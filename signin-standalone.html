@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In - The Golf Fellowship</title>
+    <style>
+        :root {
+            --primary-green: #1a5d1a;
+            --primary-green-dark: #0f3d0f;
+            --primary-green-light: #2e7d2e;
+            --bg-cream: #f5f5f0;
+            --bg-white: #ffffff;
+            --text-dark: #1a1a1a;
+            --text-gray: #666666;
+            --text-light: #999999;
+            --border-color: #e0e0e0;
+            --error-red: #dc3545;
+            --success-green: #28a745;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a5d1a 0%, #0f3d0f 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            line-height: 1.6;
+            color: #1a1a1a;
+        }
+        .container { width: 100%; max-width: 420px; }
+        .signin-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        }
+        .logo-section { text-align: center; margin-bottom: 32px; }
+        .logo {
+            width: 70px; height: 70px;
+            margin: 0 auto 16px;
+            background: linear-gradient(135deg, #1a5d1a 0%, #2e7d2e 100%);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .golf-icon { width: 40px; height: 40px; color: white; }
+        .logo-section h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
+        .tagline { color: #666; font-size: 0.95rem; }
+        .signin-form { display: flex; flex-direction: column; gap: 20px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 0.875rem; font-weight: 600; }
+        .form-group input {
+            width: 100%; padding: 14px 16px; font-size: 1rem;
+            border: 2px solid #e0e0e0; border-radius: 10px;
+            background: #f5f5f0; outline: none;
+            transition: all 0.3s ease;
+        }
+        .form-group input:focus {
+            border-color: #1a5d1a; background: #fff;
+            box-shadow: 0 0 0 3px rgba(26,93,26,0.1);
+        }
+        .form-group input::placeholder { color: #999; }
+        .form-group input.error { border-color: #dc3545; }
+        .password-wrapper { position: relative; }
+        .password-wrapper input { padding-right: 48px; }
+        .toggle-password {
+            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer; padding: 4px; color: #666;
+        }
+        .toggle-password:hover { color: #1a5d1a; }
+        .toggle-password svg { width: 20px; height: 20px; }
+        .hidden { display: none !important; }
+        .error-message { font-size: 0.8rem; color: #dc3545; min-height: 18px; }
+        .form-options { display: flex; justify-content: space-between; align-items: center; font-size: 0.875rem; }
+        .remember-me { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #666; }
+        .remember-me input[type="checkbox"] { display: none; }
+        .checkmark {
+            width: 18px; height: 18px; border: 2px solid #e0e0e0;
+            border-radius: 4px; display: flex; align-items: center; justify-content: center;
+        }
+        .remember-me input:checked + .checkmark { background: #1a5d1a; border-color: #1a5d1a; }
+        .remember-me input:checked + .checkmark::after {
+            content: ''; width: 5px; height: 9px;
+            border: solid white; border-width: 0 2px 2px 0;
+            transform: rotate(45deg); margin-bottom: 2px;
+        }
+        .forgot-password { color: #1a5d1a; text-decoration: none; font-weight: 500; }
+        .forgot-password:hover { text-decoration: underline; }
+        .btn-signin {
+            width: 100%; padding: 14px 24px; font-size: 1rem; font-weight: 600;
+            color: white; background: linear-gradient(135deg, #1a5d1a 0%, #0f3d0f 100%);
+            border: none; border-radius: 10px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            margin-top: 8px; transition: all 0.3s ease;
+        }
+        .btn-signin:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(26,93,26,0.35); }
+        .btn-signin:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+        .spinner { width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .divider { display: flex; align-items: center; gap: 16px; margin: 24px 0; }
+        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #e0e0e0; }
+        .divider span { color: #999; font-size: 0.875rem; text-transform: uppercase; }
+        .btn-social {
+            width: 100%; padding: 12px 24px; font-size: 0.95rem; font-weight: 500;
+            background: #fff; border: 2px solid #e0e0e0; border-radius: 10px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px;
+        }
+        .btn-social:hover { border-color: #999; background: #f5f5f0; }
+        .btn-social svg { width: 20px; height: 20px; }
+        .signup-link { text-align: center; margin-top: 24px; color: #666; font-size: 0.95rem; }
+        .signup-link a { color: #1a5d1a; text-decoration: none; font-weight: 600; }
+        .signup-link a:hover { text-decoration: underline; }
+        .footer { text-align: center; color: rgba(255,255,255,0.7); font-size: 0.8rem; margin-top: 20px; }
+        .success-icon {
+            width: 80px; height: 80px; margin: 0 auto 20px;
+            background: #28a745; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            animation: scaleIn 0.3s ease;
+        }
+        .success-icon svg { width: 40px; height: 40px; color: white; }
+        @keyframes scaleIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @media (max-width: 480px) {
+            .signin-card { padding: 30px 24px; }
+            .form-options { flex-direction: column; gap: 12px; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="signin-card">
+            <div class="logo-section">
+                <div class="logo">
+                    <svg viewBox="0 0 100 100" class="golf-icon">
+                        <circle cx="50" cy="30" r="8" fill="currentColor"/>
+                        <path d="M50 38 L50 75 Q50 85 55 90 L45 90 Q50 85 50 75" stroke="currentColor" stroke-width="3" fill="none"/>
+                        <ellipse cx="50" cy="92" rx="20" ry="5" fill="currentColor" opacity="0.3"/>
+                    </svg>
+                </div>
+                <h1>The Golf Fellowship</h1>
+                <p class="tagline">Welcome back, member</p>
+            </div>
+            <form id="signin-form" class="signin-form">
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" name="email" placeholder="Enter your email" required>
+                    <span class="error-message" id="email-error"></span>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                        <button type="button" class="toggle-password" aria-label="Toggle password visibility">
+                            <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg class="eye-off-icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <span class="error-message" id="password-error"></span>
+                </div>
+                <div class="form-options">
+                    <label class="remember-me">
+                        <input type="checkbox" name="remember" id="remember">
+                        <span class="checkmark"></span>
+                        Remember me
+                    </label>
+                    <a href="#" class="forgot-password">Forgot password?</a>
+                </div>
+                <button type="submit" class="btn-signin">
+                    <span class="btn-text">Sign In</span>
+                    <span class="btn-loader hidden">
+                        <svg class="spinner" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="31.4 31.4"/>
+                        </svg>
+                    </span>
+                </button>
+            </form>
+            <div class="divider"><span>or</span></div>
+            <div class="social-signin">
+                <button type="button" class="btn-social btn-google">
+                    <svg viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    Continue with Google
+                </button>
+            </div>
+            <p class="signup-link">Not a member yet? <a href="#">Join The Fellowship</a></p>
+        </div>
+        <footer class="footer"><p>&copy; 2026 The Golf Fellowship. All rights reserved.</p></footer>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('signin-form');
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const emailError = document.getElementById('email-error');
+            const passwordError = document.getElementById('password-error');
+            const togglePasswordBtn = document.querySelector('.toggle-password');
+            const btnText = document.querySelector('.btn-text');
+            const btnLoader = document.querySelector('.btn-loader');
+            const submitBtn = document.querySelector('.btn-signin');
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+            function validateEmail() {
+                const email = emailInput.value.trim();
+                if (!email) { showError(emailInput, emailError, 'Email address is required'); return false; }
+                if (!emailRegex.test(email)) { showError(emailInput, emailError, 'Please enter a valid email address'); return false; }
+                clearError(emailInput, emailError); return true;
+            }
+
+            function validatePassword() {
+                const password = passwordInput.value;
+                if (!password) { showError(passwordInput, passwordError, 'Password is required'); return false; }
+                if (password.length < 8) { showError(passwordInput, passwordError, 'Password must be at least 8 characters'); return false; }
+                clearError(passwordInput, passwordError); return true;
+            }
+
+            function showError(input, errorElement, message) { input.classList.add('error'); errorElement.textContent = message; }
+            function clearError(input, errorElement) { input.classList.remove('error'); errorElement.textContent = ''; }
+
+            function togglePasswordVisibility() {
+                const eyeIcon = togglePasswordBtn.querySelector('.eye-icon');
+                const eyeOffIcon = togglePasswordBtn.querySelector('.eye-off-icon');
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text'; eyeIcon.classList.add('hidden'); eyeOffIcon.classList.remove('hidden');
+                } else {
+                    passwordInput.type = 'password'; eyeIcon.classList.remove('hidden'); eyeOffIcon.classList.add('hidden');
+                }
+            }
+
+            function setLoading(isLoading) {
+                if (isLoading) { btnText.classList.add('hidden'); btnLoader.classList.remove('hidden'); submitBtn.disabled = true; }
+                else { btnText.classList.remove('hidden'); btnLoader.classList.add('hidden'); submitBtn.disabled = false; }
+            }
+
+            function showSuccess() {
+                const card = document.querySelector('.signin-card');
+                card.innerHTML = '<div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div><h2 style="margin-bottom:8px;text-align:center">Welcome Back!</h2><p style="color:#666;text-align:center">You have successfully signed in.</p><p style="color:#666;margin-top:16px;text-align:center">Redirecting to your dashboard...</p>';
+            }
+
+            async function handleSubmit(e) {
+                e.preventDefault();
+                if (!validateEmail() || !validatePassword()) return;
+                setLoading(true);
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                showSuccess();
+            }
+
+            form.addEventListener('submit', handleSubmit);
+            emailInput.addEventListener('blur', validateEmail);
+            passwordInput.addEventListener('blur', validatePassword);
+            emailInput.addEventListener('input', function() { if (emailInput.classList.contains('error')) clearError(emailInput, emailError); });
+            passwordInput.addEventListener('input', function() { if (passwordInput.classList.contains('error')) clearError(passwordInput, passwordError); });
+            togglePasswordBtn.addEventListener('click', togglePasswordVisibility);
+        });
+    </script>
+</body>
+</html>
