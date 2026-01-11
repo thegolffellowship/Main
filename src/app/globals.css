@@ -1,0 +1,90 @@
+/**
+ * =============================================================================
+ * GLOBAL STYLES
+ * =============================================================================
+ * Base styles that apply to the entire application.
+ * Most styling is done with Tailwind CSS classes in components.
+ * =============================================================================
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles */
+@layer base {
+  /* Smooth scrolling for the whole page */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Better default body styles */
+  body {
+    @apply antialiased text-neutral-900 bg-neutral-50;
+  }
+
+  /* Focus styles for accessibility */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary-500;
+  }
+}
+
+/* Reusable component styles */
+@layer components {
+  /* Standard button base */
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  /* Primary button (green) */
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-700 px-4 py-2;
+  }
+
+  /* Secondary button (outline) */
+  .btn-secondary {
+    @apply btn border border-neutral-300 bg-white text-neutral-900 hover:bg-neutral-100 px-4 py-2;
+  }
+
+  /* Ghost button (minimal) */
+  .btn-ghost {
+    @apply btn text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 px-4 py-2;
+  }
+
+  /* Standard input field */
+  .input {
+    @apply block w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-offset-0;
+  }
+
+  /* Form label */
+  .label {
+    @apply block text-sm font-medium text-neutral-700 mb-1.5;
+  }
+
+  /* Error text */
+  .error-text {
+    @apply text-sm text-red-600 mt-1;
+  }
+
+  /* Card container */
+  .card {
+    @apply bg-white rounded-xl border border-neutral-200 shadow-sm;
+  }
+
+  /* Section heading */
+  .section-heading {
+    @apply text-2xl font-bold text-neutral-900;
+  }
+}
+
+/* Utility classes */
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
