@@ -48,13 +48,13 @@ export function formatDate(
 ): string {
   const d = typeof date === 'string' ? new Date(date) : date;
 
-  const options: Intl.DateTimeFormatOptions = {
-    full: { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' },
-    medium: { year: 'numeric', month: 'long', day: 'numeric' },
-    short: { year: 'numeric', month: 'short', day: 'numeric' },
-  }[format];
+  const formatOptions: Record<'full' | 'short' | 'medium', Intl.DateTimeFormatOptions> = {
+    full: { weekday: 'long' as const, year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const },
+    medium: { year: 'numeric' as const, month: 'long' as const, day: 'numeric' as const },
+    short: { year: 'numeric' as const, month: 'short' as const, day: 'numeric' as const },
+  };
 
-  return new Intl.DateTimeFormat('en-US', options).format(d);
+  return new Intl.DateTimeFormat('en-US', formatOptions[format]).format(d);
 }
 
 /**
