@@ -35,11 +35,28 @@ function AuthVerifyContent() {
       try {
         const supabase = createClient();
 
-        // Check if we have a token_hash (OTP flow)
+        // Check if we have a code parameter (PKCE flow - this is what magic links use)
+        const code = searchParams.get('code');
+
+        if (code) {
+          console.log('🔍 PKCE code detected, exchanging for session...');
+          // Exchange the code for a session
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (exchangeError) {
+            console.error('Code exchange error:', exchangeError);
+            setError(exchangeError.message);
+            setIsVerifying(false);
+            return;
+          }
+        }
+
+        // Check if we have a token_hash (legacy OTP flow)
         const tokenHash = searchParams.get('token_hash');
         const type = searchParams.get('type');
 
         if (tokenHash && type) {
+          console.log('🔍 Token hash detected, verifying OTP...');
           // Verify the OTP token
           const { error: verifyError } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
@@ -54,7 +71,7 @@ function AuthVerifyContent() {
           }
         }
 
-        // Check for session (works for both OTP and PKCE flows)
+        // Check for session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError) {
