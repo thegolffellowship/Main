@@ -42,7 +42,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback${
+          emailRedirectTo: `${window.location.origin}/auth/callback-v2${
             redirectTo ? `?redirect=${redirectTo}` : ''
           }`,
         },
