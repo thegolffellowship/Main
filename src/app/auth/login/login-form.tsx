@@ -39,12 +39,17 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
 
     try {
       const supabase = createClient();
+      const redirectUrl = `${window.location.origin}/auth/callback-v2${
+        redirectTo ? `?redirect=${redirectTo}` : ''
+      }`;
+
+      // DEBUG: Log what URL we're sending to Supabase
+      console.log('🔍 SENDING REDIRECT URL TO SUPABASE:', redirectUrl);
+
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback-v2${
-            redirectTo ? `?redirect=${redirectTo}` : ''
-          }`,
+          emailRedirectTo: redirectUrl,
         },
       });
 
