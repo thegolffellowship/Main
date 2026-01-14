@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * AUTH CALLBACK ROUTE
+ * AUTH CALLBACK ROUTE (V2)
  * =============================================================================
  * This handles authentication callbacks from Supabase.
  *
@@ -20,6 +20,10 @@
  * =============================================================================
  */
 
+// CRITICAL: Force this route to be dynamic (not cached)
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -32,7 +36,7 @@ export async function GET(request: NextRequest) {
   const redirectTo = requestUrl.searchParams.get('redirect');
 
   // Debug logging - Build timestamp: 2026-01-14 21:00
-  console.log('[AUTH CALLBACK] Params:', { tokenHash: !!tokenHash, type, code: !!code });
+  console.log('[AUTH CALLBACK V2] Params:', { tokenHash: !!tokenHash, type, code: !!code });
 
   const supabase = await createServerSupabaseClient();
 
@@ -46,7 +50,9 @@ export async function GET(request: NextRequest) {
     if (!error) {
       // Successfully verified! Redirect to dashboard or specified page
       const destination = redirectTo || '/dashboard';
-      return NextResponse.redirect(new URL(destination, requestUrl.origin));
+      const response = NextResponse.redirect(new URL(destination, requestUrl.origin));
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return response;
     }
 
     console.error('OTP verification error:', error);
@@ -62,7 +68,9 @@ export async function GET(request: NextRequest) {
     if (!error) {
       // Successfully logged in! Redirect to dashboard or specified page
       const destination = redirectTo || '/dashboard';
-      return NextResponse.redirect(new URL(destination, requestUrl.origin));
+      const response = NextResponse.redirect(new URL(destination, requestUrl.origin));
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return response;
     }
 
     console.error('Code exchange error:', error);
