@@ -45,12 +45,16 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // IMPORTANT: DO NOT REMOVE
-  // This refreshes the session if expired - required for Server Components
-  // https://supabase.com/docs/guides/auth/server-side/nextjs
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Skip getUser() for auth callback routes - let them process the callback first
+  const { pathname } = request.nextUrl;
+  let user = null;
+
+  if (!pathname.startsWith('/auth/verify')) {
+    // IMPORTANT: This refreshes the session if expired - required for Server Components
+    // https://supabase.com/docs/guides/auth/server-side/nextjs
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  }
 
   return { supabaseResponse, user };
 }

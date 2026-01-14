@@ -40,8 +40,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // If logged in and trying to access auth pages, redirect to dashboard
-  if (user && pathname.startsWith('/auth/')) {
+  // If logged in and trying to access auth pages (except verify callback), redirect to dashboard
+  if (user && pathname.startsWith('/auth/') && !pathname.startsWith('/auth/verify')) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
