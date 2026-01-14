@@ -38,12 +38,18 @@ export function createClient() {
           for (const cookie of cookies) {
             const [cookieName, cookieValue] = cookie.trim().split('=');
             if (cookieName === name) {
-              return decodeURIComponent(cookieValue);
+              const value = decodeURIComponent(cookieValue);
+              console.log(`🍪 GET cookie "${name}":`, value ? 'FOUND' : 'EMPTY');
+              return value;
             }
           }
+          console.log(`🍪 GET cookie "${name}": NOT FOUND`);
+          console.log(`🍪 All cookies:`, document.cookie);
           return null;
         },
         set(name: string, value: string, options: any) {
+          console.log(`🍪 SET cookie "${name}"`, { options });
+
           let cookieString = `${name}=${encodeURIComponent(value)}`;
 
           if (options?.maxAge) {
@@ -65,9 +71,11 @@ export function createClient() {
             cookieString += `; secure`;
           }
 
+          console.log(`🍪 Cookie string:`, cookieString);
           document.cookie = cookieString;
         },
         remove(name: string, options: any) {
+          console.log(`🍪 REMOVE cookie "${name}"`);
           this.set(name, '', { ...options, maxAge: 0 });
         },
       },
