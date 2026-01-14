@@ -63,13 +63,12 @@ export function createClient() {
             cookieString += `; domain=${options.domain}`;
           }
 
-          if (options?.sameSite) {
-            cookieString += `; samesite=${options.sameSite}`;
-          }
+          // CRITICAL: Use 'none' for cross-site navigation from email links
+          // samesite=lax doesn't work when clicking links from email clients
+          cookieString += `; samesite=none`;
 
-          if (options?.secure !== false) {
-            cookieString += `; secure`;
-          }
+          // samesite=none requires secure flag
+          cookieString += `; secure`;
 
           console.log(`🍪 Cookie string:`, cookieString);
           document.cookie = cookieString;
