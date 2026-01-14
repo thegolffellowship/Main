@@ -39,7 +39,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
 
     try {
       const supabase = createClient();
-      const redirectUrl = `${window.location.origin}/auth/callback-v2${
+      const redirectUrl = `${window.location.origin}/auth/verify${
         redirectTo ? `?redirect=${redirectTo}` : ''
       }`;
 

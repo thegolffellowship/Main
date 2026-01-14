@@ -28,10 +28,10 @@ export default function HomePage() {
               >
                 Events
               </Link>
-              <Link href="/auth/login" className="btn-secondary">
+              <Link href="/auth/sign-in" className="btn-secondary">
                 Log In
               </Link>
-              <Link href="/auth/signup" className="btn-primary">
+              <Link href="/auth/register" className="btn-primary">
                 Join Now
               </Link>
             </div>

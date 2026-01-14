@@ -32,9 +32,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith(route)
   );
 
-  // If accessing protected route without login, redirect to login
+  // If accessing protected route without login, redirect to sign-in
   if (isProtectedRoute && !user) {
-    const loginUrl = new URL('/auth/login', request.url);
+    const loginUrl = new URL('/auth/sign-in', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     loginUrl.searchParams.set('message', 'Please log in to continue');
     return NextResponse.redirect(loginUrl);

@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     console.error('OTP verification error:', error);
     return NextResponse.redirect(
-      new URL(`/auth/login?message=${encodeURIComponent(error.message)}`, requestUrl.origin)
+      new URL(`/auth/sign-in?message=${encodeURIComponent(error.message)}`, requestUrl.origin)
     );
   }
 
@@ -75,12 +75,12 @@ export async function GET(request: NextRequest) {
 
     console.error('Code exchange error:', error);
     return NextResponse.redirect(
-      new URL(`/auth/login?message=${encodeURIComponent(error.message)}`, requestUrl.origin)
+      new URL(`/auth/sign-in?message=${encodeURIComponent(error.message)}`, requestUrl.origin)
     );
   }
 
   // If no valid parameters, redirect to login
   return NextResponse.redirect(
-    new URL('/auth/login?message=Invalid authentication link. Please request a new one.', requestUrl.origin)
+    new URL('/auth/sign-in?message=Invalid authentication link. Please request a new one.', requestUrl.origin)
   );
 }

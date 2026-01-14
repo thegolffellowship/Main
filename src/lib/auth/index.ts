@@ -83,7 +83,7 @@ export async function requireAuth(): Promise<Member> {
   const member = await getCurrentMember();
 
   if (!member) {
-    redirect('/auth/login?message=Please log in to continue');
+    redirect('/auth/sign-in?message=Please log in to continue');
   }
 
   return member;

@@ -36,7 +36,7 @@ export default function LoginPage({
         <p className="mt-2 text-center text-sm text-neutral-600">
           Don&apos;t have an account?{' '}
           <Link
-            href="/auth/signup"
+            href="/auth/register"
             className="font-medium text-primary-600 hover:text-primary-500"
           >
             Sign up for free
