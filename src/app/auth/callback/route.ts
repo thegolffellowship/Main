@@ -31,6 +31,9 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get('code');
   const redirectTo = requestUrl.searchParams.get('redirect');
 
+  // Debug logging - Build timestamp: 2026-01-14 21:00
+  console.log('[AUTH CALLBACK] Params:', { tokenHash: !!tokenHash, type, code: !!code });
+
   const supabase = await createServerSupabaseClient();
 
   // Handle OTP/Magic Link flow (email confirmation, magic links, password reset)
