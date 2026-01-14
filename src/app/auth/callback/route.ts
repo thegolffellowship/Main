@@ -2,13 +2,21 @@
  * =============================================================================
  * AUTH CALLBACK ROUTE
  * =============================================================================
- * This handles the redirect after a user clicks a magic link.
+ * This handles authentication callbacks from Supabase.
  *
- * FLOW:
- * 1. User clicks magic link in email
- * 2. Link contains a code from Supabase
- * 3. This route exchanges the code for a session
- * 4. User is redirected to dashboard (or wherever they were going)
+ * HANDLES TWO FLOWS:
+ *
+ * 1. OTP Flow (Magic Links, Email Confirmation, Password Reset):
+ *    - User clicks link in email
+ *    - Link contains token_hash and type parameters
+ *    - We verify the OTP with Supabase
+ *    - User is logged in and redirected
+ *
+ * 2. OAuth/PKCE Flow:
+ *    - User authenticates with OAuth provider (Google, etc.)
+ *    - Link contains code parameter
+ *    - We exchange code for session
+ *    - User is logged in and redirected
  * =============================================================================
  */
 
@@ -18,13 +26,34 @@ import type { NextRequest } from 'next/server';
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
+  const tokenHash = requestUrl.searchParams.get('token_hash');
+  const type = requestUrl.searchParams.get('type');
   const code = requestUrl.searchParams.get('code');
   const redirectTo = requestUrl.searchParams.get('redirect');
 
-  if (code) {
-    const supabase = await createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
 
-    // Exchange the code for a session
+  // Handle OTP/Magic Link flow (email confirmation, magic links, password reset)
+  if (tokenHash && type) {
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: type as any,
+    });
+
+    if (!error) {
+      // Successfully verified! Redirect to dashboard or specified page
+      const destination = redirectTo || '/dashboard';
+      return NextResponse.redirect(new URL(destination, requestUrl.origin));
+    }
+
+    console.error('OTP verification error:', error);
+    return NextResponse.redirect(
+      new URL(`/auth/login?message=${encodeURIComponent(error.message)}`, requestUrl.origin)
+    );
+  }
+
+  // Handle OAuth/PKCE flow
+  if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
@@ -32,10 +61,15 @@ export async function GET(request: NextRequest) {
       const destination = redirectTo || '/dashboard';
       return NextResponse.redirect(new URL(destination, requestUrl.origin));
     }
+
+    console.error('Code exchange error:', error);
+    return NextResponse.redirect(
+      new URL(`/auth/login?message=${encodeURIComponent(error.message)}`, requestUrl.origin)
+    );
   }
 
-  // If something went wrong, redirect to login with error message
+  // If no valid parameters, redirect to login
   return NextResponse.redirect(
-    new URL('/auth/login?message=There was an error logging in. Please try again.', requestUrl.origin)
+    new URL('/auth/login?message=Invalid authentication link. Please request a new one.', requestUrl.origin)
   );
 }
