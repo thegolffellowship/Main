@@ -105,7 +105,7 @@ header h1 {
 
 /* ---- Main ---- */
 main {
-    max-width: 1200px;
+    max-width: 1600px;
     margin: 0 auto;
     padding: 1.5rem 2rem 3rem;
 }
@@ -113,7 +113,7 @@ main {
 /* ---- Stats row ---- */
 .stats-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
 }
@@ -155,7 +155,8 @@ main {
     transition: border 0.15s;
 }
 .search-box:focus { border-color: var(--primary); }
-.sort-select {
+.sort-select,
+.filter-select {
     padding: 0.55rem 0.85rem;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -178,9 +179,9 @@ table {
 }
 thead th {
     background: #f9fafb;
-    padding: 0.7rem 0.85rem;
+    padding: 0.6rem 0.65rem;
     text-align: left;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-muted);
@@ -191,10 +192,11 @@ thead th {
 th.sortable { cursor: pointer; }
 th.sortable:hover { color: var(--primary); }
 tbody td {
-    padding: 0.65rem 0.85rem;
+    padding: 0.5rem 0.65rem;
     border-bottom: 1px solid var(--border);
-    font-size: 0.875rem;
+    font-size: 0.82rem;
     vertical-align: top;
+    white-space: nowrap;
 }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #f9fafb; }
@@ -204,84 +206,27 @@ tbody tr:hover { background: #f9fafb; }
     padding: 3rem 1rem;
     color: var(--text-muted);
     font-style: italic;
+    white-space: normal;
 }
 
-/* Amount column */
-.amount-cell {
+/* Price column */
+.price-cell {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
 
-/* Items column */
-.items-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    min-width: 220px;
-    max-width: 360px;
-}
-
-/* Plain-string item tag (generic merchants) */
-.item-tag {
-    background: #eff6ff;
-    color: var(--primary);
-    padding: 0.15rem 0.45rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    white-space: nowrap;
+/* Item name column */
+.item-name-cell {
+    font-weight: 600;
     max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* Structured item card (Golf Fellowship events) */
-.item-card {
-    background: #f8fafc;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.5rem 0.65rem;
-    font-size: 0.8rem;
-}
-.item-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 0.5rem;
-    margin-bottom: 0.3rem;
-}
-.item-card-name {
-    font-weight: 600;
-    color: var(--text);
-}
-.item-card-price {
-    font-weight: 600;
-    color: var(--green);
-    white-space: nowrap;
-}
-.item-card-details {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.15rem;
-}
-.item-detail-row {
-    font-size: 0.75rem;
-    line-height: 1.4;
-}
-.item-detail-label {
-    color: var(--text-muted);
-    text-transform: uppercase;
-    font-size: 0.65rem;
-    letter-spacing: 0.03em;
-}
-.item-detail-value {
-    color: var(--text);
-    font-weight: 500;
-}
-
 .order-id {
     font-family: monospace;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: var(--text-muted);
 }
 

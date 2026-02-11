@@ -1,76 +1,25 @@
 """
-Transaction email parser — extracts purchase data (merchant, amount, date, items,
-customer) from email text/HTML using pattern matching.
+Transaction email parser — uses Claude AI to extract structured purchase data
+from email text/HTML.
 
-Supports generic transaction emails as well as MySimpleStore / The Golf Fellowship
-order notifications.
+Returns one row per line item so that multi-item orders become multiple records,
+each with dedicated columns for filtering and sorting (item_name, city,
+handicap, side_games, etc.).
 """
 
-import re
 import html
+import json
 import logging
-from datetime import datetime
+import os
+import re
+
+import anthropic
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Amount patterns
+# Helpers
 # ---------------------------------------------------------------------------
-AMOUNT_PATTERNS = [
-    r"\$\s?[\d,]+\.\d{2}",
-    r"USD\s?[\d,]+\.\d{2}",
-    r"(?:total|amount|charged|paid|payment|price|cost|subtotal)[:\s]*\$\s?[\d,]+\.\d{2}",
-]
-
-# Keywords that indicate the amount near them is the *total*
-TOTAL_KEYWORDS = [
-    "order total",
-    "grand total",
-    "total charged",
-    "total amount",
-    "amount charged",
-    "payment amount",
-    "you paid",
-    "amount due",
-    "total:",
-    "charged:",
-    "amount:",
-    "total paid",
-]
-
-# ---------------------------------------------------------------------------
-# Merchant / sender mapping
-# ---------------------------------------------------------------------------
-SENDER_TO_MERCHANT = {
-    "mysimplestore.com": "The Golf Fellowship",
-    "amazon.com": "Amazon",
-    "paypal.com": "PayPal",
-    "venmo.com": "Venmo",
-    "square.com": "Square",
-    "stripe.com": "Stripe",
-    "apple.com": "Apple",
-    "google.com": "Google",
-    "shopify.com": "Shopify",
-    "ebay.com": "eBay",
-    "walmart.com": "Walmart",
-    "target.com": "Target",
-    "bestbuy.com": "Best Buy",
-    "uber.com": "Uber",
-    "lyft.com": "Lyft",
-    "doordash.com": "DoorDash",
-    "grubhub.com": "Grubhub",
-    "ubereats.com": "Uber Eats",
-    "netflix.com": "Netflix",
-    "spotify.com": "Spotify",
-    "chase.com": "Chase",
-    "bankofamerica.com": "Bank of America",
-    "wellsfargo.com": "Wells Fargo",
-    "citi.com": "Citi",
-    "capitalone.com": "Capital One",
-    "americanexpress.com": "American Express",
-    "discover.com": "Discover",
-}
-
 
 def _strip_html(raw_html: str) -> str:
     """Remove HTML tags and decode entities to plain text."""
@@ -82,360 +31,169 @@ def _strip_html(raw_html: str) -> str:
     return text.strip()
 
 
-def _extract_amount(text: str) -> str | None:
-    """
-    Try to find the *total* transaction amount in the email body.
-    Prioritizes amounts near 'total' keywords, falls back to the largest amount.
-    """
-    text_lower = text.lower()
-
-    # First pass: look for amounts near total-related keywords.
-    # Use a generous 200-char window to handle cases where the amount
-    # is on the next line (e.g. MySimpleStore "Order Total:\n\n$163.53").
-    for keyword in TOTAL_KEYWORDS:
-        idx = text_lower.find(keyword)
-        if idx == -1:
-            continue
-        window = text[idx : idx + 200]
-        match = re.search(r"\$\s?[\d,]+\.\d{2}", window)
-        if match:
-            return _normalize_amount(match.group())
-
-    # Second pass: collect all dollar amounts and return the largest
-    all_amounts = re.findall(r"\$\s?[\d,]+\.\d{2}", text)
-    if all_amounts:
-        parsed = []
-        for raw in all_amounts:
-            val = _normalize_amount(raw)
-            if val:
-                try:
-                    parsed.append((float(val.replace("$", "").replace(",", "")), val))
-                except ValueError:
-                    continue
-        if parsed:
-            parsed.sort(key=lambda x: x[0], reverse=True)
-            return parsed[0][1]
-
-    return None
-
-
-def _normalize_amount(raw: str) -> str:
-    """Clean up an amount string to a canonical $X,XXX.XX form."""
-    raw = raw.strip()
-    raw = re.sub(r"[^\d.,\$]", "", raw)
-    if not raw.startswith("$"):
-        raw = "$" + raw
-    return raw
-
-
-def _extract_merchant(from_addr: str, subject: str, body: str) -> str:
-    """Determine the merchant name from sender, subject, or body."""
-    from_lower = (from_addr or "").lower()
-
-    # Check sender domain against known merchants
-    for domain, name in SENDER_TO_MERCHANT.items():
-        if domain in from_lower:
-            return name
-
-    # Try to extract from subject line patterns like "Your [Merchant] order"
-    subject_patterns = [
-        r"your\s+(.+?)\s+order",
-        r"order\s+(?:from|at|with)\s+(.+?)[\s\-]",
-        r"receipt\s+from\s+(.+?)[\s\-]",
-        r"payment\s+to\s+(.+?)[\s\-]",
-        r"(.+?)\s+receipt",
-        r"(.+?)\s+order\s+confirmation",
-    ]
-    for pattern in subject_patterns:
-        match = re.search(pattern, subject, re.IGNORECASE)
-        if match:
-            merchant = match.group(1).strip()
-            if 2 < len(merchant) < 40:
-                return merchant
-
-    # Fall back to the sender display name
-    name_match = re.match(r"^([^<@]+)", from_addr)
-    if name_match:
-        name = name_match.group(1).strip().strip('"')
-        if name:
-            return name
-
-    return "Unknown"
-
-
-def _extract_customer(text: str) -> str | None:
-    """
-    Try to extract the customer name from the email body.
-    Handles MySimpleStore format ("New order from: Name") and
-    shipping address blocks ("FIRSTNAME LASTNAME" in all caps).
-    """
-    # MySimpleStore: "New order from: Kenneth Carter"
-    match = re.search(r"[Nn]ew order from:\s*(.+?)(?:\n|$)", text)
-    if match:
-        name = match.group(1).strip()
-        if name:
-            return name
-
-    # Shipping Address block — look for an all-caps name after "Shipping Address"
-    match = re.search(
-        r"[Ss]hipping\s+[Aa]ddress\s*\n+\s*([A-Z][A-Z\s]+[A-Z])\s*\n",
-        text,
-    )
-    if match:
-        name = match.group(1).strip()
-        # Title-case it: "KENNETH CARTER" → "Kenneth Carter"
-        if name and len(name) > 2:
-            return name.title()
-
-    return None
-
-
 # ---------------------------------------------------------------------------
-# Item extraction
+# AI extraction prompt
 # ---------------------------------------------------------------------------
 
-# Lines that should always be skipped (images, SKUs, quantities).
-_SKIP_LINE_RE = re.compile(
-    r"^(Rs=|SKU:|Qty:)",
-    re.IGNORECASE,
-)
+EXTRACTION_PROMPT = """\
+You are a transaction email parser. Given the raw text of a transaction or \
+order confirmation email, extract structured data and return it as JSON.
 
-# Friendly short names for common verbose labels.
-_LABEL_ALIASES = {
-    "do you have a current handicap? (not required)": "Handicap",
-    "do you have a current handicap?": "Handicap",
-    "what is your date of birth?": "Date of Birth",
-    "tee choice (see details for selection)": "Tee Choice",
-    "golf or compete?": "Golf or Compete",
-    "post-game fellowship?": "Post-Game",
-    "post game fellowship?": "Post-Game",
-    "returning or new?": "Returning or New",
-    "add net points race?": "NET Points Race",
-    "add gross points race?": "GROSS Points Race",
-    "add city match play?": "City Match Play",
-    "member status": "Member Status",
-    "shirt size": "Shirt Size",
-    "guest name": "Guest Name",
-    "city": "City",
+IMPORTANT RULES:
+- Return ONLY valid JSON — no markdown, no explanation, no extra text.
+- The top-level value must be a JSON object with the keys described below.
+- An order may contain MULTIPLE items. Return each item separately in the \
+  "items" array.
+- If a field is not present in the email, use null for that field.
+- Dollar amounts should include the "$" sign (e.g. "$158.00").
+- Dates should be in YYYY-MM-DD format.
+
+Return this exact JSON structure:
+
+{
+  "merchant": "<store or company name>",
+  "customer": "<customer / buyer name>",
+  "order_id": "<order or confirmation number>",
+  "order_date": "<YYYY-MM-DD>",
+  "total_amount": "<total charged including fees, e.g. $163.53>",
+  "items": [
+    {
+      "item_name": "<product or event name>",
+      "item_price": "<price for this item, e.g. $158.00>",
+      "quantity": <integer, default 1>,
+      "city": "<city if mentioned>",
+      "course": "<golf course name if mentioned>",
+      "handicap": "<handicap value if mentioned>",
+      "side_games": "<side game selections if mentioned, comma-separated>",
+      "tee_choice": "<tee choice if mentioned>",
+      "member_status": "<member/non-member status if mentioned>",
+      "golf_or_compete": "<event type selection if mentioned>",
+      "post_game": "<post-game fellowship selection if mentioned>",
+      "returning_or_new": "<returning or new member if mentioned>",
+      "shirt_size": "<shirt size if mentioned>",
+      "guest_name": "<guest name if mentioned>",
+      "date_of_birth": "<date of birth if mentioned>",
+      "net_points_race": "<net points race selection if mentioned>",
+      "gross_points_race": "<gross points race selection if mentioned>",
+      "city_match_play": "<city match play selection if mentioned>"
+    }
+  ]
 }
 
+Here is the email text to parse:
 
-def _clean_label(raw_label: str) -> str:
+"""
+
+
+def _call_ai(email_text: str) -> dict | None:
+    """Send email text to Claude and return the parsed JSON dict."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        logger.error("ANTHROPIC_API_KEY not set — cannot parse email with AI")
+        return None
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=2048,
+            messages=[
+                {
+                    "role": "user",
+                    "content": EXTRACTION_PROMPT + email_text,
+                }
+            ],
+        )
+        raw = message.content[0].text.strip()
+
+        # Strip markdown fences if the model wrapped the JSON
+        if raw.startswith("```"):
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw)
+
+        return json.loads(raw)
+
+    except json.JSONDecodeError:
+        logger.exception("AI returned invalid JSON")
+        return None
+    except anthropic.APIError:
+        logger.exception("Anthropic API call failed")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def parse_email(email_data: dict) -> list[dict]:
     """
-    Turn a raw email label into a clean display label.
+    Parse a single email dict (from fetcher) using Claude AI.
 
-    "Do you have a Current Handicap? (Not Required)" → "Handicap"
-    "TEE CHOICE (See details for selection)"          → "Tee Choice"
-    "RETURNING or NEW?"                                → "Returning or New"
-    """
-    key = raw_label.strip().rstrip(":").lower()
-
-    # Check aliases first
-    if key in _LABEL_ALIASES:
-        return _LABEL_ALIASES[key]
-
-    # Remove trailing question marks and parenthetical notes
-    cleaned = re.sub(r"\s*\(.*?\)\s*$", "", raw_label.strip())
-    cleaned = cleaned.rstrip("?").rstrip(":").strip()
-
-    # Title-case it
-    if cleaned.isupper() or cleaned.islower():
-        cleaned = cleaned.title()
-
-    return cleaned
-
-
-def _extract_items(text: str) -> list:
-    """
-    Extract line items from the email body.
-
-    For MySimpleStore / Golf Fellowship emails, returns a list of dicts::
-
-        {"name": "Feb 22 - LaCANTERA", "price": "$158.00",
-         "details": {"Golf or Compete": "EVENT Only - No Additional Games",
-                     "Member Status": "MEMBER = $158",
-                     "Tee Choice": "<50 | 6300-6800y", ...}}
-
-    For other merchants, returns a list of plain strings (backward-compatible).
-    """
-    items: list = []
-
-    # ----- MySimpleStore / Golf Fellowship format -----
-    mysimplestore_match = re.search(
-        r"Order Summary\b(.*?)(?:Subtotal|Sub total)",
-        text,
-        re.DOTALL | re.IGNORECASE,
-    )
-    if mysimplestore_match:
-        block = mysimplestore_match.group(1)
-        # Split on price tokens so each chunk = description before a price
-        product_chunks = re.split(r"(\$[\d,]+\.\d{2})", block)
-        i = 0
-        while i < len(product_chunks) - 1:
-            desc = product_chunks[i].strip()
-            price = product_chunks[i + 1].strip() if i + 1 < len(product_chunks) else ""
-            if desc and price:
-                lines = [ln.strip() for ln in desc.splitlines() if ln.strip()]
-
-                # Separate title lines from detail (key: value) lines
-                title_lines: list[str] = []
-                details: dict[str, str] = {}
-
-                for line in lines:
-                    if _SKIP_LINE_RE.match(line):
-                        continue
-
-                    # Any line with a colon is treated as a detail field.
-                    # We split on the LAST colon that has text on both sides,
-                    # but MySimpleStore uses "LABEL: VALUE" (first colon).
-                    if ":" in line:
-                        label_raw, _, value = line.partition(":")
-                        label_raw = label_raw.strip()
-                        value = value.strip()
-                        # Only treat as a detail if the label part looks
-                        # like a field name (at least 3 chars, not purely
-                        # numeric, and not the product title itself).
-                        if len(label_raw) >= 3 and not label_raw.isdigit():
-                            details[_clean_label(label_raw)] = value
-                            continue
-
-                    # No colon or didn't qualify as a detail → title line
-                    if len(line) > 2:
-                        title_lines.append(line)
-
-                if title_lines:
-                    items.append({
-                        "name": title_lines[0],
-                        "price": price,
-                        "details": details,
-                    })
-            i += 2
-        if items:
-            return items[:20]
-
-    # ----- Generic patterns (other merchants) -----
-    item_patterns = [
-        r"(\d+)\s*x\s+(.+?)\s+\$[\d,]+\.\d{2}",
-        r"^[\s•\-\*]+(.+?)\s+\$[\d,]+\.\d{2}",
-    ]
-    for pattern in item_patterns:
-        matches = re.findall(pattern, text, re.MULTILINE)
-        for match in matches:
-            if isinstance(match, tuple):
-                item = match[-1].strip()
-            else:
-                item = match.strip()
-            if 2 < len(item) < 100:
-                items.append(item)
-
-    return items[:20]
-
-
-def _extract_order_id(subject: str, text: str) -> str | None:
-    """Try to find an order/confirmation number from subject line and body."""
-    # Subject: "New Order #R854482675"
-    match = re.search(r"[Oo]rder\s*#\s*([A-Za-z0-9\-]{4,30})", subject)
-    if match:
-        return match.group(1).strip()
-
-    # Body: "Order: R854482675" (MySimpleStore format)
-    match = re.search(r"[Oo]rder:\s*([A-Za-z0-9\-]{4,30})", text)
-    if match:
-        return match.group(1).strip()
-
-    # Generic body patterns
-    patterns = [
-        r"order\s*(?:#|number|no\.?)[:\s]*([A-Z0-9\-]{4,30})",
-        r"confirmation\s*(?:#|number|no\.?)[:\s]*([A-Z0-9\-]{4,30})",
-        r"transaction\s*(?:#|id|number)[:\s]*([A-Z0-9\-]{4,30})",
-        r"reference\s*(?:#|number|no\.?)[:\s]*([A-Z0-9\-]{4,30})",
-        r"#\s*([A-Z0-9\-]{6,30})",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-    return None
-
-
-def _extract_date(text: str, email_date: datetime | None) -> str:
-    """
-    Try to extract the order date from the email body.
-    Falls back to the email's sent date.
-    """
-    # MySimpleStore: "Date: 02-10-2026"
-    match = re.search(r"Date:\s*(\d{2}-\d{2}-\d{4})", text)
-    if match:
-        try:
-            dt = datetime.strptime(match.group(1), "%m-%d-%Y")
-            return dt.strftime("%Y-%m-%d")
-        except ValueError:
-            pass
-
-    # ISO-style dates in body
-    match = re.search(r"(\d{4}-\d{2}-\d{2})", text)
-    if match:
-        return match.group(1)
-
-    if isinstance(email_date, datetime):
-        return email_date.strftime("%Y-%m-%d %H:%M")
-
-    return str(email_date) if email_date else ""
-
-
-def parse_email(email_data: dict) -> dict | None:
-    """
-    Parse a single email dict (from fetcher) and return structured transaction data.
-
-    Returns None if no transaction amount could be extracted.
+    Returns a *list* of flat dicts — one per line item — ready for DB insert.
+    Returns an empty list if parsing fails or no items are found.
     """
     body = email_data.get("text", "")
     if not body and email_data.get("html"):
         body = _strip_html(email_data["html"])
-
     if not body:
-        return None
+        return []
 
+    parsed = _call_ai(body)
+    if not parsed:
+        return []
+
+    items = parsed.get("items") or []
+    if not items:
+        return []
+
+    email_uid = email_data.get("uid", "")
     subject = email_data.get("subject", "")
     from_addr = email_data.get("from", "")
 
-    amount = _extract_amount(body)
-    if not amount:
-        html_body = email_data.get("html", "")
-        if html_body:
-            amount = _extract_amount(_strip_html(html_body))
+    rows = []
+    for idx, item in enumerate(items):
+        rows.append({
+            "email_uid": email_uid,
+            "item_index": idx,
+            "merchant": parsed.get("merchant") or "Unknown",
+            "customer": parsed.get("customer"),
+            "order_id": parsed.get("order_id"),
+            "order_date": parsed.get("order_date") or "",
+            "total_amount": parsed.get("total_amount") or "",
+            "item_name": item.get("item_name") or "",
+            "item_price": item.get("item_price") or "",
+            "quantity": item.get("quantity") or 1,
+            "city": item.get("city"),
+            "course": item.get("course"),
+            "handicap": item.get("handicap"),
+            "side_games": item.get("side_games"),
+            "tee_choice": item.get("tee_choice"),
+            "member_status": item.get("member_status"),
+            "golf_or_compete": item.get("golf_or_compete"),
+            "post_game": item.get("post_game"),
+            "returning_or_new": item.get("returning_or_new"),
+            "shirt_size": item.get("shirt_size"),
+            "guest_name": item.get("guest_name"),
+            "date_of_birth": item.get("date_of_birth"),
+            "net_points_race": item.get("net_points_race"),
+            "gross_points_race": item.get("gross_points_race"),
+            "city_match_play": item.get("city_match_play"),
+            "subject": subject,
+            "from_addr": from_addr,
+        })
 
-    if not amount:
-        return None
-
-    merchant = _extract_merchant(from_addr, subject, body)
-    items = _extract_items(body)
-    order_id = _extract_order_id(subject, body)
-    customer = _extract_customer(body)
-    date_str = _extract_date(body, email_data.get("date"))
-
-    return {
-        "email_uid": email_data.get("uid", ""),
-        "merchant": merchant,
-        "amount": amount,
-        "date": date_str,
-        "subject": subject,
-        "from": from_addr,
-        "items": items,
-        "order_id": order_id,
-        "customer": customer,
-    }
+    return rows
 
 
 def parse_emails(email_list: list[dict]) -> list[dict]:
-    """Parse a batch of emails and return successfully parsed transactions."""
-    transactions = []
+    """Parse a batch of emails and return flat item rows for DB storage."""
+    all_rows = []
     for email_data in email_list:
         try:
-            result = parse_email(email_data)
-            if result:
-                transactions.append(result)
+            rows = parse_email(email_data)
+            all_rows.extend(rows)
         except Exception:
             logger.exception("Failed to parse email uid=%s", email_data.get("uid"))
-    logger.info("Parsed %d transactions from %d emails", len(transactions), len(email_list))
-    return transactions
+    logger.info("Parsed %d item rows from %d emails", len(all_rows), len(email_list))
+    return all_rows

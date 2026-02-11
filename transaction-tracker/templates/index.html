@@ -10,7 +10,7 @@
     <header>
         <div class="header-content">
             <h1>Transaction Tracker</h1>
-            <p class="subtitle">Automatically parsed from your inbox</p>
+            <p class="subtitle">AI-powered email parsing</p>
         </div>
         <div class="header-actions">
             <button id="btn-check-now" class="btn btn-primary" title="Check inbox for new transactions">
@@ -22,15 +22,19 @@
     <main>
         <!-- Alert banner for unconfigured state -->
         <div id="config-alert" class="alert alert-warning" style="display:none;">
-            <strong>Email not configured.</strong>
-            Copy <code>.env.example</code> to <code>.env</code> and fill in your email credentials to start scanning your inbox.
+            <strong>Not fully configured.</strong>
+            <span id="config-alert-msg">Copy <code>.env.example</code> to <code>.env</code> and fill in your email + Anthropic API key.</span>
         </div>
 
         <!-- Stats cards -->
         <section class="stats-row" id="stats-row">
             <div class="stat-card">
-                <div class="stat-value" id="stat-count">—</div>
-                <div class="stat-label">Transactions</div>
+                <div class="stat-value" id="stat-items">—</div>
+                <div class="stat-label">Items</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-orders">—</div>
+                <div class="stat-label">Orders</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-spent">—</div>
@@ -52,17 +56,34 @@
                 type="text"
                 id="search-input"
                 class="search-box"
-                placeholder="Search by customer, merchant, amount, or subject..."
+                placeholder="Search by customer, item, city, course..."
             >
+            <select id="filter-column" class="filter-select">
+                <option value="">All columns</option>
+                <option value="item_name">Item Name</option>
+                <option value="customer">Customer</option>
+                <option value="city">City</option>
+                <option value="course">Course</option>
+                <option value="side_games">Side Games</option>
+                <option value="member_status">Member Status</option>
+                <option value="golf_or_compete">Golf or Compete</option>
+                <option value="handicap">Handicap</option>
+                <option value="tee_choice">Tee Choice</option>
+                <option value="order_id">Order ID</option>
+            </select>
             <select id="sort-select" class="sort-select">
-                <option value="date-desc">Date (newest first)</option>
-                <option value="date-asc">Date (oldest first)</option>
-                <option value="amount-desc">Amount (high to low)</option>
-                <option value="amount-asc">Amount (low to high)</option>
-                <option value="merchant-asc">Merchant (A–Z)</option>
-                <option value="merchant-desc">Merchant (Z–A)</option>
-                <option value="customer-asc">Customer (A–Z)</option>
-                <option value="customer-desc">Customer (Z–A)</option>
+                <option value="order_date-desc">Date (newest)</option>
+                <option value="order_date-asc">Date (oldest)</option>
+                <option value="item_price-desc">Price (high-low)</option>
+                <option value="item_price-asc">Price (low-high)</option>
+                <option value="item_name-asc">Item (A-Z)</option>
+                <option value="item_name-desc">Item (Z-A)</option>
+                <option value="customer-asc">Customer (A-Z)</option>
+                <option value="customer-desc">Customer (Z-A)</option>
+                <option value="city-asc">City (A-Z)</option>
+                <option value="city-desc">City (Z-A)</option>
+                <option value="side_games-asc">Side Games (A-Z)</option>
+                <option value="side_games-desc">Side Games (Z-A)</option>
             </select>
             <button id="btn-export-csv" class="btn btn-secondary">Export CSV</button>
         </section>
@@ -72,19 +93,24 @@
             <table id="txn-table">
                 <thead>
                     <tr>
-                        <th class="sortable" data-sort="date">Date</th>
+                        <th class="sortable" data-sort="order_date">Date</th>
                         <th class="sortable" data-sort="customer">Customer</th>
-                        <th class="sortable" data-sort="merchant">Merchant</th>
-                        <th class="sortable" data-sort="amount">Amount</th>
+                        <th class="sortable" data-sort="item_name">Item</th>
+                        <th class="sortable" data-sort="item_price">Price</th>
+                        <th class="sortable" data-sort="city">City</th>
+                        <th class="sortable" data-sort="course">Course</th>
+                        <th class="sortable" data-sort="handicap">Handicap</th>
+                        <th class="sortable" data-sort="side_games">Side Games</th>
+                        <th class="sortable" data-sort="tee_choice">Tee</th>
+                        <th class="sortable" data-sort="member_status">Status</th>
+                        <th class="sortable" data-sort="golf_or_compete">Type</th>
                         <th>Order ID</th>
-                        <th>Items</th>
-                        <th>Subject</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="txn-body">
                     <tr class="empty-row">
-                        <td colspan="8">Loading transactions...</td>
+                        <td colspan="13">Loading...</td>
                     </tr>
                 </tbody>
             </table>
@@ -94,7 +120,7 @@
     </main>
 
     <footer>
-        <p>Transaction Tracker &mdash; Powered by IMAP email parsing</p>
+        <p>Transaction Tracker &mdash; Powered by Claude AI</p>
     </footer>
 
     <script src="/static/js/dashboard.js"></script>
