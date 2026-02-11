@@ -3,16 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transaction Tracker</title>
+    <title>TGF Transaction Tracker</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
     <header>
         <div class="header-content">
-            <h1>Transaction Tracker</h1>
+            <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">AI-powered email parsing</p>
         </div>
         <div class="header-actions">
+            <button id="btn-send-report" class="btn btn-secondary" title="Send daily report now" style="display:none;">
+                Send Report
+            </button>
             <button id="btn-check-now" class="btn btn-primary" title="Check inbox for new transactions">
                 <span class="btn-icon">&#8635;</span> Check Now
             </button>
@@ -23,7 +26,7 @@
         <!-- Alert banner for unconfigured state -->
         <div id="config-alert" class="alert alert-warning" style="display:none;">
             <strong>Not fully configured.</strong>
-            <span id="config-alert-msg">Copy <code>.env.example</code> to <code>.env</code> and fill in your email + Anthropic API key.</span>
+            <span id="config-alert-msg">Copy <code>.env.example</code> to <code>.env</code> and fill in your credentials.</span>
         </div>
 
         <!-- Stats cards -->
@@ -47,6 +50,54 @@
             <div class="stat-card">
                 <div class="stat-value" id="stat-latest">—</div>
                 <div class="stat-label">Latest</div>
+            </div>
+        </section>
+
+        <!-- Connector panel (collapsible) -->
+        <section id="connector-panel" class="connector-panel" style="display:none;">
+            <div class="connector-header" onclick="document.getElementById('connector-body').classList.toggle('hidden')">
+                <strong>Connector / Webhook</strong>
+                <span class="connector-toggle">▾</span>
+            </div>
+            <div id="connector-body" class="connector-body hidden">
+                <p>External systems can push order data to this tracker via the webhook endpoint.</p>
+                <div class="connector-detail">
+                    <span class="connector-label">Endpoint:</span>
+                    <code id="connector-url">—</code>
+                </div>
+                <div class="connector-detail">
+                    <span class="connector-label">Method:</span>
+                    <code>POST</code>
+                </div>
+                <div class="connector-detail">
+                    <span class="connector-label">Auth:</span>
+                    <code>X-API-Key: &lt;your CONNECTOR_API_KEY&gt;</code>
+                </div>
+                <div class="connector-example">
+                    <strong>Example — push structured items:</strong>
+                    <pre>{
+  "items": [{
+    "email_uid": "ext-001", "item_index": 0,
+    "merchant": "The Golf Fellowship",
+    "customer": "John Doe",
+    "order_id": "R123456",
+    "order_date": "2026-02-11",
+    "item_name": "Feb 22 - LaCANTERA",
+    "item_price": "$158.00",
+    "city": "San Antonio",
+    "side_games": "NET Points Race"
+  }]
+}</pre>
+                    <strong>Example — send raw email text for AI parsing:</strong>
+                    <pre>{
+  "raw_email": {
+    "uid": "ext-002",
+    "subject": "New Order #R999",
+    "from": "noreply@mysimplestore.com",
+    "text": "... full email body ..."
+  }
+}</pre>
+                </div>
             </div>
         </section>
 
@@ -120,7 +171,7 @@
     </main>
 
     <footer>
-        <p>Transaction Tracker &mdash; Powered by Claude AI</p>
+        <p>TGF Transaction Tracker &mdash; Powered by Claude AI</p>
     </footer>
 
     <script src="/static/js/dashboard.js"></script>

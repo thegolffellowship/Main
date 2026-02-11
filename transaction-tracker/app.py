@@ -3,11 +3,14 @@ Transaction Email Tracker — Flask application.
 
 Automatically checks your email inbox for transaction/receipt emails,
 parses purchase data with AI (Claude), and displays it in a web dashboard.
+Includes a webhook connector for external integrations and a daily email report.
 """
 
 import os
+import secrets
 import logging
 from datetime import datetime, timedelta
+from functools import wraps
 
 from flask import Flask, jsonify, render_template, request
 from dotenv import load_dotenv
@@ -22,6 +25,7 @@ from email_parser.database import (
 )
 from email_parser.fetcher import fetch_transaction_emails
 from email_parser.parser import parse_emails
+from email_parser.report import send_daily_report
 
 load_dotenv()
 
@@ -68,6 +72,23 @@ def check_inbox():
 
 
 # ---------------------------------------------------------------------------
+# Connector API-key auth helper
+# ---------------------------------------------------------------------------
+def require_connector_key(f):
+    """Decorator that validates the X-API-Key header against CONNECTOR_API_KEY."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        expected = os.getenv("CONNECTOR_API_KEY")
+        if not expected:
+            return jsonify({"error": "CONNECTOR_API_KEY not configured on server."}), 500
+        provided = request.headers.get("X-API-Key", "")
+        if not secrets.compare_digest(provided, expected):
+            return jsonify({"error": "Invalid or missing API key."}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ---------------------------------------------------------------------------
 # Scheduler
 # ---------------------------------------------------------------------------
 scheduler = BackgroundScheduler(daemon=True)
@@ -82,6 +103,20 @@ def start_scheduler():
         id="inbox_check",
         replace_existing=True,
     )
+
+    # Daily report — runs at the configured hour (default 7:00 AM)
+    report_hour = int(os.getenv("DAILY_REPORT_HOUR", "7"))
+    if os.getenv("DAILY_REPORT_TO"):
+        scheduler.add_job(
+            send_daily_report,
+            "cron",
+            hour=report_hour,
+            minute=0,
+            id="daily_report",
+            replace_existing=True,
+        )
+        logger.info("Daily report scheduled for %02d:00 → %s", report_hour, os.getenv("DAILY_REPORT_TO"))
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -145,14 +180,108 @@ def api_check_now():
 
 @app.route("/api/config-status")
 def api_config_status():
-    """Check whether email and AI credentials are configured."""
+    """Check whether email, AI, and connector credentials are configured."""
     email_ok = all([
         os.getenv("EMAIL_HOST"),
         os.getenv("EMAIL_ADDRESS"),
         os.getenv("EMAIL_PASSWORD"),
     ])
     ai_ok = bool(os.getenv("ANTHROPIC_API_KEY"))
-    return jsonify({"configured": email_ok and ai_ok, "email": email_ok, "ai": ai_ok})
+    connector_ok = bool(os.getenv("CONNECTOR_API_KEY"))
+    report_ok = bool(os.getenv("DAILY_REPORT_TO"))
+    return jsonify({
+        "configured": email_ok and ai_ok,
+        "email": email_ok,
+        "ai": ai_ok,
+        "connector": connector_ok,
+        "daily_report": report_ok,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Routes — Connector / Webhook
+# ---------------------------------------------------------------------------
+@app.route("/api/connector/ingest", methods=["POST"])
+@require_connector_key
+def api_connector_ingest():
+    """
+    Webhook endpoint for external systems to push order data.
+
+    Accepts JSON with one of two formats:
+
+    1. Pre-structured items (direct insert):
+       {
+         "items": [
+           { "email_uid": "ext-123", "item_index": 0, "merchant": "...",
+             "customer": "...", "item_name": "...", ... }
+         ]
+       }
+
+    2. Raw email text (parsed by AI):
+       {
+         "raw_email": {
+           "uid": "ext-123",
+           "subject": "New Order #...",
+           "from": "noreply@store.com",
+           "text": "... full email body ..."
+         }
+       }
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON."}), 400
+
+    # Format 1: pre-structured items
+    if "items" in data:
+        items = data["items"]
+        if not isinstance(items, list) or not items:
+            return jsonify({"error": "'items' must be a non-empty array."}), 400
+        count = save_items(items)
+        return jsonify({"status": "ok", "inserted": count, "received": len(items)})
+
+    # Format 2: raw email for AI parsing
+    if "raw_email" in data:
+        raw = data["raw_email"]
+        if not isinstance(raw, dict) or not raw.get("text"):
+            return jsonify({"error": "'raw_email' must have at least a 'text' field."}), 400
+
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            return jsonify({"error": "ANTHROPIC_API_KEY not configured — cannot parse raw email."}), 500
+
+        rows = parse_emails([raw])
+        if rows:
+            count = save_items(rows)
+            return jsonify({"status": "ok", "inserted": count, "parsed_items": len(rows)})
+        return jsonify({"status": "ok", "inserted": 0, "message": "No items could be parsed from the email."}), 200
+
+    return jsonify({"error": "Request must contain 'items' or 'raw_email'."}), 400
+
+
+@app.route("/api/connector/info")
+def api_connector_info():
+    """Return connector configuration (whether key is set, not the key itself)."""
+    key_set = bool(os.getenv("CONNECTOR_API_KEY"))
+    return jsonify({
+        "enabled": key_set,
+        "endpoint": "/api/connector/ingest",
+        "methods": ["POST"],
+        "auth": "X-API-Key header",
+        "formats": ["pre-structured items", "raw email for AI parsing"],
+    })
+
+
+@app.route("/api/report/send-now", methods=["POST"])
+def api_send_report_now():
+    """Manually trigger the daily report."""
+    if not os.getenv("DAILY_REPORT_TO"):
+        return jsonify({"error": "DAILY_REPORT_TO not configured in .env"}), 400
+    try:
+        send_daily_report()
+        return jsonify({"status": "ok", "sent_to": os.getenv("DAILY_REPORT_TO")})
+    except Exception as e:
+        logger.exception("Manual report send failed")
+        return jsonify({"error": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------

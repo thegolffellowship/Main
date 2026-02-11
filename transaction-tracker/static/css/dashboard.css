@@ -230,6 +230,70 @@ tbody tr:hover { background: #f9fafb; }
     color: var(--text-muted);
 }
 
+/* ---- Connector panel ---- */
+.connector-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+}
+.connector-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+.connector-header:hover { background: #f9fafb; }
+.connector-toggle { color: var(--text-muted); }
+.connector-body {
+    padding: 0 1.25rem 1rem;
+    font-size: 0.82rem;
+}
+.connector-body.hidden { display: none; }
+.connector-body p { margin-bottom: 0.75rem; color: var(--text-muted); }
+.connector-detail {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    margin-bottom: 0.35rem;
+}
+.connector-label {
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    min-width: 70px;
+}
+.connector-detail code {
+    background: #f1f5f9;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    word-break: break-all;
+}
+.connector-example {
+    margin-top: 0.75rem;
+}
+.connector-example strong {
+    display: block;
+    margin-top: 0.5rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.connector-example pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    overflow-x: auto;
+    line-height: 1.5;
+}
+
 /* ---- Row count ---- */
 .row-count {
     margin-top: 0.75rem;

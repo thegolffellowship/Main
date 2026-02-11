@@ -1,5 +1,5 @@
 /* =========================================================
-   Transaction Tracker — Dashboard JavaScript
+   TGF Transaction Tracker — Dashboard JavaScript
    ========================================================= */
 
 let allItems = [];
@@ -61,13 +61,13 @@ async function checkConfig() {
     try {
         const res = await fetch("/api/config-status");
         const data = await res.json();
-        const alert = document.getElementById("config-alert");
+        const alertEl = document.getElementById("config-alert");
         const msg = document.getElementById("config-alert-msg");
 
         if (data.configured) {
-            alert.style.display = "none";
+            alertEl.style.display = "none";
         } else {
-            alert.style.display = "block";
+            alertEl.style.display = "block";
             if (!data.email && !data.ai) {
                 msg.textContent = "Email and Anthropic API key not configured. Set up your .env file.";
             } else if (!data.email) {
@@ -75,6 +75,21 @@ async function checkConfig() {
             } else {
                 msg.textContent = "Anthropic API key not configured. Add ANTHROPIC_API_KEY to your .env file.";
             }
+        }
+
+        // Show connector panel if connector is configured
+        const connPanel = document.getElementById("connector-panel");
+        if (data.connector) {
+            connPanel.style.display = "block";
+            // Set the full URL for the connector endpoint
+            document.getElementById("connector-url").textContent =
+                window.location.origin + "/api/connector/ingest";
+        }
+
+        // Show Send Report button if daily report is configured
+        const reportBtn = document.getElementById("btn-send-report");
+        if (data.daily_report) {
+            reportBtn.style.display = "inline-flex";
         }
     } catch (err) {
         console.error("Failed to check config:", err);
@@ -216,6 +231,28 @@ async function checkNow() {
     }
 }
 
+async function sendReport() {
+    const btn = document.getElementById("btn-send-report");
+    btn.disabled = true;
+    btn.textContent = "Sending...";
+
+    try {
+        const res = await fetch("/api/report/send-now", { method: "POST" });
+        const data = await res.json();
+        if (data.error) {
+            alert(data.error);
+        } else {
+            alert("Report sent to " + data.sent_to);
+        }
+    } catch (err) {
+        console.error("Send report failed:", err);
+        alert("Failed to send report.");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Send Report";
+    }
+}
+
 function exportCSV() {
     if (!allItems.length) {
         alert("No items to export.");
@@ -248,7 +285,7 @@ function exportCSV() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `transactions_${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `tgf_transactions_${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 }
@@ -266,6 +303,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("sort-select").addEventListener("change", applyFilters);
     document.getElementById("btn-check-now").addEventListener("click", checkNow);
     document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
+    document.getElementById("btn-send-report").addEventListener("click", sendReport);
 
     // Column header sorting
     document.querySelectorAll("th.sortable").forEach((th) => {
