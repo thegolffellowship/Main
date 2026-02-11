@@ -1,6 +1,9 @@
 """
-Transaction email parser — extracts purchase data (merchant, amount, date, items)
-from email text/HTML using pattern matching.
+Transaction email parser — extracts purchase data (merchant, amount, date, items,
+customer) from email text/HTML using pattern matching.
+
+Supports generic transaction emails as well as MySimpleStore / The Golf Fellowship
+order notifications.
 """
 
 import re
@@ -11,14 +14,11 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Amount patterns — match monetary values like $12.34, USD 12.34, 12,345.67
+# Amount patterns
 # ---------------------------------------------------------------------------
 AMOUNT_PATTERNS = [
-    # $1,234.56 or $ 1,234.56
     r"\$\s?[\d,]+\.\d{2}",
-    # USD 1,234.56
     r"USD\s?[\d,]+\.\d{2}",
-    # "Total: $12.34" or "Amount: $12.34" (capture the number)
     r"(?:total|amount|charged|paid|payment|price|cost|subtotal)[:\s]*\$\s?[\d,]+\.\d{2}",
 ]
 
@@ -42,6 +42,7 @@ TOTAL_KEYWORDS = [
 # Merchant / sender mapping
 # ---------------------------------------------------------------------------
 SENDER_TO_MERCHANT = {
+    "mysimplestore.com": "The Golf Fellowship",
     "amazon.com": "Amazon",
     "paypal.com": "PayPal",
     "venmo.com": "Venmo",
@@ -88,13 +89,14 @@ def _extract_amount(text: str) -> str | None:
     """
     text_lower = text.lower()
 
-    # First pass: look for amounts near total-related keywords
+    # First pass: look for amounts near total-related keywords.
+    # Use a generous 200-char window to handle cases where the amount
+    # is on the next line (e.g. MySimpleStore "Order Total:\n\n$163.53").
     for keyword in TOTAL_KEYWORDS:
         idx = text_lower.find(keyword)
         if idx == -1:
             continue
-        # Search within 80 chars after the keyword
-        window = text[idx : idx + 80]
+        window = text[idx : idx + 200]
         match = re.search(r"\$\s?[\d,]+\.\d{2}", window)
         if match:
             return _normalize_amount(match.group())
@@ -161,11 +163,83 @@ def _extract_merchant(from_addr: str, subject: str, body: str) -> str:
     return "Unknown"
 
 
+def _extract_customer(text: str) -> str | None:
+    """
+    Try to extract the customer name from the email body.
+    Handles MySimpleStore format ("New order from: Name") and
+    shipping address blocks ("FIRSTNAME LASTNAME" in all caps).
+    """
+    # MySimpleStore: "New order from: Kenneth Carter"
+    match = re.search(r"[Nn]ew order from:\s*(.+?)(?:\n|$)", text)
+    if match:
+        name = match.group(1).strip()
+        if name:
+            return name
+
+    # Shipping Address block — look for an all-caps name after "Shipping Address"
+    match = re.search(
+        r"[Ss]hipping\s+[Aa]ddress\s*\n+\s*([A-Z][A-Z\s]+[A-Z])\s*\n",
+        text,
+    )
+    if match:
+        name = match.group(1).strip()
+        # Title-case it: "KENNETH CARTER" → "Kenneth Carter"
+        if name and len(name) > 2:
+            return name.title()
+
+    return None
+
+
 def _extract_items(text: str) -> list[str]:
     """Try to pull individual line items from the email body."""
     items = []
 
-    # Pattern: "Product Name ... $XX.XX" or "1x Product Name $XX.XX"
+    # MySimpleStore event format — look for event names followed by
+    # detail lines and a price.  The event name is typically a date + venue
+    # like "Feb 22 - LaCANTERA" sitting above lines with "GOLF or COMPETE",
+    # "MEMBER STATUS", etc.
+    # Strategy: find lines just before a price like "$158.00" that look
+    # like an event/product title.
+    mysimplestore_match = re.search(
+        r"Order Summary\b(.*?)(?:Subtotal|Sub total)",
+        text,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if mysimplestore_match:
+        block = mysimplestore_match.group(1)
+        # Extract each product: title line(s) followed by a price
+        product_chunks = re.split(r"(\$[\d,]+\.\d{2})", block)
+        i = 0
+        while i < len(product_chunks) - 1:
+            desc = product_chunks[i].strip()
+            price = product_chunks[i + 1].strip() if i + 1 < len(product_chunks) else ""
+            if desc and price:
+                # Clean up: get the first meaningful line as the item name
+                lines = [l.strip() for l in desc.splitlines() if l.strip()]
+                # Skip image references, SKU lines, and detail lines
+                title_lines = []
+                for line in lines:
+                    if re.match(r"^(Rs=|SKU:|GOLF or|MEMBER STATUS|POST-GAME|TEE CHOICE)", line, re.IGNORECASE):
+                        continue
+                    if len(line) > 2:
+                        title_lines.append(line)
+                if title_lines:
+                    item_name = title_lines[0]
+                    # Also grab detail lines for context
+                    details = []
+                    for line in lines:
+                        if re.match(r"^(GOLF or COMPETE|MEMBER STATUS)", line, re.IGNORECASE):
+                            # Extract the value after the colon
+                            val = line.split(":", 1)[-1].strip() if ":" in line else line
+                            details.append(val)
+                    if details:
+                        item_name = f"{item_name} ({', '.join(details)})"
+                    items.append(f"{item_name} {price}")
+            i += 2
+        if items:
+            return items[:20]
+
+    # Generic patterns: "Product Name ... $XX.XX" or "1x Product Name $XX.XX"
     item_patterns = [
         r"(\d+)\s*x\s+(.+?)\s+\$[\d,]+\.\d{2}",
         r"^[\s•\-\*]+(.+?)\s+\$[\d,]+\.\d{2}",
@@ -180,11 +254,22 @@ def _extract_items(text: str) -> list[str]:
             if 2 < len(item) < 100:
                 items.append(item)
 
-    return items[:20]  # cap at 20 items
+    return items[:20]
 
 
-def _extract_order_id(text: str) -> str | None:
-    """Try to find an order/confirmation number."""
+def _extract_order_id(subject: str, text: str) -> str | None:
+    """Try to find an order/confirmation number from subject line and body."""
+    # Subject: "New Order #R854482675"
+    match = re.search(r"[Oo]rder\s*#\s*([A-Za-z0-9\-]{4,30})", subject)
+    if match:
+        return match.group(1).strip()
+
+    # Body: "Order: R854482675" (MySimpleStore format)
+    match = re.search(r"[Oo]rder:\s*([A-Za-z0-9\-]{4,30})", text)
+    if match:
+        return match.group(1).strip()
+
+    # Generic body patterns
     patterns = [
         r"order\s*(?:#|number|no\.?)[:\s]*([A-Z0-9\-]{4,30})",
         r"confirmation\s*(?:#|number|no\.?)[:\s]*([A-Z0-9\-]{4,30})",
@@ -197,6 +282,31 @@ def _extract_order_id(text: str) -> str | None:
         if match:
             return match.group(1).strip()
     return None
+
+
+def _extract_date(text: str, email_date: datetime | None) -> str:
+    """
+    Try to extract the order date from the email body.
+    Falls back to the email's sent date.
+    """
+    # MySimpleStore: "Date: 02-10-2026"
+    match = re.search(r"Date:\s*(\d{2}-\d{2}-\d{4})", text)
+    if match:
+        try:
+            dt = datetime.strptime(match.group(1), "%m-%d-%Y")
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # ISO-style dates in body
+    match = re.search(r"(\d{4}-\d{2}-\d{2})", text)
+    if match:
+        return match.group(1)
+
+    if isinstance(email_date, datetime):
+        return email_date.strftime("%Y-%m-%d %H:%M")
+
+    return str(email_date) if email_date else ""
 
 
 def parse_email(email_data: dict) -> dict | None:
@@ -217,7 +327,6 @@ def parse_email(email_data: dict) -> dict | None:
 
     amount = _extract_amount(body)
     if not amount:
-        # Also try the HTML version
         html_body = email_data.get("html", "")
         if html_body:
             amount = _extract_amount(_strip_html(html_body))
@@ -227,13 +336,9 @@ def parse_email(email_data: dict) -> dict | None:
 
     merchant = _extract_merchant(from_addr, subject, body)
     items = _extract_items(body)
-    order_id = _extract_order_id(body)
-
-    email_date = email_data.get("date")
-    if isinstance(email_date, datetime):
-        date_str = email_date.strftime("%Y-%m-%d %H:%M")
-    else:
-        date_str = str(email_date) if email_date else ""
+    order_id = _extract_order_id(subject, body)
+    customer = _extract_customer(body)
+    date_str = _extract_date(body, email_data.get("date"))
 
     return {
         "email_uid": email_data.get("uid", ""),
@@ -244,6 +349,7 @@ def parse_email(email_data: dict) -> dict | None:
         "from": from_addr,
         "items": items,
         "order_id": order_id,
+        "customer": customer,
     }
 
 

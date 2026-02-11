@@ -33,6 +33,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             from_addr   TEXT,
             items       TEXT,
             order_id    TEXT,
+            customer    TEXT,
             created_at  TEXT DEFAULT (datetime('now'))
         )
         """
@@ -43,6 +44,11 @@ def init_db(db_path: str | Path | None = None) -> None:
         ON transactions(date DESC)
         """
     )
+    # Add customer column to existing databases that don't have it yet
+    try:
+        conn.execute("ALTER TABLE transactions ADD COLUMN customer TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.commit()
     conn.close()
     logger.info("Database initialized at %s", db_path or DB_PATH)
@@ -60,8 +66,8 @@ def save_transactions(transactions: list[dict], db_path: str | Path | None = Non
             conn.execute(
                 """
                 INSERT OR IGNORE INTO transactions
-                    (email_uid, merchant, amount, date, subject, from_addr, items, order_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (email_uid, merchant, amount, date, subject, from_addr, items, order_id, customer)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     txn.get("email_uid", ""),
@@ -72,6 +78,7 @@ def save_transactions(transactions: list[dict], db_path: str | Path | None = Non
                     txn.get("from", ""),
                     json.dumps(txn.get("items", [])),
                     txn.get("order_id"),
+                    txn.get("customer"),
                 ),
             )
             if conn.total_changes:

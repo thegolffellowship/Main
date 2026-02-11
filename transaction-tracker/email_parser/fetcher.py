@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 # Senders commonly associated with purchase/transaction receipts
 TRANSACTION_SENDERS = [
+    "mysimplestore.com",
     "amazon.com",
     "paypal.com",
     "venmo.com",
@@ -37,6 +38,7 @@ TRANSACTION_SENDERS = [
 ]
 
 TRANSACTION_SUBJECTS = [
+    "new order",
     "receipt",
     "order confirmation",
     "payment",

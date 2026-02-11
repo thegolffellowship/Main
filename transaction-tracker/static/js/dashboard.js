@@ -28,7 +28,7 @@ async function fetchTransactions() {
     } catch (err) {
         console.error("Failed to fetch transactions:", err);
         document.getElementById("txn-body").innerHTML =
-            '<tr class="empty-row"><td colspan="7">Failed to load transactions.</td></tr>';
+            '<tr class="empty-row"><td colspan="8">Failed to load transactions.</td></tr>';
     }
 }
 
@@ -64,7 +64,7 @@ function renderTable(transactions) {
 
     if (!transactions.length) {
         tbody.innerHTML =
-            '<tr class="empty-row"><td colspan="7">No transactions found. Click "Check Now" to scan your inbox.</td></tr>';
+            '<tr class="empty-row"><td colspan="8">No transactions found. Click "Check Now" to scan your inbox.</td></tr>';
         document.getElementById("row-count").textContent = "";
         return;
     }
@@ -74,11 +74,12 @@ function renderTable(transactions) {
             (txn) => `
         <tr data-id="${txn.id}">
             <td>${escapeHtml(txn.date || "")}</td>
+            <td>${escapeHtml(txn.customer || "—")}</td>
             <td>${escapeHtml(txn.merchant || "")}</td>
             <td class="amount-cell">${escapeHtml(txn.amount || "")}</td>
-            <td>${escapeHtml(txn.subject || "")}</td>
             <td><span class="order-id">${escapeHtml(txn.order_id || "—")}</span></td>
             <td><div class="items-cell">${renderItems(txn.items)}</div></td>
+            <td>${escapeHtml(txn.subject || "")}</td>
             <td><button class="btn btn-danger" onclick="deleteTxn(${txn.id})">Delete</button></td>
         </tr>`
         )
@@ -119,6 +120,12 @@ function sortTransactions(transactions, sortKey) {
         case "merchant-desc":
             sorted.sort((a, b) => (b.merchant || "").localeCompare(a.merchant || ""));
             break;
+        case "customer-asc":
+            sorted.sort((a, b) => (a.customer || "").localeCompare(b.customer || ""));
+            break;
+        case "customer-desc":
+            sorted.sort((a, b) => (b.customer || "").localeCompare(a.customer || ""));
+            break;
     }
     return sorted;
 }
@@ -131,6 +138,7 @@ function applyFilters() {
     if (query) {
         filtered = allTransactions.filter(
             (txn) =>
+                (txn.customer || "").toLowerCase().includes(query) ||
                 (txn.merchant || "").toLowerCase().includes(query) ||
                 (txn.amount || "").toLowerCase().includes(query) ||
                 (txn.subject || "").toLowerCase().includes(query) ||
@@ -187,14 +195,15 @@ function exportCSV() {
         return;
     }
 
-    const headers = ["Date", "Merchant", "Amount", "Subject", "Order ID", "Items"];
+    const headers = ["Date", "Customer", "Merchant", "Amount", "Order ID", "Items", "Subject"];
     const rows = allTransactions.map((txn) => [
         txn.date || "",
+        txn.customer || "",
         txn.merchant || "",
         txn.amount || "",
-        txn.subject || "",
         txn.order_id || "",
         (txn.items || []).join("; "),
+        txn.subject || "",
     ]);
 
     const csvContent = [headers, ...rows]
