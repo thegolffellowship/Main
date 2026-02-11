@@ -213,13 +213,16 @@ tbody tr:hover { background: #f9fafb; }
     white-space: nowrap;
 }
 
-/* Items as tags */
+/* Items column */
 .items-cell {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-    max-width: 250px;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 220px;
+    max-width: 360px;
 }
+
+/* Plain-string item tag (generic merchants) */
 .item-tag {
     background: #eff6ff;
     color: var(--primary);
@@ -227,9 +230,53 @@ tbody tr:hover { background: #f9fafb; }
     border-radius: 4px;
     font-size: 0.75rem;
     white-space: nowrap;
-    max-width: 150px;
+    max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Structured item card (Golf Fellowship events) */
+.item-card {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.8rem;
+}
+.item-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+.item-card-name {
+    font-weight: 600;
+    color: var(--text);
+}
+.item-card-price {
+    font-weight: 600;
+    color: var(--green);
+    white-space: nowrap;
+}
+.item-card-details {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+}
+.item-detail-row {
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+.item-detail-label {
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 0.65rem;
+    letter-spacing: 0.03em;
+}
+.item-detail-value {
+    color: var(--text);
+    font-weight: 500;
 }
 
 .order-id {

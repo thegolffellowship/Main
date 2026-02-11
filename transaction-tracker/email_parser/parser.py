@@ -190,16 +190,47 @@ def _extract_customer(text: str) -> str | None:
     return None
 
 
-def _extract_items(text: str) -> list[str]:
-    """Try to pull individual line items from the email body."""
-    items = []
+# ---------------------------------------------------------------------------
+# Item extraction
+# ---------------------------------------------------------------------------
 
-    # MySimpleStore event format — look for event names followed by
-    # detail lines and a price.  The event name is typically a date + venue
-    # like "Feb 22 - LaCANTERA" sitting above lines with "GOLF or COMPETE",
-    # "MEMBER STATUS", etc.
-    # Strategy: find lines just before a price like "$158.00" that look
-    # like an event/product title.
+# Detail-line labels found in MySimpleStore / Golf Fellowship order emails.
+# Matched case-insensitively against the beginning of each line; the value
+# after the colon is captured.
+_DETAIL_LABELS = [
+    "GOLF or COMPETE",
+    "MEMBER STATUS",
+    "TEE CHOICE",
+    "POST-GAME",
+    "POST GAME",
+    "HANDICAP",
+    "SHIRT SIZE",
+    "GUEST NAME",
+    "GUEST",
+]
+
+# Lines starting with these tokens are never item titles.
+_SKIP_LINE_RE = re.compile(
+    r"^(Rs=|SKU:|Qty:)",
+    re.IGNORECASE,
+)
+
+
+def _extract_items(text: str) -> list:
+    """
+    Extract line items from the email body.
+
+    For MySimpleStore / Golf Fellowship emails, returns a list of dicts::
+
+        {"name": "Feb 22 - LaCANTERA", "price": "$158.00",
+         "details": {"GOLF or COMPETE": "COMPETE",
+                     "MEMBER STATUS": "Non-Member", ...}}
+
+    For other merchants, returns a list of plain strings (backward-compatible).
+    """
+    items: list = []
+
+    # ----- MySimpleStore / Golf Fellowship format -----
     mysimplestore_match = re.search(
         r"Order Summary\b(.*?)(?:Subtotal|Sub total)",
         text,
@@ -207,39 +238,46 @@ def _extract_items(text: str) -> list[str]:
     )
     if mysimplestore_match:
         block = mysimplestore_match.group(1)
-        # Extract each product: title line(s) followed by a price
+        # Split on price tokens so each chunk = description before a price
         product_chunks = re.split(r"(\$[\d,]+\.\d{2})", block)
         i = 0
         while i < len(product_chunks) - 1:
             desc = product_chunks[i].strip()
             price = product_chunks[i + 1].strip() if i + 1 < len(product_chunks) else ""
             if desc and price:
-                # Clean up: get the first meaningful line as the item name
-                lines = [l.strip() for l in desc.splitlines() if l.strip()]
-                # Skip image references, SKU lines, and detail lines
-                title_lines = []
+                lines = [ln.strip() for ln in desc.splitlines() if ln.strip()]
+
+                # Separate title lines from detail lines
+                title_lines: list[str] = []
+                details: dict[str, str] = {}
+
                 for line in lines:
-                    if re.match(r"^(Rs=|SKU:|GOLF or|MEMBER STATUS|POST-GAME|TEE CHOICE)", line, re.IGNORECASE):
+                    if _SKIP_LINE_RE.match(line):
                         continue
-                    if len(line) > 2:
+
+                    # Check if this line is a known detail label
+                    matched_label = False
+                    for label in _DETAIL_LABELS:
+                        if line.upper().startswith(label.upper()):
+                            val = line.split(":", 1)[-1].strip() if ":" in line else ""
+                            details[label] = val
+                            matched_label = True
+                            break
+
+                    if not matched_label and len(line) > 2:
                         title_lines.append(line)
+
                 if title_lines:
-                    item_name = title_lines[0]
-                    # Also grab detail lines for context
-                    details = []
-                    for line in lines:
-                        if re.match(r"^(GOLF or COMPETE|MEMBER STATUS)", line, re.IGNORECASE):
-                            # Extract the value after the colon
-                            val = line.split(":", 1)[-1].strip() if ":" in line else line
-                            details.append(val)
-                    if details:
-                        item_name = f"{item_name} ({', '.join(details)})"
-                    items.append(f"{item_name} {price}")
+                    items.append({
+                        "name": title_lines[0],
+                        "price": price,
+                        "details": details,
+                    })
             i += 2
         if items:
             return items[:20]
 
-    # Generic patterns: "Product Name ... $XX.XX" or "1x Product Name $XX.XX"
+    # ----- Generic patterns (other merchants) -----
     item_patterns = [
         r"(\d+)\s*x\s+(.+?)\s+\$[\d,]+\.\d{2}",
         r"^[\s•\-\*]+(.+?)\s+\$[\d,]+\.\d{2}",

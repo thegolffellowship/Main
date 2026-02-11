@@ -90,9 +90,35 @@ function renderTable(transactions) {
 
 function renderItems(items) {
     if (!items || !items.length) return '<span style="color:var(--text-muted)">—</span>';
+
     return items
-        .slice(0, 5)
-        .map((item) => `<span class="item-tag" title="${escapeHtml(item)}">${escapeHtml(item)}</span>`)
+        .slice(0, 10)
+        .map((item) => {
+            // Structured item (Golf Fellowship / MySimpleStore)
+            if (typeof item === "object" && item.name) {
+                let html = `<div class="item-card">`;
+                html += `<div class="item-card-header">`;
+                html += `<span class="item-card-name">${escapeHtml(item.name)}</span>`;
+                html += `<span class="item-card-price">${escapeHtml(item.price || "")}</span>`;
+                html += `</div>`;
+                if (item.details && Object.keys(item.details).length > 0) {
+                    html += `<div class="item-card-details">`;
+                    for (const [label, value] of Object.entries(item.details)) {
+                        if (value) {
+                            html += `<div class="item-detail-row">`;
+                            html += `<span class="item-detail-label">${escapeHtml(label)}:</span> `;
+                            html += `<span class="item-detail-value">${escapeHtml(value)}</span>`;
+                            html += `</div>`;
+                        }
+                    }
+                    html += `</div>`;
+                }
+                html += `</div>`;
+                return html;
+            }
+            // Plain string item (other merchants)
+            return `<span class="item-tag" title="${escapeHtml(item)}">${escapeHtml(item)}</span>`;
+        })
         .join("");
 }
 
@@ -202,7 +228,18 @@ function exportCSV() {
         txn.merchant || "",
         txn.amount || "",
         txn.order_id || "",
-        (txn.items || []).join("; "),
+        (txn.items || []).map((item) => {
+            if (typeof item === "object" && item.name) {
+                let parts = [item.name, item.price || ""];
+                if (item.details) {
+                    for (const [label, value] of Object.entries(item.details)) {
+                        if (value) parts.push(`${label}: ${value}`);
+                    }
+                }
+                return parts.filter(Boolean).join(" | ");
+            }
+            return item;
+        }).join("; "),
         txn.subject || "",
     ]);
 
