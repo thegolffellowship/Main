@@ -194,26 +194,55 @@ def _extract_customer(text: str) -> str | None:
 # Item extraction
 # ---------------------------------------------------------------------------
 
-# Detail-line labels found in MySimpleStore / Golf Fellowship order emails.
-# Matched case-insensitively against the beginning of each line; the value
-# after the colon is captured.
-_DETAIL_LABELS = [
-    "GOLF or COMPETE",
-    "MEMBER STATUS",
-    "TEE CHOICE",
-    "POST-GAME",
-    "POST GAME",
-    "HANDICAP",
-    "SHIRT SIZE",
-    "GUEST NAME",
-    "GUEST",
-]
-
-# Lines starting with these tokens are never item titles.
+# Lines that should always be skipped (images, SKUs, quantities).
 _SKIP_LINE_RE = re.compile(
     r"^(Rs=|SKU:|Qty:)",
     re.IGNORECASE,
 )
+
+# Friendly short names for common verbose labels.
+_LABEL_ALIASES = {
+    "do you have a current handicap? (not required)": "Handicap",
+    "do you have a current handicap?": "Handicap",
+    "what is your date of birth?": "Date of Birth",
+    "tee choice (see details for selection)": "Tee Choice",
+    "golf or compete?": "Golf or Compete",
+    "post-game fellowship?": "Post-Game",
+    "post game fellowship?": "Post-Game",
+    "returning or new?": "Returning or New",
+    "add net points race?": "NET Points Race",
+    "add gross points race?": "GROSS Points Race",
+    "add city match play?": "City Match Play",
+    "member status": "Member Status",
+    "shirt size": "Shirt Size",
+    "guest name": "Guest Name",
+    "city": "City",
+}
+
+
+def _clean_label(raw_label: str) -> str:
+    """
+    Turn a raw email label into a clean display label.
+
+    "Do you have a Current Handicap? (Not Required)" → "Handicap"
+    "TEE CHOICE (See details for selection)"          → "Tee Choice"
+    "RETURNING or NEW?"                                → "Returning or New"
+    """
+    key = raw_label.strip().rstrip(":").lower()
+
+    # Check aliases first
+    if key in _LABEL_ALIASES:
+        return _LABEL_ALIASES[key]
+
+    # Remove trailing question marks and parenthetical notes
+    cleaned = re.sub(r"\s*\(.*?\)\s*$", "", raw_label.strip())
+    cleaned = cleaned.rstrip("?").rstrip(":").strip()
+
+    # Title-case it
+    if cleaned.isupper() or cleaned.islower():
+        cleaned = cleaned.title()
+
+    return cleaned
 
 
 def _extract_items(text: str) -> list:
@@ -223,8 +252,9 @@ def _extract_items(text: str) -> list:
     For MySimpleStore / Golf Fellowship emails, returns a list of dicts::
 
         {"name": "Feb 22 - LaCANTERA", "price": "$158.00",
-         "details": {"GOLF or COMPETE": "COMPETE",
-                     "MEMBER STATUS": "Non-Member", ...}}
+         "details": {"Golf or Compete": "EVENT Only - No Additional Games",
+                     "Member Status": "MEMBER = $158",
+                     "Tee Choice": "<50 | 6300-6800y", ...}}
 
     For other merchants, returns a list of plain strings (backward-compatible).
     """
@@ -247,7 +277,7 @@ def _extract_items(text: str) -> list:
             if desc and price:
                 lines = [ln.strip() for ln in desc.splitlines() if ln.strip()]
 
-                # Separate title lines from detail lines
+                # Separate title lines from detail (key: value) lines
                 title_lines: list[str] = []
                 details: dict[str, str] = {}
 
@@ -255,16 +285,22 @@ def _extract_items(text: str) -> list:
                     if _SKIP_LINE_RE.match(line):
                         continue
 
-                    # Check if this line is a known detail label
-                    matched_label = False
-                    for label in _DETAIL_LABELS:
-                        if line.upper().startswith(label.upper()):
-                            val = line.split(":", 1)[-1].strip() if ":" in line else ""
-                            details[label] = val
-                            matched_label = True
-                            break
+                    # Any line with a colon is treated as a detail field.
+                    # We split on the LAST colon that has text on both sides,
+                    # but MySimpleStore uses "LABEL: VALUE" (first colon).
+                    if ":" in line:
+                        label_raw, _, value = line.partition(":")
+                        label_raw = label_raw.strip()
+                        value = value.strip()
+                        # Only treat as a detail if the label part looks
+                        # like a field name (at least 3 chars, not purely
+                        # numeric, and not the product title itself).
+                        if len(label_raw) >= 3 and not label_raw.isdigit():
+                            details[_clean_label(label_raw)] = value
+                            continue
 
-                    if not matched_label and len(line) > 2:
+                    # No colon or didn't qualify as a detail → title line
+                    if len(line) > 2:
                         title_lines.append(line)
 
                 if title_lines:
