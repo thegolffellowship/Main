@@ -1,0 +1,44 @@
+{
+  "accounts": [
+    {
+      "label": "Personal Gmail",
+      "email": "you@gmail.com",
+      "password": "your-app-password",
+      "imap_server": "imap.gmail.com",
+      "imap_port": 993,
+      "use_ssl": true
+    },
+    {
+      "label": "Work iCloud",
+      "email": "you@icloud.com",
+      "password": "your-app-specific-password",
+      "imap_server": "imap.mail.me.com",
+      "imap_port": 993,
+      "use_ssl": true
+    },
+    {
+      "label": "Outlook",
+      "email": "you@outlook.com",
+      "password": "your-app-password",
+      "imap_server": "outlook.office365.com",
+      "imap_port": 993,
+      "use_ssl": true
+    }
+  ],
+
+  "summary_recipient": "you@gmail.com",
+
+  "smtp": {
+    "server": "smtp.gmail.com",
+    "port": 587,
+    "email": "you@gmail.com",
+    "password": "your-app-password",
+    "use_tls": true
+  },
+
+  "schedule_hour": 8,
+  "schedule_minute": 0,
+  "timezone": "America/New_York",
+  "lookback_hours": 24,
+  "max_emails_per_account": 50
+}

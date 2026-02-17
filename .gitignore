@@ -1,0 +1,13 @@
+# Email agent credentials (never commit real passwords)
+email_agent_config.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+email_agent.log
+
+# Environment
+.env
