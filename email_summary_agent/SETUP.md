@@ -1,106 +1,84 @@
 # Email Summary Agent - Setup Guide
 
-This agent checks all your email accounts every morning at 8 AM and sends you one email with a summary of everything that came in overnight.
+This agent checks your three email accounts every morning at 8 AM and sends you one email to **niester@mac.com** with a summary of everything that came in overnight.
+
+Your accounts:
+- **niester@mac.com** (iCloud)
+- **kerry@thegolffellowship.com** (Microsoft 365)
+- **admin@thegolffellowship.com** (Microsoft 365)
 
 We'll set it up on **PythonAnywhere**, a free website that runs it for you 24/7. You don't need to leave a computer on.
 
 ---
 
-## What You'll Need Before Starting
+## What You'll Need
 
-- About 15-20 minutes
-- Your iPhone (to look up which email accounts you have)
-- A computer or tablet with a web browser (to set things up on PythonAnywhere)
-
----
-
-## Step 1: Find Out Which Email Accounts Are on Your iPhone
-
-On your iPhone:
-
-1. Open **Settings**
-2. Scroll down and tap **Mail**
-3. Tap **Accounts**
-4. You'll see a list like "iCloud", "Gmail", "Outlook", etc.
-5. **Write down each email address** - you'll need them in Step 4
+- About 15 minutes
+- A computer or tablet with a web browser
 
 ---
 
-## Step 2: Create App Passwords for Each Email Account
+## Step 1: Create an App Password for Your iCloud Account
 
-For security, email providers don't let apps use your normal password. Instead, you create a special "app password" for each account. This is a one-time thing.
-
-**Do this for each email account on your iPhone:**
-
-### If you have a Gmail account (anything @gmail.com):
-
-1. On your computer, go to **myaccount.google.com**
-2. Click **Security** on the left side
-3. Make sure **2-Step Verification** is turned ON (if it's not, turn it on first)
-4. Go back to the Security page and search for **App Passwords**
-5. For the app name, type **Email Summary Agent** and click **Create**
-6. Google will show you a 16-letter password like `abcd efgh ijkl mnop`
-7. **Copy this password and save it somewhere** - you'll need it in Step 4
-
-### If you have an iCloud account (anything @icloud.com, @me.com, or @mac.com):
+Apple doesn't let apps use your regular Apple ID password, so you need to create a special one-time "app password." This only takes a minute.
 
 1. On your computer, go to **appleid.apple.com**
-2. Sign in with your Apple ID
-3. Go to **Sign-In and Security**
+2. Sign in with the Apple ID that owns **niester@mac.com**
+3. Click **Sign-In and Security**
 4. Click **App-Specific Passwords**
-5. Click the **+** button, name it **Email Summary Agent**
-6. Apple will show you a password like `abcd-efgh-ijkl-mnop`
-7. **Copy this password and save it somewhere** - you'll need it in Step 4
-
-### If you have an Outlook/Hotmail account (@outlook.com, @hotmail.com, @live.com):
-
-1. On your computer, go to **account.microsoft.com**
-2. Sign in and go to **Security**
-3. Click **Advanced security options**
-4. Scroll to **App passwords** and click **Create a new app password**
-5. Microsoft will show you a password
-6. **Copy this password and save it somewhere** - you'll need it in Step 4
-
-### If you have a Yahoo account (@yahoo.com):
-
-1. On your computer, go to **login.yahoo.com**
-2. Go to **Account Security**
-3. Click **Generate app password**
-4. Select **Other App**, name it **Email Summary Agent**
-5. Yahoo will show you a password
-6. **Copy this password and save it somewhere** - you'll need it in Step 4
+5. Click the **+** button
+6. Name it **Email Summary Agent** and click Create
+7. Apple will show you a password that looks like `abcd-efgh-ijkl-mnop`
+8. **Copy this password and save it somewhere safe** (a note on your phone is fine) - you'll need it in Step 3
 
 ---
 
-## Step 3: Sign Up for PythonAnywhere (Free)
+## Step 2: Create App Passwords for Your Microsoft 365 Accounts
 
-1. Go to **www.pythonanywhere.com** in your browser
+You need to do this for both **kerry@thegolffellowship.com** and **admin@thegolffellowship.com**.
+
+**For each Microsoft 365 account:**
+
+1. Go to **mysignins.microsoft.com/security-info**
+2. Sign in with that Microsoft 365 account
+3. Click **+ Add sign-in method**
+4. Choose **App password** from the dropdown
+5. Name it **Email Summary Agent** and click **Next**
+6. Microsoft will show you a password
+7. **Copy this password and save it** - you'll need it in Step 3
+
+**Do this twice** - once for kerry@ and once for admin@.
+
+> **Note:** If your Microsoft 365 admin has disabled app passwords, you may need to enable them in the Microsoft 365 admin center under Settings > Org settings > Security & privacy > Azure multi-factor authentication > Additional cloud-based MFA settings.
+
+---
+
+## Step 3: Sign Up for PythonAnywhere and Set Up the Agent
+
+### 3a. Create a free account
+
+1. Go to **www.pythonanywhere.com**
 2. Click **Pricing & signup**
 3. Click **Create a Beginner account** (the free one)
-4. Fill in a username, email, and password, then create the account
-5. Confirm your email if they ask you to
+4. Pick a username and password, then create the account
 
----
+### 3b. Open a console
 
-## Step 4: Upload the Agent and Set Up Your Config
-
-### 4a. Open a console
-
-1. After logging in to PythonAnywhere, click the **Dashboard** link at the top
+1. After logging in, click **Dashboard** at the top
 2. Under **New console**, click **Bash**
-3. A black screen with a command line will appear - this is where you'll type commands
+3. A black screen will appear - this is where you'll type commands
 
-### 4b. Download the agent code
+### 3c. Download the agent
 
-Type this into the console and press Enter:
+Type this line into the console and press Enter:
 
 ```
 git clone https://github.com/thegolffellowship/Main.git
 ```
 
-Wait for it to finish.
+Wait for it to finish (a few seconds).
 
-### 4c. Create your personal config file
+### 3d. Create your config file
 
 Type this and press Enter:
 
@@ -108,7 +86,7 @@ Type this and press Enter:
 cp Main/email_agent_config.example.json Main/email_agent_config.json
 ```
 
-### 4d. Edit the config file with your email accounts
+### 3e. Add your app passwords
 
 Type this and press Enter:
 
@@ -116,88 +94,25 @@ Type this and press Enter:
 nano Main/email_agent_config.json
 ```
 
-A text editor will open. You need to replace the placeholder values with your real information.
+A text editor will open. The file already has your three email accounts set up. **You only need to replace the passwords.**
 
-**Here's what to change:**
+You'll see these lines that need changing:
 
-For each email account on your iPhone, you need a block that looks like this. Delete the example accounts and replace them with yours.
+**Line 6** - Replace `PASTE-YOUR-ICLOUD-APP-PASSWORD-HERE` with the iCloud app password from Step 1
 
-**For a Gmail account**, the block looks like:
-```json
-{
-    "label": "My Gmail",
-    "email": "yourname@gmail.com",
-    "password": "the-app-password-from-step-2",
-    "imap_server": "imap.gmail.com",
-    "imap_port": 993,
-    "use_ssl": true
-}
-```
+**Line 14** - Replace `PASTE-YOUR-MICROSOFT-365-APP-PASSWORD-HERE` with the app password for **kerry@thegolffellowship.com** from Step 2
 
-**For an iCloud account**, the block looks like:
-```json
-{
-    "label": "My iCloud",
-    "email": "yourname@icloud.com",
-    "password": "the-app-password-from-step-2",
-    "imap_server": "imap.mail.me.com",
-    "imap_port": 993,
-    "use_ssl": true
-}
-```
+**Line 22** - Replace `PASTE-YOUR-MICROSOFT-365-APP-PASSWORD-HERE` with the app password for **admin@thegolffellowship.com** from Step 2
 
-**For an Outlook/Hotmail account**, the block looks like:
-```json
-{
-    "label": "My Outlook",
-    "email": "yourname@outlook.com",
-    "password": "the-app-password-from-step-2",
-    "imap_server": "outlook.office365.com",
-    "imap_port": 993,
-    "use_ssl": true
-}
-```
+**Line 34** - Replace `PASTE-YOUR-ICLOUD-APP-PASSWORD-HERE` with the **same** iCloud app password from Step 1 (this is used to send the summary)
 
-**For a Yahoo account**, the block looks like:
-```json
-{
-    "label": "My Yahoo",
-    "email": "yourname@yahoo.com",
-    "password": "the-app-password-from-step-2",
-    "imap_server": "imap.mail.yahoo.com",
-    "imap_port": 993,
-    "use_ssl": true
-}
-```
+Use your arrow keys to move around. Just delete the placeholder text and type in the password.
 
-**Important:** If you have more than one account, put a comma between each block. If it's the last account, no comma after it.
-
-**Also change these two sections:**
-
-`"summary_recipient"` - Change this to the email address where you want to RECEIVE your daily summary (probably your main email).
-
-`"smtp"` section - This is the account that SENDS the summary. Use one of your Gmail accounts if you have one:
-```json
-"smtp": {
-    "server": "smtp.gmail.com",
-    "port": 587,
-    "email": "yourname@gmail.com",
-    "password": "the-same-app-password-for-this-gmail",
-    "use_tls": true
-}
-```
-
-**Also change the timezone** if you're not on the US East Coast. Common options:
-- `America/New_York` - Eastern Time
-- `America/Chicago` - Central Time
-- `America/Denver` - Mountain Time
-- `America/Los_Angeles` - Pacific Time
-
-**When you're done editing:**
-1. Press **Ctrl + O** (that's the letter O) then press **Enter** to save
+**When you're done:**
+1. Press **Ctrl + O** (the letter O, not zero) then press **Enter** to save
 2. Press **Ctrl + X** to exit the editor
 
-### 4e. Test it
+### 3f. Test it (dry run - won't send anything)
 
 Type this and press Enter:
 
@@ -205,57 +120,73 @@ Type this and press Enter:
 cd Main && python3 -m email_summary_agent --dry-run
 ```
 
-You should see it connect to each account and print a summary. If you see errors, double-check your email addresses and app passwords in the config file.
+You should see it connect to each of your three accounts and print a summary of recent emails. If you see errors, the most common cause is a typo in the app password - go back to step 3e and double-check.
 
-If the dry run looks good, try sending a real one:
+### 3g. Send yourself a real test summary
 
 ```
 python3 -m email_summary_agent --now
 ```
 
-Check the email address you put in `summary_recipient` - you should have a summary email.
+Check your **niester@mac.com** inbox - you should have a nicely formatted summary email.
 
 ---
 
-## Step 5: Schedule It to Run Every Morning
+## Step 4: Schedule It for Every Morning at 8 AM
 
-1. Go back to PythonAnywhere (click the PythonAnywhere logo at the top left)
-2. Click the **Tasks** tab at the top of the page
-3. Under **Scheduled tasks**, you'll see a section to create a new task
-4. Set the time to **08:00** (or whatever time you want your summary)
-5. In the command box, type:
+1. Click the **PythonAnywhere** logo at the top left to go back to the dashboard
+2. Click the **Tasks** tab
+3. Set the time to **08:00**
+4. In the command box, type:
 
 ```
 cd ~/Main && python3 -m email_summary_agent --now
 ```
 
-6. Click **Create**
+5. Click **Create**
 
-**That's it!** Every morning at 8 AM, PythonAnywhere will run the agent, and you'll get a summary email on your phone.
+**You're done!** Every morning at 8 AM, you'll receive a summary email at niester@mac.com covering all three of your accounts.
+
+---
+
+## Changing the Time Zone
+
+The schedule runs in UTC by default on PythonAnywhere. If you're on the US East Coast, 8 AM Eastern = **13:00 UTC**, so set the task time to **13:00** instead of 08:00.
+
+Common conversions for 8 AM:
+- **Eastern Time** = set task to **13:00**
+- **Central Time** = set task to **14:00**
+- **Mountain Time** = set task to **15:00**
+- **Pacific Time** = set task to **16:00**
 
 ---
 
 ## Troubleshooting
 
-**"Login failed" error for Gmail:**
-Make sure 2-Step Verification is turned on in your Google account BEFORE creating the app password. The app password won't work without it.
+**"Login failed" for iCloud:**
+Make sure you're using the app-specific password from appleid.apple.com (Step 1), not your regular Apple ID password.
 
-**"Login failed" error for iCloud:**
-Make sure you're using an app-specific password from appleid.apple.com, not your regular Apple ID password.
+**"Login failed" for Microsoft 365:**
+Make sure app passwords are enabled for your Microsoft 365 organization. If you're the admin, check the Microsoft 365 admin center.
 
-**No emails showing up:**
-The agent only looks at emails from the last 24 hours by default. If your inbox has been quiet, try sending yourself a test email first.
+**No emails in the summary:**
+The agent only looks at emails from the last 24 hours. If it's been a quiet day, try sending yourself a test email first, wait a minute, then run the test again.
 
-**Wrong time zone:**
-Edit the config file and change the `timezone` value. Re-run the test to verify.
+**Want to change where the summary gets sent:**
+On PythonAnywhere, go to Dashboard > Files > Main > email_agent_config.json. Change the `summary_recipient` value to a different email address.
 
-**Need to change settings later:**
-Go to PythonAnywhere > Dashboard > Files > navigate to `Main/email_agent_config.json` and edit it there.
+**Want to stop the daily summary:**
+Go to PythonAnywhere > Tasks tab > delete the scheduled task.
 
 ---
 
-## Notes
+## Quick Reference
 
-- **Free PythonAnywhere accounts** allow one scheduled task per day, which is exactly what we need
-- Your passwords are stored only in your PythonAnywhere account - they're never uploaded to GitHub
-- To stop the daily summary, just delete the scheduled task in PythonAnywhere
+| What | Where |
+|------|-------|
+| Agent checks | niester@mac.com, kerry@thegolffellowship.com, admin@thegolffellowship.com |
+| Summary sent to | niester@mac.com |
+| Runs at | 8:00 AM daily |
+| Hosted on | PythonAnywhere (free) |
+| To edit settings | PythonAnywhere > Files > Main/email_agent_config.json |
+| To stop | PythonAnywhere > Tasks > delete the task |

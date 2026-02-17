@@ -1,38 +1,38 @@
 {
   "accounts": [
     {
-      "label": "Personal Gmail",
-      "email": "you@gmail.com",
-      "password": "your-app-password",
-      "imap_server": "imap.gmail.com",
-      "imap_port": 993,
-      "use_ssl": true
-    },
-    {
-      "label": "Work iCloud",
-      "email": "you@icloud.com",
-      "password": "your-app-specific-password",
+      "label": "iCloud (niester@mac.com)",
+      "email": "niester@mac.com",
+      "password": "PASTE-YOUR-ICLOUD-APP-PASSWORD-HERE",
       "imap_server": "imap.mail.me.com",
       "imap_port": 993,
       "use_ssl": true
     },
     {
-      "label": "Outlook",
-      "email": "you@outlook.com",
-      "password": "your-app-password",
+      "label": "Golf Fellowship (kerry)",
+      "email": "kerry@thegolffellowship.com",
+      "password": "PASTE-YOUR-MICROSOFT-365-APP-PASSWORD-HERE",
+      "imap_server": "outlook.office365.com",
+      "imap_port": 993,
+      "use_ssl": true
+    },
+    {
+      "label": "Golf Fellowship (admin)",
+      "email": "admin@thegolffellowship.com",
+      "password": "PASTE-YOUR-MICROSOFT-365-APP-PASSWORD-HERE",
       "imap_server": "outlook.office365.com",
       "imap_port": 993,
       "use_ssl": true
     }
   ],
 
-  "summary_recipient": "you@gmail.com",
+  "summary_recipient": "niester@mac.com",
 
   "smtp": {
-    "server": "smtp.gmail.com",
+    "server": "smtp.mail.me.com",
     "port": 587,
-    "email": "you@gmail.com",
-    "password": "your-app-password",
+    "email": "niester@mac.com",
+    "password": "PASTE-YOUR-ICLOUD-APP-PASSWORD-HERE",
     "use_tls": true
   },
 
