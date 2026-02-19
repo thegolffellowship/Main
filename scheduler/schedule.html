@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PAM Health Nurse Scheduler — Schedule</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/>
+                    <path d="M12 8v4l3 3"/>
+                </svg>
+                <span>PAM Scheduler</span>
+            </div>
+        </div>
+        <ul class="nav-links">
+            <li>
+                <a href="index.html">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    Dashboard
+                </a>
+            </li>
+            <li>
+                <a href="nurses.html">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Nurses
+                </a>
+            </li>
+            <li class="active">
+                <a href="schedule.html">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                        <path d="M9 14l2 2 4-4"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    Schedule
+                </a>
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            <p>PAM Health — San Antonio</p>
+        </div>
+    </nav>
+
+    <main class="content">
+        <header class="top-bar">
+            <button class="menu-toggle" aria-label="Toggle menu">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+            </button>
+            <h1>Schedule Manager</h1>
+            <div class="header-actions">
+                <button class="btn-primary" id="addShiftBtn">+ Assign Shift</button>
+                <button class="btn-secondary" id="autoScheduleBtn">Auto-Schedule Week</button>
+            </div>
+        </header>
+
+        <section class="schedule-controls">
+            <div class="calendar-nav">
+                <button id="prevWeek" class="btn-icon" aria-label="Previous week">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="15 18 9 12 15 6"/>
+                    </svg>
+                </button>
+                <span id="weekRange" class="week-range"></span>
+                <button id="nextWeek" class="btn-icon" aria-label="Next week">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                </button>
+                <button id="todayBtn" class="btn-secondary">Today</button>
+            </div>
+            <div class="schedule-filters">
+                <select id="shiftTypeFilter" class="filter-select">
+                    <option value="">All Shifts</option>
+                    <option value="day">Day Shift</option>
+                    <option value="night">Night Shift</option>
+                </select>
+                <select id="nurseRoleFilter" class="filter-select">
+                    <option value="">All Roles</option>
+                    <option value="RN">RN</option>
+                    <option value="LVN">LVN</option>
+                    <option value="CNA">CNA</option>
+                    <option value="Charge Nurse">Charge Nurse</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="schedule-table-wrapper">
+            <table class="schedule-table" id="scheduleTable">
+                <thead>
+                    <tr id="scheduleHeader">
+                        <!-- Populated by JS -->
+                    </tr>
+                </thead>
+                <tbody id="scheduleBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </section>
+
+        <section class="time-off-section">
+            <div class="section-header">
+                <h2>Time-Off Requests</h2>
+                <button class="btn-secondary" id="addTimeOffBtn">+ Add Request</button>
+            </div>
+            <div class="time-off-list" id="timeOffList">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Assign Shift Modal -->
+    <div class="modal-overlay" id="shiftModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="shiftModalTitle">Assign Shift</h2>
+                <button class="btn-icon modal-close" id="closeShiftModal" aria-label="Close">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="shiftForm">
+                <input type="hidden" id="shiftId">
+                <div class="form-group">
+                    <label for="shiftNurse">Nurse</label>
+                    <select id="shiftNurse" required>
+                        <option value="">Select a nurse...</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="shiftDate">Date</label>
+                        <input type="date" id="shiftDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="shiftType">Shift Type</label>
+                        <select id="shiftType" required>
+                            <option value="day">Day Shift (7A — 7P)</option>
+                            <option value="night">Night Shift (7P — 7A)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="shiftNotes">Notes</label>
+                    <textarea id="shiftNotes" rows="2" placeholder="Charge nurse, float, orientation, etc."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="cancelShiftBtn">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Shift</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Time-Off Request Modal -->
+    <div class="modal-overlay" id="timeOffModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Time-Off Request</h2>
+                <button class="btn-icon modal-close" id="closeTimeOffModal" aria-label="Close">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="timeOffForm">
+                <div class="form-group">
+                    <label for="timeOffNurse">Nurse</label>
+                    <select id="timeOffNurse" required>
+                        <option value="">Select a nurse...</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="timeOffStart">Start Date</label>
+                        <input type="date" id="timeOffStart" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="timeOffEnd">End Date</label>
+                        <input type="date" id="timeOffEnd" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="timeOffReason">Reason</label>
+                    <select id="timeOffReason" required>
+                        <option value="">Select reason...</option>
+                        <option value="PTO">PTO</option>
+                        <option value="Sick">Sick Leave</option>
+                        <option value="Personal">Personal</option>
+                        <option value="FMLA">FMLA</option>
+                        <option value="Jury Duty">Jury Duty</option>
+                        <option value="Bereavement">Bereavement</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="timeOffNotes">Notes</label>
+                    <textarea id="timeOffNotes" rows="2"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="cancelTimeOffBtn">Cancel</button>
+                    <button type="submit" class="btn-primary">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Auto-Schedule Confirmation Modal -->
+    <div class="modal-overlay" id="autoScheduleModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h2>Auto-Schedule</h2>
+            </div>
+            <p class="modal-body-text">This will automatically generate a schedule for the selected week based on nurse availability and shift preferences. Existing assignments for this week will be kept.</p>
+            <div class="form-group">
+                <label for="dayNursesNeeded">Nurses needed per Day shift</label>
+                <input type="number" id="dayNursesNeeded" value="4" min="1" max="20">
+            </div>
+            <div class="form-group">
+                <label for="nightNursesNeeded">Nurses needed per Night shift</label>
+                <input type="number" id="nightNursesNeeded" value="3" min="1" max="20">
+            </div>
+            <div class="form-actions">
+                <button class="btn-secondary" id="cancelAutoBtn">Cancel</button>
+                <button class="btn-primary" id="confirmAutoBtn">Generate Schedule</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="js/schedule.js"></script>
+</body>
+</html>

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PAM Health Nurse Scheduler — Nurses</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/>
+                    <path d="M12 8v4l3 3"/>
+                </svg>
+                <span>PAM Scheduler</span>
+            </div>
+        </div>
+        <ul class="nav-links">
+            <li>
+                <a href="index.html">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    Dashboard
+                </a>
+            </li>
+            <li class="active">
+                <a href="nurses.html">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Nurses
+                </a>
+            </li>
+            <li>
+                <a href="schedule.html">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                        <path d="M9 14l2 2 4-4"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    Schedule
+                </a>
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            <p>PAM Health — San Antonio</p>
+        </div>
+    </nav>
+
+    <main class="content">
+        <header class="top-bar">
+            <button class="menu-toggle" aria-label="Toggle menu">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+            </button>
+            <h1>Nurses</h1>
+            <div class="header-actions">
+                <button class="btn-primary" id="addNurseBtn">+ Add Nurse</button>
+            </div>
+        </header>
+
+        <section class="filters-bar">
+            <input type="text" id="searchInput" class="search-input" placeholder="Search nurses by name...">
+            <select id="roleFilter" class="filter-select">
+                <option value="">All Roles</option>
+                <option value="RN">RN</option>
+                <option value="LVN">LVN</option>
+                <option value="CNA">CNA</option>
+                <option value="Charge Nurse">Charge Nurse</option>
+            </select>
+            <select id="statusFilter" class="filter-select">
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+        </section>
+
+        <section class="nurses-grid" id="nursesGrid">
+            <!-- Populated by JS -->
+        </section>
+    </main>
+
+    <!-- Add/Edit Nurse Modal -->
+    <div class="modal-overlay" id="nurseModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add Nurse</h2>
+                <button class="btn-icon modal-close" id="closeModal" aria-label="Close">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="nurseForm">
+                <input type="hidden" id="nurseId">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="firstName">First Name</label>
+                        <input type="text" id="firstName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="lastName">Last Name</label>
+                        <input type="text" id="lastName" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="role">Role</label>
+                        <select id="role" required>
+                            <option value="">Select role...</option>
+                            <option value="RN">RN — Registered Nurse</option>
+                            <option value="LVN">LVN — Licensed Vocational Nurse</option>
+                            <option value="CNA">CNA — Certified Nursing Assistant</option>
+                            <option value="Charge Nurse">Charge Nurse</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <input type="tel" id="phone" placeholder="(210) 555-0000">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" placeholder="nurse@pamhealth.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="hireDate">Hire Date</label>
+                        <input type="date" id="hireDate">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="shiftPreference">Shift Preference</label>
+                    <select id="shiftPreference">
+                        <option value="any">No Preference</option>
+                        <option value="day">Day Shift (7A — 7P)</option>
+                        <option value="night">Night Shift (7P — 7A)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="maxHours">Max Hours Per Week</label>
+                    <input type="number" id="maxHours" value="36" min="12" max="60" step="12">
+                </div>
+                <div class="form-group">
+                    <label for="notes">Notes</label>
+                    <textarea id="notes" rows="3" placeholder="Certifications, special skills, etc."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn-primary" id="saveNurseBtn">Save Nurse</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h2>Delete Nurse</h2>
+            </div>
+            <p class="modal-body-text">Are you sure you want to remove <strong id="deleteNurseName"></strong> from the roster? This will also remove all their scheduled shifts.</p>
+            <div class="form-actions">
+                <button class="btn-secondary" id="cancelDeleteBtn">Cancel</button>
+                <button class="btn-danger" id="confirmDeleteBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="js/nurses.js"></script>
+</body>
+</html>
