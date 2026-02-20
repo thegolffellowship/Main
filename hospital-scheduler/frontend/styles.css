@@ -1,0 +1,583 @@
+/* ═══════════════════════════════════════════════════
+   Hospital Staff Scheduler - Styles
+   v2: Add theme variables, responsive breakpoints,
+       print stylesheet for schedule export.
+   ═══════════════════════════════════════════════════ */
+
+:root {
+    --bg: #f5f5f5;
+    --surface: #ffffff;
+    --border: #dee2e6;
+    --text: #212529;
+    --text-secondary: #6c757d;
+    --primary: #0d6efd;
+    --primary-hover: #0b5ed7;
+    --success: #198754;
+    --danger: #dc3545;
+    --warning: #ffc107;
+
+    /* Schedule cell colors */
+    --cell-working: #d1e7dd;
+    --cell-ro: #fff3cd;
+    --cell-pto: #cce5ff;
+    --cell-x: #f8d7da;
+    --cell-off: #ffffff;
+    --cell-flag: #f8d7da;
+
+    /* Pay period divider */
+    --pay-divider: #6c757d;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+/* ─── Header ─── */
+header {
+    background: var(--surface);
+    border-bottom: 2px solid var(--primary);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+nav { display: flex; gap: 4px; }
+
+.nav-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+}
+
+.nav-btn:hover { background: var(--bg); }
+.nav-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+/* ─── Main Layout ─── */
+main { padding: 16px 24px; }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ─── Toolbar ─── */
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.toolbar-left, .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.toolbar label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.toolbar select, .toolbar input {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+    background: var(--surface);
+}
+
+/* ─── Buttons ─── */
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+}
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:disabled {
+    background: #a0c4fd;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--bg); }
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* ─── Shift Tabs ─── */
+.shift-tabs { display: flex; gap: 2px; }
+
+.shift-tab, .master-shift-tab {
+    padding: 6px 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.shift-tab:first-child, .master-shift-tab:first-child { border-radius: 4px 0 0 4px; }
+.shift-tab:last-child, .master-shift-tab:last-child { border-radius: 0 4px 4px 0; }
+
+.shift-tab.active, .master-shift-tab.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+/* ─── Schedule Grid ─── */
+.grid-container {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.schedule-grid {
+    border-collapse: collapse;
+    font-size: 12px;
+    width: max-content;
+    min-width: 100%;
+}
+
+.schedule-grid th, .schedule-grid td {
+    border: 1px solid var(--border);
+    padding: 4px 6px;
+    text-align: center;
+    white-space: nowrap;
+    min-width: 38px;
+    height: 28px;
+}
+
+.schedule-grid th {
+    background: #f8f9fa;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    font-size: 11px;
+}
+
+.schedule-grid .header-date { font-size: 10px; color: var(--text-secondary); }
+.schedule-grid .header-day { font-size: 11px; }
+
+/* Frozen first column (employee name) */
+.schedule-grid .name-col {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: var(--surface);
+    text-align: left;
+    min-width: 150px;
+    max-width: 150px;
+    font-weight: 500;
+    padding-left: 8px;
+}
+
+.schedule-grid th.name-col {
+    z-index: 15;
+    background: #f8f9fa;
+}
+
+/* Role group header */
+.role-header td {
+    background: #e9ecef;
+    font-weight: 700;
+    text-align: left;
+    padding-left: 8px;
+    font-size: 12px;
+    color: var(--text);
+}
+
+/* Totals row */
+.totals-row td {
+    background: #f8f9fa;
+    font-weight: 700;
+    font-size: 11px;
+}
+
+.totals-row td.flagged {
+    background: var(--cell-flag);
+    color: var(--danger);
+}
+
+/* Cell colors */
+.cell-W { background: var(--cell-working); color: #0f5132; font-weight: 600; }
+.cell-RO { background: var(--cell-ro); color: #664d03; font-weight: 600; }
+.cell-PTO { background: var(--cell-pto); color: #084298; font-weight: 600; }
+.cell-X { background: var(--cell-x); color: #842029; font-weight: 600; }
+.cell-off { background: var(--cell-off); }
+
+/* Manual override indicator */
+.cell-override {
+    position: relative;
+}
+.cell-override::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 5px;
+    height: 5px;
+    background: var(--primary);
+    border-radius: 50%;
+}
+
+/* Schedule cell hover */
+.schedule-grid td.schedule-cell {
+    cursor: pointer;
+    transition: opacity 0.1s;
+}
+.schedule-grid td.schedule-cell:hover {
+    opacity: 0.75;
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+}
+
+/* Pay period divider */
+.pay-divider {
+    border-left: 3px solid var(--pay-divider) !important;
+}
+
+/* Weekend columns */
+.weekend-col {
+    background-color: #f8f9fa;
+}
+
+/* ─── Preference Grid ─── */
+.pref-legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    font-size: 13px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+}
+
+.pref-grid {
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.pref-grid th, .pref-grid td {
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    text-align: center;
+    min-width: 38px;
+    height: 32px;
+}
+
+.pref-grid th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 11px;
+}
+
+.pref-grid td.pref-cell {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 11px;
+    transition: all 0.1s;
+    user-select: none;
+}
+
+.pref-grid td.pref-cell:hover {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+}
+
+/* ─── Employee Table ─── */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.data-table th, .data-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+}
+
+.data-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.data-table tr:hover { background: #f8f9fa; }
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-active { background: #d1e7dd; color: #0f5132; }
+.badge-inactive { background: #f8d7da; color: #842029; }
+.badge-ft { background: #cce5ff; color: #084298; }
+.badge-prn { background: #fff3cd; color: #664d03; }
+
+/* ─── Modal ─── */
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal.hidden { display: none; }
+
+.modal-content {
+    background: var(--surface);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+}
+
+.modal-wide {
+    max-width: 95vw;
+    width: 95vw;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 { font-size: 16px; }
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+}
+
+.modal-body { padding: 20px; }
+
+/* ─── Forms ─── */
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--text-secondary);
+}
+
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+/* ─── Summary Panel ─── */
+.summary-panel {
+    margin-top: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+}
+
+.summary-panel.hidden { display: none; }
+
+.summary-panel h3 {
+    font-size: 16px;
+    margin-bottom: 12px;
+}
+
+.summary-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+}
+
+.summary-tab {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 4px;
+    color: var(--text-secondary);
+}
+
+.summary-tab.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.summary-table th, .summary-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.summary-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.summary-table tr.warning { background: #fff3cd; }
+.summary-table tr.danger { background: #f8d7da; }
+
+.flag-count {
+    display: inline-block;
+    background: var(--danger);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+/* ─── Toast Notifications ─── */
+#toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.toast {
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: slideIn 0.3s ease-out;
+    max-width: 400px;
+}
+
+.toast-success { background: var(--success); }
+.toast-error { background: var(--danger); }
+.toast-info { background: var(--primary); }
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* ─── Empty State ─── */
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+/* ─── Scrollbar styling ─── */
+.grid-container::-webkit-scrollbar { height: 8px; }
+.grid-container::-webkit-scrollbar-track { background: #f1f1f1; }
+.grid-container::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+.grid-container::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
