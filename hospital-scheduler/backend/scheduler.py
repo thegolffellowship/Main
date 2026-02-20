@@ -154,7 +154,9 @@ def _schedule_ft_week(
             1 for d in week_dates
             if schedule[emp.id].get(d) == ScheduleCode.PTO
         )
-        shifts_needed = max(0, FT_SHIFTS_PER_WEEK - pto_count)
+        # Respect employee max_weekly_shifts cap (default 3)
+        target = min(FT_SHIFTS_PER_WEEK, emp.max_weekly_shifts)
+        shifts_needed = max(0, target - pto_count)
 
         # Get available days (not X, not PTO, not already scheduled)
         available_days = []
@@ -232,8 +234,12 @@ def _schedule_prn(
                 pref = prefs.get((emp.id, d))
                 if pref in (PreferenceCode.CANNOT_WORK, PreferenceCode.PTO, PreferenceCode.REQUEST_OFF):
                     continue
-                if _can_schedule(emp.id, d, schedule):
-                    available_days.append(d)
+                if not _can_schedule(emp.id, d, schedule):
+                    continue
+                # Enforce max weekly shifts cap
+                if _week_shift_count(emp.id, d, schedule) >= emp.max_weekly_shifts:
+                    continue
+                available_days.append(d)
 
             chosen = _pick_spread_days(available_days, shifts_needed)
             for d in chosen:
@@ -271,6 +277,9 @@ def _enforce_daily_minimums(
             if current != ScheduleCode.OFF:
                 continue
             if not _can_schedule(emp.id, d, schedule):
+                continue
+            # Enforce max weekly shifts cap
+            if _week_shift_count(emp.id, d, schedule) >= emp.max_weekly_shifts:
                 continue
             pref = prefs.get((emp.id, d))
             if pref == PreferenceCode.CANNOT_WORK:

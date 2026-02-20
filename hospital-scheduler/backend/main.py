@@ -313,6 +313,7 @@ def get_schedule(
         grid[emp_id][entry.date.isoformat()] = {
             "code": code_val,
             "is_manual_override": entry.is_manual_override,
+            "note": entry.note or "",
         }
 
     # Build employee list in role display order
@@ -328,6 +329,7 @@ def get_schedule(
             "shift": e.shift.value if hasattr(e.shift, 'value') else e.shift,
             "employment_type": e.employment_type.value if hasattr(e.employment_type, 'value') else e.employment_type,
             "prn_tier": (e.prn_tier.value if e.prn_tier and hasattr(e.prn_tier, 'value') else e.prn_tier),
+            "max_weekly_shifts": e.max_weekly_shifts,
         })
 
     return {
@@ -374,6 +376,8 @@ def update_schedule_entry(
     if entry:
         entry.code = code
         entry.is_manual_override = True
+        if update.note is not None:
+            entry.note = update.note if update.note else None
     else:
         entry = ScheduleEntry(
             employee_id=employee_id,
@@ -381,6 +385,7 @@ def update_schedule_entry(
             date=d,
             code=code,
             is_manual_override=True,
+            note=update.note if update.note else None,
         )
         db.add(entry)
 
@@ -444,7 +449,7 @@ def daily_summary(period_id: int, db: Session = Depends(get_db)):
                 if not emp or emp.shift != shift_val:
                     continue
                 code_val = entry.code.value if hasattr(entry.code, 'value') else entry.code
-                if code_val not in ("W", "RO"):
+                if code_val not in ("W", "RO"):  # CI and CX do NOT count as working
                     continue
 
                 role_val = emp.role.value if hasattr(emp.role, 'value') else emp.role

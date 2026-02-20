@@ -35,7 +35,19 @@ const PREF_CYCLE = ['', 'RO', 'PTO', 'X'];
 const PREF_CYCLE_PRN = ['', 'RO', 'X'];  // PRN can't use PTO
 
 // ─── Schedule code cycle for manual overrides ───
-const SCHED_CYCLE = ['', 'W', 'RO', 'PTO', 'X'];
+const SCHED_CYCLE = ['', 'W', 'RO', 'PTO', 'X', 'CI', 'CX'];
+const SCHED_CYCLE_PRN = ['', 'W', 'RO', 'X', 'CI', 'CX'];
+
+// ─── Note popup state ───
+let notePopupEmpId = null;
+let notePopupDate = null;
+let notePopupCode = null;
+
+// ─── Display helper: A for Day, P for Night ───
+function displayScheduleCode(code, shift) {
+    if (code === 'W') return shift === 'Day' ? 'A' : 'P';
+    return code;
+}
 
 // ═══════════════════════════════════════════════
 // Initialization
@@ -49,6 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setupPreferences();
     setupSummaryTabs();
     setupMasterView();
+    setupNotePopup();
+    setupClearFilters();
     loadPeriods();
     loadEmployees();
 });
@@ -219,7 +233,7 @@ async function loadEmployees() {
 function renderEmployeeTable(employees) {
     const tbody = document.getElementById('employee-tbody');
     if (employees.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No employees found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No employees found</td></tr>';
         return;
     }
 
@@ -230,6 +244,7 @@ function renderEmployeeTable(employees) {
             <td>${emp.shift}</td>
             <td><span class="badge ${emp.employment_type === 'Full-Time' ? 'badge-ft' : 'badge-prn'}">${emp.employment_type}</span></td>
             <td>${emp.prn_tier || '—'}</td>
+            <td>${emp.max_weekly_shifts || 3}</td>
             <td><span class="badge ${emp.is_active ? 'badge-active' : 'badge-inactive'}">${emp.is_active ? 'Active' : 'Inactive'}</span></td>
             <td>
                 <button class="btn btn-sm btn-secondary" onclick="editEmployee(${emp.id})">Edit</button>
@@ -250,6 +265,7 @@ function setupEmployeeForm() {
         document.getElementById('employee-modal-title').textContent = 'Add Employee';
         document.getElementById('employee-form').reset();
         document.getElementById('emp-edit-id').value = '';
+        document.getElementById('emp-max-shifts').value = '3';
         document.getElementById('prn-tier-group').style.display = 'none';
         openModal('employee-modal');
     });
@@ -269,6 +285,7 @@ function setupEmployeeForm() {
             role: document.getElementById('emp-role').value,
             shift: document.getElementById('emp-shift').value,
             employment_type: document.getElementById('emp-type').value,
+            max_weekly_shifts: parseInt(document.getElementById('emp-max-shifts').value) || 3,
         };
 
         if (data.employment_type === 'PRN') {
@@ -305,6 +322,8 @@ async function editEmployee(id) {
     document.getElementById('emp-role').value = emp.role;
     document.getElementById('emp-shift').value = emp.shift;
     document.getElementById('emp-type').value = emp.employment_type;
+
+    document.getElementById('emp-max-shifts').value = emp.max_weekly_shifts || 3;
 
     if (emp.employment_type === 'PRN') {
         document.getElementById('prn-tier-group').style.display = 'block';
@@ -372,32 +391,29 @@ async function loadPreferenceGrid() {
 
 function renderPrefGrid(dates, isPRN) {
     const container = document.getElementById('pref-grid-container');
-    let html = '<table class="pref-grid"><thead>';
+    let html = '<table class="schedule-grid"><thead>';
 
-    // Header row 1: month+day
-    html += '<tr><th style="min-width:80px">Week</th>';
+    // Header row: all 42 dates in columns (same format as schedule grid)
+    html += '<tr><th class="name-col">Preferences</th>';
     for (let i = 0; i < 42; i++) {
         const d = dates[i];
-        const cls = isWeekend(d) ? ' class="weekend-col"' : '';
+        const weekend = isWeekend(d) ? ' weekend-col' : '';
         const payDivider = (i > 0 && i % 14 === 0) ? ' pay-divider' : '';
-        html += `<th${cls ? '' : ''} class="${isWeekend(d) ? 'weekend-col' : ''}${payDivider}">${getDayName(d)}<br><span class="header-date">${formatDateShort(d)}</span></th>`;
+        html += `<th class="${weekend}${payDivider}"><span class="header-day">${getDayName(d)}</span><br><span class="header-date">${formatDateShort(d)}</span></th>`;
     }
     html += '</tr></thead><tbody>';
 
-    // One row per week for cleaner display
-    for (let w = 0; w < 6; w++) {
-        html += `<tr><td style="font-weight:600;text-align:left;padding-left:8px">Week ${w + 1}</td>`;
-        for (let d = 0; d < 7; d++) {
-            const idx = w * 7 + d;
-            const dateStr = dates[idx];
-            const code = pendingPrefs[dateStr] || '';
-            const cellClass = code ? `cell-${code}` : 'cell-off';
-            const weekend = isWeekend(dateStr) ? ' weekend-col' : '';
-            const payDivider = (idx > 0 && idx % 14 === 0) ? ' pay-divider' : '';
-            html += `<td class="pref-cell ${cellClass}${weekend}${payDivider}" data-date="${dateStr}" data-prn="${isPRN}">${code}</td>`;
-        }
-        html += '</tr>';
+    // Single row with all 42 dates
+    html += '<tr><td class="name-col" style="font-weight:600">Click to set</td>';
+    for (let i = 0; i < 42; i++) {
+        const dateStr = dates[i];
+        const code = pendingPrefs[dateStr] || '';
+        const cellClass = code ? `cell-${code}` : 'cell-off';
+        const weekend = isWeekend(dateStr) ? ' weekend-col' : '';
+        const payDivider = (i > 0 && i % 14 === 0) ? ' pay-divider' : '';
+        html += `<td class="pref-cell ${cellClass}${weekend}${payDivider}" data-date="${dateStr}" data-prn="${isPRN}">${code}</td>`;
     }
+    html += '</tr>';
 
     html += '</tbody></table>';
     container.innerHTML = html;
@@ -415,9 +431,6 @@ function renderPrefGrid(dates, isPRN) {
             pendingPrefs[dateStr] = nextCode;
             cell.textContent = nextCode;
             cell.className = `pref-cell ${nextCode ? 'cell-' + nextCode : 'cell-off'}${isWeekend(dateStr) ? ' weekend-col' : ''}`;
-            if (parseInt(dateStr.split('-')[2]) > 0) {
-                const idx = generateDates(document.getElementById('pref-period-select').value, 42).indexOf(dateStr);
-            }
         });
     });
 }
@@ -606,18 +619,23 @@ function renderScheduleGrid(schedData, dailySummary) {
                 const d = dates[i];
                 const entry = empGrid[d];
                 const code = entry ? entry.code : '';
+                const note = entry ? (entry.note || '') : '';
                 const isOverride = entry ? entry.is_manual_override : false;
 
                 if (code === 'W' || code === 'RO') totalShifts++;
 
                 const cellClass = code ? `cell-${code}` : 'cell-off';
                 const overrideClass = isOverride ? ' cell-override' : '';
+                const noteClass = note ? ' has-note' : '';
                 const weekend = isWeekend(d) ? ' weekend-col' : '';
                 const payDivider = (i > 0 && i % 14 === 0) ? ' pay-divider' : '';
+                const displayCode = code === 'W' ? (currentShift === 'Day' ? 'A' : 'P') : code;
+                const tooltip = note ? ` title="${escapeHtml(note)}"` : '';
 
-                html += `<td class="schedule-cell ${cellClass}${overrideClass}${weekend}${payDivider}" `
-                    + `data-emp="${emp.id}" data-date="${d}" data-code="${code}" data-type="${emp.employment_type}">`
-                    + `${code}</td>`;
+                html += `<td class="schedule-cell ${cellClass}${overrideClass}${noteClass}${weekend}${payDivider}" `
+                    + `data-emp="${emp.id}" data-date="${d}" data-code="${code}" data-note="${escapeHtml(note)}" `
+                    + `data-type="${emp.employment_type}" data-shift="${emp.shift}"${tooltip}>`
+                    + `${displayCode}</td>`;
             }
 
             html += `<td style="font-weight:600;text-align:center">${totalShifts}</td></tr>`;
@@ -656,7 +674,7 @@ function renderScheduleGrid(schedData, dailySummary) {
     html += '</tbody></table>';
     container.innerHTML = html;
 
-    // Click handlers for manual overrides
+    // Click handlers for manual overrides (left-click cycles code)
     container.querySelectorAll('.schedule-cell').forEach(cell => {
         cell.addEventListener('click', () => {
             const empId = cell.dataset.emp;
@@ -664,15 +682,21 @@ function renderScheduleGrid(schedData, dailySummary) {
             const currentCode = cell.dataset.code;
             const empType = cell.dataset.type;
 
-            // Determine available codes
-            let cycle = ['', 'W', 'RO', 'X'];
-            if (empType === 'Full-Time') cycle = ['', 'W', 'RO', 'PTO', 'X'];
+            // Determine available codes (includes CI and CX)
+            let cycle = SCHED_CYCLE_PRN;
+            if (empType === 'Full-Time') cycle = SCHED_CYCLE;
 
             const nextIdx = (cycle.indexOf(currentCode) + 1) % cycle.length;
             const nextCode = cycle[nextIdx];
 
             // Update via API
             updateScheduleCell(empId, dateStr, nextCode, cell);
+        });
+
+        // Right-click opens note popup
+        cell.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            openNotePopup(cell, e);
         });
     });
 }
@@ -685,13 +709,16 @@ async function updateScheduleCell(empId, dateStr, code, cell) {
         });
 
         // Update cell display
+        const empShift = cell.dataset.shift || currentShift;
+        const display = code === 'W' ? (empShift === 'Day' ? 'A' : 'P') : code;
         cell.dataset.code = code;
-        cell.textContent = code;
+        cell.textContent = display;
         cell.className = cell.className.replace(/cell-\S+/g, '').trim();
         cell.classList.add('schedule-cell');
         if (code) cell.classList.add(`cell-${code}`);
         else cell.classList.add('cell-off');
         cell.classList.add('cell-override');
+        if (cell.dataset.note) cell.classList.add('has-note');
 
         // Preserve weekend/pay-divider classes
         if (isWeekend(dateStr)) cell.classList.add('weekend-col');
@@ -801,6 +828,95 @@ function renderSummaryContent(tab) {
         html += '</tbody></table>';
         container.innerHTML = html;
     }
+}
+
+// ═══════════════════════════════════════════════
+// Note Popup
+// ═══════════════════════════════════════════════
+
+function setupNotePopup() {
+    document.getElementById('note-popup-save').addEventListener('click', saveNote);
+    document.getElementById('note-popup-clear').addEventListener('click', () => {
+        document.getElementById('note-popup-text').value = '';
+        saveNote();
+    });
+    document.getElementById('note-popup-close').addEventListener('click', closeNotePopup);
+
+    // Close popup on click outside
+    document.addEventListener('click', (e) => {
+        const popup = document.getElementById('note-popup');
+        if (!popup.classList.contains('hidden') && !popup.contains(e.target)) {
+            closeNotePopup();
+        }
+    });
+}
+
+function openNotePopup(cell, event) {
+    notePopupEmpId = cell.dataset.emp;
+    notePopupDate = cell.dataset.date;
+    notePopupCode = cell.dataset.code;
+
+    const popup = document.getElementById('note-popup');
+    document.getElementById('note-popup-text').value = cell.dataset.note || '';
+
+    // Position near the cell
+    const rect = cell.getBoundingClientRect();
+    popup.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    popup.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 280) + 'px';
+    popup.classList.remove('hidden');
+
+    document.getElementById('note-popup-text').focus();
+}
+
+function closeNotePopup() {
+    document.getElementById('note-popup').classList.add('hidden');
+    notePopupEmpId = null;
+    notePopupDate = null;
+    notePopupCode = null;
+}
+
+async function saveNote() {
+    if (!notePopupEmpId || !notePopupDate || !currentPeriodId) return;
+
+    const note = document.getElementById('note-popup-text').value.trim();
+    const code = notePopupCode || '';
+
+    try {
+        await apiFetch(`/api/schedule/${currentPeriodId}/${notePopupEmpId}/${notePopupDate}`, {
+            method: 'PUT',
+            body: JSON.stringify({ code, note }),
+        });
+
+        // Update the cell's note data and indicator
+        const cell = document.querySelector(
+            `.schedule-cell[data-emp="${notePopupEmpId}"][data-date="${notePopupDate}"]`
+        );
+        if (cell) {
+            cell.dataset.note = note;
+            cell.title = note;
+            if (note) {
+                cell.classList.add('has-note');
+            } else {
+                cell.classList.remove('has-note');
+            }
+        }
+
+        showToast(note ? 'Note saved' : 'Note cleared', 'success');
+        closeNotePopup();
+    } catch (e) { /* toast already shown */ }
+}
+
+// ═══════════════════════════════════════════════
+// Clear Filters
+// ═══════════════════════════════════════════════
+
+function setupClearFilters() {
+    document.getElementById('btn-clear-filters').addEventListener('click', () => {
+        document.getElementById('emp-filter-role').value = '';
+        document.getElementById('emp-filter-shift').value = '';
+        document.getElementById('emp-filter-type').value = '';
+        loadEmployees();
+    });
 }
 
 // ═══════════════════════════════════════════════

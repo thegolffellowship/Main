@@ -36,8 +36,30 @@
                 </div>
             </div>
 
+            <div class="pref-legend">
+                <span class="legend-item"><span class="legend-swatch" style="background:#d1e7dd;border:1px solid #badbcc"></span> A/P - Working (Day/Night)</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#fff3cd"></span> RO - Request Off Override</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#cce5ff"></span> PTO</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#f8d7da"></span> X - Cannot Work</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#fde8d0"></span> CI - Called In</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#e8d5f5"></span> CX - Canceled by Us</span>
+            </div>
+
             <div id="schedule-grid-container" class="grid-container">
                 <p class="empty-state">Select a period and shift to view the schedule.</p>
+            </div>
+
+            <!-- Note Popup -->
+            <div id="note-popup" class="note-popup hidden">
+                <div class="note-popup-header">
+                    <span>Cell Note</span>
+                    <button id="note-popup-close" class="modal-close">&times;</button>
+                </div>
+                <textarea id="note-popup-text" rows="3" placeholder="Enter note (e.g. reason for CI, shift details...)"></textarea>
+                <div class="note-popup-actions">
+                    <button class="btn btn-sm btn-primary" id="note-popup-save">Save Note</button>
+                    <button class="btn btn-sm btn-secondary" id="note-popup-clear">Clear</button>
+                </div>
             </div>
 
             <div id="summary-panel" class="summary-panel hidden">
@@ -77,6 +99,7 @@
                 <span class="legend-item"><span class="legend-swatch" style="background:#fff3cd"></span> RO - Request Off</span>
                 <span class="legend-item"><span class="legend-swatch" style="background:#cce5ff"></span> PTO</span>
                 <span class="legend-item"><span class="legend-swatch" style="background:#f8d7da"></span> X - Cannot Work</span>
+                <small style="color:var(--text-secondary);margin-left:8px">Click cell to cycle codes</small>
             </div>
 
             <div id="pref-grid-container" class="grid-container">
@@ -136,6 +159,7 @@
                     </label>
                 </div>
                 <div class="toolbar-right">
+                    <button id="btn-clear-filters" class="btn btn-secondary">Clear Filters</button>
                     <button id="btn-add-employee" class="btn btn-primary">+ Add Employee</button>
                 </div>
             </div>
@@ -149,6 +173,7 @@
                             <th>Shift</th>
                             <th>Type</th>
                             <th>PRN Tier</th>
+                            <th>Max/Wk</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -202,6 +227,11 @@
                                     <option value="Tier 1">Tier 1 (6 shifts/month)</option>
                                     <option value="Tier 2">Tier 2 (8 shifts/month)</option>
                                 </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="emp-max-shifts">Max Shifts Per Week</label>
+                                <input type="number" id="emp-max-shifts" min="1" max="7" value="3">
+                                <small style="color:var(--text-secondary);font-size:11px">Default 3. Increase only if employee opts in for more.</small>
                             </div>
                             <div class="form-actions">
                                 <button type="submit" class="btn btn-primary">Save</button>

@@ -65,6 +65,8 @@ class ScheduleCode(str, Enum):
     RO_OVERRIDE = "RO"      # request-off was overridden to work
     PTO = "PTO"             # paid time off (not working)
     CANNOT_WORK = "X"       # cannot work (not scheduled)
+    CALLED_IN = "CI"        # employee called in (sick, etc.)
+    CANCELED = "CX"         # shift canceled by us
     OFF = ""                # not scheduled, available day unused
 
 
@@ -98,6 +100,7 @@ class Employee(Base):
     shift = Column(SAEnum(Shift), nullable=False)
     employment_type = Column(SAEnum(EmploymentType), nullable=False)
     prn_tier = Column(SAEnum(PRNTier), nullable=True)  # NULL for Full-Time
+    max_weekly_shifts = Column(Integer, default=3, nullable=False)  # max shifts per week
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -170,6 +173,7 @@ class ScheduleEntry(Base):
     date = Column(Date, nullable=False)
     code = Column(SAEnum(ScheduleCode), nullable=False)
     is_manual_override = Column(Boolean, default=False)  # hand-edited after generation
+    note = Column(Text, nullable=True)  # free-form note per cell
 
     # Relationships
     employee = relationship("Employee", back_populates="schedule_entries")
@@ -190,6 +194,7 @@ class EmployeeCreate(BaseModel):
     shift: Shift
     employment_type: EmploymentType
     prn_tier: Optional[PRNTier] = None
+    max_weekly_shifts: int = Field(default=3, ge=1, le=7)
 
 class EmployeeUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -197,6 +202,7 @@ class EmployeeUpdate(BaseModel):
     shift: Optional[Shift] = None
     employment_type: Optional[EmploymentType] = None
     prn_tier: Optional[PRNTier] = None
+    max_weekly_shifts: Optional[int] = Field(None, ge=1, le=7)
     is_active: Optional[bool] = None
 
 class EmployeeOut(BaseModel):
@@ -206,6 +212,7 @@ class EmployeeOut(BaseModel):
     shift: Shift
     employment_type: EmploymentType
     prn_tier: Optional[PRNTier]
+    max_weekly_shifts: int
     is_active: bool
 
     class Config:
@@ -251,6 +258,7 @@ class ScheduleEntryOut(BaseModel):
     date: date
     code: str
     is_manual_override: bool
+    note: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -258,7 +266,8 @@ class ScheduleEntryOut(BaseModel):
 
 class ScheduleEntryUpdate(BaseModel):
     """Manual override of a single cell."""
-    code: str  # W, RO, PTO, X, or "" (off)
+    code: str  # W, RO, PTO, X, CI, CX, or "" (off)
+    note: Optional[str] = None  # free-form note (None = no change)
 
 
 class DailyStaffingSummary(BaseModel):

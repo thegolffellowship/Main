@@ -21,6 +21,8 @@
     --cell-ro: #fff3cd;
     --cell-pto: #cce5ff;
     --cell-x: #f8d7da;
+    --cell-ci: #fde8d0;
+    --cell-cx: #e8d5f5;
     --cell-off: #ffffff;
     --cell-flag: #f8d7da;
 
@@ -258,9 +260,11 @@ main { padding: 16px 24px; }
 .cell-RO { background: var(--cell-ro); color: #664d03; font-weight: 600; }
 .cell-PTO { background: var(--cell-pto); color: #084298; font-weight: 600; }
 .cell-X { background: var(--cell-x); color: #842029; font-weight: 600; }
+.cell-CI { background: var(--cell-ci); color: #8b5e3c; font-weight: 600; }
+.cell-CX { background: var(--cell-cx); color: #5b2c8b; font-weight: 600; }
 .cell-off { background: var(--cell-off); }
 
-/* Manual override indicator */
+/* Manual override indicator (blue dot, top-right) */
 .cell-override {
     position: relative;
 }
@@ -273,6 +277,21 @@ main { padding: 16px 24px; }
     height: 5px;
     background: var(--primary);
     border-radius: 50%;
+}
+
+/* Note indicator (orange triangle, bottom-left) */
+.has-note {
+    position: relative;
+}
+.has-note::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    border-left: 7px solid #e67e22;
+    border-top: 7px solid transparent;
 }
 
 /* Schedule cell hover */
@@ -566,6 +585,48 @@ main { padding: 16px 24px; }
 @keyframes slideIn {
     from { transform: translateX(100%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
+}
+
+/* ─── Note Popup ─── */
+.note-popup {
+    position: absolute;
+    z-index: 1500;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    width: 260px;
+    padding: 0;
+}
+
+.note-popup.hidden { display: none; }
+
+.note-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.note-popup textarea {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    resize: none;
+    outline: none;
+}
+
+.note-popup-actions {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+    justify-content: flex-end;
 }
 
 /* ─── Empty State ─── */
