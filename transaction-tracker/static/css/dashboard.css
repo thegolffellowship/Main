@@ -136,6 +136,10 @@ main {
     letter-spacing: 0.04em;
     margin-top: 0.2rem;
 }
+.category-btn.active .stat-value,
+.category-btn.active .stat-label {
+    color: #fff;
+}
 
 /* ---- Controls ---- */
 .controls {
