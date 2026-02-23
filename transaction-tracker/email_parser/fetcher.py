@@ -153,7 +153,9 @@ def fetch_transaction_emails(
 
     token = _get_graph_token(tenant_id, client_id, client_secret)
     if not token:
+        logger.error("Could not acquire Graph API token — check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET")
         return []
+    logger.info("Graph API token acquired successfully for %s", email_address)
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -165,21 +167,28 @@ def fetch_transaction_emails(
 
     results = []
     # Graph API endpoint for reading a user's messages
-    url = (
-        f"{GRAPH_BASE}/users/{email_address}/messages"
-        f"?$filter=receivedDateTime ge {since_str}"
-        f"&$select=id,subject,from,receivedDateTime,body,bodyPreview"
-        f"&$top=100"
-        f"&$orderby=receivedDateTime desc"
-    )
+    base_url = f"{GRAPH_BASE}/users/{email_address}/messages"
+    params = {
+        "$filter": f"receivedDateTime ge {since_str}",
+        "$select": "id,subject,from,receivedDateTime,body,bodyPreview",
+        "$top": "100",
+        "$orderby": "receivedDateTime desc",
+    }
 
     total_scanned = 0
     skipped_samples = []
+    next_link = None
 
     try:
-        while url:
-            resp = requests.get(url, headers=headers, timeout=30)
-            logger.info("Graph API response status: %s", resp.status_code)
+        first_page = True
+        while first_page or next_link:
+            if first_page:
+                resp = requests.get(base_url, headers=headers, params=params, timeout=30)
+                first_page = False
+            else:
+                resp = requests.get(next_link, headers=headers, timeout=30)
+
+            logger.info("Graph API response status: %s  url: %s", resp.status_code, resp.url)
             resp.raise_for_status()
             data = resp.json()
 
@@ -211,7 +220,7 @@ def fetch_transaction_emails(
                 })
 
             # Follow pagination link if present
-            url = data.get("@odata.nextLink")
+            next_link = data.get("@odata.nextLink")
 
         logger.info(
             "Fetched %d transaction emails out of %d total scanned since %s",
