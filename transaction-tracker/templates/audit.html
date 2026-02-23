@@ -227,7 +227,6 @@
             <p class="subtitle">Email Audit — Verify parsed data vs raw emails</p>
         </div>
         <div class="header-actions">
-            <a href="/" class="btn btn-secondary">Back to Dashboard</a>
             <button id="btn-autofix" class="btn btn-secondary" title="Fix side games, customer names, and course names in existing records">
                 Autofix All
             </button>
@@ -238,6 +237,13 @@
     </header>
 
     <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/audit" class="active">Audit Log</a>
+        </nav>
         <div id="loading" class="loading-msg">Click "Run Audit" to fetch emails and compare against parsed data.</div>
 
         <div id="audit-content" style="display:none;">

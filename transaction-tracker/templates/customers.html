@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — Customers</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Customers — Purchase history by player</p>
+        </div>
+        <div class="header-actions">
+            <button id="btn-export-csv" class="btn btn-secondary">Export CSV</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers" class="active">Customers</a>
+            <a href="/audit">Audit Log</a>
+        </nav>
+
+        <!-- Stats cards -->
+        <section class="stats-row" id="stats-row">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-customers">—</div>
+                <div class="stat-label">Customers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-total-items">—</div>
+                <div class="stat-label">Total Purchases</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-total-spent">—</div>
+                <div class="stat-label">Total Spent</div>
+            </div>
+        </section>
+
+        <!-- Search -->
+        <section class="controls">
+            <input type="text" id="customer-search" class="search-box" placeholder="Search customers by name, email, or phone...">
+            <select id="sort-select" class="sort-select">
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="purchases-desc">Most purchases</option>
+                <option value="purchases-asc">Fewest purchases</option>
+                <option value="spent-desc">Most spent</option>
+                <option value="spent-asc">Least spent</option>
+                <option value="latest-desc">Most recent</option>
+            </select>
+        </section>
+
+        <!-- Customer cards -->
+        <section class="customer-cards" id="customer-cards"></section>
+
+        <!-- Selected customer detail -->
+        <section id="customer-detail" style="display:none;">
+            <h3 id="detail-title" style="margin-bottom: 0.75rem; font-size: 1.1rem;"></h3>
+            <div id="detail-meta" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;"></div>
+            <div class="customer-detail-panel">
+                <table id="detail-table" style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th>Event Date</th>
+                            <th>Item</th>
+                            <th>Price</th>
+                            <th>City</th>
+                            <th>Course</th>
+                            <th>Side Games</th>
+                            <th>Type</th>
+                            <th>Order Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>TGF Transaction Tracker &mdash; Powered by Claude AI</p>
+    </footer>
+
+    <script>
+    let allCustomers = [];
+    let allItems = [];
+    let selectedCustomer = null;
+
+    function escapeHtml(str) {
+        const div = document.createElement("div");
+        div.textContent = str || "";
+        return div.innerHTML;
+    }
+
+    function parsePrice(priceStr) {
+        return parseFloat((priceStr || "0").replace(/[$,]/g, "")) || 0;
+    }
+
+    // Build customer aggregate data from items
+    function buildCustomers(items) {
+        const map = {};
+        items.forEach(item => {
+            const name = item.customer || "(Unknown)";
+            if (!map[name]) {
+                map[name] = {
+                    name: name,
+                    email: item.customer_email || "",
+                    phone: item.customer_phone || "",
+                    items: [],
+                    totalSpent: 0,
+                    latestDate: "",
+                };
+            }
+            map[name].items.push(item);
+            map[name].totalSpent += parsePrice(item.item_price);
+            if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
+            if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
+            const date = item.event_date || item.order_date || "";
+            if (date > map[name].latestDate) map[name].latestDate = date;
+        });
+        return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    function renderCustomers() {
+        const query = document.getElementById("customer-search").value.toLowerCase().trim();
+        const sortKey = document.getElementById("sort-select").value;
+
+        let filtered = allCustomers;
+        if (query) {
+            filtered = allCustomers.filter(c =>
+                c.name.toLowerCase().includes(query) ||
+                c.email.toLowerCase().includes(query) ||
+                c.phone.toLowerCase().includes(query)
+            );
+        }
+
+        // Sort
+        const [field, dir] = sortKey.split("-");
+        const asc = dir === "asc";
+        filtered.sort((a, b) => {
+            if (field === "name") {
+                return asc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+            }
+            if (field === "purchases") {
+                return asc ? a.items.length - b.items.length : b.items.length - a.items.length;
+            }
+            if (field === "spent") {
+                return asc ? a.totalSpent - b.totalSpent : b.totalSpent - a.totalSpent;
+            }
+            if (field === "latest") {
+                return b.latestDate.localeCompare(a.latestDate);
+            }
+            return 0;
+        });
+
+        // Stats
+        document.getElementById("stat-customers").textContent = allCustomers.length;
+        document.getElementById("stat-total-items").textContent = allItems.length;
+        const totalSpent = allCustomers.reduce((sum, c) => sum + c.totalSpent, 0);
+        document.getElementById("stat-total-spent").textContent = "$" + totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+        const container = document.getElementById("customer-cards");
+        if (!filtered.length) {
+            container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">No customers found.</div>';
+            return;
+        }
+
+        container.innerHTML = filtered.map(c => {
+            const isSelected = selectedCustomer && selectedCustomer.name === c.name;
+            return `
+            <div class="customer-card ${isSelected ? 'selected' : ''}" data-name="${escapeHtml(c.name)}">
+                <div class="customer-card-name">${escapeHtml(c.name)}</div>
+                <div class="customer-card-meta">
+                    <span>${c.items.length} purchase${c.items.length !== 1 ? 's' : ''}</span>
+                    <span>$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    ${c.email ? `<span>${escapeHtml(c.email)}</span>` : ''}
+                    ${c.phone ? `<span>${escapeHtml(c.phone)}</span>` : ''}
+                </div>
+            </div>`;
+        }).join("");
+
+        container.querySelectorAll(".customer-card").forEach(card => {
+            card.addEventListener("click", () => {
+                const name = card.dataset.name;
+                const cust = allCustomers.find(c => c.name === name);
+                if (cust) selectCustomer(cust);
+            });
+        });
+    }
+
+    function selectCustomer(customer) {
+        selectedCustomer = customer;
+        const detail = document.getElementById("customer-detail");
+        detail.style.display = "block";
+
+        document.getElementById("detail-title").textContent = customer.name;
+        const meta = [];
+        if (customer.email) meta.push(customer.email);
+        if (customer.phone) meta.push(customer.phone);
+        meta.push(`${customer.items.length} purchase(s)`);
+        meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} total`);
+        document.getElementById("detail-meta").textContent = meta.join(" | ");
+
+        const tbody = document.getElementById("detail-body");
+        tbody.innerHTML = customer.items
+            .sort((a, b) => (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""))
+            .map(item => `
+            <tr>
+                <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
+                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a></td>
+                <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
+                <td>${escapeHtml(item.city || "\u2014")}</td>
+                <td>${escapeHtml(item.course || "\u2014")}</td>
+                <td>${escapeHtml(item.side_games || "\u2014")}</td>
+                <td>${escapeHtml(item.golf_or_compete || "\u2014")}</td>
+                <td>${escapeHtml(item.order_date || "\u2014")}</td>
+            </tr>`).join("");
+
+        // Highlight selected card
+        document.querySelectorAll(".customer-card").forEach(c => c.classList.remove("selected"));
+        const card = document.querySelector(`.customer-card[data-name="${escapeHtml(customer.name)}"]`);
+        if (card) {
+            card.classList.add("selected");
+            // Scroll detail into view
+            detail.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }
+
+    function exportCSV() {
+        if (!selectedCustomer) {
+            alert("Select a customer first to export their data.");
+            return;
+        }
+        const headers = ["Event Date", "Item", "Price", "City", "Course", "Side Games", "Type", "Order Date"];
+        const fields = ["event_date", "item_name", "item_price", "city", "course", "side_games", "golf_or_compete", "order_date"];
+        const rows = selectedCustomer.items.map(r => fields.map(f => r[f] || ""));
+        const csvContent = [headers, ...rows]
+            .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))
+            .join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `tgf_${selectedCustomer.name.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    async function init() {
+        try {
+            const res = await fetch("/api/items");
+            allItems = await res.json();
+            allCustomers = buildCustomers(allItems);
+            renderCustomers();
+
+            // Check if URL has ?name= parameter to pre-select a customer
+            const params = new URLSearchParams(window.location.search);
+            const nameParam = params.get("name");
+            if (nameParam) {
+                const match = allCustomers.find(c => c.name === nameParam);
+                if (match) {
+                    selectCustomer(match);
+                } else {
+                    // Try partial match
+                    document.getElementById("customer-search").value = nameParam;
+                    renderCustomers();
+                }
+            }
+        } catch (err) {
+            console.error("Failed to fetch items:", err);
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        init();
+        document.getElementById("customer-search").addEventListener("input", renderCustomers);
+        document.getElementById("sort-select").addEventListener("change", renderCustomers);
+        document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
+    });
+    </script>
+</body>
+</html>

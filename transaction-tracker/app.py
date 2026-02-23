@@ -546,6 +546,11 @@ def events_page():
     return render_template("events.html")
 
 
+@app.route("/customers")
+def customers_page():
+    return render_template("customers.html")
+
+
 @app.route("/api/events")
 def api_events():
     """Return all events with registration counts."""

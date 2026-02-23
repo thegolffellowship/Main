@@ -13,12 +13,6 @@
             <p class="subtitle">AI-powered email parsing</p>
         </div>
         <div class="header-actions">
-            <a href="/events" class="btn btn-secondary" title="View events and registration counts">
-                Events
-            </a>
-            <a href="/audit" class="btn btn-secondary" title="View audit log — raw emails vs parsed data">
-                Audit Log
-            </a>
             <button id="btn-send-report" class="btn btn-secondary" title="Send daily report now" style="display:none;">
                 Send Report
             </button>
@@ -29,6 +23,14 @@
     </header>
 
     <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/" class="active">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/audit">Audit Log</a>
+        </nav>
+
         <!-- Alert banner for unconfigured state -->
         <div id="config-alert" class="alert alert-warning" style="display:none;">
             <strong>Not fully configured.</strong>
@@ -63,7 +65,7 @@
         <section id="connector-panel" class="connector-panel" style="display:none;">
             <div class="connector-header" onclick="document.getElementById('connector-body').classList.toggle('hidden')">
                 <strong>Connector / Webhook</strong>
-                <span class="connector-toggle">▾</span>
+                <span class="connector-toggle">&#9662;</span>
             </div>
             <div id="connector-body" class="connector-body hidden">
                 <p>External systems can push order data to this tracker via the webhook endpoint.</p>
@@ -147,6 +149,10 @@
                 <option value="side_games-asc">Side Games (A-Z)</option>
                 <option value="side_games-desc">Side Games (Z-A)</option>
             </select>
+            <div class="column-toggle-wrapper">
+                <button class="column-toggle-btn" id="col-toggle-btn">Columns &#9662;</button>
+                <div class="column-toggle-dropdown" id="col-toggle-dropdown"></div>
+            </div>
             <button id="btn-export-csv" class="btn btn-secondary">Export CSV</button>
         </section>
 
@@ -154,21 +160,21 @@
         <section class="table-wrapper">
             <table id="txn-table">
                 <thead>
-                    <tr>
-                        <th class="sortable" data-sort="event_date">Event Date</th>
-                        <th class="sortable" data-sort="customer">Customer</th>
-                        <th class="sortable" data-sort="item_name">Item</th>
-                        <th class="sortable" data-sort="item_price">Price</th>
-                        <th class="sortable" data-sort="city">City</th>
-                        <th class="sortable" data-sort="course">Course</th>
-                        <th class="sortable" data-sort="handicap">Handicap</th>
-                        <th class="sortable" data-sort="side_games">Side Games</th>
-                        <th class="sortable" data-sort="tee_choice">Tee</th>
-                        <th class="sortable" data-sort="member_status">Status</th>
-                        <th class="sortable" data-sort="golf_or_compete">Type</th>
-                        <th>Order ID</th>
-                        <th class="sortable" data-sort="order_date">Order Date</th>
-                        <th>Actions</th>
+                    <tr id="txn-header-row">
+                        <th class="sortable" data-sort="event_date" data-col="event_date">Event Date</th>
+                        <th class="sortable" data-sort="customer" data-col="customer">Customer</th>
+                        <th class="sortable" data-sort="item_name" data-col="item_name">Item</th>
+                        <th class="sortable" data-sort="item_price" data-col="item_price">Price</th>
+                        <th class="sortable" data-sort="city" data-col="city">City</th>
+                        <th class="sortable" data-sort="course" data-col="course">Course</th>
+                        <th class="sortable" data-sort="handicap" data-col="handicap">Handicap</th>
+                        <th class="sortable" data-sort="side_games" data-col="side_games">Side Games</th>
+                        <th class="sortable" data-sort="tee_choice" data-col="tee_choice">Tee</th>
+                        <th class="sortable" data-sort="member_status" data-col="member_status">Status</th>
+                        <th class="sortable" data-sort="golf_or_compete" data-col="golf_or_compete">Type</th>
+                        <th data-col="order_id">Order ID</th>
+                        <th class="sortable" data-sort="order_date" data-col="order_date">Order Date</th>
+                        <th data-col="actions">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="txn-body">

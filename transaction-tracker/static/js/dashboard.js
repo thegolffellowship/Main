@@ -12,6 +12,45 @@ const SEARCHABLE_FIELDS = [
     "post_game", "order_id", "order_date", "event_date", "merchant",
 ];
 
+// Column definitions for toggle and rendering
+const TABLE_COLUMNS = [
+    { key: "event_date", label: "Event Date", default: true },
+    { key: "customer", label: "Customer", default: true },
+    { key: "item_name", label: "Item", default: true },
+    { key: "item_price", label: "Price", default: true },
+    { key: "city", label: "City", default: true },
+    { key: "course", label: "Course", default: true },
+    { key: "handicap", label: "Handicap", default: true },
+    { key: "side_games", label: "Side Games", default: true },
+    { key: "tee_choice", label: "Tee", default: true },
+    { key: "member_status", label: "Status", default: true },
+    { key: "golf_or_compete", label: "Type", default: true },
+    { key: "order_id", label: "Order ID", default: true },
+    { key: "order_date", label: "Order Date", default: true },
+    { key: "actions", label: "Actions", default: true },
+];
+
+// Track which columns are visible (persisted in localStorage)
+let visibleColumns = {};
+
+function loadColumnPrefs() {
+    try {
+        const saved = localStorage.getItem("tgf_visible_columns");
+        if (saved) {
+            visibleColumns = JSON.parse(saved);
+            return;
+        }
+    } catch (e) {}
+    // Default: all visible
+    TABLE_COLUMNS.forEach(c => { visibleColumns[c.key] = c.default; });
+}
+
+function saveColumnPrefs() {
+    try {
+        localStorage.setItem("tgf_visible_columns", JSON.stringify(visibleColumns));
+    } catch (e) {}
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -26,8 +65,57 @@ function parsePrice(priceStr) {
 }
 
 function cell(value, field, rowId) {
-    const display = escapeHtml(value || "—");
+    const display = escapeHtml(value || "\u2014");
     return `<span class="cell-value" data-field="${field}" data-id="${rowId}" data-original="${escapeHtml(value || "")}">${display}</span>`;
+}
+
+// Cross-link cells: customer and item_name link to their respective pages
+function linkedCell(value, field, rowId) {
+    if (!value) return cell(value, field, rowId);
+    const display = escapeHtml(value);
+    if (field === "customer") {
+        return `<a class="cell-link" href="/customers?name=${encodeURIComponent(value)}" title="View all transactions for ${display}">${display}</a>`;
+    }
+    if (field === "item_name") {
+        return `<a class="cell-link" href="/events?item=${encodeURIComponent(value)}" title="View event details for ${display}">${display}</a>`;
+    }
+    return cell(value, field, rowId);
+}
+
+// ---------------------------------------------------------------------------
+// Column visibility
+// ---------------------------------------------------------------------------
+function buildColumnToggle() {
+    const dropdown = document.getElementById("col-toggle-dropdown");
+    dropdown.innerHTML = TABLE_COLUMNS
+        .filter(c => c.key !== "actions")
+        .map(c => {
+            const checked = visibleColumns[c.key] !== false ? "checked" : "";
+            return `<label><input type="checkbox" data-col="${c.key}" ${checked}> ${c.label}</label>`;
+        }).join("");
+
+    dropdown.querySelectorAll("input[type=checkbox]").forEach(cb => {
+        cb.addEventListener("change", () => {
+            visibleColumns[cb.dataset.col] = cb.checked;
+            saveColumnPrefs();
+            applyColumnVisibility();
+            applyFilters();
+        });
+    });
+}
+
+function applyColumnVisibility() {
+    TABLE_COLUMNS.forEach((col, idx) => {
+        const visible = visibleColumns[col.key] !== false;
+        // Header
+        const th = document.querySelector(`th[data-col="${col.key}"]`);
+        if (th) th.style.display = visible ? "" : "none";
+        // All body cells in this column index
+        document.querySelectorAll(`#txn-body tr`).forEach(tr => {
+            const tds = tr.querySelectorAll("td");
+            if (tds[idx]) tds[idx].style.display = visible ? "" : "none";
+        });
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +204,7 @@ async function saveEdit(input) {
         // Revert on failure
         const span = document.querySelector(`.cell-value[data-id="${rowId}"][data-field="${field}"]`);
         if (span) {
-            span.textContent = original || "—";
+            span.textContent = original || "\u2014";
             span.dataset.original = original;
         }
     }
@@ -137,7 +225,7 @@ function revertToSpan(input, value, field, rowId) {
     span.dataset.field = field;
     span.dataset.id = rowId;
     span.dataset.original = value || "";
-    span.textContent = value || "—";
+    span.textContent = value || "\u2014";
     // Re-attach click listener so the cell stays editable
     span.addEventListener("click", () => startEdit(span));
     if (input.parentElement) {
@@ -156,7 +244,7 @@ async function fetchItems() {
     } catch (err) {
         console.error("Failed to fetch items:", err);
         document.getElementById("txn-body").innerHTML =
-            '<tr class="empty-row"><td colspan="13">Failed to load data.</td></tr>';
+            '<tr class="empty-row"><td colspan="14">Failed to load data.</td></tr>';
     }
 }
 
@@ -218,10 +306,11 @@ async function checkConfig() {
 // ---------------------------------------------------------------------------
 function renderTable(items) {
     const tbody = document.getElementById("txn-body");
+    const visibleCount = TABLE_COLUMNS.filter(c => visibleColumns[c.key] !== false).length;
 
     if (!items.length) {
         tbody.innerHTML =
-            '<tr class="empty-row"><td colspan="14">No items found. Click "Check Now" to scan your inbox.</td></tr>';
+            `<tr class="empty-row"><td colspan="${visibleCount}">No items found. Click "Check Now" to scan your inbox.</td></tr>`;
         document.getElementById("row-count").textContent = "";
         return;
     }
@@ -231,8 +320,8 @@ function renderTable(items) {
             (row) => `
         <tr data-id="${row.id}">
             <td>${cell(row.event_date || row.order_date, "event_date", row.id)}</td>
-            <td>${cell(row.customer, "customer", row.id)}</td>
-            <td class="item-name-cell">${cell(row.item_name, "item_name", row.id)}</td>
+            <td>${linkedCell(row.customer, "customer", row.id)}</td>
+            <td class="item-name-cell">${linkedCell(row.item_name, "item_name", row.id)}</td>
             <td class="price-cell">${cell(row.item_price, "item_price", row.id)}</td>
             <td>${cell(row.city, "city", row.id)}</td>
             <td>${cell(row.course, "course", row.id)}</td>
@@ -248,10 +337,13 @@ function renderTable(items) {
         )
         .join("");
 
-    // Attach click-to-edit listeners
+    // Attach click-to-edit listeners (skip linked cells)
     tbody.querySelectorAll(".cell-value").forEach((span) => {
         span.addEventListener("click", () => startEdit(span));
     });
+
+    // Apply column visibility to newly rendered rows
+    applyColumnVisibility();
 
     document.getElementById("row-count").textContent = `Showing ${items.length} item(s)`;
 }
@@ -469,6 +561,9 @@ function exportCSV() {
 // Init
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
+    loadColumnPrefs();
+    buildColumnToggle();
+
     fetchItems();
     fetchStats();
     checkConfig();
@@ -479,6 +574,19 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btn-check-now").addEventListener("click", checkNow);
     document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
     document.getElementById("btn-send-report").addEventListener("click", sendReport);
+
+    // Column toggle dropdown
+    const colBtn = document.getElementById("col-toggle-btn");
+    const colDrop = document.getElementById("col-toggle-dropdown");
+    colBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        colDrop.classList.toggle("open");
+    });
+    document.addEventListener("click", (e) => {
+        if (!colDrop.contains(e.target) && e.target !== colBtn) {
+            colDrop.classList.remove("open");
+        }
+    });
 
     // Column header sorting
     document.querySelectorAll("th.sortable").forEach((th) => {

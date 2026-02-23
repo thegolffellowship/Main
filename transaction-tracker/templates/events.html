@@ -84,7 +84,6 @@
             <p class="subtitle">Events — Auto-detected from transaction data</p>
         </div>
         <div class="header-actions">
-            <a href="/" class="btn btn-secondary">Back to Dashboard</a>
             <button id="btn-sync" class="btn btn-primary" title="Scan transactions and create new event entries">
                 <span class="btn-icon">&#8635;</span> Sync Events
             </button>
@@ -92,6 +91,14 @@
     </header>
 
     <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events" class="active">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/audit">Audit Log</a>
+        </nav>
+
         <section class="event-summary" id="summary-section">
             <div class="stat-card">
                 <div class="stat-value" id="stat-total">—</div>
@@ -132,11 +139,22 @@
 
     <script>
     let allEvents = [];
+    let allItems = [];
+    let expandedEventId = null;
 
     function escapeHtml(str) {
         const div = document.createElement("div");
         div.textContent = str || "";
         return div.innerHTML;
+    }
+
+    async function fetchItems() {
+        try {
+            const res = await fetch("/api/items");
+            allItems = await res.json();
+        } catch (err) {
+            console.error("Failed to fetch items:", err);
+        }
     }
 
     async function fetchEvents() {
@@ -147,6 +165,10 @@
         } catch (err) {
             console.error("Failed to fetch events:", err);
         }
+    }
+
+    function getRegistrants(eventName) {
+        return allItems.filter(item => item.item_name === eventName);
     }
 
     function renderEvents() {
@@ -165,20 +187,110 @@
             return;
         }
 
-        tbody.innerHTML = allEvents.map(ev => {
-            const typeCls = ev.event_type === "event" ? "type-event" : "type-other";
-            return `
-            <tr data-id="${ev.id}">
+        let html = "";
+        allEvents.forEach(ev => {
+            const isExpanded = expandedEventId === ev.id;
+            html += `
+            <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
                 <td><strong>${escapeHtml(ev.item_name)}</strong></td>
-                <td>${escapeHtml(ev.event_date || "—")}</td>
-                <td>${escapeHtml(ev.course || "—")}</td>
-                <td>${escapeHtml(ev.city || "—")}</td>
+                <td>${escapeHtml(ev.event_date || "\u2014")}</td>
+                <td>${escapeHtml(ev.course || "\u2014")}</td>
+                <td>${escapeHtml(ev.city || "\u2014")}</td>
                 <td><span class="reg-count">${ev.registrations || 0}</span></td>
                 <td>
-                    <button class="btn btn-danger" onclick="deleteEvent(${ev.id})">Delete</button>
+                    <button class="btn btn-danger" onclick="event.stopPropagation(); deleteEvent(${ev.id})">Delete</button>
                 </td>
             </tr>`;
-        }).join("");
+
+            // Detail row (always rendered, visibility toggled via CSS)
+            html += `
+            <tr class="event-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${ev.id}">
+                <td colspan="6">
+                    <div class="event-detail-content" id="detail-content-${ev.id}">
+                        ${isExpanded ? renderDetailContent(ev) : ''}
+                    </div>
+                </td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+
+        // Attach click handlers to event rows
+        tbody.querySelectorAll(".event-row-clickable").forEach(row => {
+            row.addEventListener("click", () => {
+                const id = parseInt(row.dataset.id);
+                toggleEventDetail(id);
+            });
+        });
+
+        // Check if URL has ?item= to auto-expand
+        const params = new URLSearchParams(window.location.search);
+        const itemParam = params.get("item");
+        if (itemParam && expandedEventId === null) {
+            const match = allEvents.find(e => e.item_name === itemParam);
+            if (match) {
+                toggleEventDetail(match.id);
+            }
+        }
+    }
+
+    function renderDetailContent(ev) {
+        const registrants = getRegistrants(ev.item_name);
+        if (!registrants.length) {
+            return '<p style="color: var(--text-muted); font-style: italic;">No registrations found for this event.</p>';
+        }
+
+        let html = `<h4>Registrations (${registrants.length})</h4>`;
+        html += '<table class="registrants-table"><thead><tr>';
+        html += '<th>Customer</th><th>Price</th><th>Handicap</th><th>Side Games</th>';
+        html += '<th>Tee</th><th>Status</th><th>Type</th><th>Order Date</th>';
+        html += '</tr></thead><tbody>';
+
+        registrants.forEach(r => {
+            html += `<tr>
+                <td><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a></td>
+                <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(r.item_price || "\u2014")}</td>
+                <td>${escapeHtml(r.handicap || "\u2014")}</td>
+                <td>${escapeHtml(r.side_games || "\u2014")}</td>
+                <td>${escapeHtml(r.tee_choice || "\u2014")}</td>
+                <td>${escapeHtml(r.member_status || "\u2014")}</td>
+                <td>${escapeHtml(r.golf_or_compete || "\u2014")}</td>
+                <td>${escapeHtml(r.order_date || "\u2014")}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        return html;
+    }
+
+    function toggleEventDetail(eventId) {
+        const wasExpanded = expandedEventId === eventId;
+
+        // Collapse any currently expanded row
+        if (expandedEventId !== null) {
+            const prevRow = document.querySelector(`.event-row-clickable[data-id="${expandedEventId}"]`);
+            const prevDetail = document.querySelector(`.event-detail-row[data-detail-for="${expandedEventId}"]`);
+            if (prevRow) prevRow.classList.remove("expanded");
+            if (prevDetail) prevDetail.classList.remove("visible");
+            expandedEventId = null;
+        }
+
+        // If clicking the same row, just collapse
+        if (wasExpanded) return;
+
+        // Expand the clicked row
+        expandedEventId = eventId;
+        const row = document.querySelector(`.event-row-clickable[data-id="${eventId}"]`);
+        const detailRow = document.querySelector(`.event-detail-row[data-detail-for="${eventId}"]`);
+        if (row) row.classList.add("expanded");
+        if (detailRow) {
+            detailRow.classList.add("visible");
+            // Lazy-render content
+            const ev = allEvents.find(e => e.id === eventId);
+            if (ev) {
+                document.getElementById(`detail-content-${eventId}`).innerHTML = renderDetailContent(ev);
+            }
+        }
     }
 
     async function syncEvents() {
@@ -204,15 +316,17 @@
         try {
             await fetch(`/api/events/${id}`, { method: "DELETE" });
             allEvents = allEvents.filter(e => e.id !== id);
+            if (expandedEventId === id) expandedEventId = null;
             renderEvents();
         } catch (err) {
             alert("Delete failed.");
         }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById("btn-sync").addEventListener("click", syncEvents);
-        // Auto-sync on load then fetch
+        // Fetch items first (for registrant details), then sync events and fetch
+        await fetchItems();
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
     });
     </script>
