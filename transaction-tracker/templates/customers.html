@@ -620,6 +620,14 @@
                 renderCustomers();
             });
         });
+
+        // Auto-refresh every 30s to keep multiple users in sync
+        setInterval(() => {
+            const loginOpen = document.getElementById("login-overlay").style.display === "flex";
+            if (!loginOpen) {
+                init();
+            }
+        }, 30000);
     });
     </script>
 </body>

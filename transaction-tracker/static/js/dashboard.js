@@ -810,6 +810,24 @@ async function handleEditSubmit(e) {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-refresh (keeps multiple users in sync)
+// ---------------------------------------------------------------------------
+let autoRefreshInterval = null;
+
+function startAutoRefresh() {
+    if (autoRefreshInterval) return;
+    autoRefreshInterval = setInterval(() => {
+        // Only refresh when no modal is open and no edit in progress
+        const editOpen = document.getElementById("edit-overlay").style.display === "flex";
+        const loginOpen = document.getElementById("login-overlay").style.display === "flex";
+        if (!editOpen && !loginOpen && !activeEditor) {
+            fetchItems();
+            fetchStats();
+        }
+    }, 30000); // every 30 seconds
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
@@ -824,6 +842,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     fetchItems();
     fetchStats();
     checkConfig();
+    startAutoRefresh();
 
     document.getElementById("search-input").addEventListener("input", applyFilters);
     document.getElementById("filter-column").addEventListener("change", applyFilters);
