@@ -21,6 +21,8 @@ from email_parser.database import (
     init_db,
     get_all_items,
     get_item_stats,
+    get_audit_report,
+    get_data_snapshot,
     save_items,
     delete_item,
 )
@@ -181,6 +183,20 @@ def api_stats():
     """Return summary statistics."""
     stats = get_item_stats()
     return jsonify(stats)
+
+
+@app.route("/api/audit")
+def api_audit():
+    """Data-quality report: field fill-rates, missing-data flags, value distributions."""
+    report = get_audit_report()
+    return jsonify(report)
+
+
+@app.route("/api/data-snapshot")
+def api_data_snapshot():
+    """Quick snapshot of recent items + stats for inspection."""
+    limit = request.args.get("limit", 50, type=int)
+    return jsonify(get_data_snapshot(limit=limit))
 
 
 @app.route("/api/items/<int:item_id>", methods=["DELETE"])

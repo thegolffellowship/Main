@@ -178,6 +178,111 @@ def get_item_stats(db_path: str | Path | None = None) -> dict:
     }
 
 
+def get_audit_report(db_path: str | Path | None = None) -> dict:
+    """
+    Analyse extraction quality across all stored items.
+
+    Returns field fill-rates, rows with critical missing data,
+    and per-field value distributions for key columns.
+    """
+    conn = get_connection(db_path)
+    rows = conn.execute("SELECT * FROM items ORDER BY order_date DESC, id ASC").fetchall()
+    conn.close()
+
+    if not rows:
+        return {"total_items": 0, "message": "No items in database."}
+
+    items = [dict(r) for r in rows]
+    total = len(items)
+
+    # --- Field fill rates ---------------------------------------------------
+    critical_fields = [
+        "customer", "customer_email", "order_id", "order_date",
+        "item_name", "item_price", "event_date", "city", "course",
+    ]
+    golf_fields = [
+        "handicap", "side_games", "tee_choice", "member_status",
+        "golf_or_compete", "post_game", "returning_or_new",
+        "shirt_size", "guest_name",
+    ]
+    all_tracked = critical_fields + golf_fields
+
+    fill_rates = {}
+    for field in all_tracked:
+        filled = sum(1 for it in items if it.get(field))
+        fill_rates[field] = {
+            "filled": filled,
+            "empty": total - filled,
+            "pct": round(filled / total * 100, 1),
+        }
+
+    # --- Rows missing critical fields ----------------------------------------
+    problems = []
+    for it in items:
+        missing = [f for f in critical_fields if not it.get(f)]
+        if missing:
+            problems.append({
+                "id": it["id"],
+                "email_uid": it.get("email_uid"),
+                "customer": it.get("customer") or "(empty)",
+                "item_name": it.get("item_name") or "(empty)",
+                "missing_fields": missing,
+            })
+
+    # --- Value distributions for key columns ---------------------------------
+    distributions = {}
+    for field in ["city", "course", "member_status", "golf_or_compete", "tee_choice"]:
+        counts: dict[str, int] = {}
+        for it in items:
+            val = it.get(field) or "(empty)"
+            counts[val] = counts.get(val, 0) + 1
+        distributions[field] = dict(sorted(counts.items(), key=lambda x: -x[1]))
+
+    return {
+        "total_items": total,
+        "fill_rates": fill_rates,
+        "problems": problems,
+        "problem_count": len(problems),
+        "distributions": distributions,
+    }
+
+
+def get_data_snapshot(limit: int = 50, db_path: str | Path | None = None) -> dict:
+    """
+    Quick snapshot of the database: stats + the most recent items (default 50).
+
+    Designed for fast inspection — returns enough context to spot issues
+    without dumping the entire table.
+    """
+    conn = get_connection(db_path)
+
+    # Stats
+    row = conn.execute(
+        """
+        SELECT
+            COUNT(*)                 AS total_items,
+            COUNT(DISTINCT order_id) AS total_orders,
+            COUNT(DISTINCT customer) AS unique_customers,
+            MIN(order_date)          AS earliest,
+            MAX(order_date)          AS latest
+        FROM items
+        """
+    ).fetchone()
+
+    # Most recent items
+    recent = conn.execute(
+        "SELECT * FROM items ORDER BY created_at DESC, id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    conn.close()
+
+    return {
+        "stats": dict(row),
+        "recent_items": [dict(r) for r in recent],
+        "showing": min(limit, len(recent)),
+    }
+
+
 def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
     """Delete an item row by ID.  Returns True if a row was deleted."""
     conn = get_connection(db_path)
