@@ -218,17 +218,47 @@ async function checkNow() {
         const data = await res.json();
         if (data.error) {
             alert(data.error);
-        } else {
-            fetchItems();
-            fetchStats();
+            btn.classList.remove("loading");
+            btn.disabled = false;
+            return;
         }
+
+        // Poll for completion
+        pollCheckStatus();
     } catch (err) {
         console.error("Check now failed:", err);
         alert("Failed to check inbox. See console for details.");
-    } finally {
         btn.classList.remove("loading");
         btn.disabled = false;
     }
+}
+
+function pollCheckStatus() {
+    const btn = document.getElementById("btn-check-now");
+    const interval = setInterval(async () => {
+        try {
+            const res = await fetch("/api/check-status");
+            const data = await res.json();
+
+            if (data.status === "running") return; // keep polling
+
+            clearInterval(interval);
+            btn.classList.remove("loading");
+            btn.disabled = false;
+
+            if (data.status === "error") {
+                alert("Inbox check failed: " + data.error);
+            } else {
+                fetchItems();
+                fetchStats();
+            }
+        } catch (err) {
+            clearInterval(interval);
+            btn.classList.remove("loading");
+            btn.disabled = false;
+            console.error("Poll failed:", err);
+        }
+    }, 3000); // poll every 3 seconds
 }
 
 async function sendReport() {

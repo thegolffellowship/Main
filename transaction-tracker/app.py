@@ -9,6 +9,7 @@ Includes a webhook connector for external integrations and a daily email report.
 import os
 import secrets
 import logging
+import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -39,8 +40,12 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 
 # ---------------------------------------------------------------------------
-# Email check job
+# Email check job (with background tracking)
 # ---------------------------------------------------------------------------
+_inbox_check_lock = threading.Lock()
+_inbox_check_status = {"running": False, "error": None}
+
+
 def check_inbox():
     """Fetch new transaction emails, parse them with AI, and save to DB."""
     tenant_id = os.getenv("AZURE_TENANT_ID")
@@ -69,6 +74,18 @@ def check_inbox():
     if rows:
         count = save_items(rows)
         logger.info("Saved %d new item rows", count)
+
+
+def _check_inbox_background():
+    """Wrapper that runs check_inbox in a background thread with status tracking."""
+    try:
+        check_inbox()
+        _inbox_check_status["error"] = None
+    except Exception as e:
+        logger.exception("Background inbox check failed")
+        _inbox_check_status["error"] = str(e)
+    finally:
+        _inbox_check_status["running"] = False
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +174,7 @@ def api_delete_item(item_id):
 
 @app.route("/api/check-now", methods=["POST"])
 def api_check_now():
-    """Manually trigger an inbox check."""
+    """Manually trigger an inbox check (runs in background to avoid timeout)."""
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET")
@@ -170,13 +187,32 @@ def api_check_now():
     if not api_key:
         return jsonify({"error": "ANTHROPIC_API_KEY not configured. Add it to your .env file."}), 400
 
-    try:
-        check_inbox()
-        stats = get_item_stats()
-        return jsonify({"status": "ok", "stats": stats})
-    except Exception as e:
-        logger.exception("Manual inbox check failed")
-        return jsonify({"error": str(e)}), 500
+    with _inbox_check_lock:
+        if _inbox_check_status["running"]:
+            return jsonify({"status": "already_running"})
+        _inbox_check_status["running"] = True
+        _inbox_check_status["error"] = None
+
+    thread = threading.Thread(target=_check_inbox_background, daemon=True)
+    thread.start()
+
+    return jsonify({"status": "started"})
+
+
+@app.route("/api/check-status")
+def api_check_status():
+    """Poll this endpoint to check if the background inbox check is done."""
+    running = _inbox_check_status["running"]
+    error = _inbox_check_status["error"]
+
+    if running:
+        return jsonify({"status": "running"})
+
+    if error:
+        return jsonify({"status": "error", "error": error})
+
+    stats = get_item_stats()
+    return jsonify({"status": "done", "stats": stats})
 
 
 @app.route("/api/config-status")
@@ -291,9 +327,14 @@ def api_send_report_now():
 # ---------------------------------------------------------------------------
 init_db()
 
-if os.getenv("EMAIL_ADDRESS"):
+# Only start the scheduler in one Gunicorn worker (or in dev mode).
+# Gunicorn's --preload flag shares module-level state, but with forked workers
+# each gets its own scheduler.  We use an env-based guard so only one runs.
+_is_main_worker = not os.getenv("_SCHEDULER_STARTED")
+if os.getenv("EMAIL_ADDRESS") and _is_main_worker:
+    os.environ["_SCHEDULER_STARTED"] = "1"
     start_scheduler()
-else:
+elif not os.getenv("EMAIL_ADDRESS"):
     logger.info("Email not configured — scheduler not started. Set up .env to enable auto-checking.")
 
 if __name__ == "__main__":
