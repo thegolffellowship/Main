@@ -605,7 +605,7 @@ def normalize_tee_choices(db_path: str | Path | None = None) -> int:
         (re.compile(r"\bforward\b|\bfront\b", re.IGNORECASE), "Forward"),
         (re.compile(r"\b65\s*\+", re.IGNORECASE), "65+"),
         (re.compile(r"\b50\s*[-–]\s*64\b", re.IGNORECASE), "50-64"),
-        (re.compile(r"\b<\s*50\b|\bunder\s*50\b", re.IGNORECASE), "<50"),
+        (re.compile(r"(?:^|(?<=\s))<\s*50\b|\bunder\s*50\b", re.IGNORECASE), "<50"),
     ]
     canonical = {"<50", "50-64", "65+", "Forward"}
 

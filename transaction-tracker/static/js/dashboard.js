@@ -5,6 +5,10 @@
 let allItems = [];
 // currentRole is provided by auth.js
 
+// Sort state — independent of dropdown so header clicks always work
+let currentSortField = "event_date";
+let currentSortDir = "desc";
+
 // Columns that are searchable when "All columns" filter is selected
 const SEARCHABLE_FIELDS = [
     "customer", "customer_email", "customer_phone",
@@ -500,7 +504,7 @@ function sortItems(items, sortKey) {
 function applyFilters() {
     const query = document.getElementById("search-input").value.toLowerCase().trim();
     const filterCol = document.getElementById("filter-column").value;
-    const sortKey = document.getElementById("sort-select").value;
+    const sortKey = `${currentSortField}-${currentSortDir}`;
 
     let filtered = allItems;
 
@@ -539,6 +543,8 @@ function updateClearButton() {
 function clearAllFilters() {
     document.getElementById("search-input").value = "";
     document.getElementById("filter-column").value = "";
+    currentSortField = "event_date";
+    currentSortDir = "desc";
     document.getElementById("sort-select").value = "event_date-desc";
     activeCategory = "all";
     document.querySelectorAll(".category-btn").forEach(b => b.classList.remove("active"));
@@ -741,17 +747,29 @@ function attachHeaderDrag() {
     });
 }
 
+function syncSortDropdown() {
+    const select = document.getElementById("sort-select");
+    const desired = `${currentSortField}-${currentSortDir}`;
+    // Only update dropdown if a matching option exists; otherwise leave it alone
+    const hasOption = Array.from(select.options).some(o => o.value === desired);
+    if (hasOption) {
+        select.value = desired;
+    } else {
+        select.value = "";
+    }
+}
+
 function attachHeaderSort() {
     document.querySelectorAll("th.sortable").forEach((th) => {
         th.addEventListener("click", () => {
             const field = th.dataset.sort;
-            const select = document.getElementById("sort-select");
-            const current = select.value;
-            if (current === `${field}-asc`) {
-                select.value = `${field}-desc`;
+            if (currentSortField === field) {
+                currentSortDir = currentSortDir === "asc" ? "desc" : "asc";
             } else {
-                select.value = `${field}-asc`;
+                currentSortField = field;
+                currentSortDir = "asc";
             }
+            syncSortDropdown();
             applyFilters();
         });
     });
@@ -869,7 +887,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.getElementById("search-input").addEventListener("input", applyFilters);
     document.getElementById("filter-column").addEventListener("change", applyFilters);
-    document.getElementById("sort-select").addEventListener("change", applyFilters);
+    document.getElementById("sort-select").addEventListener("change", () => {
+        const val = document.getElementById("sort-select").value;
+        if (val) {
+            const [f, d] = val.split("-");
+            currentSortField = f;
+            currentSortDir = d;
+        }
+        applyFilters();
+    });
     document.getElementById("btn-check-now").addEventListener("click", checkNow);
     document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
     document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);

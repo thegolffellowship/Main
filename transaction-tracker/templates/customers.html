@@ -320,13 +320,6 @@
         const query = document.getElementById("customer-search").value.toLowerCase().trim();
         const statusFilter = document.getElementById("filter-status").value;
         const chapterFilter = document.getElementById("filter-chapter").value;
-        const sortKey = document.getElementById("sort-select").value;
-
-        // Sync tracked sort state from dropdown
-        const [sf, sd] = sortKey.split("-");
-        currentSortField = sf;
-        currentSortDir = sd;
-
         let filtered = allCustomers;
 
         if (query) {
@@ -391,6 +384,8 @@
         document.getElementById("customer-search").value = "";
         document.getElementById("filter-status").value = "";
         document.getElementById("filter-chapter").value = "";
+        currentSortField = "name";
+        currentSortDir = "asc";
         document.getElementById("sort-select").value = "name-asc";
         selectedCustomer = null;
         document.getElementById("customer-detail").style.display = "none";
@@ -595,7 +590,15 @@
         document.getElementById("customer-search").addEventListener("input", renderCustomers);
         document.getElementById("filter-status").addEventListener("change", renderCustomers);
         document.getElementById("filter-chapter").addEventListener("change", renderCustomers);
-        document.getElementById("sort-select").addEventListener("change", renderCustomers);
+        document.getElementById("sort-select").addEventListener("change", () => {
+            const val = document.getElementById("sort-select").value;
+            if (val) {
+                const [f, d] = val.split("-");
+                currentSortField = f;
+                currentSortDir = d;
+            }
+            renderCustomers();
+        });
         document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
         document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);
 
@@ -620,15 +623,18 @@
         // List table header sorting with arrow toggle
         document.querySelectorAll(".customer-list-table thead th[data-sort]").forEach(th => {
             th.addEventListener("click", () => {
-                const sortField = th.dataset.sort;
-                const select = document.getElementById("sort-select");
-                if (currentSortField === sortField) {
-                    // Toggle direction
-                    const newDir = currentSortDir === "asc" ? "desc" : "asc";
-                    select.value = `${sortField}-${newDir}`;
+                const field = th.dataset.sort;
+                if (currentSortField === field) {
+                    currentSortDir = currentSortDir === "asc" ? "desc" : "asc";
                 } else {
-                    select.value = `${sortField}-asc`;
+                    currentSortField = field;
+                    currentSortDir = "asc";
                 }
+                // Sync dropdown if matching option exists
+                const select = document.getElementById("sort-select");
+                const desired = `${currentSortField}-${currentSortDir}`;
+                const hasOption = Array.from(select.options).some(o => o.value === desired);
+                select.value = hasOption ? desired : "";
                 renderCustomers();
             });
         });
