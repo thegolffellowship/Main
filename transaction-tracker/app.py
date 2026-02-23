@@ -20,6 +20,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from email_parser.database import (
     init_db,
     get_all_items,
+    get_known_email_uids,
     get_item_stats,
     get_audit_report,
     get_data_snapshot,
@@ -83,13 +84,26 @@ def check_inbox():
         _inbox_check_status["message"] = "No transaction emails matched filters in the last 90 days"
         return
 
+    # Skip emails already parsed — avoids burning AI credits on duplicates
+    known_uids = get_known_email_uids()
+    new_emails = [e for e in emails if e.get("uid") not in known_uids]
+    logger.info(
+        "Fetched %d transaction emails, %d already parsed, %d new to process",
+        len(emails), len(emails) - len(new_emails), len(new_emails),
+    )
+
+    if not new_emails:
+        _inbox_check_status["message"] = f"All {len(emails)} emails already parsed — nothing new"
+        return
+
     # Parse and save one email at a time so items appear on the dashboard
     # incrementally instead of waiting for the entire batch to finish.
     import anthropic as _anthropic
 
+    _inbox_check_status["emails_fetched"] = len(new_emails)
     total_saved = 0
     total_parsed = 0
-    for i, email_data in enumerate(emails, 1):
+    for i, email_data in enumerate(new_emails, 1):
         try:
             rows = parse_email(email_data)
             total_parsed += 1
@@ -98,20 +112,20 @@ def check_inbox():
                 count = save_items(rows)
                 total_saved += count
                 _inbox_check_status["items_saved"] = total_saved
-                logger.info("Email %d/%d: saved %d items", i, len(emails), count)
+                logger.info("Email %d/%d: saved %d items", i, len(new_emails), count)
             else:
-                logger.info("Email %d/%d: no items extracted", i, len(emails))
+                logger.info("Email %d/%d: no items extracted", i, len(new_emails))
         except (_anthropic.BadRequestError, _anthropic.AuthenticationError) as e:
             logger.error(
                 "Stopping at email %d/%d — Anthropic API fatal error: %s",
-                i, len(emails), e.message,
+                i, len(new_emails), e.message,
             )
             raise
         except Exception:
-            logger.exception("Failed to parse email %d/%d uid=%s", i, len(emails), email_data.get("uid"))
+            logger.exception("Failed to parse email %d/%d uid=%s", i, len(new_emails), email_data.get("uid"))
 
-    _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(emails)} emails"
-    logger.info("Done — saved %d total new items from %d emails", total_saved, len(emails))
+    _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(new_emails)} new emails ({len(emails)} total scanned)"
+    logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
 
 
 def _check_inbox_background():

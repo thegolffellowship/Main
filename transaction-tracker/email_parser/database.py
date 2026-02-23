@@ -137,6 +137,14 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
     return inserted
 
 
+def get_known_email_uids(db_path: str | Path | None = None) -> set[str]:
+    """Return the set of email_uid values already stored in the database."""
+    conn = get_connection(db_path)
+    rows = conn.execute("SELECT DISTINCT email_uid FROM items").fetchall()
+    conn.close()
+    return {r["email_uid"] for r in rows}
+
+
 def get_all_items(db_path: str | Path | None = None) -> list[dict]:
     """Return all item rows ordered by order_date descending."""
     conn = get_connection(db_path)
