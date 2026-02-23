@@ -230,7 +230,7 @@
             const visible = custVisibleColumns[col.key] !== false;
             const th = document.querySelector(`#cust-header-row th[data-col="${col.key}"]`);
             if (th) th.style.display = visible ? "" : "none";
-            document.querySelectorAll("#customer-list-body tr").forEach(tr => {
+            document.querySelectorAll("#customer-list-body .cust-row-clickable").forEach(tr => {
                 const tds = tr.querySelectorAll("td");
                 if (tds[idx]) tds[idx].style.display = visible ? "" : "none";
             });
@@ -422,7 +422,9 @@
         currentSortDir = "asc";
         document.getElementById("sort-select").value = "name-asc";
         selectedCustomer = null;
-        document.getElementById("customer-detail").style.display = "none";
+        if (currentView === "cards") {
+            document.getElementById("customer-detail").style.display = "none";
+        }
         renderCustomers();
     }
 
@@ -453,10 +455,11 @@
             return;
         }
 
-        tbody.innerHTML = filtered.map(c => {
-            const isSelected = selectedCustomer && selectedCustomer.name === c.name;
-            return `
-            <tr data-name="${escapeHtml(c.name)}" class="${isSelected ? 'selected-row' : ''}">
+        let html = "";
+        filtered.forEach(c => {
+            const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
+            html += `
+            <tr data-name="${escapeHtml(c.name)}" class="cust-row-clickable ${isExpanded ? 'expanded' : ''}">
                 <td><strong>${escapeHtml(c.name)}</strong></td>
                 <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span></td>
                 <td>${escapeHtml(c.chapter || "\u2014")}</td>
@@ -465,16 +468,34 @@
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.email || "\u2014")}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.phone || "\u2014")}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
+            </tr>
+            <tr class="cust-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${escapeHtml(c.name)}">
+                <td colspan="8">
+                    <div class="cust-detail-content" data-detail-name="${escapeHtml(c.name)}">
+                        ${isExpanded ? renderCustDetailContent(c) : ''}
+                    </div>
+                </td>
             </tr>`;
-        }).join("");
+        });
 
-        tbody.querySelectorAll("tr[data-name]").forEach(row => {
+        tbody.innerHTML = html;
+
+        // Attach row click handlers
+        tbody.querySelectorAll(".cust-row-clickable").forEach(row => {
             row.addEventListener("click", () => {
                 const name = row.dataset.name;
                 const cust = allCustomers.find(c => c.name === name);
-                if (cust) selectCustomer(cust);
+                if (cust) toggleCustomerDetail(cust);
             });
         });
+
+        // Re-attach detail handlers for expanded row
+        if (selectedCustomer) {
+            const container = tbody.querySelector(`.cust-detail-content[data-detail-name="${escapeHtml(selectedCustomer.name)}"]`);
+            if (container && container.innerHTML.trim()) {
+                attachCustDetailHandlers(container);
+            }
+        }
 
         applyCustColumnVisibility();
     }
@@ -512,6 +533,99 @@
                 if (cust) selectCustomer(cust);
             });
         });
+    }
+
+    function renderCustDetailContent(customer) {
+        const meta = [];
+        if (customer.chapter) meta.push("Chapter: " + customer.chapter);
+        if (customer.email) meta.push(customer.email);
+        if (customer.phone) meta.push(customer.phone);
+        meta.push(`${customer.items.length} purchase(s)`);
+        meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} total`);
+
+        let html = `<div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.5rem;">${meta.join(" | ")}</div>`;
+        html += '<table class="registrants-table"><thead><tr>';
+        html += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Type</th><th>Order Date</th><th>Actions</th>';
+        html += '</tr></thead><tbody>';
+
+        const sorted = [...customer.items].sort((a, b) =>
+            (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""));
+
+        sorted.forEach(item => {
+            const txStatus = item.transaction_status || "active";
+            const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (item.transferred_from_id ? ' class="row-from-transfer"' : '');
+            let tag = "";
+            if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+            else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+            else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            let actionBtn = "";
+            if (txStatus === "active" && !item.transferred_from_id) {
+                actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
+            } else if (txStatus === "credited" || txStatus === "transferred") {
+                actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+            }
+            html += `<tr${rowClass}>
+                <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
+                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
+                <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
+                <td>${escapeHtml(item.city || "\u2014")}</td>
+                <td>${escapeHtml(item.course || "\u2014")}</td>
+                <td>${escapeHtml(item.side_games || "\u2014")}</td>
+                <td>${escapeHtml(item.golf_or_compete || "\u2014")}</td>
+                <td>${escapeHtml(item.order_date || "\u2014")}</td>
+                <td>${actionBtn}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        return html;
+    }
+
+    function attachCustDetailHandlers(container) {
+        container.querySelectorAll("[data-cust-credit-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openCustCreditModal(parseInt(btn.dataset.custCreditId));
+            });
+        });
+        container.querySelectorAll("[data-cust-reverse-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                reverseCustCredit(parseInt(btn.dataset.custReverseId));
+            });
+        });
+        // Prevent event-name links from toggling the row
+        container.querySelectorAll("a.cell-link").forEach(a => {
+            a.addEventListener("click", (e) => e.stopPropagation());
+        });
+    }
+
+    function toggleCustomerDetail(customer) {
+        const wasExpanded = selectedCustomer && selectedCustomer.name === customer.name;
+
+        // Collapse current
+        if (selectedCustomer) {
+            const prevRow = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(selectedCustomer.name)}"]`);
+            const prevDetail = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(selectedCustomer.name)}"]`);
+            if (prevRow) prevRow.classList.remove("expanded");
+            if (prevDetail) prevDetail.classList.remove("visible");
+            selectedCustomer = null;
+        }
+
+        // If clicking same row, just collapse
+        if (wasExpanded) return;
+
+        // Expand clicked
+        selectedCustomer = customer;
+        const row = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(customer.name)}"]`);
+        const detailRow = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(customer.name)}"]`);
+        if (row) row.classList.add("expanded");
+        if (detailRow) {
+            detailRow.classList.add("visible");
+            const container = detailRow.querySelector(".cust-detail-content");
+            container.innerHTML = renderCustDetailContent(customer);
+            attachCustDetailHandlers(container);
+        }
     }
 
     function selectCustomer(customer, scroll = true) {
@@ -684,6 +798,13 @@
         document.getElementById("customer-list-view").style.display = view === "list" ? "" : "none";
         document.getElementById("customer-cards").style.display = view === "cards" ? "" : "none";
 
+        // Hide/show bottom detail panel depending on view
+        if (view === "list") {
+            document.getElementById("customer-detail").style.display = "none";
+        } else if (selectedCustomer) {
+            selectCustomer(selectedCustomer);
+        }
+
         renderCustomers();
     }
 
@@ -716,7 +837,27 @@
             allItems = await res.json();
             allCustomers = buildCustomers(allItems);
             populateChapterFilter();
+
+            // Update selectedCustomer with fresh data before rendering
+            if (selectedCustomer) {
+                const freshCust = allCustomers.find(c => c.name === selectedCustomer.name);
+                if (freshCust) {
+                    selectedCustomer = freshCust;
+                } else {
+                    selectedCustomer = null;
+                    if (currentView === "cards") {
+                        document.getElementById("customer-detail").style.display = "none";
+                    }
+                }
+            }
+
+            // renderCustomers handles both list (inline expansion) and cards views
             renderCustomers();
+
+            // Cards view: re-render detail panel with fresh data
+            if (selectedCustomer && currentView === "cards") {
+                selectCustomer(selectedCustomer, false);
+            }
 
             if (!initialLoadDone) {
                 initialLoadDone = true;
@@ -726,22 +867,16 @@
                 if (nameParam) {
                     const match = allCustomers.find(c => c.name === nameParam);
                     if (match) {
-                        selectCustomer(match);
+                        if (currentView === "list") {
+                            toggleCustomerDetail(match);
+                        } else {
+                            selectCustomer(match);
+                        }
                     } else {
                         // Try partial match via search
                         document.getElementById("customer-search").value = nameParam;
                         renderCustomers();
                     }
-                }
-            } else if (selectedCustomer) {
-                // Re-render detail panel with fresh data (no scroll)
-                const freshCust = allCustomers.find(c => c.name === selectedCustomer.name);
-                if (freshCust) {
-                    selectCustomer(freshCust, false);
-                } else {
-                    // Customer no longer exists in data
-                    selectedCustomer = null;
-                    document.getElementById("customer-detail").style.display = "none";
                 }
             }
         } catch (err) {
