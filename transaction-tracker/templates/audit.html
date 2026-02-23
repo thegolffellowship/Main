@@ -325,7 +325,10 @@
     function fieldHtml(label, value) {
         const isEmpty = !value || value === "null";
         const cls = isEmpty ? "empty" : "";
-        const display = isEmpty ? "(missing)" : escapeHtml(String(value));
+        let display = isEmpty ? "(missing)" : escapeHtml(String(value));
+        if (!isEmpty && label === "Email") {
+            display = `<a href="mailto:${encodeURIComponent(value)}" class="cell-link">${escapeHtml(String(value))}</a>`;
+        }
         return `<div class="field-row"><span class="field-label">${escapeHtml(label)}:</span><span class="field-value ${cls}">${display}</span></div>`;
     }
 
