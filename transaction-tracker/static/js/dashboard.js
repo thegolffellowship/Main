@@ -3,7 +3,7 @@
    ========================================================= */
 
 let allItems = [];
-let currentRole = null; // "admin", "manager", or null
+// currentRole is provided by auth.js
 
 // Columns that are searchable when "All columns" filter is selected
 const SEARCHABLE_FIELDS = [
@@ -735,85 +735,11 @@ function attachHeaderSort() {
 }
 
 // ---------------------------------------------------------------------------
-// Authentication
+// Authentication — provided by shared auth.js
+// onAuthReady is called after successful login to re-render with role context
 // ---------------------------------------------------------------------------
-async function checkRole() {
-    try {
-        const res = await fetch("/api/auth/role");
-        const data = await res.json();
-        currentRole = data.role;
-        return currentRole;
-    } catch (err) {
-        console.error("Failed to check role:", err);
-        return null;
-    }
-}
-
-function showLoginModal() {
-    document.getElementById("login-overlay").style.display = "flex";
-    document.getElementById("login-pin").value = "";
-    document.getElementById("login-error").style.display = "none";
-    document.getElementById("login-pin").focus();
-}
-
-function hideLoginModal() {
-    document.getElementById("login-overlay").style.display = "none";
-}
-
-async function handleLogin() {
-    const pin = document.getElementById("login-pin").value.trim();
-    if (!pin) return;
-
-    const errorEl = document.getElementById("login-error");
-    errorEl.style.display = "none";
-
-    try {
-        const res = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ pin }),
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-            errorEl.textContent = data.error || "Login failed.";
-            errorEl.style.display = "block";
-            return;
-        }
-
-        currentRole = data.role;
-        hideLoginModal();
-        updateRoleUI();
-        applyFilters(); // Re-render table with role-appropriate actions
-    } catch (err) {
-        errorEl.textContent = "Connection error. Please try again.";
-        errorEl.style.display = "block";
-    }
-}
-
-async function handleLogout() {
-    try {
-        await fetch("/api/auth/logout", { method: "POST" });
-    } catch (err) {
-        console.error("Logout failed:", err);
-    }
-    currentRole = null;
-    updateRoleUI();
-    showLoginModal();
-}
-
-function updateRoleUI() {
-    const badge = document.getElementById("role-badge");
-    const logoutBtn = document.getElementById("btn-logout");
-    if (currentRole) {
-        badge.textContent = currentRole === "admin" ? "Admin" : "Manager";
-        badge.className = "role-badge role-" + currentRole;
-        badge.style.display = "";
-        logoutBtn.style.display = "";
-    } else {
-        badge.style.display = "none";
-        logoutBtn.style.display = "none";
-    }
+function onAuthReady() {
+    applyFilters();
 }
 
 // ---------------------------------------------------------------------------
@@ -887,13 +813,8 @@ async function handleEditSubmit(e) {
 // Init
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
-    // Check auth before loading dashboard
-    const role = await checkRole();
-    if (!role) {
-        showLoginModal();
-    } else {
-        updateRoleUI();
-    }
+    // Auth (shared auth.js) — will call onAuthReady() after login
+    await initAuth();
 
     loadColumnPrefs();
     loadColumnOrder();
@@ -911,13 +832,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
     document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);
     document.getElementById("btn-send-report").addEventListener("click", sendReport);
-    document.getElementById("btn-logout").addEventListener("click", handleLogout);
-
-    // Login modal
-    document.getElementById("login-submit").addEventListener("click", handleLogin);
-    document.getElementById("login-pin").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") handleLogin();
-    });
 
     // Edit modal
     document.getElementById("edit-form").addEventListener("submit", handleEditSubmit);

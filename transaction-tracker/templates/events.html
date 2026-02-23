@@ -116,8 +116,12 @@
             <p class="subtitle">Events — Auto-detected from transaction data</p>
         </div>
         <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
             <button id="btn-sync" class="btn btn-primary" title="Scan transactions and create new event entries">
                 <span class="btn-icon">&#8635;</span> Sync Events
+            </button>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">
+                Log Out
             </button>
         </div>
     </header>
@@ -179,6 +183,41 @@
         <p>TGF Transaction Tracker &mdash; Powered by Claude AI</p>
     </footer>
 
+    <!-- Login Modal -->
+    <div id="login-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal login-modal">
+            <h2>Dashboard Login</h2>
+            <p class="modal-subtitle">Enter your PIN to access the dashboard.</p>
+            <input type="password" id="login-pin" class="modal-input" placeholder="Enter PIN" maxlength="20" autocomplete="off">
+            <div id="login-error" class="modal-error" style="display:none;"></div>
+            <button id="login-submit" class="btn btn-primary modal-btn">Log In</button>
+        </div>
+    </div>
+
+    <!-- Edit Event Modal -->
+    <div id="edit-event-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal edit-modal">
+            <div class="modal-header">
+                <h2>Edit Event</h2>
+                <button id="edit-event-close" class="modal-close">&times;</button>
+            </div>
+            <form id="edit-event-form" class="edit-form">
+                <input type="hidden" id="edit-event-id">
+                <div class="edit-grid">
+                    <label>Event Name<input type="text" id="edit-event-item_name" class="modal-input"></label>
+                    <label>Date<input type="date" id="edit-event-event_date" class="modal-input"></label>
+                    <label>Course<input type="text" id="edit-event-course" class="modal-input"></label>
+                    <label>City<input type="text" id="edit-event-city" class="modal-input"></label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="edit-event-cancel" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
     <script>
     let allEvents = [];
     let allItems = [];
@@ -186,6 +225,11 @@
     let eventSortField = "event_date";
     let eventSortDir = "asc";
     let eventSearchQuery = "";
+
+    // Called by auth.js after successful login
+    function onAuthReady() {
+        renderEvents();
+    }
 
     // Column definitions for Events table
     const EVENT_COLUMNS = [
@@ -361,7 +405,8 @@
                 <td>${escapeHtml(ev.city || "\u2014")}</td>
                 <td><span class="reg-count">${ev.registrations || 0}</span></td>
                 <td>
-                    <button class="btn btn-danger" onclick="event.stopPropagation(); deleteEvent(${ev.id})">Delete</button>
+                    <button class="btn btn-edit" onclick="event.stopPropagation(); openEditEvent(${ev.id})">Edit</button>
+                    ${currentRole === "admin" ? `<button class="btn btn-danger" onclick="event.stopPropagation(); deleteEvent(${ev.id})">Delete</button>` : ''}
                 </td>
             </tr>`;
 
@@ -401,6 +446,56 @@
 
     // Track per-event game filter: null = all, "NET", "GROSS", "NO GAMES"
     let eventGameFilter = {};
+
+    // Detail table sort state
+    let detailSortField = "customer";
+    let detailSortDir = "asc";
+
+    // Detail table column definitions and visibility
+    const DETAIL_COLUMNS = [
+        { key: "customer", label: "Customer", default: true },
+        { key: "item_price", label: "Price", default: true },
+        { key: "handicap", label: "Handicap", default: true },
+        { key: "side_games", label: "Side Games", default: true },
+        { key: "tee_choice", label: "Tee", default: true },
+        { key: "member_status", label: "Status", default: true },
+        { key: "golf_or_compete", label: "Type", default: true },
+        { key: "order_date", label: "Order Date", default: true },
+    ];
+
+    let detailVisibleColumns = {};
+
+    function loadDetailColumnPrefs() {
+        try {
+            const saved = localStorage.getItem("tgf_detail_visible_columns");
+            if (saved) { detailVisibleColumns = JSON.parse(saved); return; }
+        } catch (e) {}
+        DETAIL_COLUMNS.forEach(c => { detailVisibleColumns[c.key] = c.default; });
+    }
+
+    function saveDetailColumnPrefs() {
+        try { localStorage.setItem("tgf_detail_visible_columns", JSON.stringify(detailVisibleColumns)); } catch (e) {}
+    }
+
+    function sortRegistrants(registrants) {
+        const sorted = [...registrants];
+        const asc = detailSortDir === "asc";
+        sorted.sort((a, b) => {
+            let va = a[detailSortField] || "";
+            let vb = b[detailSortField] || "";
+            if (detailSortField === "item_price") {
+                va = parseFloat((va || "0").replace(/[$,]/g, "")) || 0;
+                vb = parseFloat((vb || "0").replace(/[$,]/g, "")) || 0;
+                return asc ? va - vb : vb - va;
+            }
+            va = String(va).toLowerCase();
+            vb = String(vb).toLowerCase();
+            if (va < vb) return asc ? -1 : 1;
+            if (va > vb) return asc ? 1 : -1;
+            return 0;
+        });
+        return sorted;
+    }
 
     function classifyGameType(sideGames) {
         const sg = (sideGames || "").toUpperCase().trim();
@@ -453,23 +548,46 @@
             });
         }
 
-        html += `<h4>Registrations (${filtered.length}${activeFilter ? ' — ' + activeFilter : ''})</h4>`;
+        // Sort the filtered registrants
+        filtered = sortRegistrants(filtered);
+
+        // Detail controls row: column toggle + count
+        html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; flex-wrap:wrap;">';
+        html += `<h4 style="margin:0;">Registrations (${filtered.length}${activeFilter ? ' \u2014 ' + activeFilter : ''})</h4>`;
+        html += '<div class="column-toggle-wrapper">';
+        html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
+        html += '<div class="column-toggle-dropdown detail-col-dropdown">';
+        html += DETAIL_COLUMNS.map(c => {
+            const checked = detailVisibleColumns[c.key] !== false ? "checked" : "";
+            return `<label><input type="checkbox" data-detail-col="${c.key}" ${checked}> ${c.label}</label>`;
+        }).join("");
+        html += '</div></div></div>';
+
         html += '<table class="registrants-table"><thead><tr>';
-        html += '<th>Customer</th><th>Price</th><th>Handicap</th><th>Side Games</th>';
-        html += '<th>Tee</th><th>Status</th><th>Type</th><th>Order Date</th>';
+        DETAIL_COLUMNS.forEach(c => {
+            const vis = detailVisibleColumns[c.key] !== false;
+            const isActive = detailSortField === c.key;
+            const arrowHtml = isActive
+                ? (detailSortDir === "asc" ? "&#9650;" : "&#9660;")
+                : "&#9650;&#9660;";
+            html += `<th data-detail-sort="${c.key}" class="${isActive ? 'sort-active' : ''}" style="cursor:pointer; ${vis ? '' : 'display:none;'}">${c.label} <span class="sort-arrow">${arrowHtml}</span></th>`;
+        });
         html += '</tr></thead><tbody>';
 
         filtered.forEach(r => {
-            html += `<tr>
-                <td><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a></td>
-                <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(r.item_price || "\u2014")}</td>
-                <td>${escapeHtml(r.handicap || "\u2014")}</td>
-                <td>${escapeHtml(r.side_games || "\u2014")}</td>
-                <td>${escapeHtml(r.tee_choice || "\u2014")}</td>
-                <td>${escapeHtml(r.member_status || "\u2014")}</td>
-                <td>${escapeHtml(r.golf_or_compete || "\u2014")}</td>
-                <td>${escapeHtml(r.order_date || "\u2014")}</td>
-            </tr>`;
+            html += '<tr>';
+            DETAIL_COLUMNS.forEach(c => {
+                const vis = detailVisibleColumns[c.key] !== false;
+                const style = vis ? '' : 'display:none;';
+                if (c.key === "customer") {
+                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a></td>`;
+                } else if (c.key === "item_price") {
+                    html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
+                } else {
+                    html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
+                }
+            });
+            html += '</tr>';
         });
 
         html += '</tbody></table>';
@@ -503,12 +621,13 @@
             if (ev) {
                 const container = document.getElementById(`detail-content-${eventId}`);
                 container.innerHTML = renderDetailContent(ev);
-                attachGameFilterHandlers(container, ev);
+                attachDetailHandlers(container, ev);
             }
         }
     }
 
-    function attachGameFilterHandlers(container, ev) {
+    function attachDetailHandlers(container, ev) {
+        // Game filter badges
         container.querySelectorAll(".game-stat-badge").forEach(badge => {
             badge.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -519,9 +638,45 @@
                     eventGameFilter[ev.id] = filter;
                 }
                 container.innerHTML = renderDetailContent(ev);
-                attachGameFilterHandlers(container, ev);
+                attachDetailHandlers(container, ev);
             });
         });
+
+        // Detail column sort headers
+        container.querySelectorAll("th[data-detail-sort]").forEach(th => {
+            th.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const field = th.dataset.detailSort;
+                if (detailSortField === field) {
+                    detailSortDir = detailSortDir === "asc" ? "desc" : "asc";
+                } else {
+                    detailSortField = field;
+                    detailSortDir = "asc";
+                }
+                container.innerHTML = renderDetailContent(ev);
+                attachDetailHandlers(container, ev);
+            });
+        });
+
+        // Detail column toggle dropdown
+        const colBtn = container.querySelector(".detail-col-toggle-btn");
+        const colDrop = container.querySelector(".detail-col-dropdown");
+        if (colBtn && colDrop) {
+            colBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                colDrop.classList.toggle("open");
+            });
+            colDrop.querySelectorAll("input[data-detail-col]").forEach(cb => {
+                cb.addEventListener("click", (e) => e.stopPropagation());
+                cb.addEventListener("change", (e) => {
+                    e.stopPropagation();
+                    detailVisibleColumns[cb.dataset.detailCol] = cb.checked;
+                    saveDetailColumnPrefs();
+                    container.innerHTML = renderDetailContent(ev);
+                    attachDetailHandlers(container, ev);
+                });
+            });
+        }
     }
 
     async function syncEvents() {
@@ -545,7 +700,12 @@
     async function deleteEvent(id) {
         if (!confirm("Delete this event?")) return;
         try {
-            await fetch(`/api/events/${id}`, { method: "DELETE" });
+            const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || "Delete failed.");
+                return;
+            }
             allEvents = allEvents.filter(e => e.id !== id);
             if (expandedEventId === id) expandedEventId = null;
             renderEvents();
@@ -554,8 +714,65 @@
         }
     }
 
+    // Edit event modal
+    const EVENT_EDIT_FIELDS = ["item_name", "event_date", "course", "city"];
+
+    function openEditEvent(eventId) {
+        const ev = allEvents.find(e => e.id === eventId);
+        if (!ev) return;
+        document.getElementById("edit-event-id").value = eventId;
+        EVENT_EDIT_FIELDS.forEach(field => {
+            const input = document.getElementById("edit-event-" + field);
+            if (input) input.value = ev[field] || "";
+        });
+        document.getElementById("edit-event-overlay").style.display = "flex";
+    }
+
+    function closeEditEvent() {
+        document.getElementById("edit-event-overlay").style.display = "none";
+    }
+
+    async function handleEditEventSubmit(e) {
+        e.preventDefault();
+        const eventId = document.getElementById("edit-event-id").value;
+        const ev = allEvents.find(e => e.id === parseInt(eventId));
+        if (!ev) return;
+
+        const changes = {};
+        EVENT_EDIT_FIELDS.forEach(field => {
+            const input = document.getElementById("edit-event-" + field);
+            if (!input) return;
+            const newVal = input.value.trim() || null;
+            const oldVal = ev[field] || null;
+            if (newVal !== oldVal) changes[field] = newVal;
+        });
+
+        if (Object.keys(changes).length === 0) {
+            closeEditEvent();
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/events/${eventId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(changes),
+            });
+            if (!res.ok) throw new Error("Save failed");
+            Object.assign(ev, changes);
+            closeEditEvent();
+            renderEvents();
+        } catch (err) {
+            alert("Failed to save changes.");
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", async () => {
+        // Auth (shared auth.js)
+        await initAuth();
+
         loadEvColumnPrefs();
+        loadDetailColumnPrefs();
         buildEvColumnToggle();
 
         document.getElementById("btn-sync").addEventListener("click", syncEvents);
@@ -578,6 +795,10 @@
             if (!colDrop.contains(e.target) && e.target !== colBtn) {
                 colDrop.classList.remove("open");
             }
+            // Also close detail column dropdowns
+            document.querySelectorAll(".detail-col-dropdown.open").forEach(d => {
+                if (!d.contains(e.target)) d.classList.remove("open");
+            });
         });
 
         // Column header sorting
@@ -594,6 +815,14 @@
                 }
                 renderEvents();
             });
+        });
+
+        // Edit event modal
+        document.getElementById("edit-event-form").addEventListener("submit", handleEditEventSubmit);
+        document.getElementById("edit-event-cancel").addEventListener("click", closeEditEvent);
+        document.getElementById("edit-event-close").addEventListener("click", closeEditEvent);
+        document.getElementById("edit-event-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeEditEvent();
         });
 
         // Fetch items first (for registrant details), then sync events and fetch
