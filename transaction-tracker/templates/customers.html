@@ -120,6 +120,7 @@
                             <th>Side Games</th>
                             <th>Type</th>
                             <th>Order Date</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="detail-body"></tbody>
@@ -140,6 +141,37 @@
             <input type="password" id="login-pin" class="modal-input" placeholder="Enter PIN" maxlength="20" autocomplete="off">
             <div id="login-error" class="modal-error" style="display:none;"></div>
             <button id="login-submit" class="btn btn-primary modal-btn">Log In</button>
+        </div>
+    </div>
+
+    <!-- Credit / Transfer Modal (Customers) -->
+    <div id="cust-credit-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal">
+            <div class="modal-header">
+                <h2>Credit / Transfer</h2>
+                <button id="cust-credit-close" class="modal-close">&times;</button>
+            </div>
+            <div id="cust-credit-info" class="credit-info"></div>
+            <div class="credit-type-toggle">
+                <button class="cust-credit-type-btn credit-type-btn active" data-type="credit">Credit</button>
+                <button class="cust-credit-type-btn credit-type-btn" data-type="transfer">Transfer</button>
+            </div>
+            <div class="credit-fields">
+                <div id="cust-credit-transfer-fields" style="display:none;">
+                    <label>Transfer to Event
+                        <select id="cust-credit-target-event" class="modal-input">
+                            <option value="">Select an event...</option>
+                        </select>
+                    </label>
+                </div>
+                <label>Note (optional)
+                    <input type="text" id="cust-credit-note" class="modal-input" placeholder="Reason for credit/transfer...">
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="cust-credit-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="cust-credit-submit" class="btn btn-primary">Apply Credit</button>
+            </div>
         </div>
     </div>
 
@@ -286,7 +318,9 @@
                 };
             }
             map[name].items.push(item);
-            map[name].totalSpent += parsePrice(item.item_price);
+            if ((item.transaction_status || "active") === "active") {
+                map[name].totalSpent += parsePrice(item.item_price);
+            }
             if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
             if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
             const date = item.event_date || item.order_date || "";
@@ -460,6 +494,7 @@
                 <div class="customer-card-name">
                     ${escapeHtml(c.name)}
                     <span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span>
+                    ${c.items.some(i => i.transaction_status === "credited") ? '<span class="status-tag status-tag-credited">Has Credit</span>' : ''}
                 </div>
                 <div class="customer-card-meta">
                     ${c.chapter ? `<span>${escapeHtml(c.chapter)}</span>` : ''}
@@ -498,17 +533,40 @@
         const tbody = document.getElementById("detail-body");
         tbody.innerHTML = customer.items
             .sort((a, b) => (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""))
-            .map(item => `
-            <tr>
+            .map(item => {
+                const txStatus = item.transaction_status || "active";
+                const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (item.transferred_from_id ? ' class="row-from-transfer"' : '');
+                let tag = "";
+                if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+                else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+                else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+                let actionBtn = "";
+                if (txStatus === "active" && !item.transferred_from_id) {
+                    actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
+                } else if (txStatus === "credited" || txStatus === "transferred") {
+                    actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+                }
+                return `
+            <tr${rowClass}>
                 <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
-                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a></td>
+                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
                 <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
                 <td>${escapeHtml(item.city || "\u2014")}</td>
                 <td>${escapeHtml(item.course || "\u2014")}</td>
                 <td>${escapeHtml(item.side_games || "\u2014")}</td>
                 <td>${escapeHtml(item.golf_or_compete || "\u2014")}</td>
                 <td>${escapeHtml(item.order_date || "\u2014")}</td>
-            </tr>`).join("");
+                <td>${actionBtn}</td>
+            </tr>`;
+            }).join("");
+
+        // Wire up credit/reverse buttons
+        tbody.querySelectorAll("[data-cust-credit-id]").forEach(btn => {
+            btn.addEventListener("click", () => openCustCreditModal(parseInt(btn.dataset.custCreditId)));
+        });
+        tbody.querySelectorAll("[data-cust-reverse-id]").forEach(btn => {
+            btn.addEventListener("click", () => reverseCustCredit(parseInt(btn.dataset.custReverseId)));
+        });
 
         // Highlight in current view
         if (currentView === "list") {
@@ -522,6 +580,92 @@
         }
 
         detail.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // ---- Customers-page Credit/Transfer modal ----
+    let custCreditItemId = null;
+    let custCreditType = "credit";
+    let custCachedEvents = null;
+
+    async function loadCustEvents() {
+        if (custCachedEvents) return custCachedEvents;
+        try {
+            const res = await fetch("/api/events");
+            custCachedEvents = await res.json();
+            return custCachedEvents;
+        } catch { return []; }
+    }
+
+    async function openCustCreditModal(itemId) {
+        const item = allItems.find(r => r.id === itemId);
+        if (!item) return;
+        custCreditItemId = itemId;
+        custCreditType = "credit";
+
+        document.getElementById("cust-credit-info").innerHTML =
+            `<strong>${escapeHtml(item.customer || "Unknown")}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
+            `Price: <strong>${escapeHtml(item.item_price || "$0")}</strong>`;
+
+        document.querySelectorAll(".cust-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "credit"));
+        document.getElementById("cust-credit-transfer-fields").style.display = "none";
+        document.getElementById("cust-credit-note").value = "";
+        document.getElementById("cust-credit-submit").textContent = "Apply Credit";
+
+        const events = await loadCustEvents();
+        const today = new Date().toISOString().split("T")[0];
+        const select = document.getElementById("cust-credit-target-event");
+        select.innerHTML = '<option value="">Select an event...</option>' +
+            events
+                .filter(e => (e.event_date || "") >= today || !e.event_date)
+                .sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""))
+                .map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)}${e.event_date ? ` (${e.event_date})` : ""}</option>`)
+                .join("");
+
+        document.getElementById("cust-credit-overlay").style.display = "flex";
+    }
+
+    function closeCustCreditModal() {
+        document.getElementById("cust-credit-overlay").style.display = "none";
+        custCreditItemId = null;
+    }
+
+    async function submitCustCredit() {
+        if (!custCreditItemId) return;
+        const note = document.getElementById("cust-credit-note").value.trim();
+        try {
+            if (custCreditType === "credit") {
+                const res = await fetch(`/api/items/${custCreditItemId}/credit`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ note }),
+                });
+                if (!res.ok) throw new Error((await res.json()).error || "Credit failed");
+            } else {
+                const target = document.getElementById("cust-credit-target-event").value;
+                if (!target) { alert("Please select a target event."); return; }
+                const res = await fetch(`/api/items/${custCreditItemId}/transfer`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_event: target, note }),
+                });
+                if (!res.ok) throw new Error((await res.json()).error || "Transfer failed");
+            }
+            closeCustCreditModal();
+            custCachedEvents = null;
+            init();  // re-fetch and re-render
+        } catch (err) { alert(err.message); }
+    }
+
+    async function reverseCustCredit(itemId) {
+        const item = allItems.find(r => r.id === itemId);
+        if (!item) return;
+        if (!confirm(`Reverse ${item.transaction_status} for ${item.customer}?`)) return;
+        try {
+            const res = await fetch(`/api/items/${itemId}/reverse-credit`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+            });
+            if (!res.ok) throw new Error((await res.json()).error || "Reverse failed");
+            custCachedEvents = null;
+            init();
+        } catch (err) { alert(err.message); }
     }
 
     function switchView(view) {
@@ -587,6 +731,22 @@
         loadCustColumnPrefs();
         buildCustColumnToggle();
         init();
+        // Credit/Transfer modal
+        document.getElementById("cust-credit-submit").addEventListener("click", submitCustCredit);
+        document.getElementById("cust-credit-cancel").addEventListener("click", closeCustCreditModal);
+        document.getElementById("cust-credit-close").addEventListener("click", closeCustCreditModal);
+        document.getElementById("cust-credit-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeCustCreditModal();
+        });
+        document.querySelectorAll(".cust-credit-type-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                custCreditType = btn.dataset.type;
+                document.querySelectorAll(".cust-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === custCreditType));
+                document.getElementById("cust-credit-transfer-fields").style.display = custCreditType === "transfer" ? "block" : "none";
+                document.getElementById("cust-credit-submit").textContent = custCreditType === "transfer" ? "Transfer" : "Apply Credit";
+            });
+        });
+
         document.getElementById("customer-search").addEventListener("input", renderCustomers);
         document.getElementById("filter-status").addEventListener("change", renderCustomers);
         document.getElementById("filter-chapter").addEventListener("change", renderCustomers);

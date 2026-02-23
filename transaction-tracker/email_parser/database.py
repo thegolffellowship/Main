@@ -29,6 +29,7 @@ ITEM_COLUMNS = [
     "shirt_size", "guest_name", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
     "subject", "from_addr",
+    "transaction_status", "credit_note", "transferred_from_id", "transferred_to_id",
 ]
 
 
@@ -78,6 +79,10 @@ def init_db(db_path: str | Path | None = None) -> None:
             city_match_play  TEXT,
             subject          TEXT,
             from_addr        TEXT,
+            transaction_status TEXT DEFAULT 'active',
+            credit_note      TEXT,
+            transferred_from_id INTEGER,
+            transferred_to_id   INTEGER,
             created_at       TEXT DEFAULT (datetime('now')),
             UNIQUE(email_uid, item_index)
         )
@@ -89,6 +94,10 @@ def init_db(db_path: str | Path | None = None) -> None:
         ("customer_email", "TEXT"),
         ("customer_phone", "TEXT"),
         ("event_date", "TEXT"),
+        ("transaction_status", "TEXT DEFAULT 'active'"),
+        ("credit_note", "TEXT"),
+        ("transferred_from_id", "INTEGER"),
+        ("transferred_to_id", "INTEGER"),
     ]:
         try:
             conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
@@ -523,13 +532,14 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
 
 
 def get_all_events(db_path: str | Path | None = None) -> list[dict]:
-    """Return all events with registration counts."""
+    """Return all events with registration counts (active items only)."""
     conn = get_connection(db_path)
     rows = conn.execute(
         """
         SELECT e.*, COUNT(i.id) as registrations
         FROM events e
         LEFT JOIN items i ON i.item_name = e.item_name
+            AND COALESCE(i.transaction_status, 'active') = 'active'
         GROUP BY e.id
         ORDER BY e.event_date DESC, e.id DESC
         """
@@ -582,6 +592,170 @@ def update_item(item_id: int, fields: dict, db_path: str | Path | None = None) -
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+
+def get_item(item_id: int, db_path: str | Path | None = None) -> dict | None:
+    """Return a single item by ID, or None if not found."""
+    conn = get_connection(db_path)
+    row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None) -> bool:
+    """Mark an item as credited (money held for future use)."""
+    conn = get_connection(db_path)
+    cursor = conn.execute(
+        "UPDATE items SET transaction_status = 'credited', credit_note = ? WHERE id = ? AND COALESCE(transaction_status, 'active') = 'active'",
+        (note or "Credit on account", item_id),
+    )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
+
+
+def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path: str | Path | None = None) -> dict | None:
+    """
+    Transfer an item to a different event.
+
+    Marks the original as 'transferred' and creates a new item
+    at the target event with $0 price (credit applied).
+    Returns the new item dict or None on failure.
+    """
+    conn = get_connection(db_path)
+
+    # Fetch the original item
+    orig = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if not orig:
+        conn.close()
+        return None
+    orig = dict(orig)
+
+    if orig.get("transaction_status") not in (None, "active"):
+        conn.close()
+        return None  # already credited/transferred
+
+    # Fetch the target event for date/course/city
+    target_event = conn.execute(
+        "SELECT * FROM events WHERE item_name = ?", (target_event_name,)
+    ).fetchone()
+    target_event = dict(target_event) if target_event else {}
+
+    # Mark original as transferred
+    transfer_note = note or f"Transferred to {target_event_name}"
+    conn.execute(
+        "UPDATE items SET transaction_status = 'transferred', credit_note = ? WHERE id = ?",
+        (transfer_note, item_id),
+    )
+
+    # Create new item at target event
+    new_values = {col: orig.get(col) for col in ITEM_COLUMNS}
+    new_values["item_name"] = target_event_name
+    new_values["event_date"] = target_event.get("event_date") or orig.get("event_date")
+    new_values["course"] = target_event.get("course") or orig.get("course")
+    new_values["city"] = target_event.get("city") or orig.get("city")
+    new_values["item_price"] = "$0.00 (credit)"
+    new_values["email_uid"] = f"transfer-{item_id}"
+    new_values["item_index"] = 0
+    new_values["order_date"] = orig.get("order_date") or ""
+    new_values["transaction_status"] = "active"
+    new_values["credit_note"] = f"Transferred from {orig.get('item_name', '')} (#{item_id})"
+    new_values["transferred_from_id"] = str(item_id)
+    new_values["transferred_to_id"] = None
+
+    cols = ", ".join(ITEM_COLUMNS)
+    placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+    cursor = conn.execute(
+        f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+        tuple(new_values.get(c) for c in ITEM_COLUMNS),
+    )
+    new_id = cursor.lastrowid
+
+    # Link original to the new row
+    conn.execute(
+        "UPDATE items SET transferred_to_id = ? WHERE id = ?",
+        (new_id, item_id),
+    )
+
+    conn.commit()
+    conn.close()
+
+    new_values["id"] = new_id
+    return new_values
+
+
+def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
+    """
+    Reverse a credit or transfer.
+
+    For credits: simply resets to active.
+    For transfers: resets original to active and deletes the transferred-to item.
+    """
+    conn = get_connection(db_path)
+    item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        return False
+    item = dict(item)
+
+    status = item.get("transaction_status")
+    if status not in ("credited", "transferred"):
+        conn.close()
+        return False
+
+    if status == "transferred" and item.get("transferred_to_id"):
+        # Delete the destination item
+        conn.execute("DELETE FROM items WHERE id = ?", (item["transferred_to_id"],))
+
+    # Reset original
+    conn.execute(
+        "UPDATE items SET transaction_status = 'active', credit_note = NULL, transferred_to_id = NULL WHERE id = ?",
+        (item_id,),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+def create_event(item_name: str, event_date: str = None, course: str = None,
+                 city: str = None, db_path: str | Path | None = None) -> dict | None:
+    """Manually create a new event. Returns the event dict or None if duplicate."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.execute(
+            "INSERT INTO events (item_name, event_date, course, city, event_type) VALUES (?, ?, ?, ?, 'event')",
+            (item_name, event_date, course, city),
+        )
+        conn.commit()
+        new_id = cursor.lastrowid
+        row = conn.execute("SELECT * FROM events WHERE id = ?", (new_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except sqlite3.IntegrityError:
+        conn.close()
+        return None
+
+
+def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
+    """
+    Batch-insert events. Each dict should have: item_name, event_date, course, city.
+    Skips duplicates. Returns {"inserted": N, "skipped": N}.
+    """
+    conn = get_connection(db_path)
+    inserted = 0
+    skipped = 0
+    for ev in events:
+        try:
+            conn.execute(
+                "INSERT INTO events (item_name, event_date, course, city, event_type) VALUES (?, ?, ?, ?, 'event')",
+                (ev["item_name"], ev.get("event_date"), ev.get("course"), ev.get("city")),
+            )
+            inserted += 1
+        except sqlite3.IntegrityError:
+            skipped += 1
+    conn.commit()
+    conn.close()
+    return {"inserted": inserted, "skipped": skipped}
 
 
 def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:

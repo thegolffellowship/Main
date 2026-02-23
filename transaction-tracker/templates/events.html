@@ -142,6 +142,7 @@
                 <button class="column-toggle-btn" id="ev-col-toggle-btn">Columns &#9662;</button>
                 <div class="column-toggle-dropdown" id="ev-col-toggle-dropdown"></div>
             </div>
+            <button class="btn btn-primary" id="btn-add-event" style="font-size:0.82rem;padding:0.45rem 0.9rem;">+ Add Event</button>
             <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
         </section>
 
@@ -212,6 +213,59 @@
                 <div class="modal-actions">
                     <button type="button" id="edit-event-cancel" class="btn btn-secondary">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Credit / Transfer Modal (Events) -->
+    <div id="ev-credit-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal">
+            <div class="modal-header">
+                <h2>Credit / Transfer</h2>
+                <button id="ev-credit-close" class="modal-close">&times;</button>
+            </div>
+            <div id="ev-credit-info" class="credit-info"></div>
+            <div class="credit-type-toggle">
+                <button class="ev-credit-type-btn credit-type-btn active" data-type="credit">Credit</button>
+                <button class="ev-credit-type-btn credit-type-btn" data-type="transfer">Transfer</button>
+            </div>
+            <div class="credit-fields">
+                <div id="ev-credit-transfer-fields" style="display:none;">
+                    <label>Transfer to Event
+                        <select id="ev-credit-target-event" class="modal-input">
+                            <option value="">Select an event...</option>
+                        </select>
+                    </label>
+                </div>
+                <label>Note (optional)
+                    <input type="text" id="ev-credit-note" class="modal-input" placeholder="Reason for credit/transfer...">
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="ev-credit-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="ev-credit-submit" class="btn btn-primary">Apply Credit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Event Modal -->
+    <div id="add-event-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal add-event-modal">
+            <div class="modal-header">
+                <h2>Add Event</h2>
+                <button id="add-event-close" class="modal-close">&times;</button>
+            </div>
+            <form id="add-event-form" class="edit-form">
+                <div class="edit-grid">
+                    <label>Event Name<input type="text" id="add-event-name" class="modal-input" required></label>
+                    <label>Date<input type="date" id="add-event-date" class="modal-input"></label>
+                    <label>Course<input type="text" id="add-event-course" class="modal-input"></label>
+                    <label>City<input type="text" id="add-event-city" class="modal-input"></label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="add-event-cancel" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Event</button>
                 </div>
             </form>
         </div>
@@ -470,6 +524,7 @@
         { key: "member_status", label: "Status", default: true },
         { key: "golf_or_compete", label: "Type", default: true },
         { key: "order_date", label: "Order Date", default: true },
+        { key: "actions", label: "Actions", default: true },
     ];
 
     let detailVisibleColumns = {};
@@ -581,6 +636,10 @@
         html += '<table class="registrants-table"><thead><tr>';
         DETAIL_COLUMNS.forEach(c => {
             const vis = detailVisibleColumns[c.key] !== false;
+            if (c.key === "actions") {
+                html += `<th style="${vis ? '' : 'display:none;'}">Actions</th>`;
+                return;
+            }
             const isActive = detailSortField === c.key;
             const arrowHtml = isActive
                 ? (detailSortDir === "asc" ? "&#9650;" : "&#9660;")
@@ -590,14 +649,28 @@
         html += '</tr></thead><tbody>';
 
         filtered.forEach(r => {
-            html += '<tr>';
+            const txStatus = r.transaction_status || "active";
+            const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (r.transferred_from_id ? ' class="row-from-transfer"' : '');
+            html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
                 const style = vis ? '' : 'display:none;';
                 if (c.key === "customer") {
-                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a></td>`;
+                    let tag = "";
+                    if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+                    else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+                    else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}</td>`;
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
+                } else if (c.key === "actions") {
+                    let btns = "";
+                    if (txStatus === "active" && !r.transferred_from_id) {
+                        btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                    } else if (txStatus === "credited" || txStatus === "transferred") {
+                        btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
+                    }
+                    html += `<td style="${style}">${btns}</td>`;
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
                 }
@@ -692,6 +765,135 @@
                 });
             });
         }
+    }
+
+        // Credit/Reverse buttons in registrant rows
+        container.querySelectorAll("[data-credit-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openEvCreditModal(parseInt(btn.dataset.creditId));
+            });
+        });
+        container.querySelectorAll("[data-reverse-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                reverseEvCredit(parseInt(btn.dataset.reverseId));
+            });
+        });
+    }
+
+    // ---- Events-page Credit/Transfer modal logic ----
+    let evCreditItemId = null;
+    let evCreditType = "credit";
+
+    function openEvCreditModal(itemId) {
+        const item = allItems.find(r => r.id === itemId);
+        if (!item) return;
+        evCreditItemId = itemId;
+        evCreditType = "credit";
+
+        document.getElementById("ev-credit-info").innerHTML =
+            `<strong>${escapeHtml(item.customer || "Unknown")}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
+            `Price: <strong>${escapeHtml(item.item_price || "$0")}</strong>`;
+
+        document.querySelectorAll(".ev-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "credit"));
+        document.getElementById("ev-credit-transfer-fields").style.display = "none";
+        document.getElementById("ev-credit-note").value = "";
+        document.getElementById("ev-credit-submit").textContent = "Apply Credit";
+
+        // Populate event picker
+        const today = new Date().toISOString().split("T")[0];
+        const select = document.getElementById("ev-credit-target-event");
+        select.innerHTML = '<option value="">Select an event...</option>' +
+            allEvents
+                .filter(e => (e.event_date || "") >= today || !e.event_date)
+                .sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""))
+                .map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)}${e.event_date ? ` (${e.event_date})` : ""}</option>`)
+                .join("");
+
+        document.getElementById("ev-credit-overlay").style.display = "flex";
+    }
+
+    function closeEvCreditModal() {
+        document.getElementById("ev-credit-overlay").style.display = "none";
+        evCreditItemId = null;
+    }
+
+    async function submitEvCredit() {
+        if (!evCreditItemId) return;
+        const note = document.getElementById("ev-credit-note").value.trim();
+        try {
+            if (evCreditType === "credit") {
+                const res = await fetch(`/api/items/${evCreditItemId}/credit`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ note }),
+                });
+                if (!res.ok) throw new Error((await res.json()).error || "Credit failed");
+            } else {
+                const target = document.getElementById("ev-credit-target-event").value;
+                if (!target) { alert("Please select a target event."); return; }
+                const res = await fetch(`/api/items/${evCreditItemId}/transfer`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_event: target, note }),
+                });
+                if (!res.ok) throw new Error((await res.json()).error || "Transfer failed");
+            }
+            closeEvCreditModal();
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) { alert(err.message); }
+    }
+
+    async function reverseEvCredit(itemId) {
+        const item = allItems.find(r => r.id === itemId);
+        if (!item) return;
+        if (!confirm(`Reverse ${item.transaction_status} for ${item.customer}?`)) return;
+        try {
+            const res = await fetch(`/api/items/${itemId}/reverse-credit`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+            });
+            if (!res.ok) throw new Error((await res.json()).error || "Reverse failed");
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) { alert(err.message); }
+    }
+
+    // ---- Add Event modal logic ----
+    function openAddEventModal() {
+        document.getElementById("add-event-name").value = "";
+        document.getElementById("add-event-date").value = "";
+        document.getElementById("add-event-course").value = "";
+        document.getElementById("add-event-city").value = "";
+        document.getElementById("add-event-overlay").style.display = "flex";
+    }
+
+    function closeAddEventModal() {
+        document.getElementById("add-event-overlay").style.display = "none";
+    }
+
+    async function handleAddEventSubmit(e) {
+        e.preventDefault();
+        const name = document.getElementById("add-event-name").value.trim();
+        if (!name) return;
+        try {
+            const res = await fetch("/api/events", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    item_name: name,
+                    event_date: document.getElementById("add-event-date").value || null,
+                    course: document.getElementById("add-event-course").value.trim() || null,
+                    city: document.getElementById("add-event-city").value.trim() || null,
+                }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || "Failed to create event.");
+                return;
+            }
+            closeAddEventModal();
+            await fetchEvents();
+        } catch (err) { alert("Failed to create event."); }
     }
 
     async function syncEvents() {
@@ -792,6 +994,31 @@
 
         document.getElementById("btn-sync").addEventListener("click", syncEvents);
         document.getElementById("btn-clear-filters").addEventListener("click", clearEvFilters);
+
+        // Add Event modal
+        document.getElementById("btn-add-event").addEventListener("click", openAddEventModal);
+        document.getElementById("add-event-form").addEventListener("submit", handleAddEventSubmit);
+        document.getElementById("add-event-cancel").addEventListener("click", closeAddEventModal);
+        document.getElementById("add-event-close").addEventListener("click", closeAddEventModal);
+        document.getElementById("add-event-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeAddEventModal();
+        });
+
+        // Credit/Transfer modal
+        document.getElementById("ev-credit-submit").addEventListener("click", submitEvCredit);
+        document.getElementById("ev-credit-cancel").addEventListener("click", closeEvCreditModal);
+        document.getElementById("ev-credit-close").addEventListener("click", closeEvCreditModal);
+        document.getElementById("ev-credit-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeEvCreditModal();
+        });
+        document.querySelectorAll(".ev-credit-type-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                evCreditType = btn.dataset.type;
+                document.querySelectorAll(".ev-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === evCreditType));
+                document.getElementById("ev-credit-transfer-fields").style.display = evCreditType === "transfer" ? "block" : "none";
+                document.getElementById("ev-credit-submit").textContent = evCreditType === "transfer" ? "Transfer" : "Apply Credit";
+            });
+        });
 
         // Search
         document.getElementById("event-search").addEventListener("input", () => {

@@ -20,6 +20,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from email_parser.database import (
     init_db,
     get_all_items,
+    get_item,
     get_known_email_uids,
     get_item_stats,
     get_audit_report,
@@ -27,6 +28,11 @@ from email_parser.database import (
     save_items,
     update_item,
     delete_item,
+    credit_item,
+    transfer_item,
+    reverse_credit,
+    create_event,
+    seed_events,
     autofix_side_games,
     autofix_all,
     normalize_tee_choices,
@@ -628,6 +634,66 @@ def api_delete_event(event_id):
     return jsonify({"error": "not found"}), 404
 
 
+@app.route("/api/events", methods=["POST"])
+def api_create_event():
+    """Manually create a new event."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("item_name"):
+        return jsonify({"error": "item_name is required."}), 400
+    event = create_event(
+        item_name=data["item_name"],
+        event_date=data.get("event_date"),
+        course=data.get("course"),
+        city=data.get("city"),
+    )
+    if event:
+        return jsonify({"status": "ok", "event": event}), 201
+    return jsonify({"error": "Event already exists with that name."}), 409
+
+
+# ---------------------------------------------------------------------------
+# Routes — Credit / Transfer
+# ---------------------------------------------------------------------------
+@app.route("/api/items/<int:item_id>/credit", methods=["POST"])
+def api_credit_item(item_id):
+    """Mark an item as credited (money held for future event)."""
+    data = request.get_json(silent=True) or {}
+    if credit_item(item_id, note=data.get("note", "")):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Item not found or already credited/transferred."}), 400
+
+
+@app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
+def api_transfer_item(item_id):
+    """Transfer an item to a different event."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("target_event"):
+        return jsonify({"error": "target_event is required."}), 400
+    new_item = transfer_item(item_id, data["target_event"], note=data.get("note", ""))
+    if new_item:
+        return jsonify({"status": "ok", "new_item": new_item})
+    return jsonify({"error": "Item not found or already credited/transferred."}), 400
+
+
+@app.route("/api/items/<int:item_id>/reverse-credit", methods=["POST"])
+def api_reverse_credit(item_id):
+    """Reverse a credit or transfer, restoring the original item to active."""
+    if reverse_credit(item_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
+
+
+@app.route("/api/events/seed", methods=["POST"])
+@require_role("admin")
+def api_seed_events():
+    """Batch-create events from a JSON list. Admin only."""
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data.get("events"), list):
+        return jsonify({"error": "Body must be JSON with 'events' array."}), 400
+    result = seed_events(data["events"])
+    return jsonify({"status": "ok", **result})
+
+
 @app.route("/api/report/send-now", methods=["POST"])
 def api_send_report_now():
     """Manually trigger the daily report."""
@@ -686,6 +752,30 @@ def api_auth_logout():
 # App startup
 # ---------------------------------------------------------------------------
 init_db()
+
+# Seed upcoming San Antonio events (idempotent — skips existing)
+_SA_EVENTS = [
+    {"item_name": "PRIME TIME KICKOFF | Northern Hills", "event_date": "2026-03-15", "course": "Northern Hills", "city": "San Antonio"},
+    {"item_name": "s9.1 The Quarry", "event_date": "2026-03-17", "course": "The Quarry", "city": "San Antonio"},
+    {"item_name": "s9.2 Canyon Springs", "event_date": "2026-03-24", "course": "Canyon Springs", "city": "San Antonio"},
+    {"item_name": "s9.3 Silverhorn", "event_date": "2026-03-31", "course": "Silverhorn", "city": "San Antonio"},
+    {"item_name": "s9.4 Willow Springs", "event_date": "2026-04-07", "course": "Willow Springs", "city": "San Antonio"},
+    {"item_name": "s18.4 LANDA PARK", "event_date": "2026-04-11", "course": "Landa Park", "city": "San Antonio"},
+    {"item_name": "s9.5 Cedar Creek", "event_date": "2026-04-14", "course": "Cedar Creek", "city": "San Antonio"},
+    {"item_name": "s9.6 The Quarry", "event_date": "2026-04-21", "course": "The Quarry", "city": "San Antonio"},
+    {"item_name": "s9.7 Canyon Springs", "event_date": "2026-04-28", "course": "Canyon Springs", "city": "San Antonio"},
+    {"item_name": "s18.5 WILLOW SPRINGS", "event_date": "2026-05-02", "course": "Willow Springs", "city": "San Antonio"},
+    {"item_name": "s9.8 Silverhorn", "event_date": "2026-05-05", "course": "Silverhorn", "city": "San Antonio"},
+    {"item_name": "s9.9 TPC San Antonio | Canyons", "event_date": "2026-05-12", "course": "TPC San Antonio - Canyons", "city": "San Antonio"},
+    {"item_name": "HILL COUNTRY MATCHES | Comanche Trace", "event_date": "2026-05-16", "course": "Comanche Trace", "city": "San Antonio"},
+    {"item_name": "s9.10 Brackenridge", "event_date": "2026-05-19", "course": "Brackenridge", "city": "San Antonio"},
+    {"item_name": "s9.11 The Quarry", "event_date": "2026-05-26", "course": "The Quarry", "city": "San Antonio"},
+    {"item_name": "s18.6 KISSING TREE", "event_date": "2026-05-30", "course": "Kissing Tree", "city": "San Antonio"},
+    {"item_name": "s9.12 Canyon Springs", "event_date": "2026-06-02", "course": "Canyon Springs", "city": "San Antonio"},
+]
+_seed_result = seed_events(_SA_EVENTS)
+if _seed_result["inserted"]:
+    logger.info("Seeded %d SA events", _seed_result["inserted"])
 
 # Only start the scheduler in one Gunicorn worker (or in dev mode).
 # Gunicorn's --preload flag shares module-level state, but with forked workers
