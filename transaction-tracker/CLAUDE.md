@@ -39,6 +39,18 @@ WebFetch https://main-production-b95c.up.railway.app/api/data-snapshot?limit=20
 WebFetch https://main-production-b95c.up.railway.app/api/items
 ```
 
+## Railway Persistent Volume (IMPORTANT)
+
+SQLite data is lost on every redeploy unless stored on a persistent volume.
+
+### Setup steps in Railway dashboard:
+1. Go to your service → **Volumes** → **New Volume**
+2. Set mount path: `/data`
+3. Add environment variable: `DATABASE_PATH=/data/transactions.db`
+4. Redeploy
+
+This ensures the DB survives redeployments. Without this, every push wipes the data.
+
 ## Architecture
 
 - **Flask app** in `transaction-tracker/app.py`

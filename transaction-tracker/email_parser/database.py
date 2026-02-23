@@ -7,13 +7,16 @@ so they can be filtered and sorted directly from the dashboard.
 """
 
 import json
+import os
 import sqlite3
 import logging
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).resolve().parent.parent / "transactions.db"
+# Allow overriding via env var so Railway can point to a persistent volume.
+_default_db = Path(__file__).resolve().parent.parent / "transactions.db"
+DB_PATH = Path(os.environ.get("DATABASE_PATH", str(_default_db)))
 
 # All item-level columns (order matches the CREATE TABLE below)
 ITEM_COLUMNS = [
