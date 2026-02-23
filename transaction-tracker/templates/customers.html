@@ -33,6 +33,10 @@
                 <div class="stat-label">Customers</div>
             </div>
             <div class="stat-card">
+                <div class="stat-value" id="stat-members">—</div>
+                <div class="stat-label">Members</div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-value" id="stat-total-items">—</div>
                 <div class="stat-label">Total Purchases</div>
             </div>
@@ -42,9 +46,18 @@
             </div>
         </section>
 
-        <!-- Search -->
+        <!-- Controls -->
         <section class="controls">
-            <input type="text" id="customer-search" class="search-box" placeholder="Search customers by name, email, or phone...">
+            <input type="text" id="customer-search" class="search-box" placeholder="Search customers by name, email, chapter...">
+            <select id="filter-status" class="filter-select">
+                <option value="">All Statuses</option>
+                <option value="MEMBER">Members</option>
+                <option value="GUEST">Guests</option>
+                <option value="1st TIMER">1st Timers</option>
+            </select>
+            <select id="filter-chapter" class="filter-select">
+                <option value="">All Chapters</option>
+            </select>
             <select id="sort-select" class="sort-select">
                 <option value="name-asc">Name (A-Z)</option>
                 <option value="name-desc">Name (Z-A)</option>
@@ -54,10 +67,33 @@
                 <option value="spent-asc">Least spent</option>
                 <option value="latest-desc">Most recent</option>
             </select>
+            <div class="view-toggle">
+                <button class="view-toggle-btn active" data-view="list">List</button>
+                <button class="view-toggle-btn" data-view="cards">Cards</button>
+            </div>
         </section>
 
-        <!-- Customer cards -->
-        <section class="customer-cards" id="customer-cards"></section>
+        <!-- Customer list view (default) -->
+        <section id="customer-list-view" class="customer-list-wrapper">
+            <table class="customer-list-table">
+                <thead>
+                    <tr>
+                        <th data-sort="name">Name</th>
+                        <th data-sort="status">Status</th>
+                        <th data-sort="chapter">Chapter</th>
+                        <th data-sort="purchases">Purchases</th>
+                        <th data-sort="spent">Total Spent</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th data-sort="latest">Last Activity</th>
+                    </tr>
+                </thead>
+                <tbody id="customer-list-body"></tbody>
+            </table>
+        </section>
+
+        <!-- Customer cards view -->
+        <section class="customer-cards" id="customer-cards" style="display:none;"></section>
 
         <!-- Selected customer detail -->
         <section id="customer-detail" style="display:none;">
@@ -91,6 +127,7 @@
     let allCustomers = [];
     let allItems = [];
     let selectedCustomer = null;
+    let currentView = "list";
 
     function escapeHtml(str) {
         const div = document.createElement("div");
@@ -100,6 +137,52 @@
 
     function parsePrice(priceStr) {
         return parseFloat((priceStr || "0").replace(/[$,]/g, "")) || 0;
+    }
+
+    // Derive customer status from their transaction history
+    function deriveStatus(items) {
+        // Check for membership purchase
+        const hasMembership = items.some(item => {
+            const name = (item.item_name || "").toLowerCase();
+            return name.includes("membership") || name.includes("member");
+        });
+        if (hasMembership) return "MEMBER";
+
+        // Check member_status field across transactions
+        const memberStatuses = items.map(i => (i.member_status || "").toUpperCase()).filter(Boolean);
+        if (memberStatuses.includes("MEMBER")) return "MEMBER";
+
+        // Check returning_or_new
+        const returningNew = items.map(i => (i.returning_or_new || "").toLowerCase()).filter(Boolean);
+        if (returningNew.some(v => v.includes("new") || v.includes("1st") || v.includes("first"))) return "1st TIMER";
+
+        // If they have NON-MEMBER status or guest indicators
+        if (memberStatuses.includes("NON-MEMBER") || memberStatuses.includes("GUEST")) return "GUEST";
+
+        // Default: if only 1 purchase and no status info, likely a guest
+        if (items.length <= 1) return "GUEST";
+
+        return "GUEST";
+    }
+
+    // Derive chapter (city) from most frequent city in their transactions
+    function deriveChapter(items) {
+        const cityCounts = {};
+        items.forEach(item => {
+            const city = (item.city || "").trim();
+            if (city) {
+                cityCounts[city] = (cityCounts[city] || 0) + 1;
+            }
+        });
+        if (!Object.keys(cityCounts).length) return "";
+        // Return the most frequent city
+        return Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0][0];
+    }
+
+    function statusBadgeClass(status) {
+        if (status === "MEMBER") return "badge-member";
+        if (status === "1st TIMER") return "badge-first-timer";
+        return "badge-guest";
     }
 
     // Build customer aggregate data from items
@@ -124,48 +207,124 @@
             const date = item.event_date || item.order_date || "";
             if (date > map[name].latestDate) map[name].latestDate = date;
         });
-        return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
+
+        // Derive status and chapter for each customer
+        const customers = Object.values(map);
+        customers.forEach(c => {
+            c.status = deriveStatus(c.items);
+            c.chapter = deriveChapter(c.items);
+        });
+
+        return customers.sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    function renderCustomers() {
+    function populateChapterFilter() {
+        const chapters = [...new Set(allCustomers.map(c => c.chapter).filter(Boolean))].sort();
+        const select = document.getElementById("filter-chapter");
+        // Keep the "All Chapters" option, remove old dynamic options
+        select.innerHTML = '<option value="">All Chapters</option>';
+        chapters.forEach(ch => {
+            const opt = document.createElement("option");
+            opt.value = ch;
+            opt.textContent = ch;
+            select.appendChild(opt);
+        });
+    }
+
+    function getFilteredSorted() {
         const query = document.getElementById("customer-search").value.toLowerCase().trim();
+        const statusFilter = document.getElementById("filter-status").value;
+        const chapterFilter = document.getElementById("filter-chapter").value;
         const sortKey = document.getElementById("sort-select").value;
 
         let filtered = allCustomers;
+
         if (query) {
-            filtered = allCustomers.filter(c =>
+            filtered = filtered.filter(c =>
                 c.name.toLowerCase().includes(query) ||
                 c.email.toLowerCase().includes(query) ||
-                c.phone.toLowerCase().includes(query)
+                c.phone.toLowerCase().includes(query) ||
+                c.chapter.toLowerCase().includes(query)
             );
+        }
+        if (statusFilter) {
+            filtered = filtered.filter(c => c.status === statusFilter);
+        }
+        if (chapterFilter) {
+            filtered = filtered.filter(c => c.chapter === chapterFilter);
         }
 
         // Sort
         const [field, dir] = sortKey.split("-");
         const asc = dir === "asc";
+        filtered = [...filtered];
         filtered.sort((a, b) => {
-            if (field === "name") {
-                return asc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-            }
-            if (field === "purchases") {
-                return asc ? a.items.length - b.items.length : b.items.length - a.items.length;
-            }
-            if (field === "spent") {
-                return asc ? a.totalSpent - b.totalSpent : b.totalSpent - a.totalSpent;
-            }
-            if (field === "latest") {
-                return b.latestDate.localeCompare(a.latestDate);
-            }
+            if (field === "name") return asc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+            if (field === "status") return asc ? a.status.localeCompare(b.status) : b.status.localeCompare(a.status);
+            if (field === "chapter") return asc ? a.chapter.localeCompare(b.chapter) : b.chapter.localeCompare(a.chapter);
+            if (field === "purchases") return asc ? a.items.length - b.items.length : b.items.length - a.items.length;
+            if (field === "spent") return asc ? a.totalSpent - b.totalSpent : b.totalSpent - a.totalSpent;
+            if (field === "latest") return b.latestDate.localeCompare(a.latestDate);
             return 0;
         });
 
-        // Stats
+        return filtered;
+    }
+
+    function renderStats() {
         document.getElementById("stat-customers").textContent = allCustomers.length;
+        document.getElementById("stat-members").textContent = allCustomers.filter(c => c.status === "MEMBER").length;
         document.getElementById("stat-total-items").textContent = allItems.length;
         const totalSpent = allCustomers.reduce((sum, c) => sum + c.totalSpent, 0);
         document.getElementById("stat-total-spent").textContent = "$" + totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
 
+    function renderCustomers() {
+        renderStats();
+        const filtered = getFilteredSorted();
+
+        if (currentView === "list") {
+            renderListView(filtered);
+        } else {
+            renderCardView(filtered);
+        }
+    }
+
+    function renderListView(filtered) {
+        const tbody = document.getElementById("customer-list-body");
+
+        if (!filtered.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text-muted); font-style:italic;">No customers found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(c => {
+            const isSelected = selectedCustomer && selectedCustomer.name === c.name;
+            return `
+            <tr data-name="${escapeHtml(c.name)}" class="${isSelected ? 'selected-row' : ''}">
+                <td><strong>${escapeHtml(c.name)}</strong></td>
+                <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span></td>
+                <td>${escapeHtml(c.chapter || "\u2014")}</td>
+                <td>${c.items.length}</td>
+                <td style="font-weight:600; font-variant-numeric:tabular-nums;">$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.email || "\u2014")}</td>
+                <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.phone || "\u2014")}</td>
+                <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
+            </tr>`;
+        }).join("");
+
+        tbody.querySelectorAll("tr[data-name]").forEach(row => {
+            row.addEventListener("click", () => {
+                const name = row.dataset.name;
+                const cust = allCustomers.find(c => c.name === name);
+                if (cust) selectCustomer(cust);
+            });
+        });
+    }
+
+    function renderCardView(filtered) {
         const container = document.getElementById("customer-cards");
+
         if (!filtered.length) {
             container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">No customers found.</div>';
             return;
@@ -175,12 +334,15 @@
             const isSelected = selectedCustomer && selectedCustomer.name === c.name;
             return `
             <div class="customer-card ${isSelected ? 'selected' : ''}" data-name="${escapeHtml(c.name)}">
-                <div class="customer-card-name">${escapeHtml(c.name)}</div>
+                <div class="customer-card-name">
+                    ${escapeHtml(c.name)}
+                    <span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span>
+                </div>
                 <div class="customer-card-meta">
+                    ${c.chapter ? `<span>${escapeHtml(c.chapter)}</span>` : ''}
                     <span>${c.items.length} purchase${c.items.length !== 1 ? 's' : ''}</span>
                     <span>$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                     ${c.email ? `<span>${escapeHtml(c.email)}</span>` : ''}
-                    ${c.phone ? `<span>${escapeHtml(c.phone)}</span>` : ''}
                 </div>
             </div>`;
         }).join("");
@@ -199,8 +361,11 @@
         const detail = document.getElementById("customer-detail");
         detail.style.display = "block";
 
-        document.getElementById("detail-title").textContent = customer.name;
+        document.getElementById("detail-title").innerHTML =
+            `${escapeHtml(customer.name)} <span class="status-badge-sm ${statusBadgeClass(customer.status)}">${escapeHtml(customer.status)}</span>`;
+
         const meta = [];
+        if (customer.chapter) meta.push("Chapter: " + customer.chapter);
         if (customer.email) meta.push(customer.email);
         if (customer.phone) meta.push(customer.phone);
         meta.push(`${customer.items.length} purchase(s)`);
@@ -222,14 +387,29 @@
                 <td>${escapeHtml(item.order_date || "\u2014")}</td>
             </tr>`).join("");
 
-        // Highlight selected card
-        document.querySelectorAll(".customer-card").forEach(c => c.classList.remove("selected"));
-        const card = document.querySelector(`.customer-card[data-name="${escapeHtml(customer.name)}"]`);
-        if (card) {
-            card.classList.add("selected");
-            // Scroll detail into view
-            detail.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Highlight in current view
+        if (currentView === "list") {
+            document.querySelectorAll(".customer-list-table tbody tr").forEach(r => r.classList.remove("selected-row"));
+            const row = document.querySelector(`.customer-list-table tbody tr[data-name="${escapeHtml(customer.name)}"]`);
+            if (row) row.classList.add("selected-row");
+        } else {
+            document.querySelectorAll(".customer-card").forEach(c => c.classList.remove("selected"));
+            const card = document.querySelector(`.customer-card[data-name="${escapeHtml(customer.name)}"]`);
+            if (card) card.classList.add("selected");
         }
+
+        detail.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function switchView(view) {
+        currentView = view;
+        document.querySelectorAll(".view-toggle-btn").forEach(b => b.classList.remove("active"));
+        document.querySelector(`.view-toggle-btn[data-view="${view}"]`).classList.add("active");
+
+        document.getElementById("customer-list-view").style.display = view === "list" ? "" : "none";
+        document.getElementById("customer-cards").style.display = view === "cards" ? "" : "none";
+
+        renderCustomers();
     }
 
     function exportCSV() {
@@ -258,6 +438,7 @@
             const res = await fetch("/api/items");
             allItems = await res.json();
             allCustomers = buildCustomers(allItems);
+            populateChapterFilter();
             renderCustomers();
 
             // Check if URL has ?name= parameter to pre-select a customer
@@ -268,7 +449,7 @@
                 if (match) {
                     selectCustomer(match);
                 } else {
-                    // Try partial match
+                    // Try partial match via search
                     document.getElementById("customer-search").value = nameParam;
                     renderCustomers();
                 }
@@ -281,8 +462,30 @@
     document.addEventListener("DOMContentLoaded", () => {
         init();
         document.getElementById("customer-search").addEventListener("input", renderCustomers);
+        document.getElementById("filter-status").addEventListener("change", renderCustomers);
+        document.getElementById("filter-chapter").addEventListener("change", renderCustomers);
         document.getElementById("sort-select").addEventListener("change", renderCustomers);
         document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
+
+        // View toggle
+        document.querySelectorAll(".view-toggle-btn").forEach(btn => {
+            btn.addEventListener("click", () => switchView(btn.dataset.view));
+        });
+
+        // List table header sorting
+        document.querySelectorAll(".customer-list-table thead th[data-sort]").forEach(th => {
+            th.addEventListener("click", () => {
+                const sortField = th.dataset.sort;
+                const select = document.getElementById("sort-select");
+                const current = select.value;
+                if (current === `${sortField}-asc`) {
+                    select.value = `${sortField}-desc`;
+                } else {
+                    select.value = `${sortField}-asc`;
+                }
+                renderCustomers();
+            });
+        });
     });
     </script>
 </body>
