@@ -376,6 +376,113 @@ def api_connector_info():
     })
 
 
+@app.route("/api/audit/emails")
+def api_audit_emails():
+    """
+    Fetch raw emails from inbox AND the corresponding parsed DB records,
+    returning them side-by-side so the user can verify extraction accuracy.
+
+    Query params:
+        limit  — max emails to return (default 50)
+        days   — how far back to look (default 90)
+    """
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    address = os.getenv("EMAIL_ADDRESS")
+
+    if not all([tenant_id, client_id, client_secret, address]):
+        return jsonify({"error": "Azure AD / email credentials not configured."}), 400
+
+    limit = request.args.get("limit", 50, type=int)
+    days = request.args.get("days", 90, type=int)
+
+    from email_parser.parser import _strip_html
+
+    try:
+        emails = fetch_transaction_emails(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            email_address=address,
+            since_date=datetime.now() - timedelta(days=days),
+        )
+    except Exception as e:
+        logger.exception("Audit: failed to fetch emails")
+        return jsonify({"error": f"Failed to fetch emails: {e}"}), 500
+
+    # Build a lookup of DB items keyed by email_uid
+    all_items = get_all_items()
+    db_by_uid: dict[str, list[dict]] = {}
+    for item in all_items:
+        uid = item.get("email_uid", "")
+        if uid:
+            db_by_uid.setdefault(uid, []).append(item)
+
+    comparisons = []
+    for email in emails[:limit]:
+        uid = email.get("uid", "")
+        body_text = email.get("text", "")
+        if not body_text and email.get("html"):
+            body_text = _strip_html(email["html"])
+
+        # Truncate body for transport (keep first 2000 chars for review)
+        body_preview = body_text[:2000] if body_text else "(empty)"
+
+        db_rows = db_by_uid.get(uid, [])
+
+        # Determine audit status
+        if not db_rows:
+            status = "missing"
+            status_detail = "Email was fetched but no items were parsed/saved"
+        else:
+            # Check for missing critical fields
+            issues = []
+            for row in db_rows:
+                missing = []
+                for f in ["customer", "order_id", "item_name", "item_price", "event_date", "city"]:
+                    if not row.get(f):
+                        missing.append(f)
+                if missing:
+                    issues.append({"item_index": row.get("item_index", 0), "missing": missing})
+            if issues:
+                status = "incomplete"
+                status_detail = f"{len(issues)} item(s) have missing fields"
+            else:
+                status = "ok"
+                status_detail = f"{len(db_rows)} item(s) parsed successfully"
+
+        comparisons.append({
+            "email_uid": uid,
+            "subject": email.get("subject", ""),
+            "from": email.get("from", ""),
+            "date": email.get("date", ""),
+            "body_preview": body_preview,
+            "status": status,
+            "status_detail": status_detail,
+            "parsed_items": db_rows,
+        })
+
+    # Summary counts
+    total = len(comparisons)
+    ok_count = sum(1 for c in comparisons if c["status"] == "ok")
+    incomplete_count = sum(1 for c in comparisons if c["status"] == "incomplete")
+    missing_count = sum(1 for c in comparisons if c["status"] == "missing")
+
+    return jsonify({
+        "total_emails": total,
+        "ok": ok_count,
+        "incomplete": incomplete_count,
+        "missing": missing_count,
+        "comparisons": comparisons,
+    })
+
+
+@app.route("/audit")
+def audit_page():
+    return render_template("audit.html")
+
+
 @app.route("/api/report/send-now", methods=["POST"])
 def api_send_report_now():
     """Manually trigger the daily report."""
