@@ -950,8 +950,8 @@ async function submitCredit() {
         }
         closeCreditModal();
         cachedEvents = null;  // bust cache
-        fetchItems();
-        fetchStats();
+        await fetchItems();
+        await fetchStats();
     } catch (err) {
         alert(err.message);
     }
@@ -970,8 +970,8 @@ async function reverseCreditAction(itemId) {
         });
         if (!res.ok) throw new Error((await res.json()).error || "Reverse failed");
         cachedEvents = null;
-        fetchItems();
-        fetchStats();
+        await fetchItems();
+        await fetchStats();
     } catch (err) {
         alert(err.message);
     }
@@ -984,14 +984,14 @@ let autoRefreshInterval = null;
 
 function startAutoRefresh() {
     if (autoRefreshInterval) return;
-    autoRefreshInterval = setInterval(() => {
+    autoRefreshInterval = setInterval(async () => {
         // Only refresh when no modal is open and no edit in progress
         const editOpen = document.getElementById("edit-overlay").style.display === "flex";
         const creditOpen = document.getElementById("credit-overlay").style.display === "flex";
         const loginOpen = document.getElementById("login-overlay").style.display === "flex";
         if (!editOpen && !creditOpen && !loginOpen && !activeEditor) {
-            fetchItems();
-            fetchStats();
+            await fetchItems();
+            await fetchStats();
         }
     }, 30000); // every 30 seconds
 }

@@ -514,7 +514,7 @@
         });
     }
 
-    function selectCustomer(customer) {
+    function selectCustomer(customer, scroll = true) {
         selectedCustomer = customer;
         const detail = document.getElementById("customer-detail");
         detail.style.display = "block";
@@ -579,7 +579,9 @@
             if (card) card.classList.add("selected");
         }
 
-        detail.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (scroll) {
+            detail.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
     }
 
     // ---- Customers-page Credit/Transfer modal ----
@@ -656,7 +658,7 @@
             }
             closeCustCreditModal();
             custCachedEvents = null;
-            init();  // re-fetch and re-render
+            await init();  // re-fetch and re-render
         } catch (err) { alert(err.message); }
     }
 
@@ -670,7 +672,7 @@
             });
             if (!res.ok) throw new Error((await res.json()).error || "Reverse failed");
             custCachedEvents = null;
-            init();
+            await init();
         } catch (err) { alert(err.message); }
     }
 
@@ -706,6 +708,8 @@
         URL.revokeObjectURL(url);
     }
 
+    let initialLoadDone = false;
+
     async function init() {
         try {
             const res = await fetch("/api/items");
@@ -714,17 +718,30 @@
             populateChapterFilter();
             renderCustomers();
 
-            // Check if URL has ?name= parameter to pre-select a customer
-            const params = new URLSearchParams(window.location.search);
-            const nameParam = params.get("name");
-            if (nameParam) {
-                const match = allCustomers.find(c => c.name === nameParam);
-                if (match) {
-                    selectCustomer(match);
+            if (!initialLoadDone) {
+                initialLoadDone = true;
+                // Check if URL has ?name= parameter to pre-select a customer
+                const params = new URLSearchParams(window.location.search);
+                const nameParam = params.get("name");
+                if (nameParam) {
+                    const match = allCustomers.find(c => c.name === nameParam);
+                    if (match) {
+                        selectCustomer(match);
+                    } else {
+                        // Try partial match via search
+                        document.getElementById("customer-search").value = nameParam;
+                        renderCustomers();
+                    }
+                }
+            } else if (selectedCustomer) {
+                // Re-render detail panel with fresh data (no scroll)
+                const freshCust = allCustomers.find(c => c.name === selectedCustomer.name);
+                if (freshCust) {
+                    selectCustomer(freshCust, false);
                 } else {
-                    // Try partial match via search
-                    document.getElementById("customer-search").value = nameParam;
-                    renderCustomers();
+                    // Customer no longer exists in data
+                    selectedCustomer = null;
+                    document.getElementById("customer-detail").style.display = "none";
                 }
             }
         } catch (err) {
@@ -806,11 +823,11 @@
         });
 
         // Auto-refresh every 30s to keep multiple users in sync
-        setInterval(() => {
+        setInterval(async () => {
             const creditOpen = document.getElementById("cust-credit-overlay").style.display === "flex";
             const loginOpen = document.getElementById("login-overlay").style.display === "flex";
             if (!creditOpen && !loginOpen) {
-                init();
+                await init();
             }
         }, 30000);
     });

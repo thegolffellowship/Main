@@ -1236,15 +1236,15 @@
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
 
         // Auto-refresh every 30s to keep multiple users in sync
-        setInterval(() => {
+        setInterval(async () => {
             const editOpen = document.getElementById("edit-event-overlay").style.display === "flex";
             const creditOpen = document.getElementById("ev-credit-overlay").style.display === "flex";
             const addEventOpen = document.getElementById("add-event-overlay").style.display === "flex";
             const addPlayerOpen = document.getElementById("add-player-overlay").style.display === "flex";
             const loginOpen = document.getElementById("login-overlay").style.display === "flex";
             if (!editOpen && !creditOpen && !addEventOpen && !addPlayerOpen && !loginOpen) {
-                fetchItems();
-                fetchEvents();
+                await fetchItems();
+                await fetchEvents();
             }
         }, 30000);
     });
