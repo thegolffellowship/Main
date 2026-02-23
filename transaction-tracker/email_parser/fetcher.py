@@ -153,8 +153,7 @@ def fetch_transaction_emails(
 
     token = _get_graph_token(tenant_id, client_id, client_secret)
     if not token:
-        logger.error("Could not acquire Graph API token — check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET")
-        return []
+        raise RuntimeError("Could not acquire Graph API token — check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET")
     logger.info("Graph API token acquired successfully for %s", email_address)
 
     headers = {
@@ -179,59 +178,54 @@ def fetch_transaction_emails(
     skipped_samples = []
     next_link = None
 
-    try:
-        first_page = True
-        while first_page or next_link:
-            if first_page:
-                resp = requests.get(base_url, headers=headers, params=params, timeout=30)
-                first_page = False
-            else:
-                resp = requests.get(next_link, headers=headers, timeout=30)
+    first_page = True
+    while first_page or next_link:
+        if first_page:
+            resp = requests.get(base_url, headers=headers, params=params, timeout=30)
+            first_page = False
+        else:
+            resp = requests.get(next_link, headers=headers, timeout=30)
 
-            logger.info("Graph API response status: %s  url: %s", resp.status_code, resp.url)
-            resp.raise_for_status()
-            data = resp.json()
+        logger.info("Graph API response status: %s  url: %s", resp.status_code, resp.url)
+        resp.raise_for_status()
+        data = resp.json()
 
-            messages = data.get("value", [])
-            logger.info("Page returned %d messages", len(messages))
+        messages = data.get("value", [])
+        logger.info("Page returned %d messages", len(messages))
 
-            for msg in messages:
-                total_scanned += 1
-                from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
-                subject = msg.get("subject", "")
+        for msg in messages:
+            total_scanned += 1
+            from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
+            subject = msg.get("subject", "")
 
-                if not _is_transaction_email(subject, from_addr):
-                    # Log first few skipped emails so we can see what's being filtered out
-                    if len(skipped_samples) < 10:
-                        skipped_samples.append(f"  from={from_addr}  subject={subject}")
-                    continue
+            if not _is_transaction_email(subject, from_addr):
+                # Log first few skipped emails so we can see what's being filtered out
+                if len(skipped_samples) < 10:
+                    skipped_samples.append(f"  from={from_addr}  subject={subject}")
+                continue
 
-                body = msg.get("body", {})
-                body_content = body.get("content", "")
-                content_type = body.get("contentType", "text")
+            body = msg.get("body", {})
+            body_content = body.get("content", "")
+            content_type = body.get("contentType", "text")
 
-                results.append({
-                    "uid": msg["id"],
-                    "subject": subject,
-                    "from": from_addr,
-                    "date": msg.get("receivedDateTime"),
-                    "text": body_content if content_type == "text" else "",
-                    "html": body_content if content_type == "html" else "",
-                })
+            results.append({
+                "uid": msg["id"],
+                "subject": subject,
+                "from": from_addr,
+                "date": msg.get("receivedDateTime"),
+                "text": body_content if content_type == "text" else "",
+                "html": body_content if content_type == "html" else "",
+            })
 
-            # Follow pagination link if present
-            next_link = data.get("@odata.nextLink")
+        # Follow pagination link if present
+        next_link = data.get("@odata.nextLink")
 
-        logger.info(
-            "Fetched %d transaction emails out of %d total scanned since %s",
-            len(results), total_scanned, since_date.date(),
-        )
-        if skipped_samples:
-            logger.info("Sample skipped emails:\n%s", "\n".join(skipped_samples))
-    except requests.exceptions.HTTPError as e:
-        logger.exception("Graph API HTTP error: %s", e.response.text if e.response else e)
-    except Exception:
-        logger.exception("Failed to fetch emails via Graph API")
+    logger.info(
+        "Fetched %d transaction emails out of %d total scanned since %s",
+        len(results), total_scanned, since_date.date(),
+    )
+    if skipped_samples:
+        logger.info("Sample skipped emails:\n%s", "\n".join(skipped_samples))
 
     return results
 

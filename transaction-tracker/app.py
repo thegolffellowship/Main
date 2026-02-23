@@ -45,7 +45,14 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 # Email check job (with background tracking)
 # ---------------------------------------------------------------------------
 _inbox_check_lock = threading.Lock()
-_inbox_check_status = {"running": False, "error": None}
+_inbox_check_status = {
+    "running": False,
+    "error": None,
+    "emails_fetched": 0,
+    "emails_parsed": 0,
+    "items_saved": 0,
+    "message": None,
+}
 
 
 def check_inbox():
@@ -57,6 +64,7 @@ def check_inbox():
 
     if not all([tenant_id, client_id, client_secret, address]):
         logger.warning("Azure AD / email credentials not configured — skipping inbox check")
+        _inbox_check_status["message"] = "Azure AD / email credentials not configured"
         return
 
     logger.info("Checking inbox for %s ...", address)
@@ -68,8 +76,11 @@ def check_inbox():
         since_date=datetime.now() - timedelta(days=90),
     )
 
+    _inbox_check_status["emails_fetched"] = len(emails)
+
     if not emails:
         logger.info("No new transaction emails found")
+        _inbox_check_status["message"] = "No transaction emails matched filters in the last 90 days"
         return
 
     # Parse and save one email at a time so items appear on the dashboard
@@ -77,12 +88,16 @@ def check_inbox():
     import anthropic as _anthropic
 
     total_saved = 0
+    total_parsed = 0
     for i, email_data in enumerate(emails, 1):
         try:
             rows = parse_email(email_data)
+            total_parsed += 1
+            _inbox_check_status["emails_parsed"] = total_parsed
             if rows:
                 count = save_items(rows)
                 total_saved += count
+                _inbox_check_status["items_saved"] = total_saved
                 logger.info("Email %d/%d: saved %d items", i, len(emails), count)
             else:
                 logger.info("Email %d/%d: no items extracted", i, len(emails))
@@ -91,15 +106,20 @@ def check_inbox():
                 "Stopping at email %d/%d — Anthropic API fatal error: %s",
                 i, len(emails), e.message,
             )
-            break
+            raise
         except Exception:
             logger.exception("Failed to parse email %d/%d uid=%s", i, len(emails), email_data.get("uid"))
 
+    _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(emails)} emails"
     logger.info("Done — saved %d total new items from %d emails", total_saved, len(emails))
 
 
 def _check_inbox_background():
     """Wrapper that runs check_inbox in a background thread with status tracking."""
+    _inbox_check_status["emails_fetched"] = 0
+    _inbox_check_status["emails_parsed"] = 0
+    _inbox_check_status["items_saved"] = 0
+    _inbox_check_status["message"] = None
     try:
         check_inbox()
         _inbox_check_status["error"] = None
@@ -241,14 +261,25 @@ def api_check_status():
     running = _inbox_check_status["running"]
     error = _inbox_check_status["error"]
 
+    progress = {
+        "emails_fetched": _inbox_check_status["emails_fetched"],
+        "emails_parsed": _inbox_check_status["emails_parsed"],
+        "items_saved": _inbox_check_status["items_saved"],
+    }
+
     if running:
-        return jsonify({"status": "running"})
+        return jsonify({"status": "running", "progress": progress})
 
     if error:
-        return jsonify({"status": "error", "error": error})
+        return jsonify({"status": "error", "error": error, "progress": progress})
 
     stats = get_item_stats()
-    return jsonify({"status": "done", "stats": stats})
+    return jsonify({
+        "status": "done",
+        "stats": stats,
+        "progress": progress,
+        "message": _inbox_check_status.get("message"),
+    })
 
 
 @app.route("/api/config-status")

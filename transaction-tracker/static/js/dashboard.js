@@ -246,14 +246,29 @@ function pollCheckStatus() {
             const res = await fetch("/api/check-status");
             const data = await res.json();
 
-            if (data.status === "running") return; // keep polling
+            // Show progress while running
+            if (data.status === "running") {
+                const p = data.progress || {};
+                if (p.emails_fetched > 0) {
+                    btn.textContent = `Parsing ${p.emails_parsed}/${p.emails_fetched}...`;
+                }
+                return; // keep polling
+            }
 
             clearInterval(interval);
             btn.classList.remove("loading");
             btn.disabled = false;
+            btn.textContent = "Check Now";
 
             if (data.status === "error") {
-                alert("Inbox check failed: " + data.error);
+                alert("Inbox check failed:\n\n" + data.error);
+            } else if (data.message) {
+                const p = data.progress || {};
+                if (p.items_saved > 0) {
+                    alert(`Done! Saved ${p.items_saved} item(s) from ${p.emails_fetched} email(s).`);
+                } else {
+                    alert(data.message);
+                }
             }
             // Final refresh to catch any last items
             fetchItems();
@@ -262,6 +277,7 @@ function pollCheckStatus() {
             clearInterval(interval);
             btn.classList.remove("loading");
             btn.disabled = false;
+            btn.textContent = "Check Now";
             console.error("Poll failed:", err);
         }
     }, 3000); // poll every 3 seconds
