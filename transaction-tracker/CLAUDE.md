@@ -2,7 +2,7 @@
 
 ## Deployed URL
 
-**Railway:** `https://tgf-tracker.up.railway.app`
+**Railway:** `https://main-production-b95c.up.railway.app`
 
 ## Inspection Endpoints
 
@@ -19,7 +19,7 @@ about what's been parsed — query these live endpoints:
 ### How to check data quality
 
 ```
-WebFetch https://tgf-tracker.up.railway.app/api/audit
+WebFetch https://main-production-b95c.up.railway.app/api/audit
 ```
 
 This returns:
@@ -30,13 +30,13 @@ This returns:
 ### How to inspect recent data
 
 ```
-WebFetch https://tgf-tracker.up.railway.app/api/data-snapshot?limit=20
+WebFetch https://main-production-b95c.up.railway.app/api/data-snapshot?limit=20
 ```
 
 ### How to get full data
 
 ```
-WebFetch https://tgf-tracker.up.railway.app/api/items
+WebFetch https://main-production-b95c.up.railway.app/api/items
 ```
 
 ## Architecture
