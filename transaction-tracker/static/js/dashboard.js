@@ -450,7 +450,25 @@ function applyFilters() {
         }
     }
 
+    updateClearButton();
     renderTable(sortItems(filtered, sortKey));
+}
+
+function updateClearButton() {
+    const query = document.getElementById("search-input").value.trim();
+    const filterCol = document.getElementById("filter-column").value;
+    const hasFilters = query || filterCol || activeCategory !== "all";
+    document.getElementById("btn-clear-filters").classList.toggle("visible", !!hasFilters);
+}
+
+function clearAllFilters() {
+    document.getElementById("search-input").value = "";
+    document.getElementById("filter-column").value = "";
+    document.getElementById("sort-select").value = "event_date-desc";
+    activeCategory = "all";
+    document.querySelectorAll(".category-btn").forEach(b => b.classList.remove("active"));
+    document.querySelector('.category-btn[data-category="all"]').classList.add("active");
+    applyFilters();
 }
 
 // ---------------------------------------------------------------------------
@@ -619,6 +637,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("sort-select").addEventListener("change", applyFilters);
     document.getElementById("btn-check-now").addEventListener("click", checkNow);
     document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
+    document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);
     document.getElementById("btn-send-report").addEventListener("click", sendReport);
 
     // Category filter buttons

@@ -67,6 +67,7 @@
                 <option value="spent-asc">Least spent</option>
                 <option value="latest-desc">Most recent</option>
             </select>
+            <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
             <div class="view-toggle">
                 <button class="view-toggle-btn active" data-view="list">List</button>
                 <button class="view-toggle-btn" data-view="cards">Cards</button>
@@ -78,14 +79,14 @@
             <table class="customer-list-table">
                 <thead>
                     <tr>
-                        <th data-sort="name">Name</th>
-                        <th data-sort="status">Status</th>
-                        <th data-sort="chapter">Chapter</th>
-                        <th data-sort="purchases">Purchases</th>
-                        <th data-sort="spent">Total Spent</th>
+                        <th data-sort="name" class="sort-active">Name <span class="sort-arrow">&#9650;</span></th>
+                        <th data-sort="status">Status <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="chapter">Chapter <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="purchases">Purchases <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="spent">Total Spent <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th>Email</th>
                         <th>Phone</th>
-                        <th data-sort="latest">Last Activity</th>
+                        <th data-sort="latest">Last Activity <span class="sort-arrow">&#9650;&#9660;</span></th>
                     </tr>
                 </thead>
                 <tbody id="customer-list-body"></tbody>
@@ -128,6 +129,8 @@
     let allItems = [];
     let selectedCustomer = null;
     let currentView = "list";
+    let currentSortField = "name";
+    let currentSortDir = "asc";
 
     function escapeHtml(str) {
         const div = document.createElement("div");
@@ -237,6 +240,11 @@
         const chapterFilter = document.getElementById("filter-chapter").value;
         const sortKey = document.getElementById("sort-select").value;
 
+        // Sync tracked sort state from dropdown
+        const [sf, sd] = sortKey.split("-");
+        currentSortField = sf;
+        currentSortDir = sd;
+
         let filtered = allCustomers;
 
         if (query) {
@@ -255,20 +263,53 @@
         }
 
         // Sort
-        const [field, dir] = sortKey.split("-");
-        const asc = dir === "asc";
+        const asc = currentSortDir === "asc";
         filtered = [...filtered];
         filtered.sort((a, b) => {
-            if (field === "name") return asc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-            if (field === "status") return asc ? a.status.localeCompare(b.status) : b.status.localeCompare(a.status);
-            if (field === "chapter") return asc ? a.chapter.localeCompare(b.chapter) : b.chapter.localeCompare(a.chapter);
-            if (field === "purchases") return asc ? a.items.length - b.items.length : b.items.length - a.items.length;
-            if (field === "spent") return asc ? a.totalSpent - b.totalSpent : b.totalSpent - a.totalSpent;
-            if (field === "latest") return b.latestDate.localeCompare(a.latestDate);
+            if (currentSortField === "name") return asc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+            if (currentSortField === "status") return asc ? a.status.localeCompare(b.status) : b.status.localeCompare(a.status);
+            if (currentSortField === "chapter") return asc ? a.chapter.localeCompare(b.chapter) : b.chapter.localeCompare(a.chapter);
+            if (currentSortField === "purchases") return asc ? a.items.length - b.items.length : b.items.length - a.items.length;
+            if (currentSortField === "spent") return asc ? a.totalSpent - b.totalSpent : b.totalSpent - a.totalSpent;
+            if (currentSortField === "latest") return b.latestDate.localeCompare(a.latestDate);
             return 0;
         });
 
+        updateSortArrows();
+        updateClearButton();
         return filtered;
+    }
+
+    function updateSortArrows() {
+        document.querySelectorAll(".customer-list-table thead th[data-sort]").forEach(th => {
+            const field = th.dataset.sort;
+            const arrow = th.querySelector(".sort-arrow");
+            if (field === currentSortField) {
+                th.classList.add("sort-active");
+                arrow.innerHTML = currentSortDir === "asc" ? "&#9650;" : "&#9660;";
+            } else {
+                th.classList.remove("sort-active");
+                arrow.innerHTML = "&#9650;&#9660;";
+            }
+        });
+    }
+
+    function updateClearButton() {
+        const query = document.getElementById("customer-search").value.trim();
+        const statusFilter = document.getElementById("filter-status").value;
+        const chapterFilter = document.getElementById("filter-chapter").value;
+        const hasFilters = query || statusFilter || chapterFilter;
+        document.getElementById("btn-clear-filters").classList.toggle("visible", !!hasFilters);
+    }
+
+    function clearAllFilters() {
+        document.getElementById("customer-search").value = "";
+        document.getElementById("filter-status").value = "";
+        document.getElementById("filter-chapter").value = "";
+        document.getElementById("sort-select").value = "name-asc";
+        selectedCustomer = null;
+        document.getElementById("customer-detail").style.display = "none";
+        renderCustomers();
     }
 
     function renderStats() {
@@ -466,20 +507,22 @@
         document.getElementById("filter-chapter").addEventListener("change", renderCustomers);
         document.getElementById("sort-select").addEventListener("change", renderCustomers);
         document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
+        document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);
 
         // View toggle
         document.querySelectorAll(".view-toggle-btn").forEach(btn => {
             btn.addEventListener("click", () => switchView(btn.dataset.view));
         });
 
-        // List table header sorting
+        // List table header sorting with arrow toggle
         document.querySelectorAll(".customer-list-table thead th[data-sort]").forEach(th => {
             th.addEventListener("click", () => {
                 const sortField = th.dataset.sort;
                 const select = document.getElementById("sort-select");
-                const current = select.value;
-                if (current === `${sortField}-asc`) {
-                    select.value = `${sortField}-desc`;
+                if (currentSortField === sortField) {
+                    // Toggle direction
+                    const newDir = currentSortDir === "asc" ? "desc" : "asc";
+                    select.value = `${sortField}-${newDir}`;
                 } else {
                     select.value = `${sortField}-asc`;
                 }

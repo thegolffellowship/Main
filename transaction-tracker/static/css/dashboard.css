@@ -655,6 +655,35 @@ footer {
     background: rgba(255,255,255,0.25);
 }
 
+/* ---- Sort arrows ---- */
+.sort-arrow {
+    display: inline-block;
+    margin-left: 0.25rem;
+    font-size: 0.65rem;
+    opacity: 0.4;
+    vertical-align: middle;
+}
+th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
+
+/* ---- Clear filters button ---- */
+.btn-clear-filters {
+    display: none;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--red);
+    transition: background 0.15s;
+    white-space: nowrap;
+}
+.btn-clear-filters:hover { background: #fef2f2; }
+.btn-clear-filters.visible { display: inline-flex; }
+
 /* ---- Clickable Links ---- */
 .cell-link {
     color: var(--primary);
