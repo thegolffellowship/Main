@@ -117,6 +117,13 @@ def _call_ai(email_text: str) -> dict | None:
     except json.JSONDecodeError:
         logger.exception("AI returned invalid JSON")
         return None
+    except anthropic.BadRequestError as e:
+        # Re-raise billing / auth errors so the caller can stop the batch
+        logger.error("Anthropic API fatal error: %s", e.message)
+        raise
+    except anthropic.AuthenticationError as e:
+        logger.error("Anthropic API auth error: %s", e.message)
+        raise
     except anthropic.APIError:
         logger.exception("Anthropic API call failed")
         return None
@@ -193,6 +200,11 @@ def parse_emails(email_list: list[dict]) -> list[dict]:
         try:
             rows = parse_email(email_data)
             all_rows.extend(rows)
+        except (anthropic.BadRequestError, anthropic.AuthenticationError) as e:
+            logger.error(
+                "Stopping batch — Anthropic API returned a fatal error: %s", e.message,
+            )
+            break
         except Exception:
             logger.exception("Failed to parse email uid=%s", email_data.get("uid"))
     logger.info("Parsed %d item rows from %d emails", len(all_rows), len(email_list))
