@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — Events</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        .events-table-wrapper {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            box-shadow: var(--shadow);
+        }
+        .events-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .events-table thead th {
+            background: #f9fafb;
+            padding: 0.6rem 0.85rem;
+            text-align: left;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+        }
+        .events-table tbody td {
+            padding: 0.55rem 0.85rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+            vertical-align: top;
+        }
+        .events-table tbody tr:last-child td { border-bottom: none; }
+        .events-table tbody tr:hover { background: #f9fafb; }
+        .reg-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.78rem;
+            min-width: 28px;
+            height: 28px;
+            border-radius: 14px;
+            padding: 0 0.5rem;
+        }
+        .event-type-badge {
+            display: inline-block;
+            padding: 0.15rem 0.55rem;
+            border-radius: 12px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .type-event { background: #ecfdf5; color: #065f46; }
+        .type-other { background: #f1f5f9; color: #475569; }
+        .event-summary {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .event-summary .stat-card {
+            flex: 1;
+            min-width: 120px;
+        }
+        .empty-msg {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Events — Auto-detected from transaction data</p>
+        </div>
+        <div class="header-actions">
+            <a href="/" class="btn btn-secondary">Back to Dashboard</a>
+            <button id="btn-sync" class="btn btn-primary" title="Scan transactions and create new event entries">
+                <span class="btn-icon">&#8635;</span> Sync Events
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <section class="event-summary" id="summary-section">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-total">—</div>
+                <div class="stat-label">Events</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-upcoming">—</div>
+                <div class="stat-label">Upcoming</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-past">—</div>
+                <div class="stat-label">Past</div>
+            </div>
+        </section>
+
+        <section class="events-table-wrapper">
+            <table class="events-table">
+                <thead>
+                    <tr>
+                        <th>Event Name</th>
+                        <th>Date</th>
+                        <th>Course</th>
+                        <th>City</th>
+                        <th>Registrations</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="events-body">
+                    <tr><td colspan="6" class="empty-msg">Loading...</td></tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <footer>
+        <p>TGF Transaction Tracker &mdash; Powered by Claude AI</p>
+    </footer>
+
+    <script>
+    let allEvents = [];
+
+    function escapeHtml(str) {
+        const div = document.createElement("div");
+        div.textContent = str || "";
+        return div.innerHTML;
+    }
+
+    async function fetchEvents() {
+        try {
+            const res = await fetch("/api/events");
+            allEvents = await res.json();
+            renderEvents();
+        } catch (err) {
+            console.error("Failed to fetch events:", err);
+        }
+    }
+
+    function renderEvents() {
+        const tbody = document.getElementById("events-body");
+
+        // Summary stats
+        const today = new Date().toISOString().split("T")[0];
+        const upcoming = allEvents.filter(e => e.event_date && e.event_date >= today);
+        const past = allEvents.filter(e => !e.event_date || e.event_date < today);
+        document.getElementById("stat-total").textContent = allEvents.length;
+        document.getElementById("stat-upcoming").textContent = upcoming.length;
+        document.getElementById("stat-past").textContent = past.length;
+
+        if (!allEvents.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No events found. Click "Sync Events" to scan transactions.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = allEvents.map(ev => {
+            const typeCls = ev.event_type === "event" ? "type-event" : "type-other";
+            return `
+            <tr data-id="${ev.id}">
+                <td><strong>${escapeHtml(ev.item_name)}</strong></td>
+                <td>${escapeHtml(ev.event_date || "—")}</td>
+                <td>${escapeHtml(ev.course || "—")}</td>
+                <td>${escapeHtml(ev.city || "—")}</td>
+                <td><span class="reg-count">${ev.registrations || 0}</span></td>
+                <td>
+                    <button class="btn btn-danger" onclick="deleteEvent(${ev.id})">Delete</button>
+                </td>
+            </tr>`;
+        }).join("");
+    }
+
+    async function syncEvents() {
+        const btn = document.getElementById("btn-sync");
+        btn.disabled = true;
+        btn.textContent = "Syncing...";
+        try {
+            const res = await fetch("/api/events/sync", { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Sync failed");
+            alert(`Synced! ${data.inserted} new events found, ${data.skipped_non_event} non-event items skipped.`);
+            fetchEvents();
+        } catch (err) {
+            alert("Sync failed: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Sync Events";
+        }
+    }
+
+    async function deleteEvent(id) {
+        if (!confirm("Delete this event?")) return;
+        try {
+            await fetch(`/api/events/${id}`, { method: "DELETE" });
+            allEvents = allEvents.filter(e => e.id !== id);
+            renderEvents();
+        } catch (err) {
+            alert("Delete failed.");
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("btn-sync").addEventListener("click", syncEvents);
+        // Auto-sync on load then fetch
+        fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
+    });
+    </script>
+</body>
+</html>

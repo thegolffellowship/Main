@@ -96,6 +96,21 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass  # column already exists
 
+    # Events table — canonical event list, auto-populated from items
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS events (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_name   TEXT NOT NULL UNIQUE,
+            event_date  TEXT,
+            course      TEXT,
+            city        TEXT,
+            event_type  TEXT DEFAULT 'event',
+            created_at  TEXT DEFAULT (datetime('now'))
+        )
+        """
+    )
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_items_order_date ON items(order_date DESC)"
     )
@@ -104,6 +119,9 @@ def init_db(db_path: str | Path | None = None) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_items_customer ON items(customer)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_event_date ON events(event_date DESC)"
     )
 
     conn.commit()
@@ -419,6 +437,141 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
         "breakdown": fixes,
         "details": details,
     }
+
+
+# ---------------------------------------------------------------------------
+# Events table
+# ---------------------------------------------------------------------------
+
+# Keywords that indicate an item is NOT an event (membership, merch, etc.)
+_NON_EVENT_KEYWORDS = [
+    "member", "membership", "shirt", "merch", "hat", "polo",
+    "donation", "gift card", "season pass",
+]
+
+
+def _is_event_item(item_name: str) -> bool:
+    """Heuristic: an item is an event if it has a date-like pattern or course name."""
+    if not item_name:
+        return False
+    lower = item_name.lower()
+    # Exclude memberships, merch, etc.
+    for kw in _NON_EVENT_KEYWORDS:
+        if kw in lower:
+            return False
+    # Contains a month name or date pattern → likely an event
+    import re
+    month_pattern = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b"
+    if re.search(month_pattern, lower):
+        return True
+    # Contains a known course name keyword → likely an event
+    course_keywords = [
+        "cantera", "morris", "cedar", "cowboys", "wolfdancer", "falconhead",
+        "moody", "quarry", "tpc", "kissing", "plum", "landa", "vaaler",
+        "hancock", "craig ranch",
+    ]
+    for ck in course_keywords:
+        if ck in lower:
+            return True
+    return False
+
+
+def sync_events_from_items(db_path: str | Path | None = None) -> dict:
+    """
+    Scan items table and insert any new events into the events table.
+
+    An 'event' is determined heuristically: items with date-like names or
+    course references are events; memberships and merchandise are not.
+    """
+    conn = get_connection(db_path)
+    items = conn.execute(
+        "SELECT DISTINCT item_name, event_date, course, city FROM items"
+    ).fetchall()
+
+    inserted = 0
+    skipped_non_event = 0
+    for item in items:
+        name = item["item_name"] or ""
+        if not _is_event_item(name):
+            skipped_non_event += 1
+            continue
+        try:
+            conn.execute(
+                """INSERT OR IGNORE INTO events (item_name, event_date, course, city, event_type)
+                   VALUES (?, ?, ?, ?, 'event')""",
+                (name, item["event_date"], item["course"], item["city"]),
+            )
+            if conn.execute("SELECT changes()").fetchone()[0] > 0:
+                inserted += 1
+        except sqlite3.IntegrityError:
+            pass
+
+    conn.commit()
+    conn.close()
+    logger.info("Events sync: %d new events, %d non-event items skipped", inserted, skipped_non_event)
+    return {"inserted": inserted, "skipped_non_event": skipped_non_event, "total_items_scanned": len(items)}
+
+
+def get_all_events(db_path: str | Path | None = None) -> list[dict]:
+    """Return all events with registration counts."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        """
+        SELECT e.*, COUNT(i.id) as registrations
+        FROM events e
+        LEFT JOIN items i ON i.item_name = e.item_name
+        GROUP BY e.id
+        ORDER BY e.event_date DESC, e.id DESC
+        """
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_event(event_id: int, fields: dict, db_path: str | Path | None = None) -> bool:
+    """Update specific fields on an event row."""
+    allowed = {"item_name", "event_date", "course", "city", "event_type"}
+    safe = {k: v for k, v in fields.items() if k in allowed}
+    if not safe:
+        return False
+    set_clause = ", ".join(f"{col} = ?" for col in safe)
+    values = list(safe.values()) + [event_id]
+    conn = get_connection(db_path)
+    cursor = conn.execute(f"UPDATE events SET {set_clause} WHERE id = ?", values)
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
+
+
+def delete_event(event_id: int, db_path: str | Path | None = None) -> bool:
+    """Delete an event by ID."""
+    conn = get_connection(db_path)
+    cursor = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
+
+
+def update_item(item_id: int, fields: dict, db_path: str | Path | None = None) -> bool:
+    """
+    Update specific fields on an item row.
+
+    Only columns in ITEM_COLUMNS are allowed (prevents SQL injection via column names).
+    Returns True if a row was updated.
+    """
+    # Whitelist: only allow known columns
+    safe_fields = {k: v for k, v in fields.items() if k in ITEM_COLUMNS}
+    if not safe_fields:
+        return False
+
+    set_clause = ", ".join(f"{col} = ?" for col in safe_fields)
+    values = list(safe_fields.values()) + [item_id]
+
+    conn = get_connection(db_path)
+    cursor = conn.execute(f"UPDATE items SET {set_clause} WHERE id = ?", values)
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
 
 
 def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:

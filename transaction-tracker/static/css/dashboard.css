@@ -294,6 +294,29 @@ tbody tr:hover { background: #f9fafb; }
     line-height: 1.5;
 }
 
+/* ---- Inline editing ---- */
+.cell-value {
+    cursor: pointer;
+    padding: 0.1rem 0.25rem;
+    border-radius: 3px;
+    transition: background 0.12s;
+}
+.cell-value:hover {
+    background: #e0e7ff;
+}
+.cell-edit-input {
+    width: 100%;
+    min-width: 60px;
+    padding: 0.2rem 0.35rem;
+    border: 2px solid var(--primary);
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    background: #fff;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
 /* ---- Row count ---- */
 .row-count {
     margin-top: 0.75rem;

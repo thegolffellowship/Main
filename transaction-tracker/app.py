@@ -25,9 +25,14 @@ from email_parser.database import (
     get_audit_report,
     get_data_snapshot,
     save_items,
+    update_item,
     delete_item,
     autofix_side_games,
     autofix_all,
+    sync_events_from_items,
+    get_all_events,
+    update_event,
+    delete_event,
 )
 from email_parser.fetcher import fetch_transaction_emails
 from email_parser.parser import parse_email, parse_emails
@@ -233,6 +238,18 @@ def api_data_snapshot():
     """Quick snapshot of recent items + stats for inspection."""
     limit = request.args.get("limit", 50, type=int)
     return jsonify(get_data_snapshot(limit=limit))
+
+
+@app.route("/api/items/<int:item_id>", methods=["PATCH"])
+def api_update_item(item_id):
+    """Update specific fields on an item row (for inline editing)."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON."}), 400
+    updated = update_item(item_id, data)
+    if updated:
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "not found or no valid fields"}), 404
 
 
 @app.route("/api/items/<int:item_id>", methods=["DELETE"])
@@ -519,6 +536,50 @@ def api_autofix_all():
     except Exception as e:
         logger.exception("Autofix-all failed")
         return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Routes — Events
+# ---------------------------------------------------------------------------
+@app.route("/events")
+def events_page():
+    return render_template("events.html")
+
+
+@app.route("/api/events")
+def api_events():
+    """Return all events with registration counts."""
+    return jsonify(get_all_events())
+
+
+@app.route("/api/events/sync", methods=["POST"])
+def api_sync_events():
+    """Scan items and auto-create event entries for event-type items."""
+    try:
+        result = sync_events_from_items()
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.exception("Event sync failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>", methods=["PATCH"])
+def api_update_event(event_id):
+    """Update fields on an event."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON."}), 400
+    if update_event(event_id, data):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "not found or no valid fields"}), 404
+
+
+@app.route("/api/events/<int:event_id>", methods=["DELETE"])
+def api_delete_event(event_id):
+    """Delete an event."""
+    if delete_event(event_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "not found"}), 404
 
 
 @app.route("/api/report/send-now", methods=["POST"])

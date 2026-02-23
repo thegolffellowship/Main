@@ -25,8 +25,122 @@ function parsePrice(priceStr) {
     return parseFloat((priceStr || "0").replace(/[$,]/g, "")) || 0;
 }
 
-function cell(value) {
-    return escapeHtml(value || "—");
+function cell(value, field, rowId) {
+    const display = escapeHtml(value || "—");
+    return `<span class="cell-value" data-field="${field}" data-id="${rowId}" data-original="${escapeHtml(value || "")}">${display}</span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Inline editing
+// ---------------------------------------------------------------------------
+let activeEditor = null;
+
+function startEdit(span) {
+    if (activeEditor) cancelEdit();
+    const field = span.dataset.field;
+    const rowId = span.dataset.id;
+    const original = span.dataset.original;
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "cell-edit-input";
+    input.value = original;
+    input.dataset.field = field;
+    input.dataset.id = rowId;
+    input.dataset.original = original;
+
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+    activeEditor = input;
+
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            saveEdit(input);
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            cancelEdit();
+        } else if (e.key === "Tab") {
+            e.preventDefault();
+            saveEdit(input);
+            // Move to next editable cell in the row
+            const td = input.closest ? input.parentElement : null;
+            if (td) {
+                const nextTd = e.shiftKey ? td.previousElementSibling : td.nextElementSibling;
+                if (nextTd) {
+                    const nextSpan = nextTd.querySelector(".cell-value");
+                    if (nextSpan) setTimeout(() => startEdit(nextSpan), 50);
+                }
+            }
+        }
+    });
+
+    input.addEventListener("blur", () => {
+        // Small delay to allow Tab/Enter handlers to fire first
+        setTimeout(() => {
+            if (activeEditor === input) saveEdit(input);
+        }, 100);
+    });
+}
+
+async function saveEdit(input) {
+    const field = input.dataset.field;
+    const rowId = input.dataset.id;
+    const original = input.dataset.original;
+    const newValue = input.value.trim();
+    activeEditor = null;
+
+    // No change — just revert
+    if (newValue === original) {
+        revertToSpan(input, original, field, rowId);
+        return;
+    }
+
+    // Optimistically show the new value
+    revertToSpan(input, newValue, field, rowId);
+
+    try {
+        const res = await fetch(`/api/items/${rowId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ [field]: newValue || null }),
+        });
+        if (!res.ok) throw new Error("Save failed");
+
+        // Update local data
+        const item = allItems.find((r) => r.id === parseInt(rowId));
+        if (item) item[field] = newValue || null;
+    } catch (err) {
+        console.error("Failed to save edit:", err);
+        // Revert on failure
+        const span = document.querySelector(`.cell-value[data-id="${rowId}"][data-field="${field}"]`);
+        if (span) {
+            span.textContent = original || "—";
+            span.dataset.original = original;
+        }
+    }
+}
+
+function cancelEdit() {
+    if (!activeEditor) return;
+    const original = activeEditor.dataset.original;
+    const field = activeEditor.dataset.field;
+    const rowId = activeEditor.dataset.id;
+    revertToSpan(activeEditor, original, field, rowId);
+    activeEditor = null;
+}
+
+function revertToSpan(input, value, field, rowId) {
+    const span = document.createElement("span");
+    span.className = "cell-value";
+    span.dataset.field = field;
+    span.dataset.id = rowId;
+    span.dataset.original = value || "";
+    span.textContent = value || "—";
+    if (input.parentElement) {
+        input.replaceWith(span);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -114,23 +228,28 @@ function renderTable(items) {
         .map(
             (row) => `
         <tr data-id="${row.id}">
-            <td>${cell(row.event_date || row.order_date)}</td>
-            <td>${cell(row.customer)}</td>
-            <td class="item-name-cell">${cell(row.item_name)}</td>
-            <td class="price-cell">${cell(row.item_price)}</td>
-            <td>${cell(row.city)}</td>
-            <td>${cell(row.course)}</td>
-            <td>${cell(row.handicap)}</td>
-            <td>${cell(row.side_games)}</td>
-            <td>${cell(row.tee_choice)}</td>
-            <td>${cell(row.member_status)}</td>
-            <td>${cell(row.golf_or_compete)}</td>
-            <td><span class="order-id">${cell(row.order_id)}</span></td>
-            <td>${cell(row.order_date)}</td>
+            <td>${cell(row.event_date || row.order_date, "event_date", row.id)}</td>
+            <td>${cell(row.customer, "customer", row.id)}</td>
+            <td class="item-name-cell">${cell(row.item_name, "item_name", row.id)}</td>
+            <td class="price-cell">${cell(row.item_price, "item_price", row.id)}</td>
+            <td>${cell(row.city, "city", row.id)}</td>
+            <td>${cell(row.course, "course", row.id)}</td>
+            <td>${cell(row.handicap, "handicap", row.id)}</td>
+            <td>${cell(row.side_games, "side_games", row.id)}</td>
+            <td>${cell(row.tee_choice, "tee_choice", row.id)}</td>
+            <td>${cell(row.member_status, "member_status", row.id)}</td>
+            <td>${cell(row.golf_or_compete, "golf_or_compete", row.id)}</td>
+            <td><span class="order-id">${cell(row.order_id, "order_id", row.id)}</span></td>
+            <td>${cell(row.order_date, "order_date", row.id)}</td>
             <td><button class="btn btn-danger" onclick="deleteItem(${row.id})">Delete</button></td>
         </tr>`
         )
         .join("");
+
+    // Attach click-to-edit listeners
+    tbody.querySelectorAll(".cell-value").forEach((span) => {
+        span.addEventListener("click", () => startEdit(span));
+    });
 
     document.getElementById("row-count").textContent = `Showing ${items.length} item(s)`;
 }
