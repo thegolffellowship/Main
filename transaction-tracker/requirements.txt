@@ -1,5 +1,6 @@
 flask==3.1.0
-imap-tools==1.7.4
+msal==1.31.0
+requests==2.32.3
 apscheduler==3.10.4
 python-dotenv==1.0.1
 gunicorn==23.0.0

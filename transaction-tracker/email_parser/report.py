@@ -1,42 +1,15 @@
 """
-Daily email report — sends a summary of recent transactions via SMTP.
+Daily email report — sends a summary of recent transactions via Microsoft Graph API.
 """
 
 import logging
 import os
-import smtplib
 from datetime import datetime, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 from .database import get_connection
+from .fetcher import send_mail_graph
 
 logger = logging.getLogger(__name__)
-
-# IMAP host → SMTP host mapping for common providers
-_SMTP_MAP = {
-    "outlook.office365.com": ("smtp.office365.com", 587),
-    "imap.gmail.com": ("smtp.gmail.com", 587),
-    "imap.mail.yahoo.com": ("smtp.mail.yahoo.com", 587),
-}
-
-
-def _get_smtp_settings() -> tuple[str, int]:
-    """Derive SMTP host/port from env or fall back from IMAP host."""
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = os.getenv("SMTP_PORT")
-
-    if smtp_host and smtp_port:
-        return smtp_host, int(smtp_port)
-
-    # Derive from IMAP host
-    imap_host = os.getenv("EMAIL_HOST", "")
-    if imap_host in _SMTP_MAP:
-        return _SMTP_MAP[imap_host]
-
-    # Best guess: replace imap with smtp
-    guessed = imap_host.replace("imap.", "smtp.")
-    return guessed, 587
 
 
 def get_recent_items(hours: int = 24) -> list[dict]:
@@ -134,34 +107,31 @@ def build_report_html(items: list[dict]) -> str:
 
 
 def send_daily_report():
-    """Build and send the daily report email."""
+    """Build and send the daily report email via Microsoft Graph API."""
     report_to = os.getenv("DAILY_REPORT_TO")
     if not report_to:
         logger.info("DAILY_REPORT_TO not set — skipping daily report")
         return
 
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
     email_address = os.getenv("EMAIL_ADDRESS")
-    email_password = os.getenv("EMAIL_PASSWORD")
-    if not email_address or not email_password:
-        logger.warning("Email credentials not set — cannot send report")
-        return
 
-    smtp_host, smtp_port = _get_smtp_settings()
+    if not all([tenant_id, client_id, client_secret, email_address]):
+        logger.warning("Azure AD credentials not set — cannot send report")
+        return
 
     items = get_recent_items(hours=24)
     html_body = build_report_html(items)
+    subject = f"TGF Daily Report — {datetime.now().strftime('%b %d, %Y')} — {len(items)} new item(s)"
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"TGF Daily Report — {datetime.now().strftime('%b %d, %Y')} — {len(items)} new item(s)"
-    msg["From"] = email_address
-    msg["To"] = report_to
-    msg.attach(MIMEText(html_body, "html"))
-
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
-            server.login(email_address, email_password)
-            server.send_message(msg)
-        logger.info("Daily report sent to %s (%d items)", report_to, len(items))
-    except Exception:
-        logger.exception("Failed to send daily report")
+    send_mail_graph(
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+        from_address=email_address,
+        to_address=report_to,
+        subject=subject,
+        html_body=html_body,
+    )

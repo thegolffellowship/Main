@@ -1,10 +1,16 @@
-"""IMAP email fetcher — connects to inbox and retrieves transaction-related emails."""
+"""Microsoft Graph API email fetcher — reads inbox via OAuth and retrieves transaction-related emails."""
 
 import logging
+import os
 from datetime import datetime, timedelta
-from imap_tools import MailBox, AND
+
+import msal
+import requests
 
 logger = logging.getLogger(__name__)
+
+# Microsoft Graph API base URL
+GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 # Senders commonly associated with purchase/transaction receipts
 TRANSACTION_SENDERS = [
@@ -56,24 +62,33 @@ TRANSACTION_SUBJECTS = [
 ]
 
 
-def connect(host: str, port: int, email: str, password: str) -> MailBox:
-    """Open an IMAP connection and authenticate."""
-    mailbox = MailBox(host, port)
-    mailbox.login(email, password)
-    return mailbox
+def _get_graph_token(tenant_id: str, client_id: str, client_secret: str) -> str | None:
+    """Acquire an access token for Microsoft Graph using client credentials flow."""
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+    app = msal.ConfidentialClientApplication(
+        client_id,
+        authority=authority,
+        client_credential=client_secret,
+    )
+
+    result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+
+    if "access_token" in result:
+        return result["access_token"]
+
+    logger.error("Failed to acquire Graph token: %s", result.get("error_description", result))
+    return None
 
 
-def _is_transaction_email(msg) -> bool:
+def _is_transaction_email(subject: str, from_address: str) -> bool:
     """Heuristic check: does the email look like a transaction/receipt?"""
-    subject_lower = (msg.subject or "").lower()
-    from_lower = (msg.from_ or "").lower()
+    subject_lower = (subject or "").lower()
+    from_lower = (from_address or "").lower()
 
-    # Check sender domain
     for domain in TRANSACTION_SENDERS:
         if domain in from_lower:
             return True
 
-    # Check subject keywords
     for keyword in TRANSACTION_SUBJECTS:
         if keyword in subject_lower:
             return True
@@ -82,42 +97,122 @@ def _is_transaction_email(msg) -> bool:
 
 
 def fetch_transaction_emails(
-    host: str,
-    port: int,
+    tenant_id: str,
+    client_id: str,
+    client_secret: str,
     email_address: str,
-    password: str,
     since_date: datetime | None = None,
-    folder: str = "INBOX",
 ) -> list[dict]:
     """
-    Connect to the mailbox and return a list of raw email dicts
+    Connect to Microsoft Graph API and return a list of raw email dicts
     that look like transaction/receipt emails.
     """
     if since_date is None:
         since_date = datetime.now() - timedelta(days=90)
 
+    token = _get_graph_token(tenant_id, client_id, client_secret)
+    if not token:
+        return []
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    # Format date for OData filter
+    since_str = since_date.strftime("%Y-%m-%dT00:00:00Z")
+
     results = []
+    # Graph API endpoint for reading a user's messages
+    url = (
+        f"{GRAPH_BASE}/users/{email_address}/messages"
+        f"?$filter=receivedDateTime ge {since_str}"
+        f"&$select=id,subject,from,receivedDateTime,body,bodyPreview"
+        f"&$top=100"
+        f"&$orderby=receivedDateTime desc"
+    )
 
     try:
-        with MailBox(host, int(port)).login(email_address, password, folder) as mailbox:
-            criteria = AND(date_gte=since_date.date())
-            for msg in mailbox.fetch(criteria, mark_seen=False):
-                if not _is_transaction_email(msg):
+        while url:
+            resp = requests.get(url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+
+            for msg in data.get("value", []):
+                from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
+                subject = msg.get("subject", "")
+
+                if not _is_transaction_email(subject, from_addr):
                     continue
 
-                results.append(
-                    {
-                        "uid": msg.uid,
-                        "subject": msg.subject,
-                        "from": msg.from_,
-                        "date": msg.date,
-                        "text": msg.text or "",
-                        "html": msg.html or "",
-                    }
-                )
+                body = msg.get("body", {})
+                body_content = body.get("content", "")
+                content_type = body.get("contentType", "text")
+
+                results.append({
+                    "uid": msg["id"],
+                    "subject": subject,
+                    "from": from_addr,
+                    "date": msg.get("receivedDateTime"),
+                    "text": body_content if content_type == "text" else "",
+                    "html": body_content if content_type == "html" else "",
+                })
+
+            # Follow pagination link if present
+            url = data.get("@odata.nextLink")
 
         logger.info("Fetched %d transaction emails since %s", len(results), since_date.date())
+    except requests.exceptions.HTTPError as e:
+        logger.exception("Graph API HTTP error: %s", e.response.text if e.response else e)
     except Exception:
-        logger.exception("Failed to fetch emails")
+        logger.exception("Failed to fetch emails via Graph API")
 
     return results
+
+
+def send_mail_graph(
+    tenant_id: str,
+    client_id: str,
+    client_secret: str,
+    from_address: str,
+    to_address: str,
+    subject: str,
+    html_body: str,
+) -> bool:
+    """Send an email via Microsoft Graph API (requires Mail.Send permission)."""
+    token = _get_graph_token(tenant_id, client_id, client_secret)
+    if not token:
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "message": {
+            "subject": subject,
+            "body": {
+                "contentType": "HTML",
+                "content": html_body,
+            },
+            "toRecipients": [
+                {"emailAddress": {"address": to_address}}
+            ],
+        },
+        "saveToSentItems": "false",
+    }
+
+    url = f"{GRAPH_BASE}/users/{from_address}/sendMail"
+
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        resp.raise_for_status()
+        logger.info("Email sent via Graph API to %s", to_address)
+        return True
+    except requests.exceptions.HTTPError as e:
+        logger.exception("Graph API send mail error: %s", e.response.text if e.response else e)
+    except Exception:
+        logger.exception("Failed to send email via Graph API")
+
+    return False

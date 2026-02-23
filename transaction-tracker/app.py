@@ -43,21 +43,21 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 # ---------------------------------------------------------------------------
 def check_inbox():
     """Fetch new transaction emails, parse them with AI, and save to DB."""
-    host = os.getenv("EMAIL_HOST")
-    port = os.getenv("EMAIL_PORT", "993")
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
     address = os.getenv("EMAIL_ADDRESS")
-    password = os.getenv("EMAIL_PASSWORD")
 
-    if not all([host, address, password]):
-        logger.warning("Email credentials not configured — skipping inbox check")
+    if not all([tenant_id, client_id, client_secret, address]):
+        logger.warning("Azure AD / email credentials not configured — skipping inbox check")
         return
 
     logger.info("Checking inbox for %s ...", address)
     emails = fetch_transaction_emails(
-        host=host,
-        port=int(port),
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
         email_address=address,
-        password=password,
         since_date=datetime.now() - timedelta(days=90),
     )
 
@@ -158,13 +158,14 @@ def api_delete_item(item_id):
 @app.route("/api/check-now", methods=["POST"])
 def api_check_now():
     """Manually trigger an inbox check."""
-    host = os.getenv("EMAIL_HOST")
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
     address = os.getenv("EMAIL_ADDRESS")
-    password = os.getenv("EMAIL_PASSWORD")
     api_key = os.getenv("ANTHROPIC_API_KEY")
 
-    if not all([host, address, password]):
-        return jsonify({"error": "Email credentials not configured. Create a .env file from .env.example."}), 400
+    if not all([tenant_id, client_id, client_secret, address]):
+        return jsonify({"error": "Azure AD credentials not configured. Create a .env file from .env.example."}), 400
 
     if not api_key:
         return jsonify({"error": "ANTHROPIC_API_KEY not configured. Add it to your .env file."}), 400
@@ -182,9 +183,10 @@ def api_check_now():
 def api_config_status():
     """Check whether email, AI, and connector credentials are configured."""
     email_ok = all([
-        os.getenv("EMAIL_HOST"),
+        os.getenv("AZURE_TENANT_ID"),
+        os.getenv("AZURE_CLIENT_ID"),
+        os.getenv("AZURE_CLIENT_SECRET"),
         os.getenv("EMAIL_ADDRESS"),
-        os.getenv("EMAIL_PASSWORD"),
     ])
     ai_ok = bool(os.getenv("ANTHROPIC_API_KEY"))
     connector_ok = bool(os.getenv("CONNECTOR_API_KEY"))
