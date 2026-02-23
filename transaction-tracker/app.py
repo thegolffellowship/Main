@@ -25,7 +25,7 @@ from email_parser.database import (
     delete_item,
 )
 from email_parser.fetcher import fetch_transaction_emails
-from email_parser.parser import parse_emails
+from email_parser.parser import parse_email, parse_emails
 from email_parser.report import send_daily_report
 
 load_dotenv()
@@ -70,10 +70,30 @@ def check_inbox():
         logger.info("No new transaction emails found")
         return
 
-    rows = parse_emails(emails)
-    if rows:
-        count = save_items(rows)
-        logger.info("Saved %d new item rows", count)
+    # Parse and save one email at a time so items appear on the dashboard
+    # incrementally instead of waiting for the entire batch to finish.
+    import anthropic as _anthropic
+
+    total_saved = 0
+    for i, email_data in enumerate(emails, 1):
+        try:
+            rows = parse_email(email_data)
+            if rows:
+                count = save_items(rows)
+                total_saved += count
+                logger.info("Email %d/%d: saved %d items", i, len(emails), count)
+            else:
+                logger.info("Email %d/%d: no items extracted", i, len(emails))
+        except (_anthropic.BadRequestError, _anthropic.AuthenticationError) as e:
+            logger.error(
+                "Stopping at email %d/%d — Anthropic API fatal error: %s",
+                i, len(emails), e.message,
+            )
+            break
+        except Exception:
+            logger.exception("Failed to parse email %d/%d uid=%s", i, len(emails), email_data.get("uid"))
+
+    logger.info("Done — saved %d total new items from %d emails", total_saved, len(emails))
 
 
 def _check_inbox_background():
