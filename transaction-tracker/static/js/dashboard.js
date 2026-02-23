@@ -875,6 +875,18 @@ let creditItemId = null;
 let creditType = "credit";  // "credit" or "transfer"
 let cachedEvents = null;
 
+function buildEventPickerOptions(events) {
+    const today = new Date().toISOString().split("T")[0];
+    const upcoming = events.filter(e => e.event_date && e.event_date >= today).sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
+    const past = events.filter(e => e.event_date && e.event_date < today).sort((a, b) => (b.event_date || "").localeCompare(a.event_date || ""));
+    const noDate = events.filter(e => !e.event_date);
+    let html = '<option value="">Select an event...</option>';
+    if (upcoming.length) html += '<optgroup label="Upcoming">' + upcoming.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+    if (past.length) html += '<optgroup label="Past">' + past.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+    if (noDate.length) html += '<optgroup label="No Date">' + noDate.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)}</option>`).join("") + '</optgroup>';
+    return html;
+}
+
 async function loadEventsForPicker() {
     if (cachedEvents) return cachedEvents;
     try {
@@ -901,16 +913,10 @@ async function openCreditModal(itemId) {
     document.getElementById("credit-note").value = "";
     document.getElementById("credit-submit").textContent = "Apply Credit";
 
-    // Load events for dropdown
+    // Load events for dropdown — upcoming first, then past
     const events = await loadEventsForPicker();
     const select = document.getElementById("credit-target-event");
-    const today = new Date().toISOString().split("T")[0];
-    select.innerHTML = '<option value="">Select an event...</option>' +
-        events
-            .filter(e => (e.event_date || "") >= today || !e.event_date)
-            .sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""))
-            .map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)}${e.event_date ? ` (${e.event_date})` : ""}</option>`)
-            .join("");
+    select.innerHTML = buildEventPickerOptions(events);
 
     document.getElementById("credit-overlay").style.display = "flex";
 }

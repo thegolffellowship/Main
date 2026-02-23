@@ -583,6 +583,18 @@
     }
 
     // ---- Customers-page Credit/Transfer modal ----
+    function buildCustPickerOptions(events) {
+        const today = new Date().toISOString().split("T")[0];
+        const upcoming = events.filter(e => e.event_date && e.event_date >= today).sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
+        const past = events.filter(e => e.event_date && e.event_date < today).sort((a, b) => (b.event_date || "").localeCompare(a.event_date || ""));
+        const noDate = events.filter(e => !e.event_date);
+        let html = '<option value="">Select an event...</option>';
+        if (upcoming.length) html += '<optgroup label="Upcoming">' + upcoming.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+        if (past.length) html += '<optgroup label="Past">' + past.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+        if (noDate.length) html += '<optgroup label="No Date">' + noDate.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)}</option>`).join("") + '</optgroup>';
+        return html;
+    }
+
     let custCreditItemId = null;
     let custCreditType = "credit";
     let custCachedEvents = null;
@@ -612,14 +624,8 @@
         document.getElementById("cust-credit-submit").textContent = "Apply Credit";
 
         const events = await loadCustEvents();
-        const today = new Date().toISOString().split("T")[0];
         const select = document.getElementById("cust-credit-target-event");
-        select.innerHTML = '<option value="">Select an event...</option>' +
-            events
-                .filter(e => (e.event_date || "") >= today || !e.event_date)
-                .sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""))
-                .map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)}${e.event_date ? ` (${e.event_date})` : ""}</option>`)
-                .join("");
+        select.innerHTML = buildCustPickerOptions(events);
 
         document.getElementById("cust-credit-overlay").style.display = "flex";
     }

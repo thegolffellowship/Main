@@ -147,15 +147,15 @@
         </section>
 
         <section class="event-summary" id="summary-section">
-            <div class="stat-card">
+            <div class="stat-card category-btn" data-ev-filter="all" style="cursor:pointer;">
                 <div class="stat-value" id="stat-total">—</div>
-                <div class="stat-label">Events</div>
+                <div class="stat-label">All Events</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card category-btn active" data-ev-filter="upcoming" style="cursor:pointer;">
                 <div class="stat-value" id="stat-upcoming">—</div>
                 <div class="stat-label">Upcoming</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card category-btn" data-ev-filter="past" style="cursor:pointer;">
                 <div class="stat-value" id="stat-past">—</div>
                 <div class="stat-label">Past</div>
             </div>
@@ -279,6 +279,7 @@
     let eventSortField = "event_date";
     let eventSortDir = "asc";
     let eventSearchQuery = "";
+    let eventTimeFilter = "upcoming";  // "all", "upcoming", "past"
 
     /** Build a "LastName, FirstName..." key for consistent name sorting. */
     function lastNameSortKey(name) {
@@ -287,6 +288,18 @@
         if (parts.length <= 1) return s.toLowerCase();
         const last = parts.pop();
         return (last + ", " + parts.join(" ")).toLowerCase();
+    }
+
+    function buildEvPickerOptions(events) {
+        const today = new Date().toISOString().split("T")[0];
+        const upcoming = events.filter(e => e.event_date && e.event_date >= today).sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
+        const past = events.filter(e => e.event_date && e.event_date < today).sort((a, b) => (b.event_date || "").localeCompare(a.event_date || ""));
+        const noDate = events.filter(e => !e.event_date);
+        let html = '<option value="">Select an event...</option>';
+        if (upcoming.length) html += '<optgroup label="Upcoming">' + upcoming.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+        if (past.length) html += '<optgroup label="Past">' + past.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+        if (noDate.length) html += '<optgroup label="No Date">' + noDate.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)}</option>`).join("") + '</optgroup>';
+        return html;
     }
 
     // Called by auth.js after successful login
@@ -349,15 +362,17 @@
     }
 
     function updateEvClearButton() {
-        const hasFilters = eventSearchQuery.trim().length > 0;
+        const hasFilters = eventSearchQuery.trim().length > 0 || eventTimeFilter !== "upcoming";
         document.getElementById("btn-clear-filters").classList.toggle("visible", hasFilters);
     }
 
     function clearEvFilters() {
         document.getElementById("event-search").value = "";
         eventSearchQuery = "";
+        eventTimeFilter = "upcoming";
         eventSortField = "event_date";
         eventSortDir = "asc";
+        document.querySelectorAll("[data-ev-filter]").forEach(b => b.classList.toggle("active", b.dataset.evFilter === "upcoming"));
         renderEvents();
     }
 
@@ -392,6 +407,16 @@
 
     function getFilteredSortedEvents() {
         let filtered = allEvents;
+        const today = new Date().toISOString().split("T")[0];
+
+        // Time filter (unless actively searching — search searches everything)
+        if (!eventSearchQuery) {
+            if (eventTimeFilter === "upcoming") {
+                filtered = filtered.filter(e => e.event_date && e.event_date >= today);
+            } else if (eventTimeFilter === "past") {
+                filtered = filtered.filter(e => !e.event_date || e.event_date < today);
+            }
+        }
 
         // Search
         if (eventSearchQuery) {
@@ -765,7 +790,6 @@
                 });
             });
         }
-    }
 
         // Credit/Reverse buttons in registrant rows
         container.querySelectorAll("[data-credit-id]").forEach(btn => {
@@ -801,15 +825,9 @@
         document.getElementById("ev-credit-note").value = "";
         document.getElementById("ev-credit-submit").textContent = "Apply Credit";
 
-        // Populate event picker
-        const today = new Date().toISOString().split("T")[0];
+        // Populate event picker — all events grouped by upcoming/past
         const select = document.getElementById("ev-credit-target-event");
-        select.innerHTML = '<option value="">Select an event...</option>' +
-            allEvents
-                .filter(e => (e.event_date || "") >= today || !e.event_date)
-                .sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""))
-                .map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)}${e.event_date ? ` (${e.event_date})` : ""}</option>`)
-                .join("");
+        select.innerHTML = buildEvPickerOptions(allEvents);
 
         document.getElementById("ev-credit-overlay").style.display = "flex";
     }
@@ -1040,6 +1058,15 @@
             // Also close detail column dropdowns
             document.querySelectorAll(".detail-col-dropdown.open").forEach(d => {
                 if (!d.contains(e.target)) d.classList.remove("open");
+            });
+        });
+
+        // Event time filter (stat card clicks)
+        document.querySelectorAll("[data-ev-filter]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                eventTimeFilter = btn.dataset.evFilter;
+                document.querySelectorAll("[data-ev-filter]").forEach(b => b.classList.toggle("active", b.dataset.evFilter === eventTimeFilter));
+                renderEvents();
             });
         });
 
