@@ -55,7 +55,10 @@ IMPORTANT RULES:
 FIELD-SPECIFIC GUIDANCE:
 - "customer": The buyer / registrant name. Always use Title Case \
   (e.g. "Mike Jenkins", not "mike jenkins" or "MIKE JENKINS").
-- "item_name": Use the event/product name exactly as shown (e.g. "Feb 22 - LaCANTERA").
+- "item_name": Use the event/product name exactly as shown (e.g. "Feb 22 - LaCANTERA"). \
+  Exception: for membership items, normalise the item name to just "TGF MEMBERSHIP" \
+  regardless of any city or tier suffix in the original (e.g. "TGF MEMBERSHIP CITY: \
+  AUS | New Member..." → "TGF MEMBERSHIP").
 - "event_date": The date of the golf event, NOT the order date. Parse it from \
   the item name when present (e.g. "Feb 22 - LaCANTERA" → "2026-02-22"). Use \
   the current year (2026) if only month and day are given.
@@ -271,6 +274,22 @@ def _normalize_course_name(course: str | None) -> str | None:
     return course.strip().title()
 
 
+# ---------------------------------------------------------------------------
+# Item name normalisation
+# ---------------------------------------------------------------------------
+
+_MEMBERSHIP_RE = re.compile(r"^TGF\s+MEMBERSHIP\b.*", re.IGNORECASE)
+
+
+def _normalize_item_name(name: str | None) -> str | None:
+    """Normalise item names — e.g. strip city/tier suffixes from memberships."""
+    if not name:
+        return name
+    if _MEMBERSHIP_RE.match(name.strip()):
+        return "TGF MEMBERSHIP"
+    return name
+
+
 def _call_ai(email_text: str) -> dict | None:
     """Send email text to Claude and return the parsed JSON dict."""
     api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -368,7 +387,7 @@ def parse_email(email_data: dict) -> list[dict]:
             "order_id": parsed.get("order_id"),
             "order_date": parsed.get("order_date") or "",
             "total_amount": parsed.get("total_amount") or "",
-            "item_name": item.get("item_name") or "",
+            "item_name": _normalize_item_name(item.get("item_name")) or "",
             "event_date": item.get("event_date"),
             "item_price": item.get("item_price") or "",
             "quantity": item.get("quantity") or 1,

@@ -446,7 +446,8 @@
                 const msg = `Scanned ${data.scanned} rows, ${data.fixed} rows updated:\n` +
                     `  Side games: ${b.side_games || 0}\n` +
                     `  Customer names: ${b.customer_name || 0}\n` +
-                    `  Course names: ${b.course_name || 0}`;
+                    `  Course names: ${b.course_name || 0}\n` +
+                    `  Item names: ${b.item_name || 0}`;
                 alert(msg);
                 // Re-run audit to show updated data
                 if (data.fixed > 0) runAudit();

@@ -138,6 +138,8 @@ function revertToSpan(input, value, field, rowId) {
     span.dataset.id = rowId;
     span.dataset.original = value || "";
     span.textContent = value || "—";
+    // Re-attach click listener so the cell stays editable
+    span.addEventListener("click", () => startEdit(span));
     if (input.parentElement) {
         input.replaceWith(span);
     }

@@ -364,6 +364,7 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
       1. side_games / golf_or_compete misplacement
       2. customer name → Title Case
       3. course name → canonical spelling
+      4. item_name normalisation (e.g. membership variants)
 
     Returns a combined summary.
     """
@@ -371,14 +372,15 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
         _fixup_side_games_field,
         _normalize_customer_name,
         _normalize_course_name,
+        _normalize_item_name,
     )
 
     conn = get_connection(db_path)
     rows = conn.execute(
-        "SELECT id, customer, course, golf_or_compete, side_games FROM items"
+        "SELECT id, item_name, customer, course, golf_or_compete, side_games FROM items"
     ).fetchall()
 
-    fixes = {"side_games": 0, "customer_name": 0, "course_name": 0}
+    fixes = {"side_games": 0, "customer_name": 0, "course_name": 0, "item_name": 0}
     details = []
 
     for row in rows:
@@ -414,6 +416,13 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
             updates["course"] = new_course
             fixes["course_name"] += 1
 
+        # --- Item name fix (memberships etc.) ---
+        original_item = item.get("item_name") or ""
+        new_item = _normalize_item_name(original_item) or ""
+        if new_item and new_item != original_item:
+            updates["item_name"] = new_item
+            fixes["item_name"] += 1
+
         # Apply all updates for this row in one statement
         if updates:
             set_clause = ", ".join(f"{col} = ?" for col in updates)
@@ -427,9 +436,10 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
     total_fixed = len(details)
     logger.info(
         "Autofix all: scanned %d rows, %d rows changed "
-        "(side_games=%d, customer_name=%d, course_name=%d)",
+        "(side_games=%d, customer_name=%d, course_name=%d, item_name=%d)",
         len(rows), total_fixed,
         fixes["side_games"], fixes["customer_name"], fixes["course_name"],
+        fixes["item_name"],
     )
     return {
         "scanned": len(rows),
