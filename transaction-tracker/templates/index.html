@@ -61,6 +61,14 @@
             </div>
         </section>
 
+        <!-- Category filter toggles -->
+        <section class="category-filters" id="category-filters">
+            <button class="category-btn active" data-category="all">All <span class="cat-count" id="cat-count-all">0</span></button>
+            <button class="category-btn" data-category="upcoming">Upcoming Events <span class="cat-count" id="cat-count-upcoming">0</span></button>
+            <button class="category-btn" data-category="past">Past Events <span class="cat-count" id="cat-count-past">0</span></button>
+            <button class="category-btn" data-category="membership">Memberships <span class="cat-count" id="cat-count-membership">0</span></button>
+        </section>
+
         <!-- Connector panel (collapsible) -->
         <section id="connector-panel" class="connector-panel" style="display:none;">
             <div class="connector-header" onclick="document.getElementById('connector-body').classList.toggle('hidden')">

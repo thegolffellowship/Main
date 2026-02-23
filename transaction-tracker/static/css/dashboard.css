@@ -614,6 +614,47 @@ footer {
 .customer-list-table tbody tr:hover { background: #eef2ff; }
 .customer-list-table tbody tr.selected-row { background: #e0e7ff; }
 
+/* ---- Category filter toggles ---- */
+.category-filters {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+.category-btn {
+    padding: 0.45rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--surface);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.category-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+.category-btn.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+.category-btn .cat-count {
+    display: inline-block;
+    margin-left: 0.3rem;
+    background: rgba(0,0,0,0.1);
+    padding: 0.05rem 0.4rem;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+.category-btn.active .cat-count {
+    background: rgba(255,255,255,0.25);
+}
+
 /* ---- Clickable Links ---- */
 .cell-link {
     color: var(--primary);

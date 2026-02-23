@@ -30,6 +30,46 @@ const TABLE_COLUMNS = [
     { key: "actions", label: "Actions", default: true },
 ];
 
+// Active category filter
+let activeCategory = "all";
+
+// Non-event keywords (memberships, merchandise, etc.)
+const NON_EVENT_KEYWORDS = [
+    "member", "membership", "shirt", "merch", "hat", "polo",
+    "donation", "gift card", "season pass",
+];
+
+// Classify an item as "membership", "upcoming", or "past" event
+function classifyItem(item) {
+    const name = (item.item_name || "").toLowerCase();
+    // Check for membership/merch
+    for (const kw of NON_EVENT_KEYWORDS) {
+        if (name.includes(kw)) return "membership";
+    }
+    // It's an event — check if upcoming or past
+    const eventDate = item.event_date || "";
+    if (eventDate) {
+        const today = new Date().toISOString().split("T")[0];
+        return eventDate >= today ? "upcoming" : "past";
+    }
+    // No event date but has course/month keywords → treat as past (no date known)
+    return "past";
+}
+
+function updateCategoryCounts() {
+    let upcoming = 0, past = 0, membership = 0;
+    allItems.forEach(item => {
+        const cat = classifyItem(item);
+        if (cat === "upcoming") upcoming++;
+        else if (cat === "past") past++;
+        else if (cat === "membership") membership++;
+    });
+    document.getElementById("cat-count-all").textContent = allItems.length;
+    document.getElementById("cat-count-upcoming").textContent = upcoming;
+    document.getElementById("cat-count-past").textContent = past;
+    document.getElementById("cat-count-membership").textContent = membership;
+}
+
 // Track which columns are visible (persisted in localStorage)
 let visibleColumns = {};
 
@@ -240,6 +280,7 @@ async function fetchItems() {
     try {
         const res = await fetch("/api/items");
         allItems = await res.json();
+        updateCategoryCounts();
         applyFilters();
     } catch (err) {
         console.error("Failed to fetch items:", err);
@@ -388,15 +429,20 @@ function applyFilters() {
 
     let filtered = allItems;
 
+    // Category filter
+    if (activeCategory !== "all") {
+        filtered = filtered.filter(item => classifyItem(item) === activeCategory);
+    }
+
     if (query) {
         if (filterCol) {
             // Search within a specific column only
-            filtered = allItems.filter(
+            filtered = filtered.filter(
                 (row) => (row[filterCol] || "").toLowerCase().includes(query)
             );
         } else {
             // Search across all searchable fields
-            filtered = allItems.filter((row) =>
+            filtered = filtered.filter((row) =>
                 SEARCHABLE_FIELDS.some(
                     (f) => (row[f] || "").toLowerCase().includes(query)
                 )
@@ -574,6 +620,16 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btn-check-now").addEventListener("click", checkNow);
     document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
     document.getElementById("btn-send-report").addEventListener("click", sendReport);
+
+    // Category filter buttons
+    document.querySelectorAll(".category-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            activeCategory = btn.dataset.category;
+            document.querySelectorAll(".category-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            applyFilters();
+        });
+    });
 
     // Column toggle dropdown
     const colBtn = document.getElementById("col-toggle-btn");
