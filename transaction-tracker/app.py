@@ -26,6 +26,7 @@ from email_parser.database import (
     get_data_snapshot,
     save_items,
     delete_item,
+    autofix_side_games,
 )
 from email_parser.fetcher import fetch_transaction_emails
 from email_parser.parser import parse_email, parse_emails
@@ -495,6 +496,17 @@ def api_audit_emails():
 @app.route("/audit")
 def audit_page():
     return render_template("audit.html")
+
+
+@app.route("/api/audit/autofix-side-games", methods=["POST"])
+def api_autofix_side_games():
+    """Fix side_games / golf_or_compete misplacement in existing DB rows."""
+    try:
+        result = autofix_side_games()
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.exception("Autofix failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/report/send-now", methods=["POST"])

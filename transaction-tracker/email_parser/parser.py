@@ -64,7 +64,22 @@ FIELD-SPECIFIC GUIDANCE:
 - "customer_phone": The buyer's phone number if present in the order.
 - "member_status": Extract only the status label (e.g. "MEMBER" or "NON-MEMBER"), \
   not the price.
-- "side_games": Combine all side-game selections into a comma-separated string.
+- "side_games": CRITICAL — The email field labelled "GOLF or COMPETE?" often \
+  contains BOTH the event type AND the side-games selection in one string. \
+  You MUST split them apart. Examples of what the raw email may show:
+    "EVENT + NET Games Only | Add $30"  → golf_or_compete="GOLF", side_games="NET"
+    "EVENT + GROSS Games Only | Add $30" → golf_or_compete="GOLF", side_games="GROSS"
+    "EVENT + BOTH NET & GROSS Games"     → golf_or_compete="GOLF", side_games="BOTH"
+    "EVENT Only - No Additional Games"   → golf_or_compete="GOLF", side_games="NONE"
+    "COMPETE + NET Games Only | Add $30" → golf_or_compete="COMPETE", side_games="NET"
+  The side_games value must be normalised to exactly one of: "NET", "GROSS", \
+  "BOTH", or "NONE". If the text says "No Additional Games" that is "NONE". \
+  If the text contains "BOTH NET & GROSS" that is "BOTH". \
+  Do NOT put the full "EVENT + NET Games Only | Add $30" string into \
+  golf_or_compete — that string contains side-games data.
+- "golf_or_compete": Should contain ONLY the event-type portion: "GOLF" or \
+  "COMPETE". If the raw value starts with "EVENT" treat that as "GOLF". \
+  Never put side-games text here.
 - "handicap": The numeric handicap value only.
 
 Return this exact JSON structure:
@@ -86,10 +101,10 @@ Return this exact JSON structure:
       "city": "<city where event takes place — infer from course if needed>",
       "course": "<golf course name if mentioned>",
       "handicap": "<numeric handicap value if mentioned>",
-      "side_games": "<all side game selections, comma-separated>",
+      "side_games": "<NET, GROSS, BOTH, or NONE — see rules above>",
       "tee_choice": "<tee choice if mentioned>",
       "member_status": "<MEMBER or NON-MEMBER>",
-      "golf_or_compete": "<event type selection if mentioned>",
+      "golf_or_compete": "<GOLF or COMPETE only — see rules above>",
       "post_game": "<post-game fellowship selection if mentioned>",
       "returning_or_new": "<returning or new member if mentioned>",
       "shirt_size": "<shirt size if mentioned>",
@@ -105,6 +120,66 @@ Return this exact JSON structure:
 Here is the email text to parse:
 
 """
+
+
+_SIDE_GAMES_PATTERNS = [
+    (re.compile(r"BOTH\s*NET\s*[&+]\s*GROSS", re.IGNORECASE), "BOTH"),
+    (re.compile(r"NET\s*[&+]\s*GROSS", re.IGNORECASE), "BOTH"),
+    (re.compile(r"\bNET\b.*Games?\b", re.IGNORECASE), "NET"),
+    (re.compile(r"\bGROSS\b.*Games?\b", re.IGNORECASE), "GROSS"),
+    (re.compile(r"\bBOTH\b", re.IGNORECASE), "BOTH"),
+    (re.compile(r"No\s+Additional\s+Games", re.IGNORECASE), "NONE"),
+    (re.compile(r"EVENT\s+Only", re.IGNORECASE), "NONE"),
+]
+
+_SIDE_GAMES_KEYWORDS = re.compile(
+    r"NET Games|GROSS Games|BOTH NET|No Additional Games|EVENT Only|EVENT \+",
+    re.IGNORECASE,
+)
+
+
+def _normalize_side_games(value: str | None) -> str | None:
+    """Normalize a side-games value to NET / GROSS / BOTH / NONE."""
+    if not value:
+        return value
+    upper = value.strip().upper()
+    # Already clean
+    if upper in ("NET", "GROSS", "BOTH", "NONE"):
+        return upper
+    # Try pattern matching on the raw string
+    for pattern, label in _SIDE_GAMES_PATTERNS:
+        if pattern.search(value):
+            return label
+    return value  # leave as-is if we can't parse it
+
+
+def _fixup_side_games_field(item: dict) -> dict:
+    """
+    Detect when side-games data has landed in golf_or_compete and move it.
+
+    Also normalises both fields to their canonical values.
+    """
+    goc = item.get("golf_or_compete") or ""
+    sg = item.get("side_games") or ""
+
+    # If golf_or_compete contains side-games text, split it out
+    if _SIDE_GAMES_KEYWORDS.search(goc):
+        # Extract side games
+        if not sg:
+            sg = _normalize_side_games(goc)
+        # Determine the event type from the prefix
+        if re.match(r"(?:COMPETE|COMPETITION)", goc, re.IGNORECASE):
+            goc = "COMPETE"
+        else:
+            goc = "GOLF"
+        item["golf_or_compete"] = goc
+        item["side_games"] = sg
+
+    # Always normalise side_games if it has a value
+    if item.get("side_games"):
+        item["side_games"] = _normalize_side_games(item["side_games"])
+
+    return item
 
 
 def _call_ai(email_text: str) -> dict | None:
@@ -182,6 +257,9 @@ def parse_email(email_data: dict) -> list[dict]:
 
     rows = []
     for idx, item in enumerate(items):
+        # Fix side-games / golf_or_compete misplacement before storing
+        item = _fixup_side_games_field(item)
+
         rows.append({
             "email_uid": email_uid,
             "item_index": idx,

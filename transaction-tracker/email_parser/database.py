@@ -294,6 +294,52 @@ def get_data_snapshot(limit: int = 50, db_path: str | Path | None = None) -> dic
     }
 
 
+def autofix_side_games(db_path: str | Path | None = None) -> dict:
+    """
+    Scan all rows and fix side_games / golf_or_compete misplacement.
+
+    Returns a summary: { "scanned": N, "fixed": N, "details": [...] }
+    """
+    from email_parser.parser import _fixup_side_games_field
+
+    conn = get_connection(db_path)
+    rows = conn.execute("SELECT id, golf_or_compete, side_games FROM items").fetchall()
+
+    fixed = 0
+    details = []
+    for row in rows:
+        item = dict(row)
+        original_goc = item.get("golf_or_compete") or ""
+        original_sg = item.get("side_games") or ""
+
+        result = _fixup_side_games_field({
+            "golf_or_compete": original_goc,
+            "side_games": original_sg,
+        })
+
+        new_goc = result.get("golf_or_compete") or ""
+        new_sg = result.get("side_games") or ""
+
+        if new_goc != original_goc or new_sg != original_sg:
+            conn.execute(
+                "UPDATE items SET golf_or_compete = ?, side_games = ? WHERE id = ?",
+                (new_goc, new_sg, item["id"]),
+            )
+            fixed += 1
+            details.append({
+                "id": item["id"],
+                "old_golf_or_compete": original_goc,
+                "new_golf_or_compete": new_goc,
+                "old_side_games": original_sg,
+                "new_side_games": new_sg,
+            })
+
+    conn.commit()
+    conn.close()
+    logger.info("Autofix: scanned %d rows, fixed %d", len(rows), fixed)
+    return {"scanned": len(rows), "fixed": fixed, "details": details}
+
+
 def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
     """Delete an item row by ID.  Returns True if a row was deleted."""
     conn = get_connection(db_path)
