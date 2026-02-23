@@ -19,6 +19,7 @@ TRANSACTION_SENDERS = [
     "paypal.com",
     "venmo.com",
     "square.com",
+    "squareup.com",
     "stripe.com",
     "apple.com",
     "google.com",
@@ -41,6 +42,29 @@ TRANSACTION_SENDERS = [
     "capitalone.com",
     "americanexpress.com",
     "discover.com",
+    # Golf / tee-time / event platforms
+    "golfnow.com",
+    "teeoff.com",
+    "foreup.com",
+    "chronogolf.com",
+    "golfgenius.com",
+    "clubessential.com",
+    "lightspeedhq.com",
+    "clover.com",
+    "toasttab.com",
+    "eventbrite.com",
+    "golfchannel.com",
+    # General business / payments
+    "intuit.com",
+    "quickbooks.com",
+    "freshbooks.com",
+    "waveapps.com",
+    "zelle.com",
+    "cashapp.com",
+    "notify.thegolffellowship.com",
+    "thegolffellowship.com",
+    "noreply",
+    "no-reply",
 ]
 
 TRANSACTION_SUBJECTS = [
@@ -59,6 +83,23 @@ TRANSACTION_SUBJECTS = [
     "payment sent",
     "autopay",
     "statement",
+    # Golf / event related
+    "tee time",
+    "booking",
+    "reservation",
+    "registration",
+    "membership",
+    "renewal",
+    "dues",
+    "entry fee",
+    "round of golf",
+    "golf event",
+    "tournament",
+    "confirmation",
+    "thank you for your",
+    "your booking",
+    "event registration",
+    "subscription",
 ]
 
 
@@ -132,17 +173,28 @@ def fetch_transaction_emails(
         f"&$orderby=receivedDateTime desc"
     )
 
+    total_scanned = 0
+    skipped_samples = []
+
     try:
         while url:
             resp = requests.get(url, headers=headers, timeout=30)
+            logger.info("Graph API response status: %s", resp.status_code)
             resp.raise_for_status()
             data = resp.json()
 
-            for msg in data.get("value", []):
+            messages = data.get("value", [])
+            logger.info("Page returned %d messages", len(messages))
+
+            for msg in messages:
+                total_scanned += 1
                 from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
                 subject = msg.get("subject", "")
 
                 if not _is_transaction_email(subject, from_addr):
+                    # Log first few skipped emails so we can see what's being filtered out
+                    if len(skipped_samples) < 10:
+                        skipped_samples.append(f"  from={from_addr}  subject={subject}")
                     continue
 
                 body = msg.get("body", {})
@@ -161,7 +213,12 @@ def fetch_transaction_emails(
             # Follow pagination link if present
             url = data.get("@odata.nextLink")
 
-        logger.info("Fetched %d transaction emails since %s", len(results), since_date.date())
+        logger.info(
+            "Fetched %d transaction emails out of %d total scanned since %s",
+            len(results), total_scanned, since_date.date(),
+        )
+        if skipped_samples:
+            logger.info("Sample skipped emails:\n%s", "\n".join(skipped_samples))
     except requests.exceptions.HTTPError as e:
         logger.exception("Graph API HTTP error: %s", e.response.text if e.response else e)
     except Exception:
