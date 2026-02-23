@@ -807,8 +807,9 @@
 
         // Auto-refresh every 30s to keep multiple users in sync
         setInterval(() => {
+            const creditOpen = document.getElementById("cust-credit-overlay").style.display === "flex";
             const loginOpen = document.getElementById("login-overlay").style.display === "flex";
-            if (!loginOpen) {
+            if (!creditOpen && !loginOpen) {
                 init();
             }
         }, 30000);

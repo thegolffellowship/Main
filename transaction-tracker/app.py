@@ -33,6 +33,7 @@ from email_parser.database import (
     reverse_credit,
     create_event,
     seed_events,
+    add_player_to_event,
     autofix_side_games,
     autofix_all,
     normalize_tee_choices,
@@ -681,6 +682,26 @@ def api_reverse_credit(item_id):
     if reverse_credit(item_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
+
+
+@app.route("/api/events/add-player", methods=["POST"])
+def api_add_player():
+    """Manually add a comp'd player to an event."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("event_name") or not data.get("customer"):
+        return jsonify({"error": "event_name and customer are required."}), 400
+    item = add_player_to_event(
+        event_name=data["event_name"],
+        customer=data["customer"],
+        side_games=data.get("side_games", ""),
+        tee_choice=data.get("tee_choice", ""),
+        handicap=data.get("handicap", ""),
+        member_status=data.get("member_status", ""),
+        golf_or_compete=data.get("golf_or_compete", ""),
+    )
+    if item:
+        return jsonify({"status": "ok", "item": item}), 201
+    return jsonify({"error": "Failed to add player."}), 500
 
 
 @app.route("/api/events/seed", methods=["POST"])

@@ -758,6 +758,61 @@ def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
     return {"inserted": inserted, "skipped": skipped}
 
 
+def add_player_to_event(event_name: str, customer: str, side_games: str = "",
+                        tee_choice: str = "", handicap: str = "",
+                        member_status: str = "", golf_or_compete: str = "",
+                        db_path: str | Path | None = None) -> dict | None:
+    """
+    Manually add a player (comp'd entry) to an event.
+
+    Creates an items row with $0.00 price linked to the event.
+    Returns the new item dict or None on failure.
+    """
+    import time
+
+    conn = get_connection(db_path)
+
+    # Look up the event for date/course/city
+    event = conn.execute(
+        "SELECT * FROM events WHERE item_name = ?", (event_name,)
+    ).fetchone()
+    event = dict(event) if event else {}
+
+    uid = f"manual-{int(time.time() * 1000)}"
+
+    new_values = {col: None for col in ITEM_COLUMNS}
+    new_values["email_uid"] = uid
+    new_values["item_index"] = 0
+    new_values["merchant"] = "Manual Entry"
+    new_values["customer"] = customer
+    new_values["item_name"] = event_name
+    new_values["item_price"] = "$0.00 (comp)"
+    new_values["order_date"] = __import__("datetime").date.today().isoformat()
+    new_values["event_date"] = event.get("event_date") or ""
+    new_values["course"] = event.get("course") or ""
+    new_values["city"] = event.get("city") or ""
+    new_values["side_games"] = side_games or None
+    new_values["tee_choice"] = tee_choice or None
+    new_values["handicap"] = handicap or None
+    new_values["member_status"] = member_status or None
+    new_values["golf_or_compete"] = golf_or_compete or None
+    new_values["transaction_status"] = "active"
+
+    cols = ", ".join(ITEM_COLUMNS)
+    placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+    cursor = conn.execute(
+        f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+        tuple(new_values.get(c) for c in ITEM_COLUMNS),
+    )
+    new_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    new_values["id"] = new_id
+    logger.info("Added player %s to event %s (id=%d)", customer, event_name, new_id)
+    return new_values
+
+
 def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
     """Delete an item row by ID.  Returns True if a row was deleted."""
     conn = get_connection(db_path)

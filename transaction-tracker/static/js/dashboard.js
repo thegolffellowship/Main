@@ -987,8 +987,9 @@ function startAutoRefresh() {
     autoRefreshInterval = setInterval(() => {
         // Only refresh when no modal is open and no edit in progress
         const editOpen = document.getElementById("edit-overlay").style.display === "flex";
+        const creditOpen = document.getElementById("credit-overlay").style.display === "flex";
         const loginOpen = document.getElementById("login-overlay").style.display === "flex";
-        if (!editOpen && !loginOpen && !activeEditor) {
+        if (!editOpen && !creditOpen && !loginOpen && !activeEditor) {
             fetchItems();
             fetchStats();
         }

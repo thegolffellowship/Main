@@ -249,6 +249,63 @@
         </div>
     </div>
 
+    <!-- Add Player Modal -->
+    <div id="add-player-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal add-player-modal">
+            <div class="modal-header">
+                <h2>Add Player</h2>
+                <button id="add-player-close" class="modal-close">&times;</button>
+            </div>
+            <div id="add-player-event-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
+            <form id="add-player-form" class="edit-form">
+                <div class="edit-grid">
+                    <label>Player Name <span style="color:#e11d48;">*</span>
+                        <input type="text" id="add-player-name" class="modal-input" required placeholder="First Last">
+                    </label>
+                    <label>Side Games
+                        <select id="add-player-side-games" class="modal-input">
+                            <option value="">None</option>
+                            <option value="Net">Net</option>
+                            <option value="Gross">Gross</option>
+                            <option value="Both">Both (Net + Gross)</option>
+                        </select>
+                    </label>
+                    <label>Tee Choice
+                        <select id="add-player-tee" class="modal-input">
+                            <option value="">—</option>
+                            <option value="<50"><50</option>
+                            <option value="50-64">50-64</option>
+                            <option value="65+">65+</option>
+                            <option value="Forward">Forward</option>
+                        </select>
+                    </label>
+                    <label>Handicap
+                        <input type="text" id="add-player-handicap" class="modal-input" placeholder="e.g. 12">
+                    </label>
+                    <label>Status
+                        <select id="add-player-status" class="modal-input">
+                            <option value="">—</option>
+                            <option value="MEMBER">Member</option>
+                            <option value="NON-MEMBER">Non-Member</option>
+                            <option value="GUEST">Guest</option>
+                        </select>
+                    </label>
+                    <label>Type
+                        <select id="add-player-type" class="modal-input">
+                            <option value="">—</option>
+                            <option value="Golf">Golf</option>
+                            <option value="Compete">Compete</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="add-player-cancel" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Player</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Add Event Modal -->
     <div id="add-event-overlay" class="modal-overlay" style="display:none;">
         <div class="modal add-event-modal">
@@ -519,6 +576,15 @@
             });
         });
 
+        // Re-attach detail handlers for any already-expanded row
+        if (expandedEventId !== null) {
+            const ev = allEvents.find(e => e.id === expandedEventId);
+            const container = document.getElementById(`detail-content-${expandedEventId}`);
+            if (ev && container && container.innerHTML.trim()) {
+                attachDetailHandlers(container, ev);
+            }
+        }
+
         applyEvColumnVisibility();
 
         // Check if URL has ?item= to auto-expand
@@ -617,7 +683,10 @@
     function renderDetailContent(ev) {
         const registrants = getRegistrants(ev.item_name);
         if (!registrants.length) {
-            return '<p style="color: var(--text-muted); font-style: italic;">No registrations found for this event.</p>';
+            return `<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem;">` +
+                `<p style="color: var(--text-muted); font-style: italic; margin:0;">No registrations found for this event.</p>` +
+                `<button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>` +
+                `</div>`;
         }
 
         const stats = computeGameStats(registrants);
@@ -646,9 +715,10 @@
         // Sort the filtered registrants
         filtered = sortRegistrants(filtered);
 
-        // Detail controls row: column toggle + count
+        // Detail controls row: column toggle + count + Add Player button
         html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; flex-wrap:wrap;">';
         html += `<h4 style="margin:0;">Registrations (${filtered.length}${activeFilter ? ' \u2014 ' + activeFilter : ''})</h4>`;
+        html += `<button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>`;
         html += '<div class="column-toggle-wrapper">';
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
@@ -804,6 +874,14 @@
                 reverseEvCredit(parseInt(btn.dataset.reverseId));
             });
         });
+
+        // Add Player button
+        container.querySelectorAll(".btn-add-player").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openAddPlayerModal(btn.dataset.eventName);
+            });
+        });
     }
 
     // ---- Events-page Credit/Transfer modal logic ----
@@ -914,6 +992,57 @@
         } catch (err) { alert("Failed to create event."); }
     }
 
+    // ---- Add Player modal logic ----
+    let addPlayerEventName = null;
+
+    function openAddPlayerModal(eventName) {
+        addPlayerEventName = eventName;
+        document.getElementById("add-player-event-info").innerHTML =
+            `Adding comp'd player to: <strong>${escapeHtml(eventName)}</strong>`;
+        document.getElementById("add-player-name").value = "";
+        document.getElementById("add-player-side-games").value = "";
+        document.getElementById("add-player-tee").value = "";
+        document.getElementById("add-player-handicap").value = "";
+        document.getElementById("add-player-status").value = "";
+        document.getElementById("add-player-type").value = "";
+        document.getElementById("add-player-overlay").style.display = "flex";
+        document.getElementById("add-player-name").focus();
+    }
+
+    function closeAddPlayerModal() {
+        document.getElementById("add-player-overlay").style.display = "none";
+        addPlayerEventName = null;
+    }
+
+    async function handleAddPlayerSubmit(e) {
+        e.preventDefault();
+        const name = document.getElementById("add-player-name").value.trim();
+        if (!name || !addPlayerEventName) return;
+        try {
+            const res = await fetch("/api/events/add-player", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    event_name: addPlayerEventName,
+                    customer: name,
+                    side_games: document.getElementById("add-player-side-games").value,
+                    tee_choice: document.getElementById("add-player-tee").value,
+                    handicap: document.getElementById("add-player-handicap").value,
+                    member_status: document.getElementById("add-player-status").value,
+                    golf_or_compete: document.getElementById("add-player-type").value,
+                }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || "Failed to add player.");
+                return;
+            }
+            closeAddPlayerModal();
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) { alert("Failed to add player."); }
+    }
+
     async function syncEvents() {
         const btn = document.getElementById("btn-sync");
         btn.disabled = true;
@@ -1013,6 +1142,14 @@
         document.getElementById("btn-sync").addEventListener("click", syncEvents);
         document.getElementById("btn-clear-filters").addEventListener("click", clearEvFilters);
 
+        // Add Player modal
+        document.getElementById("add-player-form").addEventListener("submit", handleAddPlayerSubmit);
+        document.getElementById("add-player-cancel").addEventListener("click", closeAddPlayerModal);
+        document.getElementById("add-player-close").addEventListener("click", closeAddPlayerModal);
+        document.getElementById("add-player-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeAddPlayerModal();
+        });
+
         // Add Event modal
         document.getElementById("btn-add-event").addEventListener("click", openAddEventModal);
         document.getElementById("add-event-form").addEventListener("submit", handleAddEventSubmit);
@@ -1101,8 +1238,11 @@
         // Auto-refresh every 30s to keep multiple users in sync
         setInterval(() => {
             const editOpen = document.getElementById("edit-event-overlay").style.display === "flex";
+            const creditOpen = document.getElementById("ev-credit-overlay").style.display === "flex";
+            const addEventOpen = document.getElementById("add-event-overlay").style.display === "flex";
+            const addPlayerOpen = document.getElementById("add-player-overlay").style.display === "flex";
             const loginOpen = document.getElementById("login-overlay").style.display === "flex";
-            if (!editOpen && !loginOpen) {
+            if (!editOpen && !creditOpen && !addEventOpen && !addPlayerOpen && !loginOpen) {
                 fetchItems();
                 fetchEvents();
             }
