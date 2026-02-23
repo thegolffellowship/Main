@@ -121,10 +121,15 @@
                 <option value="handicap">Handicap</option>
                 <option value="tee_choice">Tee Choice</option>
                 <option value="order_id">Order ID</option>
+                <option value="event_date">Event Date</option>
+                <option value="customer_email">Customer Email</option>
+                <option value="customer_phone">Customer Phone</option>
             </select>
             <select id="sort-select" class="sort-select">
-                <option value="order_date-desc">Date (newest)</option>
-                <option value="order_date-asc">Date (oldest)</option>
+                <option value="event_date-desc">Event Date (newest)</option>
+                <option value="event_date-asc">Event Date (oldest)</option>
+                <option value="order_date-desc">Order Date (newest)</option>
+                <option value="order_date-asc">Order Date (oldest)</option>
                 <option value="item_price-desc">Price (high-low)</option>
                 <option value="item_price-asc">Price (low-high)</option>
                 <option value="item_name-asc">Item (A-Z)</option>
@@ -144,7 +149,7 @@
             <table id="txn-table">
                 <thead>
                     <tr>
-                        <th class="sortable" data-sort="order_date">Date</th>
+                        <th class="sortable" data-sort="event_date">Event Date</th>
                         <th class="sortable" data-sort="customer">Customer</th>
                         <th class="sortable" data-sort="item_name">Item</th>
                         <th class="sortable" data-sort="item_price">Price</th>
@@ -156,12 +161,13 @@
                         <th class="sortable" data-sort="member_status">Status</th>
                         <th class="sortable" data-sort="golf_or_compete">Type</th>
                         <th>Order ID</th>
+                        <th class="sortable" data-sort="order_date">Order Date</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="txn-body">
                     <tr class="empty-row">
-                        <td colspan="13">Loading...</td>
+                        <td colspan="14">Loading...</td>
                     </tr>
                 </tbody>
             </table>

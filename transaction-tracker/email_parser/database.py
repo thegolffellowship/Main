@@ -17,8 +17,10 @@ DB_PATH = Path(__file__).resolve().parent.parent / "transactions.db"
 
 # All item-level columns (order matches the CREATE TABLE below)
 ITEM_COLUMNS = [
-    "email_uid", "item_index", "merchant", "customer", "order_id",
-    "order_date", "total_amount", "item_name", "item_price", "quantity",
+    "email_uid", "item_index", "merchant", "customer",
+    "customer_email", "customer_phone",
+    "order_id", "order_date", "total_amount",
+    "item_name", "event_date", "item_price", "quantity",
     "city", "course", "handicap", "side_games", "tee_choice",
     "member_status", "golf_or_compete", "post_game", "returning_or_new",
     "shirt_size", "guest_name", "date_of_birth",
@@ -47,10 +49,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             item_index       INTEGER NOT NULL DEFAULT 0,
             merchant         TEXT NOT NULL,
             customer         TEXT,
+            customer_email   TEXT,
+            customer_phone   TEXT,
             order_id         TEXT,
             order_date       TEXT NOT NULL,
             total_amount     TEXT,
             item_name        TEXT NOT NULL,
+            event_date       TEXT,
             item_price       TEXT,
             quantity         INTEGER DEFAULT 1,
             city             TEXT,
@@ -75,6 +80,18 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
         """
     )
+
+    # Migrate: add columns that may not exist in older databases
+    for col, col_type in [
+        ("customer_email", "TEXT"),
+        ("customer_phone", "TEXT"),
+        ("event_date", "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
+            logger.info("Added new column: %s", col)
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_items_order_date ON items(order_date DESC)"

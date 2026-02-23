@@ -36,8 +36,9 @@ def _strip_html(raw_html: str) -> str:
 # ---------------------------------------------------------------------------
 
 EXTRACTION_PROMPT = """\
-You are a transaction email parser. Given the raw text of a transaction or \
-order confirmation email, extract structured data and return it as JSON.
+You are a transaction email parser for The Golf Fellowship (TGF). Given the \
+raw text of a transaction or order confirmation email, extract structured data \
+and return it as JSON.
 
 IMPORTANT RULES:
 - Return ONLY valid JSON — no markdown, no explanation, no extra text.
@@ -48,25 +49,46 @@ IMPORTANT RULES:
 - Dollar amounts should include the "$" sign (e.g. "$158.00").
 - Dates should be in YYYY-MM-DD format.
 
+FIELD-SPECIFIC GUIDANCE:
+- "item_name": Use the event/product name exactly as shown (e.g. "Feb 22 - LaCANTERA").
+- "event_date": The date of the golf event, NOT the order date. Parse it from \
+  the item name when present (e.g. "Feb 22 - LaCANTERA" → "2026-02-22"). Use \
+  the current year (2026) if only month and day are given.
+- "city": The city where the event takes place. Infer it from the course name \
+  or event context if not explicitly stated. Common Texas courses: \
+  LaCantera/TPC San Antonio/The Quarry = San Antonio, \
+  Cowboys Golf Club/TPC Craig Ranch = Dallas, \
+  Wolfdancer/Falconhead = Austin, \
+  Moody Gardens = Galveston, etc.
+- "customer_email": The buyer's email address if present in the order.
+- "customer_phone": The buyer's phone number if present in the order.
+- "member_status": Extract only the status label (e.g. "MEMBER" or "NON-MEMBER"), \
+  not the price.
+- "side_games": Combine all side-game selections into a comma-separated string.
+- "handicap": The numeric handicap value only.
+
 Return this exact JSON structure:
 
 {
   "merchant": "<store or company name>",
   "customer": "<customer / buyer name>",
+  "customer_email": "<buyer email if present>",
+  "customer_phone": "<buyer phone if present>",
   "order_id": "<order or confirmation number>",
   "order_date": "<YYYY-MM-DD>",
   "total_amount": "<total charged including fees, e.g. $163.53>",
   "items": [
     {
       "item_name": "<product or event name>",
+      "event_date": "<YYYY-MM-DD date of the event, parsed from item name>",
       "item_price": "<price for this item, e.g. $158.00>",
       "quantity": <integer, default 1>,
-      "city": "<city if mentioned>",
+      "city": "<city where event takes place — infer from course if needed>",
       "course": "<golf course name if mentioned>",
-      "handicap": "<handicap value if mentioned>",
-      "side_games": "<side game selections if mentioned, comma-separated>",
+      "handicap": "<numeric handicap value if mentioned>",
+      "side_games": "<all side game selections, comma-separated>",
       "tee_choice": "<tee choice if mentioned>",
-      "member_status": "<member/non-member status if mentioned>",
+      "member_status": "<MEMBER or NON-MEMBER>",
       "golf_or_compete": "<event type selection if mentioned>",
       "post_game": "<post-game fellowship selection if mentioned>",
       "returning_or_new": "<returning or new member if mentioned>",
@@ -165,10 +187,13 @@ def parse_email(email_data: dict) -> list[dict]:
             "item_index": idx,
             "merchant": parsed.get("merchant") or "Unknown",
             "customer": parsed.get("customer"),
+            "customer_email": parsed.get("customer_email"),
+            "customer_phone": parsed.get("customer_phone"),
             "order_id": parsed.get("order_id"),
             "order_date": parsed.get("order_date") or "",
             "total_amount": parsed.get("total_amount") or "",
             "item_name": item.get("item_name") or "",
+            "event_date": item.get("event_date"),
             "item_price": item.get("item_price") or "",
             "quantity": item.get("quantity") or 1,
             "city": item.get("city"),

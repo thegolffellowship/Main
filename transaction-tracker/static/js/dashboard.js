@@ -6,9 +6,10 @@ let allItems = [];
 
 // Columns that are searchable when "All columns" filter is selected
 const SEARCHABLE_FIELDS = [
-    "customer", "item_name", "item_price", "city", "course", "handicap",
+    "customer", "customer_email", "customer_phone",
+    "item_name", "item_price", "city", "course", "handicap",
     "side_games", "tee_choice", "member_status", "golf_or_compete",
-    "post_game", "order_id", "order_date", "merchant",
+    "post_game", "order_id", "order_date", "event_date", "merchant",
 ];
 
 // ---------------------------------------------------------------------------
@@ -104,7 +105,7 @@ function renderTable(items) {
 
     if (!items.length) {
         tbody.innerHTML =
-            '<tr class="empty-row"><td colspan="13">No items found. Click "Check Now" to scan your inbox.</td></tr>';
+            '<tr class="empty-row"><td colspan="14">No items found. Click "Check Now" to scan your inbox.</td></tr>';
         document.getElementById("row-count").textContent = "";
         return;
     }
@@ -113,7 +114,7 @@ function renderTable(items) {
         .map(
             (row) => `
         <tr data-id="${row.id}">
-            <td>${cell(row.order_date)}</td>
+            <td>${cell(row.event_date || row.order_date)}</td>
             <td>${cell(row.customer)}</td>
             <td class="item-name-cell">${cell(row.item_name)}</td>
             <td class="price-cell">${cell(row.item_price)}</td>
@@ -125,6 +126,7 @@ function renderTable(items) {
             <td>${cell(row.member_status)}</td>
             <td>${cell(row.golf_or_compete)}</td>
             <td><span class="order-id">${cell(row.order_id)}</span></td>
+            <td>${cell(row.order_date)}</td>
             <td><button class="btn btn-danger" onclick="deleteItem(${row.id})">Delete</button></td>
         </tr>`
         )
@@ -237,6 +239,10 @@ function pollCheckStatus() {
     const btn = document.getElementById("btn-check-now");
     const interval = setInterval(async () => {
         try {
+            // Refresh the table on every poll so new items appear incrementally
+            fetchItems();
+            fetchStats();
+
             const res = await fetch("/api/check-status");
             const data = await res.json();
 
@@ -248,10 +254,10 @@ function pollCheckStatus() {
 
             if (data.status === "error") {
                 alert("Inbox check failed: " + data.error);
-            } else {
-                fetchItems();
-                fetchStats();
             }
+            // Final refresh to catch any last items
+            fetchItems();
+            fetchStats();
         } catch (err) {
             clearInterval(interval);
             btn.classList.remove("loading");
@@ -290,7 +296,8 @@ function exportCSV() {
     }
 
     const headers = [
-        "Date", "Customer", "Item", "Price", "City", "Course", "Handicap",
+        "Event Date", "Order Date", "Customer", "Email", "Phone",
+        "Item", "Price", "City", "Course", "Handicap",
         "Side Games", "Tee Choice", "Member Status", "Golf or Compete",
         "Post Game", "Returning/New", "Shirt Size", "Guest Name",
         "Net Points Race", "Gross Points Race", "City Match Play",
@@ -298,7 +305,8 @@ function exportCSV() {
     ];
 
     const fields = [
-        "order_date", "customer", "item_name", "item_price", "city", "course",
+        "event_date", "order_date", "customer", "customer_email", "customer_phone",
+        "item_name", "item_price", "city", "course",
         "handicap", "side_games", "tee_choice", "member_status",
         "golf_or_compete", "post_game", "returning_or_new", "shirt_size",
         "guest_name", "net_points_race", "gross_points_race", "city_match_play",
