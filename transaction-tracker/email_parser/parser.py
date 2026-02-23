@@ -44,22 +44,35 @@ IMPORTANT RULES:
 - Return ONLY valid JSON — no markdown, no explanation, no extra text.
 - The top-level value must be a JSON object with the keys described below.
 - An order may contain MULTIPLE items. Return each item separately in the \
-  "items" array.
+  "items" array. However, ONLY create an item if there is a real product or \
+  event line item with a name and price. Do NOT create phantom items from \
+  section headers, form field labels, or repeated text. If the order has one \
+  product line, return exactly one item.
 - If a field is not present in the email, use null for that field.
 - Dollar amounts should include the "$" sign (e.g. "$158.00").
 - Dates should be in YYYY-MM-DD format.
 
 FIELD-SPECIFIC GUIDANCE:
+- "customer": The buyer / registrant name. Always use Title Case \
+  (e.g. "Mike Jenkins", not "mike jenkins" or "MIKE JENKINS").
 - "item_name": Use the event/product name exactly as shown (e.g. "Feb 22 - LaCANTERA").
 - "event_date": The date of the golf event, NOT the order date. Parse it from \
   the item name when present (e.g. "Feb 22 - LaCANTERA" → "2026-02-22"). Use \
   the current year (2026) if only month and day are given.
 - "city": The city where the event takes place. Infer it from the course name \
   or event context if not explicitly stated. Common Texas courses: \
-  LaCantera/TPC San Antonio/The Quarry = San Antonio, \
+  La Cantera/TPC San Antonio/The Quarry = San Antonio, \
   Cowboys Golf Club/TPC Craig Ranch = Dallas, \
   Wolfdancer/Falconhead = Austin, \
   Moody Gardens = Galveston, etc.
+- "course": Use consistent canonical course names. Standard spellings: \
+  "La Cantera", "TPC San Antonio", "The Quarry", "Cowboys Golf Club", \
+  "TPC Craig Ranch", "Wolfdancer", "Falconhead", "Moody Gardens", \
+  "Morris Williams", "Cedar Creek", "Kissing Tree", "Plum Creek", \
+  "Landa Park", "Vaaler Creek", "Hancock Park". \
+  Always use these exact spellings regardless of how the email formats them \
+  (e.g. "LaCANTERA" or "LaCantera" → "La Cantera", \
+  "MORRIS WILLIAMS" → "Morris Williams", "CEDAR CREEK" → "Cedar Creek").
 - "customer_email": The buyer's email address if present in the order.
 - "customer_phone": The buyer's phone number if present in the order.
 - "member_status": Extract only the status label (e.g. "MEMBER" or "NON-MEMBER"), \
@@ -182,6 +195,82 @@ def _fixup_side_games_field(item: dict) -> dict:
     return item
 
 
+# ---------------------------------------------------------------------------
+# Customer name normalisation
+# ---------------------------------------------------------------------------
+
+# Small words that should stay lowercase in title case (unless first/last)
+_TITLE_CASE_SMALL = {"and", "or", "the", "of", "in", "at", "to", "for", "a", "an"}
+
+# Common name prefixes that need special casing
+_NAME_PREFIX_MAP = {
+    "mc": lambda rest: "Mc" + rest.capitalize(),
+    "mac": lambda rest: "Mac" + rest.capitalize(),
+    "o'": lambda rest: "O'" + rest.capitalize(),
+}
+
+
+def _normalize_customer_name(name: str | None) -> str | None:
+    """Normalise customer name to Title Case with special-case handling."""
+    if not name:
+        return name
+    parts = name.strip().split()
+    result = []
+    for i, part in enumerate(parts):
+        lower = part.lower()
+        # Handle Mc/Mac/O' prefixes
+        handled = False
+        for prefix, formatter in _NAME_PREFIX_MAP.items():
+            if lower.startswith(prefix) and len(lower) > len(prefix):
+                result.append(formatter(lower[len(prefix):]))
+                handled = True
+                break
+        if not handled:
+            result.append(part.capitalize())
+    return " ".join(result) if result else name
+
+
+# ---------------------------------------------------------------------------
+# Course name canonicalisation
+# ---------------------------------------------------------------------------
+
+_COURSE_CANONICAL = {
+    "lacantera": "La Cantera",
+    "la cantera": "La Cantera",
+    "lacantera golf": "La Cantera",
+    "tpc san antonio": "TPC San Antonio",
+    "the quarry": "The Quarry",
+    "cowboys golf club": "Cowboys Golf Club",
+    "tpc craig ranch": "TPC Craig Ranch",
+    "wolfdancer": "Wolfdancer",
+    "falconhead": "Falconhead",
+    "moody gardens": "Moody Gardens",
+    "morris williams": "Morris Williams",
+    "cedar creek": "Cedar Creek",
+    "kissing tree": "Kissing Tree",
+    "plum creek": "Plum Creek",
+    "landa park": "Landa Park",
+    "vaaler creek": "Vaaler Creek",
+    "hancock park": "Hancock Park",
+}
+
+
+def _normalize_course_name(course: str | None) -> str | None:
+    """Map course name to its canonical spelling."""
+    if not course:
+        return course
+    lookup = course.strip().lower()
+    # Direct match
+    if lookup in _COURSE_CANONICAL:
+        return _COURSE_CANONICAL[lookup]
+    # Substring match (e.g. "LaCANTERA Resort" still matches "lacantera")
+    for key, canonical in _COURSE_CANONICAL.items():
+        if key in lookup:
+            return canonical
+    # No match — return title-cased original
+    return course.strip().title()
+
+
 def _call_ai(email_text: str) -> dict | None:
     """Send email text to Claude and return the parsed JSON dict."""
     api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -251,9 +340,18 @@ def parse_email(email_data: dict) -> list[dict]:
     if not items:
         return []
 
+    # Filter out phantom items — must have at least an item_name
+    items = [it for it in items if it.get("item_name")]
+
+    if not items:
+        return []
+
     email_uid = email_data.get("uid", "")
     subject = email_data.get("subject", "")
     from_addr = email_data.get("from", "")
+
+    # Normalise order-level customer name once
+    customer = _normalize_customer_name(parsed.get("customer"))
 
     rows = []
     for idx, item in enumerate(items):
@@ -264,7 +362,7 @@ def parse_email(email_data: dict) -> list[dict]:
             "email_uid": email_uid,
             "item_index": idx,
             "merchant": parsed.get("merchant") or "Unknown",
-            "customer": parsed.get("customer"),
+            "customer": customer,
             "customer_email": parsed.get("customer_email"),
             "customer_phone": parsed.get("customer_phone"),
             "order_id": parsed.get("order_id"),
@@ -275,7 +373,7 @@ def parse_email(email_data: dict) -> list[dict]:
             "item_price": item.get("item_price") or "",
             "quantity": item.get("quantity") or 1,
             "city": item.get("city"),
-            "course": item.get("course"),
+            "course": _normalize_course_name(item.get("course")),
             "handicap": item.get("handicap"),
             "side_games": item.get("side_games"),
             "tee_choice": item.get("tee_choice"),

@@ -27,6 +27,7 @@ from email_parser.database import (
     save_items,
     delete_item,
     autofix_side_games,
+    autofix_all,
 )
 from email_parser.fetcher import fetch_transaction_emails
 from email_parser.parser import parse_email, parse_emails
@@ -506,6 +507,17 @@ def api_autofix_side_games():
         return jsonify({"status": "ok", **result})
     except Exception as e:
         logger.exception("Autofix failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/audit/autofix-all", methods=["POST"])
+def api_autofix_all():
+    """Run all autofixes: side_games, customer names, course names."""
+    try:
+        result = autofix_all()
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.exception("Autofix-all failed")
         return jsonify({"error": str(e)}), 500
 
 

@@ -340,6 +340,87 @@ def autofix_side_games(db_path: str | Path | None = None) -> dict:
     return {"scanned": len(rows), "fixed": fixed, "details": details}
 
 
+def autofix_all(db_path: str | Path | None = None) -> dict:
+    """
+    Run all autofix passes on existing data:
+      1. side_games / golf_or_compete misplacement
+      2. customer name → Title Case
+      3. course name → canonical spelling
+
+    Returns a combined summary.
+    """
+    from email_parser.parser import (
+        _fixup_side_games_field,
+        _normalize_customer_name,
+        _normalize_course_name,
+    )
+
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT id, customer, course, golf_or_compete, side_games FROM items"
+    ).fetchall()
+
+    fixes = {"side_games": 0, "customer_name": 0, "course_name": 0}
+    details = []
+
+    for row in rows:
+        item = dict(row)
+        row_id = item["id"]
+        updates = {}
+
+        # --- Side games fix ---
+        original_goc = item.get("golf_or_compete") or ""
+        original_sg = item.get("side_games") or ""
+        result = _fixup_side_games_field({
+            "golf_or_compete": original_goc,
+            "side_games": original_sg,
+        })
+        new_goc = result.get("golf_or_compete") or ""
+        new_sg = result.get("side_games") or ""
+        if new_goc != original_goc or new_sg != original_sg:
+            updates["golf_or_compete"] = new_goc
+            updates["side_games"] = new_sg
+            fixes["side_games"] += 1
+
+        # --- Customer name fix ---
+        original_name = item.get("customer") or ""
+        new_name = _normalize_customer_name(original_name) or ""
+        if new_name and new_name != original_name:
+            updates["customer"] = new_name
+            fixes["customer_name"] += 1
+
+        # --- Course name fix ---
+        original_course = item.get("course") or ""
+        new_course = _normalize_course_name(original_course) or ""
+        if new_course and new_course != original_course:
+            updates["course"] = new_course
+            fixes["course_name"] += 1
+
+        # Apply all updates for this row in one statement
+        if updates:
+            set_clause = ", ".join(f"{col} = ?" for col in updates)
+            values = list(updates.values()) + [row_id]
+            conn.execute(f"UPDATE items SET {set_clause} WHERE id = ?", values)
+            details.append({"id": row_id, "changes": updates})
+
+    conn.commit()
+    conn.close()
+
+    total_fixed = len(details)
+    logger.info(
+        "Autofix all: scanned %d rows, %d rows changed "
+        "(side_games=%d, customer_name=%d, course_name=%d)",
+        len(rows), total_fixed,
+        fixes["side_games"], fixes["customer_name"], fixes["course_name"],
+    )
+    return {
+        "scanned": len(rows),
+        "fixed": total_fixed,
+        "breakdown": fixes,
+        "details": details,
+    }
+
+
 def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
     """Delete an item row by ID.  Returns True if a row was deleted."""
     conn = get_connection(db_path)

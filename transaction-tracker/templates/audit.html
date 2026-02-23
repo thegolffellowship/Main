@@ -228,8 +228,8 @@
         </div>
         <div class="header-actions">
             <a href="/" class="btn btn-secondary">Back to Dashboard</a>
-            <button id="btn-autofix" class="btn btn-secondary" title="Fix side-games data in existing records">
-                Autofix Side Games
+            <button id="btn-autofix" class="btn btn-secondary" title="Fix side games, customer names, and course names in existing records">
+                Autofix All
             </button>
             <button id="btn-run-audit" class="btn btn-primary" title="Re-fetch emails and compare">
                 <span class="btn-icon">&#128269;</span> Run Audit
@@ -433,16 +433,20 @@
             });
         });
 
-        // Autofix side-games button
+        // Autofix all button
         document.getElementById("btn-autofix").addEventListener("click", async () => {
             const btn = document.getElementById("btn-autofix");
             btn.disabled = true;
             btn.textContent = "Fixing...";
             try {
-                const res = await fetch("/api/audit/autofix-side-games", { method: "POST" });
+                const res = await fetch("/api/audit/autofix-all", { method: "POST" });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "Request failed");
-                const msg = `Scanned ${data.scanned} rows, fixed ${data.fixed}.`;
+                const b = data.breakdown || {};
+                const msg = `Scanned ${data.scanned} rows, ${data.fixed} rows updated:\n` +
+                    `  Side games: ${b.side_games || 0}\n` +
+                    `  Customer names: ${b.customer_name || 0}\n` +
+                    `  Course names: ${b.course_name || 0}`;
                 alert(msg);
                 // Re-run audit to show updated data
                 if (data.fixed > 0) runAudit();
@@ -450,7 +454,7 @@
                 alert("Autofix failed: " + err.message);
             } finally {
                 btn.disabled = false;
-                btn.textContent = "Autofix Side Games";
+                btn.textContent = "Autofix All";
             }
         });
 
