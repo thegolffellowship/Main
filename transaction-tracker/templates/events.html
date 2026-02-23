@@ -75,6 +75,38 @@
             color: var(--text-muted);
             font-style: italic;
         }
+        .event-game-stats {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .game-stat-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.85rem;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .game-stat-badge:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .game-stat-badge.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+        .game-stat-badge strong {
+            font-weight: 700;
+        }
     </style>
 </head>
 <body>
@@ -99,6 +131,16 @@
             <a href="/audit">Audit Log</a>
         </nav>
 
+        <!-- Controls -->
+        <section class="controls" style="margin-bottom: 0.75rem;">
+            <input type="text" id="event-search" class="search-box" placeholder="Search events by name, course, city...">
+            <div class="column-toggle-wrapper">
+                <button class="column-toggle-btn" id="ev-col-toggle-btn">Columns &#9662;</button>
+                <div class="column-toggle-dropdown" id="ev-col-toggle-dropdown"></div>
+            </div>
+            <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
+        </section>
+
         <section class="event-summary" id="summary-section">
             <div class="stat-card">
                 <div class="stat-value" id="stat-total">—</div>
@@ -117,13 +159,13 @@
         <section class="events-table-wrapper">
             <table class="events-table">
                 <thead>
-                    <tr>
-                        <th>Event Name</th>
-                        <th>Date</th>
-                        <th>Course</th>
-                        <th>City</th>
-                        <th>Registrations</th>
-                        <th>Actions</th>
+                    <tr id="events-header-row">
+                        <th data-col="item_name" data-sort="item_name">Event Name <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="event_date" data-sort="event_date">Date <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="course" data-sort="course">Course <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="city" data-sort="city">City <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="registrations" data-sort="registrations">Registrations <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="actions">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="events-body">
@@ -141,6 +183,76 @@
     let allEvents = [];
     let allItems = [];
     let expandedEventId = null;
+    let eventSortField = "event_date";
+    let eventSortDir = "asc";
+    let eventSearchQuery = "";
+
+    // Column definitions for Events table
+    const EVENT_COLUMNS = [
+        { key: "item_name", label: "Event Name", default: true },
+        { key: "event_date", label: "Date", default: true },
+        { key: "course", label: "Course", default: true },
+        { key: "city", label: "City", default: true },
+        { key: "registrations", label: "Registrations", default: true },
+        { key: "actions", label: "Actions", default: true },
+    ];
+
+    let evVisibleColumns = {};
+
+    function loadEvColumnPrefs() {
+        try {
+            const saved = localStorage.getItem("tgf_ev_visible_columns");
+            if (saved) { evVisibleColumns = JSON.parse(saved); return; }
+        } catch (e) {}
+        EVENT_COLUMNS.forEach(c => { evVisibleColumns[c.key] = c.default; });
+    }
+
+    function saveEvColumnPrefs() {
+        try { localStorage.setItem("tgf_ev_visible_columns", JSON.stringify(evVisibleColumns)); } catch (e) {}
+    }
+
+    function buildEvColumnToggle() {
+        const dropdown = document.getElementById("ev-col-toggle-dropdown");
+        dropdown.innerHTML = EVENT_COLUMNS
+            .filter(c => c.key !== "actions")
+            .map(c => {
+                const checked = evVisibleColumns[c.key] !== false ? "checked" : "";
+                return `<label><input type="checkbox" data-col="${c.key}" ${checked}> ${c.label}</label>`;
+            }).join("");
+        dropdown.querySelectorAll("input[type=checkbox]").forEach(cb => {
+            cb.addEventListener("change", () => {
+                evVisibleColumns[cb.dataset.col] = cb.checked;
+                saveEvColumnPrefs();
+                applyEvColumnVisibility();
+            });
+        });
+    }
+
+    function applyEvColumnVisibility() {
+        EVENT_COLUMNS.forEach((col, idx) => {
+            const visible = evVisibleColumns[col.key] !== false;
+            const th = document.querySelector(`#events-header-row th[data-col="${col.key}"]`);
+            if (th) th.style.display = visible ? "" : "none";
+            // Body cells by column index (only event rows and detail rows)
+            document.querySelectorAll("#events-body .event-row-clickable").forEach(tr => {
+                const tds = tr.querySelectorAll("td");
+                if (tds[idx]) tds[idx].style.display = visible ? "" : "none";
+            });
+        });
+    }
+
+    function updateEvClearButton() {
+        const hasFilters = eventSearchQuery.trim().length > 0;
+        document.getElementById("btn-clear-filters").classList.toggle("visible", hasFilters);
+    }
+
+    function clearEvFilters() {
+        document.getElementById("event-search").value = "";
+        eventSearchQuery = "";
+        eventSortField = "event_date";
+        eventSortDir = "asc";
+        renderEvents();
+    }
 
     function escapeHtml(str) {
         const div = document.createElement("div");
@@ -171,6 +283,53 @@
         return allItems.filter(item => item.item_name === eventName);
     }
 
+    function getFilteredSortedEvents() {
+        let filtered = allEvents;
+
+        // Search
+        if (eventSearchQuery) {
+            const q = eventSearchQuery.toLowerCase();
+            filtered = filtered.filter(e =>
+                (e.item_name || "").toLowerCase().includes(q) ||
+                (e.course || "").toLowerCase().includes(q) ||
+                (e.city || "").toLowerCase().includes(q)
+            );
+        }
+
+        // Sort
+        filtered = [...filtered];
+        const asc = eventSortDir === "asc";
+        filtered.sort((a, b) => {
+            let va, vb;
+            if (eventSortField === "registrations") {
+                va = a.registrations || 0;
+                vb = b.registrations || 0;
+                return asc ? va - vb : vb - va;
+            }
+            va = (a[eventSortField] || "").toLowerCase();
+            vb = (b[eventSortField] || "").toLowerCase();
+            if (va < vb) return asc ? -1 : 1;
+            if (va > vb) return asc ? 1 : -1;
+            return 0;
+        });
+
+        return filtered;
+    }
+
+    function updateEvSortArrows() {
+        document.querySelectorAll("#events-header-row th[data-sort]").forEach(th => {
+            const field = th.dataset.sort;
+            const arrow = th.querySelector(".sort-arrow");
+            if (field === eventSortField) {
+                th.classList.add("sort-active");
+                arrow.innerHTML = eventSortDir === "asc" ? "&#9650;" : "&#9660;";
+            } else {
+                th.classList.remove("sort-active");
+                arrow.innerHTML = "&#9650;&#9660;";
+            }
+        });
+    }
+
     function renderEvents() {
         const tbody = document.getElementById("events-body");
 
@@ -182,13 +341,17 @@
         document.getElementById("stat-upcoming").textContent = upcoming.length;
         document.getElementById("stat-past").textContent = past.length;
 
-        if (!allEvents.length) {
+        const filtered = getFilteredSortedEvents();
+        updateEvSortArrows();
+        updateEvClearButton();
+
+        if (!filtered.length) {
             tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No events found. Click "Sync Events" to scan transactions.</td></tr>';
             return;
         }
 
         let html = "";
-        allEvents.forEach(ev => {
+        filtered.forEach(ev => {
             const isExpanded = expandedEventId === ev.id;
             html += `
             <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
@@ -223,15 +386,42 @@
             });
         });
 
+        applyEvColumnVisibility();
+
         // Check if URL has ?item= to auto-expand
         const params = new URLSearchParams(window.location.search);
         const itemParam = params.get("item");
         if (itemParam && expandedEventId === null) {
-            const match = allEvents.find(e => e.item_name === itemParam);
+            const match = filtered.find(e => e.item_name === itemParam);
             if (match) {
                 toggleEventDetail(match.id);
             }
         }
+    }
+
+    // Track per-event game filter: null = all, "NET", "GROSS", "NO GAMES"
+    let eventGameFilter = {};
+
+    function classifyGameType(sideGames) {
+        const sg = (sideGames || "").toUpperCase().trim();
+        if (!sg || sg === "NONE" || sg === "\u2014") return "NO GAMES";
+        if (sg === "BOTH" || (sg.includes("NET") && sg.includes("GROSS"))) return "BOTH";
+        if (sg.includes("NET")) return "NET";
+        if (sg.includes("GROSS")) return "GROSS";
+        // If there's a value but doesn't match known patterns, treat as a game
+        return "NET";
+    }
+
+    function computeGameStats(registrants) {
+        let net = 0, gross = 0, noGames = 0;
+        registrants.forEach(r => {
+            const type = classifyGameType(r.side_games);
+            if (type === "BOTH") { net++; gross++; }
+            else if (type === "NET") { net++; }
+            else if (type === "GROSS") { gross++; }
+            else { noGames++; }
+        });
+        return { players: registrants.length, net, gross, noGames };
     }
 
     function renderDetailContent(ev) {
@@ -240,13 +430,36 @@
             return '<p style="color: var(--text-muted); font-style: italic;">No registrations found for this event.</p>';
         }
 
-        let html = `<h4>Registrations (${registrants.length})</h4>`;
+        const stats = computeGameStats(registrants);
+        const activeFilter = eventGameFilter[ev.id] || null;
+
+        // Summary badges
+        let html = '<div class="event-game-stats">';
+        html += `<span class="game-stat-badge ${!activeFilter ? 'active' : ''}" data-event-id="${ev.id}" data-filter="">PLAYERS <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET GAMES <strong>${stats.net}</strong></span>`;
+        html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS GAMES <strong>${stats.gross}</strong></span>`;
+        html += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NO GAMES <strong>${stats.noGames}</strong></span>`;
+        html += '</div>';
+
+        // Filter registrants if a game filter is active
+        let filtered = registrants;
+        if (activeFilter) {
+            filtered = registrants.filter(r => {
+                const type = classifyGameType(r.side_games);
+                if (activeFilter === "NET") return type === "NET" || type === "BOTH";
+                if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
+                if (activeFilter === "NO GAMES") return type === "NO GAMES";
+                return true;
+            });
+        }
+
+        html += `<h4>Registrations (${filtered.length}${activeFilter ? ' — ' + activeFilter : ''})</h4>`;
         html += '<table class="registrants-table"><thead><tr>';
         html += '<th>Customer</th><th>Price</th><th>Handicap</th><th>Side Games</th>';
         html += '<th>Tee</th><th>Status</th><th>Type</th><th>Order Date</th>';
         html += '</tr></thead><tbody>';
 
-        registrants.forEach(r => {
+        filtered.forEach(r => {
             html += `<tr>
                 <td><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a></td>
                 <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(r.item_price || "\u2014")}</td>
@@ -288,9 +501,27 @@
             // Lazy-render content
             const ev = allEvents.find(e => e.id === eventId);
             if (ev) {
-                document.getElementById(`detail-content-${eventId}`).innerHTML = renderDetailContent(ev);
+                const container = document.getElementById(`detail-content-${eventId}`);
+                container.innerHTML = renderDetailContent(ev);
+                attachGameFilterHandlers(container, ev);
             }
         }
+    }
+
+    function attachGameFilterHandlers(container, ev) {
+        container.querySelectorAll(".game-stat-badge").forEach(badge => {
+            badge.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const filter = badge.dataset.filter;
+                if (!filter || eventGameFilter[ev.id] === filter) {
+                    delete eventGameFilter[ev.id];
+                } else {
+                    eventGameFilter[ev.id] = filter;
+                }
+                container.innerHTML = renderDetailContent(ev);
+                attachGameFilterHandlers(container, ev);
+            });
+        });
     }
 
     async function syncEvents() {
@@ -324,7 +555,47 @@
     }
 
     document.addEventListener("DOMContentLoaded", async () => {
+        loadEvColumnPrefs();
+        buildEvColumnToggle();
+
         document.getElementById("btn-sync").addEventListener("click", syncEvents);
+        document.getElementById("btn-clear-filters").addEventListener("click", clearEvFilters);
+
+        // Search
+        document.getElementById("event-search").addEventListener("input", () => {
+            eventSearchQuery = document.getElementById("event-search").value.trim();
+            renderEvents();
+        });
+
+        // Column toggle dropdown
+        const colBtn = document.getElementById("ev-col-toggle-btn");
+        const colDrop = document.getElementById("ev-col-toggle-dropdown");
+        colBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            colDrop.classList.toggle("open");
+        });
+        document.addEventListener("click", (e) => {
+            if (!colDrop.contains(e.target) && e.target !== colBtn) {
+                colDrop.classList.remove("open");
+            }
+        });
+
+        // Column header sorting
+        document.querySelectorAll("#events-header-row th[data-sort]").forEach(th => {
+            th.style.cursor = "pointer";
+            th.style.userSelect = "none";
+            th.addEventListener("click", () => {
+                const field = th.dataset.sort;
+                if (eventSortField === field) {
+                    eventSortDir = eventSortDir === "asc" ? "desc" : "asc";
+                } else {
+                    eventSortField = field;
+                    eventSortDir = "asc";
+                }
+                renderEvents();
+            });
+        });
+
         // Fetch items first (for registrant details), then sync events and fetch
         await fetchItems();
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());

@@ -191,6 +191,9 @@ thead th {
 }
 th.sortable { cursor: pointer; }
 th.sortable:hover { color: var(--primary); }
+th[draggable] { cursor: grab; }
+th.col-dragging { opacity: 0.4; }
+th.col-drag-over { border-left: 3px solid var(--primary); }
 tbody td {
     padding: 0.5rem 0.65rem;
     border-bottom: 1px solid var(--border);
@@ -296,12 +299,14 @@ tbody tr:hover { background: #f9fafb; }
 
 /* ---- Inline editing ---- */
 .cell-value {
-    cursor: pointer;
     padding: 0.1rem 0.25rem;
     border-radius: 3px;
     transition: background 0.12s;
 }
-.cell-value:hover {
+.cell-value.cell-editable {
+    cursor: pointer;
+}
+.cell-value.cell-editable:hover {
     background: #e0e7ff;
 }
 .cell-edit-input {

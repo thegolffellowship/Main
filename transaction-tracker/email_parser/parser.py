@@ -169,6 +169,28 @@ def _normalize_side_games(value: str | None) -> str | None:
     return value  # leave as-is if we can't parse it
 
 
+_TEE_PATTERNS = [
+    (re.compile(r"\bforward\b|\bfront\b", re.IGNORECASE), "Forward"),
+    (re.compile(r"\b65\s*\+", re.IGNORECASE), "65+"),
+    (re.compile(r"\b50\s*[-–]\s*64\b", re.IGNORECASE), "50-64"),
+    (re.compile(r"\b<\s*50\b|\bunder\s*50\b", re.IGNORECASE), "<50"),
+]
+
+
+def _normalize_tee_choice(value: str | None) -> str | None:
+    """Normalize a tee-choice value to <50 / 50-64 / 65+ / Forward."""
+    if not value:
+        return value
+    cleaned = value.strip()
+    # Already canonical
+    if cleaned in ("<50", "50-64", "65+", "Forward"):
+        return cleaned
+    for pattern, label in _TEE_PATTERNS:
+        if pattern.search(cleaned):
+            return label
+    return cleaned  # leave as-is if we can't parse it
+
+
 def _fixup_side_games_field(item: dict) -> dict:
     """
     Detect when side-games data has landed in golf_or_compete and move it.
@@ -395,7 +417,7 @@ def parse_email(email_data: dict) -> list[dict]:
             "course": _normalize_course_name(item.get("course")),
             "handicap": item.get("handicap"),
             "side_games": item.get("side_games"),
-            "tee_choice": item.get("tee_choice"),
+            "tee_choice": _normalize_tee_choice(item.get("tee_choice")),
             "member_status": item.get("member_status"),
             "golf_or_compete": item.get("golf_or_compete"),
             "post_game": item.get("post_game"),

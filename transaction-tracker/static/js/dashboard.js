@@ -73,6 +73,35 @@ function updateCategoryCounts() {
 // Track which columns are visible (persisted in localStorage)
 let visibleColumns = {};
 
+// Track column order (persisted in localStorage)
+let columnOrder = [];
+
+function loadColumnOrder() {
+    try {
+        const saved = localStorage.getItem("tgf_column_order");
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            // Validate: must have same keys as TABLE_COLUMNS
+            const allKeys = TABLE_COLUMNS.map(c => c.key);
+            if (parsed.length === allKeys.length && parsed.every(k => allKeys.includes(k))) {
+                columnOrder = parsed;
+                return;
+            }
+        }
+    } catch (e) {}
+    columnOrder = TABLE_COLUMNS.map(c => c.key);
+}
+
+function saveColumnOrder() {
+    try {
+        localStorage.setItem("tgf_column_order", JSON.stringify(columnOrder));
+    } catch (e) {}
+}
+
+function getOrderedColumns() {
+    return columnOrder.map(key => TABLE_COLUMNS.find(c => c.key === key));
+}
+
 function loadColumnPrefs() {
     try {
         const saved = localStorage.getItem("tgf_visible_columns");
@@ -145,7 +174,8 @@ function buildColumnToggle() {
 }
 
 function applyColumnVisibility() {
-    TABLE_COLUMNS.forEach((col, idx) => {
+    const ordered = getOrderedColumns();
+    ordered.forEach((col, idx) => {
         const visible = visibleColumns[col.key] !== false;
         // Header
         const th = document.querySelector(`th[data-col="${col.key}"]`);
@@ -266,8 +296,11 @@ function revertToSpan(input, value, field, rowId) {
     span.dataset.id = rowId;
     span.dataset.original = value || "";
     span.textContent = value || "\u2014";
-    // Re-attach click listener so the cell stays editable
-    span.addEventListener("click", () => startEdit(span));
+    // Re-attach click listener so the cell stays editable (only for item_name)
+    if (field === "item_name") {
+        span.classList.add("cell-editable");
+        span.addEventListener("click", () => startEdit(span));
+    }
     if (input.parentElement) {
         input.replaceWith(span);
     }
@@ -345,9 +378,38 @@ async function checkConfig() {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
+function cellForColumn(key, row) {
+    if (key === "event_date") return cell(row.event_date || row.order_date, "event_date", row.id);
+    if (key === "customer") return linkedCell(row.customer, "customer", row.id);
+    if (key === "item_name") return linkedCell(row.item_name, "item_name", row.id);
+    if (key === "item_price") return cell(row.item_price, "item_price", row.id);
+    if (key === "order_id") return `<span class="order-id">${cell(row.order_id, "order_id", row.id)}</span>`;
+    if (key === "actions") return `<button class="btn btn-danger" onclick="deleteItem(${row.id})">Delete</button>`;
+    return cell(row[key], key, row.id);
+}
+
+function tdClass(key) {
+    if (key === "item_name") return ' class="item-name-cell"';
+    if (key === "item_price") return ' class="price-cell"';
+    return "";
+}
+
+function renderHeaderRow() {
+    const headerRow = document.getElementById("txn-header-row");
+    const ordered = getOrderedColumns();
+    headerRow.innerHTML = ordered.map(col => {
+        const sortable = col.key !== "order_id" && col.key !== "actions" ? ' class="sortable"' : '';
+        const sortAttr = sortable ? ` data-sort="${col.key}"` : '';
+        return `<th${sortable}${sortAttr} data-col="${col.key}" draggable="true">${col.label}</th>`;
+    }).join("");
+    applyColumnVisibility();
+    attachHeaderDrag();
+    attachHeaderSort();
+}
+
 function renderTable(items) {
     const tbody = document.getElementById("txn-body");
-    const visibleCount = TABLE_COLUMNS.filter(c => visibleColumns[c.key] !== false).length;
+    const visibleCount = getOrderedColumns().filter(c => visibleColumns[c.key] !== false).length;
 
     if (!items.length) {
         tbody.innerHTML =
@@ -356,30 +418,19 @@ function renderTable(items) {
         return;
     }
 
+    const ordered = getOrderedColumns();
     tbody.innerHTML = items
         .map(
             (row) => `
         <tr data-id="${row.id}">
-            <td>${cell(row.event_date || row.order_date, "event_date", row.id)}</td>
-            <td>${linkedCell(row.customer, "customer", row.id)}</td>
-            <td class="item-name-cell">${linkedCell(row.item_name, "item_name", row.id)}</td>
-            <td class="price-cell">${cell(row.item_price, "item_price", row.id)}</td>
-            <td>${cell(row.city, "city", row.id)}</td>
-            <td>${cell(row.course, "course", row.id)}</td>
-            <td>${cell(row.handicap, "handicap", row.id)}</td>
-            <td>${cell(row.side_games, "side_games", row.id)}</td>
-            <td>${cell(row.tee_choice, "tee_choice", row.id)}</td>
-            <td>${cell(row.member_status, "member_status", row.id)}</td>
-            <td>${cell(row.golf_or_compete, "golf_or_compete", row.id)}</td>
-            <td><span class="order-id">${cell(row.order_id, "order_id", row.id)}</span></td>
-            <td>${cell(row.order_date, "order_date", row.id)}</td>
-            <td><button class="btn btn-danger" onclick="deleteItem(${row.id})">Delete</button></td>
+            ${ordered.map(col => `<td${tdClass(col.key)}>${cellForColumn(col.key, row)}</td>`).join("")}
         </tr>`
         )
         .join("");
 
-    // Attach click-to-edit listeners (skip linked cells)
-    tbody.querySelectorAll(".cell-value").forEach((span) => {
+    // Attach click-to-edit listeners — only item_name is editable
+    tbody.querySelectorAll('.cell-value[data-field="item_name"]').forEach((span) => {
+        span.classList.add("cell-editable");
         span.addEventListener("click", () => startEdit(span));
     });
 
@@ -622,11 +673,74 @@ function exportCSV() {
 }
 
 // ---------------------------------------------------------------------------
+// Column header drag-and-drop
+// ---------------------------------------------------------------------------
+let dragSrcCol = null;
+
+function attachHeaderDrag() {
+    const ths = document.querySelectorAll("#txn-header-row th[draggable]");
+    ths.forEach(th => {
+        th.addEventListener("dragstart", (e) => {
+            dragSrcCol = th.dataset.col;
+            th.classList.add("col-dragging");
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", dragSrcCol);
+        });
+        th.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            th.classList.add("col-drag-over");
+        });
+        th.addEventListener("dragleave", () => {
+            th.classList.remove("col-drag-over");
+        });
+        th.addEventListener("drop", (e) => {
+            e.preventDefault();
+            th.classList.remove("col-drag-over");
+            const targetCol = th.dataset.col;
+            if (dragSrcCol && dragSrcCol !== targetCol) {
+                const fromIdx = columnOrder.indexOf(dragSrcCol);
+                const toIdx = columnOrder.indexOf(targetCol);
+                if (fromIdx !== -1 && toIdx !== -1) {
+                    columnOrder.splice(fromIdx, 1);
+                    columnOrder.splice(toIdx, 0, dragSrcCol);
+                    saveColumnOrder();
+                    renderHeaderRow();
+                    applyFilters();
+                }
+            }
+        });
+        th.addEventListener("dragend", () => {
+            th.classList.remove("col-dragging");
+            document.querySelectorAll("#txn-header-row th").forEach(h => h.classList.remove("col-drag-over"));
+        });
+    });
+}
+
+function attachHeaderSort() {
+    document.querySelectorAll("th.sortable").forEach((th) => {
+        th.addEventListener("click", () => {
+            const field = th.dataset.sort;
+            const select = document.getElementById("sort-select");
+            const current = select.value;
+            if (current === `${field}-asc`) {
+                select.value = `${field}-desc`;
+            } else {
+                select.value = `${field}-asc`;
+            }
+            applyFilters();
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
     loadColumnPrefs();
+    loadColumnOrder();
     buildColumnToggle();
+    renderHeaderRow();
 
     fetchItems();
     fetchStats();
@@ -661,21 +775,5 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!colDrop.contains(e.target) && e.target !== colBtn) {
             colDrop.classList.remove("open");
         }
-    });
-
-    // Column header sorting
-    document.querySelectorAll("th.sortable").forEach((th) => {
-        th.addEventListener("click", () => {
-            const field = th.dataset.sort;
-            const select = document.getElementById("sort-select");
-            const current = select.value;
-            // Toggle direction
-            if (current === `${field}-asc`) {
-                select.value = `${field}-desc`;
-            } else {
-                select.value = `${field}-asc`;
-            }
-            applyFilters();
-        });
     });
 });

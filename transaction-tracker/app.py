@@ -29,6 +29,7 @@ from email_parser.database import (
     delete_item,
     autofix_side_games,
     autofix_all,
+    normalize_tee_choices,
     sync_events_from_items,
     get_all_events,
     update_event,
@@ -529,12 +530,25 @@ def api_autofix_side_games():
 
 @app.route("/api/audit/autofix-all", methods=["POST"])
 def api_autofix_all():
-    """Run all autofixes: side_games, customer names, course names."""
+    """Run all autofixes: side_games, customer names, course names, tee choices."""
     try:
         result = autofix_all()
+        tee_fixed = normalize_tee_choices()
+        result["tee_choices_fixed"] = tee_fixed
         return jsonify({"status": "ok", **result})
     except Exception as e:
         logger.exception("Autofix-all failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/audit/autofix-tee-choices", methods=["POST"])
+def api_autofix_tee_choices():
+    """Normalize all tee_choice values to standard: <50, 50-64, 65+, Forward."""
+    try:
+        updated = normalize_tee_choices()
+        return jsonify({"status": "ok", "tee_choices_fixed": updated})
+    except Exception as e:
+        logger.exception("Autofix tee choices failed")
         return jsonify({"error": str(e)}), 500
 
 

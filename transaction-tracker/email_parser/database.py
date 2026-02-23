@@ -591,3 +591,43 @@ def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+
+def normalize_tee_choices(db_path: str | Path | None = None) -> int:
+    """
+    One-time migration: standardise all tee_choice values in the DB.
+    Standards: <50, 50-64, 65+, Forward.
+    Returns the number of rows updated.
+    """
+    import re
+
+    _TEE_MAP = [
+        (re.compile(r"\bforward\b|\bfront\b", re.IGNORECASE), "Forward"),
+        (re.compile(r"\b65\s*\+", re.IGNORECASE), "65+"),
+        (re.compile(r"\b50\s*[-–]\s*64\b", re.IGNORECASE), "50-64"),
+        (re.compile(r"\b<\s*50\b|\bunder\s*50\b", re.IGNORECASE), "<50"),
+    ]
+    canonical = {"<50", "50-64", "65+", "Forward"}
+
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT id, tee_choice FROM items WHERE tee_choice IS NOT NULL AND tee_choice != ''"
+    ).fetchall()
+
+    updated = 0
+    for row_id, val in rows:
+        cleaned = val.strip()
+        if cleaned in canonical:
+            continue
+        new_val = cleaned
+        for pattern, label in _TEE_MAP:
+            if pattern.search(cleaned):
+                new_val = label
+                break
+        if new_val != val:
+            conn.execute("UPDATE items SET tee_choice = ? WHERE id = ?", (new_val, row_id))
+            updated += 1
+
+    conn.commit()
+    conn.close()
+    return updated

@@ -67,6 +67,10 @@
                 <option value="spent-asc">Least spent</option>
                 <option value="latest-desc">Most recent</option>
             </select>
+            <div class="column-toggle-wrapper">
+                <button class="column-toggle-btn" id="cust-col-toggle-btn">Columns &#9662;</button>
+                <div class="column-toggle-dropdown" id="cust-col-toggle-dropdown"></div>
+            </div>
             <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
             <div class="view-toggle">
                 <button class="view-toggle-btn active" data-view="list">List</button>
@@ -78,15 +82,15 @@
         <section id="customer-list-view" class="customer-list-wrapper">
             <table class="customer-list-table">
                 <thead>
-                    <tr>
-                        <th data-sort="name" class="sort-active">Name <span class="sort-arrow">&#9650;</span></th>
-                        <th data-sort="status">Status <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-sort="chapter">Chapter <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-sort="purchases">Purchases <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-sort="spent">Total Spent <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th>Email</th>
-                        <th>Phone</th>
-                        <th data-sort="latest">Last Activity <span class="sort-arrow">&#9650;&#9660;</span></th>
+                    <tr id="cust-header-row">
+                        <th data-sort="name" data-col="name" class="sort-active">Name <span class="sort-arrow">&#9650;</span></th>
+                        <th data-sort="status" data-col="status">Status <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="chapter" data-col="chapter">Chapter <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="purchases" data-col="purchases">Purchases <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="spent" data-col="spent">Total Spent <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="email">Email</th>
+                        <th data-col="phone">Phone</th>
+                        <th data-sort="latest" data-col="latest">Last Activity <span class="sort-arrow">&#9650;&#9660;</span></th>
                     </tr>
                 </thead>
                 <tbody id="customer-list-body"></tbody>
@@ -131,6 +135,59 @@
     let currentView = "list";
     let currentSortField = "name";
     let currentSortDir = "asc";
+
+    // Column definitions for Customers table
+    const CUST_COLUMNS = [
+        { key: "name", label: "Name" },
+        { key: "status", label: "Status" },
+        { key: "chapter", label: "Chapter" },
+        { key: "purchases", label: "Purchases" },
+        { key: "spent", label: "Total Spent" },
+        { key: "email", label: "Email" },
+        { key: "phone", label: "Phone" },
+        { key: "latest", label: "Last Activity" },
+    ];
+
+    let custVisibleColumns = {};
+
+    function loadCustColumnPrefs() {
+        try {
+            const saved = localStorage.getItem("tgf_cust_visible_columns");
+            if (saved) { custVisibleColumns = JSON.parse(saved); return; }
+        } catch (e) {}
+        CUST_COLUMNS.forEach(c => { custVisibleColumns[c.key] = true; });
+    }
+
+    function saveCustColumnPrefs() {
+        try { localStorage.setItem("tgf_cust_visible_columns", JSON.stringify(custVisibleColumns)); } catch (e) {}
+    }
+
+    function buildCustColumnToggle() {
+        const dropdown = document.getElementById("cust-col-toggle-dropdown");
+        dropdown.innerHTML = CUST_COLUMNS.map(c => {
+            const checked = custVisibleColumns[c.key] !== false ? "checked" : "";
+            return `<label><input type="checkbox" data-col="${c.key}" ${checked}> ${c.label}</label>`;
+        }).join("");
+        dropdown.querySelectorAll("input[type=checkbox]").forEach(cb => {
+            cb.addEventListener("change", () => {
+                custVisibleColumns[cb.dataset.col] = cb.checked;
+                saveCustColumnPrefs();
+                applyCustColumnVisibility();
+            });
+        });
+    }
+
+    function applyCustColumnVisibility() {
+        CUST_COLUMNS.forEach((col, idx) => {
+            const visible = custVisibleColumns[col.key] !== false;
+            const th = document.querySelector(`#cust-header-row th[data-col="${col.key}"]`);
+            if (th) th.style.display = visible ? "" : "none";
+            document.querySelectorAll("#customer-list-body tr").forEach(tr => {
+                const tds = tr.querySelectorAll("td");
+                if (tds[idx]) tds[idx].style.display = visible ? "" : "none";
+            });
+        });
+    }
 
     function escapeHtml(str) {
         const div = document.createElement("div");
@@ -361,6 +418,8 @@
                 if (cust) selectCustomer(cust);
             });
         });
+
+        applyCustColumnVisibility();
     }
 
     function renderCardView(filtered) {
@@ -501,6 +560,8 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+        loadCustColumnPrefs();
+        buildCustColumnToggle();
         init();
         document.getElementById("customer-search").addEventListener("input", renderCustomers);
         document.getElementById("filter-status").addEventListener("change", renderCustomers);
@@ -508,6 +569,19 @@
         document.getElementById("sort-select").addEventListener("change", renderCustomers);
         document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
         document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);
+
+        // Column toggle dropdown
+        const colBtn = document.getElementById("cust-col-toggle-btn");
+        const colDrop = document.getElementById("cust-col-toggle-dropdown");
+        colBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            colDrop.classList.toggle("open");
+        });
+        document.addEventListener("click", (e) => {
+            if (!colDrop.contains(e.target) && e.target !== colBtn) {
+                colDrop.classList.remove("open");
+            }
+        });
 
         // View toggle
         document.querySelectorAll(".view-toggle-btn").forEach(btn => {
