@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, session
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -170,6 +170,24 @@ def require_connector_key(f):
 
 
 # ---------------------------------------------------------------------------
+# Role-based access helpers
+# ---------------------------------------------------------------------------
+def require_role(role):
+    """Decorator that checks the session for a minimum role level."""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            user_role = session.get("role")
+            if not user_role:
+                return jsonify({"error": "Not authenticated. Please log in."}), 401
+            if role == "admin" and user_role != "admin":
+                return jsonify({"error": "Admin access required."}), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+
+# ---------------------------------------------------------------------------
 # Scheduler
 # ---------------------------------------------------------------------------
 scheduler = BackgroundScheduler(daemon=True)
@@ -254,8 +272,9 @@ def api_update_item(item_id):
 
 
 @app.route("/api/items/<int:item_id>", methods=["DELETE"])
+@require_role("admin")
 def api_delete_item(item_id):
-    """Delete an item row by ID."""
+    """Delete an item row by ID. Admin only."""
     deleted = delete_item(item_id)
     if deleted:
         return jsonify({"status": "ok"})
@@ -594,8 +613,9 @@ def api_update_event(event_id):
 
 
 @app.route("/api/events/<int:event_id>", methods=["DELETE"])
+@require_role("admin")
 def api_delete_event(event_id):
-    """Delete an event."""
+    """Delete an event. Admin only."""
     if delete_event(event_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "not found"}), 404
@@ -612,6 +632,44 @@ def api_send_report_now():
     except Exception as e:
         logger.exception("Manual report send failed")
         return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Routes — Authentication
+# ---------------------------------------------------------------------------
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    """Authenticate with a PIN and set the session role."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("pin"):
+        return jsonify({"error": "PIN is required."}), 400
+
+    pin = str(data["pin"]).strip()
+    admin_pin = os.getenv("ADMIN_PIN", "")
+    manager_pin = os.getenv("MANAGER_PIN", "")
+
+    if admin_pin and secrets.compare_digest(pin, admin_pin):
+        session["role"] = "admin"
+        return jsonify({"status": "ok", "role": "admin"})
+    elif manager_pin and secrets.compare_digest(pin, manager_pin):
+        session["role"] = "manager"
+        return jsonify({"status": "ok", "role": "manager"})
+    else:
+        return jsonify({"error": "Invalid PIN."}), 401
+
+
+@app.route("/api/auth/role")
+def api_auth_role():
+    """Return the current session role (or null if not logged in)."""
+    role = session.get("role")
+    return jsonify({"role": role})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    """Clear the session role."""
+    session.pop("role", None)
+    return jsonify({"status": "ok"})
 
 
 # ---------------------------------------------------------------------------

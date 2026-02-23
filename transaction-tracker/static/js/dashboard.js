@@ -3,6 +3,7 @@
    ========================================================= */
 
 let allItems = [];
+let currentRole = null; // "admin", "manager", or null
 
 // Columns that are searchable when "All columns" filter is selected
 const SEARCHABLE_FIELDS = [
@@ -384,7 +385,13 @@ function cellForColumn(key, row) {
     if (key === "item_name") return linkedCell(row.item_name, "item_name", row.id);
     if (key === "item_price") return cell(row.item_price, "item_price", row.id);
     if (key === "order_id") return `<span class="order-id">${cell(row.order_id, "order_id", row.id)}</span>`;
-    if (key === "actions") return `<button class="btn btn-danger" onclick="deleteItem(${row.id})">Delete</button>`;
+    if (key === "actions") {
+        let btns = `<button class="btn btn-edit" onclick="openEditModal(${row.id})">Edit</button>`;
+        if (currentRole === "admin") {
+            btns += ` <button class="btn btn-danger" onclick="deleteItem(${row.id})">Delete</button>`;
+        }
+        return btns;
+    }
     return cell(row[key], key, row.id);
 }
 
@@ -427,12 +434,6 @@ function renderTable(items) {
         </tr>`
         )
         .join("");
-
-    // Attach click-to-edit listeners — only item_name is editable
-    tbody.querySelectorAll('.cell-value[data-field="item_name"]').forEach((span) => {
-        span.classList.add("cell-editable");
-        span.addEventListener("click", () => startEdit(span));
-    });
 
     // Apply column visibility to newly rendered rows
     applyColumnVisibility();
@@ -734,9 +735,166 @@ function attachHeaderSort() {
 }
 
 // ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+async function checkRole() {
+    try {
+        const res = await fetch("/api/auth/role");
+        const data = await res.json();
+        currentRole = data.role;
+        return currentRole;
+    } catch (err) {
+        console.error("Failed to check role:", err);
+        return null;
+    }
+}
+
+function showLoginModal() {
+    document.getElementById("login-overlay").style.display = "flex";
+    document.getElementById("login-pin").value = "";
+    document.getElementById("login-error").style.display = "none";
+    document.getElementById("login-pin").focus();
+}
+
+function hideLoginModal() {
+    document.getElementById("login-overlay").style.display = "none";
+}
+
+async function handleLogin() {
+    const pin = document.getElementById("login-pin").value.trim();
+    if (!pin) return;
+
+    const errorEl = document.getElementById("login-error");
+    errorEl.style.display = "none";
+
+    try {
+        const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pin }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            errorEl.textContent = data.error || "Login failed.";
+            errorEl.style.display = "block";
+            return;
+        }
+
+        currentRole = data.role;
+        hideLoginModal();
+        updateRoleUI();
+        applyFilters(); // Re-render table with role-appropriate actions
+    } catch (err) {
+        errorEl.textContent = "Connection error. Please try again.";
+        errorEl.style.display = "block";
+    }
+}
+
+async function handleLogout() {
+    try {
+        await fetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {
+        console.error("Logout failed:", err);
+    }
+    currentRole = null;
+    updateRoleUI();
+    showLoginModal();
+}
+
+function updateRoleUI() {
+    const badge = document.getElementById("role-badge");
+    const logoutBtn = document.getElementById("btn-logout");
+    if (currentRole) {
+        badge.textContent = currentRole === "admin" ? "Admin" : "Manager";
+        badge.className = "role-badge role-" + currentRole;
+        badge.style.display = "";
+        logoutBtn.style.display = "";
+    } else {
+        badge.style.display = "none";
+        logoutBtn.style.display = "none";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Edit Modal
+// ---------------------------------------------------------------------------
+const EDIT_FIELDS = [
+    "customer", "item_name", "item_price", "event_date",
+    "city", "course", "handicap", "side_games",
+    "tee_choice", "member_status", "golf_or_compete",
+];
+
+function openEditModal(itemId) {
+    const item = allItems.find(r => r.id === itemId);
+    if (!item) return;
+
+    document.getElementById("edit-id").value = itemId;
+    EDIT_FIELDS.forEach(field => {
+        const input = document.getElementById("edit-" + field);
+        if (input) input.value = item[field] || "";
+    });
+
+    document.getElementById("edit-overlay").style.display = "flex";
+}
+
+function closeEditModal() {
+    document.getElementById("edit-overlay").style.display = "none";
+}
+
+async function handleEditSubmit(e) {
+    e.preventDefault();
+    const itemId = document.getElementById("edit-id").value;
+    const item = allItems.find(r => r.id === parseInt(itemId));
+    if (!item) return;
+
+    // Collect changed fields only
+    const changes = {};
+    EDIT_FIELDS.forEach(field => {
+        const input = document.getElementById("edit-" + field);
+        if (!input) return;
+        const newVal = input.value.trim() || null;
+        const oldVal = item[field] || null;
+        if (newVal !== oldVal) {
+            changes[field] = newVal;
+        }
+    });
+
+    if (Object.keys(changes).length === 0) {
+        closeEditModal();
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/items/${itemId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(changes),
+        });
+        if (!res.ok) throw new Error("Save failed");
+
+        // Update local data
+        Object.assign(item, changes);
+        closeEditModal();
+        applyFilters();
+    } catch (err) {
+        console.error("Failed to save edit:", err);
+        alert("Failed to save changes.");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+    // Check auth before loading dashboard
+    const role = await checkRole();
+    if (!role) {
+        showLoginModal();
+    } else {
+        updateRoleUI();
+    }
+
     loadColumnPrefs();
     loadColumnOrder();
     buildColumnToggle();
@@ -753,6 +911,21 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
     document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);
     document.getElementById("btn-send-report").addEventListener("click", sendReport);
+    document.getElementById("btn-logout").addEventListener("click", handleLogout);
+
+    // Login modal
+    document.getElementById("login-submit").addEventListener("click", handleLogin);
+    document.getElementById("login-pin").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") handleLogin();
+    });
+
+    // Edit modal
+    document.getElementById("edit-form").addEventListener("submit", handleEditSubmit);
+    document.getElementById("edit-cancel").addEventListener("click", closeEditModal);
+    document.getElementById("edit-close").addEventListener("click", closeEditModal);
+    document.getElementById("edit-overlay").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeEditModal();
+    });
 
     // Category filter buttons
     document.querySelectorAll(".category-btn").forEach(btn => {
