@@ -444,6 +444,22 @@ function renderTable(items) {
 // ---------------------------------------------------------------------------
 // Sorting
 // ---------------------------------------------------------------------------
+
+/** Extract last name from a full name string for sorting purposes. */
+function getLastName(name) {
+    const parts = String(name).trim().split(/\s+/);
+    return parts.length > 1 ? parts[parts.length - 1] : parts[0];
+}
+
+/** Build a "LastName, FirstName..." key for consistent name sorting. */
+function lastNameSortKey(name) {
+    const s = String(name).trim();
+    const parts = s.split(/\s+/);
+    if (parts.length <= 1) return s.toLowerCase();
+    const last = parts.pop();
+    return (last + ", " + parts.join(" ")).toLowerCase();
+}
+
 function sortItems(items, sortKey) {
     const [field, dir] = sortKey.split("-");
     const asc = dir === "asc";
@@ -458,6 +474,13 @@ function sortItems(items, sortKey) {
             va = parsePrice(va);
             vb = parsePrice(vb);
             return asc ? va - vb : vb - va;
+        }
+
+        // Name fields sort by last name
+        if (field === "customer") {
+            va = lastNameSortKey(va);
+            vb = lastNameSortKey(vb);
+            return asc ? va.localeCompare(vb) : vb.localeCompare(va);
         }
 
         // String sort

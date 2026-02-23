@@ -261,6 +261,15 @@
         return "badge-guest";
     }
 
+    /** Build a "LastName, FirstName..." key for consistent name sorting. */
+    function lastNameSortKey(name) {
+        const s = String(name).trim();
+        const parts = s.split(/\s+/);
+        if (parts.length <= 1) return s.toLowerCase();
+        const last = parts.pop();
+        return (last + ", " + parts.join(" ")).toLowerCase();
+    }
+
     // Build customer aggregate data from items
     function buildCustomers(items) {
         const map = {};
@@ -291,7 +300,7 @@
             c.chapter = deriveChapter(c.items);
         });
 
-        return customers.sort((a, b) => a.name.localeCompare(b.name));
+        return customers.sort((a, b) => lastNameSortKey(a.name).localeCompare(lastNameSortKey(b.name)));
     }
 
     function populateChapterFilter() {
@@ -339,7 +348,10 @@
         const asc = currentSortDir === "asc";
         filtered = [...filtered];
         filtered.sort((a, b) => {
-            if (currentSortField === "name") return asc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+            if (currentSortField === "name") {
+                const ka = lastNameSortKey(a.name), kb = lastNameSortKey(b.name);
+                return asc ? ka.localeCompare(kb) : kb.localeCompare(ka);
+            }
             if (currentSortField === "status") return asc ? a.status.localeCompare(b.status) : b.status.localeCompare(a.status);
             if (currentSortField === "chapter") return asc ? a.chapter.localeCompare(b.chapter) : b.chapter.localeCompare(a.chapter);
             if (currentSortField === "purchases") return asc ? a.items.length - b.items.length : b.items.length - a.items.length;

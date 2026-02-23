@@ -226,6 +226,15 @@
     let eventSortDir = "asc";
     let eventSearchQuery = "";
 
+    /** Build a "LastName, FirstName..." key for consistent name sorting. */
+    function lastNameSortKey(name) {
+        const s = String(name).trim();
+        const parts = s.split(/\s+/);
+        if (parts.length <= 1) return s.toLowerCase();
+        const last = parts.pop();
+        return (last + ", " + parts.join(" ")).toLowerCase();
+    }
+
     // Called by auth.js after successful login
     function onAuthReady() {
         renderEvents();
@@ -487,6 +496,12 @@
                 va = parseFloat((va || "0").replace(/[$,]/g, "")) || 0;
                 vb = parseFloat((vb || "0").replace(/[$,]/g, "")) || 0;
                 return asc ? va - vb : vb - va;
+            }
+            // Sort customer names by last name
+            if (detailSortField === "customer") {
+                va = lastNameSortKey(va);
+                vb = lastNameSortKey(vb);
+                return asc ? va.localeCompare(vb) : vb.localeCompare(va);
             }
             va = String(va).toLowerCase();
             vb = String(vb).toLowerCase();
