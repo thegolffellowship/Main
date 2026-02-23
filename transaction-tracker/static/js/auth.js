@@ -53,6 +53,7 @@ async function handleLogin() {
         currentRole = data.role;
         hideLoginModal();
         updateRoleUI();
+        updateNavForRole();
         if (typeof onAuthReady === "function") onAuthReady();
     } catch (err) {
         errorEl.textContent = "Connection error. Please try again.";
@@ -86,12 +87,22 @@ function updateRoleUI() {
     }
 }
 
+function updateNavForRole() {
+    // Hide Audit tab for non-admin roles
+    document.querySelectorAll(".tab-nav a").forEach(link => {
+        if (link.getAttribute("href") === "/audit") {
+            link.style.display = (currentRole === "admin") ? "" : "none";
+        }
+    });
+}
+
 async function initAuth() {
     const role = await checkRole();
     if (!role) {
         showLoginModal();
     } else {
         updateRoleUI();
+        updateNavForRole();
         if (typeof onAuthReady === "function") onAuthReady();
     }
 

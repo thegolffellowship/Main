@@ -430,6 +430,7 @@ def api_connector_info():
 
 
 @app.route("/api/audit/emails")
+@require_role("admin")
 def api_audit_emails():
     """
     Fetch raw emails from inbox AND the corresponding parsed DB records,
@@ -533,10 +534,14 @@ def api_audit_emails():
 
 @app.route("/audit")
 def audit_page():
+    # Admin-only page — managers are redirected to home
+    if session.get("role") != "admin":
+        return render_template("index.html")
     return render_template("audit.html")
 
 
 @app.route("/api/audit/autofix-side-games", methods=["POST"])
+@require_role("admin")
 def api_autofix_side_games():
     """Fix side_games / golf_or_compete misplacement in existing DB rows."""
     try:
@@ -548,6 +553,7 @@ def api_autofix_side_games():
 
 
 @app.route("/api/audit/autofix-all", methods=["POST"])
+@require_role("admin")
 def api_autofix_all():
     """Run all autofixes: side_games, customer names, course names, tee choices."""
     try:
@@ -561,6 +567,7 @@ def api_autofix_all():
 
 
 @app.route("/api/audit/autofix-tee-choices", methods=["POST"])
+@require_role("admin")
 def api_autofix_tee_choices():
     """Normalize all tee_choice values to standard: <50, 50-64, 65+, Forward."""
     try:
@@ -640,6 +647,9 @@ def api_send_report_now():
 @app.route("/api/auth/login", methods=["POST"])
 def api_auth_login():
     """Authenticate with a PIN and set the session role."""
+    # Re-read .env so PIN changes take effect without a server restart
+    load_dotenv(override=True)
+
     data = request.get_json(silent=True)
     if not data or not data.get("pin"):
         return jsonify({"error": "PIN is required."}), 400

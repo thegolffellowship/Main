@@ -443,8 +443,22 @@
         }
     }
 
+    // Redirect non-admin users away from audit page
+    function onAuthReady() {
+        if (currentRole !== "admin") {
+            window.location.href = "/";
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", async () => {
         await initAuth();
+
+        // Block managers from audit page
+        if (currentRole && currentRole !== "admin") {
+            window.location.href = "/";
+            return;
+        }
+
         document.getElementById("btn-run-audit").addEventListener("click", runAudit);
 
         document.querySelectorAll(".filter-btn").forEach(btn => {
