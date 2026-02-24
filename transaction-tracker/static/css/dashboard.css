@@ -697,6 +697,8 @@ footer {
     color: #fff;
     border-color: var(--primary);
 }
+.label-short { display: none; }
+.label-full { display: inline; }
 .category-btn .cat-count {
     display: inline-block;
     margin-left: 0.3rem;
@@ -1146,6 +1148,11 @@ tr.row-transferred { opacity: 0.6; }
     .stat-card { padding: 0.3rem 0.25rem; text-align: center; }
     .stat-value { font-size: clamp(0.7rem, 3.5vw, 1rem); line-height: 1.2; }
     .stat-label { font-size: clamp(0.45rem, 2vw, 0.6rem); margin-top: 0; line-height: 1.2; }
+    .stat-date { display: none; }
+
+    /* Category filter labels — short on mobile */
+    .label-full { display: none; }
+    .label-short { display: inline; }
 
     /* Controls — 2-col grid */
     .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; margin-bottom: 0.5rem; }
