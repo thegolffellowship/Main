@@ -536,8 +536,10 @@
             if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
-            const gameType = escapeHtml(r.golf_or_compete || "");
-            const topType = gameType ? `<span class="mc-type">${gameType}</span>` : "";
+            const sideGame = classifyGameType(r.side_games);
+            const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
+            const tee = (r.tee_choice || "").trim();
+            const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
             let actionBtn = '';
             if (txStatus === "active" && !r.transferred_from_id) {
@@ -549,8 +551,6 @@
             const fields = [
                 ["Price", r.item_price || "\u2014"],
                 ["Handicap", r.handicap || "\u2014"],
-                ["Side Games", r.side_games || "\u2014"],
-                ["Tee", r.tee_choice || "\u2014"],
                 ["Status", r.member_status || "\u2014"],
                 ["Order Date", r.order_date || "\u2014"],
             ];
@@ -560,7 +560,7 @@
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         <span class="mc-customer"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}" onclick="event.stopPropagation()">${escapeHtml(r.customer || "\u2014")}</a></span>
-                        ${topType} ${tag}
+                        ${topTags} ${tag}
                     </div>
                     <span class="mc-chevron">&#9656;</span>
                 </div>
