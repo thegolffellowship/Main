@@ -1042,7 +1042,7 @@ tr.row-transferred { opacity: 0.6; }
     transition: transform 0.15s;
     flex-shrink: 0;
 }
-.mobile-card.expanded .mc-chevron {
+.mobile-card.expanded > .mobile-card-top > .mc-chevron {
     transform: rotate(90deg);
 }
 .mobile-card-details {
@@ -1050,7 +1050,7 @@ tr.row-transferred { opacity: 0.6; }
     padding: 0 1rem 0.75rem;
     border-top: 1px solid var(--border);
 }
-.mobile-card.expanded .mobile-card-details {
+.mobile-card.expanded > .mobile-card-details {
     display: block;
 }
 .mc-field-grid {
