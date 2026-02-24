@@ -100,12 +100,13 @@
                 <tbody id="customer-list-body"></tbody>
             </table>
         </section>
+        <section id="customer-mobile-cards" class="mobile-card-list customers-mobile"></section>
 
         <!-- Customer cards view -->
         <section class="customer-cards" id="customer-cards" style="display:none;"></section>
 
-        <!-- Selected customer detail -->
-        <section id="customer-detail" style="display:none;">
+        <!-- Selected customer detail (desktop cards view only, hidden on mobile) -->
+        <section id="customer-detail" style="display:none;" class="customer-detail-section">
             <h3 id="detail-title" style="margin-bottom: 0.75rem; font-size: 1.1rem;"></h3>
             <div id="detail-meta" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;"></div>
             <div class="customer-detail-panel">
@@ -436,9 +437,124 @@
         document.getElementById("stat-total-spent").textContent = "$" + totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
+    function renderCustDetailMobile(customer) {
+        const sorted = [...customer.items].sort((a, b) =>
+            (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""));
+
+        return sorted.map(item => {
+            const txStatus = item.transaction_status || "active";
+            const statusClass = txStatus !== "active" ? ` row-${txStatus}` : (item.transferred_from_id ? ' row-from-transfer' : '');
+            let tag = '';
+            if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+            else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+            else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            const gameType = escapeHtml(item.golf_or_compete || "");
+            const topType = gameType ? `<span class="mc-type">${gameType}</span>` : "";
+
+            let actionBtn = '';
+            if (txStatus === "active" && !item.transferred_from_id) {
+                actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
+            } else if (txStatus === "credited" || txStatus === "transferred") {
+                actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+            }
+
+            const fields = [
+                ["Date", item.event_date || item.order_date || "\u2014"],
+                ["Price", item.item_price || "\u2014"],
+                ["City", item.city || "\u2014"],
+                ["Course", item.course || "\u2014"],
+                ["Side Games", item.side_games || "\u2014"],
+            ];
+
+            return `
+            <div class="mobile-card${statusClass}" data-id="${item.id}">
+                <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
+                    <div class="mc-primary">
+                        <span class="mc-customer"><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}" onclick="event.stopPropagation()">${escapeHtml(item.item_name || "\u2014")}</a></span>
+                        ${topType} ${tag}
+                    </div>
+                    <span class="mc-chevron">&#9656;</span>
+                </div>
+                <div class="mobile-card-details">
+                    <div class="mc-field-grid">
+                        ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
+                    </div>
+                    ${actionBtn ? `<div class="mc-actions">${actionBtn}</div>` : ''}
+                </div>
+            </div>`;
+        }).join("");
+    }
+
+    function renderCustomersMobile(filtered) {
+        const container = document.getElementById("customer-mobile-cards");
+        if (!container) return;
+
+        if (!filtered.length) {
+            container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-muted); font-style:italic;">No customers found.</div>';
+            return;
+        }
+
+        container.innerHTML = filtered.map(c => {
+            const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
+            const meta = [];
+            if (c.chapter) meta.push(escapeHtml(c.chapter));
+            meta.push(c.items.length + " purchase" + (c.items.length !== 1 ? "s" : ""));
+            meta.push("$" + c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+
+            return `
+            <div class="mobile-card ${isExpanded ? 'expanded' : ''}" data-cust-name="${escapeHtml(c.name)}" ${isExpanded ? 'style="border-color:var(--primary);"' : ''}>
+                <div class="mobile-card-top cust-mobile-top" data-name="${escapeHtml(c.name)}">
+                    <div class="mc-primary">
+                        <span class="mc-customer">${escapeHtml(c.name)}</span>
+                        <span class="status-badge-sm ${statusBadgeClass(c.status)}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(c.status)}</span>
+                        <br><span class="mc-event">${meta.join(" &bull; ")}</span>
+                    </div>
+                    <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
+                </div>
+                <div class="mobile-card-details" ${isExpanded ? 'style="display:block;"' : ''}>
+                    ${isExpanded ? renderCustDetailMobile(c) : ''}
+                </div>
+            </div>`;
+        }).join("");
+
+        // Attach click handlers
+        container.querySelectorAll(".cust-mobile-top").forEach(top => {
+            top.addEventListener("click", () => {
+                const name = top.dataset.name;
+                const cust = allCustomers.find(c => c.name === name);
+                if (!cust) return;
+                const wasExpanded = selectedCustomer && selectedCustomer.name === name;
+                selectedCustomer = wasExpanded ? null : cust;
+                renderCustomersMobile(filtered);
+            });
+        });
+
+        // Attach credit/reverse handlers for expanded customer
+        if (selectedCustomer) {
+            const expandedCard = container.querySelector(`.mobile-card[data-cust-name="${escapeHtml(selectedCustomer.name)}"]`);
+            if (expandedCard) {
+                expandedCard.querySelectorAll("[data-cust-credit-id]").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        openCustCreditModal(parseInt(btn.dataset.custCreditId));
+                    });
+                });
+                expandedCard.querySelectorAll("[data-cust-reverse-id]").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        reverseCustCredit(parseInt(btn.dataset.custReverseId));
+                    });
+                });
+            }
+        }
+    }
+
     function renderCustomers() {
         renderStats();
         const filtered = getFilteredSorted();
+
+        // Always render mobile view (CSS controls visibility)
+        renderCustomersMobile(filtered);
 
         if (currentView === "list") {
             renderListView(filtered);

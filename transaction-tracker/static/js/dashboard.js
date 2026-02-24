@@ -432,6 +432,73 @@ function renderHeaderRow() {
     attachHeaderSort();
 }
 
+function renderMobileCards(items) {
+    let container = document.getElementById("txn-mobile-cards");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "txn-mobile-cards";
+        container.className = "mobile-card-list";
+        const wrapper = document.querySelector(".table-wrapper");
+        wrapper.parentNode.insertBefore(container, wrapper.nextSibling);
+    }
+
+    if (!items.length) {
+        container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-muted); font-style:italic;">No items found.</div>';
+        return;
+    }
+
+    container.innerHTML = items.map(row => {
+        const status = row.transaction_status || "active";
+        const statusClass = status !== "active" ? ` row-${status}` : (row.transferred_from_id ? ' row-from-transfer' : '');
+        const tag = statusTag(row);
+        const gameType = escapeHtml(row.golf_or_compete || "");
+        const topType = gameType ? `<span class="mc-type">${gameType}</span>` : "";
+
+        // Detail fields
+        const fields = [
+            ["Date", row.event_date || row.order_date || "\u2014"],
+            ["Price", row.item_price || "\u2014"],
+            ["City", row.city || "\u2014"],
+            ["Course", row.course || "\u2014"],
+            ["Handicap", row.handicap || "\u2014"],
+            ["Side Games", row.side_games || "\u2014"],
+            ["Tee", row.tee_choice || "\u2014"],
+            ["Status", row.member_status || "\u2014"],
+            ["Order ID", row.order_id || "\u2014"],
+            ["Order Date", row.order_date || "\u2014"],
+        ];
+
+        // Action buttons
+        let actionHtml = `<button class="btn btn-edit" onclick="openEditModal(${row.id})">Edit</button>`;
+        if (status === "active" && !row.transferred_from_id) {
+            actionHtml += ` <button class="btn btn-credit" onclick="openCreditModal(${row.id})">Credit</button>`;
+        } else if (status === "credited" || status === "transferred") {
+            actionHtml += ` <button class="btn btn-reverse" onclick="reverseCreditAction(${row.id})">Reverse</button>`;
+        }
+        if (currentRole === "admin") {
+            actionHtml += ` <button class="btn btn-danger" onclick="deleteItem(${row.id})">Delete</button>`;
+        }
+
+        return `
+        <div class="mobile-card${statusClass}" data-id="${row.id}">
+            <div class="mobile-card-top" onclick="this.parentElement.classList.toggle('expanded')">
+                <div class="mc-primary">
+                    <span class="mc-customer">${escapeHtml(row.customer || "Unknown")}</span>
+                    ${topType} ${tag}
+                    <br><span class="mc-event">${escapeHtml(row.item_name || "\u2014")}</span>
+                </div>
+                <span class="mc-chevron">&#9656;</span>
+            </div>
+            <div class="mobile-card-details">
+                <div class="mc-field-grid">
+                    ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
+                </div>
+                <div class="mc-actions">${actionHtml}</div>
+            </div>
+        </div>`;
+    }).join("");
+}
+
 function renderTable(items) {
     const tbody = document.getElementById("txn-body");
     const visibleCount = getOrderedColumns().filter(c => visibleColumns[c.key] !== false).length;
@@ -440,6 +507,7 @@ function renderTable(items) {
         tbody.innerHTML =
             `<tr class="empty-row"><td colspan="${visibleCount}">No items found. Click "Check Now" to scan your inbox.</td></tr>`;
         document.getElementById("row-count").textContent = "";
+        renderMobileCards([]);
         return;
     }
 
@@ -459,6 +527,9 @@ function renderTable(items) {
 
     // Apply column visibility to newly rendered rows
     applyColumnVisibility();
+
+    // Render mobile card view (shown/hidden via CSS media query)
+    renderMobileCards(items);
 
     document.getElementById("row-count").textContent = `Showing ${items.length} item(s)`;
 }

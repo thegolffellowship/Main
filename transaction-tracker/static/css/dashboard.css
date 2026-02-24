@@ -981,16 +981,212 @@ tr.row-transferred { opacity: 0.6; }
     width: 480px;
 }
 
-/* ---- Responsive ---- */
-@media (max-width: 640px) {
-    header { flex-direction: column; gap: 0.75rem; text-align: center; }
-    main { padding: 1rem; }
-    .controls { flex-direction: column; }
-    .search-box { min-width: unset; }
-    .tab-nav { overflow-x: auto; }
+/* ---- Mobile Card List ---- */
+.mobile-card-list {
+    display: none;
+}
+.mobile-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 0.5rem;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+.mobile-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    gap: 0.5rem;
+    min-height: 48px;
+    -webkit-tap-highlight-color: transparent;
+}
+.mobile-card-top:active {
+    background: #f1f5f9;
+}
+.mobile-card-top .mc-primary {
+    font-size: 0.88rem;
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+}
+.mobile-card-top .mc-primary .mc-customer {
+    color: var(--text);
+}
+.mobile-card-top .mc-primary .mc-event {
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.82rem;
+}
+.mobile-card-top .mc-primary .mc-type {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 8px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: #eff6ff;
+    color: #1e40af;
+    vertical-align: middle;
+    margin-left: 0.35rem;
+}
+.mobile-card-top .mc-chevron {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+}
+.mobile-card.expanded .mc-chevron {
+    transform: rotate(90deg);
+}
+.mobile-card-details {
+    display: none;
+    padding: 0 1rem 0.75rem;
+    border-top: 1px solid var(--border);
+}
+.mobile-card.expanded .mobile-card-details {
+    display: block;
+}
+.mc-field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.3rem 1rem;
+    font-size: 0.82rem;
+    padding-top: 0.65rem;
+}
+.mc-field {
+    display: flex;
+    gap: 0.35rem;
+}
+.mc-field-label {
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.75rem;
+    min-width: 65px;
+    flex-shrink: 0;
+}
+.mc-field-value {
+    font-weight: 600;
+    word-break: break-word;
+}
+.mc-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding-top: 0.65rem;
+    flex-wrap: wrap;
+}
+.mc-actions .btn {
+    min-height: 40px;
+    font-size: 0.82rem;
+}
+
+/* Status indicators on mobile cards */
+.mobile-card.row-credited {
+    opacity: 0.6;
+}
+.mobile-card.row-transferred {
+    opacity: 0.6;
+}
+
+/* ---- Responsive: Tablet ---- */
+@media (max-width: 1024px) {
+    main { padding: 1.25rem 1.25rem 2rem; }
+    .stats-row { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+}
+
+/* ---- Responsive: Mobile ---- */
+@media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        gap: 0.75rem;
+        text-align: center;
+        padding: 1rem;
+    }
+    .header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+    main { padding: 1rem 0.75rem 2rem; }
+
+    /* Navigation */
+    .tab-nav {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .tab-nav::-webkit-scrollbar { display: none; }
     .tab-nav a { padding: 0.5rem 0.85rem; font-size: 0.75rem; }
+
+    /* Stats */
+    .stats-row { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.5rem; }
+    .stat-card { padding: 0.75rem 0.85rem; }
+    .stat-value { font-size: 1.25rem; }
+
+    /* Controls */
+    .controls { flex-direction: column; gap: 0.5rem; }
+    .search-box { min-width: unset; width: 100%; }
+    .filter-select, .sort-select { width: 100%; }
+
+    /* Category filters */
+    .category-filters { gap: 0.35rem; }
+    .category-btn { padding: 0.35rem 0.75rem; font-size: 0.78rem; }
+
+    /* Hide desktop table, show mobile cards */
+    .table-wrapper { display: none; }
+    .mobile-card-list { display: block; }
+    .row-count { font-size: 0.75rem; }
+
+    /* Column toggle — not needed on mobile card view */
+    .column-toggle-wrapper { display: none; }
+
+    /* Events table → mobile cards */
+    .events-table-wrapper { display: none; }
+    .mobile-card-list.events-mobile { display: block; }
+
+    /* Customer list → mobile cards */
+    .customer-list-wrapper { display: none; }
+    .mobile-card-list.customers-mobile { display: block; }
     .customer-cards { grid-template-columns: 1fr; }
-    .edit-modal { width: 95vw; }
+    .view-toggle { display: none; }
+    .customer-detail-panel { overflow-x: auto; }
+
+    /* Event detail sub-tables → mobile cards */
+    .registrants-table { display: none; }
+    .mobile-card-list.registrants-mobile { display: block; }
+
+    /* Modals */
+    .login-modal { width: calc(100vw - 2rem); max-width: 360px; }
+    .edit-modal { width: calc(100vw - 2rem); max-width: 600px; max-height: 85vh; overflow-y: auto; }
     .edit-grid { grid-template-columns: 1fr; }
-    .login-modal { width: 90vw; }
+    .credit-modal { width: calc(100vw - 2rem); max-width: 480px; max-height: 85vh; overflow-y: auto; }
+    .add-event-modal { width: calc(100vw - 2rem); max-width: 480px; }
+    .add-player-modal { width: calc(100vw - 2rem); max-width: 480px; max-height: 85vh; overflow-y: auto; }
+    .modal { padding: 1.25rem; }
+
+    /* Connector panel */
+    .connector-panel { font-size: 0.82rem; }
+    .connector-example pre { font-size: 0.7rem; }
+
+    /* Touch feedback */
+    .btn:active { transform: scale(0.97); }
+    .category-btn:active { transform: scale(0.97); }
+
+    /* Prevent 300ms tap delay */
+    * { touch-action: manipulation; }
+
+    /* Audit page */
+    .comparison-grid { grid-template-columns: 1fr; }
+    .panel:first-child {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    .audit-summary { grid-template-columns: repeat(2, 1fr); }
+    .field-grid { grid-template-columns: 1fr; }
+
+    /* Customers page: hide bottom detail panel on mobile (using inline expansion instead) */
+    .customer-detail-section { display: none !important; }
 }
