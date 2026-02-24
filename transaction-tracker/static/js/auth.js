@@ -4,6 +4,21 @@
    Requires the login modal HTML and role badge/logout button in header.
    ========================================================= */
 
+// Always start at the Transactions page on fresh app launch.
+// sessionStorage persists during tab/navigation but clears when the
+// standalone PWA is fully closed or the browser tab is closed.
+(function() {
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    if (!sessionStorage.getItem("tgf_session_active")) {
+        sessionStorage.setItem("tgf_session_active", "1");
+        if (window.location.pathname !== "/") {
+            window.location.replace("/");
+            return;
+        }
+    }
+    window.scrollTo(0, 0);
+})();
+
 let currentRole = null;
 
 async function checkRole() {

@@ -15,7 +15,7 @@ function classifyGameType(sideGames) {
 }
 
 // Sort state — independent of dropdown so header clicks always work
-let currentSortField = "event_date";
+let currentSortField = "order_date";
 let currentSortDir = "desc";
 
 // Columns that are searchable when "All columns" filter is selected
