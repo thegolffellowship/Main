@@ -51,6 +51,47 @@ SQLite data is lost on every redeploy unless stored on a persistent volume.
 
 This ensures the DB survives redeployments. Without this, every push wipes the data.
 
+## MCP Server (Direct Data Access for Claude)
+
+An MCP (Model Context Protocol) server at `mcp_server.py` gives Claude direct
+read/write access to the transaction database — no WebFetch needed.
+
+### Claude Code setup
+
+The `.mcp.json` at the repo root auto-configures it. Just restart Claude Code
+in this directory and you'll see the `tgf-transactions` server with 21 tools.
+
+### Claude Desktop setup
+
+Add this to your `claude_desktop_config.json` (Settings → Developer → Edit Config):
+
+```json
+{
+  "mcpServers": {
+    "tgf-transactions": {
+      "command": "python",
+      "args": ["/full/path/to/transaction-tracker/mcp_server.py"]
+    }
+  }
+}
+```
+
+Replace `/full/path/to/` with the actual absolute path on your machine.
+
+### Available tools (21)
+
+**Read:**
+`get_transactions`, `get_transaction_by_id`, `get_statistics`,
+`get_data_quality_report`, `get_recent_snapshot`, `list_events`,
+`get_event_registrations`, `list_customers`, `get_customer_details`,
+`search_transactions`
+
+**Write:**
+`update_transaction`, `credit_transaction`, `transfer_transaction`,
+`undo_credit_or_transfer`, `create_new_event`, `update_existing_event`,
+`delete_existing_event`, `add_player`, `delete_transaction`,
+`sync_events`, `run_autofix`
+
 ## Architecture
 
 - **Flask app** in `transaction-tracker/app.py`
