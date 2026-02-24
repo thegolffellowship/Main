@@ -41,10 +41,17 @@ from email_parser.database import (
     get_all_events,
     update_event,
     delete_event,
+    get_known_rsvp_uids,
+    save_rsvps,
+    get_rsvps_for_event,
+    get_all_rsvps,
+    get_rsvp_stats,
+    rematch_rsvps,
 )
 from email_parser.fetcher import fetch_transaction_emails
 from email_parser.parser import parse_email, parse_emails
 from email_parser.report import send_daily_report
+from email_parser.rsvp_parser import fetch_rsvp_emails, parse_rsvp_emails
 
 load_dotenv()
 
@@ -143,6 +150,46 @@ def check_inbox():
     logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
 
 
+def check_rsvp_inbox():
+    """Fetch new RSVP emails from Golf Genius, parse them, and save to DB."""
+    rsvp_address = os.getenv("RSVP_EMAIL_ADDRESS")
+    if not rsvp_address:
+        logger.info("RSVP_EMAIL_ADDRESS not configured — skipping RSVP check")
+        return
+
+    logger.info("Checking RSVP inbox for %s ...", rsvp_address)
+    try:
+        emails = fetch_rsvp_emails(
+            since_date=datetime.now() - timedelta(days=90),
+        )
+    except Exception as e:
+        logger.exception("Failed to fetch RSVP emails: %s", e)
+        return
+
+    if not emails:
+        logger.info("No RSVP emails found")
+        return
+
+    # Skip already-processed
+    known_uids = get_known_rsvp_uids()
+    new_emails = [e for e in emails if e.get("uid") not in known_uids]
+    logger.info(
+        "RSVP: fetched %d emails, %d already processed, %d new",
+        len(emails), len(emails) - len(new_emails), len(new_emails),
+    )
+
+    if not new_emails:
+        return
+
+    parsed = parse_rsvp_emails(new_emails)
+    if parsed:
+        saved = save_rsvps(parsed)
+        logger.info("RSVP: saved %d new RSVPs from %d emails", saved, len(new_emails))
+
+    # Also re-run matching for any previously unmatched RSVPs
+    rematch_rsvps()
+
+
 def _check_inbox_background():
     """Wrapper that runs check_inbox in a background thread with status tracking."""
     _inbox_check_status["emails_fetched"] = 0
@@ -209,6 +256,18 @@ def start_scheduler():
         id="inbox_check",
         replace_existing=True,
     )
+
+    # RSVP inbox check — same interval as transaction inbox
+    if os.getenv("RSVP_EMAIL_ADDRESS"):
+        scheduler.add_job(
+            check_rsvp_inbox,
+            "interval",
+            minutes=interval,
+            id="rsvp_inbox_check",
+            replace_existing=True,
+        )
+        logger.info("RSVP scheduler: checking %s every %d minutes",
+                     os.getenv("RSVP_EMAIL_ADDRESS"), interval)
 
     # Daily report — runs at the configured hour (default 7:00 AM)
     report_hour = int(os.getenv("DAILY_REPORT_HOUR", "7"))
@@ -354,12 +413,14 @@ def api_config_status():
     ai_ok = bool(os.getenv("ANTHROPIC_API_KEY"))
     connector_ok = bool(os.getenv("CONNECTOR_API_KEY"))
     report_ok = bool(os.getenv("DAILY_REPORT_TO"))
+    rsvp_ok = bool(os.getenv("RSVP_EMAIL_ADDRESS"))
     return jsonify({
         "configured": email_ok and ai_ok,
         "email": email_ok,
         "ai": ai_ok,
         "connector": connector_ok,
         "daily_report": report_ok,
+        "rsvp": rsvp_ok,
     })
 
 
@@ -713,6 +774,70 @@ def api_seed_events():
         return jsonify({"error": "Body must be JSON with 'events' array."}), 400
     result = seed_events(data["events"])
     return jsonify({"status": "ok", **result})
+
+
+# ---------------------------------------------------------------------------
+# Routes — RSVP
+# ---------------------------------------------------------------------------
+@app.route("/api/rsvps")
+def api_rsvps():
+    """Return RSVPs, optionally filtered by event or response."""
+    event = request.args.get("event", "")
+    response = request.args.get("response", "")
+    return jsonify(get_all_rsvps(event_name=event, response=response))
+
+
+@app.route("/api/rsvps/event/<path:event_name>")
+def api_rsvps_for_event(event_name):
+    """Return the latest RSVP per player for a specific event."""
+    return jsonify(get_rsvps_for_event(event_name))
+
+
+@app.route("/api/rsvps/stats")
+def api_rsvp_stats():
+    """Return RSVP summary statistics."""
+    return jsonify(get_rsvp_stats())
+
+
+@app.route("/api/rsvps/check-now", methods=["POST"])
+def api_rsvp_check_now():
+    """Manually trigger an RSVP inbox check."""
+    rsvp_address = os.getenv("RSVP_EMAIL_ADDRESS")
+    if not rsvp_address:
+        return jsonify({"error": "RSVP_EMAIL_ADDRESS not configured."}), 400
+
+    try:
+        check_rsvp_inbox()
+        stats = get_rsvp_stats()
+        return jsonify({"status": "ok", "stats": stats})
+    except Exception as e:
+        logger.exception("Manual RSVP check failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rsvps/rematch", methods=["POST"])
+def api_rsvp_rematch():
+    """Re-run matching logic on unmatched RSVPs."""
+    try:
+        result = rematch_rsvps()
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.exception("RSVP rematch failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rsvps/config-status")
+def api_rsvp_config_status():
+    """Check whether RSVP email credentials are configured."""
+    rsvp_ok = bool(os.getenv("RSVP_EMAIL_ADDRESS"))
+    tenant_ok = bool(
+        os.getenv("RSVP_AZURE_TENANT_ID") or os.getenv("AZURE_TENANT_ID")
+    )
+    return jsonify({
+        "configured": rsvp_ok and tenant_ok,
+        "rsvp_email": rsvp_ok,
+        "azure_credentials": tenant_ok,
+    })
 
 
 @app.route("/api/report/send-now", methods=["POST"])

@@ -120,6 +120,26 @@ def init_db(db_path: str | Path | None = None) -> None:
         """
     )
 
+    # RSVPs table — Golf Genius round signup confirmations
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS rsvps (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_uid        TEXT NOT NULL UNIQUE,
+            player_name      TEXT,
+            player_email     TEXT,
+            gg_event_name    TEXT,
+            event_identifier TEXT,
+            event_date       TEXT,
+            response         TEXT NOT NULL,
+            received_at      TEXT,
+            matched_event    TEXT,
+            matched_item_id  INTEGER,
+            created_at       TEXT DEFAULT (datetime('now'))
+        )
+        """
+    )
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_items_order_date ON items(order_date DESC)"
     )
@@ -131,6 +151,12 @@ def init_db(db_path: str | Path | None = None) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_events_event_date ON events(event_date DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_rsvps_matched_event ON rsvps(matched_event)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_rsvps_player_email ON rsvps(player_email)"
     )
 
     conn.commit()
@@ -820,6 +846,307 @@ def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# RSVPs — Golf Genius round signup confirmations
+# ---------------------------------------------------------------------------
+
+def get_known_rsvp_uids(db_path: str | Path | None = None) -> set[str]:
+    """Return the set of email_uid values already stored in rsvps."""
+    conn = get_connection(db_path)
+    rows = conn.execute("SELECT DISTINCT email_uid FROM rsvps").fetchall()
+    conn.close()
+    return {r["email_uid"] for r in rows}
+
+
+def match_rsvp_to_event(event_identifier: str, event_date: str | None,
+                         db_path: str | Path | None = None) -> str | None:
+    """Try to match an RSVP event identifier to an events.item_name.
+
+    Strategies:
+      1. item_name contains the event_identifier substring
+      2. Match by event_date alone (if only one event on that date)
+      3. Normalize the identifier as a course name and match course + date
+    """
+    conn = get_connection(db_path)
+
+    # Strategy 1: Direct substring match
+    rows = conn.execute(
+        "SELECT item_name FROM events WHERE item_name LIKE ?",
+        (f"%{event_identifier}%",),
+    ).fetchall()
+    if len(rows) == 1:
+        conn.close()
+        return rows[0]["item_name"]
+
+    # Strategy 2: Match by event_date (if one event on that date)
+    if event_date:
+        rows = conn.execute(
+            "SELECT item_name FROM events WHERE event_date = ?",
+            (event_date,),
+        ).fetchall()
+        if len(rows) == 1:
+            conn.close()
+            return rows[0]["item_name"]
+
+    # Strategy 3: Normalize as course name and match course + date
+    from email_parser.parser import _normalize_course_name
+    normalized = _normalize_course_name(event_identifier)
+    if normalized and event_date:
+        rows = conn.execute(
+            "SELECT item_name FROM events WHERE course LIKE ? AND event_date = ?",
+            (f"%{normalized}%", event_date),
+        ).fetchall()
+        if len(rows) == 1:
+            conn.close()
+            return rows[0]["item_name"]
+    elif normalized:
+        rows = conn.execute(
+            "SELECT item_name FROM events WHERE course LIKE ?",
+            (f"%{normalized}%",),
+        ).fetchall()
+        if len(rows) == 1:
+            conn.close()
+            return rows[0]["item_name"]
+
+    conn.close()
+    return None
+
+
+def match_rsvp_to_item(player_email: str | None, player_name: str | None,
+                        event_name: str, db_path: str | Path | None = None) -> int | None:
+    """Try to match an RSVP player to an items row (transaction).
+
+    Strategies:
+      1. Match by player email + event name
+      2. Match by player first name + event name (only if single match)
+    """
+    conn = get_connection(db_path)
+
+    # Strategy 1: Email match
+    if player_email:
+        row = conn.execute(
+            """SELECT id FROM items
+               WHERE LOWER(customer_email) = LOWER(?)
+                 AND item_name = ?
+                 AND COALESCE(transaction_status, 'active') = 'active'""",
+            (player_email, event_name),
+        ).fetchone()
+        if row:
+            conn.close()
+            return row["id"]
+
+    # Strategy 2: First name match (loose — only if one match)
+    if player_name:
+        rows = conn.execute(
+            """SELECT id FROM items
+               WHERE customer LIKE ?
+                 AND item_name = ?
+                 AND COALESCE(transaction_status, 'active') = 'active'""",
+            (f"{player_name}%", event_name),
+        ).fetchall()
+        if len(rows) == 1:
+            conn.close()
+            return rows[0]["id"]
+
+    conn.close()
+    return None
+
+
+def save_rsvp(rsvp: dict, db_path: str | Path | None = None) -> int | None:
+    """
+    Save a parsed RSVP to the database.
+
+    Performs event and item matching before insert.
+    Returns the rsvp id, or None if it was a duplicate.
+    """
+    conn = get_connection(db_path)
+
+    # Match event
+    matched_event = match_rsvp_to_event(
+        rsvp["event_identifier"], rsvp.get("event_date"), db_path,
+    )
+
+    # Match transaction
+    matched_item_id = None
+    if matched_event:
+        matched_item_id = match_rsvp_to_item(
+            rsvp.get("player_email"), rsvp.get("player_name"),
+            matched_event, db_path,
+        )
+
+    try:
+        cursor = conn.execute(
+            """INSERT OR IGNORE INTO rsvps
+               (email_uid, player_name, player_email, gg_event_name,
+                event_identifier, event_date, response, received_at,
+                matched_event, matched_item_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                rsvp["email_uid"],
+                rsvp.get("player_name"),
+                rsvp.get("player_email"),
+                rsvp.get("gg_event_name"),
+                rsvp.get("event_identifier"),
+                rsvp.get("event_date"),
+                rsvp["response"],
+                rsvp.get("received_at"),
+                matched_event,
+                matched_item_id,
+            ),
+        )
+        conn.commit()
+        if cursor.rowcount > 0:
+            rsvp_id = cursor.lastrowid
+            conn.close()
+            logger.info(
+                "Saved RSVP: %s %s for %s (matched_event=%s, matched_item=%s)",
+                rsvp.get("player_name"), rsvp["response"],
+                rsvp.get("event_identifier"), matched_event, matched_item_id,
+            )
+            return rsvp_id
+    except sqlite3.IntegrityError:
+        pass
+
+    conn.close()
+    return None
+
+
+def save_rsvps(rsvps: list[dict], db_path: str | Path | None = None) -> int:
+    """Save a batch of parsed RSVPs. Returns count of newly inserted."""
+    inserted = 0
+    for rsvp in rsvps:
+        result = save_rsvp(rsvp, db_path)
+        if result is not None:
+            inserted += 1
+    logger.info("Saved %d new RSVPs (%d total provided)", inserted, len(rsvps))
+    return inserted
+
+
+def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> list[dict]:
+    """
+    Return the latest RSVP for each player for the given event.
+
+    Groups by player_email and returns only the most recent response.
+    """
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        """SELECT r1.*
+           FROM rsvps r1
+           INNER JOIN (
+               SELECT player_email, MAX(received_at) AS max_date
+               FROM rsvps
+               WHERE matched_event = ?
+                 AND player_email IS NOT NULL AND player_email != ''
+               GROUP BY player_email
+           ) r2 ON r1.player_email = r2.player_email AND r1.received_at = r2.max_date
+           WHERE r1.matched_event = ?
+           ORDER BY r1.player_name ASC""",
+        (event_name, event_name),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_all_rsvps(event_name: str = "", response: str = "",
+                   db_path: str | Path | None = None) -> list[dict]:
+    """Return RSVPs with optional filtering by event and/or response."""
+    conn = get_connection(db_path)
+    clauses = []
+    params = []
+
+    if event_name:
+        clauses.append("matched_event LIKE ?")
+        params.append(f"%{event_name}%")
+    if response:
+        clauses.append("response = ?")
+        params.append(response.upper())
+
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    rows = conn.execute(
+        f"SELECT * FROM rsvps{where} ORDER BY received_at DESC",
+        params,
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_rsvp_stats(db_path: str | Path | None = None) -> dict:
+    """Return summary RSVP statistics."""
+    conn = get_connection(db_path)
+    total = conn.execute("SELECT COUNT(*) as c FROM rsvps").fetchone()["c"]
+    playing = conn.execute(
+        "SELECT COUNT(*) as c FROM rsvps WHERE response = 'PLAYING'"
+    ).fetchone()["c"]
+    not_playing = conn.execute(
+        "SELECT COUNT(*) as c FROM rsvps WHERE response = 'NOT PLAYING'"
+    ).fetchone()["c"]
+    matched = conn.execute(
+        "SELECT COUNT(*) as c FROM rsvps WHERE matched_item_id IS NOT NULL"
+    ).fetchone()["c"]
+    unmatched = conn.execute(
+        "SELECT COUNT(*) as c FROM rsvps WHERE matched_event IS NOT NULL AND matched_item_id IS NULL AND response = 'PLAYING'"
+    ).fetchone()["c"]
+    conn.close()
+    return {
+        "total_rsvps": total,
+        "playing": playing,
+        "not_playing": not_playing,
+        "matched_to_transaction": matched,
+        "playing_no_transaction": unmatched,
+    }
+
+
+def rematch_rsvps(db_path: str | Path | None = None) -> dict:
+    """
+    Re-run matching logic on all RSVPs that are missing matches.
+
+    Useful after new events or transactions are added.
+    Returns {"rematched_events": N, "rematched_items": N}.
+    """
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT * FROM rsvps WHERE matched_event IS NULL OR matched_item_id IS NULL"
+    ).fetchall()
+
+    rematched_events = 0
+    rematched_items = 0
+
+    for row in rows:
+        rsvp = dict(row)
+        updates = {}
+
+        # Re-match event
+        if not rsvp.get("matched_event"):
+            matched_event = match_rsvp_to_event(
+                rsvp["event_identifier"], rsvp.get("event_date"), db_path,
+            )
+            if matched_event:
+                updates["matched_event"] = matched_event
+                rematched_events += 1
+
+        event_name = updates.get("matched_event") or rsvp.get("matched_event")
+
+        # Re-match item
+        if event_name and not rsvp.get("matched_item_id"):
+            matched_item = match_rsvp_to_item(
+                rsvp.get("player_email"), rsvp.get("player_name"),
+                event_name, db_path,
+            )
+            if matched_item:
+                updates["matched_item_id"] = matched_item
+                rematched_items += 1
+
+        if updates:
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            values = list(updates.values()) + [rsvp["id"]]
+            conn.execute(f"UPDATE rsvps SET {set_clause} WHERE id = ?", values)
+
+    conn.commit()
+    conn.close()
+    logger.info("Rematch: %d events, %d items rematched", rematched_events, rematched_items)
+    return {"rematched_events": rematched_events, "rematched_items": rematched_items}
 
 
 def normalize_tee_choices(db_path: str | Path | None = None) -> int:

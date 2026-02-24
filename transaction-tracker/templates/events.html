@@ -134,6 +134,9 @@
             <button id="btn-sync" class="btn btn-primary" title="Scan transactions and create new event entries">
                 <span class="btn-icon">&#8635;</span> Sync Events
             </button>
+            <button id="btn-check-rsvps" class="btn btn-secondary" title="Check Golf Genius RSVPs" style="display:none;">
+                <span class="btn-icon">&#9745;</span> Check RSVPs
+            </button>
             <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">
                 Log Out
             </button>
@@ -347,6 +350,7 @@
     <script>
     let allEvents = [];
     let allItems = [];
+    let allRsvps = {};  // keyed by event_name → array of rsvp objects
     let expandedEventId = null;
     let eventSortField = "event_date";
     let eventSortDir = "asc";
@@ -463,6 +467,18 @@
         }
     }
 
+    async function fetchRsvps(eventName) {
+        try {
+            const res = await fetch(`/api/rsvps/event/${encodeURIComponent(eventName)}`);
+            const data = await res.json();
+            allRsvps[eventName] = data;
+            return data;
+        } catch (err) {
+            console.error("Failed to fetch RSVPs:", err);
+            return [];
+        }
+    }
+
     async function fetchEvents() {
         try {
             const res = await fetch("/api/events");
@@ -543,6 +559,8 @@
             if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
+            const rsvpBadge = renderRsvpBadge(rsvp);
             const sideGame = classifyGameType(r.side_games);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
@@ -567,7 +585,7 @@
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         <span class="mc-customer"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}" onclick="event.stopPropagation()">${escapeHtml(r.customer || "\u2014")}</a></span>
-                        ${topTags} ${tag}
+                        ${rsvpBadge} ${topTags} ${tag}
                     </div>
                     <span class="mc-chevron">&#9656;</span>
                 </div>
@@ -640,9 +658,9 @@
 
         // Attach click handlers
         container.querySelectorAll(".ev-mobile-top").forEach(top => {
-            top.addEventListener("click", () => {
+            top.addEventListener("click", async () => {
                 const id = parseInt(top.dataset.id);
-                toggleEventDetail(id);
+                await toggleEventDetail(id);
             });
         });
 
@@ -820,9 +838,30 @@
         return { players: registrants.length, net, gross, noGames };
     }
 
+    function getRsvpForItem(itemId, eventName) {
+        const rsvps = allRsvps[eventName] || [];
+        return rsvps.find(r => r.matched_item_id === itemId);
+    }
+
+    function getRsvpByEmail(email, eventName) {
+        if (!email) return null;
+        const rsvps = allRsvps[eventName] || [];
+        return rsvps.find(r => r.player_email && r.player_email.toLowerCase() === email.toLowerCase());
+    }
+
+    function renderRsvpBadge(rsvp) {
+        if (!rsvp) return '';
+        if (rsvp.response === 'PLAYING') {
+            return '<span class="rsvp-badge rsvp-playing" title="Confirmed in Golf Genius">GG</span>';
+        }
+        return '<span class="rsvp-badge rsvp-not-playing" title="Cancelled in Golf Genius">GG</span>';
+    }
+
     function renderDetailContent(ev) {
         const registrants = getRegistrants(ev.item_name);
-        if (!registrants.length) {
+        const rsvps = allRsvps[ev.item_name] || [];
+
+        if (!registrants.length && !rsvps.length) {
             return `<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem;">` +
                 `<p style="color: var(--text-muted); font-style: italic; margin:0;">No registrations found for this event.</p>` +
                 `<button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>` +
@@ -832,12 +871,21 @@
         const stats = computeGameStats(registrants);
         const activeFilter = eventGameFilter[ev.id] || null;
 
+        // Count RSVP stats
+        const playingRsvps = rsvps.filter(r => r.response === 'PLAYING');
+        const notPlayingRsvps = rsvps.filter(r => r.response === 'NOT PLAYING');
+        const matchedItemIds = new Set(rsvps.filter(r => r.matched_item_id).map(r => r.matched_item_id));
+        const unmatchedPlaying = playingRsvps.filter(r => !r.matched_item_id);
+
         // Summary badges
         let html = '<div class="event-game-stats">';
         html += `<span class="game-stat-badge ${!activeFilter ? 'active' : ''}" data-event-id="${ev.id}" data-filter="">PLAYERS <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET GAMES <strong>${stats.net}</strong></span>`;
         html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS GAMES <strong>${stats.gross}</strong></span>`;
         html += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NO GAMES <strong>${stats.noGames}</strong></span>`;
+        if (rsvps.length) {
+            html += `<span class="game-stat-badge rsvp-stat-badge" style="cursor:default;">GG <strong>${playingRsvps.length}</strong> / <strong style="color:var(--red);">${notPlayingRsvps.length}</strong></span>`;
+        }
         html += '</div>';
 
         // Filter registrants if a game filter is active
@@ -885,6 +933,9 @@
 
         filtered.forEach(r => {
             const txStatus = r.transaction_status || "active";
+            const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
+            const hasGgConfirm = rsvp && rsvp.response === 'PLAYING';
+            const hasGgCancel = rsvp && rsvp.response === 'NOT PLAYING';
             const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (r.transferred_from_id ? ' class="row-from-transfer"' : '');
             html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
@@ -895,7 +946,8 @@
                     if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
-                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}</td>`;
+                    const rsvpBadge = renderRsvpBadge(rsvp);
+                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${rsvpBadge}${tag}</td>`;
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
@@ -914,10 +966,44 @@
         });
 
         html += '</tbody></table>';
+
+        // RSVP sections — only show if RSVPs exist for this event
+        if (rsvps.length) {
+            // Unmatched PLAYING RSVPs — players who RSVP'd but have no transaction
+            if (unmatchedPlaying.length) {
+                html += '<div class="rsvp-section rsvp-unmatched">';
+                html += `<h4 style="color:#d97706;">RSVP'd Playing — No Transaction (${unmatchedPlaying.length})</h4>`;
+                html += '<div class="rsvp-player-list">';
+                unmatchedPlaying.forEach(r => {
+                    html += `<div class="rsvp-player-card rsvp-unmatched-card">`;
+                    html += `<span class="rsvp-badge rsvp-playing">GG</span> `;
+                    html += `<strong>${escapeHtml(r.player_name || 'Unknown')}</strong>`;
+                    if (r.player_email) html += ` <span class="rsvp-email">${escapeHtml(r.player_email)}</span>`;
+                    html += `</div>`;
+                });
+                html += '</div></div>';
+            }
+
+            // NOT PLAYING RSVPs
+            if (notPlayingRsvps.length) {
+                html += '<div class="rsvp-section rsvp-not-playing-section">';
+                html += `<h4 style="color:var(--red);">Not Playing (${notPlayingRsvps.length})</h4>`;
+                html += '<div class="rsvp-player-list">';
+                notPlayingRsvps.forEach(r => {
+                    html += `<div class="rsvp-player-card rsvp-cancelled-card">`;
+                    html += `<span class="rsvp-badge rsvp-not-playing">GG</span> `;
+                    html += `<strong>${escapeHtml(r.player_name || 'Unknown')}</strong>`;
+                    if (r.player_email) html += ` <span class="rsvp-email">${escapeHtml(r.player_email)}</span>`;
+                    html += `</div>`;
+                });
+                html += '</div></div>';
+            }
+        }
+
         return html;
     }
 
-    function toggleEventDetail(eventId) {
+    async function toggleEventDetail(eventId) {
         const wasExpanded = expandedEventId === eventId;
 
         // Collapse any currently expanded row
@@ -942,10 +1028,12 @@
         if (row) row.classList.add("expanded");
         if (detailRow) {
             detailRow.classList.add("visible");
-            // Lazy-render content
+            // Lazy-render content — fetch RSVPs first
             const ev = allEvents.find(e => e.id === eventId);
             if (ev) {
                 const container = document.getElementById(`detail-content-${eventId}`);
+                container.innerHTML = '<div style="padding:1rem; color:var(--text-muted);">Loading...</div>';
+                await fetchRsvps(ev.item_name);
                 container.innerHTML = renderDetailContent(ev);
                 attachDetailHandlers(container, ev);
             }
@@ -1302,6 +1390,37 @@
 
         document.getElementById("btn-sync").addEventListener("click", syncEvents);
         document.getElementById("btn-clear-filters").addEventListener("click", clearEvFilters);
+
+        // RSVP check button — only show if configured
+        fetch("/api/rsvps/config-status").then(r => r.json()).then(data => {
+            if (data.configured) {
+                document.getElementById("btn-check-rsvps").style.display = "";
+            }
+        }).catch(() => {});
+
+        document.getElementById("btn-check-rsvps").addEventListener("click", async () => {
+            const btn = document.getElementById("btn-check-rsvps");
+            btn.disabled = true;
+            btn.textContent = "Checking...";
+            try {
+                const res = await fetch("/api/rsvps/check-now", { method: "POST" });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "RSVP check failed");
+                const s = data.stats || {};
+                alert(`RSVPs updated! ${s.total_rsvps || 0} total, ${s.playing || 0} playing, ${s.not_playing || 0} not playing.`);
+                // Refresh expanded event if any
+                if (expandedEventId !== null) {
+                    const ev = allEvents.find(e => e.id === expandedEventId);
+                    if (ev) await fetchRsvps(ev.item_name);
+                    renderEvents();
+                }
+            } catch (err) {
+                alert("RSVP check failed: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span class="btn-icon">&#9745;</span> Check RSVPs';
+            }
+        });
 
         // Add Player modal
         document.getElementById("add-player-form").addEventListener("submit", handleAddPlayerSubmit);
