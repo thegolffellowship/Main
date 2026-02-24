@@ -1033,6 +1033,10 @@
     }
 
     document.addEventListener("DOMContentLoaded", async () => {
+        if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+        window.scrollTo(0, 0);
+        document.querySelectorAll(".mobile-card.expanded").forEach(c => c.classList.remove("expanded"));
+
         await initAuth();
         loadCustColumnPrefs();
         buildCustColumnToggle();

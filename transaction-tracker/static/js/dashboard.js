@@ -1082,6 +1082,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Prevent browser from restoring previous scroll position; start at top
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     window.scrollTo(0, 0);
+    // Collapse any cards restored from bfcache
+    document.querySelectorAll(".mobile-card.expanded").forEach(c => c.classList.remove("expanded"));
 
     // Auth (shared auth.js) — will call onAuthReady() after login
     await initAuth();
@@ -1158,4 +1160,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             colDrop.classList.remove("open");
         }
     });
+});
+
+// When PWA resumes from bfcache, reset to clean state
+window.addEventListener("pageshow", (e) => {
+    if (e.persisted) {
+        window.scrollTo(0, 0);
+        document.querySelectorAll(".mobile-card.expanded").forEach(c => c.classList.remove("expanded"));
+    }
 });
