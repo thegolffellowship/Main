@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tgf-transactions": {
+      "command": "python",
+      "args": ["transaction-tracker/mcp_server.py"]
+    }
+  }
+}

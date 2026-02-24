@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — Customers</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TGF Tracker">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Customers — Purchase history by player</p>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-export-csv" class="btn btn-secondary">Export CSV</button>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">
+                Log Out
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers" class="active">Customers</a>
+            <a href="/audit">Audit Log</a>
+        </nav>
+
+        <!-- Stats cards -->
+        <section class="stats-row" id="stats-row">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-customers">—</div>
+                <div class="stat-label">Customers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-members">—</div>
+                <div class="stat-label">Members</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-total-items">—</div>
+                <div class="stat-label">Total Purchases</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-total-spent">—</div>
+                <div class="stat-label">Total Spent</div>
+            </div>
+        </section>
+
+        <!-- Controls -->
+        <section class="controls">
+            <input type="text" id="customer-search" class="search-box" placeholder="Search customers by name, email, chapter...">
+            <select id="filter-status" class="filter-select">
+                <option value="">All Statuses</option>
+                <option value="MEMBER">Members</option>
+                <option value="GUEST">Guests</option>
+                <option value="1st TIMER">1st Timers</option>
+            </select>
+            <select id="filter-chapter" class="filter-select">
+                <option value="">All Chapters</option>
+            </select>
+            <select id="sort-select" class="sort-select">
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="purchases-desc">Most purchases</option>
+                <option value="purchases-asc">Fewest purchases</option>
+                <option value="spent-desc">Most spent</option>
+                <option value="spent-asc">Least spent</option>
+                <option value="latest-desc">Most recent</option>
+            </select>
+            <div class="column-toggle-wrapper">
+                <button class="column-toggle-btn" id="cust-col-toggle-btn">Columns &#9662;</button>
+                <div class="column-toggle-dropdown" id="cust-col-toggle-dropdown"></div>
+            </div>
+            <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
+            <div class="view-toggle">
+                <button class="view-toggle-btn active" data-view="list">List</button>
+                <button class="view-toggle-btn" data-view="cards">Cards</button>
+            </div>
+        </section>
+
+        <!-- Customer list view (default) -->
+        <section id="customer-list-view" class="customer-list-wrapper">
+            <table class="customer-list-table">
+                <thead>
+                    <tr id="cust-header-row">
+                        <th data-sort="name" data-col="name" class="sort-active">Name <span class="sort-arrow">&#9650;</span></th>
+                        <th data-sort="status" data-col="status">Status <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="chapter" data-col="chapter">Chapter <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="purchases" data-col="purchases">Purchases <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="spent" data-col="spent">Total Spent <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="email">Email</th>
+                        <th data-col="phone">Phone</th>
+                        <th data-sort="latest" data-col="latest">Last Activity <span class="sort-arrow">&#9650;&#9660;</span></th>
+                    </tr>
+                </thead>
+                <tbody id="customer-list-body"></tbody>
+            </table>
+        </section>
+        <section id="customer-mobile-cards" class="mobile-card-list customers-mobile"></section>
+
+        <!-- Customer cards view -->
+        <section class="customer-cards" id="customer-cards" style="display:none;"></section>
+
+        <!-- Selected customer detail (desktop cards view only, hidden on mobile) -->
+        <section id="customer-detail" style="display:none;" class="customer-detail-section">
+            <h3 id="detail-title" style="margin-bottom: 0.75rem; font-size: 1.1rem;"></h3>
+            <div id="detail-meta" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;"></div>
+            <div class="customer-detail-panel">
+                <table id="detail-table" style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th>Event Date</th>
+                            <th>Item</th>
+                            <th>Price</th>
+                            <th>City</th>
+                            <th>Course</th>
+                            <th>Side Games</th>
+                            <th>Type</th>
+                            <th>Order Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>TGF Transaction Tracker &mdash; Powered by Claude AI</p>
+    </footer>
+
+    <!-- Login Modal -->
+    <div id="login-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal login-modal">
+            <h2>Dashboard Login</h2>
+            <p class="modal-subtitle">Enter your PIN to access the dashboard.</p>
+            <input type="password" id="login-pin" class="modal-input" placeholder="Enter PIN" maxlength="20" autocomplete="off">
+            <div id="login-error" class="modal-error" style="display:none;"></div>
+            <button id="login-submit" class="btn btn-primary modal-btn">Log In</button>
+        </div>
+    </div>
+
+    <!-- Credit / Transfer Modal (Customers) -->
+    <div id="cust-credit-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal">
+            <div class="modal-header">
+                <h2>Credit / Transfer</h2>
+                <button id="cust-credit-close" class="modal-close">&times;</button>
+            </div>
+            <div id="cust-credit-info" class="credit-info"></div>
+            <div class="credit-type-toggle">
+                <button class="cust-credit-type-btn credit-type-btn active" data-type="credit">Credit</button>
+                <button class="cust-credit-type-btn credit-type-btn" data-type="transfer">Transfer</button>
+            </div>
+            <div class="credit-fields">
+                <div id="cust-credit-transfer-fields" style="display:none;">
+                    <label>Transfer to Event
+                        <select id="cust-credit-target-event" class="modal-input">
+                            <option value="">Select an event...</option>
+                        </select>
+                    </label>
+                </div>
+                <label>Note (optional)
+                    <input type="text" id="cust-credit-note" class="modal-input" placeholder="Reason for credit/transfer...">
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="cust-credit-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="cust-credit-submit" class="btn btn-primary">Apply Credit</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+    let allCustomers = [];
+    let allItems = [];
+    let selectedCustomer = null;
+    let currentView = "list";
+    let currentSortField = "name";
+    let currentSortDir = "asc";
+
+    // Column definitions for Customers table
+    const CUST_COLUMNS = [
+        { key: "name", label: "Name" },
+        { key: "status", label: "Status" },
+        { key: "chapter", label: "Chapter" },
+        { key: "purchases", label: "Purchases" },
+        { key: "spent", label: "Total Spent" },
+        { key: "email", label: "Email" },
+        { key: "phone", label: "Phone" },
+        { key: "latest", label: "Last Activity" },
+    ];
+
+    let custVisibleColumns = {};
+
+    function loadCustColumnPrefs() {
+        try {
+            const saved = localStorage.getItem("tgf_cust_visible_columns");
+            if (saved) { custVisibleColumns = JSON.parse(saved); return; }
+        } catch (e) {}
+        CUST_COLUMNS.forEach(c => { custVisibleColumns[c.key] = true; });
+    }
+
+    function saveCustColumnPrefs() {
+        try { localStorage.setItem("tgf_cust_visible_columns", JSON.stringify(custVisibleColumns)); } catch (e) {}
+    }
+
+    function buildCustColumnToggle() {
+        const dropdown = document.getElementById("cust-col-toggle-dropdown");
+        dropdown.innerHTML = CUST_COLUMNS.map(c => {
+            const checked = custVisibleColumns[c.key] !== false ? "checked" : "";
+            return `<label><input type="checkbox" data-col="${c.key}" ${checked}> ${c.label}</label>`;
+        }).join("");
+        dropdown.querySelectorAll("input[type=checkbox]").forEach(cb => {
+            cb.addEventListener("change", () => {
+                custVisibleColumns[cb.dataset.col] = cb.checked;
+                saveCustColumnPrefs();
+                applyCustColumnVisibility();
+            });
+        });
+    }
+
+    function applyCustColumnVisibility() {
+        CUST_COLUMNS.forEach((col, idx) => {
+            const visible = custVisibleColumns[col.key] !== false;
+            const th = document.querySelector(`#cust-header-row th[data-col="${col.key}"]`);
+            if (th) th.style.display = visible ? "" : "none";
+            document.querySelectorAll("#customer-list-body .cust-row-clickable").forEach(tr => {
+                const tds = tr.querySelectorAll("td");
+                if (tds[idx]) tds[idx].style.display = visible ? "" : "none";
+            });
+        });
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement("div");
+        div.textContent = str || "";
+        return div.innerHTML;
+    }
+
+    function classifyGameType(sideGames) {
+        const sg = (sideGames || "").toUpperCase().trim();
+        if (!sg || sg === "NONE" || sg === "\u2014") return "NONE";
+        if (sg === "BOTH" || (sg.includes("NET") && sg.includes("GROSS"))) return "BOTH";
+        if (sg.includes("NET")) return "NET";
+        if (sg.includes("GROSS")) return "GROSS";
+        return "NET";
+    }
+
+    function parsePrice(priceStr) {
+        return parseFloat((priceStr || "0").replace(/[$,]/g, "")) || 0;
+    }
+
+    // Derive customer status from their transaction history
+    function deriveStatus(items) {
+        // Check for membership purchase
+        const hasMembership = items.some(item => {
+            const name = (item.item_name || "").toLowerCase();
+            return name.includes("membership") || name.includes("member");
+        });
+        if (hasMembership) return "MEMBER";
+
+        // Check member_status field across transactions
+        const memberStatuses = items.map(i => (i.member_status || "").toUpperCase()).filter(Boolean);
+        if (memberStatuses.includes("MEMBER")) return "MEMBER";
+
+        // Check returning_or_new
+        const returningNew = items.map(i => (i.returning_or_new || "").toLowerCase()).filter(Boolean);
+        if (returningNew.some(v => v.includes("new") || v.includes("1st") || v.includes("first"))) return "1st TIMER";
+
+        // If they have NON-MEMBER status or guest indicators
+        if (memberStatuses.includes("NON-MEMBER") || memberStatuses.includes("GUEST")) return "GUEST";
+
+        // Default: if only 1 purchase and no status info, likely a guest
+        if (items.length <= 1) return "GUEST";
+
+        return "GUEST";
+    }
+
+    // Derive chapter (city) from most frequent city in their transactions
+    function deriveChapter(items) {
+        const cityCounts = {};
+        items.forEach(item => {
+            const city = (item.city || "").trim();
+            if (city) {
+                cityCounts[city] = (cityCounts[city] || 0) + 1;
+            }
+        });
+        if (!Object.keys(cityCounts).length) return "";
+        // Return the most frequent city
+        return Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0][0];
+    }
+
+    function statusBadgeClass(status) {
+        if (status === "MEMBER") return "badge-member";
+        if (status === "1st TIMER") return "badge-first-timer";
+        return "badge-guest";
+    }
+
+    /** Build a "LastName, FirstName..." key for consistent name sorting. */
+    function lastNameSortKey(name) {
+        const s = String(name).trim();
+        const parts = s.split(/\s+/);
+        if (parts.length <= 1) return s.toLowerCase();
+        const last = parts.pop();
+        return (last + ", " + parts.join(" ")).toLowerCase();
+    }
+
+    // Build customer aggregate data from items
+    function buildCustomers(items) {
+        const map = {};
+        items.forEach(item => {
+            const name = item.customer || "(Unknown)";
+            if (!map[name]) {
+                map[name] = {
+                    name: name,
+                    email: item.customer_email || "",
+                    phone: item.customer_phone || "",
+                    items: [],
+                    totalSpent: 0,
+                    latestDate: "",
+                };
+            }
+            map[name].items.push(item);
+            if ((item.transaction_status || "active") === "active") {
+                map[name].totalSpent += parsePrice(item.item_price);
+            }
+            if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
+            if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
+            const date = item.event_date || item.order_date || "";
+            if (date > map[name].latestDate) map[name].latestDate = date;
+        });
+
+        // Derive status and chapter for each customer
+        const customers = Object.values(map);
+        customers.forEach(c => {
+            c.status = deriveStatus(c.items);
+            c.chapter = deriveChapter(c.items);
+        });
+
+        return customers.sort((a, b) => lastNameSortKey(a.name).localeCompare(lastNameSortKey(b.name)));
+    }
+
+    function populateChapterFilter() {
+        const chapters = [...new Set(allCustomers.map(c => c.chapter).filter(Boolean))].sort();
+        const select = document.getElementById("filter-chapter");
+        // Keep the "All Chapters" option, remove old dynamic options
+        select.innerHTML = '<option value="">All Chapters</option>';
+        chapters.forEach(ch => {
+            const opt = document.createElement("option");
+            opt.value = ch;
+            opt.textContent = ch;
+            select.appendChild(opt);
+        });
+    }
+
+    function getFilteredSorted() {
+        const query = document.getElementById("customer-search").value.toLowerCase().trim();
+        const statusFilter = document.getElementById("filter-status").value;
+        const chapterFilter = document.getElementById("filter-chapter").value;
+        let filtered = allCustomers;
+
+        if (query) {
+            filtered = filtered.filter(c =>
+                c.name.toLowerCase().includes(query) ||
+                c.email.toLowerCase().includes(query) ||
+                c.phone.toLowerCase().includes(query) ||
+                c.chapter.toLowerCase().includes(query)
+            );
+        }
+        if (statusFilter) {
+            filtered = filtered.filter(c => c.status === statusFilter);
+        }
+        if (chapterFilter) {
+            filtered = filtered.filter(c => c.chapter === chapterFilter);
+        }
+
+        // Sort
+        const asc = currentSortDir === "asc";
+        filtered = [...filtered];
+        filtered.sort((a, b) => {
+            if (currentSortField === "name") {
+                const ka = lastNameSortKey(a.name), kb = lastNameSortKey(b.name);
+                return asc ? ka.localeCompare(kb) : kb.localeCompare(ka);
+            }
+            if (currentSortField === "status") return asc ? a.status.localeCompare(b.status) : b.status.localeCompare(a.status);
+            if (currentSortField === "chapter") return asc ? a.chapter.localeCompare(b.chapter) : b.chapter.localeCompare(a.chapter);
+            if (currentSortField === "purchases") return asc ? a.items.length - b.items.length : b.items.length - a.items.length;
+            if (currentSortField === "spent") return asc ? a.totalSpent - b.totalSpent : b.totalSpent - a.totalSpent;
+            if (currentSortField === "latest") return b.latestDate.localeCompare(a.latestDate);
+            return 0;
+        });
+
+        updateSortArrows();
+        updateClearButton();
+        return filtered;
+    }
+
+    function updateSortArrows() {
+        document.querySelectorAll(".customer-list-table thead th[data-sort]").forEach(th => {
+            const field = th.dataset.sort;
+            const arrow = th.querySelector(".sort-arrow");
+            if (field === currentSortField) {
+                th.classList.add("sort-active");
+                arrow.innerHTML = currentSortDir === "asc" ? "&#9650;" : "&#9660;";
+            } else {
+                th.classList.remove("sort-active");
+                arrow.innerHTML = "&#9650;&#9660;";
+            }
+        });
+    }
+
+    function updateClearButton() {
+        const query = document.getElementById("customer-search").value.trim();
+        const statusFilter = document.getElementById("filter-status").value;
+        const chapterFilter = document.getElementById("filter-chapter").value;
+        const hasFilters = query || statusFilter || chapterFilter;
+        document.getElementById("btn-clear-filters").classList.toggle("visible", !!hasFilters);
+    }
+
+    function clearAllFilters() {
+        document.getElementById("customer-search").value = "";
+        document.getElementById("filter-status").value = "";
+        document.getElementById("filter-chapter").value = "";
+        currentSortField = "name";
+        currentSortDir = "asc";
+        document.getElementById("sort-select").value = "name-asc";
+        selectedCustomer = null;
+        if (currentView === "cards") {
+            document.getElementById("customer-detail").style.display = "none";
+        }
+        renderCustomers();
+    }
+
+    function renderStats() {
+        document.getElementById("stat-customers").textContent = allCustomers.length;
+        document.getElementById("stat-members").textContent = allCustomers.filter(c => c.status === "MEMBER").length;
+        document.getElementById("stat-total-items").textContent = allItems.length;
+        const totalSpent = allCustomers.reduce((sum, c) => sum + c.totalSpent, 0);
+        document.getElementById("stat-total-spent").textContent = "$" + Math.round(totalSpent).toLocaleString();
+    }
+
+    function renderCustDetailMobile(customer) {
+        const sorted = [...customer.items].sort((a, b) =>
+            (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""));
+
+        return sorted.map(item => {
+            const txStatus = item.transaction_status || "active";
+            const statusClass = txStatus !== "active" ? ` row-${txStatus}` : (item.transferred_from_id ? ' row-from-transfer' : '');
+            let tag = '';
+            if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+            else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+            else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            const sideGameLabel = classifyGameType(item.side_games);
+            const tee = (item.tee_choice || "").trim();
+            const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
+
+            let actionBtn = '';
+            if (txStatus === "active" && !item.transferred_from_id) {
+                actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
+            } else if (txStatus === "credited" || txStatus === "transferred") {
+                actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+            }
+
+            const fields = [
+                ["Date", item.event_date || item.order_date || "\u2014"],
+                ["Price", item.item_price || "\u2014"],
+                ["City", item.city || "\u2014"],
+                ["Course", item.course || "\u2014"],
+            ];
+
+            return `
+            <div class="mobile-card${statusClass}" data-id="${item.id}">
+                <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
+                    <div class="mc-primary">
+                        <span class="mc-customer"><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}" onclick="event.stopPropagation()">${escapeHtml(item.item_name || "\u2014")}</a></span>
+                        ${topTags} ${tag}
+                    </div>
+                    <span class="mc-chevron">&#9656;</span>
+                </div>
+                <div class="mobile-card-details">
+                    <div class="mc-field-grid">
+                        ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
+                    </div>
+                    ${actionBtn ? `<div class="mc-actions">${actionBtn}</div>` : ''}
+                </div>
+            </div>`;
+        }).join("");
+    }
+
+    function renderCustomersMobile(filtered) {
+        const container = document.getElementById("customer-mobile-cards");
+        if (!container) return;
+
+        if (!filtered.length) {
+            container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-muted); font-style:italic;">No customers found.</div>';
+            return;
+        }
+
+        container.innerHTML = filtered.map(c => {
+            const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
+            const meta = [];
+            if (c.chapter) meta.push(escapeHtml(c.chapter));
+            meta.push(c.items.length + " purchase" + (c.items.length !== 1 ? "s" : ""));
+            meta.push("$" + c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0}));
+
+            return `
+            <div class="mobile-card ${isExpanded ? 'expanded' : ''}" data-cust-name="${escapeHtml(c.name)}" ${isExpanded ? 'style="border-color:var(--primary);"' : ''}>
+                <div class="mobile-card-top cust-mobile-top" data-name="${escapeHtml(c.name)}">
+                    <div class="mc-primary">
+                        <span class="mc-customer">${escapeHtml(c.name)}</span>
+                        <span class="status-badge-sm ${statusBadgeClass(c.status)}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(c.status)}</span>
+                        <br><span class="mc-event">${meta.join(" &bull; ")}</span>
+                    </div>
+                    <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
+                </div>
+                <div class="mobile-card-details" ${isExpanded ? 'style="display:block;"' : ''}>
+                    ${isExpanded ? renderCustDetailMobile(c) : ''}
+                </div>
+            </div>`;
+        }).join("");
+
+        // Attach click handlers
+        container.querySelectorAll(".cust-mobile-top").forEach(top => {
+            top.addEventListener("click", () => {
+                const name = top.dataset.name;
+                const cust = allCustomers.find(c => c.name === name);
+                if (!cust) return;
+                const wasExpanded = selectedCustomer && selectedCustomer.name === name;
+                selectedCustomer = wasExpanded ? null : cust;
+                renderCustomersMobile(filtered);
+            });
+        });
+
+        // Attach credit/reverse handlers for expanded customer
+        if (selectedCustomer) {
+            const expandedCard = container.querySelector(`.mobile-card[data-cust-name="${escapeHtml(selectedCustomer.name)}"]`);
+            if (expandedCard) {
+                expandedCard.querySelectorAll("[data-cust-credit-id]").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        openCustCreditModal(parseInt(btn.dataset.custCreditId));
+                    });
+                });
+                expandedCard.querySelectorAll("[data-cust-reverse-id]").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        reverseCustCredit(parseInt(btn.dataset.custReverseId));
+                    });
+                });
+            }
+        }
+    }
+
+    function renderCustomers() {
+        renderStats();
+        const filtered = getFilteredSorted();
+
+        // Always render mobile view (CSS controls visibility)
+        renderCustomersMobile(filtered);
+
+        if (currentView === "list") {
+            renderListView(filtered);
+        } else {
+            renderCardView(filtered);
+        }
+    }
+
+    function renderListView(filtered) {
+        const tbody = document.getElementById("customer-list-body");
+
+        if (!filtered.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text-muted); font-style:italic;">No customers found.</td></tr>';
+            return;
+        }
+
+        let html = "";
+        filtered.forEach(c => {
+            const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
+            html += `
+            <tr data-name="${escapeHtml(c.name)}" class="cust-row-clickable ${isExpanded ? 'expanded' : ''}">
+                <td><strong>${escapeHtml(c.name)}</strong></td>
+                <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span></td>
+                <td>${escapeHtml(c.chapter || "\u2014")}</td>
+                <td>${c.items.length}</td>
+                <td style="font-weight:600; font-variant-numeric:tabular-nums;">$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
+                <td style="font-size:0.78rem; color:var(--text-muted);">${c.email ? `<a href="mailto:${encodeURIComponent(c.email)}" class="cell-link" onclick="event.stopPropagation()">${escapeHtml(c.email)}</a>` : '\u2014'}</td>
+                <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.phone || "\u2014")}</td>
+                <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
+            </tr>
+            <tr class="cust-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${escapeHtml(c.name)}">
+                <td colspan="8">
+                    <div class="cust-detail-content" data-detail-name="${escapeHtml(c.name)}">
+                        ${isExpanded ? renderCustDetailContent(c) : ''}
+                    </div>
+                </td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+
+        // Attach row click handlers
+        tbody.querySelectorAll(".cust-row-clickable").forEach(row => {
+            row.addEventListener("click", () => {
+                const name = row.dataset.name;
+                const cust = allCustomers.find(c => c.name === name);
+                if (cust) toggleCustomerDetail(cust);
+            });
+        });
+
+        // Re-attach detail handlers for expanded row
+        if (selectedCustomer) {
+            const container = tbody.querySelector(`.cust-detail-content[data-detail-name="${escapeHtml(selectedCustomer.name)}"]`);
+            if (container && container.innerHTML.trim()) {
+                attachCustDetailHandlers(container);
+            }
+        }
+
+        applyCustColumnVisibility();
+    }
+
+    function renderCardView(filtered) {
+        const container = document.getElementById("customer-cards");
+
+        if (!filtered.length) {
+            container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">No customers found.</div>';
+            return;
+        }
+
+        container.innerHTML = filtered.map(c => {
+            const isSelected = selectedCustomer && selectedCustomer.name === c.name;
+            return `
+            <div class="customer-card ${isSelected ? 'selected' : ''}" data-name="${escapeHtml(c.name)}">
+                <div class="customer-card-name">
+                    ${escapeHtml(c.name)}
+                    <span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span>
+                    ${c.items.some(i => i.transaction_status === "credited") ? '<span class="status-tag status-tag-credited">Has Credit</span>' : ''}
+                </div>
+                <div class="customer-card-meta">
+                    ${c.chapter ? `<span>${escapeHtml(c.chapter)}</span>` : ''}
+                    <span>${c.items.length} purchase${c.items.length !== 1 ? 's' : ''}</span>
+                    <span>$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                    ${c.email ? `<span><a href="mailto:${encodeURIComponent(c.email)}" class="cell-link">${escapeHtml(c.email)}</a></span>` : ''}
+                </div>
+            </div>`;
+        }).join("");
+
+        container.querySelectorAll(".customer-card").forEach(card => {
+            card.addEventListener("click", () => {
+                const name = card.dataset.name;
+                const cust = allCustomers.find(c => c.name === name);
+                if (cust) selectCustomer(cust);
+            });
+        });
+    }
+
+    function renderCustDetailContent(customer) {
+        const meta = [];
+        if (customer.chapter) meta.push("Chapter: " + customer.chapter);
+        if (customer.email) meta.push(`<a href="mailto:${encodeURIComponent(customer.email)}" class="cell-link">${escapeHtml(customer.email)}</a>`);
+        if (customer.phone) meta.push(customer.phone);
+        meta.push(`${customer.items.length} purchase(s)`);
+        meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} total`);
+
+        let html = `<div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.5rem;">${meta.join(" | ")}</div>`;
+        html += '<table class="registrants-table"><thead><tr>';
+        html += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Type</th><th>Order Date</th><th>Actions</th>';
+        html += '</tr></thead><tbody>';
+
+        const sorted = [...customer.items].sort((a, b) =>
+            (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""));
+
+        sorted.forEach(item => {
+            const txStatus = item.transaction_status || "active";
+            const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (item.transferred_from_id ? ' class="row-from-transfer"' : '');
+            let tag = "";
+            if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+            else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+            else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            let actionBtn = "";
+            if (txStatus === "active" && !item.transferred_from_id) {
+                actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
+            } else if (txStatus === "credited" || txStatus === "transferred") {
+                actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+            }
+            html += `<tr${rowClass}>
+                <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
+                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
+                <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
+                <td>${escapeHtml(item.city || "\u2014")}</td>
+                <td>${escapeHtml(item.course || "\u2014")}</td>
+                <td>${escapeHtml(item.side_games || "\u2014")}</td>
+                <td>${escapeHtml(item.golf_or_compete || "\u2014")}</td>
+                <td>${escapeHtml(item.order_date || "\u2014")}</td>
+                <td>${actionBtn}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        return html;
+    }
+
+    function attachCustDetailHandlers(container) {
+        container.querySelectorAll("[data-cust-credit-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openCustCreditModal(parseInt(btn.dataset.custCreditId));
+            });
+        });
+        container.querySelectorAll("[data-cust-reverse-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                reverseCustCredit(parseInt(btn.dataset.custReverseId));
+            });
+        });
+        // Prevent event-name links from toggling the row
+        container.querySelectorAll("a.cell-link").forEach(a => {
+            a.addEventListener("click", (e) => e.stopPropagation());
+        });
+    }
+
+    function toggleCustomerDetail(customer) {
+        const wasExpanded = selectedCustomer && selectedCustomer.name === customer.name;
+
+        // Collapse current
+        if (selectedCustomer) {
+            const prevRow = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(selectedCustomer.name)}"]`);
+            const prevDetail = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(selectedCustomer.name)}"]`);
+            if (prevRow) prevRow.classList.remove("expanded");
+            if (prevDetail) prevDetail.classList.remove("visible");
+            selectedCustomer = null;
+        }
+
+        // If clicking same row, just collapse
+        if (wasExpanded) return;
+
+        // Expand clicked
+        selectedCustomer = customer;
+        const row = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(customer.name)}"]`);
+        const detailRow = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(customer.name)}"]`);
+        if (row) row.classList.add("expanded");
+        if (detailRow) {
+            detailRow.classList.add("visible");
+            const container = detailRow.querySelector(".cust-detail-content");
+            container.innerHTML = renderCustDetailContent(customer);
+            attachCustDetailHandlers(container);
+        }
+    }
+
+    function selectCustomer(customer, scroll = true) {
+        selectedCustomer = customer;
+        const detail = document.getElementById("customer-detail");
+        detail.style.display = "block";
+
+        document.getElementById("detail-title").innerHTML =
+            `${escapeHtml(customer.name)} <span class="status-badge-sm ${statusBadgeClass(customer.status)}">${escapeHtml(customer.status)}</span>`;
+
+        const meta = [];
+        if (customer.chapter) meta.push("Chapter: " + escapeHtml(customer.chapter));
+        if (customer.email) meta.push(`<a href="mailto:${encodeURIComponent(customer.email)}" class="cell-link">${escapeHtml(customer.email)}</a>`);
+        if (customer.phone) meta.push(escapeHtml(customer.phone));
+        meta.push(`${customer.items.length} purchase(s)`);
+        meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} total`);
+        document.getElementById("detail-meta").innerHTML = meta.join(" | ");
+
+        const tbody = document.getElementById("detail-body");
+        tbody.innerHTML = customer.items
+            .sort((a, b) => (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""))
+            .map(item => {
+                const txStatus = item.transaction_status || "active";
+                const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (item.transferred_from_id ? ' class="row-from-transfer"' : '');
+                let tag = "";
+                if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+                else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+                else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+                let actionBtn = "";
+                if (txStatus === "active" && !item.transferred_from_id) {
+                    actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
+                } else if (txStatus === "credited" || txStatus === "transferred") {
+                    actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+                }
+                return `
+            <tr${rowClass}>
+                <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
+                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
+                <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
+                <td>${escapeHtml(item.city || "\u2014")}</td>
+                <td>${escapeHtml(item.course || "\u2014")}</td>
+                <td>${escapeHtml(item.side_games || "\u2014")}</td>
+                <td>${escapeHtml(item.golf_or_compete || "\u2014")}</td>
+                <td>${escapeHtml(item.order_date || "\u2014")}</td>
+                <td>${actionBtn}</td>
+            </tr>`;
+            }).join("");
+
+        // Wire up credit/reverse buttons
+        tbody.querySelectorAll("[data-cust-credit-id]").forEach(btn => {
+            btn.addEventListener("click", () => openCustCreditModal(parseInt(btn.dataset.custCreditId)));
+        });
+        tbody.querySelectorAll("[data-cust-reverse-id]").forEach(btn => {
+            btn.addEventListener("click", () => reverseCustCredit(parseInt(btn.dataset.custReverseId)));
+        });
+
+        // Highlight in current view
+        if (currentView === "list") {
+            document.querySelectorAll(".customer-list-table tbody tr").forEach(r => r.classList.remove("selected-row"));
+            const row = document.querySelector(`.customer-list-table tbody tr[data-name="${escapeHtml(customer.name)}"]`);
+            if (row) row.classList.add("selected-row");
+        } else {
+            document.querySelectorAll(".customer-card").forEach(c => c.classList.remove("selected"));
+            const card = document.querySelector(`.customer-card[data-name="${escapeHtml(customer.name)}"]`);
+            if (card) card.classList.add("selected");
+        }
+
+        if (scroll) {
+            detail.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }
+
+    // ---- Customers-page Credit/Transfer modal ----
+    function buildCustPickerOptions(events) {
+        const today = new Date().toISOString().split("T")[0];
+        const upcoming = events.filter(e => e.event_date && e.event_date >= today).sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
+        const past = events.filter(e => e.event_date && e.event_date < today).sort((a, b) => (b.event_date || "").localeCompare(a.event_date || ""));
+        const noDate = events.filter(e => !e.event_date);
+        let html = '<option value="">Select an event...</option>';
+        if (upcoming.length) html += '<optgroup label="Upcoming">' + upcoming.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+        if (past.length) html += '<optgroup label="Past">' + past.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+        if (noDate.length) html += '<optgroup label="No Date">' + noDate.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)}</option>`).join("") + '</optgroup>';
+        return html;
+    }
+
+    let custCreditItemId = null;
+    let custCreditType = "credit";
+    let custCachedEvents = null;
+
+    async function loadCustEvents() {
+        if (custCachedEvents) return custCachedEvents;
+        try {
+            const res = await fetch("/api/events");
+            custCachedEvents = await res.json();
+            return custCachedEvents;
+        } catch { return []; }
+    }
+
+    async function openCustCreditModal(itemId) {
+        const item = allItems.find(r => r.id === itemId);
+        if (!item) return;
+        custCreditItemId = itemId;
+        custCreditType = "credit";
+
+        document.getElementById("cust-credit-info").innerHTML =
+            `<strong>${escapeHtml(item.customer || "Unknown")}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
+            `Price: <strong>${escapeHtml(item.item_price || "$0")}</strong>`;
+
+        document.querySelectorAll(".cust-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "credit"));
+        document.getElementById("cust-credit-transfer-fields").style.display = "none";
+        document.getElementById("cust-credit-note").value = "";
+        document.getElementById("cust-credit-submit").textContent = "Apply Credit";
+
+        const events = await loadCustEvents();
+        const select = document.getElementById("cust-credit-target-event");
+        select.innerHTML = buildCustPickerOptions(events);
+
+        document.getElementById("cust-credit-overlay").style.display = "flex";
+    }
+
+    function closeCustCreditModal() {
+        document.getElementById("cust-credit-overlay").style.display = "none";
+        custCreditItemId = null;
+    }
+
+    async function submitCustCredit() {
+        if (!custCreditItemId) return;
+        const note = document.getElementById("cust-credit-note").value.trim();
+        try {
+            if (custCreditType === "credit") {
+                const res = await fetch(`/api/items/${custCreditItemId}/credit`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ note }),
+                });
+                if (!res.ok) throw new Error((await res.json()).error || "Credit failed");
+            } else {
+                const target = document.getElementById("cust-credit-target-event").value;
+                if (!target) { alert("Please select a target event."); return; }
+                const res = await fetch(`/api/items/${custCreditItemId}/transfer`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_event: target, note }),
+                });
+                if (!res.ok) throw new Error((await res.json()).error || "Transfer failed");
+            }
+            closeCustCreditModal();
+            custCachedEvents = null;
+            await init();  // re-fetch and re-render
+        } catch (err) { alert(err.message); }
+    }
+
+    async function reverseCustCredit(itemId) {
+        const item = allItems.find(r => r.id === itemId);
+        if (!item) return;
+        if (!confirm(`Reverse ${item.transaction_status} for ${item.customer}?`)) return;
+        try {
+            const res = await fetch(`/api/items/${itemId}/reverse-credit`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+            });
+            if (!res.ok) throw new Error((await res.json()).error || "Reverse failed");
+            custCachedEvents = null;
+            await init();
+        } catch (err) { alert(err.message); }
+    }
+
+    function switchView(view) {
+        currentView = view;
+        document.querySelectorAll(".view-toggle-btn").forEach(b => b.classList.remove("active"));
+        document.querySelector(`.view-toggle-btn[data-view="${view}"]`).classList.add("active");
+
+        document.getElementById("customer-list-view").style.display = view === "list" ? "" : "none";
+        document.getElementById("customer-cards").style.display = view === "cards" ? "" : "none";
+
+        // Hide/show bottom detail panel depending on view
+        if (view === "list") {
+            document.getElementById("customer-detail").style.display = "none";
+        } else if (selectedCustomer) {
+            selectCustomer(selectedCustomer);
+        }
+
+        renderCustomers();
+    }
+
+    function exportCSV() {
+        if (!selectedCustomer) {
+            alert("Select a customer first to export their data.");
+            return;
+        }
+        const headers = ["Event Date", "Item", "Price", "City", "Course", "Side Games", "Type", "Order Date"];
+        const fields = ["event_date", "item_name", "item_price", "city", "course", "side_games", "golf_or_compete", "order_date"];
+        const rows = selectedCustomer.items.map(r => fields.map(f => r[f] || ""));
+        const csvContent = [headers, ...rows]
+            .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))
+            .join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `tgf_${selectedCustomer.name.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    let initialLoadDone = false;
+
+    async function init() {
+        try {
+            const res = await fetch("/api/items");
+            allItems = await res.json();
+            allCustomers = buildCustomers(allItems);
+            populateChapterFilter();
+
+            // Update selectedCustomer with fresh data before rendering
+            if (selectedCustomer) {
+                const freshCust = allCustomers.find(c => c.name === selectedCustomer.name);
+                if (freshCust) {
+                    selectedCustomer = freshCust;
+                } else {
+                    selectedCustomer = null;
+                    if (currentView === "cards") {
+                        document.getElementById("customer-detail").style.display = "none";
+                    }
+                }
+            }
+
+            // renderCustomers handles both list (inline expansion) and cards views
+            renderCustomers();
+
+            // Cards view: re-render detail panel with fresh data
+            if (selectedCustomer && currentView === "cards") {
+                selectCustomer(selectedCustomer, false);
+            }
+
+            if (!initialLoadDone) {
+                initialLoadDone = true;
+                // Check if URL has ?name= parameter to pre-select a customer
+                const params = new URLSearchParams(window.location.search);
+                const nameParam = params.get("name");
+                if (nameParam) {
+                    const match = allCustomers.find(c => c.name === nameParam);
+                    if (match) {
+                        // Set selected so both desktop and mobile render expanded
+                        selectedCustomer = match;
+                        renderCustomers();
+                        // Scroll to the customer card/row after render
+                        requestAnimationFrame(() => {
+                            const mobileCard = document.querySelector(`.mobile-card[data-cust-name="${escapeHtml(match.name)}"]`);
+                            const desktopRow = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(match.name)}"]`);
+                            if (mobileCard && window.innerWidth <= 768) {
+                                mobileCard.scrollIntoView({ behavior: "smooth", block: "center" });
+                            } else if (desktopRow) {
+                                desktopRow.classList.add("expanded");
+                                const detailRow = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(match.name)}"]`);
+                                if (detailRow) {
+                                    detailRow.classList.add("visible");
+                                    const container = detailRow.querySelector(".cust-detail-content");
+                                    container.innerHTML = renderCustDetailContent(match);
+                                    attachCustDetailHandlers(container);
+                                }
+                                desktopRow.scrollIntoView({ behavior: "smooth", block: "center" });
+                            }
+                        });
+                    } else {
+                        // Try partial match via search
+                        document.getElementById("customer-search").value = nameParam;
+                        renderCustomers();
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("Failed to fetch items:", err);
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+        if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+        window.scrollTo(0, 0);
+        document.querySelectorAll(".mobile-card.expanded").forEach(c => c.classList.remove("expanded"));
+
+        await initAuth();
+        loadCustColumnPrefs();
+        buildCustColumnToggle();
+        init();
+        // Credit/Transfer modal
+        document.getElementById("cust-credit-submit").addEventListener("click", submitCustCredit);
+        document.getElementById("cust-credit-cancel").addEventListener("click", closeCustCreditModal);
+        document.getElementById("cust-credit-close").addEventListener("click", closeCustCreditModal);
+        document.getElementById("cust-credit-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeCustCreditModal();
+        });
+        document.querySelectorAll(".cust-credit-type-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                custCreditType = btn.dataset.type;
+                document.querySelectorAll(".cust-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === custCreditType));
+                document.getElementById("cust-credit-transfer-fields").style.display = custCreditType === "transfer" ? "block" : "none";
+                document.getElementById("cust-credit-submit").textContent = custCreditType === "transfer" ? "Transfer" : "Apply Credit";
+            });
+        });
+
+        document.getElementById("customer-search").addEventListener("input", renderCustomers);
+        document.getElementById("filter-status").addEventListener("change", renderCustomers);
+        document.getElementById("filter-chapter").addEventListener("change", renderCustomers);
+        document.getElementById("sort-select").addEventListener("change", () => {
+            const val = document.getElementById("sort-select").value;
+            if (val) {
+                const [f, d] = val.split("-");
+                currentSortField = f;
+                currentSortDir = d;
+            }
+            renderCustomers();
+        });
+        document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
+        document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);
+
+        // Column toggle dropdown
+        const colBtn = document.getElementById("cust-col-toggle-btn");
+        const colDrop = document.getElementById("cust-col-toggle-dropdown");
+        colBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            colDrop.classList.toggle("open");
+        });
+        document.addEventListener("click", (e) => {
+            if (!colDrop.contains(e.target) && e.target !== colBtn) {
+                colDrop.classList.remove("open");
+            }
+        });
+
+        // View toggle
+        document.querySelectorAll(".view-toggle-btn").forEach(btn => {
+            btn.addEventListener("click", () => switchView(btn.dataset.view));
+        });
+
+        // List table header sorting with arrow toggle
+        document.querySelectorAll(".customer-list-table thead th[data-sort]").forEach(th => {
+            th.addEventListener("click", () => {
+                const field = th.dataset.sort;
+                if (currentSortField === field) {
+                    currentSortDir = currentSortDir === "asc" ? "desc" : "asc";
+                } else {
+                    currentSortField = field;
+                    currentSortDir = "asc";
+                }
+                // Sync dropdown if matching option exists
+                const select = document.getElementById("sort-select");
+                const desired = `${currentSortField}-${currentSortDir}`;
+                const hasOption = Array.from(select.options).some(o => o.value === desired);
+                select.value = hasOption ? desired : "";
+                renderCustomers();
+            });
+        });
+
+        // Auto-refresh every 30s to keep multiple users in sync
+        setInterval(async () => {
+            const creditOpen = document.getElementById("cust-credit-overlay").style.display === "flex";
+            const loginOpen = document.getElementById("login-overlay").style.display === "flex";
+            if (!creditOpen && !loginOpen) {
+                await init();
+            }
+        }, 30000);
+    });
+    </script>
+</body>
+</html>
