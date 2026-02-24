@@ -450,7 +450,7 @@
         document.getElementById("stat-members").textContent = allCustomers.filter(c => c.status === "MEMBER").length;
         document.getElementById("stat-total-items").textContent = allItems.length;
         const totalSpent = allCustomers.reduce((sum, c) => sum + c.totalSpent, 0);
-        document.getElementById("stat-total-spent").textContent = "$" + totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById("stat-total-spent").textContent = "$" + Math.round(totalSpent).toLocaleString();
     }
 
     function renderCustDetailMobile(customer) {
@@ -515,7 +515,7 @@
             const meta = [];
             if (c.chapter) meta.push(escapeHtml(c.chapter));
             meta.push(c.items.length + " purchase" + (c.items.length !== 1 ? "s" : ""));
-            meta.push("$" + c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+            meta.push("$" + c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0}));
 
             return `
             <div class="mobile-card ${isExpanded ? 'expanded' : ''}" data-cust-name="${escapeHtml(c.name)}" ${isExpanded ? 'style="border-color:var(--primary);"' : ''}>
@@ -596,7 +596,7 @@
                 <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span></td>
                 <td>${escapeHtml(c.chapter || "\u2014")}</td>
                 <td>${c.items.length}</td>
-                <td style="font-weight:600; font-variant-numeric:tabular-nums;">$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td style="font-weight:600; font-variant-numeric:tabular-nums;">$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${c.email ? `<a href="mailto:${encodeURIComponent(c.email)}" class="cell-link" onclick="event.stopPropagation()">${escapeHtml(c.email)}</a>` : '\u2014'}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.phone || "\u2014")}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
@@ -652,7 +652,7 @@
                 <div class="customer-card-meta">
                     ${c.chapter ? `<span>${escapeHtml(c.chapter)}</span>` : ''}
                     <span>${c.items.length} purchase${c.items.length !== 1 ? 's' : ''}</span>
-                    <span>$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    <span>$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
                     ${c.email ? `<span><a href="mailto:${encodeURIComponent(c.email)}" class="cell-link">${escapeHtml(c.email)}</a></span>` : ''}
                 </div>
             </div>`;
@@ -673,7 +673,7 @@
         if (customer.email) meta.push(`<a href="mailto:${encodeURIComponent(customer.email)}" class="cell-link">${escapeHtml(customer.email)}</a>`);
         if (customer.phone) meta.push(customer.phone);
         meta.push(`${customer.items.length} purchase(s)`);
-        meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} total`);
+        meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} total`);
 
         let html = `<div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.5rem;">${meta.join(" | ")}</div>`;
         html += '<table class="registrants-table"><thead><tr>';
@@ -773,7 +773,7 @@
         if (customer.email) meta.push(`<a href="mailto:${encodeURIComponent(customer.email)}" class="cell-link">${escapeHtml(customer.email)}</a>`);
         if (customer.phone) meta.push(escapeHtml(customer.phone));
         meta.push(`${customer.items.length} purchase(s)`);
-        meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} total`);
+        meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} total`);
         document.getElementById("detail-meta").innerHTML = meta.join(" | ");
 
         const tbody = document.getElementById("detail-body");

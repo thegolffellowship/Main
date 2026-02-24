@@ -62,10 +62,10 @@
         .val-err { color: var(--red); }
 
         @media (max-width: 768px) {
-            .audit-summary { grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 0.35rem; }
-            .summary-card { padding: 0.45rem 0.5rem; }
-            .summary-card .val { font-size: 1rem; }
-            .summary-card .lbl { font-size: 0.65rem; }
+            .audit-summary { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0.25rem; }
+            .summary-card { padding: 0.3rem 0.25rem; }
+            .summary-card .val { font-size: clamp(0.7rem, 3.5vw, 1rem); line-height: 1.2; }
+            .summary-card .lbl { font-size: clamp(0.45rem, 2vw, 0.6rem); line-height: 1.2; }
         }
 
         .audit-filters {

@@ -123,11 +123,15 @@ main {
     border-radius: var(--radius);
     padding: 1.1rem 1.25rem;
     box-shadow: var(--shadow);
+    overflow: hidden;
 }
 .stat-value {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .stat-label {
     font-size: 0.8rem;
@@ -135,6 +139,9 @@ main {
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-top: 0.2rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .category-btn.active .stat-value,
 .category-btn.active .stat-label {
@@ -1137,8 +1144,8 @@ tr.row-transferred { opacity: 0.6; }
     /* Stats — force single row */
     .stats-row { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0.25rem; margin-bottom: 0.5rem; }
     .stat-card { padding: 0.3rem 0.25rem; text-align: center; }
-    .stat-value { font-size: 0.9rem; }
-    .stat-label { font-size: 0.55rem; margin-top: 0; }
+    .stat-value { font-size: clamp(0.7rem, 3.5vw, 1rem); line-height: 1.2; }
+    .stat-label { font-size: clamp(0.45rem, 2vw, 0.6rem); margin-top: 0; line-height: 1.2; }
 
     /* Controls — 2-col grid */
     .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; margin-bottom: 0.5rem; }

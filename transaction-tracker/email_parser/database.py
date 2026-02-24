@@ -210,7 +210,7 @@ def get_item_stats(db_path: str | Path | None = None) -> dict:
     return {
         "total_items": row["total_items"],
         "total_orders": row["total_orders"],
-        "total_spent": f"${total_spent:,.2f}",
+        "total_spent": f"${total_spent:,.0f}",
         "earliest_date": row["earliest"] or "N/A",
         "latest_date": row["latest"] or "N/A",
     }
