@@ -923,7 +923,10 @@
         }
 
         // If clicking the same row, just collapse
-        if (wasExpanded) return;
+        if (wasExpanded) {
+            renderEventsMobile(getFilteredSortedEvents());
+            return;
+        }
 
         // Expand the clicked row
         expandedEventId = eventId;
@@ -940,6 +943,23 @@
                 attachDetailHandlers(container, ev);
             }
         }
+
+        // Re-render mobile cards to reflect expanded state
+        renderEventsMobile(getFilteredSortedEvents());
+    }
+
+    function isMobileContainer(container) {
+        return container.id && container.id.startsWith("ev-mobile-detail-");
+    }
+
+    function rerenderDetail(container, ev) {
+        if (isMobileContainer(container)) {
+            // Re-render mobile view for this event
+            renderEventsMobile(getFilteredSortedEvents());
+        } else {
+            container.innerHTML = renderDetailContent(ev);
+            attachDetailHandlers(container, ev);
+        }
     }
 
     function attachDetailHandlers(container, ev) {
@@ -953,8 +973,7 @@
                 } else {
                     eventGameFilter[ev.id] = filter;
                 }
-                container.innerHTML = renderDetailContent(ev);
-                attachDetailHandlers(container, ev);
+                rerenderDetail(container, ev);
             });
         });
 
@@ -969,8 +988,7 @@
                     detailSortField = field;
                     detailSortDir = "asc";
                 }
-                container.innerHTML = renderDetailContent(ev);
-                attachDetailHandlers(container, ev);
+                rerenderDetail(container, ev);
             });
         });
 
@@ -988,8 +1006,7 @@
                     e.stopPropagation();
                     detailVisibleColumns[cb.dataset.detailCol] = cb.checked;
                     saveDetailColumnPrefs();
-                    container.innerHTML = renderDetailContent(ev);
-                    attachDetailHandlers(container, ev);
+                    rerenderDetail(container, ev);
                 });
             });
         }
