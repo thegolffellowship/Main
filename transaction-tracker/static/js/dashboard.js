@@ -5,6 +5,15 @@
 let allItems = [];
 // currentRole is provided by auth.js
 
+function classifyGameType(sideGames) {
+    const sg = (sideGames || "").toUpperCase().trim();
+    if (!sg || sg === "NONE" || sg === "\u2014") return "NONE";
+    if (sg === "BOTH" || (sg.includes("NET") && sg.includes("GROSS"))) return "BOTH";
+    if (sg.includes("NET")) return "NET";
+    if (sg.includes("GROSS")) return "GROSS";
+    return "NET";
+}
+
 // Sort state — independent of dropdown so header clicks always work
 let currentSortField = "event_date";
 let currentSortDir = "desc";
@@ -451,8 +460,9 @@ function renderMobileCards(items) {
         const status = row.transaction_status || "active";
         const statusClass = status !== "active" ? ` row-${status}` : (row.transferred_from_id ? ' row-from-transfer' : '');
         const tag = statusTag(row);
-        const gameType = escapeHtml(row.golf_or_compete || "");
-        const topType = gameType ? `<span class="mc-type">${gameType}</span>` : "";
+        const sideGameLabel = classifyGameType(row.side_games);
+        const tee = (row.tee_choice || "").trim();
+        const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
         // Detail fields
         const fields = [
@@ -461,8 +471,6 @@ function renderMobileCards(items) {
             ["City", row.city || "\u2014"],
             ["Course", row.course || "\u2014"],
             ["Handicap", row.handicap || "\u2014"],
-            ["Side Games", row.side_games || "\u2014"],
-            ["Tee", row.tee_choice || "\u2014"],
             ["Status", row.member_status || "\u2014"],
             ["Order ID", row.order_id || "\u2014"],
             ["Order Date", row.order_date || "\u2014"],
@@ -484,7 +492,7 @@ function renderMobileCards(items) {
             <div class="mobile-card-top" onclick="this.parentElement.classList.toggle('expanded')">
                 <div class="mc-primary">
                     <span class="mc-customer">${escapeHtml(row.customer || "Unknown")}</span>
-                    ${topType} ${tag}
+                    ${topTags} ${tag}
                     <br><span class="mc-event">${escapeHtml(row.item_name || "\u2014")}</span>
                 </div>
                 <span class="mc-chevron">&#9656;</span>

@@ -251,6 +251,15 @@
         return div.innerHTML;
     }
 
+    function classifyGameType(sideGames) {
+        const sg = (sideGames || "").toUpperCase().trim();
+        if (!sg || sg === "NONE" || sg === "\u2014") return "NONE";
+        if (sg === "BOTH" || (sg.includes("NET") && sg.includes("GROSS"))) return "BOTH";
+        if (sg.includes("NET")) return "NET";
+        if (sg.includes("GROSS")) return "GROSS";
+        return "NET";
+    }
+
     function parsePrice(priceStr) {
         return parseFloat((priceStr || "0").replace(/[$,]/g, "")) || 0;
     }
@@ -455,8 +464,9 @@
             if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
-            const gameType = escapeHtml(item.golf_or_compete || "");
-            const topType = gameType ? `<span class="mc-type">${gameType}</span>` : "";
+            const sideGameLabel = classifyGameType(item.side_games);
+            const tee = (item.tee_choice || "").trim();
+            const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
             let actionBtn = '';
             if (txStatus === "active" && !item.transferred_from_id) {
@@ -470,7 +480,6 @@
                 ["Price", item.item_price || "\u2014"],
                 ["City", item.city || "\u2014"],
                 ["Course", item.course || "\u2014"],
-                ["Side Games", item.side_games || "\u2014"],
             ];
 
             return `
@@ -478,7 +487,7 @@
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         <span class="mc-customer"><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}" onclick="event.stopPropagation()">${escapeHtml(item.item_name || "\u2014")}</a></span>
-                        ${topType} ${tag}
+                        ${topTags} ${tag}
                     </div>
                     <span class="mc-chevron">&#9656;</span>
                 </div>
