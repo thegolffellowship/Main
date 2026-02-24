@@ -54,6 +54,13 @@
         .val-warn { color: #d97706; }
         .val-err { color: var(--red); }
 
+        @media (max-width: 768px) {
+            .audit-summary { grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 0.35rem; }
+            .summary-card { padding: 0.45rem 0.5rem; }
+            .summary-card .val { font-size: 1rem; }
+            .summary-card .lbl { font-size: 0.65rem; }
+        }
+
         .audit-filters {
             display: flex;
             gap: 0.75rem;

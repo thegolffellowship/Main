@@ -1126,9 +1126,10 @@ tr.row-transferred { opacity: 0.6; }
     .tab-nav a { padding: 0.5rem 0.85rem; font-size: 0.75rem; }
 
     /* Stats */
-    .stats-row { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.5rem; }
-    .stat-card { padding: 0.75rem 0.85rem; }
-    .stat-value { font-size: 1.25rem; }
+    .stats-row { grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 0.35rem; }
+    .stat-card { padding: 0.45rem 0.5rem; text-align: center; }
+    .stat-value { font-size: 1rem; }
+    .stat-label { font-size: 0.65rem; }
 
     /* Controls */
     .controls { flex-direction: column; gap: 0.5rem; }

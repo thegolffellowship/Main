@@ -983,11 +983,27 @@
                 if (nameParam) {
                     const match = allCustomers.find(c => c.name === nameParam);
                     if (match) {
-                        if (currentView === "list") {
-                            toggleCustomerDetail(match);
-                        } else {
-                            selectCustomer(match);
-                        }
+                        // Set selected so both desktop and mobile render expanded
+                        selectedCustomer = match;
+                        renderCustomers();
+                        // Scroll to the customer card/row after render
+                        requestAnimationFrame(() => {
+                            const mobileCard = document.querySelector(`.mobile-card[data-cust-name="${escapeHtml(match.name)}"]`);
+                            const desktopRow = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(match.name)}"]`);
+                            if (mobileCard && window.innerWidth <= 768) {
+                                mobileCard.scrollIntoView({ behavior: "smooth", block: "center" });
+                            } else if (desktopRow) {
+                                desktopRow.classList.add("expanded");
+                                const detailRow = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(match.name)}"]`);
+                                if (detailRow) {
+                                    detailRow.classList.add("visible");
+                                    const container = detailRow.querySelector(".cust-detail-content");
+                                    container.innerHTML = renderCustDetailContent(match);
+                                    attachCustDetailHandlers(container);
+                                }
+                                desktopRow.scrollIntoView({ behavior: "smooth", block: "center" });
+                            }
+                        });
                     } else {
                         // Try partial match via search
                         document.getElementById("customer-search").value = nameParam;
