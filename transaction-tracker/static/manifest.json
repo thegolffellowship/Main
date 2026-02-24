@@ -1,0 +1,23 @@
+{
+  "name": "TGF Transaction Tracker",
+  "short_name": "TGF Tracker",
+  "description": "The Golf Fellowship — Transaction & Event Tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#1e40af",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
