@@ -61,22 +61,23 @@ read/write access to the transaction database — no WebFetch needed.
 The `.mcp.json` at the repo root auto-configures it. Just restart Claude Code
 in this directory and you'll see the `tgf-transactions` server with 21 tools.
 
-### Claude Desktop setup
+### Claude Desktop setup (remote — no local install)
 
+The MCP endpoint is built into the Railway app at `/mcp/mcp`.
 Add this to your `claude_desktop_config.json` (Settings → Developer → Edit Config):
 
 ```json
 {
   "mcpServers": {
     "tgf-transactions": {
-      "command": "python",
-      "args": ["/full/path/to/transaction-tracker/mcp_server.py"]
+      "type": "streamable-http",
+      "url": "https://main-production-b95c.up.railway.app/mcp/mcp"
     }
   }
 }
 ```
 
-Replace `/full/path/to/` with the actual absolute path on your machine.
+No Python or local install needed — Claude Desktop connects directly to Railway.
 
 ### Available tools (21)
 
