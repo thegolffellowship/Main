@@ -1136,9 +1136,11 @@ tr.row-transferred { opacity: 0.6; }
     /* Navigation */
     .tab-nav {
         overflow-x: auto;
+        overflow-y: hidden;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
         margin-bottom: 0.5rem;
+        flex-wrap: nowrap;
     }
     .tab-nav::-webkit-scrollbar { display: none; }
     .tab-nav a { padding: 0.4rem 0.7rem; font-size: 0.72rem; }

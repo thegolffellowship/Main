@@ -1079,6 +1079,10 @@ function startAutoRefresh() {
 // Init
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
+    // Prevent browser from restoring previous scroll position; start at top
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    window.scrollTo(0, 0);
+
     // Auth (shared auth.js) — will call onAuthReady() after login
     await initAuth();
 
