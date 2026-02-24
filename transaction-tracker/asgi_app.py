@@ -22,6 +22,7 @@ from app import app as flask_app
 from mcp_server import mcp
 
 mcp.settings.stateless_http = True
+mcp.settings.streamable_http_path = "/"
 mcp_starlette = mcp.streamable_http_app()
 
 # The MCP session manager needs a lifespan to initialise its task group
