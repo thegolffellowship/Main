@@ -1323,4 +1323,97 @@ tr.row-transferred { opacity: 0.6; }
 
     /* Customers page: hide bottom detail panel on mobile (using inline expansion instead) */
     .customer-detail-section { display: none !important; }
+
+    .games-panel { padding: 0.5rem; }
+    .games-table th, .games-table td { padding: 0.25rem 0.4rem; font-size: 0.72rem; }
+    .games-panel-header { font-size: 0.8rem; }
+}
+
+/* =========================================================
+   Games Calculator Panel
+   ========================================================= */
+.games-badge {
+    background: #f0fdf4 !important;
+    color: #166534 !important;
+    border-color: #86efac !important;
+    font-weight: 600;
+    cursor: pointer;
+}
+.games-badge.active {
+    background: #166534 !important;
+    color: #fff !important;
+    border-color: #166534 !important;
+}
+
+.games-panel {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    margin: 0.5rem 0 0.75rem 0;
+}
+.games-panel-header {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--primary);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 2px solid var(--primary);
+}
+.games-panel-empty {
+    padding: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+.games-section {
+    margin-bottom: 0.6rem;
+}
+.games-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+.games-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+.games-table th {
+    background: #f1f5f9;
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+}
+.games-table td {
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+.games-row-sub td {
+    color: #475569;
+    font-size: 0.78rem;
+}
+.games-row-disabled td {
+    color: #94a3b8;
+    font-style: italic;
+}
+.games-row-total td {
+    border-top: 2px solid var(--border);
+    font-weight: 600;
+}
+.games-grand-total {
+    text-align: right;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--primary);
+    padding: 0.5rem 0.5rem 0;
+    border-top: 2px solid var(--primary);
+    margin-top: 0.25rem;
 }
