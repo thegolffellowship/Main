@@ -1023,28 +1023,34 @@
         const matchedItemIds = new Set(rsvps.filter(r => r.matched_item_id).map(r => r.matched_item_id));
         const unmatchedPlaying = playingRsvps.filter(r => !r.matched_item_id);
 
-        // Summary badges
-        let html = '<div class="event-game-stats">';
-        html += `<span class="game-stat-badge ${!activeFilter ? 'active' : ''}" data-event-id="${ev.id}" data-filter="">PLAYERS <strong>${stats.players}</strong></span>`;
-        html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET GAMES <strong>${stats.net}</strong></span>`;
-        html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS GAMES <strong>${stats.gross}</strong></span>`;
-        html += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NO GAMES <strong>${stats.noGames}</strong></span>`;
-        if (rsvps.length) {
-            html += `<span class="game-stat-badge rsvp-stat-badge" style="cursor:default;">GG <strong>${playingRsvps.length}</strong> / <strong style="color:var(--red);">${notPlayingRsvps.length}</strong></span>`;
-        }
-        // GAMES badge (only for s9/s18 events)
         const holesType = extractHolesType(ev.item_name);
+        const gamesView = holesType && gamesOpenForEvent[ev.id];
+
+        // View toggle: PLAYERS / GAMES
+        let html = '<div class="event-game-stats">';
+        html += `<span class="game-stat-badge view-toggle-badge ${!gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
         if (holesType) {
-            const gamesOpen = gamesOpenForEvent[ev.id];
-            html += `<span class="game-stat-badge games-badge ${gamesOpen ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+            html += `<span class="game-stat-badge view-toggle-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+        }
+
+        // Sub-filter badges (only in PLAYERS view)
+        if (!gamesView) {
+            html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
+            html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
+            html += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NO GAMES <strong>${stats.noGames}</strong></span>`;
+            if (rsvps.length) {
+                html += `<span class="game-stat-badge rsvp-stat-badge" style="cursor:default;">GG <strong>${playingRsvps.length}</strong> / <strong style="color:var(--red);">${notPlayingRsvps.length}</strong></span>`;
+            }
         }
         html += '</div>';
 
-        // Games calculator panel (toggled)
-        if (holesType && gamesOpenForEvent[ev.id]) {
+        // ---- GAMES VIEW ----
+        if (gamesView) {
             html += renderGamesPanel(ev);
+            return html;
         }
 
+        // ---- PLAYERS VIEW ----
         // Filter registrants if a game filter is active
         let filtered = registrants;
         if (activeFilter) {
@@ -1230,17 +1236,18 @@
     }
 
     function attachDetailHandlers(container, ev) {
-        // GAMES badge toggle
+        // PLAYERS / GAMES view toggle
         container.querySelectorAll("[data-toggle-games]").forEach(badge => {
             badge.addEventListener("click", (e) => {
                 e.stopPropagation();
-                gamesOpenForEvent[ev.id] = !gamesOpenForEvent[ev.id];
+                const wantGames = badge.dataset.toggleGames === "1";
+                gamesOpenForEvent[ev.id] = wantGames;
                 rerenderDetail(container, ev);
             });
         });
 
-        // Game filter badges
-        container.querySelectorAll(".game-stat-badge:not([data-toggle-games])").forEach(badge => {
+        // Game filter badges (PLAYERS view sub-filters)
+        container.querySelectorAll(".game-stat-badge[data-filter]").forEach(badge => {
             badge.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const filter = badge.dataset.filter;

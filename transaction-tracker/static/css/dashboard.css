@@ -1332,12 +1332,14 @@ tr.row-transferred { opacity: 0.6; }
 /* =========================================================
    Games Calculator Panel
    ========================================================= */
+.view-toggle-badge {
+    font-weight: 600;
+    cursor: pointer;
+}
 .games-badge {
     background: #f0fdf4 !important;
     color: #166534 !important;
     border-color: #86efac !important;
-    font-weight: 600;
-    cursor: pointer;
 }
 .games-badge.active {
     background: #166534 !important;
