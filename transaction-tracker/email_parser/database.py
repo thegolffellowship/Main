@@ -22,9 +22,10 @@ DB_PATH = Path(os.environ.get("DATABASE_PATH", str(_default_db)))
 ITEM_COLUMNS = [
     "email_uid", "item_index", "merchant", "customer",
     "customer_email", "customer_phone",
-    "order_id", "order_date", "total_amount",
+    "order_id", "order_date", "total_amount", "transaction_fees",
     "item_name", "event_date", "item_price", "quantity",
-    "city", "course", "handicap", "side_games", "tee_choice",
+    "city", "chapter", "course", "handicap", "has_handicap",
+    "side_games", "tee_choice",
     "member_status", "golf_or_compete", "post_game", "returning_or_new",
     "shirt_size", "guest_name", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
@@ -98,6 +99,9 @@ def init_db(db_path: str | Path | None = None) -> None:
         ("credit_note", "TEXT"),
         ("transferred_from_id", "INTEGER"),
         ("transferred_to_id", "INTEGER"),
+        ("chapter", "TEXT"),
+        ("has_handicap", "TEXT"),
+        ("transaction_fees", "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
@@ -408,14 +412,15 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
         _normalize_customer_name,
         _normalize_course_name,
         _normalize_item_name,
+        _normalize_chapter,
     )
 
     conn = get_connection(db_path)
     rows = conn.execute(
-        "SELECT id, item_name, customer, course, golf_or_compete, side_games FROM items"
+        "SELECT id, item_name, customer, course, chapter, golf_or_compete, side_games FROM items"
     ).fetchall()
 
-    fixes = {"side_games": 0, "customer_name": 0, "course_name": 0, "item_name": 0}
+    fixes = {"side_games": 0, "customer_name": 0, "course_name": 0, "item_name": 0, "chapter": 0}
     details = []
 
     for row in rows:
@@ -451,6 +456,13 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
             updates["course"] = new_course
             fixes["course_name"] += 1
 
+        # --- Chapter fix ---
+        original_chapter = item.get("chapter") or ""
+        new_chapter = _normalize_chapter(original_chapter) or ""
+        if new_chapter and new_chapter != original_chapter:
+            updates["chapter"] = new_chapter
+            fixes["chapter"] += 1
+
         # --- Item name fix (memberships etc.) ---
         original_item = item.get("item_name") or ""
         new_item = _normalize_item_name(original_item) or ""
@@ -471,10 +483,10 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
     total_fixed = len(details)
     logger.info(
         "Autofix all: scanned %d rows, %d rows changed "
-        "(side_games=%d, customer_name=%d, course_name=%d, item_name=%d)",
+        "(side_games=%d, customer_name=%d, course_name=%d, item_name=%d, chapter=%d)",
         len(rows), total_fixed,
         fixes["side_games"], fixes["customer_name"], fixes["course_name"],
-        fixes["item_name"],
+        fixes["item_name"], fixes["chapter"],
     )
     return {
         "scanned": len(rows),

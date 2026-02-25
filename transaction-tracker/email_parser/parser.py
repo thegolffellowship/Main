@@ -62,12 +62,19 @@ FIELD-SPECIFIC GUIDANCE:
 - "event_date": The date of the golf event, NOT the order date. Parse it from \
   the item name when present (e.g. "Feb 22 - LaCANTERA" → "2026-02-22"). Use \
   the current year (2026) if only month and day are given.
-- "city": The city where the event takes place. Infer it from the course name \
-  or event context if not explicitly stated. Common Texas courses: \
+- "city": The city where the EVENT takes place. Infer it from the course name \
+  or event context if not explicitly stated. For MEMBERSHIP items, leave city \
+  null — the membership city/chapter goes in the "chapter" field instead. \
+  Common Texas courses: \
   La Cantera/TPC San Antonio/The Quarry = San Antonio, \
   Cowboys Golf Club/TPC Craig Ranch = Dallas, \
   Wolfdancer/Falconhead = Austin, \
   Moody Gardens = Galveston, etc.
+- "chapter": The TGF chapter the member is signing up for. Only applies to \
+  MEMBERSHIP items. Extract from "CITY: AUS" or "CITY: SA" or "CITY: DAL" etc. \
+  Normalise to full city names: AUS/ATX → "Austin", SA/SAT → "San Antonio", \
+  DAL/DFW → "Dallas", HOU → "Houston", GAL → "Galveston". \
+  For event items, set chapter to null.
 - "course": Use consistent canonical course names. Standard spellings: \
   "La Cantera", "TPC San Antonio", "The Quarry", "Cowboys Golf Club", \
   "TPC Craig Ranch", "Wolfdancer", "Falconhead", "Moody Gardens", \
@@ -96,7 +103,21 @@ FIELD-SPECIFIC GUIDANCE:
 - "golf_or_compete": Should contain ONLY the event-type portion: "GOLF" or \
   "COMPETE". If the raw value starts with "EVENT" treat that as "GOLF". \
   Never put side-games text here.
-- "handicap": The numeric handicap value only.
+- "handicap": The numeric handicap value only (for event registrations).
+- "has_handicap": For MEMBERSHIP items only — "YES" or "NO" from the \
+  "Do you have a Current Handicap?" field. For events, set to null.
+- "returning_or_new": For MEMBERSHIP items — "New" or "Returning" from \
+  the "RETURNING or NEW?" field. Extract just the keyword.
+- "net_points_race": For MEMBERSHIP items — "YES" or "NO" from \
+  "Add NET Points Race?" field. Normalise to uppercase YES/NO.
+- "gross_points_race": For MEMBERSHIP items — "YES" or "NO" from \
+  "Add GROSS Points Race?" field. Normalise to uppercase YES/NO.
+- "city_match_play": For MEMBERSHIP items — "YES" or "NO" from \
+  "Add City MATCH PLAY?" field. Normalise to uppercase YES/NO.
+- "date_of_birth": YYYY-MM-DD format. Often appears on membership orders.
+- "transaction_fees": The processing/transaction fee amount charged on the \
+  order (e.g. "$7.53"). This is an ORDER-level field, not per-item. \
+  Look for "Transaction Fee", "Processing Fee", "Service Fee", etc.
 
 Return this exact JSON structure:
 
@@ -107,28 +128,31 @@ Return this exact JSON structure:
   "customer_phone": "<buyer phone if present>",
   "order_id": "<order or confirmation number>",
   "order_date": "<YYYY-MM-DD>",
-  "total_amount": "<total charged including fees, e.g. $163.53>",
+  "total_amount": "<total charged including fees, e.g. $222.53>",
+  "transaction_fees": "<processing fee amount, e.g. $7.53>",
   "items": [
     {
       "item_name": "<product or event name>",
       "event_date": "<YYYY-MM-DD date of the event, parsed from item name>",
       "item_price": "<price for this item, e.g. $158.00>",
       "quantity": <integer, default 1>,
-      "city": "<city where event takes place — infer from course if needed>",
+      "city": "<city where event takes place — null for memberships>",
+      "chapter": "<TGF chapter — Austin, San Antonio, Dallas, etc. — null for events>",
       "course": "<golf course name if mentioned>",
       "handicap": "<numeric handicap value if mentioned>",
+      "has_handicap": "<YES or NO — membership only, null for events>",
       "side_games": "<NET, GROSS, BOTH, or NONE — see rules above>",
       "tee_choice": "<tee choice if mentioned>",
       "member_status": "<MEMBER or NON-MEMBER>",
       "golf_or_compete": "<GOLF or COMPETE only — see rules above>",
       "post_game": "<post-game fellowship selection if mentioned>",
-      "returning_or_new": "<returning or new member if mentioned>",
+      "returning_or_new": "<New or Returning — membership only>",
       "shirt_size": "<shirt size if mentioned>",
       "guest_name": "<guest name if mentioned>",
-      "date_of_birth": "<date of birth if mentioned>",
-      "net_points_race": "<net points race selection if mentioned>",
-      "gross_points_race": "<gross points race selection if mentioned>",
-      "city_match_play": "<city match play selection if mentioned>"
+      "date_of_birth": "<YYYY-MM-DD date of birth if mentioned>",
+      "net_points_race": "<YES or NO — membership only>",
+      "gross_points_race": "<YES or NO — membership only>",
+      "city_match_play": "<YES or NO — membership only>"
     }
   ]
 }
@@ -300,6 +324,35 @@ def _normalize_course_name(course: str | None) -> str | None:
 # Item name normalisation
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Chapter normalisation (membership city/chapter abbreviations)
+# ---------------------------------------------------------------------------
+
+_CHAPTER_MAP = {
+    "aus": "Austin",
+    "atx": "Austin",
+    "austin": "Austin",
+    "sa": "San Antonio",
+    "sat": "San Antonio",
+    "san antonio": "San Antonio",
+    "dal": "Dallas",
+    "dfw": "Dallas",
+    "dallas": "Dallas",
+    "hou": "Houston",
+    "houston": "Houston",
+    "gal": "Galveston",
+    "galveston": "Galveston",
+}
+
+
+def _normalize_chapter(chapter: str | None) -> str | None:
+    """Normalise chapter abbreviations to full city names."""
+    if not chapter:
+        return chapter
+    lookup = chapter.strip().lower()
+    return _CHAPTER_MAP.get(lookup, chapter.strip().title())
+
+
 _MEMBERSHIP_RE = re.compile(r"^TGF\s+MEMBERSHIP\b.*", re.IGNORECASE)
 
 
@@ -409,13 +462,16 @@ def parse_email(email_data: dict) -> list[dict]:
             "order_id": parsed.get("order_id"),
             "order_date": parsed.get("order_date") or "",
             "total_amount": parsed.get("total_amount") or "",
+            "transaction_fees": parsed.get("transaction_fees"),
             "item_name": _normalize_item_name(item.get("item_name")) or "",
             "event_date": item.get("event_date"),
             "item_price": item.get("item_price") or "",
             "quantity": item.get("quantity") or 1,
             "city": item.get("city"),
+            "chapter": _normalize_chapter(item.get("chapter")),
             "course": _normalize_course_name(item.get("course")),
             "handicap": item.get("handicap"),
+            "has_handicap": item.get("has_handicap"),
             "side_games": item.get("side_games"),
             "tee_choice": _normalize_tee_choice(item.get("tee_choice")),
             "member_status": item.get("member_status"),

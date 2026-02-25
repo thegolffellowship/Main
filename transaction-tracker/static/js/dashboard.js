@@ -768,19 +768,23 @@ function exportCSV() {
 
     const headers = [
         "Event Date", "Order Date", "Customer", "Email", "Phone",
-        "Item", "Price", "City", "Course", "Handicap",
+        "Item", "Price", "Transaction Fees", "City", "Chapter", "Course",
+        "Handicap", "Has Handicap",
         "Side Games", "Tee Choice", "Member Status", "Golf or Compete",
         "Post Game", "Returning/New", "Shirt Size", "Guest Name",
+        "Date of Birth",
         "Net Points Race", "Gross Points Race", "City Match Play",
         "Order ID", "Total Amount", "Merchant",
     ];
 
     const fields = [
         "event_date", "order_date", "customer", "customer_email", "customer_phone",
-        "item_name", "item_price", "city", "course",
-        "handicap", "side_games", "tee_choice", "member_status",
+        "item_name", "item_price", "transaction_fees", "city", "chapter", "course",
+        "handicap", "has_handicap",
+        "side_games", "tee_choice", "member_status",
         "golf_or_compete", "post_game", "returning_or_new", "shirt_size",
-        "guest_name", "net_points_race", "gross_points_race", "city_match_play",
+        "guest_name", "date_of_birth",
+        "net_points_race", "gross_points_race", "city_match_play",
         "order_id", "total_amount", "merchant",
     ];
 
@@ -884,9 +888,11 @@ function onAuthReady() {
 // Edit Modal
 // ---------------------------------------------------------------------------
 const EDIT_FIELDS = [
-    "customer", "item_name", "item_price", "event_date",
-    "city", "course", "handicap", "side_games",
+    "customer", "item_name", "item_price", "transaction_fees", "event_date",
+    "city", "chapter", "course", "handicap", "has_handicap", "side_games",
     "tee_choice", "member_status", "golf_or_compete",
+    "returning_or_new", "date_of_birth",
+    "net_points_race", "gross_points_race", "city_match_play",
 ];
 
 function openEditModal(itemId) {
