@@ -779,6 +779,11 @@ def api_seed_events():
 # ---------------------------------------------------------------------------
 # Routes — RSVP
 # ---------------------------------------------------------------------------
+@app.route("/rsvps")
+def rsvps_page():
+    return render_template("rsvps.html")
+
+
 @app.route("/api/rsvps")
 def api_rsvps():
     """Return RSVPs, optionally filtered by event or response."""
