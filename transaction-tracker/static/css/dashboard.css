@@ -1332,14 +1332,27 @@ tr.row-transferred { opacity: 0.6; }
 /* =========================================================
    Games Calculator Panel
    ========================================================= */
-.view-toggle-badge {
-    font-weight: 600;
-    cursor: pointer;
+/* PLAYERS / GAMES connected toggle group */
+.view-toggle-group {
+    display: inline-flex;
+    border: 2px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+    margin-right: 0.35rem;
 }
-.games-badge {
-    background: #f0fdf4 !important;
-    color: #166534 !important;
-    border-color: #86efac !important;
+.view-toggle-group .game-stat-badge {
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    font-weight: 600;
+}
+.view-toggle-group .game-stat-badge:not(:last-child) {
+    border-right: 1px solid var(--border);
+}
+.view-toggle-group .games-badge:not(.active) {
+    background: #f0fdf4;
+    color: #166534;
+    border-color: transparent;
 }
 .games-badge.active {
     background: #166534 !important;

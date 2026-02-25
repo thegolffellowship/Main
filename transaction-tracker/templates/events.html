@@ -637,29 +637,45 @@
             let detailHtml = '';
             if (isExpanded) {
                 const activeFilter = eventGameFilter[ev.id] || null;
-                let filteredRegs = registrants;
-                if (activeFilter) {
-                    filteredRegs = registrants.filter(r => {
-                        const type = classifyGameType(r.side_games);
-                        if (activeFilter === "NET") return type === "NET" || type === "BOTH";
-                        if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
-                        if (activeFilter === "NO GAMES") return type === "NO GAMES";
-                        return true;
-                    });
-                }
-                filteredRegs = sortRegistrants(filteredRegs);
+                const mobileHolesType = extractHolesType(ev.item_name);
+                const mobileGamesView = mobileHolesType && gamesOpenForEvent[ev.id];
 
-                detailHtml = `
-                <div class="event-game-stats" style="margin-bottom:0.5rem;">
-                    <span class="game-stat-badge ${!activeFilter ? 'active' : ''}" data-event-id="${ev.id}" data-filter="">PLAYERS <strong>${stats.players}</strong></span>
-                    <span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>
-                    <span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>
-                    <span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>
-                </div>
-                <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem; flex-wrap:wrap;">
-                    <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>
-                </div>
-                ${filteredRegs.length ? renderRegistrantsMobile(filteredRegs, ev) : '<div style="color:var(--text-muted); font-style:italic; font-size:0.85rem;">No registrations.</div>'}`;
+                // PLAYERS / GAMES toggle + filter badges
+                let badgesHtml = '<div class="event-game-stats" style="margin-bottom:0.5rem;">';
+                badgesHtml += '<span class="view-toggle-group">';
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+                if (mobileHolesType) {
+                    badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+                }
+                badgesHtml += '</span>';
+                if (!mobileGamesView) {
+                    badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
+                    badgesHtml += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
+                    badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>`;
+                }
+                badgesHtml += '</div>';
+
+                if (mobileGamesView) {
+                    detailHtml = badgesHtml + renderGamesPanel(ev);
+                } else {
+                    let filteredRegs = registrants;
+                    if (activeFilter) {
+                        filteredRegs = registrants.filter(r => {
+                            const type = classifyGameType(r.side_games);
+                            if (activeFilter === "NET") return type === "NET" || type === "BOTH";
+                            if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
+                            if (activeFilter === "NO GAMES") return type === "NO GAMES";
+                            return true;
+                        });
+                    }
+                    filteredRegs = sortRegistrants(filteredRegs);
+
+                    detailHtml = badgesHtml + `
+                    <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem; flex-wrap:wrap;">
+                        <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>
+                    </div>
+                    ${filteredRegs.length ? renderRegistrantsMobile(filteredRegs, ev) : '<div style="color:var(--text-muted); font-style:italic; font-size:0.85rem;">No registrations.</div>'}`;
+                }
             }
 
             return `
@@ -1065,12 +1081,14 @@
         const holesType = extractHolesType(ev.item_name);
         const gamesView = holesType && gamesOpenForEvent[ev.id];
 
-        // View toggle: PLAYERS / GAMES
+        // View toggle: PLAYERS / GAMES (connected toggle group)
         let html = '<div class="event-game-stats">';
-        html += `<span class="game-stat-badge view-toggle-badge ${!gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+        html += '<span class="view-toggle-group">';
+        html += `<span class="game-stat-badge ${!gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
         if (holesType) {
-            html += `<span class="game-stat-badge view-toggle-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+            html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
         }
+        html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
         if (!gamesView) {
