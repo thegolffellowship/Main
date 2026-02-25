@@ -1384,7 +1384,8 @@ tr.row-transferred { opacity: 0.6; }
 .games-table col.gc-2nd    { width: 5rem; }
 .games-table col.gc-3rd    { width: 5rem; }
 .games-table col.gc-4th    { width: 5rem; }
-.games-table th {
+.games-table th,
+.games-table thead th {
     background: #f1f5f9;
     padding: 0.3rem 0.6rem;
     text-align: center;
@@ -1394,7 +1395,8 @@ tr.row-transferred { opacity: 0.6; }
     color: var(--text-muted);
     border-bottom: 1px solid var(--border);
 }
-.games-table th:first-child {
+.games-table th:first-child,
+.games-table thead th:first-child {
     text-align: left;
 }
 .games-table td {
