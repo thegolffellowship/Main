@@ -1387,7 +1387,7 @@ tr.row-transferred { opacity: 0.6; }
 .games-table th,
 .games-table thead th {
     background: #f1f5f9;
-    padding: 0.3rem 0.6rem;
+    padding: 0.35rem 0.6rem;
     text-align: center;
     font-size: 0.7rem;
     text-transform: uppercase;
@@ -1400,7 +1400,7 @@ tr.row-transferred { opacity: 0.6; }
     text-align: left;
 }
 .games-table td {
-    padding: 0.3rem 0.6rem;
+    padding: 0.35rem 0.6rem;
     border-bottom: 1px solid #e2e8f0;
     text-align: center;
 }
@@ -1433,13 +1433,12 @@ tr.row-transferred { opacity: 0.6; }
 .games-row-total td {
     border-top: 2px solid var(--border);
     font-weight: 600;
+    background: #e9eef2;
 }
-.games-grand-total {
-    text-align: right;
-    font-size: 0.95rem;
+.games-grand-total-row td {
+    font-size: 0.9rem;
     font-weight: 700;
     color: var(--primary);
-    padding: 0.5rem 0.6rem 0;
-    border-top: 2px solid var(--primary);
-    margin-top: 0.25rem;
+    border-top: 3px solid var(--primary);
+    padding-top: 0.5rem;
 }

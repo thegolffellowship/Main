@@ -879,6 +879,10 @@
         if (v == null || v === "NO_GAME" || v === "NO_EVENT") return null;
         return "$" + Number(v).toFixed(2).replace(/\.00$/, "");
     }
+    function numVal(v) {
+        if (v == null || v === "NO_GAME" || v === "NO_EVENT") return 0;
+        return Number(v) || 0;
+    }
 
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name);
@@ -908,15 +912,17 @@
 
         html += '<table class="games-table">';
         html += '<colgroup><col class="gc-game"><col class="gc-fund"><col class="gc-mwp"><col class="gc-flights"><col class="gc-1st"><col class="gc-2nd"><col class="gc-3rd"><col class="gc-4th"></colgroup>';
-        html += '<thead><tr><th>Game</th><th>Prize Fund</th><th>MWP</th><th>Flights</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th></tr></thead>';
+        html += '<thead><tr><th>Game</th><th>Pot</th><th>MWP</th><th>Flights</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th></tr></thead>';
         html += '<tbody>';
 
         // ── INCLUDED GAMES section (based on total player count) ──
         html += `<tr class="games-section-row"><td colspan="${C}">INCLUDED GAMES (${totalPC} players)</td></tr>`;
+        let inclMWP = 0;
 
         if (gEvent && totalPC >= 4) {
             const teamType = gEvent.teamType || "Team Net";
             if (gEvent.teamTotal !== "NO_EVENT") {
+                inclMWP += numVal(gEvent.teamMWP);
                 html += `<tr><td>${escapeHtml(teamType)}</td><td>${fmt$(gEvent.teamTotal) || "—"}</td><td>${fmt$(gEvent.teamMWP) || "—"}</td><td></td><td>${fmt$(gEvent.team1st) || "—"}</td><td>${fmt$(gEvent.team2nd) || "—"}</td><td></td><td></td></tr>`;
             }
 
@@ -925,20 +931,23 @@
                 if (v === "NO_GAME" || v === "NO_EVENT") {
                     html += `<tr class="games-row-disabled"><td>CTP #${i+1}</td><td colspan="${C-1}">No Game</td></tr>`;
                 } else if (v != null) {
+                    inclMWP += numVal(v);
                     html += `<tr><td>CTP #${i+1}</td><td>${fmt$(v)}</td><td>${fmt$(v)}</td><td></td>${empty4}</tr>`;
                 }
             });
 
             if (gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
-                html += `<tr><td>Hole-in-One</td><td>${fmt$(gEvent.holeInOne)}</td><td></td><td></td>${empty4}</tr>`;
+                inclMWP += numVal(gEvent.holeInOne);
+                html += `<tr><td>Hole-in-One</td><td>${fmt$(gEvent.holeInOne)}</td><td>${fmt$(gEvent.holeInOne)}</td><td></td>${empty4}</tr>`;
             }
-            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gEvent.eventTotalPot) || "—"}</td><td></td><td></td>${empty4}</tr>`;
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gEvent.eventTotalPot) || "—"}</td><td>${fmt$(inclMWP)}</td><td></td>${empty4}</tr>`;
         } else {
             html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough players (${totalPC})</td></tr>`;
         }
 
         // ── NET GAMES section (based on net player count) ──
         html += `<tr class="games-section-row"><td colspan="${C}">NET GAMES (${netPC} players)</td></tr>`;
+        let netMWP = 0;
 
         if (gNet && netPC >= 2) {
             const netFlights = gNet.netFlights ? parseInt(gNet.netFlights) : 1;
@@ -957,33 +966,46 @@
                     { f1: gNet.netHigh1st, f2: gNet.netHigh2nd, f3: gNet.netHigh3rd },
                   ];
 
-            html += `<tr><td><strong>Individual Net</strong></td><td>${fmt$(gNet.individualNet) || "—"}</td><td></td><td>${netFlights}</td>${empty4}</tr>`;
+            // MWP for Individual Net = max 1st-place across all active flights
+            let indNetMWP = 0;
+            for (let i = 0; i < netFlights && i < netFlightData.length; i++) {
+                const fd = netFlightData[i];
+                if (fd.f1 != null && fd.f1 !== "NO_GAME" && fd.f1 !== "NO_EVENT") {
+                    indNetMWP = Math.max(indNetMWP, numVal(fd.f1));
+                }
+            }
+            netMWP += indNetMWP;
+
+            html += `<tr><td><strong>Individual Net</strong></td><td>${fmt$(gNet.individualNet) || "—"}</td><td>${fmt$(indNetMWP) || "—"}</td><td>${netFlights}</td>${empty4}</tr>`;
 
             for (let i = 0; i < netFlights && i < netFlightData.length; i++) {
                 const fd = netFlightData[i];
                 if (fd.f1 != null && fd.f1 !== "NO_GAME" && fd.f1 !== "NO_EVENT") {
-                    html += `<tr class="games-row-sub"><td class="games-indent">${netFlightNames[i]}</td><td></td><td></td><td></td>`;
+                    html += `<tr class="games-row-sub"><td class="games-indent">${netFlightNames[i]}</td><td></td><td>${fmt$(fd.f1) || "—"}</td><td></td>`;
                     html += `<td>${fmt$(fd.f1) || "—"}</td><td>${fmt$(fd.f2) || "—"}</td><td>${fmt$(fd.f3) || "—"}</td><td>${fmt$(fd.f4) || "—"}</td></tr>`;
                 }
             }
 
             if (holes === 9) {
-                if (gNet.cityMVP) html += `<tr><td>City MVP</td><td>${fmt$(gNet.cityMVP)}</td><td>${fmt$(gNet.cityMVP)}</td><td></td>${empty4}</tr>`;
-                if (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME") html += `<tr><td>TGF MVP</td><td>${fmt$(gNet.tgfMVP)}</td><td>${fmt$(gNet.tgfMVP)}</td><td></td>${empty4}</tr>`;
+                if (gNet.cityMVP) { netMWP += numVal(gNet.cityMVP); html += `<tr><td>City MVP</td><td>${fmt$(gNet.cityMVP)}</td><td>${fmt$(gNet.cityMVP)}</td><td></td>${empty4}</tr>`; }
+                if (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME") { netMWP += numVal(gNet.tgfMVP); html += `<tr><td>TGF MVP</td><td>${fmt$(gNet.tgfMVP)}</td><td>${fmt$(gNet.tgfMVP)}</td><td></td>${empty4}</tr>`; }
             } else {
-                if (gNet.mvp) html += `<tr><td>MVP</td><td>${fmt$(gNet.mvp)}</td><td></td><td></td>${empty4}</tr>`;
+                if (gNet.mvp) { netMWP += numVal(gNet.mvp); html += `<tr><td>MVP</td><td>${fmt$(gNet.mvp)}</td><td>${fmt$(gNet.mvp)}</td><td></td>${empty4}</tr>`; }
             }
-            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gNet.netTotalPot) || "—"}</td><td></td><td></td>${empty4}</tr>`;
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gNet.netTotalPot) || "—"}</td><td>${fmt$(netMWP)}</td><td></td>${empty4}</tr>`;
         } else {
             html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough net players (${netPC})</td></tr>`;
         }
 
         // ── GROSS GAMES section (based on gross player count) ──
         html += `<tr class="games-section-row"><td colspan="${C}">GROSS GAMES (${grossPC} players)</td></tr>`;
+        let grossMWP = 0;
 
         if (gGross && grossPC >= 2) {
             const skinsFlights = gGross.skinsFlights ? parseInt(gGross.skinsFlights) : 1;
-            html += `<tr><td><strong>Skins</strong></td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td></td><td>${skinsFlights}</td>${empty4}</tr>`;
+            const skinsMwpVal = numVal(gGross.skinsTotal);
+            grossMWP += skinsMwpVal;
+            html += `<tr><td><strong>Skins</strong></td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
             if (gGross.skins && gGross.skins.length) {
                 const skinDetail = gGross.skins.map((v, i) => `${i+1}=${fmt$(v)}`).join(", ");
                 html += `<tr class="games-row-sub"><td class="games-indent" colspan="4">Per skin: ${skinDetail}</td>${empty4}</tr>`;
@@ -991,27 +1013,31 @@
 
             if (gGross.individualGross && gGross.individualGross !== "NO_GAME" && gGross.individualGross !== "NO_EVENT") {
                 const gFlights = gGross.grossFlights ? parseInt(gGross.grossFlights) : 0;
+                const grossIndMWP = numVal(gGross.grossLow1st);
+                grossMWP += grossIndMWP;
                 let details = '';
                 if (gGross.grossLow1st) details += `1st: ${fmt$(gGross.grossLow1st)}`;
                 if (gGross.grossLow2nd) details += `, 2nd: ${fmt$(gGross.grossLow2nd)}`;
-                html += `<tr><td><strong>Ind. Gross</strong></td><td>${fmt$(gGross.individualGross)}</td><td></td><td>${gFlights}</td><td>${details}</td><td></td><td></td><td></td></tr>`;
+                html += `<tr><td><strong>Ind. Gross</strong></td><td>${fmt$(gGross.individualGross)}</td><td>${fmt$(grossIndMWP) || "—"}</td><td>${gFlights}</td><td>${details}</td><td></td><td></td><td></td></tr>`;
             } else {
                 html += `<tr class="games-row-disabled"><td>Ind. Gross</td><td colspan="${C-1}">No Game</td></tr>`;
             }
 
-            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gGross.grossTotalPot) || "—"}</td><td></td><td></td>${empty4}</tr>`;
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gGross.grossTotalPot) || "—"}</td><td>${fmt$(grossMWP)}</td><td></td>${empty4}</tr>`;
         } else {
             html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough gross players (${grossPC})</td></tr>`;
         }
 
-        html += '</tbody></table>';
+        html += '</tbody>';
 
-        // Grand total from all three lookups
+        // Grand total row inside the table, aligned under Pot and MWP columns
         const eventTotal = (gEvent && totalPC >= 4) ? (Number(gEvent.eventTotalPot) || 0) : 0;
         const netTotal = (gNet && netPC >= 2) ? (Number(gNet.netTotalPot) || 0) : 0;
         const grossTotal = (gGross && grossPC >= 2) ? (Number(gGross.grossTotalPot) || 0) : 0;
-        html += `<div class="games-grand-total">TOTAL POT: ${fmt$(eventTotal + netTotal + grossTotal)}</div>`;
+        const totalMWP = inclMWP + netMWP + grossMWP;
+        html += `<tfoot><tr class="games-grand-total-row"><td>TOTAL</td><td>${fmt$(eventTotal + netTotal + grossTotal)}</td><td>${fmt$(totalMWP)}</td><td></td>${empty4}</tr></tfoot>`;
 
+        html += '</table>';
         html += '</div>';
         return html;
     }
