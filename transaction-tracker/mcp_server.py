@@ -41,6 +41,10 @@ from email_parser.database import (
     sync_events_from_items,
     autofix_all,
     init_db,
+    get_rsvps_for_event,
+    get_all_rsvps,
+    get_rsvp_stats,
+    rematch_rsvps,
 )
 
 # ── Initialise ──────────────────────────────────────────────────────────
@@ -392,6 +396,47 @@ def sync_events() -> str:
 def run_autofix() -> str:
     """Run all data quality autofixes: normalize side games, customer names, course names, and item names."""
     result = autofix_all()
+    return json.dumps({"status": "ok", **result})
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  RSVP TOOLS
+# ═══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def get_event_rsvps(event_name: str) -> str:
+    """Get the latest RSVP status (PLAYING/NOT PLAYING) for each player at an event.
+
+    Args:
+        event_name: The exact event/item name
+    """
+    rsvps = get_rsvps_for_event(event_name)
+    if not rsvps:
+        return json.dumps({"message": f"No RSVPs found for '{event_name}'"})
+    return json.dumps(rsvps, indent=2)
+
+
+@mcp.tool()
+def search_rsvps(event: str = "", response: str = "") -> str:
+    """Search RSVPs with optional filters.
+
+    Args:
+        event: Filter by event name (partial match)
+        response: Filter by response: PLAYING or NOT PLAYING
+    """
+    return json.dumps(get_all_rsvps(event_name=event, response=response), indent=2)
+
+
+@mcp.tool()
+def get_rsvp_summary() -> str:
+    """Get RSVP summary statistics: total, playing, not playing, matched, unmatched."""
+    return json.dumps(get_rsvp_stats(), indent=2)
+
+
+@mcp.tool()
+def rematch_all_rsvps() -> str:
+    """Re-run matching logic on all unmatched RSVPs. Useful after adding new events or transactions."""
+    result = rematch_rsvps()
     return json.dumps({"status": "ok", **result})
 
 

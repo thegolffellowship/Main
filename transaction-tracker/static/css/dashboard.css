@@ -985,6 +985,76 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 tr.row-credited { opacity: 0.6; }
 tr.row-transferred { opacity: 0.6; }
 
+/* ---- RSVP Badges & Sections ---- */
+.rsvp-badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 6px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+}
+.rsvp-playing {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+.rsvp-not-playing {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+.rsvp-stat-badge {
+    border-color: #a78bfa !important;
+    color: #6d28d9 !important;
+}
+.rsvp-section {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+.rsvp-section h4 {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+}
+.rsvp-unmatched {
+    background: #fffbeb;
+    border-color: #fde68a;
+}
+.rsvp-not-playing-section {
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+.rsvp-player-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.rsvp-player-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 16px;
+    font-size: 0.78rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+}
+.rsvp-player-card strong {
+    font-weight: 600;
+}
+.rsvp-email {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
 /* Add Event modal */
 .add-event-modal {
     width: 480px;

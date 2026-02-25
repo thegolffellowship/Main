@@ -34,6 +34,7 @@
             <a href="/">Transactions</a>
             <a href="/events">Events</a>
             <a href="/customers" class="active">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
             <a href="/audit">Audit Log</a>
         </nav>
 
@@ -290,8 +291,15 @@
         return "GUEST";
     }
 
-    // Derive chapter (city) from most frequent city in their transactions
+    // Derive chapter — prefer actual chapter column from membership rows,
+    // fall back to most frequent city in transactions
     function deriveChapter(items) {
+        // First check for an explicit chapter value (from membership orders)
+        for (const item of items) {
+            const ch = (item.chapter || "").trim();
+            if (ch) return ch;
+        }
+        // Fallback: most frequent city
         const cityCounts = {};
         items.forEach(item => {
             const city = (item.city || "").trim();
@@ -300,7 +308,6 @@
             }
         });
         if (!Object.keys(cityCounts).length) return "";
-        // Return the most frequent city
         return Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0][0];
     }
 
@@ -668,14 +675,35 @@
     }
 
     function renderCustDetailContent(customer) {
+        // Extract membership-specific info from their items
+        const membershipItem = customer.items.find(i => (i.item_name || "").toUpperCase().includes("MEMBERSHIP"));
+        const dob = customer.items.map(i => i.date_of_birth).find(Boolean) || "";
+        const chapter = customer.chapter || "";
+        const returningNew = membershipItem ? (membershipItem.returning_or_new || "") : "";
+        const netPts = membershipItem ? (membershipItem.net_points_race || "") : "";
+        const grossPts = membershipItem ? (membershipItem.gross_points_race || "") : "";
+        const matchPlay = membershipItem ? (membershipItem.city_match_play || "") : "";
+        const hasHandicap = membershipItem ? (membershipItem.has_handicap || "") : "";
+
         const meta = [];
-        if (customer.chapter) meta.push("Chapter: " + customer.chapter);
+        if (chapter) meta.push("Chapter: " + chapter);
         if (customer.email) meta.push(`<a href="mailto:${encodeURIComponent(customer.email)}" class="cell-link">${escapeHtml(customer.email)}</a>`);
         if (customer.phone) meta.push(customer.phone);
+        if (dob) meta.push("DOB: " + dob);
         meta.push(`${customer.items.length} purchase(s)`);
         meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} total`);
 
+        // Membership season badges
+        const badges = [];
+        if (returningNew) badges.push(`<span class="status-badge-sm ${returningNew.toLowerCase().includes('new') ? 'badge-first-timer' : 'badge-member'}">${escapeHtml(returningNew)}</span>`);
+        if (netPts === "YES") badges.push('<span class="status-badge-sm badge-member">NET Pts</span>');
+        if (grossPts === "YES") badges.push('<span class="status-badge-sm badge-member">GROSS Pts</span>');
+        if (matchPlay === "YES") badges.push('<span class="status-badge-sm badge-guest">Match Play</span>');
+
         let html = `<div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.5rem;">${meta.join(" | ")}</div>`;
+        if (badges.length) {
+            html += `<div style="margin-bottom:0.5rem; display:flex; gap:0.3rem; flex-wrap:wrap;">${badges.join("")}</div>`;
+        }
         html += '<table class="registrants-table"><thead><tr>';
         html += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Type</th><th>Order Date</th><th>Actions</th>';
         html += '</tr></thead><tbody>';

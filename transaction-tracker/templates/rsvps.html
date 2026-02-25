@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — RSVP Log</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TGF Tracker">
+    <style>
+        .rsvp-table-wrapper {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            box-shadow: var(--shadow);
+        }
+        .rsvp-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .rsvp-table thead th {
+            background: #f9fafb;
+            padding: 0.6rem 0.85rem;
+            text-align: left;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+        }
+        .rsvp-table thead th:hover { color: var(--primary); }
+        .rsvp-table tbody td {
+            padding: 0.55rem 0.85rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+            vertical-align: top;
+            white-space: nowrap;
+        }
+        .rsvp-table tbody tr:last-child td { border-bottom: none; }
+        .rsvp-table tbody tr:hover { background: #f9fafb; }
+        .rsvp-response {
+            display: inline-block;
+            padding: 0.15rem 0.55rem;
+            border-radius: 12px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .rsvp-playing { background: #ecfdf5; color: #065f46; }
+        .rsvp-not-playing { background: #fef2f2; color: #991b1b; }
+        .rsvp-match-badge {
+            display: inline-block;
+            padding: 0.1rem 0.45rem;
+            border-radius: 8px;
+            font-size: 0.68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .match-yes { background: #ecfdf5; color: #065f46; }
+        .match-no { background: #fef3c7; color: #92400e; }
+        .empty-msg {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+        @media (max-width: 768px) {
+            .rsvp-table-wrapper { display: none; }
+            .mobile-card-list.rsvps-mobile { display: block; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">RSVP Log — Player responses from GolfGenius</p>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-check-rsvps" class="btn btn-primary" title="Check inbox for new RSVP responses">
+                <span class="btn-icon">&#8635;</span> Check RSVPs
+            </button>
+            <button id="btn-rematch" class="btn btn-secondary" title="Re-match unmatched RSVPs to events">
+                Rematch
+            </button>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">
+                Log Out
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps" class="active">RSVP Log</a>
+            <a href="/audit">Audit Log</a>
+        </nav>
+
+        <!-- Controls -->
+        <section class="controls" style="margin-bottom: 0.75rem;">
+            <input type="text" id="rsvp-search" class="search-box" placeholder="Search by player name, event, email...">
+            <select id="rsvp-event-filter" class="filter-select">
+                <option value="">All Events</option>
+            </select>
+            <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
+        </section>
+
+        <!-- Stats / Category Filters -->
+        <section class="category-filters" id="rsvp-filters">
+            <button class="category-btn active" data-rsvp-filter="all">All <span class="cat-count" id="cat-count-all">0</span></button>
+            <button class="category-btn" data-rsvp-filter="playing"><span class="label-full">Playing</span><span class="label-short">Playing</span> <span class="cat-count" id="cat-count-playing">0</span></button>
+            <button class="category-btn" data-rsvp-filter="not_playing"><span class="label-full">Not Playing</span><span class="label-short">Not Play</span> <span class="cat-count" id="cat-count-not-playing">0</span></button>
+            <button class="category-btn" data-rsvp-filter="matched"><span class="label-full">Matched</span><span class="label-short">Match</span> <span class="cat-count" id="cat-count-matched">0</span></button>
+            <button class="category-btn" data-rsvp-filter="unmatched"><span class="label-full">Unmatched</span><span class="label-short">Unmatch</span> <span class="cat-count" id="cat-count-unmatched">0</span></button>
+        </section>
+
+        <!-- Summary Stats -->
+        <section class="stats-row" id="stats-row">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-total">—</div>
+                <div class="stat-label">Total RSVPs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-playing" style="color: var(--green);">—</div>
+                <div class="stat-label">Playing</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-not-playing" style="color: var(--red);">—</div>
+                <div class="stat-label">Not Playing</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-matched">—</div>
+                <div class="stat-label">Matched</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-unmatched" style="color: #d97706;">—</div>
+                <div class="stat-label">Unmatched</div>
+            </div>
+        </section>
+
+        <!-- Desktop Table -->
+        <section class="rsvp-table-wrapper">
+            <table class="rsvp-table">
+                <thead>
+                    <tr>
+                        <th data-sort="player_name">Player <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="player_email">Email <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="gg_event_name">GG Event <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="response">Response <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="event_date">Event Date <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="received_at">Received <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="matched_event">Matched Event <span class="sort-arrow">&#9650;&#9660;</span></th>
+                    </tr>
+                </thead>
+                <tbody id="rsvp-body">
+                    <tr><td colspan="7" class="empty-msg">Loading...</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Mobile Cards -->
+        <section id="rsvp-mobile-cards" class="mobile-card-list rsvps-mobile"></section>
+
+        <div class="row-count" id="row-count"></div>
+    </main>
+
+    <footer>
+        <p>TGF Transaction Tracker &mdash; Powered by Claude AI</p>
+    </footer>
+
+    <!-- Login Modal -->
+    <div id="login-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal login-modal">
+            <h2>Dashboard Login</h2>
+            <p class="modal-subtitle">Enter your PIN to access the dashboard.</p>
+            <input type="password" id="login-pin" class="modal-input" placeholder="Enter PIN" maxlength="20" autocomplete="off">
+            <div id="login-error" class="modal-error" style="display:none;"></div>
+            <button id="login-submit" class="btn btn-primary modal-btn">Log In</button>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+    /* =========================================================
+       RSVP Log Page
+       ========================================================= */
+    let allRsvps = [];
+    let rsvpStats = {};
+    let rsvpSearchQuery = "";
+    let rsvpCategoryFilter = "all";
+    let rsvpEventFilter = "";
+    let rsvpSortField = "received_at";
+    let rsvpSortDir = "desc";
+
+    // ---- Helpers ----
+    function escapeHtml(str) {
+        const div = document.createElement("div");
+        div.textContent = str || "";
+        return div.innerHTML;
+    }
+
+    function formatDate(str) {
+        if (!str) return "\u2014";
+        // Handle ISO datetime strings
+        const d = new Date(str);
+        if (isNaN(d)) return escapeHtml(str);
+        return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+
+    function formatDateTime(str) {
+        if (!str) return "\u2014";
+        const d = new Date(str);
+        if (isNaN(d)) return escapeHtml(str);
+        return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+            " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    }
+
+    // ---- Data fetching ----
+    async function fetchRsvps() {
+        try {
+            const res = await fetch("/api/rsvps");
+            allRsvps = await res.json();
+        } catch (err) {
+            console.error("Failed to fetch RSVPs:", err);
+        }
+    }
+
+    async function fetchRsvpStats() {
+        try {
+            const res = await fetch("/api/rsvps/stats");
+            rsvpStats = await res.json();
+        } catch (err) {
+            console.error("Failed to fetch RSVP stats:", err);
+        }
+    }
+
+    // ---- Filtering & Sorting ----
+    function getFilteredSortedRsvps() {
+        let filtered = allRsvps;
+
+        // Category filter
+        if (rsvpCategoryFilter === "playing") {
+            filtered = filtered.filter(r => r.response === "PLAYING");
+        } else if (rsvpCategoryFilter === "not_playing") {
+            filtered = filtered.filter(r => r.response === "NOT PLAYING");
+        } else if (rsvpCategoryFilter === "matched") {
+            filtered = filtered.filter(r => r.matched_event);
+        } else if (rsvpCategoryFilter === "unmatched") {
+            filtered = filtered.filter(r => !r.matched_event);
+        }
+
+        // Event dropdown filter
+        if (rsvpEventFilter) {
+            filtered = filtered.filter(r =>
+                r.matched_event === rsvpEventFilter || r.gg_event_name === rsvpEventFilter
+            );
+        }
+
+        // Text search
+        const q = rsvpSearchQuery.toLowerCase().trim();
+        if (q) {
+            filtered = filtered.filter(r => {
+                return (r.player_name || "").toLowerCase().includes(q) ||
+                       (r.player_email || "").toLowerCase().includes(q) ||
+                       (r.gg_event_name || "").toLowerCase().includes(q) ||
+                       (r.matched_event || "").toLowerCase().includes(q) ||
+                       (r.response || "").toLowerCase().includes(q);
+            });
+        }
+
+        // Sort
+        filtered.sort((a, b) => {
+            let va = a[rsvpSortField] || "";
+            let vb = b[rsvpSortField] || "";
+            if (typeof va === "string") va = va.toLowerCase();
+            if (typeof vb === "string") vb = vb.toLowerCase();
+            if (va < vb) return rsvpSortDir === "asc" ? -1 : 1;
+            if (va > vb) return rsvpSortDir === "asc" ? 1 : -1;
+            return 0;
+        });
+
+        return filtered;
+    }
+
+    // ---- Rendering ----
+    function updateStats() {
+        const total = allRsvps.length;
+        const playing = allRsvps.filter(r => r.response === "PLAYING").length;
+        const notPlaying = allRsvps.filter(r => r.response === "NOT PLAYING").length;
+        const matched = allRsvps.filter(r => r.matched_event).length;
+        const unmatched = allRsvps.filter(r => !r.matched_event).length;
+
+        document.getElementById("stat-total").textContent = total;
+        document.getElementById("stat-playing").textContent = playing;
+        document.getElementById("stat-not-playing").textContent = notPlaying;
+        document.getElementById("stat-matched").textContent = matched;
+        document.getElementById("stat-unmatched").textContent = unmatched;
+
+        document.getElementById("cat-count-all").textContent = total;
+        document.getElementById("cat-count-playing").textContent = playing;
+        document.getElementById("cat-count-not-playing").textContent = notPlaying;
+        document.getElementById("cat-count-matched").textContent = matched;
+        document.getElementById("cat-count-unmatched").textContent = unmatched;
+    }
+
+    function buildEventFilter() {
+        const select = document.getElementById("rsvp-event-filter");
+        const events = new Set();
+        allRsvps.forEach(r => {
+            if (r.matched_event) events.add(r.matched_event);
+            else if (r.gg_event_name) events.add(r.gg_event_name);
+        });
+        const sorted = [...events].sort();
+        let html = '<option value="">All Events</option>';
+        sorted.forEach(e => {
+            html += `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`;
+        });
+        select.innerHTML = html;
+        if (rsvpEventFilter) select.value = rsvpEventFilter;
+    }
+
+    function responseBadge(response) {
+        if (response === "PLAYING") return '<span class="rsvp-response rsvp-playing">Playing</span>';
+        if (response === "NOT PLAYING") return '<span class="rsvp-response rsvp-not-playing">Not Playing</span>';
+        return escapeHtml(response || "\u2014");
+    }
+
+    function matchBadge(matched) {
+        if (matched) return `<span class="rsvp-match-badge match-yes">Matched</span> ${escapeHtml(matched)}`;
+        return '<span class="rsvp-match-badge match-no">Unmatched</span>';
+    }
+
+    function updateSortArrows() {
+        document.querySelectorAll(".rsvp-table thead th[data-sort]").forEach(th => {
+            const field = th.dataset.sort;
+            const isActive = rsvpSortField === field;
+            th.classList.toggle("sort-active", isActive);
+            const arrow = th.querySelector(".sort-arrow");
+            if (arrow) {
+                arrow.innerHTML = isActive
+                    ? (rsvpSortDir === "asc" ? "&#9650;" : "&#9660;")
+                    : "&#9650;&#9660;";
+            }
+        });
+    }
+
+    function updateClearButton() {
+        const hasFilters = rsvpSearchQuery.trim().length > 0 ||
+                           rsvpCategoryFilter !== "all" ||
+                           rsvpEventFilter !== "";
+        document.getElementById("btn-clear-filters").classList.toggle("visible", hasFilters);
+    }
+
+    function renderRsvps() {
+        updateStats();
+        buildEventFilter();
+
+        const filtered = getFilteredSortedRsvps();
+        updateSortArrows();
+        updateClearButton();
+
+        const tbody = document.getElementById("rsvp-body");
+
+        if (!filtered.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No RSVPs found. Click "Check RSVPs" to scan for RSVP emails.</td></tr>';
+            document.getElementById("row-count").textContent = "";
+            renderMobileCards([]);
+            return;
+        }
+
+        let html = "";
+        filtered.forEach(r => {
+            html += `<tr>
+                <td><strong>${escapeHtml(r.player_name || "\u2014")}</strong></td>
+                <td>${escapeHtml(r.player_email || "\u2014")}</td>
+                <td>${escapeHtml(r.gg_event_name || "\u2014")}</td>
+                <td>${responseBadge(r.response)}</td>
+                <td>${formatDate(r.event_date)}</td>
+                <td>${formatDateTime(r.received_at)}</td>
+                <td>${matchBadge(r.matched_event)}</td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+        document.getElementById("row-count").textContent = `Showing ${filtered.length} of ${allRsvps.length} RSVPs`;
+
+        renderMobileCards(filtered);
+    }
+
+    function renderMobileCards(filtered) {
+        const container = document.getElementById("rsvp-mobile-cards");
+        if (!container) return;
+
+        if (!filtered.length) {
+            container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-muted); font-style:italic;">No RSVPs found.</div>';
+            return;
+        }
+
+        container.innerHTML = filtered.map(r => {
+            const fields = [
+                ["Email", r.player_email || "\u2014"],
+                ["Event", r.gg_event_name || "\u2014"],
+                ["Event Date", r.event_date ? formatDate(r.event_date) : "\u2014"],
+                ["Received", r.received_at ? formatDateTime(r.received_at) : "\u2014"],
+                ["Matched", r.matched_event || "Unmatched"],
+            ];
+
+            const respClass = r.response === "PLAYING" ? "rsvp-playing" : (r.response === "NOT PLAYING" ? "rsvp-not-playing" : "");
+
+            return `
+            <div class="mobile-card">
+                <div class="mobile-card-top" onclick="this.parentElement.classList.toggle('expanded')">
+                    <div class="mc-primary">
+                        <span class="mc-customer">${escapeHtml(r.player_name || "\u2014")}</span>
+                        <span class="rsvp-response ${respClass}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(r.response || "\u2014")}</span>
+                        <br><span class="mc-event">${escapeHtml(r.gg_event_name || "\u2014")}</span>
+                    </div>
+                    <span class="mc-chevron">&#9656;</span>
+                </div>
+                <div class="mobile-card-details">
+                    <div class="mc-field-grid">
+                        ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
+                    </div>
+                </div>
+            </div>`;
+        }).join("");
+    }
+
+    // ---- Event Handlers ----
+    function initHandlers() {
+        // Search
+        const searchInput = document.getElementById("rsvp-search");
+        searchInput.addEventListener("input", () => {
+            rsvpSearchQuery = searchInput.value;
+            renderRsvps();
+        });
+
+        // Restore search from localStorage
+        try {
+            const saved = localStorage.getItem("tgf_rsvp_search");
+            if (saved) { rsvpSearchQuery = saved; searchInput.value = saved; }
+        } catch (e) {}
+        searchInput.addEventListener("input", () => {
+            try { localStorage.setItem("tgf_rsvp_search", searchInput.value); } catch (e) {}
+        });
+
+        // Event filter dropdown
+        document.getElementById("rsvp-event-filter").addEventListener("change", (e) => {
+            rsvpEventFilter = e.target.value;
+            renderRsvps();
+        });
+
+        // Category filter buttons
+        document.querySelectorAll("[data-rsvp-filter]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                rsvpCategoryFilter = btn.dataset.rsvpFilter;
+                document.querySelectorAll("[data-rsvp-filter]").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                renderRsvps();
+            });
+        });
+
+        // Sort headers
+        document.querySelectorAll(".rsvp-table thead th[data-sort]").forEach(th => {
+            th.addEventListener("click", () => {
+                const field = th.dataset.sort;
+                if (rsvpSortField === field) {
+                    rsvpSortDir = rsvpSortDir === "asc" ? "desc" : "asc";
+                } else {
+                    rsvpSortField = field;
+                    rsvpSortDir = "asc";
+                }
+                renderRsvps();
+            });
+        });
+
+        // Clear filters
+        document.getElementById("btn-clear-filters").addEventListener("click", () => {
+            rsvpSearchQuery = "";
+            rsvpCategoryFilter = "all";
+            rsvpEventFilter = "";
+            searchInput.value = "";
+            document.getElementById("rsvp-event-filter").value = "";
+            document.querySelectorAll("[data-rsvp-filter]").forEach(b =>
+                b.classList.toggle("active", b.dataset.rsvpFilter === "all")
+            );
+            try { localStorage.removeItem("tgf_rsvp_search"); } catch (e) {}
+            renderRsvps();
+        });
+
+        // Check RSVPs button
+        document.getElementById("btn-check-rsvps").addEventListener("click", async () => {
+            const btn = document.getElementById("btn-check-rsvps");
+            btn.classList.add("loading");
+            btn.disabled = true;
+            try {
+                const res = await fetch("/api/rsvps/check-now", { method: "POST" });
+                const data = await res.json();
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    if (data.message) alert(data.message);
+                    await Promise.all([fetchRsvps(), fetchRsvpStats()]);
+                    renderRsvps();
+                }
+            } catch (err) {
+                alert("Failed to check RSVPs: " + err.message);
+            } finally {
+                btn.classList.remove("loading");
+                btn.disabled = false;
+            }
+        });
+
+        // Rematch button
+        document.getElementById("btn-rematch").addEventListener("click", async () => {
+            const btn = document.getElementById("btn-rematch");
+            btn.disabled = true;
+            btn.textContent = "Rematching...";
+            try {
+                const res = await fetch("/api/rsvps/rematch", { method: "POST" });
+                const data = await res.json();
+                if (data.error) {
+                    alert("Rematch failed: " + data.error);
+                } else {
+                    alert(`Rematch complete: ${data.rematched} newly matched, ${data.still_unmatched} still unmatched.`);
+                    await Promise.all([fetchRsvps(), fetchRsvpStats()]);
+                    renderRsvps();
+                }
+            } catch (err) {
+                alert("Rematch failed: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Rematch";
+            }
+        });
+
+        // Check URL params for pre-filtering
+        const params = new URLSearchParams(window.location.search);
+        const eventParam = params.get("event");
+        if (eventParam) {
+            rsvpEventFilter = eventParam;
+        }
+        const responseParam = params.get("response");
+        if (responseParam === "PLAYING") {
+            rsvpCategoryFilter = "playing";
+            document.querySelectorAll("[data-rsvp-filter]").forEach(b =>
+                b.classList.toggle("active", b.dataset.rsvpFilter === "playing")
+            );
+        } else if (responseParam === "NOT PLAYING") {
+            rsvpCategoryFilter = "not_playing";
+            document.querySelectorAll("[data-rsvp-filter]").forEach(b =>
+                b.classList.toggle("active", b.dataset.rsvpFilter === "not_playing")
+            );
+        }
+    }
+
+    // ---- Init (called by auth.js after login) ----
+    async function onAuthReady() {
+        await Promise.all([fetchRsvps(), fetchRsvpStats()]);
+        renderRsvps();
+    }
+
+    initHandlers();
+    initAuth();
+    </script>
+</body>
+</html>
