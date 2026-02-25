@@ -163,6 +163,20 @@ def init_db(db_path: str | Path | None = None) -> None:
         "CREATE INDEX IF NOT EXISTS idx_rsvps_player_email ON rsvps(player_email)"
     )
 
+    # Manual RSVP overrides — tap-to-change circle on event detail
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS rsvp_overrides (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id    INTEGER NOT NULL,
+            event_name TEXT NOT NULL,
+            status     TEXT NOT NULL DEFAULT 'none',
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(item_id, event_name)
+        )
+        """
+    )
+
     conn.commit()
     conn.close()
     logger.info("Database initialized at %s", db_path or DB_PATH)
@@ -1199,3 +1213,38 @@ def normalize_tee_choices(db_path: str | Path | None = None) -> int:
     conn.commit()
     conn.close()
     return updated
+
+
+# ---------------------------------------------------------------------------
+# Manual RSVP Overrides
+# ---------------------------------------------------------------------------
+
+def get_rsvp_overrides(event_name: str, db_path=None) -> dict:
+    """Return {item_id: status} for all manual overrides on an event."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT item_id, status FROM rsvp_overrides WHERE event_name = ?",
+        (event_name,),
+    ).fetchall()
+    conn.close()
+    return {r[0]: r[1] for r in rows}
+
+
+def set_rsvp_override(item_id: int, event_name: str, status: str, db_path=None):
+    """Upsert a manual RSVP override. status is 'none', 'playing', or 'not_playing'."""
+    conn = get_connection(db_path)
+    if status == "none":
+        conn.execute(
+            "DELETE FROM rsvp_overrides WHERE item_id = ? AND event_name = ?",
+            (item_id, event_name),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO rsvp_overrides (item_id, event_name, status)
+               VALUES (?, ?, ?)
+               ON CONFLICT(item_id, event_name)
+               DO UPDATE SET status = excluded.status, updated_at = datetime('now')""",
+            (item_id, event_name, status),
+        )
+    conn.commit()
+    conn.close()
