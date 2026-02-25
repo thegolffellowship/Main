@@ -352,6 +352,7 @@
     let allEvents = [];
     let allItems = [];
     let allRsvps = {};  // keyed by event_name → array of rsvp objects
+    let allRsvpOverrides = {};  // keyed by event_name → {item_id: status}
     let expandedEventId = null;
     let eventSortField = "event_date";
     let eventSortDir = "asc";
@@ -470,10 +471,13 @@
 
     async function fetchRsvps(eventName) {
         try {
-            const res = await fetch(`/api/rsvps/event/${encodeURIComponent(eventName)}`);
-            const data = await res.json();
-            allRsvps[eventName] = data;
-            return data;
+            const [rsvpRes, overrideRes] = await Promise.all([
+                fetch(`/api/rsvps/event/${encodeURIComponent(eventName)}`),
+                fetch(`/api/rsvps/overrides/${encodeURIComponent(eventName)}`)
+            ]);
+            allRsvps[eventName] = await rsvpRes.json();
+            allRsvpOverrides[eventName] = await overrideRes.json();
+            return allRsvps[eventName];
         } catch (err) {
             console.error("Failed to fetch RSVPs:", err);
             return [];
@@ -552,6 +556,7 @@
     }
 
     function renderRegistrantsMobile(registrants, ev) {
+        const overrides = allRsvpOverrides[ev.item_name] || {};
         let html = '';
         registrants.forEach(r => {
             const txStatus = r.transaction_status || "active";
@@ -561,7 +566,17 @@
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
-            const rsvpBadge = renderRsvpBadge(rsvp);
+            const manualOverride = overrides[r.id];
+            let circleState = "none";
+            if (manualOverride && manualOverride !== "none") {
+                circleState = manualOverride;
+            } else if (rsvp && rsvp.response === 'PLAYING') {
+                circleState = "playing";
+            } else if (rsvp && rsvp.response === 'NOT PLAYING') {
+                circleState = "not_playing";
+            }
+            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState}` : "";
+            const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}"></span>`;
             const sideGame = classifyGameType(r.side_games);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
@@ -585,8 +600,9 @@
             <div class="mobile-card${statusClass}" data-id="${r.id}">
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
+                        ${circleHtml}
                         <span class="mc-customer"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}" onclick="event.stopPropagation()">${escapeHtml(r.customer || "\u2014")}</a></span>
-                        ${rsvpBadge} ${topTags} ${tag}
+                        ${topTags} ${tag}
                     </div>
                     <span class="mc-chevron">&#9656;</span>
                 </div>
@@ -766,6 +782,7 @@
 
     // Detail table column definitions and visibility
     const DETAIL_COLUMNS = [
+        { key: "rsvp", label: "", default: true },
         { key: "customer", label: "Customer", default: true },
         { key: "item_price", label: "Price", default: true },
         { key: "handicap", label: "Handicap", default: true },
@@ -850,14 +867,6 @@
         return rsvps.find(r => r.player_email && r.player_email.toLowerCase() === email.toLowerCase());
     }
 
-    function renderRsvpBadge(rsvp) {
-        if (!rsvp) return '';
-        if (rsvp.response === 'PLAYING') {
-            return '<span class="rsvp-badge rsvp-playing" title="Confirmed in Golf Genius">GG</span>';
-        }
-        return '<span class="rsvp-badge rsvp-not-playing" title="Cancelled in Golf Genius">GG</span>';
-    }
-
     function renderDetailContent(ev) {
         const registrants = getRegistrants(ev.item_name);
         const rsvps = allRsvps[ev.item_name] || [];
@@ -911,7 +920,7 @@
         html += '<div class="column-toggle-wrapper">';
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
-        html += DETAIL_COLUMNS.map(c => {
+        html += DETAIL_COLUMNS.filter(c => c.key !== "rsvp").map(c => {
             const checked = detailVisibleColumns[c.key] !== false ? "checked" : "";
             return `<label><input type="checkbox" data-detail-col="${c.key}" ${checked}> ${c.label}</label>`;
         }).join("");
@@ -920,6 +929,10 @@
         html += '<table class="registrants-table"><thead><tr>';
         DETAIL_COLUMNS.forEach(c => {
             const vis = detailVisibleColumns[c.key] !== false;
+            if (c.key === "rsvp") {
+                html += '<th class="rsvp-col" title="RSVP Status"></th>';
+                return;
+            }
             if (c.key === "actions") {
                 html += `<th style="${vis ? '' : 'display:none;'}">Actions</th>`;
                 return;
@@ -932,23 +945,34 @@
         });
         html += '</tr></thead><tbody>';
 
+        const overrides = allRsvpOverrides[ev.item_name] || {};
         filtered.forEach(r => {
             const txStatus = r.transaction_status || "active";
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
-            const hasGgConfirm = rsvp && rsvp.response === 'PLAYING';
-            const hasGgCancel = rsvp && rsvp.response === 'NOT PLAYING';
+            // Determine circle state: manual override wins, then auto from RSVP
+            const manualOverride = overrides[r.id];
+            let circleState = "none";
+            if (manualOverride && manualOverride !== "none") {
+                circleState = manualOverride;
+            } else if (rsvp && rsvp.response === 'PLAYING') {
+                circleState = "playing";
+            } else if (rsvp && rsvp.response === 'NOT PLAYING') {
+                circleState = "not_playing";
+            }
+            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState}` : "";
             const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (r.transferred_from_id ? ' class="row-from-transfer"' : '');
             html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
                 const style = vis ? '' : 'display:none;';
-                if (c.key === "customer") {
+                if (c.key === "rsvp") {
+                    html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" title="${circleState === 'playing' ? 'Playing' : circleState === 'not_playing' ? 'Not Playing' : 'No RSVP'}"></span></td>`;
+                } else if (c.key === "customer") {
                     let tag = "";
                     if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
-                    const rsvpBadge = renderRsvpBadge(rsvp);
-                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${rsvpBadge}${tag}</td>`;
+                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}</td>`;
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
@@ -1106,6 +1130,34 @@
                 });
             });
         }
+
+        // RSVP circle tap-to-toggle
+        container.querySelectorAll(".rsvp-circle").forEach(circle => {
+            circle.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(circle.dataset.itemId);
+                const eventName = circle.dataset.eventName;
+                const current = circle.dataset.rsvpState;
+                // Cycle: none → playing → not_playing → none
+                const next = current === "none" ? "playing" : current === "playing" ? "not_playing" : "none";
+                try {
+                    await fetch("/api/rsvps/overrides", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ item_id: itemId, event_name: eventName, status: next })
+                    });
+                    // Update local cache
+                    if (!allRsvpOverrides[eventName]) allRsvpOverrides[eventName] = {};
+                    allRsvpOverrides[eventName][itemId] = next;
+                    // Update circle visually without full re-render
+                    circle.dataset.rsvpState = next;
+                    circle.className = "rsvp-circle" + (next !== "none" ? ` rsvp-circle-${next}` : "");
+                    circle.title = next === "playing" ? "Playing" : next === "not_playing" ? "Not Playing" : "No RSVP";
+                } catch (err) {
+                    console.error("Failed to update RSVP override:", err);
+                }
+            });
+        });
 
         // Credit/Reverse buttons in registrant rows
         container.querySelectorAll("[data-credit-id]").forEach(btn => {

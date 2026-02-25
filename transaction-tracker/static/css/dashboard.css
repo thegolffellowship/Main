@@ -985,6 +985,29 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 tr.row-credited { opacity: 0.6; }
 tr.row-transferred { opacity: 0.6; }
 
+/* ---- RSVP Circle (tap-to-toggle) ---- */
+.rsvp-circle {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--text-muted, #6b7280);
+    background: transparent;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background 0.15s, border-color 0.15s;
+}
+.rsvp-circle:hover { opacity: 0.8; }
+.rsvp-circle.rsvp-circle-playing {
+    background: #22c55e;
+    border-color: #16a34a;
+}
+.rsvp-circle.rsvp-circle-not-playing {
+    background: #ef4444;
+    border-color: #dc2626;
+}
+.registrants-table .rsvp-col { width: 30px; text-align: center; padding: 0.25rem; }
+
 /* ---- RSVP Badges & Sections ---- */
 .rsvp-badge {
     display: inline-block;

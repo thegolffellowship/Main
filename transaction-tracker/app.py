@@ -47,6 +47,8 @@ from email_parser.database import (
     get_all_rsvps,
     get_rsvp_stats,
     rematch_rsvps,
+    get_rsvp_overrides,
+    set_rsvp_override,
 )
 from email_parser.fetcher import fetch_transaction_emails
 from email_parser.parser import parse_email, parse_emails
@@ -829,6 +831,27 @@ def api_rsvp_rematch():
     except Exception as e:
         logger.exception("RSVP rematch failed")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rsvps/overrides/<path:event_name>")
+def api_rsvp_overrides(event_name):
+    """Return manual RSVP overrides for an event as {item_id: status}."""
+    return jsonify(get_rsvp_overrides(event_name))
+
+
+@app.route("/api/rsvps/overrides", methods=["POST"])
+def api_set_rsvp_override():
+    """Set a manual RSVP override for a registrant."""
+    data = request.get_json(force=True)
+    item_id = data.get("item_id")
+    event_name = data.get("event_name")
+    status = data.get("status", "none")
+    if not item_id or not event_name:
+        return jsonify({"error": "item_id and event_name required"}), 400
+    if status not in ("none", "playing", "not_playing"):
+        return jsonify({"error": "status must be none, playing, or not_playing"}), 400
+    set_rsvp_override(int(item_id), event_name, status)
+    return jsonify({"status": "ok", "item_id": item_id, "event_name": event_name, "rsvp_status": status})
 
 
 @app.route("/api/rsvps/config-status")
