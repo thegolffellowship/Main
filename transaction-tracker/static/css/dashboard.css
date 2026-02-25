@@ -1387,7 +1387,7 @@ tr.row-transferred { opacity: 0.6; }
 .games-table th {
     background: #f1f5f9;
     padding: 0.3rem 0.6rem;
-    text-align: right;
+    text-align: center;
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.03em;
@@ -1400,7 +1400,7 @@ tr.row-transferred { opacity: 0.6; }
 .games-table td {
     padding: 0.3rem 0.6rem;
     border-bottom: 1px solid #e2e8f0;
-    text-align: right;
+    text-align: center;
 }
 .games-table td:first-child {
     text-align: left;
@@ -1413,9 +1413,10 @@ tr.row-transferred { opacity: 0.6; }
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--text-muted);
+    color: #1b1b1b;
+    background: #d3dde4;
     text-align: left !important;
-    padding: 0.6rem 0.6rem 0.2rem;
+    padding: 0.4rem 0.6rem;
     border-bottom: none;
 }
 .games-row-sub td {
