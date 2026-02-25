@@ -1353,6 +1353,8 @@ tr.row-transferred { opacity: 0.6; }
     border-radius: var(--radius);
     padding: 0.75rem;
     margin: 0.5rem 0 0.75rem 0;
+    display: inline-block;
+    min-width: 0;
 }
 .games-panel-header {
     font-weight: 700;
@@ -1367,36 +1369,54 @@ tr.row-transferred { opacity: 0.6; }
     color: var(--text-muted);
     font-style: italic;
 }
-.games-section {
-    margin-bottom: 0.6rem;
-}
-.games-section-title {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
-    margin-bottom: 0.25rem;
-}
 .games-table {
-    width: 100%;
     border-collapse: collapse;
     font-size: 0.8rem;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
+/* Column sizing */
+.games-table col.gc-game   { width: auto; }
+.games-table col.gc-fund   { width: 5.5rem; }
+.games-table col.gc-mwp    { width: 4.5rem; }
+.games-table col.gc-flights { width: 3.5rem; }
+.games-table col.gc-1st    { width: 5rem; }
+.games-table col.gc-2nd    { width: 5rem; }
+.games-table col.gc-3rd    { width: 5rem; }
+.games-table col.gc-4th    { width: 5rem; }
 .games-table th {
     background: #f1f5f9;
-    padding: 0.3rem 0.5rem;
-    text-align: left;
+    padding: 0.3rem 0.6rem;
+    text-align: right;
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--text-muted);
     border-bottom: 1px solid var(--border);
 }
+.games-table th:first-child {
+    text-align: left;
+}
 .games-table td {
-    padding: 0.3rem 0.5rem;
+    padding: 0.3rem 0.6rem;
     border-bottom: 1px solid #e2e8f0;
+    text-align: right;
+}
+.games-table td:first-child {
+    text-align: left;
+}
+.games-indent {
+    padding-left: 1.5rem !important;
+}
+.games-section-row td {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    text-align: left !important;
+    padding: 0.6rem 0.6rem 0.2rem;
+    border-bottom: none;
 }
 .games-row-sub td {
     color: #475569;
@@ -1405,6 +1425,7 @@ tr.row-transferred { opacity: 0.6; }
 .games-row-disabled td {
     color: #94a3b8;
     font-style: italic;
+    text-align: left;
 }
 .games-row-total td {
     border-top: 2px solid var(--border);
@@ -1415,7 +1436,7 @@ tr.row-transferred { opacity: 0.6; }
     font-size: 0.95rem;
     font-weight: 700;
     color: var(--primary);
-    padding: 0.5rem 0.5rem 0;
+    padding: 0.5rem 0.6rem 0;
     border-top: 2px solid var(--primary);
     margin-top: 0.25rem;
 }
