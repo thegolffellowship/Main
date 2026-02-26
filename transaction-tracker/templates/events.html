@@ -301,7 +301,7 @@
                 <!-- Name: always shown. For comp mode, shows manager dropdown. Otherwise text input with autocomplete. -->
                 <div id="ap-name-section">
                     <div id="ap-manager-select" style="margin-bottom:0.75rem;">
-                        <label class="ap-field-label">Manager <span style="color:#e11d48;">*</span>
+                        <label class="ap-field-label"><span>Manager <span style="color:#e11d48;">*</span></span>
                             <select id="add-player-manager" class="modal-input">
                                 <option value="">Select manager…</option>
                                 <option value="Kerry Niester">Kerry Niester</option>
@@ -311,7 +311,7 @@
                         </label>
                     </div>
                     <div id="ap-name-input" style="display:none; margin-bottom:0.75rem;">
-                        <label class="ap-field-label">Player Name <span style="color:#e11d48;">*</span>
+                        <label class="ap-field-label"><span>Player Name <span style="color:#e11d48;">*</span></span>
                             <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" list="ap-customer-list">
                             <datalist id="ap-customer-list"></datalist>
                         </label>
@@ -349,6 +349,7 @@
                             <option value="Net">Net</option>
                             <option value="Gross">Gross</option>
                             <option value="Both">Both (Net + Gross)</option>
+                            <option value="None">None</option>
                         </select>
                     </label>
                     <label>Tee Choice
@@ -1822,6 +1823,14 @@
             if (!name) missing.push("Player Name");
         }
         if (!addPlayerEventName) return;
+
+        // Prevent duplicate player entry
+        const existingRegs = getRegistrants(addPlayerEventName);
+        const isDuplicate = existingRegs.some(r => (r.customer || "").toLowerCase() === name.toLowerCase());
+        if (isDuplicate) {
+            alert(`${name} is already registered for this event.`);
+            return;
+        }
 
         const payload = {
             event_name: addPlayerEventName,

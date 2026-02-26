@@ -1045,7 +1045,7 @@ tr.row-transferred { opacity: 0.6; }
 .registrants-table tr.row-rsvp-only,
 tr.row-rsvp-only,
 .mobile-card.row-rsvp-only {
-    background: color-mix(in srgb, #fbbf24 15%, transparent) !important;
+    background: rgba(251, 191, 36, 0.15) !important;
 }
 .registrants-table tr.row-rsvp-only td,
 tr.row-rsvp-only td,
