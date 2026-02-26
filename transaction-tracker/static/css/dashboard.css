@@ -1042,14 +1042,6 @@ tr.row-transferred { opacity: 0.6; }
 }
 .rsvp-circle.rsvp-circle-playing { cursor: default; }
 /* RSVP-only row styling */
-.registrants-table tr.row-rsvp-only,
-tr.row-rsvp-only,
-.mobile-card.row-rsvp-only {
-    background: rgba(251, 191, 36, 0.15) !important;
-}
-.registrants-table tr.row-rsvp-only td,
-tr.row-rsvp-only td,
-.mobile-card.row-rsvp-only { font-style: italic; }
 .rsvp-only-tag {
     display: inline-block;
     padding: 0.1rem 0.4rem;
@@ -1540,4 +1532,16 @@ tr.row-rsvp-only td,
     .games-row-sub td { font-size: 0.66rem; }
     .games-row-sub td[colspan] { white-space: normal; word-break: break-word; }
     .games-grand-total-row td { font-size: 0.78rem; padding-top: 0.35rem; }
+}
+
+/* ---- RSVP-only row amber tint (must come AFTER .mobile-card base styles) ---- */
+.registrants-table tbody tr.row-rsvp-only,
+.registrants-table tr.row-rsvp-only,
+tr.row-rsvp-only {
+    background-color: rgba(251, 191, 36, 0.15) !important;
+}
+tr.row-rsvp-only td { font-style: italic; }
+div.mobile-card.row-rsvp-only {
+    background-color: rgba(251, 191, 36, 0.15) !important;
+    font-style: italic;
 }
