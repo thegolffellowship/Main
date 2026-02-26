@@ -335,9 +335,9 @@
 
                 <!-- Golf details: shown for comp and paid_separately, hidden for rsvp -->
                 <div id="ap-golf-details" class="edit-grid">
-                    <label>Side Games
-                        <select id="add-player-side-games" class="modal-input">
-                            <option value="">None</option>
+                    <label>Side Games <span style="color:#e11d48;">*</span>
+                        <select id="add-player-side-games" class="modal-input" required>
+                            <option value="">Select…</option>
                             <option value="Net">Net</option>
                             <option value="Gross">Gross</option>
                             <option value="Both">Both (Net + Gross)</option>
@@ -359,15 +359,9 @@
                         <select id="add-player-status" class="modal-input">
                             <option value="">—</option>
                             <option value="MEMBER">Member</option>
-                            <option value="NON-MEMBER">Non-Member</option>
                             <option value="GUEST">Guest</option>
-                        </select>
-                    </label>
-                    <label>Type
-                        <select id="add-player-type" class="modal-input">
-                            <option value="">—</option>
-                            <option value="Golf">Golf</option>
-                            <option value="Compete">Compete</option>
+                            <option value="1ST TIMER">1st Timer</option>
+                            <option value="MANAGER">Manager</option>
                         </select>
                     </label>
                 </div>
@@ -424,15 +418,9 @@
                         <select id="upgrade-rsvp-status" class="modal-input">
                             <option value="">—</option>
                             <option value="MEMBER">Member</option>
-                            <option value="NON-MEMBER">Non-Member</option>
                             <option value="GUEST">Guest</option>
-                        </select>
-                    </label>
-                    <label>Type
-                        <select id="upgrade-rsvp-type" class="modal-input">
-                            <option value="">—</option>
-                            <option value="Golf">Golf</option>
-                            <option value="Compete">Compete</option>
+                            <option value="1ST TIMER">1st Timer</option>
+                            <option value="MANAGER">Manager</option>
                         </select>
                     </label>
                 </div>
@@ -715,9 +703,11 @@
             const tee = (r.tee_choice || "").trim();
             const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
+            const isManual = (r.email_uid || "").startsWith("manual-");
             let actionBtn = '';
             if (txStatus === "active" && !r.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred") {
                 actionBtn = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
             }
@@ -938,7 +928,6 @@
         { key: "side_games", label: "Side Games", default: true },
         { key: "tee_choice", label: "Tee", default: true },
         { key: "member_status", label: "Status", default: true },
-        { key: "golf_or_compete", label: "Type", default: true },
         { key: "order_date", label: "Order Date", default: true },
         { key: "actions", label: "Actions", default: true },
     ];
@@ -1336,9 +1325,11 @@
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
+                    const isManualRow = (r.email_uid || "").startsWith("manual-");
                     let btns = "";
                     if (txStatus === "active" && !r.transferred_from_id) {
                         btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                        if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "credited" || txStatus === "transferred") {
                         btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
                     }
@@ -1574,6 +1565,26 @@
             });
         });
 
+        // Delete manual player buttons
+        container.querySelectorAll("[data-delete-id]").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const id = parseInt(btn.dataset.deleteId);
+                const name = btn.dataset.playerName || "this player";
+                if (!confirm(`Delete manually added player "${name}"? This cannot be undone.`)) return;
+                try {
+                    const res = await fetch(`/api/events/delete-manual-player/${id}`, { method: "DELETE" });
+                    if (!res.ok) {
+                        const data = await res.json();
+                        alert(data.error || "Failed to delete player.");
+                        return;
+                    }
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Failed to delete player."); }
+            });
+        });
+
         // Add Player button
         container.querySelectorAll(".btn-add-player").forEach(btn => {
             btn.addEventListener("click", (e) => {
@@ -1718,6 +1729,15 @@
         // Toggle golf details
         document.getElementById("ap-golf-details").style.display = isRsvp ? "none" : "";
 
+        // Auto-select Manager status in comp mode
+        const statusSelect = document.getElementById("add-player-status");
+        if (isComp) {
+            statusSelect.value = "MANAGER";
+            statusSelect.disabled = true;
+        } else {
+            statusSelect.disabled = false;
+        }
+
         // Update submit button text
         const btn = document.getElementById("add-player-submit-btn");
         if (isComp) btn.textContent = "Add Manager";
@@ -1762,7 +1782,6 @@
         document.getElementById("add-player-tee").value = "";
         document.getElementById("add-player-handicap").value = "";
         document.getElementById("add-player-status").value = "";
-        document.getElementById("add-player-type").value = "";
         document.getElementById("add-player-amount") && (document.getElementById("add-player-amount").value = "");
         document.getElementById("add-player-source") && (document.getElementById("add-player-source").value = "");
         updateAddPlayerMode();
@@ -1795,10 +1814,10 @@
 
         if (mode !== "rsvp") {
             payload.side_games = document.getElementById("add-player-side-games").value;
+            if (!payload.side_games) { alert("Please select a side games option."); return; }
             payload.tee_choice = document.getElementById("add-player-tee").value;
             payload.handicap = document.getElementById("add-player-handicap").value;
             payload.member_status = document.getElementById("add-player-status").value;
-            payload.golf_or_compete = document.getElementById("add-player-type").value;
         }
 
         if (mode === "paid_separately") {
@@ -1840,7 +1859,6 @@
         document.getElementById("upgrade-rsvp-tee").value = "";
         document.getElementById("upgrade-rsvp-handicap").value = "";
         document.getElementById("upgrade-rsvp-status").value = "";
-        document.getElementById("upgrade-rsvp-type").value = "";
         document.getElementById("upgrade-rsvp-overlay").style.display = "flex";
     }
 
@@ -1867,7 +1885,6 @@
                     tee_choice: document.getElementById("upgrade-rsvp-tee").value,
                     handicap: document.getElementById("upgrade-rsvp-handicap").value,
                     member_status: document.getElementById("upgrade-rsvp-status").value,
-                    golf_or_compete: document.getElementById("upgrade-rsvp-type").value,
                 }),
             });
             if (!res.ok) {

@@ -129,7 +129,6 @@
                             <th>City</th>
                             <th>Course</th>
                             <th>Side Games</th>
-                            <th>Type</th>
                             <th>Order Date</th>
                             <th>Actions</th>
                         </tr>
@@ -708,7 +707,7 @@
             html += `<div style="margin-bottom:0.5rem; display:flex; gap:0.3rem; flex-wrap:wrap;">${badges.join("")}</div>`;
         }
         html += '<table class="registrants-table"><thead><tr>';
-        html += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Type</th><th>Order Date</th><th>Actions</th>';
+        html += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Order Date</th><th>Actions</th>';
         html += '</tr></thead><tbody>';
 
         const sorted = [...customer.items].sort((a, b) =>
@@ -734,7 +733,6 @@
                 <td>${escapeHtml(item.city || "\u2014")}</td>
                 <td>${escapeHtml(item.course || "\u2014")}</td>
                 <td>${escapeHtml(item.side_games || "\u2014")}</td>
-                <td>${escapeHtml(item.golf_or_compete || "\u2014")}</td>
                 <td>${escapeHtml(item.order_date || "\u2014")}</td>
                 <td>${actionBtn}</td>
             </tr>`;
@@ -831,7 +829,6 @@
                 <td>${escapeHtml(item.city || "\u2014")}</td>
                 <td>${escapeHtml(item.course || "\u2014")}</td>
                 <td>${escapeHtml(item.side_games || "\u2014")}</td>
-                <td>${escapeHtml(item.golf_or_compete || "\u2014")}</td>
                 <td>${escapeHtml(item.order_date || "\u2014")}</td>
                 <td>${actionBtn}</td>
             </tr>`;
@@ -976,8 +973,8 @@
             alert("Select a customer first to export their data.");
             return;
         }
-        const headers = ["Event Date", "Item", "Price", "City", "Course", "Side Games", "Type", "Order Date"];
-        const fields = ["event_date", "item_name", "item_price", "city", "course", "side_games", "golf_or_compete", "order_date"];
+        const headers = ["Event Date", "Item", "Price", "City", "Course", "Side Games", "Order Date"];
+        const fields = ["event_date", "item_name", "item_price", "city", "course", "side_games", "order_date"];
         const rows = selectedCustomer.items.map(r => fields.map(f => r[f] || ""));
         const csvContent = [headers, ...rows]
             .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))

@@ -22,7 +22,7 @@ let currentSortDir = "desc";
 const SEARCHABLE_FIELDS = [
     "customer", "customer_email", "customer_phone",
     "item_name", "item_price", "city", "course", "handicap",
-    "side_games", "tee_choice", "member_status", "golf_or_compete",
+    "side_games", "tee_choice", "member_status",
     "post_game", "order_id", "order_date", "event_date", "merchant",
 ];
 
@@ -38,7 +38,6 @@ const TABLE_COLUMNS = [
     { key: "side_games", label: "Side Games", default: true },
     { key: "tee_choice", label: "Tee", default: true },
     { key: "member_status", label: "Status", default: true },
-    { key: "golf_or_compete", label: "Type", default: true },
     { key: "order_id", label: "Order ID", default: true },
     { key: "order_date", label: "Order Date", default: true },
     { key: "actions", label: "Actions", default: true },
@@ -782,7 +781,7 @@ function exportCSV() {
         "item_name", "item_price", "transaction_fees", "city", "chapter", "course",
         "handicap", "has_handicap",
         "side_games", "tee_choice", "member_status",
-        "golf_or_compete", "post_game", "returning_or_new", "shirt_size",
+        "post_game", "returning_or_new", "shirt_size",
         "guest_name", "date_of_birth",
         "net_points_race", "gross_points_race", "city_match_play",
         "order_id", "total_amount", "merchant",
@@ -890,7 +889,7 @@ function onAuthReady() {
 const EDIT_FIELDS = [
     "customer", "item_name", "item_price", "transaction_fees", "event_date",
     "city", "chapter", "course", "handicap", "has_handicap", "side_games",
-    "tee_choice", "member_status", "golf_or_compete",
+    "tee_choice", "member_status",
     "returning_or_new", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
 ];

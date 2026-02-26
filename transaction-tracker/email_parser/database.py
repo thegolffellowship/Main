@@ -26,7 +26,7 @@ ITEM_COLUMNS = [
     "item_name", "event_date", "item_price", "quantity",
     "city", "chapter", "course", "handicap", "has_handicap",
     "side_games", "tee_choice",
-    "member_status", "golf_or_compete", "post_game", "returning_or_new",
+    "member_status", "post_game", "returning_or_new",
     "shirt_size", "guest_name", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
     "subject", "from_addr",
@@ -69,7 +69,6 @@ def init_db(db_path: str | Path | None = None) -> None:
             side_games       TEXT,
             tee_choice       TEXT,
             member_status    TEXT,
-            golf_or_compete  TEXT,
             post_game        TEXT,
             returning_or_new TEXT,
             shirt_size       TEXT,
@@ -284,7 +283,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
     ]
     golf_fields = [
         "handicap", "side_games", "tee_choice", "member_status",
-        "golf_or_compete", "post_game", "returning_or_new",
+        "post_game", "returning_or_new",
         "shirt_size", "guest_name",
     ]
     all_tracked = critical_fields + golf_fields
@@ -313,7 +312,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
 
     # --- Value distributions for key columns ---------------------------------
     distributions = {}
-    for field in ["city", "course", "member_status", "golf_or_compete", "tee_choice"]:
+    for field in ["city", "course", "member_status", "tee_choice"]:
         counts: dict[str, int] = {}
         for it in items:
             val = it.get(field) or "(empty)"
@@ -367,40 +366,36 @@ def get_data_snapshot(limit: int = 50, db_path: str | Path | None = None) -> dic
 
 def autofix_side_games(db_path: str | Path | None = None) -> dict:
     """
-    Scan all rows and fix side_games / golf_or_compete misplacement.
+    Scan all rows and fix side_games misplacement.
 
     Returns a summary: { "scanned": N, "fixed": N, "details": [...] }
     """
     from email_parser.parser import _fixup_side_games_field
 
     conn = get_connection(db_path)
-    rows = conn.execute("SELECT id, golf_or_compete, side_games FROM items").fetchall()
+    rows = conn.execute("SELECT id, side_games FROM items").fetchall()
 
     fixed = 0
     details = []
     for row in rows:
         item = dict(row)
-        original_goc = item.get("golf_or_compete") or ""
         original_sg = item.get("side_games") or ""
 
         result = _fixup_side_games_field({
-            "golf_or_compete": original_goc,
+            "golf_or_compete": "",
             "side_games": original_sg,
         })
 
-        new_goc = result.get("golf_or_compete") or ""
         new_sg = result.get("side_games") or ""
 
-        if new_goc != original_goc or new_sg != original_sg:
+        if new_sg != original_sg:
             conn.execute(
-                "UPDATE items SET golf_or_compete = ?, side_games = ? WHERE id = ?",
-                (new_goc, new_sg, item["id"]),
+                "UPDATE items SET side_games = ? WHERE id = ?",
+                (new_sg, item["id"]),
             )
             fixed += 1
             details.append({
                 "id": item["id"],
-                "old_golf_or_compete": original_goc,
-                "new_golf_or_compete": new_goc,
                 "old_side_games": original_sg,
                 "new_side_games": new_sg,
             })
@@ -414,7 +409,7 @@ def autofix_side_games(db_path: str | Path | None = None) -> dict:
 def autofix_all(db_path: str | Path | None = None) -> dict:
     """
     Run all autofix passes on existing data:
-      1. side_games / golf_or_compete misplacement
+      1. side_games misplacement
       2. customer name → Title Case
       3. course name → canonical spelling
       4. item_name normalisation (e.g. membership variants)
@@ -431,7 +426,7 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
 
     conn = get_connection(db_path)
     rows = conn.execute(
-        "SELECT id, item_name, customer, course, chapter, golf_or_compete, side_games FROM items"
+        "SELECT id, item_name, customer, course, chapter, side_games FROM items"
     ).fetchall()
 
     fixes = {"side_games": 0, "customer_name": 0, "course_name": 0, "item_name": 0, "chapter": 0}
@@ -443,16 +438,13 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
         updates = {}
 
         # --- Side games fix ---
-        original_goc = item.get("golf_or_compete") or ""
         original_sg = item.get("side_games") or ""
         result = _fixup_side_games_field({
-            "golf_or_compete": original_goc,
+            "golf_or_compete": "",
             "side_games": original_sg,
         })
-        new_goc = result.get("golf_or_compete") or ""
         new_sg = result.get("side_games") or ""
-        if new_goc != original_goc or new_sg != original_sg:
-            updates["golf_or_compete"] = new_goc
+        if new_sg != original_sg:
             updates["side_games"] = new_sg
             fixes["side_games"] += 1
 
@@ -813,7 +805,6 @@ def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
 def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                         side_games: str = "", tee_choice: str = "",
                         handicap: str = "", member_status: str = "",
-                        golf_or_compete: str = "",
                         payment_amount: str = "", payment_source: str = "",
                         customer_email: str = "",
                         db_path: str | Path | None = None) -> dict | None:
@@ -858,7 +849,6 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         new_values["tee_choice"] = tee_choice or None
         new_values["handicap"] = handicap or None
         new_values["member_status"] = member_status or None
-        new_values["golf_or_compete"] = golf_or_compete or None
     elif mode == "rsvp":
         new_values["merchant"] = "RSVP Only"
         new_values["item_price"] = None
@@ -871,7 +861,6 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         new_values["tee_choice"] = tee_choice or None
         new_values["handicap"] = handicap or None
         new_values["member_status"] = member_status or None
-        new_values["golf_or_compete"] = golf_or_compete or None
     else:
         new_values["merchant"] = "Manual Entry"
         new_values["item_price"] = "$0.00"
@@ -895,7 +884,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
 def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
                          payment_source: str = "", side_games: str = "",
                          tee_choice: str = "", handicap: str = "",
-                         member_status: str = "", golf_or_compete: str = "",
+                         member_status: str = "",
                          db_path: str | Path | None = None) -> dict | None:
     """
     Upgrade an RSVP-only placeholder to a full paid registration.
@@ -926,7 +915,6 @@ def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
             tee_choice = ?,
             handicap = ?,
             member_status = ?,
-            golf_or_compete = ?,
             transaction_status = 'active'
         WHERE id = ?""",
         (
@@ -936,7 +924,6 @@ def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
             tee_choice or None,
             handicap or None,
             member_status or None,
-            golf_or_compete or None,
             item_id,
         ),
     )
@@ -960,6 +947,28 @@ def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+
+def delete_manual_player(item_id: int, db_path: str | Path | None = None) -> bool:
+    """Delete a manually added player (email_uid starts with 'manual-').
+
+    Returns True if the row was deleted, False if not found or not manual.
+    """
+    conn = get_connection(db_path)
+    item = conn.execute("SELECT email_uid FROM items WHERE id = ?", (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        return False
+    uid = dict(item).get("email_uid") or ""
+    if not uid.startswith("manual-"):
+        conn.close()
+        logger.warning("Refused to delete non-manual item %d (uid=%s)", item_id, uid)
+        return False
+    conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+    logger.info("Deleted manual player item %d (uid=%s)", item_id, uid)
+    return True
 
 
 # ---------------------------------------------------------------------------

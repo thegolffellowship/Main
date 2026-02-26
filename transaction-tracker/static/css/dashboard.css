@@ -931,6 +931,19 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 }
 .btn-reverse:hover { background: #f3f4f6; }
 
+.btn-delete-manual {
+    background: transparent;
+    color: #dc2626;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.15s;
+}
+.btn-delete-manual:hover { background: #fef2f2; }
+
 .credit-modal {
     width: 480px;
 }

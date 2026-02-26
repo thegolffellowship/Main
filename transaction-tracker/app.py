@@ -30,6 +30,7 @@ from email_parser.database import (
     save_items,
     update_item,
     delete_item,
+    delete_manual_player,
     credit_item,
     transfer_item,
     reverse_credit,
@@ -350,6 +351,14 @@ def api_delete_item(item_id):
     if deleted:
         return jsonify({"status": "ok"})
     return jsonify({"error": "not found"}), 404
+
+
+@app.route("/api/events/delete-manual-player/<int:item_id>", methods=["DELETE"])
+def api_delete_manual_player(item_id):
+    """Delete a manually added player. Only works for manual entries."""
+    if delete_manual_player(item_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Not found or not a manually added player."}), 400
 
 
 @app.route("/api/check-now", methods=["POST"])
@@ -693,7 +702,7 @@ def api_matrix_save():
 @app.route("/api/audit/autofix-side-games", methods=["POST"])
 @require_role("admin")
 def api_autofix_side_games():
-    """Fix side_games / golf_or_compete misplacement in existing DB rows."""
+    """Fix side_games misplacement in existing DB rows."""
     try:
         result = autofix_side_games()
         return jsonify({"status": "ok", **result})
@@ -844,7 +853,6 @@ def api_add_player():
         tee_choice=data.get("tee_choice", ""),
         handicap=data.get("handicap", ""),
         member_status=data.get("member_status", ""),
-        golf_or_compete=data.get("golf_or_compete", ""),
         payment_amount=data.get("payment_amount", ""),
         payment_source=data.get("payment_source", ""),
         customer_email=data.get("customer_email", ""),
@@ -868,7 +876,6 @@ def api_upgrade_rsvp():
         tee_choice=data.get("tee_choice", ""),
         handicap=data.get("handicap", ""),
         member_status=data.get("member_status", ""),
-        golf_or_compete=data.get("golf_or_compete", ""),
     )
     if item:
         return jsonify({"status": "ok", "item": item})

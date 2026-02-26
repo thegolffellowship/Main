@@ -320,7 +320,6 @@ def add_player(
     tee_choice: str = "",
     handicap: str = "",
     member_status: str = "",
-    golf_or_compete: str = "",
 ) -> str:
     """Add a comp'd player to an event ($0 registration).
 
@@ -331,7 +330,6 @@ def add_player(
         tee_choice: <50, 50-64, 65+, or Forward
         handicap: Numeric handicap
         member_status: MEMBER or NON-MEMBER
-        golf_or_compete: GOLF or COMPETE
     """
     return json.dumps(
         _post("/api/events/add-player", {
@@ -341,7 +339,6 @@ def add_player(
             "tee_choice": tee_choice,
             "handicap": handicap,
             "member_status": member_status,
-            "golf_or_compete": golf_or_compete,
         }),
         indent=2,
     )
