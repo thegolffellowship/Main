@@ -395,10 +395,13 @@
             <div id="upgrade-rsvp-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
             <form id="upgrade-rsvp-form" class="edit-form">
                 <div class="edit-grid">
-                    <label>Amount <span style="color:#e11d48;">*</span>
-                        <input type="text" id="upgrade-rsvp-amount" class="modal-input" placeholder="e.g. $125">
+                    <label><span>Amount <span style="color:#e11d48;">*</span></span>
+                        <div style="position:relative;">
+                            <span style="position:absolute;left:0.65rem;top:50%;transform:translateY(-50%);font-weight:600;color:var(--text-muted);pointer-events:none;">$</span>
+                            <input type="text" id="upgrade-rsvp-amount" class="modal-input" inputmode="decimal" placeholder="0.00" style="padding-left:1.4rem;">
+                        </div>
                     </label>
-                    <label>Payment Source <span style="color:#e11d48;">*</span>
+                    <label><span>Payment Source <span style="color:#e11d48;">*</span></span>
                         <select id="upgrade-rsvp-source" class="modal-input">
                             <option value="">Select…</option>
                             <option value="Venmo">Venmo</option>
@@ -406,12 +409,13 @@
                             <option value="Cash">Cash</option>
                         </select>
                     </label>
-                    <label>Side Games
+                    <label><span>Side Games <span style="color:#e11d48;">*</span></span>
                         <select id="upgrade-rsvp-side-games" class="modal-input">
-                            <option value="">None</option>
+                            <option value="">Select…</option>
                             <option value="Net">Net</option>
                             <option value="Gross">Gross</option>
                             <option value="Both">Both (Net + Gross)</option>
+                            <option value="None">None</option>
                         </select>
                     </label>
                     <label>Tee Choice
@@ -688,7 +692,7 @@
                 : txStatus !== "active" ? ` row-${txStatus}`
                 : (r.transferred_from_id ? ' row-from-transfer' : '');
             let tag = '';
-            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only</span>`;
+            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only — tap to record payment</span>`;
             else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
@@ -1336,7 +1340,7 @@
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
                     let tag = "";
-                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only</span>`;
+                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only — tap to record payment</span>`;
                     else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
@@ -1923,18 +1927,30 @@
     async function handleUpgradeRsvpSubmit(e) {
         e.preventDefault();
         if (!upgradeRsvpItemId) return;
-        const amount = document.getElementById("upgrade-rsvp-amount").value.trim();
+        const missing = [];
+        let rawAmount = document.getElementById("upgrade-rsvp-amount").value.trim().replace(/[^0-9.]/g, "");
         const source = document.getElementById("upgrade-rsvp-source").value;
-        if (!amount || !source) { alert("Please enter payment amount and source."); return; }
+        const sideGames = document.getElementById("upgrade-rsvp-side-games").value;
+        let formattedAmount = "";
+        if (!rawAmount) missing.push("Amount");
+        else {
+            const num = parseFloat(rawAmount);
+            if (isNaN(num) || num <= 0) { alert("Please enter a valid dollar amount."); return; }
+            formattedAmount = "$" + num.toFixed(2);
+        }
+        if (!source) missing.push("Payment Source");
+        if (!sideGames) missing.push("Side Games");
+        if (missing.length > 1) { alert("All required fields must be entered."); return; }
+        if (missing.length === 1) { alert(`Please enter ${missing[0]}.`); return; }
         try {
             const res = await fetch("/api/events/upgrade-rsvp", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     item_id: upgradeRsvpItemId,
-                    payment_amount: amount,
+                    payment_amount: formattedAmount,
                     payment_source: source,
-                    side_games: document.getElementById("upgrade-rsvp-side-games").value,
+                    side_games: sideGames,
                     tee_choice: document.getElementById("upgrade-rsvp-tee").value,
                     handicap: document.getElementById("upgrade-rsvp-handicap").value,
                     member_status: document.getElementById("upgrade-rsvp-status").value,
@@ -2119,13 +2135,15 @@
             }
         });
 
-        // Auto-format amount field on blur
-        document.getElementById("add-player-amount").addEventListener("blur", function() {
-            let raw = this.value.trim().replace(/[^0-9.]/g, "");
-            if (raw) {
-                const num = parseFloat(raw);
-                if (!isNaN(num) && num > 0) this.value = num.toFixed(2);
-            }
+        // Auto-format amount fields on blur
+        ["add-player-amount", "upgrade-rsvp-amount"].forEach(id => {
+            document.getElementById(id).addEventListener("blur", function() {
+                let raw = this.value.trim().replace(/[^0-9.]/g, "");
+                if (raw) {
+                    const num = parseFloat(raw);
+                    if (!isNaN(num) && num > 0) this.value = num.toFixed(2);
+                }
+            });
         });
 
         // Upgrade RSVP modal
