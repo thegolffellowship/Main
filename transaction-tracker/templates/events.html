@@ -731,7 +731,7 @@
             ];
 
             html += `
-            <div class="mobile-card${statusClass}" style="${isRsvpOnly ? 'background:#fef3c7;font-style:italic;' : isManual ? 'background:#eff6ff;' : ''}" data-id="${r.id}">
+            <div class="mobile-card${statusClass}" style="${isRsvpOnly ? 'background:#fef3c7;font-style:italic;' : isManual ? 'background:#dbeafe;' : ''}" data-id="${r.id}">
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         ${circleHtml}
@@ -1324,7 +1324,7 @@
             html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
-                const rowBg = isRsvpOnly ? 'background-color:#fef3c7;font-style:italic;' : isManualRow ? 'background-color:#eff6ff;' : '';
+                const rowBg = isRsvpOnly ? 'background-color:#fef3c7;font-style:italic;' : isManualRow ? 'background-color:#dbeafe;' : '';
                 const style = (vis ? '' : 'display:none;') + rowBg;
                 if (c.key === "rsvp") {
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
