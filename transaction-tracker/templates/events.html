@@ -713,8 +713,11 @@
             const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
             const isManual = (r.email_uid || "").startsWith("manual-");
+            const isComp = (r.email_uid || "").startsWith("manual-comp");
             let actionBtn = '';
             if (isRsvpOnly && isManual) {
+                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+            } else if (isComp) {
                 actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "active" && !r.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
@@ -1339,7 +1342,10 @@
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
                     let btns = "";
+                    const isCompRow = (r.email_uid || "").startsWith("manual-comp");
                     if (isRsvpOnly && isManualRow) {
+                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                    } else if (isCompRow) {
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "active" && !r.transferred_from_id) {
                         btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
