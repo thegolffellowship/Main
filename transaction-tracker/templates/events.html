@@ -705,7 +705,9 @@
 
             const isManual = (r.email_uid || "").startsWith("manual-");
             let actionBtn = '';
-            if (txStatus === "active" && !r.transferred_from_id) {
+            if (isRsvpOnly && isManual) {
+                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+            } else if (txStatus === "active" && !r.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                 if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred") {
@@ -1327,7 +1329,9 @@
                 } else if (c.key === "actions") {
                     const isManualRow = (r.email_uid || "").startsWith("manual-");
                     let btns = "";
-                    if (txStatus === "active" && !r.transferred_from_id) {
+                    if (isRsvpOnly && isManualRow) {
+                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                    } else if (txStatus === "active" && !r.transferred_from_id) {
                         btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                         if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "credited" || txStatus === "transferred") {

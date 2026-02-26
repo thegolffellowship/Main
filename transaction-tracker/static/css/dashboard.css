@@ -1041,10 +1041,12 @@ tr.row-transferred { opacity: 0.6; }
 }
 .rsvp-circle.rsvp-circle-playing { cursor: default; }
 /* RSVP-only row styling */
-tr.row-rsvp-only {
-    background: color-mix(in srgb, #fbbf24 6%, transparent);
+tr.row-rsvp-only,
+.mobile-card.row-rsvp-only {
+    background: color-mix(in srgb, #fbbf24 12%, transparent);
 }
-tr.row-rsvp-only td { font-style: italic; }
+tr.row-rsvp-only td,
+.mobile-card.row-rsvp-only { font-style: italic; }
 .rsvp-only-tag {
     display: inline-block;
     padding: 0.1rem 0.4rem;
