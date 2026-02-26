@@ -1581,11 +1581,12 @@
                 }
 
                 try {
-                    await fetch("/api/rsvps/overrides", {
+                    const resp = await fetch("/api/rsvps/overrides", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ item_id: itemId, event_name: eventName, status: next })
                     });
+                    if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
                     if (!allRsvpOverrides[eventName]) allRsvpOverrides[eventName] = {};
                     allRsvpOverrides[eventName][itemId] = next;
                     circle.dataset.rsvpState = next;

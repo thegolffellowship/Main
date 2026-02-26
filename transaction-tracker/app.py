@@ -964,7 +964,7 @@ def api_set_rsvp_override():
     status = data.get("status", "none")
     if not item_id or not event_name:
         return jsonify({"error": "item_id and event_name required"}), 400
-    if status not in ("none", "playing", "not_playing"):
+    if status not in ("none", "playing", "not_playing", "manual_green"):
         return jsonify({"error": "status must be none, playing, or not_playing"}), 400
     set_rsvp_override(int(item_id), event_name, status)
     return jsonify({"status": "ok", "item_id": item_id, "event_name": event_name, "rsvp_status": status})
