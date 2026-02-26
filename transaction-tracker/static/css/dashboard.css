@@ -857,7 +857,8 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
 }
-.edit-grid label {
+.edit-grid label,
+.ap-field-label {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
@@ -1041,10 +1042,12 @@ tr.row-transferred { opacity: 0.6; }
 }
 .rsvp-circle.rsvp-circle-playing { cursor: default; }
 /* RSVP-only row styling */
+.registrants-table tr.row-rsvp-only,
 tr.row-rsvp-only,
 .mobile-card.row-rsvp-only {
-    background: color-mix(in srgb, #fbbf24 12%, transparent);
+    background: color-mix(in srgb, #fbbf24 15%, transparent) !important;
 }
+.registrants-table tr.row-rsvp-only td,
 tr.row-rsvp-only td,
 .mobile-card.row-rsvp-only { font-style: italic; }
 .rsvp-only-tag {

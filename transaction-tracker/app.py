@@ -856,6 +856,7 @@ def api_add_player():
         payment_amount=data.get("payment_amount", ""),
         payment_source=data.get("payment_source", ""),
         customer_email=data.get("customer_email", ""),
+        customer_phone=data.get("customer_phone", ""),
     )
     if item:
         return jsonify({"status": "ok", "item": item}), 201

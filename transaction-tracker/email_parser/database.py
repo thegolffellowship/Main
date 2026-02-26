@@ -806,7 +806,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                         side_games: str = "", tee_choice: str = "",
                         handicap: str = "", member_status: str = "",
                         payment_amount: str = "", payment_source: str = "",
-                        customer_email: str = "",
+                        customer_email: str = "", customer_phone: str = "",
                         db_path: str | Path | None = None) -> dict | None:
     """
     Add a player to an event.
@@ -835,6 +835,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
     new_values["item_index"] = 0
     new_values["customer"] = customer
     new_values["customer_email"] = customer_email or None
+    new_values["customer_phone"] = customer_phone or None
     new_values["item_name"] = event_name
     new_values["order_date"] = __import__("datetime").date.today().isoformat()
     new_values["event_date"] = event.get("event_date") or ""

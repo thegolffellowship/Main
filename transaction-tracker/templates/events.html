@@ -301,7 +301,7 @@
                 <!-- Name: always shown. For comp mode, shows manager dropdown. Otherwise text input with autocomplete. -->
                 <div id="ap-name-section">
                     <div id="ap-manager-select" style="margin-bottom:0.75rem;">
-                        <label>Manager <span style="color:#e11d48;">*</span>
+                        <label class="ap-field-label">Manager <span style="color:#e11d48;">*</span>
                             <select id="add-player-manager" class="modal-input">
                                 <option value="">Select manager…</option>
                                 <option value="Kerry Niester">Kerry Niester</option>
@@ -311,19 +311,27 @@
                         </label>
                     </div>
                     <div id="ap-name-input" style="display:none; margin-bottom:0.75rem;">
-                        <label>Player Name <span style="color:#e11d48;">*</span>
+                        <label class="ap-field-label">Player Name <span style="color:#e11d48;">*</span>
                             <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" list="ap-customer-list">
                             <datalist id="ap-customer-list"></datalist>
+                        </label>
+                    </div>
+                    <div id="ap-contact-fields" class="edit-grid" style="display:none; margin-bottom:0.5rem;">
+                        <label>Email
+                            <input type="email" id="add-player-email" class="modal-input" placeholder="email@example.com">
+                        </label>
+                        <label>Phone
+                            <input type="tel" id="add-player-phone" class="modal-input" placeholder="(555) 123-4567">
                         </label>
                     </div>
                 </div>
 
                 <!-- Payment fields: only for paid_separately mode -->
                 <div id="ap-payment-section" class="edit-grid" style="display:none; margin-bottom:0.5rem;">
-                    <label>Amount <span style="color:#e11d48;">*</span>
+                    <label><span>Amount <span style="color:#e11d48;">*</span></span>
                         <input type="text" id="add-player-amount" class="modal-input" placeholder="e.g. $125">
                     </label>
-                    <label>Payment Source <span style="color:#e11d48;">*</span>
+                    <label><span>Payment Source <span style="color:#e11d48;">*</span></span>
                         <select id="add-player-source" class="modal-input">
                             <option value="">Select…</option>
                             <option value="Venmo">Venmo</option>
@@ -335,7 +343,7 @@
 
                 <!-- Golf details: shown for comp and paid_separately, hidden for rsvp -->
                 <div id="ap-golf-details" class="edit-grid">
-                    <label>Side Games <span style="color:#e11d48;">*</span>
+                    <label><span>Side Games <span style="color:#e11d48;">*</span></span>
                         <select id="add-player-side-games" class="modal-input">
                             <option value="">Select…</option>
                             <option value="Net">Net</option>
@@ -1788,6 +1796,9 @@
         document.getElementById("add-player-status").value = "";
         document.getElementById("add-player-amount") && (document.getElementById("add-player-amount").value = "");
         document.getElementById("add-player-source") && (document.getElementById("add-player-source").value = "");
+        document.getElementById("add-player-email").value = "";
+        document.getElementById("add-player-phone").value = "";
+        document.getElementById("ap-contact-fields").style.display = "none";
         updateAddPlayerMode();
         document.getElementById("add-player-overlay").style.display = "flex";
     }
@@ -1800,13 +1811,15 @@
     async function handleAddPlayerSubmit(e) {
         e.preventDefault();
         const mode = getAddPlayerMode();
+        const missing = [];
         let name;
+
         if (mode === "comp") {
             name = document.getElementById("add-player-manager").value;
-            if (!name) { alert("Please select a manager."); return; }
+            if (!name) missing.push("Manager");
         } else {
             name = document.getElementById("add-player-name").value.trim();
-            if (!name) { alert("Please enter a player name."); return; }
+            if (!name) missing.push("Player Name");
         }
         if (!addPlayerEventName) return;
 
@@ -1818,7 +1831,7 @@
 
         if (mode !== "rsvp") {
             payload.side_games = document.getElementById("add-player-side-games").value;
-            if (!payload.side_games) { alert("Please select a side games option."); return; }
+            if (!payload.side_games) missing.push("Side Games");
             payload.tee_choice = document.getElementById("add-player-tee").value;
             payload.handicap = document.getElementById("add-player-handicap").value;
             payload.member_status = document.getElementById("add-player-status").value;
@@ -1827,11 +1840,23 @@
         if (mode === "paid_separately") {
             payload.payment_amount = document.getElementById("add-player-amount").value.trim();
             payload.payment_source = document.getElementById("add-player-source").value;
-            if (!payload.payment_amount || !payload.payment_source) {
-                alert("Please enter payment amount and source.");
-                return;
-            }
+            if (!payload.payment_amount) missing.push("Amount");
+            if (!payload.payment_source) missing.push("Payment Source");
         }
+
+        if (missing.length > 1) {
+            alert("All required fields must be entered.");
+            return;
+        } else if (missing.length === 1) {
+            alert(`Please enter ${missing[0]}.`);
+            return;
+        }
+
+        // Include optional contact fields
+        const emailEl = document.getElementById("add-player-email");
+        const phoneEl = document.getElementById("add-player-phone");
+        if (emailEl && emailEl.value.trim()) payload.customer_email = emailEl.value.trim();
+        if (phoneEl && phoneEl.value.trim()) payload.customer_phone = phoneEl.value.trim();
 
         try {
             const res = await fetch("/api/events/add-player", {
@@ -2046,6 +2071,28 @@
         // Mode toggle for Add Player
         document.querySelectorAll('input[name="add-player-mode"]').forEach(radio => {
             radio.addEventListener("change", updateAddPlayerMode);
+        });
+
+        // Show email/phone fields for new players + auto-fill status
+        document.getElementById("add-player-name").addEventListener("input", function() {
+            const name = this.value.trim();
+            const knownNames = new Set(allItems.map(i => (i.customer || "").toLowerCase()));
+            const isKnown = knownNames.has(name.toLowerCase());
+            document.getElementById("ap-contact-fields").style.display = (name && !isKnown) ? "" : "none";
+
+            // Auto-fill status from existing customer data
+            if (isKnown) {
+                const customerItems = allItems.filter(i => (i.customer || "").toLowerCase() === name.toLowerCase());
+                const statuses = customerItems.map(i => (i.member_status || "").toUpperCase()).filter(Boolean);
+                const statusSelect = document.getElementById("add-player-status");
+                if (!statusSelect.disabled) {
+                    if (statuses.includes("MEMBER")) statusSelect.value = "MEMBER";
+                    else if (statuses.includes("MANAGER")) statusSelect.value = "MANAGER";
+                    else if (statuses.includes("GUEST")) statusSelect.value = "GUEST";
+                    else if (statuses.includes("1ST TIMER")) statusSelect.value = "1ST TIMER";
+                    else statusSelect.value = "";
+                }
+            }
         });
 
         // Upgrade RSVP modal
