@@ -693,7 +693,7 @@
                 : txStatus !== "active" ? ` row-${txStatus}`
                 : (r.transferred_from_id ? ' row-from-transfer' : '');
             let tag = '';
-            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only — tap to record payment</span>`;
+            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP - Remind</span>`;
             else if (isGgRsvp) tag = '<span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">GG RSVP</span>';
             else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
@@ -1381,7 +1381,7 @@
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
                     let tag = "";
-                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only — tap to record payment</span>`;
+                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP - Remind</span>`;
                     else if (isGgRsvp) tag = '<span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">GG RSVP</span>';
                     else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
