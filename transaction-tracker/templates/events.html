@@ -889,7 +889,7 @@
     }
 
     function extractHolesType(eventName) {
-        const m = (eventName || "").match(/^s(\d+)\./i);
+        const m = (eventName || "").match(/^[a-z](\d+)\./i);
         return m ? parseInt(m[1]) : null;
     }
 
