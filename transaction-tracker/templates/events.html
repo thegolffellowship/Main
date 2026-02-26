@@ -152,6 +152,7 @@
             <a href="/events" class="active">Events</a>
             <a href="/customers">Customers</a>
             <a href="/rsvps">RSVP Log</a>
+            <a href="/matrix">Matrix</a>
             <a href="/audit">Audit Log</a>
         </nav>
 
@@ -1020,13 +1021,18 @@
         let grossMWP = 0;
 
         if (gGross && grossPC >= 2) {
-            const skinsFlights = gGross.skinsFlights ? parseInt(gGross.skinsFlights) : 1;
-            const skinsMwpVal = numVal(gGross.skinsTotal);
-            grossMWP += skinsMwpVal;
-            html += `<tr><td><strong>Skins</strong></td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
-            if (gGross.skins && gGross.skins.length) {
-                const skinDetail = gGross.skins.map((v, i) => `${i+1}=${fmt$(v)}`).join(", ");
-                html += `<tr class="games-row-sub"><td class="games-indent" colspan="4">Per skin: ${skinDetail}</td>${empty4}</tr>`;
+            const skinsLabel = grossPC < 8 ? "1/2 Net Skins" : "Skins Gross";
+            if (gGross.skinsTotal && gGross.skinsTotal !== "NO_EVENT" && gGross.skinsTotal !== "NO_GAME") {
+                const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
+                const skinsMwpVal = numVal(gGross.skinsTotal);
+                grossMWP += skinsMwpVal;
+                html += `<tr><td><strong>${skinsLabel}</strong></td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
+                if (gGross.skins && gGross.skins.length) {
+                    const skinDetail = gGross.skins.map((v, i) => `${i+1}=${fmt$(v)}`).join(", ");
+                    html += `<tr class="games-row-sub"><td class="games-indent" colspan="4">Per skin: ${skinDetail}</td>${empty4}</tr>`;
+                }
+            } else {
+                html += `<tr class="games-row-disabled"><td>${skinsLabel}</td><td colspan="${C-1}">No Game</td></tr>`;
             }
 
             if (gGross.individualGross && gGross.individualGross !== "NO_GAME" && gGross.individualGross !== "NO_EVENT") {

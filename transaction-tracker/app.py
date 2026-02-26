@@ -7,6 +7,8 @@ Includes a webhook connector for external integrations and a daily email report.
 """
 
 import os
+import re
+import json
 import secrets
 import logging
 import threading
@@ -602,12 +604,81 @@ def api_audit_emails():
     })
 
 
+@app.route("/matrix")
+def matrix_page():
+    # Admin-only page
+    if session.get("role") != "admin":
+        return render_template("index.html")
+    return render_template("matrix.html")
+
+
 @app.route("/audit")
 def audit_page():
     # Admin-only page — managers are redirected to home
     if session.get("role") != "admin":
         return render_template("index.html")
     return render_template("audit.html")
+
+
+@app.route("/api/matrix", methods=["PUT"])
+@require_role("admin")
+def api_matrix_save():
+    """Save edits to the side-games matrix JS file."""
+    try:
+        data = request.get_json(force=True)
+        changes = data.get("changes", {})
+        if not changes:
+            return jsonify({"error": "No changes provided"}), 400
+
+        matrix_path = os.path.join(
+            os.path.dirname(__file__), "static", "js", "games-matrix.js"
+        )
+        with open(matrix_path, "r") as f:
+            content = f.read()
+
+        # Parse existing matrices
+        m9 = re.search(r"window\.GAMES_MATRIX_9\s*=\s*(\{.*?\});", content, re.DOTALL)
+        m18 = re.search(r"window\.GAMES_MATRIX_18\s*=\s*(\{.*?\});", content, re.DOTALL)
+        matrix9 = json.loads(m9.group(1))
+        matrix18 = json.loads(m18.group(1))
+
+        for change_key, new_val in changes.items():
+            parts = change_key.split(":", 2)
+            if len(parts) != 3:
+                continue
+            holes, pc, field_key = parts
+            matrix = matrix9 if holes == "9" else matrix18
+            if pc not in matrix:
+                continue
+            entry = matrix[pc]
+
+            if field_key.startswith("skins."):
+                idx = int(field_key.split(".")[1])
+                if "skins" not in entry:
+                    entry["skins"] = []
+                while len(entry["skins"]) <= idx:
+                    entry["skins"].append(None)
+                entry["skins"][idx] = new_val
+            else:
+                entry[field_key] = new_val
+
+        # Write back
+        new_content = "// Auto-generated from 25-SideGame-PrizeMatrix.xlsx\n"
+        new_content += "// Last edited via Matrix UI\n\n"
+        new_content += "window.GAMES_MATRIX_9 = "
+        new_content += json.dumps(matrix9, indent=2)
+        new_content += ";\n\n"
+        new_content += "window.GAMES_MATRIX_18 = "
+        new_content += json.dumps(matrix18, indent=2)
+        new_content += ";\n"
+
+        with open(matrix_path, "w") as f:
+            f.write(new_content)
+
+        return jsonify({"status": "ok", "matrix9": matrix9, "matrix18": matrix18})
+    except Exception as e:
+        logger.exception("Matrix save failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/audit/autofix-side-games", methods=["POST"])
