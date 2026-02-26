@@ -1260,17 +1260,19 @@
 
         // Expand the clicked row
         expandedEventId = eventId;
+        const ev = allEvents.find(e => e.id === eventId);
+
+        // Fetch RSVPs first (needed for both desktop and mobile)
+        if (ev) await fetchRsvps(ev.item_name);
+
+        // Desktop: render detail into table row
         const row = document.querySelector(`.event-row-clickable[data-id="${eventId}"]`);
         const detailRow = document.querySelector(`.event-detail-row[data-detail-for="${eventId}"]`);
         if (row) row.classList.add("expanded");
         if (detailRow) {
             detailRow.classList.add("visible");
-            // Lazy-render content — fetch RSVPs first
-            const ev = allEvents.find(e => e.id === eventId);
             if (ev) {
                 const container = document.getElementById(`detail-content-${eventId}`);
-                container.innerHTML = '<div style="padding:1rem; color:var(--text-muted);">Loading...</div>';
-                await fetchRsvps(ev.item_name);
                 container.innerHTML = renderDetailContent(ev);
                 attachDetailHandlers(container, ev);
             }

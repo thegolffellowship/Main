@@ -1324,30 +1324,7 @@ tr.row-transferred { opacity: 0.6; }
     /* Customers page: hide bottom detail panel on mobile (using inline expansion instead) */
     .customer-detail-section { display: none !important; }
 
-    .games-panel {
-        padding: 0.4rem;
-        display: block;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        margin: 0.4rem 0 0.5rem 0;
-    }
-    .games-panel-header { font-size: 0.75rem; margin-bottom: 0.35rem; padding-bottom: 0.25rem; }
-    .games-table { font-size: 0.7rem; min-width: 420px; }
-    .games-table th,
-    .games-table thead th,
-    .games-table td { padding: 0.2rem 0.25rem; font-size: 0.68rem; }
-    .games-table col.gc-fund   { width: 3.8rem; }
-    .games-table col.gc-mwp    { width: 3.5rem; }
-    .games-table col.gc-flights { width: 2rem; }
-    .games-table col.gc-1st    { width: 3.5rem; }
-    .games-table col.gc-2nd    { width: 3.5rem; }
-    .games-table col.gc-3rd    { width: 3.5rem; }
-    .games-table col.gc-4th    { width: 3.5rem; }
-    .games-section-row td { font-size: 0.62rem; padding: 0.25rem; }
-    .games-indent { padding-left: 0.8rem !important; }
-    .games-row-sub td { font-size: 0.66rem; }
-    .games-row-sub td[colspan] { white-space: normal; word-break: break-word; }
-    .games-grand-total-row td { font-size: 0.78rem; padding-top: 0.35rem; }
+    /* Games panel mobile overrides moved AFTER base styles — see below */
 }
 
 /* =========================================================
@@ -1476,4 +1453,33 @@ tr.row-transferred { opacity: 0.6; }
     color: var(--primary);
     border-top: 3px solid var(--primary);
     padding-top: 0.5rem;
+}
+
+/* ---- Games panel mobile (must come AFTER base styles) ---- */
+@media (max-width: 768px) {
+    .games-panel {
+        padding: 0.4rem;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0.4rem 0 0.5rem 0;
+        max-width: 100%;
+    }
+    .games-panel-header { font-size: 0.75rem; margin-bottom: 0.35rem; padding-bottom: 0.25rem; }
+    .games-table { font-size: 0.7rem; min-width: 420px; }
+    .games-table th,
+    .games-table thead th,
+    .games-table td { padding: 0.2rem 0.25rem; font-size: 0.68rem; }
+    .games-table col.gc-fund   { width: 3.8rem; }
+    .games-table col.gc-mwp    { width: 3.5rem; }
+    .games-table col.gc-flights { width: 2rem; }
+    .games-table col.gc-1st    { width: 3.5rem; }
+    .games-table col.gc-2nd    { width: 3.5rem; }
+    .games-table col.gc-3rd    { width: 3.5rem; }
+    .games-table col.gc-4th    { width: 3.5rem; }
+    .games-section-row td { font-size: 0.62rem; padding: 0.25rem; }
+    .games-indent { padding-left: 0.8rem !important; }
+    .games-row-sub td { font-size: 0.66rem; }
+    .games-row-sub td[colspan] { white-space: normal; word-break: break-word; }
+    .games-grand-total-row td { font-size: 0.78rem; padding-top: 0.35rem; }
 }
