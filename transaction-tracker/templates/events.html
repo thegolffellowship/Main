@@ -583,8 +583,6 @@
         try {
             const res = await fetch("/api/items");
             allItems = await res.json();
-            const rsvpItems = allItems.filter(i => i.transaction_status === "rsvp_only");
-            if (rsvpItems.length) console.log("DEBUG: RSVP-only items in allItems:", rsvpItems.map(i => ({id: i.id, customer: i.customer, status: i.transaction_status})));
         } catch (err) {
             console.error("Failed to fetch items:", err);
         }
@@ -682,7 +680,6 @@
         let html = '';
         registrants.forEach(r => {
             const txStatus = r.transaction_status || "active";
-            if (txStatus === "rsvp_only") console.log("MOBILE RSVP-only:", r.customer, "id:", r.id, "status:", r.transaction_status);
             const isRsvpOnly = txStatus === "rsvp_only";
             const statusClass = isRsvpOnly ? ' row-rsvp-only'
                 : txStatus !== "active" ? ` row-${txStatus}`
@@ -734,7 +731,7 @@
             ];
 
             html += `
-            <div class="mobile-card${statusClass}"${isRsvpOnly ? ' style="background:#fef3c7;font-style:italic;"' : ''} data-id="${r.id}">
+            <div class="mobile-card${statusClass}" style="${isRsvpOnly ? 'background:#fef3c7;font-style:italic;' : isManual ? 'background:#eff6ff;' : ''}" data-id="${r.id}">
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         ${circleHtml}
@@ -1298,7 +1295,6 @@
         const overrides = allRsvpOverrides[ev.item_name] || {};
         filtered.forEach(r => {
             const txStatus = r.transaction_status || "active";
-            if (txStatus === "rsvp_only") console.log("RSVP-only row found:", r.customer, "id:", r.id, "status:", r.transaction_status);
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             // Determine circle state: manual override wins, then auto from RSVP
             const manualOverride = overrides[r.id];
@@ -1319,6 +1315,7 @@
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
             const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "Added to GG (manual)" : "No RSVP";
             const isRsvpOnly = txStatus === "rsvp_only";
+            const isManualRow = (r.email_uid || "").startsWith("manual-");
             let rowClass;
             if (isRsvpOnly) rowClass = ' class="row-rsvp-only"';
             else if (txStatus !== "active") rowClass = ` class="row-${txStatus}"`;
@@ -1327,8 +1324,8 @@
             html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
-                const rsvpBg = isRsvpOnly ? 'background-color:#fef3c7;font-style:italic;' : '';
-                const style = (vis ? '' : 'display:none;') + rsvpBg;
+                const rowBg = isRsvpOnly ? 'background-color:#fef3c7;font-style:italic;' : isManualRow ? 'background-color:#eff6ff;' : '';
+                const style = (vis ? '' : 'display:none;') + rowBg;
                 if (c.key === "rsvp") {
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
@@ -1341,7 +1338,6 @@
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
-                    const isManualRow = (r.email_uid || "").startsWith("manual-");
                     let btns = "";
                     if (isRsvpOnly && isManualRow) {
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
