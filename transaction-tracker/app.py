@@ -36,6 +36,7 @@ from email_parser.database import (
     create_event,
     seed_events,
     add_player_to_event,
+    upgrade_rsvp_to_paid,
     autofix_side_games,
     autofix_all,
     normalize_tee_choices,
@@ -612,6 +613,14 @@ def matrix_page():
     return render_template("matrix.html")
 
 
+@app.route("/changelog")
+def changelog_page():
+    # Admin-only page — managers are redirected to home
+    if session.get("role") != "admin":
+        return render_template("index.html")
+    return render_template("changelog.html")
+
+
 @app.route("/audit")
 def audit_page():
     # Admin-only page — managers are redirected to home
@@ -820,13 +829,41 @@ def api_reverse_credit(item_id):
 
 @app.route("/api/events/add-player", methods=["POST"])
 def api_add_player():
-    """Manually add a comp'd player to an event."""
+    """Add a player to an event (comp, RSVP only, or paid separately)."""
     data = request.get_json(silent=True)
     if not data or not data.get("event_name") or not data.get("customer"):
         return jsonify({"error": "event_name and customer are required."}), 400
+    mode = data.get("mode", "comp")
+    if mode not in ("comp", "rsvp", "paid_separately"):
+        return jsonify({"error": "Invalid mode."}), 400
     item = add_player_to_event(
         event_name=data["event_name"],
         customer=data["customer"],
+        mode=mode,
+        side_games=data.get("side_games", ""),
+        tee_choice=data.get("tee_choice", ""),
+        handicap=data.get("handicap", ""),
+        member_status=data.get("member_status", ""),
+        golf_or_compete=data.get("golf_or_compete", ""),
+        payment_amount=data.get("payment_amount", ""),
+        payment_source=data.get("payment_source", ""),
+        customer_email=data.get("customer_email", ""),
+    )
+    if item:
+        return jsonify({"status": "ok", "item": item}), 201
+    return jsonify({"error": "Failed to add player."}), 500
+
+
+@app.route("/api/events/upgrade-rsvp", methods=["POST"])
+def api_upgrade_rsvp():
+    """Upgrade an RSVP-only placeholder to a full paid registration."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("item_id"):
+        return jsonify({"error": "item_id is required."}), 400
+    item = upgrade_rsvp_to_paid(
+        item_id=data["item_id"],
+        payment_amount=data.get("payment_amount", ""),
+        payment_source=data.get("payment_source", ""),
         side_games=data.get("side_games", ""),
         tee_choice=data.get("tee_choice", ""),
         handicap=data.get("handicap", ""),
@@ -834,8 +871,8 @@ def api_add_player():
         golf_or_compete=data.get("golf_or_compete", ""),
     )
     if item:
-        return jsonify({"status": "ok", "item": item}), 201
-    return jsonify({"error": "Failed to add player."}), 500
+        return jsonify({"status": "ok", "item": item})
+    return jsonify({"error": "Item not found or not in RSVP-only state."}), 400
 
 
 @app.route("/api/events/seed", methods=["POST"])

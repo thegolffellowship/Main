@@ -810,14 +810,21 @@ def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
     return {"inserted": inserted, "skipped": skipped}
 
 
-def add_player_to_event(event_name: str, customer: str, side_games: str = "",
-                        tee_choice: str = "", handicap: str = "",
-                        member_status: str = "", golf_or_compete: str = "",
+def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
+                        side_games: str = "", tee_choice: str = "",
+                        handicap: str = "", member_status: str = "",
+                        golf_or_compete: str = "",
+                        payment_amount: str = "", payment_source: str = "",
+                        customer_email: str = "",
                         db_path: str | Path | None = None) -> dict | None:
     """
-    Manually add a player (comp'd entry) to an event.
+    Add a player to an event.
 
-    Creates an items row with $0.00 price linked to the event.
+    Modes:
+      - 'comp': Manager comp ($0.00 price, full golf details)
+      - 'rsvp': RSVP-only placeholder (name only, no price, no games)
+      - 'paid_separately': Paid via Venmo/Zelle/Cash (custom price, full details)
+
     Returns the new item dict or None on failure.
     """
     import time
@@ -830,25 +837,44 @@ def add_player_to_event(event_name: str, customer: str, side_games: str = "",
     ).fetchone()
     event = dict(event) if event else {}
 
-    uid = f"manual-{int(time.time() * 1000)}"
+    uid = f"manual-{mode}-{int(time.time() * 1000)}"
 
     new_values = {col: None for col in ITEM_COLUMNS}
     new_values["email_uid"] = uid
     new_values["item_index"] = 0
-    new_values["merchant"] = "Manual Entry"
     new_values["customer"] = customer
+    new_values["customer_email"] = customer_email or None
     new_values["item_name"] = event_name
-    new_values["item_price"] = "$0.00 (comp)"
     new_values["order_date"] = __import__("datetime").date.today().isoformat()
     new_values["event_date"] = event.get("event_date") or ""
     new_values["course"] = event.get("course") or ""
     new_values["city"] = event.get("city") or ""
-    new_values["side_games"] = side_games or None
-    new_values["tee_choice"] = tee_choice or None
-    new_values["handicap"] = handicap or None
-    new_values["member_status"] = member_status or None
-    new_values["golf_or_compete"] = golf_or_compete or None
     new_values["transaction_status"] = "active"
+
+    if mode == "comp":
+        new_values["merchant"] = "Manual Entry"
+        new_values["item_price"] = "$0.00 (comp)"
+        new_values["side_games"] = side_games or None
+        new_values["tee_choice"] = tee_choice or None
+        new_values["handicap"] = handicap or None
+        new_values["member_status"] = member_status or None
+        new_values["golf_or_compete"] = golf_or_compete or None
+    elif mode == "rsvp":
+        new_values["merchant"] = "RSVP Only"
+        new_values["item_price"] = None
+        new_values["transaction_status"] = "rsvp_only"
+    elif mode == "paid_separately":
+        source_label = payment_source or "External"
+        new_values["merchant"] = f"Paid Separately ({source_label})"
+        new_values["item_price"] = payment_amount or "$0.00"
+        new_values["side_games"] = side_games or None
+        new_values["tee_choice"] = tee_choice or None
+        new_values["handicap"] = handicap or None
+        new_values["member_status"] = member_status or None
+        new_values["golf_or_compete"] = golf_or_compete or None
+    else:
+        new_values["merchant"] = "Manual Entry"
+        new_values["item_price"] = "$0.00"
 
     cols = ", ".join(ITEM_COLUMNS)
     placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
@@ -861,8 +887,70 @@ def add_player_to_event(event_name: str, customer: str, side_games: str = "",
     conn.close()
 
     new_values["id"] = new_id
-    logger.info("Added player %s to event %s (id=%d)", customer, event_name, new_id)
+    logger.info("Added player %s to event %s (mode=%s, id=%d)",
+                customer, event_name, mode, new_id)
     return new_values
+
+
+def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
+                         payment_source: str = "", side_games: str = "",
+                         tee_choice: str = "", handicap: str = "",
+                         member_status: str = "", golf_or_compete: str = "",
+                         db_path: str | Path | None = None) -> dict | None:
+    """
+    Upgrade an RSVP-only placeholder to a full paid registration.
+
+    Updates the existing item row with payment and golf details.
+    Returns the updated item dict or None on failure.
+    """
+    conn = get_connection(db_path)
+
+    item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        return None
+    item = dict(item)
+
+    if item.get("transaction_status") != "rsvp_only":
+        conn.close()
+        logger.warning("Item %d is not rsvp_only (status=%s)", item_id,
+                       item.get("transaction_status"))
+        return None
+
+    source_label = payment_source or "External"
+    conn.execute(
+        """UPDATE items SET
+            merchant = ?,
+            item_price = ?,
+            side_games = ?,
+            tee_choice = ?,
+            handicap = ?,
+            member_status = ?,
+            golf_or_compete = ?,
+            transaction_status = 'active'
+        WHERE id = ?""",
+        (
+            f"Paid Separately ({source_label})",
+            payment_amount or "$0.00",
+            side_games or None,
+            tee_choice or None,
+            handicap or None,
+            member_status or None,
+            golf_or_compete or None,
+            item_id,
+        ),
+    )
+    conn.commit()
+
+    # Re-read the updated row
+    updated = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    conn.close()
+
+    if updated:
+        updated = dict(updated)
+        logger.info("Upgraded RSVP item %d to paid registration", item_id)
+        return updated
+    return None
 
 
 def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:

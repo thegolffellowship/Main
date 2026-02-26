@@ -130,6 +130,7 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Events — Auto-detected from transaction data</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.1.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -279,11 +280,61 @@
                 <button id="add-player-close" class="modal-close">&times;</button>
             </div>
             <div id="add-player-event-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
+
+            <!-- Mode selector -->
+            <div class="add-player-modes" style="display:flex; gap:0; margin-bottom:1rem; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+                <label class="ap-mode-btn ap-mode-active" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600; transition:background 0.15s, color 0.15s; border-right:1px solid var(--border);">
+                    <input type="radio" name="add-player-mode" value="comp" checked style="display:none;">
+                    Manager Comp
+                </label>
+                <label class="ap-mode-btn" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600; transition:background 0.15s, color 0.15s; border-right:1px solid var(--border);">
+                    <input type="radio" name="add-player-mode" value="rsvp" style="display:none;">
+                    RSVP Only
+                </label>
+                <label class="ap-mode-btn" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600; transition:background 0.15s, color 0.15s;">
+                    <input type="radio" name="add-player-mode" value="paid_separately" style="display:none;">
+                    Paid Separately
+                </label>
+            </div>
+
             <form id="add-player-form" class="edit-form">
-                <div class="edit-grid">
-                    <label>Player Name <span style="color:#e11d48;">*</span>
-                        <input type="text" id="add-player-name" class="modal-input" required placeholder="First Last">
+                <!-- Name: always shown. For comp mode, shows manager dropdown. Otherwise text input with autocomplete. -->
+                <div id="ap-name-section">
+                    <div id="ap-manager-select" style="margin-bottom:0.75rem;">
+                        <label>Manager <span style="color:#e11d48;">*</span>
+                            <select id="add-player-manager" class="modal-input">
+                                <option value="">Select manager…</option>
+                                <option value="Kerry Niester">Kerry Niester</option>
+                                <option value="Robert Straiton">Robert Straiton</option>
+                                <option value="James Jones">James Jones</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div id="ap-name-input" style="display:none; margin-bottom:0.75rem;">
+                        <label>Player Name <span style="color:#e11d48;">*</span>
+                            <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" list="ap-customer-list">
+                            <datalist id="ap-customer-list"></datalist>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Payment fields: only for paid_separately mode -->
+                <div id="ap-payment-section" class="edit-grid" style="display:none; margin-bottom:0.5rem;">
+                    <label>Amount <span style="color:#e11d48;">*</span>
+                        <input type="text" id="add-player-amount" class="modal-input" placeholder="e.g. $125">
                     </label>
+                    <label>Payment Source <span style="color:#e11d48;">*</span>
+                        <select id="add-player-source" class="modal-input">
+                            <option value="">Select…</option>
+                            <option value="Venmo">Venmo</option>
+                            <option value="Zelle">Zelle</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </label>
+                </div>
+
+                <!-- Golf details: shown for comp and paid_separately, hidden for rsvp -->
+                <div id="ap-golf-details" class="edit-grid">
                     <label>Side Games
                         <select id="add-player-side-games" class="modal-input">
                             <option value="">None</option>
@@ -295,7 +346,7 @@
                     <label>Tee Choice
                         <select id="add-player-tee" class="modal-input">
                             <option value="">—</option>
-                            <option value="<50"><50</option>
+                            <option value="<50">&lt;50</option>
                             <option value="50-64">50-64</option>
                             <option value="65+">65+</option>
                             <option value="Forward">Forward</option>
@@ -322,7 +373,72 @@
                 </div>
                 <div class="modal-actions">
                     <button type="button" id="add-player-cancel" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Player</button>
+                    <button type="submit" id="add-player-submit-btn" class="btn btn-primary">Add Player</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upgrade RSVP Modal -->
+    <div id="upgrade-rsvp-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-header">
+                <h2>Record Payment &amp; Details</h2>
+                <button id="upgrade-rsvp-close" class="modal-close">&times;</button>
+            </div>
+            <div id="upgrade-rsvp-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
+            <form id="upgrade-rsvp-form" class="edit-form">
+                <div class="edit-grid">
+                    <label>Amount <span style="color:#e11d48;">*</span>
+                        <input type="text" id="upgrade-rsvp-amount" class="modal-input" placeholder="e.g. $125">
+                    </label>
+                    <label>Payment Source <span style="color:#e11d48;">*</span>
+                        <select id="upgrade-rsvp-source" class="modal-input">
+                            <option value="">Select…</option>
+                            <option value="Venmo">Venmo</option>
+                            <option value="Zelle">Zelle</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </label>
+                    <label>Side Games
+                        <select id="upgrade-rsvp-side-games" class="modal-input">
+                            <option value="">None</option>
+                            <option value="Net">Net</option>
+                            <option value="Gross">Gross</option>
+                            <option value="Both">Both (Net + Gross)</option>
+                        </select>
+                    </label>
+                    <label>Tee Choice
+                        <select id="upgrade-rsvp-tee" class="modal-input">
+                            <option value="">—</option>
+                            <option value="<50">&lt;50</option>
+                            <option value="50-64">50-64</option>
+                            <option value="65+">65+</option>
+                            <option value="Forward">Forward</option>
+                        </select>
+                    </label>
+                    <label>Handicap
+                        <input type="text" id="upgrade-rsvp-handicap" class="modal-input" placeholder="e.g. 12">
+                    </label>
+                    <label>Status
+                        <select id="upgrade-rsvp-status" class="modal-input">
+                            <option value="">—</option>
+                            <option value="MEMBER">Member</option>
+                            <option value="NON-MEMBER">Non-Member</option>
+                            <option value="GUEST">Guest</option>
+                        </select>
+                    </label>
+                    <label>Type
+                        <select id="upgrade-rsvp-type" class="modal-input">
+                            <option value="">—</option>
+                            <option value="Golf">Golf</option>
+                            <option value="Compete">Compete</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="upgrade-rsvp-cancel" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Record Payment</button>
                 </div>
             </form>
         </div>
@@ -350,6 +466,7 @@
         </div>
     </div>
 
+    <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/games-matrix.js"></script>
     <script>
@@ -501,7 +618,7 @@
 
     function getRegistrants(eventName) {
         return allItems.filter(item => item.item_name === eventName
-            && (item.transaction_status || 'active') === 'active');
+            && ['active', 'rsvp_only'].includes(item.transaction_status || 'active'));
     }
 
     function getFilteredSortedEvents() {
@@ -566,23 +683,33 @@
         let html = '';
         registrants.forEach(r => {
             const txStatus = r.transaction_status || "active";
-            const statusClass = txStatus !== "active" ? ` row-${txStatus}` : (r.transferred_from_id ? ' row-from-transfer' : '');
+            const isRsvpOnly = txStatus === "rsvp_only";
+            const statusClass = isRsvpOnly ? ' row-rsvp-only'
+                : txStatus !== "active" ? ` row-${txStatus}`
+                : (r.transferred_from_id ? ' row-from-transfer' : '');
             let tag = '';
-            if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only</span>`;
+            else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             const manualOverride = overrides[r.id];
             let circleState = "none";
-            if (manualOverride && manualOverride !== "none") {
-                circleState = manualOverride;
-            } else if (rsvp && rsvp.response === 'PLAYING') {
+            let circleSource = "none";
+            if (rsvp && rsvp.response === 'PLAYING') {
                 circleState = "playing";
+                circleSource = "auto";
             } else if (rsvp && rsvp.response === 'NOT PLAYING') {
                 circleState = "not_playing";
+                circleSource = "auto";
             }
-            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState}` : "";
-            const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}"></span>`;
+            if (manualOverride && manualOverride !== "none") {
+                circleState = manualOverride;
+                circleSource = "manual";
+            }
+            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "Added to GG (manual)" : "No RSVP";
+            const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span>`;
             const sideGame = classifyGameType(r.side_games);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
@@ -869,6 +996,8 @@
     function computeGameStats(registrants) {
         let net = 0, gross = 0, noGames = 0;
         registrants.forEach(r => {
+            // RSVP-only players count toward total but not net/gross
+            if (r.transaction_status === "rsvp_only") { noGames++; return; }
             const type = classifyGameType(r.side_games);
             if (type === "BOTH") { net++; gross++; }
             else if (type === "NET") { net++; }
@@ -1170,24 +1299,37 @@
             // Determine circle state: manual override wins, then auto from RSVP
             const manualOverride = overrides[r.id];
             let circleState = "none";
-            if (manualOverride && manualOverride !== "none") {
-                circleState = manualOverride;
-            } else if (rsvp && rsvp.response === 'PLAYING') {
+            let circleSource = "none"; // tracks whether state came from GG auto or manual
+            if (rsvp && rsvp.response === 'PLAYING') {
                 circleState = "playing";
+                circleSource = "auto";
             } else if (rsvp && rsvp.response === 'NOT PLAYING') {
                 circleState = "not_playing";
+                circleSource = "auto";
             }
-            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState}` : "";
-            const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (r.transferred_from_id ? ' class="row-from-transfer"' : '');
+            // Manual override can upgrade blank/red to manual_green, or reset manual_green to none
+            if (manualOverride && manualOverride !== "none") {
+                circleState = manualOverride;
+                circleSource = "manual";
+            }
+            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "Added to GG (manual)" : "No RSVP";
+            const isRsvpOnly = txStatus === "rsvp_only";
+            let rowClass;
+            if (isRsvpOnly) rowClass = ' class="row-rsvp-only"';
+            else if (txStatus !== "active") rowClass = ` class="row-${txStatus}"`;
+            else if (r.transferred_from_id) rowClass = ' class="row-from-transfer"';
+            else rowClass = '';
             html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
                 const style = vis ? '' : 'display:none;';
                 if (c.key === "rsvp") {
-                    html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" title="${circleState === 'playing' ? 'Playing' : circleState === 'not_playing' ? 'Not Playing' : 'No RSVP'}"></span></td>`;
+                    html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
                     let tag = "";
-                    if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only</span>`;
+                    else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}</td>`;
@@ -1368,24 +1510,53 @@
                 const itemId = parseInt(circle.dataset.itemId);
                 const eventName = circle.dataset.eventName;
                 const current = circle.dataset.rsvpState;
-                // Cycle: none → playing → not_playing → none
-                const next = current === "none" ? "playing" : current === "playing" ? "not_playing" : "none";
+                const source = circle.dataset.circleSource;
+
+                // Auto-green (GG Playing) is locked — no click action
+                if (current === "playing" && source === "auto") return;
+
+                let next;
+                if (current === "none" || current === "not_playing") {
+                    // Blank or red → manual_green (with confirmation)
+                    const msg = current === "not_playing"
+                        ? "This player RSVP'd 'Not Playing' on GG. Confirm you've added them to the GG roster?"
+                        : "Confirm you've added this player to the GG roster?";
+                    if (!confirm(msg)) return;
+                    next = "manual_green";
+                } else if (current === "manual_green") {
+                    // Manual green → back to none (with confirmation)
+                    if (!confirm("Remove manual GG confirmation?")) return;
+                    next = "none";
+                } else {
+                    return; // Other states: no action
+                }
+
                 try {
                     await fetch("/api/rsvps/overrides", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ item_id: itemId, event_name: eventName, status: next })
                     });
-                    // Update local cache
                     if (!allRsvpOverrides[eventName]) allRsvpOverrides[eventName] = {};
                     allRsvpOverrides[eventName][itemId] = next;
-                    // Update circle visually without full re-render
                     circle.dataset.rsvpState = next;
-                    circle.className = "rsvp-circle" + (next !== "none" ? ` rsvp-circle-${next}` : "");
-                    circle.title = next === "playing" ? "Playing" : next === "not_playing" ? "Not Playing" : "No RSVP";
+                    circle.dataset.circleSource = next === "none" ? "none" : "manual";
+                    const cls = next !== "none" ? ` rsvp-circle-${next.replace("_", "-")}` : "";
+                    circle.className = "rsvp-circle" + cls;
+                    circle.title = next === "manual_green" ? "Added to GG (manual)" : "No RSVP";
                 } catch (err) {
                     console.error("Failed to update RSVP override:", err);
                 }
+            });
+        });
+
+        // RSVP-only tag click → open upgrade modal
+        container.querySelectorAll(".rsvp-only-tag").forEach(tag => {
+            tag.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(tag.dataset.itemId);
+                const item = allItems.find(r => r.id === itemId);
+                if (item) openUpgradeRsvpModal(item);
             });
         });
 
@@ -1523,18 +1694,79 @@
     // ---- Add Player modal logic ----
     let addPlayerEventName = null;
 
+    // ---- Add Player modal (3 modes) ----
+    let addPlayerMode = "comp";
+
+    function getAddPlayerMode() {
+        const checked = document.querySelector('input[name="add-player-mode"]:checked');
+        return checked ? checked.value : "comp";
+    }
+
+    function updateAddPlayerMode() {
+        addPlayerMode = getAddPlayerMode();
+        const isComp = addPlayerMode === "comp";
+        const isRsvp = addPlayerMode === "rsvp";
+        const isPaid = addPlayerMode === "paid_separately";
+
+        // Toggle name sections
+        document.getElementById("ap-manager-select").style.display = isComp ? "" : "none";
+        document.getElementById("ap-name-input").style.display = isComp ? "none" : "";
+
+        // Toggle payment fields
+        document.getElementById("ap-payment-section").style.display = isPaid ? "" : "none";
+
+        // Toggle golf details
+        document.getElementById("ap-golf-details").style.display = isRsvp ? "none" : "";
+
+        // Update submit button text
+        const btn = document.getElementById("add-player-submit-btn");
+        if (isComp) btn.textContent = "Add Manager";
+        else if (isRsvp) btn.textContent = "Add RSVP";
+        else btn.textContent = "Add Player";
+
+        // Update event info text
+        if (addPlayerEventName) {
+            const prefix = isComp ? "Comp manager for" : isRsvp ? "RSVP only for" : "Paid separately for";
+            document.getElementById("add-player-event-info").innerHTML =
+                `${prefix}: <strong>${escapeHtml(addPlayerEventName)}</strong>`;
+        }
+
+        // Update mode button styles
+        document.querySelectorAll(".ap-mode-btn").forEach(label => {
+            const radio = label.querySelector("input");
+            if (radio && radio.checked) {
+                label.style.background = "var(--primary)";
+                label.style.color = "#fff";
+            } else {
+                label.style.background = "var(--surface)";
+                label.style.color = "var(--text)";
+            }
+        });
+
+        // Populate customer autocomplete list
+        if (!isComp) {
+            const datalist = document.getElementById("ap-customer-list");
+            const names = [...new Set(allItems.map(i => i.customer).filter(Boolean))].sort();
+            datalist.innerHTML = names.map(n => `<option value="${escapeHtml(n)}">`).join("");
+        }
+    }
+
     function openAddPlayerModal(eventName) {
         addPlayerEventName = eventName;
-        document.getElementById("add-player-event-info").innerHTML =
-            `Adding comp'd player to: <strong>${escapeHtml(eventName)}</strong>`;
+        // Reset mode to comp
+        document.querySelector('input[name="add-player-mode"][value="comp"]').checked = true;
+        // Clear all fields
+        document.getElementById("add-player-manager").value = "";
         document.getElementById("add-player-name").value = "";
         document.getElementById("add-player-side-games").value = "";
         document.getElementById("add-player-tee").value = "";
         document.getElementById("add-player-handicap").value = "";
         document.getElementById("add-player-status").value = "";
         document.getElementById("add-player-type").value = "";
+        document.getElementById("add-player-amount") && (document.getElementById("add-player-amount").value = "");
+        document.getElementById("add-player-source") && (document.getElementById("add-player-source").value = "");
+        updateAddPlayerMode();
         document.getElementById("add-player-overlay").style.display = "flex";
-        document.getElementById("add-player-name").focus();
     }
 
     function closeAddPlayerModal() {
@@ -1544,21 +1776,45 @@
 
     async function handleAddPlayerSubmit(e) {
         e.preventDefault();
-        const name = document.getElementById("add-player-name").value.trim();
-        if (!name || !addPlayerEventName) return;
+        const mode = getAddPlayerMode();
+        let name;
+        if (mode === "comp") {
+            name = document.getElementById("add-player-manager").value;
+            if (!name) { alert("Please select a manager."); return; }
+        } else {
+            name = document.getElementById("add-player-name").value.trim();
+            if (!name) { alert("Please enter a player name."); return; }
+        }
+        if (!addPlayerEventName) return;
+
+        const payload = {
+            event_name: addPlayerEventName,
+            customer: name,
+            mode: mode,
+        };
+
+        if (mode !== "rsvp") {
+            payload.side_games = document.getElementById("add-player-side-games").value;
+            payload.tee_choice = document.getElementById("add-player-tee").value;
+            payload.handicap = document.getElementById("add-player-handicap").value;
+            payload.member_status = document.getElementById("add-player-status").value;
+            payload.golf_or_compete = document.getElementById("add-player-type").value;
+        }
+
+        if (mode === "paid_separately") {
+            payload.payment_amount = document.getElementById("add-player-amount").value.trim();
+            payload.payment_source = document.getElementById("add-player-source").value;
+            if (!payload.payment_amount || !payload.payment_source) {
+                alert("Please enter payment amount and source.");
+                return;
+            }
+        }
+
         try {
             const res = await fetch("/api/events/add-player", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    event_name: addPlayerEventName,
-                    customer: name,
-                    side_games: document.getElementById("add-player-side-games").value,
-                    tee_choice: document.getElementById("add-player-tee").value,
-                    handicap: document.getElementById("add-player-handicap").value,
-                    member_status: document.getElementById("add-player-status").value,
-                    golf_or_compete: document.getElementById("add-player-type").value,
-                }),
+                body: JSON.stringify(payload),
             });
             if (!res.ok) {
                 const data = await res.json();
@@ -1569,6 +1825,60 @@
             await fetchItems();
             await fetchEvents();
         } catch (err) { alert("Failed to add player."); }
+    }
+
+    // ---- Upgrade RSVP modal ----
+    let upgradeRsvpItemId = null;
+
+    function openUpgradeRsvpModal(item) {
+        upgradeRsvpItemId = item.id;
+        document.getElementById("upgrade-rsvp-info").innerHTML =
+            `Recording payment for: <strong>${escapeHtml(item.customer)}</strong>`;
+        document.getElementById("upgrade-rsvp-amount").value = "";
+        document.getElementById("upgrade-rsvp-source").value = "";
+        document.getElementById("upgrade-rsvp-side-games").value = "";
+        document.getElementById("upgrade-rsvp-tee").value = "";
+        document.getElementById("upgrade-rsvp-handicap").value = "";
+        document.getElementById("upgrade-rsvp-status").value = "";
+        document.getElementById("upgrade-rsvp-type").value = "";
+        document.getElementById("upgrade-rsvp-overlay").style.display = "flex";
+    }
+
+    function closeUpgradeRsvpModal() {
+        document.getElementById("upgrade-rsvp-overlay").style.display = "none";
+        upgradeRsvpItemId = null;
+    }
+
+    async function handleUpgradeRsvpSubmit(e) {
+        e.preventDefault();
+        if (!upgradeRsvpItemId) return;
+        const amount = document.getElementById("upgrade-rsvp-amount").value.trim();
+        const source = document.getElementById("upgrade-rsvp-source").value;
+        if (!amount || !source) { alert("Please enter payment amount and source."); return; }
+        try {
+            const res = await fetch("/api/events/upgrade-rsvp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    item_id: upgradeRsvpItemId,
+                    payment_amount: amount,
+                    payment_source: source,
+                    side_games: document.getElementById("upgrade-rsvp-side-games").value,
+                    tee_choice: document.getElementById("upgrade-rsvp-tee").value,
+                    handicap: document.getElementById("upgrade-rsvp-handicap").value,
+                    member_status: document.getElementById("upgrade-rsvp-status").value,
+                    golf_or_compete: document.getElementById("upgrade-rsvp-type").value,
+                }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || "Failed to upgrade RSVP.");
+                return;
+            }
+            closeUpgradeRsvpModal();
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) { alert("Failed to upgrade RSVP."); }
     }
 
     async function syncEvents() {
@@ -1712,6 +2022,18 @@
         document.getElementById("add-player-overlay").addEventListener("click", (e) => {
             if (e.target === e.currentTarget) closeAddPlayerModal();
         });
+        // Mode toggle for Add Player
+        document.querySelectorAll('input[name="add-player-mode"]').forEach(radio => {
+            radio.addEventListener("change", updateAddPlayerMode);
+        });
+
+        // Upgrade RSVP modal
+        document.getElementById("upgrade-rsvp-form").addEventListener("submit", handleUpgradeRsvpSubmit);
+        document.getElementById("upgrade-rsvp-cancel").addEventListener("click", closeUpgradeRsvpModal);
+        document.getElementById("upgrade-rsvp-close").addEventListener("click", closeUpgradeRsvpModal);
+        document.getElementById("upgrade-rsvp-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeUpgradeRsvpModal();
+        });
 
         // Add Event modal
         document.getElementById("btn-add-event").addEventListener("click", openAddEventModal);
@@ -1804,8 +2126,9 @@
             const creditOpen = document.getElementById("ev-credit-overlay").style.display === "flex";
             const addEventOpen = document.getElementById("add-event-overlay").style.display === "flex";
             const addPlayerOpen = document.getElementById("add-player-overlay").style.display === "flex";
+            const upgradeOpen = document.getElementById("upgrade-rsvp-overlay").style.display === "flex";
             const loginOpen = document.getElementById("login-overlay").style.display === "flex";
-            if (!editOpen && !creditOpen && !addEventOpen && !addPlayerOpen && !loginOpen) {
+            if (!editOpen && !creditOpen && !addEventOpen && !addPlayerOpen && !upgradeOpen && !loginOpen) {
                 await fetchItems();
                 await fetchEvents();
             }
