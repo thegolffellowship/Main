@@ -329,7 +329,10 @@
                 <!-- Payment fields: only for paid_separately mode -->
                 <div id="ap-payment-section" class="edit-grid" style="display:none; margin-bottom:0.5rem;">
                     <label><span>Amount <span style="color:#e11d48;">*</span></span>
-                        <input type="text" id="add-player-amount" class="modal-input" placeholder="e.g. $125">
+                        <div style="position:relative;">
+                            <span style="position:absolute;left:0.65rem;top:50%;transform:translateY(-50%);font-weight:600;color:var(--text-muted);pointer-events:none;">$</span>
+                            <input type="text" id="add-player-amount" class="modal-input" inputmode="decimal" placeholder="0.00" style="padding-left:1.4rem;">
+                        </div>
                     </label>
                     <label><span>Payment Source <span style="color:#e11d48;">*</span></span>
                         <select id="add-player-source" class="modal-input">
@@ -1854,9 +1857,14 @@
         }
 
         if (mode === "paid_separately") {
-            payload.payment_amount = document.getElementById("add-player-amount").value.trim();
+            let rawAmount = document.getElementById("add-player-amount").value.trim().replace(/[^0-9.]/g, "");
             payload.payment_source = document.getElementById("add-player-source").value;
-            if (!payload.payment_amount) missing.push("Amount");
+            if (!rawAmount) missing.push("Amount");
+            else {
+                const num = parseFloat(rawAmount);
+                if (isNaN(num) || num <= 0) { alert("Please enter a valid dollar amount."); return; }
+                payload.payment_amount = "$" + num.toFixed(2);
+            }
             if (!payload.payment_source) missing.push("Payment Source");
         }
 
@@ -2108,6 +2116,15 @@
                     else if (statuses.includes("1ST TIMER")) statusSelect.value = "1ST TIMER";
                     else statusSelect.value = "";
                 }
+            }
+        });
+
+        // Auto-format amount field on blur
+        document.getElementById("add-player-amount").addEventListener("blur", function() {
+            let raw = this.value.trim().replace(/[^0-9.]/g, "");
+            if (raw) {
+                const num = parseFloat(raw);
+                if (!isNaN(num) && num > 0) this.value = num.toFixed(2);
             }
         });
 
