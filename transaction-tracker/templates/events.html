@@ -583,6 +583,8 @@
         try {
             const res = await fetch("/api/items");
             allItems = await res.json();
+            const rsvpItems = allItems.filter(i => i.transaction_status === "rsvp_only");
+            if (rsvpItems.length) console.log("DEBUG: RSVP-only items in allItems:", rsvpItems.map(i => ({id: i.id, customer: i.customer, status: i.transaction_status})));
         } catch (err) {
             console.error("Failed to fetch items:", err);
         }
@@ -680,6 +682,7 @@
         let html = '';
         registrants.forEach(r => {
             const txStatus = r.transaction_status || "active";
+            if (txStatus === "rsvp_only") console.log("MOBILE RSVP-only:", r.customer, "id:", r.id, "status:", r.transaction_status);
             const isRsvpOnly = txStatus === "rsvp_only";
             const statusClass = isRsvpOnly ? ' row-rsvp-only'
                 : txStatus !== "active" ? ` row-${txStatus}`
@@ -1295,6 +1298,7 @@
         const overrides = allRsvpOverrides[ev.item_name] || {};
         filtered.forEach(r => {
             const txStatus = r.transaction_status || "active";
+            if (txStatus === "rsvp_only") console.log("RSVP-only row found:", r.customer, "id:", r.id, "status:", r.transaction_status);
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             // Determine circle state: manual override wins, then auto from RSVP
             const manualOverride = overrides[r.id];
