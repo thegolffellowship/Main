@@ -688,14 +688,17 @@
         registrants.forEach(r => {
             const txStatus = r.transaction_status || "active";
             const isRsvpOnly = txStatus === "rsvp_only";
-            const statusClass = isRsvpOnly ? ' row-rsvp-only'
+            const isGgRsvp = txStatus === "gg_rsvp";
+            const statusClass = (isRsvpOnly || isGgRsvp) ? ' row-rsvp-only'
                 : txStatus !== "active" ? ` row-${txStatus}`
                 : (r.transferred_from_id ? ' row-from-transfer' : '');
             let tag = '';
             if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only — tap to record payment</span>`;
+            else if (isGgRsvp) tag = '<span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">GG RSVP</span>';
             else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            if ((r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             const manualOverride = overrides[r.id];
             let circleState = "none";
@@ -741,7 +744,7 @@
             ];
 
             html += `
-            <div class="mobile-card${statusClass}" style="${isRsvpOnly ? 'background:#fef3c7;font-style:italic;' : isComp ? 'background:#dcfce7;' : isManual ? 'background:#dbeafe;' : ''}" data-id="${r.id}">
+            <div class="mobile-card${statusClass}" style="${(isRsvpOnly || isGgRsvp) ? 'background:#fef3c7;font-style:italic;' : isComp ? 'background:#dcfce7;' : isManual ? 'background:#dbeafe;' : ''}" data-id="${r.id}">
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         ${circleHtml}
@@ -774,6 +777,19 @@
             const isExpanded = expandedEventId === ev.id;
             const registrants = getRegistrants(ev.item_name);
             const stats = computeGameStats(registrants);
+
+            // Create synthetic rows for unmatched GG RSVP players (mobile)
+            const mRsvps = allRsvps[ev.item_name] || [];
+            const mUnmatched = mRsvps.filter(r => r.response === 'PLAYING' && !r.matched_item_id);
+            const mGgRows = mUnmatched.map((r, i) => ({
+                id: `gg-rsvp-${i}`, customer: r.player_name || 'Unknown',
+                customer_email: r.player_email || '', item_name: ev.item_name,
+                item_price: '', side_games: '', tee_choice: '', handicap: '',
+                member_status: '', order_date: '',
+                transaction_status: 'gg_rsvp', email_uid: 'gg-rsvp', transferred_from_id: null
+            }));
+            stats.players += mGgRows.length;
+            stats.noGames += mGgRows.length;
 
             let detailHtml = '';
             if (isExpanded) {
@@ -810,6 +826,9 @@
                         });
                     }
                     filteredRegs = sortRegistrants(filteredRegs);
+                    if (!activeFilter || activeFilter === "NO GAMES") {
+                        filteredRegs = filteredRegs.concat(mGgRows);
+                    }
 
                     detailHtml = badgesHtml + `
                     <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem; flex-wrap:wrap;">
@@ -1225,6 +1244,21 @@
         const matchedItemIds = new Set(rsvps.filter(r => r.matched_item_id).map(r => r.matched_item_id));
         const unmatchedPlaying = playingRsvps.filter(r => !r.matched_item_id);
 
+        // Create synthetic rows for unmatched GG RSVP players so they appear in the main table
+        const ggRsvpRows = unmatchedPlaying.map((r, i) => ({
+            id: `gg-rsvp-${i}`,
+            customer: r.player_name || 'Unknown',
+            customer_email: r.player_email || '',
+            item_name: ev.item_name,
+            item_price: '', side_games: '', tee_choice: '', handicap: '',
+            member_status: '', order_date: '',
+            transaction_status: 'gg_rsvp',
+            email_uid: 'gg-rsvp',
+            transferred_from_id: null
+        }));
+        stats.players += ggRsvpRows.length;
+        stats.noGames += ggRsvpRows.length;
+
         const holesType = extractHolesType(ev.item_name);
         const gamesView = holesType && gamesOpenForEvent[ev.id];
 
@@ -1269,6 +1303,11 @@
 
         // Sort the filtered registrants
         filtered = sortRegistrants(filtered);
+
+        // Append GG RSVP players (show when no filter or NO GAMES filter)
+        if (!activeFilter || activeFilter === "NO GAMES") {
+            filtered = filtered.concat(ggRsvpRows);
+        }
 
         // Detail controls row: column toggle + count + Add Player button
         html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; flex-wrap:wrap;">';
@@ -1325,26 +1364,29 @@
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
             const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "Added to GG (manual)" : "No RSVP";
             const isRsvpOnly = txStatus === "rsvp_only";
+            const isGgRsvp = txStatus === "gg_rsvp";
             const isManualRow = (r.email_uid || "").startsWith("manual-");
             const isCompRow = (r.email_uid || "").startsWith("manual-comp");
             let rowClass;
-            if (isRsvpOnly) rowClass = ' class="row-rsvp-only"';
+            if (isRsvpOnly || isGgRsvp) rowClass = ' class="row-rsvp-only"';
             else if (txStatus !== "active") rowClass = ` class="row-${txStatus}"`;
             else if (r.transferred_from_id) rowClass = ' class="row-from-transfer"';
             else rowClass = '';
             html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
-                const rowBg = isRsvpOnly ? 'background-color:#fef3c7;font-style:italic;' : isCompRow ? 'background-color:#dcfce7;' : isManualRow ? 'background-color:#dbeafe;' : '';
+                const rowBg = (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;' : isCompRow ? 'background-color:#dcfce7;' : isManualRow ? 'background-color:#dbeafe;' : '';
                 const style = (vis ? '' : 'display:none;') + rowBg;
                 if (c.key === "rsvp") {
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
                     let tag = "";
                     if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP Only — tap to record payment</span>`;
+                    else if (isGgRsvp) tag = '<span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">GG RSVP</span>';
                     else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+                    if ((r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}</td>`;
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
@@ -1372,21 +1414,6 @@
 
         // RSVP sections — only show if RSVPs exist for this event
         if (rsvps.length) {
-            // Unmatched PLAYING RSVPs — players who RSVP'd but have no transaction
-            if (unmatchedPlaying.length) {
-                html += '<div class="rsvp-section rsvp-unmatched">';
-                html += `<h4 style="color:#d97706;">RSVP'd Playing — No Transaction (${unmatchedPlaying.length})</h4>`;
-                html += '<div class="rsvp-player-list">';
-                unmatchedPlaying.forEach(r => {
-                    html += `<div class="rsvp-player-card rsvp-unmatched-card">`;
-                    html += `<span class="rsvp-badge rsvp-playing">GG</span> `;
-                    html += `<strong>${escapeHtml(r.player_name || 'Unknown')}</strong>`;
-                    if (r.player_email) html += ` <span class="rsvp-email">${escapeHtml(r.player_email)}</span>`;
-                    html += `</div>`;
-                });
-                html += '</div></div>';
-            }
-
             // NOT PLAYING RSVPs
             if (notPlayingRsvps.length) {
                 html += '<div class="rsvp-section rsvp-not-playing-section">';
