@@ -54,7 +54,7 @@ from email_parser.database import (
     get_rsvp_overrides,
     set_rsvp_override,
 )
-from email_parser.fetcher import fetch_transaction_emails
+from email_parser.fetcher import fetch_transaction_emails, send_mail_graph
 from email_parser.parser import parse_email, parse_emails
 from email_parser.report import send_daily_report
 from email_parser.rsvp_parser import fetch_rsvp_emails, parse_rsvp_emails
@@ -881,6 +881,48 @@ def api_upgrade_rsvp():
     if item:
         return jsonify({"status": "ok", "item": item})
     return jsonify({"error": "Item not found or not in RSVP-only state."}), 400
+
+
+@app.route("/api/events/send-reminder", methods=["POST"])
+def api_send_reminder():
+    """Send a payment reminder email to an RSVP-only player."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    to_email = (data.get("to_email") or "").strip()
+    player_name = data.get("player_name", "Player")
+    event_name = data.get("event_name", "the upcoming event")
+    if not to_email:
+        return jsonify({"error": "to_email is required"}), 400
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return jsonify({"error": "Email credentials not configured"}), 500
+
+    subject = f"Payment Reminder — {event_name}"
+    html_body = (
+        f"<p>Hi {player_name},</p>"
+        f"<p>This is a friendly reminder that we have you down for "
+        f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+        f"<p>Please complete your registration at your earliest convenience.</p>"
+        f"<p>Thanks,<br>The Golf Fellowship</p>"
+    )
+
+    ok = send_mail_graph(
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+        from_address=from_address,
+        to_address=to_email,
+        subject=subject,
+        html_body=html_body,
+    )
+    if ok:
+        return jsonify({"status": "ok", "message": f"Reminder sent to {to_email}"})
+    return jsonify({"error": "Failed to send reminder email"}), 500
 
 
 @app.route("/api/events/seed", methods=["POST"])

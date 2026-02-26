@@ -1153,6 +1153,8 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
     Return the latest RSVP for each player for the given event.
 
     Groups by player_email and returns only the most recent response.
+    Also resolves the full player name from existing items (player cards)
+    by matching on player_email, and flags whether a player card was found.
     """
     conn = get_connection(db_path)
     rows = conn.execute(
@@ -1169,8 +1171,29 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
            ORDER BY r1.player_name ASC""",
         (event_name, event_name),
     ).fetchall()
+
+    # Resolve full names from player cards (items table) by email
+    results = []
+    for r in rows:
+        rsvp = dict(r)
+        rsvp["resolved_name"] = rsvp.get("player_name")
+        rsvp["has_player_card"] = False
+        email = (rsvp.get("player_email") or "").strip().lower()
+        if email:
+            card = conn.execute(
+                """SELECT customer FROM items
+                   WHERE LOWER(customer_email) = ?
+                     AND customer IS NOT NULL AND customer != ''
+                   ORDER BY order_date DESC LIMIT 1""",
+                (email,),
+            ).fetchone()
+            if card:
+                rsvp["resolved_name"] = card["customer"]
+                rsvp["has_player_card"] = True
+        results.append(rsvp)
+
     conn.close()
-    return [dict(r) for r in rows]
+    return results
 
 
 def get_all_rsvps(event_name: str = "", response: str = "",

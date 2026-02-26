@@ -695,19 +695,25 @@
             const isManual = (r.email_uid || "").startsWith("manual-");
             const isComp = (r.email_uid || "").startsWith("manual-comp");
             let tag = '';
-            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP - Remind</span>`;
-            else if (isGgRsvp) tag = '<span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">GG RSVP</span>';
+            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
+            else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">RSVP - Remind</span>`;
+            else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
             else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
-            if (isComp) tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Comp</span>';
-            else if (isManual && !isRsvpOnly) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
-            if ((r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
+            if (isComp || (r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
+            else if (isManual && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             const manualOverride = overrides[r.id];
             let circleState = "none";
             let circleSource = "none";
-            if (rsvp && rsvp.response === 'PLAYING') {
+            if (isGgRsvp) {
+                circleState = "playing";
+                circleSource = "auto";
+            } else if (isRsvpOnly) {
+                circleState = "manual_green";
+                circleSource = "manual";
+            } else if (rsvp && rsvp.response === 'PLAYING') {
                 circleState = "playing";
                 circleSource = "auto";
             } else if (rsvp && rsvp.response === 'NOT PLAYING') {
@@ -719,7 +725,7 @@
                 circleSource = "manual";
             }
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
-            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "Added to GG (manual)" : "No RSVP";
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
             const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span>`;
             const sideGame = classifyGameType(r.side_games);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
@@ -784,11 +790,12 @@
             const mRsvps = allRsvps[ev.item_name] || [];
             const mUnmatched = mRsvps.filter(r => r.response === 'PLAYING' && !r.matched_item_id);
             const mGgRows = mUnmatched.map((r, i) => ({
-                id: `gg-rsvp-${i}`, customer: r.player_name || 'Unknown',
+                id: `gg-rsvp-${i}`, customer: r.resolved_name || r.player_name || 'Unknown',
                 customer_email: r.player_email || '', item_name: ev.item_name,
                 item_price: '', side_games: '', tee_choice: '', handicap: '',
                 member_status: '', order_date: '',
-                transaction_status: 'gg_rsvp', email_uid: 'gg-rsvp', transferred_from_id: null
+                transaction_status: 'gg_rsvp', email_uid: 'gg-rsvp', transferred_from_id: null,
+                has_player_card: r.has_player_card !== false
             }));
             stats.players += mGgRows.length;
             stats.noGames += mGgRows.length;
@@ -1249,14 +1256,15 @@
         // Create synthetic rows for unmatched GG RSVP players so they appear in the main table
         const ggRsvpRows = unmatchedPlaying.map((r, i) => ({
             id: `gg-rsvp-${i}`,
-            customer: r.player_name || 'Unknown',
+            customer: r.resolved_name || r.player_name || 'Unknown',
             customer_email: r.player_email || '',
             item_name: ev.item_name,
             item_price: '', side_games: '', tee_choice: '', handicap: '',
             member_status: '', order_date: '',
             transaction_status: 'gg_rsvp',
             email_uid: 'gg-rsvp',
-            transferred_from_id: null
+            transferred_from_id: null,
+            has_player_card: r.has_player_card !== false
         }));
         stats.players += ggRsvpRows.length;
         stats.noGames += ggRsvpRows.length;
@@ -1346,12 +1354,20 @@
         const overrides = allRsvpOverrides[ev.item_name] || {};
         filtered.forEach(r => {
             const txStatus = r.transaction_status || "active";
+            const isRsvpOnly = txStatus === "rsvp_only";
+            const isGgRsvp = txStatus === "gg_rsvp";
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
-            // Determine circle state: manual override wins, then auto from RSVP
+            // Determine circle state: GG RSVP = green, manual RSVP = light green, then auto from GG match
             const manualOverride = overrides[r.id];
             let circleState = "none";
-            let circleSource = "none"; // tracks whether state came from GG auto or manual
-            if (rsvp && rsvp.response === 'PLAYING') {
+            let circleSource = "none";
+            if (isGgRsvp) {
+                circleState = "playing";
+                circleSource = "auto";
+            } else if (isRsvpOnly) {
+                circleState = "manual_green";
+                circleSource = "manual";
+            } else if (rsvp && rsvp.response === 'PLAYING') {
                 circleState = "playing";
                 circleSource = "auto";
             } else if (rsvp && rsvp.response === 'NOT PLAYING') {
@@ -1364,9 +1380,7 @@
                 circleSource = "manual";
             }
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
-            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "Added to GG (manual)" : "No RSVP";
-            const isRsvpOnly = txStatus === "rsvp_only";
-            const isGgRsvp = txStatus === "gg_rsvp";
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
             const isManualRow = (r.email_uid || "").startsWith("manual-");
             const isCompRow = (r.email_uid || "").startsWith("manual-comp");
             let rowClass;
@@ -1383,14 +1397,14 @@
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
                     let tag = "";
-                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" title="Click to record payment">RSVP - Remind</span>`;
-                    else if (isGgRsvp) tag = '<span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">GG RSVP</span>';
+                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
+                    else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">RSVP - Remind</span>`;
+                    else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
                     else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
-                    if (isCompRow) tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Comp</span>';
-                    else if (isManualRow && !isRsvpOnly) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
-                    if ((r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
+                    if (isCompRow || (r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
+                    else if (isManualRow && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}</td>`;
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
@@ -1600,13 +1614,82 @@
             });
         });
 
-        // RSVP-only tag click → open upgrade modal
+        // RSVP-Remind tag click → popover with Record Payment + Send Reminder
         container.querySelectorAll(".rsvp-only-tag").forEach(tag => {
             tag.addEventListener("click", (e) => {
                 e.stopPropagation();
-                const itemId = parseInt(tag.dataset.itemId);
-                const item = allItems.find(r => r.id === itemId);
-                if (item) openUpgradeRsvpModal(item);
+                // Remove any existing popover
+                document.querySelectorAll(".rsvp-popover").forEach(p => p.remove());
+
+                const itemId = tag.dataset.itemId;
+                const email = tag.dataset.customerEmail || "";
+                const isGgRsvp = String(itemId).startsWith("gg-rsvp");
+                const item = isGgRsvp ? null : allItems.find(r => r.id === parseInt(itemId));
+                // Get player name from the adjacent link or parent
+                const nameEl = tag.closest("td")?.querySelector(".cell-link") || tag.closest(".mc-header")?.querySelector("a");
+                const playerName = nameEl ? nameEl.textContent.trim() : "Player";
+                // Get event name from the expanded event context
+                const eventCard = tag.closest("[data-event-id]");
+                const eventId = eventCard ? parseInt(eventCard.dataset.eventId) : expandedEventId;
+                const ev = allEvents.find(e => e.id === eventId);
+                const eventName = ev ? ev.item_name : "";
+
+                const pop = document.createElement("div");
+                pop.className = "rsvp-popover";
+                // Record Payment button (only for real items, not GG RSVP synthetic rows)
+                const payBtn = document.createElement("button");
+                payBtn.className = "rsvp-popover-btn";
+                payBtn.textContent = "Record Payment";
+                if (item) {
+                    payBtn.addEventListener("click", (ev2) => {
+                        ev2.stopPropagation();
+                        pop.remove();
+                        openUpgradeRsvpModal(item);
+                    });
+                } else {
+                    payBtn.disabled = true;
+                    payBtn.title = "Add player first to record payment";
+                    payBtn.style.opacity = "0.5";
+                }
+                pop.appendChild(payBtn);
+
+                // Send Reminder button
+                const remindBtn = document.createElement("button");
+                remindBtn.className = "rsvp-popover-btn";
+                remindBtn.textContent = "Send Reminder";
+                if (email) {
+                    remindBtn.addEventListener("click", async (ev2) => {
+                        ev2.stopPropagation();
+                        pop.remove();
+                        if (!confirm(`Send payment reminder to ${playerName} (${email})?`)) return;
+                        try {
+                            const resp = await fetch("/api/events/send-reminder", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ to_email: email, player_name: playerName, event_name: eventName })
+                            });
+                            const result = await resp.json();
+                            if (resp.ok) alert("Reminder sent!");
+                            else alert(result.error || "Failed to send reminder.");
+                        } catch (err) {
+                            alert("Error sending reminder: " + err.message);
+                        }
+                    });
+                } else {
+                    remindBtn.disabled = true;
+                    remindBtn.title = "No email address available";
+                    remindBtn.style.opacity = "0.5";
+                }
+                pop.appendChild(remindBtn);
+
+                // Position near the tag
+                tag.style.position = "relative";
+                tag.parentElement.style.position = "relative";
+                tag.parentElement.appendChild(pop);
+
+                // Close on outside click
+                const close = (ev2) => { if (!pop.contains(ev2.target) && ev2.target !== tag) { pop.remove(); document.removeEventListener("click", close); } };
+                setTimeout(() => document.addEventListener("click", close), 0);
             });
         });
 
