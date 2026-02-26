@@ -741,7 +741,7 @@
             ];
 
             html += `
-            <div class="mobile-card${statusClass}" style="${isRsvpOnly ? 'background:#fef3c7;font-style:italic;' : isManual ? 'background:#dbeafe;' : ''}" data-id="${r.id}">
+            <div class="mobile-card${statusClass}" style="${isRsvpOnly ? 'background:#fef3c7;font-style:italic;' : isComp ? 'background:#dcfce7;' : isManual ? 'background:#dbeafe;' : ''}" data-id="${r.id}">
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         ${circleHtml}
@@ -1326,6 +1326,7 @@
             const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "Added to GG (manual)" : "No RSVP";
             const isRsvpOnly = txStatus === "rsvp_only";
             const isManualRow = (r.email_uid || "").startsWith("manual-");
+            const isCompRow = (r.email_uid || "").startsWith("manual-comp");
             let rowClass;
             if (isRsvpOnly) rowClass = ' class="row-rsvp-only"';
             else if (txStatus !== "active") rowClass = ` class="row-${txStatus}"`;
@@ -1334,7 +1335,7 @@
             html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
-                const rowBg = isRsvpOnly ? 'background-color:#fef3c7;font-style:italic;' : isManualRow ? 'background-color:#dbeafe;' : '';
+                const rowBg = isRsvpOnly ? 'background-color:#fef3c7;font-style:italic;' : isCompRow ? 'background-color:#dcfce7;' : isManualRow ? 'background-color:#dbeafe;' : '';
                 const style = (vis ? '' : 'display:none;') + rowBg;
                 if (c.key === "rsvp") {
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
@@ -1349,7 +1350,6 @@
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
                     let btns = "";
-                    const isCompRow = (r.email_uid || "").startsWith("manual-comp");
                     if (isRsvpOnly && isManualRow) {
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isCompRow) {
