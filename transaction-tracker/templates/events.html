@@ -731,7 +731,7 @@
             ];
 
             html += `
-            <div class="mobile-card${statusClass}"${isRsvpOnly ? ' style="background-color:rgba(251,191,36,0.18)!important;font-style:italic;"' : ''} data-id="${r.id}">
+            <div class="mobile-card${statusClass}"${isRsvpOnly ? ' style="background:#fef3c7;font-style:italic;"' : ''} data-id="${r.id}">
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         ${circleHtml}
@@ -1320,11 +1320,11 @@
             else if (txStatus !== "active") rowClass = ` class="row-${txStatus}"`;
             else if (r.transferred_from_id) rowClass = ' class="row-from-transfer"';
             else rowClass = '';
-            html += `<tr${rowClass}${isRsvpOnly ? ' style="background-color:rgba(251,191,36,0.18)!important;"' : ''}>`;
+            html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
-                const baseStyle = isRsvpOnly ? 'font-style:italic;' : '';
-                const style = vis ? baseStyle : `display:none;${baseStyle}`;
+                const rsvpBg = isRsvpOnly ? 'background-color:#fef3c7;font-style:italic;' : '';
+                const style = (vis ? '' : 'display:none;') + rsvpBg;
                 if (c.key === "rsvp") {
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
