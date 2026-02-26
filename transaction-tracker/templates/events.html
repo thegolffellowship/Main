@@ -787,8 +787,21 @@
             const stats = computeGameStats(registrants);
 
             // Create synthetic rows for unmatched GG RSVP players (mobile)
+            // Frontend dedup: exclude RSVPs whose email or name matches an existing registrant
             const mRsvps = allRsvps[ev.item_name] || [];
-            const mUnmatched = mRsvps.filter(r => r.response === 'PLAYING' && !r.matched_item_id);
+            const mRegEmails = new Set(registrants.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+            const mRegNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+            const mUnmatched = mRsvps.filter(r => {
+                if (r.response !== 'PLAYING') return false;
+                if (r.matched_item_id) return false;
+                const email = (r.player_email || "").toLowerCase();
+                if (email && mRegEmails.has(email)) return false;
+                const resolved = (r.resolved_name || "").toLowerCase();
+                const first = (r.player_name || "").toLowerCase();
+                if (resolved && mRegNames.has(resolved)) return false;
+                if (first && [...mRegNames].some(n => n.startsWith(first))) return false;
+                return true;
+            });
             const mGgRows = mUnmatched.map((r, i) => ({
                 id: `gg-rsvp-${i}`, customer: r.resolved_name || r.player_name || 'Unknown',
                 customer_email: r.player_email || '', item_name: ev.item_name,
@@ -1251,7 +1264,19 @@
         const playingRsvps = rsvps.filter(r => r.response === 'PLAYING');
         const notPlayingRsvps = rsvps.filter(r => r.response === 'NOT PLAYING');
         const matchedItemIds = new Set(rsvps.filter(r => r.matched_item_id).map(r => r.matched_item_id));
-        const unmatchedPlaying = playingRsvps.filter(r => !r.matched_item_id);
+        // Frontend dedup: also exclude GG RSVPs whose email or name matches an existing registrant
+        const regEmails = new Set(registrants.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+        const regNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const unmatchedPlaying = playingRsvps.filter(r => {
+            if (r.matched_item_id) return false;
+            const email = (r.player_email || "").toLowerCase();
+            if (email && regEmails.has(email)) return false;
+            const resolved = (r.resolved_name || "").toLowerCase();
+            const first = (r.player_name || "").toLowerCase();
+            if (resolved && regNames.has(resolved)) return false;
+            if (first && [...regNames].some(n => n.startsWith(first))) return false;
+            return true;
+        });
 
         // Create synthetic rows for unmatched GG RSVP players so they appear in the main table
         const ggRsvpRows = unmatchedPlaying.map((r, i) => ({
