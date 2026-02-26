@@ -23,6 +23,19 @@
     --cell-x: #f8d7da;
     --cell-ci: #fde8d0;
     --cell-cx: #e8d5f5;
+    --cell-lco: #ffd6d6;
+    --cell-lci: #ffe0b2;
+    --cell-e: #c8e6c9;
+    --cell-nb: #b3e5fc;
+    --cell-sb: #d1c4e9;
+    --cell-ld: #90caf9;       /* Lite Duty - blue */
+    --cell-ss: #1a237e;       /* Switched Shifts - dark blue/navy */
+    --cell-pu: #b3e5fc;       /* Picked Up Shift - light blue */
+    --cell-nc: #f50057;       /* Needs Clarification - hot pink */
+    --cell-lv: #f8bbd0;       /* Leave - light pink */
+    --cell-tr: #ce93d8;       /* Transferred - purple */
+    --cell-od: #fff9c4;       /* Other Department - yellow */
+    --cell-vac: #a5d6a7;      /* Vacation - green */
     --cell-off: #ffffff;
     --cell-flag: #f8d7da;
 
@@ -262,6 +275,19 @@ main { padding: 16px 24px; }
 .cell-X { background: var(--cell-x); color: #842029; font-weight: 600; }
 .cell-CI { background: var(--cell-ci); color: #8b5e3c; font-weight: 600; }
 .cell-CX { background: var(--cell-cx); color: #5b2c8b; font-weight: 600; }
+.cell-LCO { background: var(--cell-lco); color: #b71c1c; font-weight: 600; font-size: 10px; }
+.cell-LCI { background: var(--cell-lci); color: #e65100; font-weight: 600; font-size: 10px; }
+.cell-E { background: var(--cell-e); color: #1b5e20; font-weight: 600; }
+.cell-NB { background: var(--cell-nb); color: #01579b; font-weight: 600; }
+.cell-SB { background: var(--cell-sb); color: #4a148c; font-weight: 600; }
+.cell-LD { background: var(--cell-ld); color: #0d47a1; font-weight: 600; }
+.cell-SS { background: var(--cell-ss); color: #ffffff; font-weight: 600; }
+.cell-PU { background: var(--cell-pu); color: #01579b; font-weight: 600; }
+.cell-NC { background: var(--cell-nc); color: #ffffff; font-weight: 600; }
+.cell-LV { background: var(--cell-lv); color: #880e4f; font-weight: 600; }
+.cell-TR { background: var(--cell-tr); color: #4a148c; font-weight: 600; }
+.cell-OD { background: var(--cell-od); color: #f57f17; font-weight: 600; }
+.cell-VAC { background: var(--cell-vac); color: #1b5e20; font-weight: 600; font-size: 10px; }
 .cell-off { background: var(--cell-off); }
 
 /* Manual override indicator (blue dot, top-right) */
@@ -642,3 +668,93 @@ main { padding: 16px 24px; }
 .grid-container::-webkit-scrollbar-track { background: #f1f1f1; }
 .grid-container::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
 .grid-container::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
+
+/* ─── Version List ─── */
+.version-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+}
+.version-item:last-child { border-bottom: none; }
+.version-info { flex: 1; }
+.version-label { font-weight: 600; font-size: 14px; }
+.version-date { font-size: 12px; color: var(--text-secondary); }
+
+/* ─── Report ─── */
+.report-section { margin-bottom: 20px; }
+.report-section h4 { font-size: 14px; margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.report-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.report-stat {
+    background: var(--bg);
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    text-align: center;
+    min-width: 80px;
+}
+.report-stat-value { font-size: 20px; font-weight: 700; color: var(--primary); }
+.report-stat-label { font-size: 11px; color: var(--text-secondary); }
+
+/* ─── Print Styles ─── */
+@media print {
+    header, .toolbar, .summary-panel, .note-popup, #toast-container,
+    .pref-legend, .btn, nav, .toolbar-right, .toolbar-left label { display: none !important; }
+
+    body { background: white; font-size: 11px; }
+    main { padding: 0; }
+    .tab-content { display: block !important; }
+    #tab-preferences, #tab-employees { display: none !important; }
+
+    .grid-container {
+        overflow: visible;
+        border: none;
+        page-break-inside: avoid;
+    }
+
+    .schedule-grid th, .schedule-grid td {
+        padding: 2px 3px;
+        min-width: 28px;
+        height: 20px;
+        font-size: 9px;
+        border: 1px solid #333;
+    }
+
+    .schedule-grid .name-col {
+        position: static;
+        min-width: 100px;
+        max-width: 100px;
+    }
+
+    .schedule-grid th.name-col { position: static; }
+
+    /* Preserve cell colors in print */
+    .cell-W, .cell-RO, .cell-PTO, .cell-X, .cell-CI, .cell-CX,
+    .cell-LCO, .cell-LCI, .cell-E, .cell-NB, .cell-SB,
+    .cell-LD, .cell-SS, .cell-PU, .cell-NC, .cell-LV, .cell-TR, .cell-OD, .cell-VAC {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .role-header td {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Show print header */
+    .print-header { display: block !important; text-align: center; margin-bottom: 12px; }
+    .print-header h2 { font-size: 16px; }
+    .print-header p { font-size: 11px; color: #666; }
+}
+
+.print-header { display: none; }
+
+/* ─── Report Print ─── */
+@media print {
+    .modal { position: static !important; background: none !important; }
+    .modal-content { box-shadow: none; max-width: 100%; }
+    .modal.hidden { display: none !important; }
+    #report-modal:not(.hidden) { display: block !important; }
+    #report-modal:not(.hidden) #tab-schedule { display: none !important; }
+}

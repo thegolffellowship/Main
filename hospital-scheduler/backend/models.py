@@ -67,6 +67,19 @@ class ScheduleCode(str, Enum):
     CANNOT_WORK = "X"       # cannot work (not scheduled)
     CALLED_IN = "CI"        # employee called in (sick, etc.)
     CANCELED = "CX"         # shift canceled by us
+    LATE_CLOCK_OFF = "LCO"  # late clock off (6+ min after designated clock-off)
+    LATE_CLOCK_IN = "LCI"   # late clock in (6+ min after designated clock-in)
+    EARLY_CLOCK_IN = "E"    # early clock in (6+ min before designated clock-off)
+    NO_LUNCH_BREAK = "NB"   # no lunch break taken
+    SHORT_BREAK = "SB"      # short break (21 min or less)
+    LITE_DUTY = "LD"        # lite duty assignment
+    SWITCHED_SHIFTS = "SS"  # switched shifts with another employee
+    PICKED_UP = "PU"        # picked up shift
+    NEEDS_CLARIFICATION = "NC"  # needs clarification (hot pink)
+    LEAVE = "LV"            # on leave
+    TRANSFERRED = "TR"      # transferred to another unit
+    OTHER_DEPT = "OD"       # working in other department
+    VACATION = "VAC"        # vacation
     OFF = ""                # not scheduled, available day unused
 
 
@@ -130,6 +143,7 @@ class SchedulePeriod(Base):
     # Relationships
     preferences = relationship("Preference", back_populates="period", cascade="all, delete-orphan")
     schedule_entries = relationship("ScheduleEntry", back_populates="period", cascade="all, delete-orphan")
+    versions = relationship("ScheduleVersion", back_populates="period", cascade="all, delete-orphan")
 
 
 class Preference(Base):
@@ -156,6 +170,60 @@ class Preference(Base):
     __table_args__ = (
         UniqueConstraint("employee_id", "period_id", "date", name="uq_pref_emp_period_date"),
     )
+
+
+class ScheduleVersion(Base):
+    """
+    A saved snapshot of a schedule for a period.
+    Each time a schedule is generated or explicitly saved, a new version is created.
+    """
+    __tablename__ = "schedule_versions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    period_id = Column(Integer, ForeignKey("schedule_periods.id"), nullable=False)
+    version_number = Column(Integer, nullable=False)
+    label = Column(String(200), nullable=True)  # user-defined label or auto "v1", "v2"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    period = relationship("SchedulePeriod", back_populates="versions")
+    entries = relationship("ScheduleVersionEntry", back_populates="version", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("period_id", "version_number", name="uq_version_period_num"),
+    )
+
+
+class ScheduleVersionEntry(Base):
+    """Snapshot of a schedule entry for a specific version."""
+    __tablename__ = "schedule_version_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    version_id = Column(Integer, ForeignKey("schedule_versions.id"), nullable=False)
+    employee_id = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
+    code = Column(String(10), nullable=False)
+    note = Column(Text, nullable=True)
+
+    version = relationship("ScheduleVersion", back_populates="entries")
+
+
+class ScheduleChangeLog(Base):
+    """
+    Tracks individual cell changes for undo/redo.
+    Each change stores the old and new values.
+    """
+    __tablename__ = "schedule_change_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    period_id = Column(Integer, ForeignKey("schedule_periods.id"), nullable=False)
+    employee_id = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
+    old_code = Column(String(10), nullable=False, default="")
+    new_code = Column(String(10), nullable=False, default="")
+    old_note = Column(Text, nullable=True)
+    new_note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_undone = Column(Boolean, default=False)
 
 
 class ScheduleEntry(Base):
@@ -266,7 +334,7 @@ class ScheduleEntryOut(BaseModel):
 
 class ScheduleEntryUpdate(BaseModel):
     """Manual override of a single cell."""
-    code: str  # W, RO, PTO, X, CI, CX, or "" (off)
+    code: str  # W, RO, PTO, X, CI, CX, LCO, LCI, E, NB, SB, LD, SS, PU, NC, LV, TR, OD, VAC, or "" (off)
     note: Optional[str] = None  # free-form note (None = no change)
 
 

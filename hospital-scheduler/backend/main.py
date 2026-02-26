@@ -4,12 +4,12 @@ Hospital Staff Scheduling Tool - FastAPI Backend
 REST API for managing employees, preferences, schedule periods,
 and auto-generated schedules.
 
-Run with: uvicorn main:app --reload --port 8000
-
-v2: Add authentication middleware, rate limiting, WebSocket for
-real-time schedule updates, background task queue for generation.
+Local:  uvicorn main:app --reload --port 8000
+Cloud:  gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker
 """
 
+import os
+from pathlib import Path
 from datetime import date, timedelta, datetime
 from typing import Optional
 
@@ -20,9 +20,14 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
+# Resolve frontend directory (works from backend/ or project root)
+_backend_dir = Path(__file__).resolve().parent
+_frontend_dir = _backend_dir.parent / "frontend"
+
 from database import init_db, get_db
 from models import (
     Employee, Preference, ScheduleEntry, SchedulePeriod,
+    ScheduleVersion, ScheduleVersionEntry, ScheduleChangeLog,
     EmployeeCreate, EmployeeUpdate, EmployeeOut,
     PreferenceSet, PreferenceOut,
     SchedulePeriodCreate, SchedulePeriodOut,
@@ -62,13 +67,13 @@ def startup():
 # Serve Frontend
 # ──────────────────────────────────────────────
 
-app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+app.mount("/static", StaticFiles(directory=str(_frontend_dir)), name="static")
 
 
 @app.get("/")
 def serve_frontend():
     """Serve the main HTML page."""
-    return FileResponse("../frontend/index.html")
+    return FileResponse(str(_frontend_dir / "index.html"))
 
 
 # ──────────────────────────────────────────────
@@ -373,6 +378,30 @@ def update_schedule_entry(
     except ValueError:
         raise HTTPException(400, f"Invalid schedule code: {update.code}")
 
+    # Log the change for undo/redo
+    old_code = ""
+    old_note = None
+    if entry:
+        old_code = entry.code.value if hasattr(entry.code, 'value') else entry.code
+        old_note = entry.note
+
+    change_log = ScheduleChangeLog(
+        period_id=period_id,
+        employee_id=employee_id,
+        date=d,
+        old_code=old_code,
+        new_code=update.code,
+        old_note=old_note,
+        new_note=update.note,
+    )
+    db.add(change_log)
+
+    # Clear any "undone" entries ahead of this point (new branch in history)
+    db.query(ScheduleChangeLog).filter(
+        ScheduleChangeLog.period_id == period_id,
+        ScheduleChangeLog.is_undone == True,
+    ).delete()
+
     if entry:
         entry.code = code
         entry.is_manual_override = True
@@ -403,13 +432,23 @@ def update_schedule_entry(
 def generate(period_id: int, db: Session = Depends(get_db)):
     """
     Run the auto-scheduler for a 6-week period.
-    Overwrites any existing schedule entries (including manual overrides).
+    Saves a snapshot of the current schedule before generating a new one.
     """
     period = db.query(SchedulePeriod).filter(SchedulePeriod.id == period_id).first()
     if not period:
         raise HTTPException(404, "Schedule period not found")
 
+    # Save current schedule as a version before overwriting
+    _save_schedule_version(db, period, label="Auto-save before generate")
+
+    # Clear undo history for this period (new generation = fresh start)
+    db.query(ScheduleChangeLog).filter(ScheduleChangeLog.period_id == period_id).delete()
+
     summary = generate_schedule(db, period)
+
+    # Save the newly generated schedule as a version too
+    _save_schedule_version(db, period, label="Generated")
+
     return summary
 
 
@@ -499,3 +538,334 @@ def daily_summary(period_id: int, db: Session = Depends(get_db)):
             })
 
     return results
+
+
+# ──────────────────────────────────────────────
+# Helper: Save Schedule Version
+# ──────────────────────────────────────────────
+
+def _save_schedule_version(db: Session, period: SchedulePeriod, label: str = None):
+    """Save current schedule entries as a version snapshot."""
+    entries = db.query(ScheduleEntry).filter(
+        ScheduleEntry.period_id == period.id
+    ).all()
+
+    if not entries:
+        return  # Nothing to save
+
+    # Determine next version number
+    max_ver = db.query(ScheduleVersion).filter(
+        ScheduleVersion.period_id == period.id
+    ).count()
+    next_ver = max_ver + 1
+
+    version = ScheduleVersion(
+        period_id=period.id,
+        version_number=next_ver,
+        label=label or f"v{next_ver}",
+    )
+    db.add(version)
+    db.flush()
+
+    # Copy all current entries into the version
+    for entry in entries:
+        code_val = entry.code.value if hasattr(entry.code, 'value') else entry.code
+        ve = ScheduleVersionEntry(
+            version_id=version.id,
+            employee_id=entry.employee_id,
+            date=entry.date,
+            code=code_val,
+            note=entry.note,
+        )
+        db.add(ve)
+
+    db.commit()
+    return version
+
+
+# ──────────────────────────────────────────────
+# Save Schedule (explicit save button)
+# ──────────────────────────────────────────────
+
+@app.post("/api/schedule/{period_id}/save")
+def save_schedule(period_id: int, label: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """Explicitly save the current schedule as a named version."""
+    period = db.query(SchedulePeriod).filter(SchedulePeriod.id == period_id).first()
+    if not period:
+        raise HTTPException(404, "Schedule period not found")
+
+    version = _save_schedule_version(db, period, label=label or None)
+    if not version:
+        raise HTTPException(400, "No schedule entries to save")
+
+    return {
+        "message": "Schedule saved",
+        "version_number": version.version_number,
+        "label": version.label,
+    }
+
+
+# ──────────────────────────────────────────────
+# Schedule Versions (list / restore)
+# ──────────────────────────────────────────────
+
+@app.get("/api/schedule/{period_id}/versions")
+def list_versions(period_id: int, db: Session = Depends(get_db)):
+    """List all saved schedule versions for a period."""
+    versions = db.query(ScheduleVersion).filter(
+        ScheduleVersion.period_id == period_id
+    ).order_by(ScheduleVersion.version_number.desc()).all()
+
+    return [{
+        "id": v.id,
+        "version_number": v.version_number,
+        "label": v.label,
+        "created_at": v.created_at.isoformat() if v.created_at else None,
+    } for v in versions]
+
+
+@app.post("/api/schedule/{period_id}/versions/{version_id}/restore")
+def restore_version(period_id: int, version_id: int, db: Session = Depends(get_db)):
+    """Restore a previously saved schedule version."""
+    version = db.query(ScheduleVersion).filter(
+        ScheduleVersion.id == version_id,
+        ScheduleVersion.period_id == period_id,
+    ).first()
+    if not version:
+        raise HTTPException(404, "Version not found")
+
+    # Save current schedule before restoring
+    period = db.query(SchedulePeriod).filter(SchedulePeriod.id == period_id).first()
+    _save_schedule_version(db, period, label="Auto-save before restore")
+
+    # Delete current entries
+    db.query(ScheduleEntry).filter(ScheduleEntry.period_id == period_id).delete()
+
+    # Restore entries from the version
+    for ve in version.entries:
+        try:
+            code = ScheduleCode(ve.code)
+        except ValueError:
+            code = ScheduleCode.OFF
+        entry = ScheduleEntry(
+            employee_id=ve.employee_id,
+            period_id=period_id,
+            date=ve.date,
+            code=code,
+            is_manual_override=True,
+            note=ve.note,
+        )
+        db.add(entry)
+
+    # Clear undo log
+    db.query(ScheduleChangeLog).filter(ScheduleChangeLog.period_id == period_id).delete()
+    db.commit()
+
+    return {"message": f"Restored version {version.version_number}: {version.label}"}
+
+
+# ──────────────────────────────────────────────
+# Undo / Redo
+# ──────────────────────────────────────────────
+
+@app.post("/api/schedule/{period_id}/undo")
+def undo_change(period_id: int, db: Session = Depends(get_db)):
+    """Undo the most recent schedule cell change."""
+    # Find last non-undone change
+    change = db.query(ScheduleChangeLog).filter(
+        ScheduleChangeLog.period_id == period_id,
+        ScheduleChangeLog.is_undone == False,
+    ).order_by(ScheduleChangeLog.id.desc()).first()
+
+    if not change:
+        raise HTTPException(400, "Nothing to undo")
+
+    # Apply the old values
+    entry = db.query(ScheduleEntry).filter(
+        ScheduleEntry.period_id == period_id,
+        ScheduleEntry.employee_id == change.employee_id,
+        ScheduleEntry.date == change.date,
+    ).first()
+
+    if change.old_code == "":
+        # Was empty before, delete the entry
+        if entry:
+            db.delete(entry)
+    else:
+        try:
+            old_code = ScheduleCode(change.old_code)
+        except ValueError:
+            old_code = ScheduleCode.OFF
+
+        if entry:
+            entry.code = old_code
+            entry.note = change.old_note
+        else:
+            entry = ScheduleEntry(
+                employee_id=change.employee_id,
+                period_id=period_id,
+                date=change.date,
+                code=old_code,
+                is_manual_override=True,
+                note=change.old_note,
+            )
+            db.add(entry)
+
+    change.is_undone = True
+    db.commit()
+
+    return {
+        "message": "Undone",
+        "employee_id": change.employee_id,
+        "date": change.date.isoformat(),
+        "restored_code": change.old_code,
+        "restored_note": change.old_note or "",
+    }
+
+
+@app.post("/api/schedule/{period_id}/redo")
+def redo_change(period_id: int, db: Session = Depends(get_db)):
+    """Redo the most recently undone change."""
+    # Find oldest undone change
+    change = db.query(ScheduleChangeLog).filter(
+        ScheduleChangeLog.period_id == period_id,
+        ScheduleChangeLog.is_undone == True,
+    ).order_by(ScheduleChangeLog.id.asc()).first()
+
+    if not change:
+        raise HTTPException(400, "Nothing to redo")
+
+    # Apply the new values
+    entry = db.query(ScheduleEntry).filter(
+        ScheduleEntry.period_id == period_id,
+        ScheduleEntry.employee_id == change.employee_id,
+        ScheduleEntry.date == change.date,
+    ).first()
+
+    if change.new_code == "":
+        if entry:
+            db.delete(entry)
+    else:
+        try:
+            new_code = ScheduleCode(change.new_code)
+        except ValueError:
+            new_code = ScheduleCode.OFF
+
+        if entry:
+            entry.code = new_code
+            if change.new_note is not None:
+                entry.note = change.new_note if change.new_note else None
+        else:
+            entry = ScheduleEntry(
+                employee_id=change.employee_id,
+                period_id=period_id,
+                date=change.date,
+                code=new_code,
+                is_manual_override=True,
+                note=change.new_note if change.new_note else None,
+            )
+            db.add(entry)
+
+    change.is_undone = False
+    db.commit()
+
+    return {
+        "message": "Redone",
+        "employee_id": change.employee_id,
+        "date": change.date.isoformat(),
+        "restored_code": change.new_code,
+        "restored_note": change.new_note or "",
+    }
+
+
+# ──────────────────────────────────────────────
+# Employee Report
+# ──────────────────────────────────────────────
+
+@app.get("/api/report/employee/{employee_id}/{period_id}")
+def employee_report(employee_id: int, period_id: int, db: Session = Depends(get_db)):
+    """
+    Pull a detailed report for a single employee for a given period.
+    Includes: all schedule entries, totals by code, weekly breakdown.
+    """
+    emp = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not emp:
+        raise HTTPException(404, "Employee not found")
+
+    period = db.query(SchedulePeriod).filter(SchedulePeriod.id == period_id).first()
+    if not period:
+        raise HTTPException(404, "Period not found")
+
+    entries = db.query(ScheduleEntry).filter(
+        ScheduleEntry.employee_id == employee_id,
+        ScheduleEntry.period_id == period_id,
+    ).order_by(ScheduleEntry.date).all()
+
+    all_dates = [period.start_date + timedelta(days=i) for i in range(42)]
+
+    # Build daily detail
+    daily_detail = []
+    code_counts = {}
+    for d in all_dates:
+        entry = next((e for e in entries if e.date == d), None)
+        code_val = ""
+        note = ""
+        if entry:
+            code_val = entry.code.value if hasattr(entry.code, 'value') else entry.code
+            note = entry.note or ""
+            code_counts[code_val] = code_counts.get(code_val, 0) + 1
+
+        daily_detail.append({
+            "date": d.isoformat(),
+            "day": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][d.weekday()],
+            "code": code_val,
+            "note": note,
+        })
+
+    # Weekly breakdown
+    weekly = []
+    for week_idx in range(6):
+        week_start = week_idx * 7
+        week_dates = all_dates[week_start:week_start + 7]
+        shifts = sum(1 for d in week_dates
+                     if any(e.date == d and (e.code.value if hasattr(e.code, 'value') else e.code) in ('W', 'RO')
+                            for e in entries))
+        ci_count = sum(1 for d in week_dates
+                       if any(e.date == d and (e.code.value if hasattr(e.code, 'value') else e.code) == 'CI'
+                              for e in entries))
+        lco_count = sum(1 for d in week_dates
+                        if any(e.date == d and (e.code.value if hasattr(e.code, 'value') else e.code) == 'LCO'
+                               for e in entries))
+        lci_count = sum(1 for d in week_dates
+                        if any(e.date == d and (e.code.value if hasattr(e.code, 'value') else e.code) == 'LCI'
+                               for e in entries))
+        weekly.append({
+            "week": week_idx + 1,
+            "start_date": week_dates[0].isoformat(),
+            "end_date": week_dates[-1].isoformat(),
+            "shifts_worked": shifts,
+            "call_ins": ci_count,
+            "late_clock_offs": lco_count,
+            "late_clock_ins": lci_count,
+        })
+
+    total_shifts = code_counts.get("W", 0) + code_counts.get("RO", 0)
+
+    return {
+        "employee": {
+            "id": emp.id,
+            "name": emp.name,
+            "role": emp.role.value if hasattr(emp.role, 'value') else emp.role,
+            "shift": emp.shift.value if hasattr(emp.shift, 'value') else emp.shift,
+            "employment_type": emp.employment_type.value if hasattr(emp.employment_type, 'value') else emp.employment_type,
+        },
+        "period": {
+            "name": period.name,
+            "start_date": period.start_date.isoformat(),
+            "end_date": period.end_date.isoformat(),
+        },
+        "total_shifts_worked": total_shifts,
+        "code_counts": code_counts,
+        "weekly_breakdown": weekly,
+        "daily_detail": daily_detail,
+    }

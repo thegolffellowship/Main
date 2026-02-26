@@ -35,8 +35,8 @@ const PREF_CYCLE = ['', 'RO', 'PTO', 'X'];
 const PREF_CYCLE_PRN = ['', 'RO', 'X'];  // PRN can't use PTO
 
 // ─── Schedule code cycle for manual overrides ───
-const SCHED_CYCLE = ['', 'W', 'RO', 'PTO', 'X', 'CI', 'CX'];
-const SCHED_CYCLE_PRN = ['', 'W', 'RO', 'X', 'CI', 'CX'];
+const SCHED_CYCLE = ['', 'W', 'RO', 'PTO', 'X', 'CI', 'CX', 'LCO', 'LCI', 'E', 'NB', 'SB', 'LD', 'SS', 'PU', 'NC', 'LV', 'TR', 'OD', 'VAC'];
+const SCHED_CYCLE_PRN = ['', 'W', 'RO', 'X', 'CI', 'CX', 'LCO', 'LCI', 'E', 'NB', 'SB', 'LD', 'SS', 'PU', 'NC', 'LV', 'TR', 'OD', 'VAC'];
 
 // ─── Note popup state ───
 let notePopupEmpId = null;
@@ -63,6 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setupMasterView();
     setupNotePopup();
     setupClearFilters();
+    setupUndoRedo();
+    setupSaveAndVersions();
+    setupPrintSchedule();
     loadPeriods();
     loadEmployees();
 });
@@ -248,6 +251,7 @@ function renderEmployeeTable(employees) {
             <td><span class="badge ${emp.is_active ? 'badge-active' : 'badge-inactive'}">${emp.is_active ? 'Active' : 'Inactive'}</span></td>
             <td>
                 <button class="btn btn-sm btn-secondary" onclick="editEmployee(${emp.id})">Edit</button>
+                <button class="btn btn-sm btn-secondary" onclick="pullEmployeeReport(${emp.id}, '${escapeHtml(emp.name)}')">Report</button>
                 ${emp.is_active ? `<button class="btn btn-sm btn-danger" onclick="deactivateEmployee(${emp.id}, '${escapeHtml(emp.name)}')">Deactivate</button>` : ''}
             </td>
         </tr>
@@ -511,6 +515,7 @@ async function loadMasterView() {
         }
 
         const empPrefs = allPrefs[String(emp.id)] || {};
+        const isPRN = emp.employment_type === 'PRN';
         html += `<tr><td class="name-col">${escapeHtml(emp.name)}</td>`;
         for (let i = 0; i < 42; i++) {
             const d = dates[i];
@@ -518,13 +523,47 @@ async function loadMasterView() {
             const cellClass = code ? `cell-${code}` : 'cell-off';
             const weekend = isWeekend(d) ? ' weekend-col' : '';
             const payDivider = (i > 0 && i % 14 === 0) ? ' pay-divider' : '';
-            html += `<td class="${cellClass}${weekend}${payDivider}">${code}</td>`;
+            html += `<td class="master-pref-cell ${cellClass}${weekend}${payDivider}" data-emp="${emp.id}" data-date="${d}" data-prn="${isPRN}">${code}</td>`;
         }
         html += '</tr>';
     }
 
     html += '</tbody></table>';
     container.innerHTML = html;
+
+    // Make master view editable: click to cycle preference codes
+    container.querySelectorAll('.master-pref-cell').forEach(cell => {
+        cell.style.cursor = 'pointer';
+        cell.addEventListener('click', async () => {
+            const empId = parseInt(cell.dataset.emp);
+            const dateStr = cell.dataset.date;
+            const isPRN = cell.dataset.prn === 'true';
+            const cycle = isPRN ? PREF_CYCLE_PRN : PREF_CYCLE;
+            const currentCode = cell.textContent.trim();
+            const nextIdx = (cycle.indexOf(currentCode) + 1) % cycle.length;
+            const nextCode = cycle[nextIdx];
+
+            // Update via API (send full preference set for this employee)
+            const existingPrefs = allPrefs[String(empId)] || {};
+            existingPrefs[dateStr] = nextCode;
+
+            try {
+                await apiFetch('/api/preferences', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        employee_id: empId,
+                        period_id: currentPeriodId,
+                        preferences: existingPrefs,
+                    }),
+                });
+
+                // Update cell display
+                cell.textContent = nextCode;
+                cell.className = `master-pref-cell ${nextCode ? 'cell-' + nextCode : 'cell-off'}${isWeekend(dateStr) ? ' weekend-col' : ''}`;
+                allPrefs[String(empId)] = existingPrefs;
+            } catch (e) { /* toast shown */ }
+        });
+    });
 }
 
 // ═══════════════════════════════════════════════
@@ -945,4 +984,202 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+// ═══════════════════════════════════════════════
+// Undo / Redo
+// ═══════════════════════════════════════════════
+
+function setupUndoRedo() {
+    const btnUndo = document.getElementById('btn-undo');
+    const btnRedo = document.getElementById('btn-redo');
+
+    btnUndo.addEventListener('click', async () => {
+        if (!currentPeriodId) return;
+        try {
+            const result = await apiFetch(`/api/schedule/${currentPeriodId}/undo`, { method: 'POST' });
+            showToast('Undone', 'success');
+            loadScheduleGrid();
+        } catch (e) { /* toast already shown */ }
+    });
+
+    btnRedo.addEventListener('click', async () => {
+        if (!currentPeriodId) return;
+        try {
+            const result = await apiFetch(`/api/schedule/${currentPeriodId}/redo`, { method: 'POST' });
+            showToast('Redone', 'success');
+            loadScheduleGrid();
+        } catch (e) { /* toast already shown */ }
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            btnUndo.click();
+        }
+        if (e.ctrlKey && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+            e.preventDefault();
+            btnRedo.click();
+        }
+    });
+}
+
+// ═══════════════════════════════════════════════
+// Save & Versions
+// ═══════════════════════════════════════════════
+
+function setupSaveAndVersions() {
+    document.getElementById('btn-save-schedule').addEventListener('click', async () => {
+        if (!currentPeriodId) {
+            showToast('Select a period first', 'error');
+            return;
+        }
+        const label = prompt('Enter a label for this version (optional):') || '';
+        try {
+            const result = await apiFetch(`/api/schedule/${currentPeriodId}/save?label=${encodeURIComponent(label)}`, {
+                method: 'POST',
+            });
+            showToast(`Schedule saved as ${result.label}`, 'success');
+        } catch (e) { /* toast already shown */ }
+    });
+
+    document.getElementById('btn-versions').addEventListener('click', async () => {
+        if (!currentPeriodId) {
+            showToast('Select a period first', 'error');
+            return;
+        }
+        await loadVersionsList();
+        openModal('versions-modal');
+    });
+}
+
+async function loadVersionsList() {
+    const versions = await apiFetch(`/api/schedule/${currentPeriodId}/versions`);
+    const container = document.getElementById('versions-list');
+
+    if (versions.length === 0) {
+        container.innerHTML = '<p class="empty-state">No saved versions yet.</p>';
+        return;
+    }
+
+    container.innerHTML = versions.map(v => `
+        <div class="version-item">
+            <div class="version-info">
+                <div class="version-label">v${v.version_number} — ${escapeHtml(v.label || 'Untitled')}</div>
+                <div class="version-date">${v.created_at ? new Date(v.created_at).toLocaleString() : ''}</div>
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="restoreVersion(${v.id})">Restore</button>
+        </div>
+    `).join('');
+}
+
+async function restoreVersion(versionId) {
+    if (!confirm('Restore this version? Your current schedule will be auto-saved first.')) return;
+    try {
+        const result = await apiFetch(`/api/schedule/${currentPeriodId}/versions/${versionId}/restore`, {
+            method: 'POST',
+        });
+        showToast(result.message, 'success');
+        closeAllModals();
+        loadScheduleGrid();
+    } catch (e) { /* toast already shown */ }
+}
+
+// ═══════════════════════════════════════════════
+// Print Schedule
+// ═══════════════════════════════════════════════
+
+function setupPrintSchedule() {
+    document.getElementById('btn-print-schedule').addEventListener('click', () => {
+        window.print();
+    });
+
+    // Print button in report modal
+    document.getElementById('btn-print-report').addEventListener('click', () => {
+        // Show only the report modal for printing
+        document.getElementById('report-modal').classList.remove('hidden');
+        window.print();
+    });
+}
+
+// ═══════════════════════════════════════════════
+// Employee Report
+// ═══════════════════════════════════════════════
+
+async function pullEmployeeReport(employeeId, employeeName) {
+    if (!currentPeriodId) {
+        // Use the first available period
+        const schedSelect = document.getElementById('schedule-period-select');
+        if (schedSelect.value && schedSelect.value !== '__new__') {
+            currentPeriodId = parseInt(schedSelect.value);
+        } else {
+            showToast('Select a schedule period first', 'error');
+            return;
+        }
+    }
+
+    try {
+        const report = await apiFetch(`/api/report/employee/${employeeId}/${currentPeriodId}`);
+        renderEmployeeReport(report);
+        document.getElementById('report-modal-title').textContent = `Report: ${employeeName}`;
+        openModal('report-modal');
+    } catch (e) { /* toast already shown */ }
+}
+
+function renderEmployeeReport(report) {
+    const container = document.getElementById('report-content');
+    const emp = report.employee;
+    const period = report.period;
+
+    let html = '';
+
+    // Employee info header
+    html += `<div class="report-section">
+        <p><strong>${escapeHtml(emp.name)}</strong> — ${emp.role}, ${emp.shift} Shift, ${emp.employment_type}</p>
+        <p style="color:var(--text-secondary);font-size:12px">Period: ${period.name} (${period.start_date} to ${period.end_date})</p>
+    </div>`;
+
+    // Summary stats
+    html += `<div class="report-section">
+        <h4>Summary</h4>
+        <div class="report-stats">
+            <div class="report-stat"><div class="report-stat-value">${report.total_shifts_worked}</div><div class="report-stat-label">Shifts Worked</div></div>`;
+
+    const codeCounts = report.code_counts || {};
+    for (const [code, count] of Object.entries(codeCounts)) {
+        if (code && count > 0) {
+            const label = code === 'W' ? 'Working' : code === 'RO' ? 'RO Override' : code === 'PTO' ? 'PTO' :
+                code === 'CI' ? 'Called In' : code === 'CX' ? 'Canceled' : code === 'LCO' ? 'Late Clock Off' :
+                code === 'LCI' ? 'Late Clock In' : code === 'E' ? 'Early Clock In' : code === 'NB' ? 'No Lunch Break' :
+                code === 'SB' ? 'Short Break' : code === 'X' ? 'Cannot Work' :
+                code === 'LD' ? 'Lite Duty' : code === 'SS' ? 'Switched Shifts' : code === 'PU' ? 'Picked Up' :
+                code === 'NC' ? 'Needs Clarification' : code === 'LV' ? 'Leave' : code === 'TR' ? 'Transferred' :
+                code === 'OD' ? 'Other Dept' : code === 'VAC' ? 'Vacation' : code;
+            html += `<div class="report-stat"><div class="report-stat-value">${count}</div><div class="report-stat-label">${label}</div></div>`;
+        }
+    }
+    html += `</div></div>`;
+
+    // Weekly breakdown
+    html += `<div class="report-section"><h4>Weekly Breakdown</h4>`;
+    html += `<table class="summary-table"><thead><tr>
+        <th>Week</th><th>Dates</th><th>Shifts</th><th>Call-Ins</th><th>Late Off</th><th>Late In</th>
+    </tr></thead><tbody>`;
+    for (const w of report.weekly_breakdown) {
+        html += `<tr><td>Week ${w.week}</td><td>${w.start_date} — ${w.end_date}</td>
+            <td>${w.shifts_worked}</td><td>${w.call_ins}</td><td>${w.late_clock_offs}</td><td>${w.late_clock_ins}</td></tr>`;
+    }
+    html += '</tbody></table></div>';
+
+    // Daily detail
+    html += `<div class="report-section"><h4>Daily Detail</h4>`;
+    html += `<table class="summary-table"><thead><tr><th>Date</th><th>Day</th><th>Code</th><th>Note</th></tr></thead><tbody>`;
+    for (const d of report.daily_detail) {
+        const cls = d.code ? ` class="cell-${d.code}"` : '';
+        html += `<tr><td>${d.date}</td><td>${d.day}</td><td${cls} style="text-align:center;font-weight:600">${d.code || '—'}</td><td>${escapeHtml(d.note || '')}</td></tr>`;
+    }
+    html += '</tbody></table></div>';
+
+    container.innerHTML = html;
 }
