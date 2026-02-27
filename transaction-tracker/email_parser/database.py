@@ -195,6 +195,21 @@ def init_db(db_path: str | Path | None = None) -> None:
         "CREATE INDEX IF NOT EXISTS idx_event_aliases_canonical ON event_aliases(canonical_event_name)"
     )
 
+    # Support feedback — bug reports and feature requests from the chat widget
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS feedback (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            type       TEXT NOT NULL CHECK(type IN ('bug', 'feature')),
+            message    TEXT NOT NULL,
+            page       TEXT,
+            role       TEXT,
+            status     TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved', 'dismissed')),
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+        """
+    )
+
     conn.commit()
     conn.close()
     logger.info("Database initialized at %s", db_path or DB_PATH)
@@ -1869,3 +1884,45 @@ def set_rsvp_override(item_id: int, event_name: str, status: str, db_path=None):
         )
     conn.commit()
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Support Feedback — bug reports and feature requests
+# ---------------------------------------------------------------------------
+
+def save_feedback(feedback_type: str, message: str, page: str = "",
+                  role: str = "", db_path: str | Path | None = None) -> dict:
+    """Save a bug report or feature request. Returns the new row as a dict."""
+    conn = get_connection(db_path)
+    cursor = conn.execute(
+        "INSERT INTO feedback (type, message, page, role) VALUES (?, ?, ?, ?)",
+        (feedback_type, message, page or None, role or None),
+    )
+    conn.commit()
+    new_id = cursor.lastrowid
+    row = conn.execute("SELECT * FROM feedback WHERE id = ?", (new_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else {"id": new_id}
+
+
+def get_all_feedback(db_path: str | Path | None = None) -> list[dict]:
+    """Return all feedback rows, newest first."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT * FROM feedback ORDER BY created_at DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_feedback_status(feedback_id: int, status: str,
+                           db_path: str | Path | None = None) -> bool:
+    """Update the status of a feedback row. Returns True if updated."""
+    conn = get_connection(db_path)
+    cursor = conn.execute(
+        "UPDATE feedback SET status = ? WHERE id = ?",
+        (status, feedback_id),
+    )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0

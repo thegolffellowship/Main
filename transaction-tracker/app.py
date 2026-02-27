@@ -15,7 +15,7 @@ import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
-from flask import Flask, jsonify, render_template, request, send_file, session
+from flask import Flask, Response, jsonify, render_template, request, send_file, session
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -60,6 +60,9 @@ from email_parser.database import (
     get_rsvp_overrides,
     set_rsvp_override,
     merge_customers,
+    save_feedback,
+    get_all_feedback,
+    update_feedback_status,
 )
 from email_parser.fetcher import fetch_transaction_emails, send_mail_graph
 from email_parser.parser import parse_email, parse_emails
@@ -1255,6 +1258,124 @@ def api_send_report_now():
     except Exception as e:
         logger.exception("Manual report send failed")
         return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Routes — AI Support Chat & Feedback
+# ---------------------------------------------------------------------------
+
+_TGF_SYSTEM_PROMPT = """You are the TGF Assistant, an AI helper built into The Golf Fellowship's Transaction Tracker.
+You help managers and admins understand and use the platform.
+
+Key facts about the platform:
+- Pages: Transactions (main item list), Events (event roster + RSVP circles), Customers (player directory with merge), RSVP Log, Matrix (admin pairings), Audit (email verification).
+- Transaction items are parsed from emails via AI. Each row = one line item from a purchase.
+- Events are auto-created from transaction item names when they match golf event patterns.
+- Event aliases link variant item names to a canonical event (e.g. "San Antonio Kickoff NORTHERN HILLS" → "San Antonio Kickoff CEDAR CREEK").
+- RSVP circles show player status: green = paid, yellow/dotted = RSVP only (no payment), red = not playing, gray = no response. Real Golf Genius RSVPs override manual green.
+- Orphan banner appears when transaction items don't match any event — admins can create the event or add an alias.
+- Customer merge combines two player records (e.g. "Jdub Wade" + "John Wade").
+- Credits: items can be credited (money on account), transferred to another event, or reversed.
+- Auth: PIN-based, two tiers — Admin (full access) and Manager (no audit/matrix).
+- Bulk "Remind All" sends payment reminder emails to RSVP-only players on an event.
+- Database backup is available at /admin/backup (admin only).
+
+When answering:
+- Be concise and helpful. Use specific page names and button labels.
+- If you don't know something specific about TGF data, say so — don't guess at numbers.
+- For bugs or feature requests, encourage the user to use the Report a Bug or Request a Feature buttons.
+- You can explain any feature, workflow, or concept in the platform.
+"""
+
+
+@app.route("/api/support/chat", methods=["POST"])
+def api_support_chat():
+    """Streaming AI chat endpoint for the support widget."""
+    user_role = session.get("role")
+    if not user_role:
+        return jsonify({"error": "Not authenticated."}), 401
+
+    data = request.get_json(silent=True)
+    if not data or not data.get("message"):
+        return jsonify({"error": "Message is required."}), 400
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return jsonify({"error": "AI not configured (missing API key)."}), 503
+
+    messages = data.get("history", [])
+    messages.append({"role": "user", "content": data["message"]})
+
+    page = data.get("page", "")
+    role_context = f"\nThe user is a {user_role} currently on the {page} page." if page else f"\nThe user is a {user_role}."
+
+    def generate():
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        try:
+            with client.messages.stream(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=1024,
+                system=_TGF_SYSTEM_PROMPT + role_context,
+                messages=messages,
+            ) as stream:
+                for text in stream.text_stream:
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+            yield "data: {\"done\": true}\n\n"
+        except Exception as e:
+            logger.exception("Support chat error")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/api/support/feedback", methods=["POST"])
+def api_support_feedback_post():
+    """Log a bug report or feature request."""
+    user_role = session.get("role")
+    if not user_role:
+        return jsonify({"error": "Not authenticated."}), 401
+
+    data = request.get_json(silent=True)
+    if not data or not data.get("message"):
+        return jsonify({"error": "Message is required."}), 400
+
+    fb_type = data.get("type", "bug")
+    if fb_type not in ("bug", "feature"):
+        return jsonify({"error": "Type must be 'bug' or 'feature'."}), 400
+
+    result = save_feedback(
+        feedback_type=fb_type,
+        message=data["message"],
+        page=data.get("page", ""),
+        role=user_role,
+    )
+    return jsonify({"status": "ok", "feedback": result})
+
+
+@app.route("/api/support/feedback", methods=["GET"])
+@require_role("admin")
+def api_support_feedback_get():
+    """Return all feedback (admin only)."""
+    rows = get_all_feedback()
+    return jsonify({"feedback": rows})
+
+
+@app.route("/api/support/feedback/<int:feedback_id>", methods=["PATCH"])
+@require_role("admin")
+def api_support_feedback_update(feedback_id):
+    """Update feedback status (admin only)."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("status"):
+        return jsonify({"error": "Status is required."}), 400
+    new_status = data["status"]
+    if new_status not in ("open", "resolved", "dismissed"):
+        return jsonify({"error": "Status must be 'open', 'resolved', or 'dismissed'."}), 400
+    ok = update_feedback_status(feedback_id, new_status)
+    if not ok:
+        return jsonify({"error": "Feedback not found."}), 404
+    return jsonify({"status": "ok"})
 
 
 # ---------------------------------------------------------------------------
