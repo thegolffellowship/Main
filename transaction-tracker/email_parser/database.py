@@ -879,6 +879,74 @@ def resolve_orphaned_items(old_item_name: str, target_event_name: str,
 
 
 # ---------------------------------------------------------------------------
+# Customer Merge
+# ---------------------------------------------------------------------------
+
+
+def merge_customers(source_name: str, target_name: str,
+                    db_path: str | Path | None = None) -> dict:
+    """
+    Merge one customer into another by updating all items rows.
+
+    Rewrites items.customer from source_name to target_name.
+    Preserves target's email/phone; fills in from source if target lacks them.
+
+    Returns summary with count of items updated.
+    """
+    conn = get_connection(db_path)
+
+    # Grab contact info from target (prefer) then source as fallback
+    target_row = conn.execute(
+        """SELECT customer_email, customer_phone FROM items
+           WHERE customer = ? AND (customer_email IS NOT NULL AND customer_email != '')
+           ORDER BY order_date DESC LIMIT 1""",
+        (target_name,),
+    ).fetchone()
+    source_row = conn.execute(
+        """SELECT customer_email, customer_phone FROM items
+           WHERE customer = ? AND (customer_email IS NOT NULL AND customer_email != '')
+           ORDER BY order_date DESC LIMIT 1""",
+        (source_name,),
+    ).fetchone()
+
+    # Determine best email/phone (target wins, source fills gaps)
+    best_email = (target_row["customer_email"] if target_row else "") or \
+                 (source_row["customer_email"] if source_row else "") or ""
+    best_phone = (target_row["customer_phone"] if target_row else "") or \
+                 (source_row["customer_phone"] if source_row else "") or ""
+
+    # Update all source items to the target customer name
+    cursor = conn.execute(
+        "UPDATE items SET customer = ? WHERE customer = ?",
+        (target_name, source_name),
+    )
+    items_updated = cursor.rowcount
+
+    # Backfill email/phone on all target items that are missing them
+    if best_email:
+        conn.execute(
+            "UPDATE items SET customer_email = ? WHERE customer = ? AND (customer_email IS NULL OR customer_email = '')",
+            (best_email, target_name),
+        )
+    if best_phone:
+        conn.execute(
+            "UPDATE items SET customer_phone = ? WHERE customer = ? AND (customer_phone IS NULL OR customer_phone = '')",
+            (best_phone, target_name),
+        )
+
+    conn.commit()
+    conn.close()
+
+    logger.info("Merged customer '%s' → '%s' (%d items updated)",
+                source_name, target_name, items_updated)
+    return {
+        "source": source_name,
+        "target": target_name,
+        "items_updated": items_updated,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Event Aliases — map variant item names to canonical event names
 # ---------------------------------------------------------------------------
 

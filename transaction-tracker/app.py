@@ -59,6 +59,7 @@ from email_parser.database import (
     unmatch_rsvp,
     get_rsvp_overrides,
     set_rsvp_override,
+    merge_customers,
 )
 from email_parser.fetcher import fetch_transaction_emails, send_mail_graph
 from email_parser.parser import parse_email, parse_emails
@@ -763,6 +764,21 @@ def events_page():
 @app.route("/customers")
 def customers_page():
     return render_template("customers.html")
+
+
+@app.route("/api/customers/merge", methods=["POST"])
+@require_role("admin")
+def api_merge_customers():
+    """Merge one customer into another."""
+    data = request.get_json(force=True)
+    source = (data.get("source") or "").strip()
+    target = (data.get("target") or "").strip()
+    if not source or not target:
+        return jsonify({"error": "source and target customer names required"}), 400
+    if source == target:
+        return jsonify({"error": "source and target cannot be the same"}), 400
+    result = merge_customers(source, target)
+    return jsonify(result)
 
 
 @app.route("/api/events")

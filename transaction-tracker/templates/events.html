@@ -2516,7 +2516,8 @@
             const name = document.getElementById("resolve-new-name").value.trim();
             if (!name) { alert("Event name is required."); return; }
             try {
-                // Create the event
+                // Create the event (if it already exists, that's OK — just proceed to link)
+                let eventExisted = false;
                 const createRes = await fetch("/api/events", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -2529,9 +2530,14 @@
                 });
                 if (!createRes.ok) {
                     const d = await createRes.json();
-                    throw new Error(d.error || "Failed to create event");
+                    // If event already exists, proceed to resolve — not an error
+                    if ((d.error || "").toLowerCase().includes("already exists")) {
+                        eventExisted = true;
+                    } else {
+                        throw new Error(d.error || "Failed to create event");
+                    }
                 }
-                // Now resolve orphans to this new event
+                // Now resolve orphans to this event
                 if (name !== resolveOrphanName) {
                     const resolveRes = await fetch("/api/events/resolve-orphan", {
                         method: "POST",
@@ -2540,9 +2546,9 @@
                     });
                     const data = await resolveRes.json();
                     if (!resolveRes.ok) throw new Error(data.error || "Resolve failed");
-                    alert(`Created event "${name}" and linked ${data.items_linked} transaction(s) via alias.`);
+                    alert(`${eventExisted ? "Event already existed." : "Created event."} Linked ${data.items_linked} transaction(s) to "${name}" via alias.`);
                 } else {
-                    alert(`Created event "${name}". Items are now attached.`);
+                    alert(`${eventExisted ? "Event already existed" : "Created event"} "${name}". Items are now attached.`);
                 }
                 closeResolveOrphan();
                 await fetchItems();

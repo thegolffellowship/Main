@@ -185,6 +185,28 @@
         </div>
     </div>
 
+    <!-- Customer Merge modal -->
+    <div id="cust-merge-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal">
+            <div class="modal-header">
+                <h2>Merge Customer</h2>
+                <button id="cust-merge-close" class="modal-close">&times;</button>
+            </div>
+            <div id="cust-merge-info" class="credit-info"></div>
+            <div class="credit-fields">
+                <label>Merge into (target customer)
+                    <select id="cust-merge-target" class="modal-input">
+                        <option value="">Select a customer...</option>
+                    </select>
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="cust-merge-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="cust-merge-submit" class="btn btn-primary">Merge</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script>
@@ -532,6 +554,8 @@
                     <div class="mc-primary">
                         <span class="mc-customer">${escapeHtml(c.name)}</span>
                         <span class="status-badge-sm ${statusBadgeClass(c.status)}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(c.status)}</span>
+                        ${c.items.some(i => i.transaction_status === "credited") ? '<span class="status-tag status-tag-credited" style="margin-left:0.25rem; vertical-align:middle;">Has Credit</span>' : ''}
+                        ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-customer="${escapeHtml(c.name)}" style="font-size:0.65rem; padding:0.1rem 0.3rem; margin-left:0.25rem; vertical-align:middle;" onclick="event.stopPropagation(); openCustMergeModal('${escapeHtml(c.name).replace(/'/g, "\\'")}')">Merge</button>` : ''}
                         <br><span class="mc-event">${meta.join(" &bull; ")}</span>
                     </div>
                     <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
@@ -601,7 +625,7 @@
             const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
             html += `
             <tr data-name="${escapeHtml(c.name)}" class="cust-row-clickable ${isExpanded ? 'expanded' : ''}">
-                <td><strong>${escapeHtml(c.name)}</strong></td>
+                <td><strong>${escapeHtml(c.name)}</strong>${c.items.some(i => i.transaction_status === "credited") ? ' <span class="status-tag status-tag-credited">Has Credit</span>' : ''}</td>
                 <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span></td>
                 <td>${escapeHtml(c.chapter || "\u2014")}</td>
                 <td>${c.items.length}</td>
@@ -702,7 +726,7 @@
         if (grossPts === "YES") badges.push('<span class="status-badge-sm badge-member">GROSS Pts</span>');
         if (matchPlay === "YES") badges.push('<span class="status-badge-sm badge-guest">Match Play</span>');
 
-        let html = `<div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.5rem;">${meta.join(" | ")}</div>`;
+        let html = `<div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.5rem;">${meta.join(" | ")}${currentRole === "admin" ? ` | <button class="btn btn-edit" data-merge-customer="${escapeHtml(customer.name)}" style="font-size:0.72rem; padding:0.15rem 0.4rem;">Merge</button>` : ''}</div>`;
         if (badges.length) {
             html += `<div style="margin-bottom:0.5rem; display:flex; gap:0.3rem; flex-wrap:wrap;">${badges.join("")}</div>`;
         }
@@ -753,6 +777,13 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 reverseCustCredit(parseInt(btn.dataset.custReverseId));
+            });
+        });
+        // Merge customer button
+        container.querySelectorAll("[data-merge-customer]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openCustMergeModal(btn.dataset.mergeCustomer);
             });
         });
         // Prevent event-name links from toggling the row
@@ -950,6 +981,56 @@
         } catch (err) { alert(err.message); }
     }
 
+    // ---- Customer Merge ----
+    let mergeSourceName = null;
+
+    function openCustMergeModal(sourceName) {
+        mergeSourceName = sourceName;
+        const source = allCustomers.find(c => c.name === sourceName);
+        document.getElementById("cust-merge-info").innerHTML =
+            `<strong>${escapeHtml(sourceName)}</strong> — ${source ? source.items.length : '?'} purchase(s)`;
+
+        // Populate target dropdown with all OTHER customers
+        const select = document.getElementById("cust-merge-target");
+        select.innerHTML = '<option value="">Select a customer...</option>';
+        allCustomers
+            .filter(c => c.name !== sourceName)
+            .forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c.name;
+                opt.textContent = `${c.name} (${c.items.length} purchases)`;
+                select.appendChild(opt);
+            });
+
+        document.getElementById("cust-merge-overlay").style.display = "flex";
+    }
+
+    function closeCustMergeModal() {
+        document.getElementById("cust-merge-overlay").style.display = "none";
+        mergeSourceName = null;
+    }
+
+    async function submitCustMerge() {
+        const target = document.getElementById("cust-merge-target").value;
+        if (!target) { alert("Please select a target customer."); return; }
+        if (!confirm(`Merge "${mergeSourceName}" into "${target}"? All of ${mergeSourceName}'s transactions will move to ${target}.`)) return;
+        try {
+            const res = await fetch("/api/customers/merge", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ source: mergeSourceName, target: target }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Merge failed");
+            alert(`Merged! ${data.items_updated} transaction(s) moved from "${data.source}" to "${data.target}".`);
+            closeCustMergeModal();
+            selectedCustomer = null;
+            await init();
+        } catch (err) {
+            alert("Merge failed: " + err.message);
+        }
+    }
+
     function switchView(view) {
         currentView = view;
         document.querySelectorAll(".view-toggle-btn").forEach(b => b.classList.remove("active"));
@@ -1083,6 +1164,14 @@
                 document.getElementById("cust-credit-transfer-fields").style.display = custCreditType === "transfer" ? "block" : "none";
                 document.getElementById("cust-credit-submit").textContent = custCreditType === "transfer" ? "Transfer" : "Apply Credit";
             });
+        });
+
+        // Customer Merge modal
+        document.getElementById("cust-merge-submit").addEventListener("click", submitCustMerge);
+        document.getElementById("cust-merge-cancel").addEventListener("click", closeCustMergeModal);
+        document.getElementById("cust-merge-close").addEventListener("click", closeCustMergeModal);
+        document.getElementById("cust-merge-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeCustMergeModal();
         });
 
         document.getElementById("customer-search").addEventListener("input", renderCustomers);
