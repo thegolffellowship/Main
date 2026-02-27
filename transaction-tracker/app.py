@@ -15,7 +15,7 @@ import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, jsonify, render_template, request, send_file, session
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -428,6 +428,67 @@ def api_check_status():
         "stats": stats,
         "progress": progress,
         "message": _inbox_check_status.get("message"),
+    })
+
+
+@app.route("/admin/backup")
+@require_role("admin")
+def admin_backup():
+    """Stream the SQLite database file as a download. Admin-only."""
+    from email_parser.database import DB_PATH
+    import shutil
+    db_path = str(DB_PATH)
+    if not os.path.isfile(db_path):
+        return jsonify({"error": "Database file not found"}), 404
+    # Copy to a temp file to avoid streaming a locked WAL-mode DB
+    backup_path = db_path + ".backup"
+    shutil.copy2(db_path, backup_path)
+    # Also checkpoint WAL into the backup
+    try:
+        import sqlite3
+        conn = sqlite3.connect(backup_path)
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+    except Exception:
+        pass
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return send_file(
+        backup_path,
+        mimetype="application/x-sqlite3",
+        as_attachment=True,
+        download_name=f"tgf_transactions_{timestamp}.db",
+    )
+
+
+@app.route("/api/health")
+def api_health():
+    """Diagnostic endpoint for Railway troubleshooting."""
+    from email_parser.database import DB_PATH
+    db_path = str(DB_PATH)
+    db_exists = os.path.isfile(db_path)
+    db_dir_exists = os.path.isdir(os.path.dirname(db_path))
+    try:
+        from email_parser.database import get_connection
+        conn = get_connection()
+        row = conn.execute("SELECT COUNT(*) as cnt FROM items").fetchone()
+        item_count = row["cnt"]
+        conn.close()
+        db_readable = True
+    except Exception as e:
+        item_count = 0
+        db_readable = False
+    env_keys = ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET",
+                "EMAIL_ADDRESS", "ANTHROPIC_API_KEY", "DATABASE_PATH",
+                "SECRET_KEY", "ADMIN_PIN", "MANAGER_PIN", "RSVP_EMAIL_ADDRESS"]
+    env_status = {k: ("set" if os.getenv(k) else "missing") for k in env_keys}
+    return jsonify({
+        "status": "ok" if db_readable else "error",
+        "database_path": db_path,
+        "database_exists": db_exists,
+        "database_dir_exists": db_dir_exists,
+        "database_readable": db_readable,
+        "item_count": item_count,
+        "env_vars": env_status,
     })
 
 
@@ -1006,6 +1067,61 @@ def api_send_reminder():
     return jsonify({"error": "Failed to send reminder email"}), 500
 
 
+@app.route("/api/events/send-reminder-all", methods=["POST"])
+def api_send_reminder_all():
+    """Send payment reminder emails to ALL RSVP-only players for an event."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    event_name = (data.get("event_name") or "").strip()
+    if not event_name:
+        return jsonify({"error": "event_name is required"}), 400
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return jsonify({"error": "Email credentials not configured"}), 500
+
+    # Find all RSVP-only players for this event with email addresses
+    items = get_all_items()
+    rsvp_players = [
+        i for i in items
+        if i.get("item_name") == event_name
+        and (i.get("transaction_status") or "active") == "rsvp_only"
+        and i.get("customer_email")
+    ]
+
+    if not rsvp_players:
+        return jsonify({"error": "No RSVP-only players with emails found for this event"}), 404
+
+    sent = 0
+    failed = 0
+    for player in rsvp_players:
+        to_email = player["customer_email"].strip()
+        player_name = player.get("customer") or "Player"
+        subject = f"Payment Reminder — {event_name}"
+        html_body = (
+            f"<p>Hi {player_name},</p>"
+            f"<p>This is a friendly reminder that we have you down for "
+            f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+            f"<p>Please complete your registration at your earliest convenience.</p>"
+            f"<p>Thanks,<br>The Golf Fellowship</p>"
+        )
+        ok = send_mail_graph(
+            tenant_id=tenant_id, client_id=client_id,
+            client_secret=client_secret, from_address=from_address,
+            to_address=to_email, subject=subject, html_body=html_body,
+        )
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+
+    return jsonify({"status": "ok", "sent": sent, "failed": failed, "total": len(rsvp_players)})
+
+
 @app.route("/api/events/seed", methods=["POST"])
 @require_role("admin")
 def api_seed_events():
@@ -1189,7 +1305,6 @@ init_db()
 
 # Seed upcoming San Antonio events (idempotent — skips existing)
 _SA_EVENTS = [
-    {"item_name": "PRIME TIME KICKOFF | Northern Hills", "event_date": "2026-03-15", "course": "Northern Hills", "city": "San Antonio"},
     {"item_name": "s9.1 The Quarry", "event_date": "2026-03-17", "course": "The Quarry", "city": "San Antonio"},
     {"item_name": "s9.2 Canyon Springs", "event_date": "2026-03-24", "course": "Canyon Springs", "city": "San Antonio"},
     {"item_name": "s9.3 Silverhorn", "event_date": "2026-03-31", "course": "Silverhorn", "city": "San Antonio"},

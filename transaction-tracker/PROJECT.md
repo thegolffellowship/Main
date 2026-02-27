@@ -685,7 +685,7 @@ Features discussed or planned but not yet implemented:
 ### High Priority
 - **SUPPORT button** — "I have a question" button for players to contact TGF directly from the app
 - **Player-facing event page** — Public page where players can see their upcoming events, RSVP status, and payment status without needing a PIN
-- **Bulk email reminders** — Send payment reminders to all RSVP-only players for an event at once (currently one at a time)
+- ~~**Bulk email reminders**~~ — **DONE** (v1.2.0). "Remind All" button on event detail sends to all RSVP-only players at once.
 
 ### Medium Priority
 - **Event flyer / details section** — Attach course info, directions, tee times, and event notes to each event
@@ -702,4 +702,92 @@ Features discussed or planned but not yet implemented:
 - **Player profile photos** — Upload or link profile pictures for the customer directory
 - **Dark mode** — System-preference or manual toggle
 - **Full-text search API** — Dedicated search endpoint with fuzzy matching
-- **Database backup/export** — One-click SQLite backup download from admin panel
+- ~~**Database backup/export**~~ — **DONE** (v1.2.0). Admin endpoint at `/admin/backup` streams the SQLite database file.
+
+---
+
+## Future Considerations
+
+### Auth Scalability: Per-User PINs
+
+The current two-PIN system (`ADMIN_PIN`, `MANAGER_PIN`) works for San Antonio and Austin today, where one admin and one chapter manager each have a PIN. But TGF is expanding to DFW (Q2 2026) and Houston (Q3 2026), which means:
+
+- 4 chapter managers needing separate access
+- Shared PINs make it impossible to audit who did what
+- No way to revoke access for a single person without changing everyone's PIN
+
+**Recommended upgrade path (lightweight, no external auth service):**
+
+1. **Add a `users` table:**
+   ```sql
+   CREATE TABLE users (
+       id       INTEGER PRIMARY KEY AUTOINCREMENT,
+       name     TEXT NOT NULL,
+       pin      TEXT NOT NULL,          -- hashed PIN (bcrypt or similar)
+       role     TEXT NOT NULL,          -- 'admin', 'manager'
+       chapter  TEXT,                   -- 'San Antonio', 'Austin', 'DFW', 'Houston'
+       active   INTEGER DEFAULT 1,     -- soft-disable without deleting
+       created_at TEXT DEFAULT (datetime('now'))
+   );
+   ```
+
+2. **Login flow change:** Login modal accepts a PIN, checks it against the `users` table instead of env vars. Session stores user ID, role, and chapter. Env-based PINs become the initial admin bootstrap mechanism only.
+
+3. **Chapter-scoped views:** Once users have a chapter, add optional chapter filtering to the Events and Customers pages. A DFW manager only sees DFW events by default but can switch to "All Chapters" view.
+
+4. **User management page (admin):** Simple CRUD for managing PINs, roles, and chapters. Admin-only. Could be as simple as a table with inline editing.
+
+5. **Audit logging (optional):** Add a `user_id` column to actions like credits, transfers, merges, and manual player additions for accountability.
+
+**Effort estimate:** 1-2 sessions. The user table and login change are straightforward. Chapter-scoped views are the most work but can be rolled out incrementally.
+
+**When to build:** When the third chapter (DFW) goes live and a third PIN is needed.
+
+---
+
+## Platform Relationship
+
+### Context
+
+The TGF Transaction Tracker was built as an operations tool for managing golf event registrations, payments, and RSVPs. A separate "TGF Platform" MVP is targeting May 2026 as a member-facing application with self-service registration, profiles, and payment.
+
+### Does this tool get deprecated?
+
+**No.** The Transaction Tracker and the TGF Platform serve different audiences and solve different problems:
+
+| Concern | Transaction Tracker | TGF Platform (MVP) |
+|---------|-------------------|-------------------|
+| **Users** | TGF admins and chapter managers | TGF members and prospective players |
+| **Purpose** | Operations: parse emails, reconcile payments, manage rosters | Self-service: register, pay, view schedule, manage profile |
+| **Data source** | Email inbox (MySimpleStore, PayPal, GG) | Direct user input + payment gateway |
+| **Strength** | Works with existing email-based workflow today | Replaces that workflow long-term |
+
+### Recommended Transition Strategy
+
+**Phase 1 — Parallel operation (now through Platform MVP launch)**
+- Transaction Tracker continues as the primary operations tool
+- Platform MVP is built and tested independently
+- No changes needed on either side
+
+**Phase 2 — Platform launch (May 2026)**
+- Platform handles member-facing registration and payment
+- Transaction Tracker becomes the **admin/operations layer**:
+  - Continues parsing emails for any registrations that still come through the old flow (stragglers, manual payments, comps)
+  - Provides the roster management, credit/transfer, and RSVP integration that the Platform MVP won't have on day one
+  - Serves as the data reconciliation tool (cross-referencing Platform registrations with email confirmations)
+
+**Phase 3 — Full integration (post-MVP)**
+- Platform gets its own admin dashboard → Transaction Tracker's dashboard role shrinks
+- **Keep permanently:**
+  - **Email parsing pipeline** — Always valuable as a backup data source and for catching edge cases (PayPal direct payments, forwarded receipts, etc.)
+  - **MCP server** — Claude integration for operational queries remains useful regardless of what frontend exists
+  - **Side Games matrix** — Reusable prize calculation engine, can be exposed as an API to the Platform
+  - **RSVP integration** — Golf Genius email parsing stays relevant until GG offers a proper API
+- **Deprecate when Platform covers them:**
+  - Manual player additions (Platform handles registration directly)
+  - Customer directory (Platform has member profiles)
+  - Daily email reports (Platform has its own notifications)
+
+### The Bottom Line
+
+The Transaction Tracker evolves from "the whole system" to "the operations and data integrity layer." The email parsing pipeline, MCP server, and GG integration are permanent infrastructure. The dashboard and manual management features gradually hand off to the Platform as it matures.

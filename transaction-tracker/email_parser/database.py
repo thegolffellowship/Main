@@ -36,6 +36,8 @@ ITEM_COLUMNS = [
 
 def get_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
     path = str(db_path or DB_PATH)
+    # Ensure parent directory exists (Railway persistent volume may need creation)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
