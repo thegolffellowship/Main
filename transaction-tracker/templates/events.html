@@ -994,9 +994,11 @@
                         filteredRegs = filteredRegs.concat(mGgRows);
                     }
 
+                    const mRsvpOnlyCount = mRegs.filter(r => (r.transaction_status || "active") === "rsvp_only" && r.customer_email).length;
                     detailHtml = badgesHtml + `
                     <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem; flex-wrap:wrap;">
                         <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>
+                        ${mRsvpOnlyCount > 0 ? `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Remind All (${mRsvpOnlyCount})</button>` : ''}
                     </div>
                     ${filteredRegs.length ? renderRegistrantsMobile(filteredRegs, ev) : '<div style="color:var(--text-muted); font-style:italic; font-size:0.85rem;">No registrations.</div>'}`;
                 }
@@ -1491,10 +1493,14 @@
             filtered = filtered.concat(ggRsvpRows);
         }
 
-        // Detail controls row: column toggle + count + Add Player button
+        // Detail controls row: column toggle + count + Add Player + Remind All
+        const rsvpOnlyCount = registrants.filter(r => (r.transaction_status || "active") === "rsvp_only" && r.customer_email).length;
         html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; flex-wrap:wrap;">';
         html += `<h4 style="margin:0;">Registrations (${filtered.length}${activeFilter ? ' \u2014 ' + activeFilter : ''})</h4>`;
         html += `<button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>`;
+        if (rsvpOnlyCount > 0) {
+            html += `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Send payment reminder to all ${rsvpOnlyCount} RSVP-only player(s)">Remind All (${rsvpOnlyCount})</button>`;
+        }
         html += '<div class="column-toggle-wrapper">';
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
@@ -1910,6 +1916,34 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openAddPlayerModal(btn.dataset.eventName);
+            });
+        });
+
+        // Remind All button
+        container.querySelectorAll(".btn-remind-all").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const eventName = btn.dataset.eventName;
+                if (!confirm(`Send payment reminder emails to ALL RSVP-only players for "${eventName}"?`)) return;
+                btn.disabled = true;
+                btn.textContent = "Sending...";
+                try {
+                    const resp = await fetch("/api/events/send-reminder-all", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ event_name: eventName }),
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok) throw new Error(data.error || "Failed");
+                    alert(`Reminders sent: ${data.sent} succeeded, ${data.failed} failed (${data.total} total)`);
+                } catch (err) {
+                    alert("Failed: " + err.message);
+                }
+                btn.disabled = false;
+                btn.textContent = btn.textContent.replace("Sending...", "Remind All");
+                // Re-render to restore button text
+                const ev = allEvents.find(e => e.item_name === eventName);
+                if (ev && expandedEventId === ev.id) rerenderDetail(container, ev);
             });
         });
     }
