@@ -362,12 +362,16 @@
                     phone: item.customer_phone || "",
                     items: [],
                     totalSpent: 0,
+                    creditTotal: 0,
                     latestDate: "",
                 };
             }
             map[name].items.push(item);
             if ((item.transaction_status || "active") === "active") {
                 map[name].totalSpent += parsePrice(item.item_price);
+            }
+            if (item.transaction_status === "credited") {
+                map[name].creditTotal += parsePrice(item.item_price);
             }
             if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
             if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
@@ -554,7 +558,7 @@
                     <div class="mc-primary">
                         <span class="mc-customer">${escapeHtml(c.name)}</span>
                         <span class="status-badge-sm ${statusBadgeClass(c.status)}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(c.status)}</span>
-                        ${c.items.some(i => i.transaction_status === "credited") ? '<span class="status-tag status-tag-credited" style="margin-left:0.25rem; vertical-align:middle;">Has Credit</span>' : ''}
+                        ${c.creditTotal > 0 ? `<span class="status-tag status-tag-credited" style="margin-left:0.25rem; vertical-align:middle;">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} Credit</span>` : ''}
                         ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-customer="${escapeHtml(c.name)}" style="font-size:0.65rem; padding:0.1rem 0.3rem; margin-left:0.25rem; vertical-align:middle;" onclick="event.stopPropagation(); openCustMergeModal('${escapeHtml(c.name).replace(/'/g, "\\'")}')">Merge</button>` : ''}
                         <br><span class="mc-event">${meta.join(" &bull; ")}</span>
                     </div>
@@ -625,7 +629,7 @@
             const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
             html += `
             <tr data-name="${escapeHtml(c.name)}" class="cust-row-clickable ${isExpanded ? 'expanded' : ''}">
-                <td><strong>${escapeHtml(c.name)}</strong>${c.items.some(i => i.transaction_status === "credited") ? ' <span class="status-tag status-tag-credited">Has Credit</span>' : ''}</td>
+                <td><strong>${escapeHtml(c.name)}</strong>${c.creditTotal > 0 ? ` <span class="status-tag status-tag-credited">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} Credit</span>` : ''}</td>
                 <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span></td>
                 <td>${escapeHtml(c.chapter || "\u2014")}</td>
                 <td>${c.items.length}</td>
@@ -680,7 +684,7 @@
                 <div class="customer-card-name">
                     ${escapeHtml(c.name)}
                     <span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span>
-                    ${c.items.some(i => i.transaction_status === "credited") ? '<span class="status-tag status-tag-credited">Has Credit</span>' : ''}
+                    ${c.creditTotal > 0 ? `<span class="status-tag status-tag-credited">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} Credit</span>` : ''}
                 </div>
                 <div class="customer-card-meta">
                     ${c.chapter ? `<span>${escapeHtml(c.chapter)}</span>` : ''}
