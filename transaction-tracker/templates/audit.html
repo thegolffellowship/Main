@@ -239,6 +239,7 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Email Audit — Verify parsed data vs raw emails</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.1.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -261,6 +262,7 @@
             <a href="/events">Events</a>
             <a href="/customers">Customers</a>
             <a href="/rsvps">RSVP Log</a>
+            <a href="/matrix">Matrix</a>
             <a href="/audit" class="active">Audit Log</a>
         </nav>
         <div id="loading" class="loading-msg">Click "Run Audit" to fetch emails and compare against parsed data.</div>
@@ -314,6 +316,7 @@
         </div>
     </div>
 
+    <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script>
     let auditData = null;
@@ -363,7 +366,6 @@
             ["Side Games", item.side_games],
             ["Tee Choice", item.tee_choice],
             ["Status", item.member_status],
-            ["Type", item.golf_or_compete],
             ["Post Game", item.post_game],
             ["New/Return", item.returning_or_new],
             ["Shirt Size", item.shirt_size],

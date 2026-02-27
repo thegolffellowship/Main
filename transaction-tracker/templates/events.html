@@ -114,12 +114,64 @@
         .game-stat-badge strong {
             font-weight: 700;
         }
+        /* Orphan banner */
+        .orphan-banner {
+            background: #fef3c7;
+            border: 2px solid #f59e0b;
+            border-left: 5px solid #d97706;
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(217, 119, 6, 0.15);
+        }
+        .orphan-banner-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            flex-wrap: wrap;
+            font-size: 0.92rem;
+        }
+        .orphan-icon { font-size: 1.3rem; }
+        .orphan-subtitle { font-size: 0.82rem; color: #92400e; flex: 1; }
+        .orphan-toggle-btn {
+            background: #fff7ed;
+            border: 1px solid #d97706;
+            border-radius: 6px;
+            padding: 0.3rem 0.85rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #92400e;
+            cursor: pointer;
+        }
+        .orphan-toggle-btn:hover { background: #fde68a; }
+        .orphan-list { padding: 0.25rem 1rem 0.75rem; }
+        .orphan-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.55rem 0;
+            border-top: 1px solid #fbbf24;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .orphan-item-info { font-size: 0.85rem; flex: 1; min-width: 200px; }
+        .orphan-item-name { font-weight: 600; color: #92400e; }
+        .orphan-item-meta { color: var(--text-muted); font-size: 0.78rem; }
+        .orphan-item-actions { display: flex; gap: 0.3rem; }
+        /* Resolve mode toggle */
+        .resolve-mode-btn { background: #f9fafb; color: var(--text-muted); transition: background 0.15s, color 0.15s; }
+        .resolve-mode-active { background: var(--primary) !important; color: #fff !important; }
         /* Mobile: hide events table column toggle */
         @media (max-width: 768px) {
             .column-toggle-wrapper { display: none; }
             .event-summary .stat-card { min-width: 0; }
             .event-summary { gap: 0.25rem; }
             .game-stat-badge { padding: 0.25rem 0.5rem; font-size: 0.65rem; }
+            .event-game-stats { gap: 0.35rem; margin-bottom: 0.5rem; }
+            .view-toggle-group { margin-right: 0.2rem; }
+            .orphan-banner-header { font-size: 0.82rem; }
+            .orphan-subtitle { display: none; }
         }
     </style>
 </head>
@@ -128,6 +180,7 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Events — Auto-detected from transaction data</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.1.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -150,6 +203,7 @@
             <a href="/events" class="active">Events</a>
             <a href="/customers">Customers</a>
             <a href="/rsvps">RSVP Log</a>
+            <a href="/matrix">Matrix</a>
             <a href="/audit">Audit Log</a>
         </nav>
 
@@ -177,6 +231,17 @@
                 <div class="stat-value" id="stat-past">—</div>
                 <div class="stat-label">Past</div>
             </div>
+        </section>
+
+        <!-- Orphaned Items Banner (admin only) -->
+        <section id="orphan-banner" class="orphan-banner" style="display:none;">
+            <div class="orphan-banner-header">
+                <span class="orphan-icon">&#9888;</span>
+                <strong><span id="orphan-count">0</span> Unattached Item Group(s)</strong>
+                <span class="orphan-subtitle">Transactions that don't match any event — click to resolve</span>
+                <button class="orphan-toggle-btn" id="orphan-toggle-btn">Show &#9662;</button>
+            </div>
+            <div id="orphan-list" class="orphan-list" style="display:none;"></div>
         </section>
 
         <section class="events-table-wrapper">
@@ -276,23 +341,85 @@
                 <button id="add-player-close" class="modal-close">&times;</button>
             </div>
             <div id="add-player-event-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
+
+            <!-- Mode selector -->
+            <div class="add-player-modes" style="display:flex; gap:0; margin-bottom:1rem; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+                <label class="ap-mode-btn ap-mode-active" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600; transition:background 0.15s, color 0.15s; border-right:1px solid var(--border);">
+                    <input type="radio" name="add-player-mode" value="comp" checked style="display:none;">
+                    Manager Comp
+                </label>
+                <label class="ap-mode-btn" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600; transition:background 0.15s, color 0.15s; border-right:1px solid var(--border);">
+                    <input type="radio" name="add-player-mode" value="rsvp" style="display:none;">
+                    RSVP Only
+                </label>
+                <label class="ap-mode-btn" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600; transition:background 0.15s, color 0.15s;">
+                    <input type="radio" name="add-player-mode" value="paid_separately" style="display:none;">
+                    Paid Separately
+                </label>
+            </div>
+
             <form id="add-player-form" class="edit-form">
-                <div class="edit-grid">
-                    <label>Player Name <span style="color:#e11d48;">*</span>
-                        <input type="text" id="add-player-name" class="modal-input" required placeholder="First Last">
+                <!-- Name: always shown. For comp mode, shows manager dropdown. Otherwise text input with autocomplete. -->
+                <div id="ap-name-section">
+                    <div id="ap-manager-select" style="margin-bottom:0.75rem;">
+                        <label class="ap-field-label"><span>Manager <span style="color:#e11d48;">*</span></span>
+                            <select id="add-player-manager" class="modal-input">
+                                <option value="">Select manager…</option>
+                                <option value="Kerry Niester">Kerry Niester</option>
+                                <option value="Robert Straiton">Robert Straiton</option>
+                                <option value="James Jones">James Jones</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div id="ap-name-input" style="display:none; margin-bottom:0.75rem;">
+                        <label class="ap-field-label"><span>Player Name <span style="color:#e11d48;">*</span></span>
+                            <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" list="ap-customer-list">
+                            <datalist id="ap-customer-list"></datalist>
+                        </label>
+                    </div>
+                    <div id="ap-contact-fields" class="edit-grid" style="display:none; margin-bottom:0.5rem;">
+                        <label>Email
+                            <input type="email" id="add-player-email" class="modal-input" placeholder="email@example.com">
+                        </label>
+                        <label>Phone
+                            <input type="tel" id="add-player-phone" class="modal-input" placeholder="(555) 123-4567">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Payment fields: only for paid_separately mode -->
+                <div id="ap-payment-section" class="edit-grid" style="display:none; margin-bottom:0.5rem;">
+                    <label><span>Amount <span style="color:#e11d48;">*</span></span>
+                        <div style="position:relative;">
+                            <span style="position:absolute;left:0.65rem;top:50%;transform:translateY(-50%);font-weight:600;color:var(--text-muted);pointer-events:none;">$</span>
+                            <input type="text" id="add-player-amount" class="modal-input" inputmode="decimal" placeholder="0.00" style="padding-left:1.4rem;">
+                        </div>
                     </label>
-                    <label>Side Games
+                    <label><span>Payment Source <span style="color:#e11d48;">*</span></span>
+                        <select id="add-player-source" class="modal-input">
+                            <option value="">Select…</option>
+                            <option value="Venmo">Venmo</option>
+                            <option value="Zelle">Zelle</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </label>
+                </div>
+
+                <!-- Golf details: shown for comp and paid_separately, hidden for rsvp -->
+                <div id="ap-golf-details" class="edit-grid">
+                    <label><span>Side Games <span style="color:#e11d48;">*</span></span>
                         <select id="add-player-side-games" class="modal-input">
-                            <option value="">None</option>
+                            <option value="">Select…</option>
                             <option value="Net">Net</option>
                             <option value="Gross">Gross</option>
                             <option value="Both">Both (Net + Gross)</option>
+                            <option value="None">None</option>
                         </select>
                     </label>
                     <label>Tee Choice
                         <select id="add-player-tee" class="modal-input">
                             <option value="">—</option>
-                            <option value="<50"><50</option>
+                            <option value="<50">&lt;50</option>
                             <option value="50-64">50-64</option>
                             <option value="65+">65+</option>
                             <option value="Forward">Forward</option>
@@ -305,21 +432,78 @@
                         <select id="add-player-status" class="modal-input">
                             <option value="">—</option>
                             <option value="MEMBER">Member</option>
-                            <option value="NON-MEMBER">Non-Member</option>
                             <option value="GUEST">Guest</option>
-                        </select>
-                    </label>
-                    <label>Type
-                        <select id="add-player-type" class="modal-input">
-                            <option value="">—</option>
-                            <option value="Golf">Golf</option>
-                            <option value="Compete">Compete</option>
+                            <option value="1ST TIMER">1st Timer</option>
+                            <option value="MANAGER">Manager</option>
                         </select>
                     </label>
                 </div>
                 <div class="modal-actions">
                     <button type="button" id="add-player-cancel" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Player</button>
+                    <button type="submit" id="add-player-submit-btn" class="btn btn-primary">Add Player</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upgrade RSVP Modal -->
+    <div id="upgrade-rsvp-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-header">
+                <h2>Record Payment &amp; Details</h2>
+                <button id="upgrade-rsvp-close" class="modal-close">&times;</button>
+            </div>
+            <div id="upgrade-rsvp-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
+            <form id="upgrade-rsvp-form" class="edit-form">
+                <div class="edit-grid">
+                    <label><span>Amount <span style="color:#e11d48;">*</span></span>
+                        <div style="position:relative;">
+                            <span style="position:absolute;left:0.65rem;top:50%;transform:translateY(-50%);font-weight:600;color:var(--text-muted);pointer-events:none;">$</span>
+                            <input type="text" id="upgrade-rsvp-amount" class="modal-input" inputmode="decimal" placeholder="0.00" style="padding-left:1.4rem;">
+                        </div>
+                    </label>
+                    <label><span>Payment Source <span style="color:#e11d48;">*</span></span>
+                        <select id="upgrade-rsvp-source" class="modal-input">
+                            <option value="">Select…</option>
+                            <option value="Venmo">Venmo</option>
+                            <option value="Zelle">Zelle</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </label>
+                    <label><span>Side Games <span style="color:#e11d48;">*</span></span>
+                        <select id="upgrade-rsvp-side-games" class="modal-input">
+                            <option value="">Select…</option>
+                            <option value="Net">Net</option>
+                            <option value="Gross">Gross</option>
+                            <option value="Both">Both (Net + Gross)</option>
+                            <option value="None">None</option>
+                        </select>
+                    </label>
+                    <label>Tee Choice
+                        <select id="upgrade-rsvp-tee" class="modal-input">
+                            <option value="">—</option>
+                            <option value="<50">&lt;50</option>
+                            <option value="50-64">50-64</option>
+                            <option value="65+">65+</option>
+                            <option value="Forward">Forward</option>
+                        </select>
+                    </label>
+                    <label>Handicap
+                        <input type="text" id="upgrade-rsvp-handicap" class="modal-input" placeholder="e.g. 12">
+                    </label>
+                    <label>Status
+                        <select id="upgrade-rsvp-status" class="modal-input">
+                            <option value="">—</option>
+                            <option value="MEMBER">Member</option>
+                            <option value="GUEST">Guest</option>
+                            <option value="1ST TIMER">1st Timer</option>
+                            <option value="MANAGER">Manager</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="upgrade-rsvp-cancel" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Record Payment</button>
                 </div>
             </form>
         </div>
@@ -347,13 +531,84 @@
         </div>
     </div>
 
+    <!-- Merge Event Modal -->
+    <div id="merge-event-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2>Merge Event</h2>
+                <button id="merge-event-close" class="modal-close">&times;</button>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+                All registrations, RSVPs, and overrides from the <strong>source</strong> event will be moved to the <strong>target</strong> event. The source event will be deleted.
+            </p>
+            <div id="merge-source-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
+            <label style="display:block; margin-bottom:1rem;">
+                <span style="font-weight:600; font-size:0.82rem;">Merge into (target event)</span>
+                <select id="merge-target-select" class="modal-input" style="margin-top:0.3rem;">
+                    <option value="">Select target event...</option>
+                </select>
+            </label>
+            <div class="modal-actions">
+                <button type="button" id="merge-event-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="merge-event-submit" class="btn btn-primary">Merge Events</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resolve Orphan Modal -->
+    <div id="resolve-orphan-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2>Resolve Unattached Items</h2>
+                <button id="resolve-orphan-close" class="modal-close">&times;</button>
+            </div>
+            <div id="resolve-orphan-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
+            <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.75rem;">
+                Choose how to resolve these items:
+            </p>
+            <div style="display:flex; gap:0; margin-bottom:1rem; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+                <label class="resolve-mode-btn resolve-mode-active" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600;">
+                    <input type="radio" name="resolve-mode" value="assign" checked style="display:none;">
+                    Assign to Event
+                </label>
+                <label class="resolve-mode-btn" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600;">
+                    <input type="radio" name="resolve-mode" value="create" style="display:none;">
+                    Create New Event
+                </label>
+            </div>
+            <div id="resolve-assign-section">
+                <label style="display:block; margin-bottom:1rem;">
+                    <span style="font-weight:600; font-size:0.82rem;">Assign to existing event</span>
+                    <select id="resolve-target-select" class="modal-input" style="margin-top:0.3rem;">
+                        <option value="">Select event...</option>
+                    </select>
+                </label>
+            </div>
+            <div id="resolve-create-section" style="display:none;">
+                <div class="edit-grid" style="margin-bottom:1rem;">
+                    <label>Event Name<input type="text" id="resolve-new-name" class="modal-input"></label>
+                    <label>Date<input type="date" id="resolve-new-date" class="modal-input"></label>
+                    <label>Course<input type="text" id="resolve-new-course" class="modal-input"></label>
+                    <label>City<input type="text" id="resolve-new-city" class="modal-input"></label>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="resolve-orphan-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="resolve-orphan-submit" class="btn btn-primary">Resolve</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/games-matrix.js"></script>
     <script>
     let allEvents = [];
     let allItems = [];
     let allRsvps = {};  // keyed by event_name → array of rsvp objects
     let allRsvpOverrides = {};  // keyed by event_name → {item_id: status}
     let expandedEventId = null;
+    let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let eventSortField = "event_date";
     let eventSortDir = "asc";
     let eventSearchQuery = "";
@@ -380,9 +635,10 @@
         return html;
     }
 
-    // Called by auth.js after successful login
+    // Called by auth.js after successful login or session restore
     function onAuthReady() {
         renderEvents();
+        fetchOrphanedItems();
     }
 
     // Column definitions for Events table
@@ -495,7 +751,14 @@
     }
 
     function getRegistrants(eventName) {
-        return allItems.filter(item => item.item_name === eventName);
+        // Find the event's aliases so items with old/variant names are included
+        const ev = allEvents.find(e => e.item_name === eventName);
+        const names = new Set([eventName]);
+        if (ev && ev.aliases) {
+            ev.aliases.forEach(a => names.add(a));
+        }
+        return allItems.filter(item => names.has(item.item_name)
+            && ['active', 'rsvp_only'].includes(item.transaction_status || 'active'));
     }
 
     function getFilteredSortedEvents() {
@@ -560,31 +823,65 @@
         let html = '';
         registrants.forEach(r => {
             const txStatus = r.transaction_status || "active";
-            const statusClass = txStatus !== "active" ? ` row-${txStatus}` : (r.transferred_from_id ? ' row-from-transfer' : '');
+            const isRsvpOnly = txStatus === "rsvp_only";
+            const isGgRsvp = txStatus === "gg_rsvp";
+            const statusClass = (isRsvpOnly || isGgRsvp) ? ' row-rsvp-only'
+                : txStatus !== "active" ? ` row-${txStatus}`
+                : (r.transferred_from_id ? ' row-from-transfer' : '');
+            const isManual = (r.email_uid || "").startsWith("manual-");
+            const isComp = (r.email_uid || "").startsWith("manual-comp");
             let tag = '';
-            if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
+            else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">RSVP - Remind</span>`;
+            else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
+            else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            if (isComp || (r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
+            else if (isManual && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             const manualOverride = overrides[r.id];
             let circleState = "none";
-            if (manualOverride && manualOverride !== "none") {
-                circleState = manualOverride;
+            let circleSource = "none";
+            if (isGgRsvp) {
+                circleState = "playing";
+                circleSource = "auto";
+            } else if (isRsvpOnly) {
+                circleState = "manual_green";
+                circleSource = "manual";
             } else if (rsvp && rsvp.response === 'PLAYING') {
                 circleState = "playing";
+                circleSource = "auto";
             } else if (rsvp && rsvp.response === 'NOT PLAYING') {
                 circleState = "not_playing";
+                circleSource = "auto";
             }
-            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState}` : "";
-            const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}"></span>`;
+            if (manualOverride && manualOverride !== "none") {
+                // A real GG RSVP response takes precedence over manual_green
+                // (admin added player to roster, player later responded themselves)
+                if (manualOverride === "manual_green" && rsvp && (rsvp.response === 'PLAYING' || rsvp.response === 'NOT PLAYING')) {
+                    // Keep the GG RSVP state already set above
+                } else {
+                    circleState = manualOverride;
+                    circleSource = "manual";
+                }
+            }
+            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
+            const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span>`;
             const sideGame = classifyGameType(r.side_games);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
             const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
             let actionBtn = '';
-            if (txStatus === "active" && !r.transferred_from_id) {
+            if (isRsvpOnly && isManual) {
+                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+            } else if (isComp) {
+                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+            } else if (txStatus === "active" && !r.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred") {
                 actionBtn = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
             }
@@ -597,7 +894,7 @@
             ];
 
             html += `
-            <div class="mobile-card${statusClass}" data-id="${r.id}">
+            <div class="mobile-card${statusClass}" style="${(isRsvpOnly || isGgRsvp) ? 'background:#fef3c7;font-style:italic;' : isComp ? 'background:#dcfce7;' : isManual ? 'background:#dbeafe;' : ''}" data-id="${r.id}">
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         ${circleHtml}
@@ -631,32 +928,78 @@
             const registrants = getRegistrants(ev.item_name);
             const stats = computeGameStats(registrants);
 
+            // Create synthetic rows for unmatched GG RSVP players (mobile)
+            // Frontend dedup: exclude RSVPs whose email or name matches an existing registrant
+            const mRsvps = allRsvps[ev.item_name] || [];
+            const mRegEmails = new Set(registrants.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+            const mRegNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+            const mUnmatched = mRsvps.filter(r => {
+                if (r.response !== 'PLAYING') return false;
+                if (r.matched_item_id) return false;
+                const email = (r.player_email || "").toLowerCase();
+                if (email && mRegEmails.has(email)) return false;
+                const resolved = (r.resolved_name || "").toLowerCase();
+                const first = (r.player_name || "").toLowerCase();
+                if (resolved && mRegNames.has(resolved)) return false;
+                if (first && [...mRegNames].some(n => n.startsWith(first))) return false;
+                return true;
+            });
+            const mGgRows = mUnmatched.map((r, i) => ({
+                id: `gg-rsvp-${i}`, customer: r.resolved_name || r.player_name || 'Unknown',
+                customer_email: r.player_email || '', item_name: ev.item_name,
+                item_price: '', side_games: '', tee_choice: '', handicap: '',
+                member_status: '', order_date: '',
+                transaction_status: 'gg_rsvp', email_uid: 'gg-rsvp', transferred_from_id: null,
+                has_player_card: r.has_player_card !== false
+            }));
+            stats.players += mGgRows.length;
+            stats.noGames += mGgRows.length;
+
             let detailHtml = '';
             if (isExpanded) {
                 const activeFilter = eventGameFilter[ev.id] || null;
-                let filteredRegs = registrants;
-                if (activeFilter) {
-                    filteredRegs = registrants.filter(r => {
-                        const type = classifyGameType(r.side_games);
-                        if (activeFilter === "NET") return type === "NET" || type === "BOTH";
-                        if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
-                        if (activeFilter === "NO GAMES") return type === "NO GAMES";
-                        return true;
-                    });
-                }
-                filteredRegs = sortRegistrants(filteredRegs);
+                const mobileHolesType = extractHolesType(ev.item_name);
+                const mobileGamesView = mobileHolesType && gamesOpenForEvent[ev.id];
 
-                detailHtml = `
-                <div class="event-game-stats" style="margin-bottom:0.5rem;">
-                    <span class="game-stat-badge ${!activeFilter ? 'active' : ''}" data-event-id="${ev.id}" data-filter="">PLAYERS <strong>${stats.players}</strong></span>
-                    <span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>
-                    <span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>
-                    <span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>
-                </div>
-                <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem; flex-wrap:wrap;">
-                    <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>
-                </div>
-                ${filteredRegs.length ? renderRegistrantsMobile(filteredRegs, ev) : '<div style="color:var(--text-muted); font-style:italic; font-size:0.85rem;">No registrations.</div>'}`;
+                // PLAYERS / GAMES toggle + filter badges
+                let badgesHtml = '<div class="event-game-stats" style="margin-bottom:0.5rem;">';
+                badgesHtml += '<span class="view-toggle-group">';
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+                if (mobileHolesType) {
+                    badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+                }
+                badgesHtml += '</span>';
+                if (!mobileGamesView) {
+                    badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
+                    badgesHtml += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
+                    badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NONE <strong>${stats.noGames}</strong></span>`;
+                }
+                badgesHtml += '</div>';
+
+                if (mobileGamesView) {
+                    detailHtml = badgesHtml + renderGamesPanel(ev);
+                } else {
+                    let filteredRegs = registrants;
+                    if (activeFilter) {
+                        filteredRegs = registrants.filter(r => {
+                            const type = classifyGameType(r.side_games);
+                            if (activeFilter === "NET") return type === "NET" || type === "BOTH";
+                            if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
+                            if (activeFilter === "NO GAMES") return type === "NO GAMES";
+                            return true;
+                        });
+                    }
+                    filteredRegs = sortRegistrants(filteredRegs);
+                    if (!activeFilter || activeFilter === "NO GAMES") {
+                        filteredRegs = filteredRegs.concat(mGgRows);
+                    }
+
+                    detailHtml = badgesHtml + `
+                    <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem; flex-wrap:wrap;">
+                        <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>
+                    </div>
+                    ${filteredRegs.length ? renderRegistrantsMobile(filteredRegs, ev) : '<div style="color:var(--text-muted); font-style:italic; font-size:0.85rem;">No registrations.</div>'}`;
+                }
             }
 
             return `
@@ -665,6 +1008,7 @@
                     <div class="mc-primary">
                         <span class="mc-customer">${escapeHtml(ev.item_name)}</span>
                         <span class="reg-count" style="font-size:0.7rem; min-width:22px; height:22px; border-radius:11px; margin-left:0.35rem; vertical-align:middle;">${ev.registrations || 0}</span>
+                        ${ev.aliases && ev.aliases.length ? `<div style="margin-top:0.2rem; display:flex; gap:0.2rem; flex-wrap:wrap;">${ev.aliases.map(a => `<span style="display:inline-block; background:#e0e7ff; color:#3730a3; padding:0.1rem 0.3rem; border-radius:4px; font-size:0.6rem; font-weight:500; line-height:1.3;">${escapeHtml(a)}</span>`).join("")}</div>` : ''}
                         <br><span class="mc-event">${escapeHtml(ev.event_date || "\u2014")} &bull; ${escapeHtml(ev.course || ev.city || "\u2014")}</span>
                     </div>
                     <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
@@ -716,13 +1060,17 @@
             const isExpanded = expandedEventId === ev.id;
             html += `
             <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
-                <td><strong>${escapeHtml(ev.item_name)}</strong></td>
+                <td>
+                    <strong>${escapeHtml(ev.item_name)}</strong>
+                    ${ev.aliases && ev.aliases.length ? `<div style="margin-top:0.25rem; display:flex; gap:0.25rem; flex-wrap:wrap;">${ev.aliases.map(a => `<span style="display:inline-block; background:#e0e7ff; color:#3730a3; padding:0.1rem 0.35rem; border-radius:4px; font-size:0.65rem; font-weight:500; line-height:1.3;">${escapeHtml(a)}</span>`).join("")}</div>` : ''}
+                </td>
                 <td>${escapeHtml(ev.event_date || "\u2014")}</td>
                 <td>${escapeHtml(ev.course || "\u2014")}</td>
                 <td>${escapeHtml(ev.city || "\u2014")}</td>
                 <td><span class="reg-count">${ev.registrations || 0}</span></td>
                 <td>
                     <button class="btn btn-edit" onclick="event.stopPropagation(); openEditEvent(${ev.id})">Edit</button>
+                    ${currentRole === "admin" ? `<button class="btn btn-edit" onclick="event.stopPropagation(); openMergeEvent(${ev.id})" title="Merge into another event">Merge</button>` : ''}
                     ${currentRole === "admin" ? `<button class="btn btn-danger" onclick="event.stopPropagation(); deleteEvent(${ev.id})">Delete</button>` : ''}
                 </td>
             </tr>`;
@@ -789,7 +1137,6 @@
         { key: "side_games", label: "Side Games", default: true },
         { key: "tee_choice", label: "Tee", default: true },
         { key: "member_status", label: "Status", default: true },
-        { key: "golf_or_compete", label: "Type", default: true },
         { key: "order_date", label: "Order Date", default: true },
         { key: "actions", label: "Actions", default: true },
     ];
@@ -847,6 +1194,8 @@
     function computeGameStats(registrants) {
         let net = 0, gross = 0, noGames = 0;
         registrants.forEach(r => {
+            // RSVP-only players count toward total but not net/gross
+            if (r.transaction_status === "rsvp_only") { noGames++; return; }
             const type = classifyGameType(r.side_games);
             if (type === "BOTH") { net++; gross++; }
             else if (type === "NET") { net++; }
@@ -867,6 +1216,183 @@
         return rsvps.find(r => r.player_email && r.player_email.toLowerCase() === email.toLowerCase());
     }
 
+    function extractHolesType(eventName) {
+        const m = (eventName || "").match(/^[a-z](\d+)\./i);
+        return m ? parseInt(m[1]) : null;
+    }
+
+    function fmt$(v) {
+        if (v == null || v === "NO_GAME" || v === "NO_EVENT") return null;
+        return "$" + Number(v).toFixed(2).replace(/\.00$/, "");
+    }
+    function numVal(v) {
+        if (v == null || v === "NO_GAME" || v === "NO_EVENT") return 0;
+        return Number(v) || 0;
+    }
+
+    function renderGamesPanel(ev) {
+        const holes = extractHolesType(ev.item_name);
+        if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
+        const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
+        const registrants = getRegistrants(ev.item_name);
+        const stats = computeGameStats(registrants);
+
+        // Each section uses its own player count for lookup
+        const totalPC = stats.players;
+        const netPC = stats.net;
+        const grossPC = stats.gross;
+
+        const gEvent = matrix[String(totalPC)];   // Included Games: all players
+        const gNet   = matrix[String(netPC)];      // Net Games: net players only
+        const gGross = matrix[String(grossPC)];    // Gross Games: gross players only
+
+        if (!gEvent && !gNet && !gGross) {
+            return `<div class="games-panel-empty">No games data available. Total: ${totalPC}, Net: ${netPC}, Gross: ${grossPC}.</div>`;
+        }
+
+        const C = 8;
+        const empty4 = '<td></td><td></td><td></td><td></td>';
+
+        let html = '<div class="games-panel">';
+        html += `<div class="games-panel-header">${holes}-HOLE GAMES &mdash; ${totalPC} Total, ${netPC} Net, ${grossPC} Gross</div>`;
+
+        html += '<table class="games-table">';
+        html += '<colgroup><col class="gc-game"><col class="gc-fund"><col class="gc-mwp"><col class="gc-flights"><col class="gc-1st"><col class="gc-2nd"><col class="gc-3rd"><col class="gc-4th"></colgroup>';
+        html += '<thead><tr><th>Game</th><th>Pot</th><th>MWP</th><th>Flights</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th></tr></thead>';
+        html += '<tbody>';
+
+        // ── INCLUDED GAMES section (based on total player count) ──
+        html += `<tr class="games-section-row"><td colspan="${C}">INCLUDED GAMES (${totalPC} players)</td></tr>`;
+        let inclMWP = 0;
+
+        if (gEvent && totalPC >= 4) {
+            const teamType = gEvent.teamType || "Team Net";
+            if (gEvent.teamTotal !== "NO_EVENT") {
+                inclMWP += numVal(gEvent.teamMWP);
+                html += `<tr><td>${escapeHtml(teamType)}</td><td>${fmt$(gEvent.teamTotal) || "—"}</td><td>${fmt$(gEvent.teamMWP) || "—"}</td><td></td><td>${fmt$(gEvent.team1st) || "—"}</td><td>${fmt$(gEvent.team2nd) || "—"}</td><td></td><td></td></tr>`;
+            }
+
+            const ctps = holes === 18 ? [gEvent.ctp1, gEvent.ctp2, gEvent.ctp3, gEvent.ctp4] : [gEvent.ctp1, gEvent.ctp2];
+            ctps.forEach((v, i) => {
+                if (v === "NO_GAME" || v === "NO_EVENT") {
+                    html += `<tr class="games-row-disabled"><td>CTP #${i+1}</td><td colspan="${C-1}">No Game</td></tr>`;
+                } else if (v != null) {
+                    inclMWP += numVal(v);
+                    html += `<tr><td>CTP #${i+1}</td><td>${fmt$(v)}</td><td>${fmt$(v)}</td><td></td>${empty4}</tr>`;
+                }
+            });
+
+            if (gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
+                inclMWP += numVal(gEvent.holeInOne);
+                html += `<tr><td>Hole-in-One</td><td>${fmt$(gEvent.holeInOne)}</td><td>${fmt$(gEvent.holeInOne)}</td><td></td>${empty4}</tr>`;
+            }
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gEvent.eventTotalPot) || "—"}</td><td>${fmt$(inclMWP)}</td><td></td>${empty4}</tr>`;
+        } else {
+            html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough players (${totalPC})</td></tr>`;
+        }
+
+        // ── NET GAMES section (based on net player count) ──
+        html += `<tr class="games-section-row"><td colspan="${C}">NET GAMES (${netPC} players)</td></tr>`;
+        let netMWP = 0;
+
+        if (gNet && netPC >= 2) {
+            const netFlights = gNet.netFlights ? parseInt(gNet.netFlights) : 1;
+            const netFlightNames = holes === 18
+                ? ["Low Flight", "High Flight", "Mid Flight", "4th Flight"]
+                : ["Low Flight", "High Flight"];
+            const netFlightData = holes === 18
+                ? [
+                    { f1: gNet.netLow1st, f2: gNet.netLow2nd, f3: gNet.netLow3rd, f4: gNet.netLow4th },
+                    { f1: gNet.netHigh1st, f2: gNet.netHigh2nd, f3: gNet.netHigh3rd, f4: gNet.netHigh4th },
+                    { f1: gNet.netMid1st, f2: gNet.netMid2nd, f3: gNet.netMid3rd, f4: gNet.netMid4th },
+                    { f1: gNet.net4th1st, f2: gNet.net4th2nd, f3: gNet.net4th3rd, f4: gNet.net4th4th },
+                  ]
+                : [
+                    { f1: gNet.netLow1st, f2: gNet.netLow2nd, f3: gNet.netLow3rd },
+                    { f1: gNet.netHigh1st, f2: gNet.netHigh2nd, f3: gNet.netHigh3rd },
+                  ];
+
+            // MWP for Individual Net = max 1st-place across all active flights
+            let indNetMWP = 0;
+            for (let i = 0; i < netFlights && i < netFlightData.length; i++) {
+                const fd = netFlightData[i];
+                if (fd.f1 != null && fd.f1 !== "NO_GAME" && fd.f1 !== "NO_EVENT") {
+                    indNetMWP = Math.max(indNetMWP, numVal(fd.f1));
+                }
+            }
+            netMWP += indNetMWP;
+
+            html += `<tr><td><strong>Individual Net</strong></td><td>${fmt$(gNet.individualNet) || "—"}</td><td>${fmt$(indNetMWP) || "—"}</td><td>${netFlights}</td>${empty4}</tr>`;
+
+            for (let i = 0; i < netFlights && i < netFlightData.length; i++) {
+                const fd = netFlightData[i];
+                if (fd.f1 != null && fd.f1 !== "NO_GAME" && fd.f1 !== "NO_EVENT") {
+                    html += `<tr class="games-row-sub"><td class="games-indent">${netFlightNames[i]}</td><td></td><td>${fmt$(fd.f1) || "—"}</td><td></td>`;
+                    html += `<td>${fmt$(fd.f1) || "—"}</td><td>${fmt$(fd.f2) || "—"}</td><td>${fmt$(fd.f3) || "—"}</td><td>${fmt$(fd.f4) || "—"}</td></tr>`;
+                }
+            }
+
+            if (holes === 9) {
+                if (gNet.cityMVP) { netMWP += numVal(gNet.cityMVP); html += `<tr><td>City MVP</td><td>${fmt$(gNet.cityMVP)}</td><td>${fmt$(gNet.cityMVP)}</td><td></td>${empty4}</tr>`; }
+                if (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME") { netMWP += numVal(gNet.tgfMVP); html += `<tr><td>TGF MVP</td><td>${fmt$(gNet.tgfMVP)}</td><td>${fmt$(gNet.tgfMVP)}</td><td></td>${empty4}</tr>`; }
+            } else {
+                if (gNet.mvp) { netMWP += numVal(gNet.mvp); html += `<tr><td>MVP</td><td>${fmt$(gNet.mvp)}</td><td>${fmt$(gNet.mvp)}</td><td></td>${empty4}</tr>`; }
+            }
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gNet.netTotalPot) || "—"}</td><td>${fmt$(netMWP)}</td><td></td>${empty4}</tr>`;
+        } else {
+            html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough net players (${netPC})</td></tr>`;
+        }
+
+        // ── GROSS GAMES section (based on gross player count) ──
+        html += `<tr class="games-section-row"><td colspan="${C}">GROSS GAMES (${grossPC} players)</td></tr>`;
+        let grossMWP = 0;
+
+        if (gGross && grossPC >= 2) {
+            const skinsLabel = grossPC < 8 ? "1/2 Net Skins" : "Skins Gross";
+            if (gGross.skinsTotal && gGross.skinsTotal !== "NO_EVENT" && gGross.skinsTotal !== "NO_GAME") {
+                const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
+                const skinsMwpVal = numVal(gGross.skinsTotal);
+                grossMWP += skinsMwpVal;
+                html += `<tr><td><strong>${skinsLabel}</strong></td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
+                if (gGross.skins && gGross.skins.length) {
+                    const skinDetail = gGross.skins.map((v, i) => `${i+1}=${fmt$(v)}`).join(", ");
+                    html += `<tr class="games-row-sub"><td class="games-indent" colspan="4">Per skin: ${skinDetail}</td>${empty4}</tr>`;
+                }
+            } else {
+                html += `<tr class="games-row-disabled"><td>${skinsLabel}</td><td colspan="${C-1}">No Game</td></tr>`;
+            }
+
+            if (gGross.individualGross && gGross.individualGross !== "NO_GAME" && gGross.individualGross !== "NO_EVENT") {
+                const gFlights = gGross.grossFlights ? parseInt(gGross.grossFlights) : 0;
+                const grossIndMWP = numVal(gGross.grossLow1st);
+                grossMWP += grossIndMWP;
+                let details = '';
+                if (gGross.grossLow1st) details += `1st: ${fmt$(gGross.grossLow1st)}`;
+                if (gGross.grossLow2nd) details += `, 2nd: ${fmt$(gGross.grossLow2nd)}`;
+                html += `<tr><td><strong>Ind. Gross</strong></td><td>${fmt$(gGross.individualGross)}</td><td>${fmt$(grossIndMWP) || "—"}</td><td>${gFlights}</td><td>${details}</td><td></td><td></td><td></td></tr>`;
+            } else {
+                html += `<tr class="games-row-disabled"><td>Ind. Gross</td><td colspan="${C-1}">No Game</td></tr>`;
+            }
+
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gGross.grossTotalPot) || "—"}</td><td>${fmt$(grossMWP)}</td><td></td>${empty4}</tr>`;
+        } else {
+            html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough gross players (${grossPC})</td></tr>`;
+        }
+
+        html += '</tbody>';
+
+        // Grand total row inside the table, aligned under Pot and MWP columns
+        const eventTotal = (gEvent && totalPC >= 4) ? (Number(gEvent.eventTotalPot) || 0) : 0;
+        const netTotal = (gNet && netPC >= 2) ? (Number(gNet.netTotalPot) || 0) : 0;
+        const grossTotal = (gGross && grossPC >= 2) ? (Number(gGross.grossTotalPot) || 0) : 0;
+        const totalMWP = inclMWP + netMWP + grossMWP;
+        html += `<tfoot><tr class="games-grand-total-row"><td>TOTAL</td><td>${fmt$(eventTotal + netTotal + grossTotal)}</td><td>${fmt$(totalMWP)}</td><td></td>${empty4}</tr></tfoot>`;
+
+        html += '</table>';
+        html += '</div>';
+        return html;
+    }
+
     function renderDetailContent(ev) {
         const registrants = getRegistrants(ev.item_name);
         const rsvps = allRsvps[ev.item_name] || [];
@@ -885,19 +1411,66 @@
         const playingRsvps = rsvps.filter(r => r.response === 'PLAYING');
         const notPlayingRsvps = rsvps.filter(r => r.response === 'NOT PLAYING');
         const matchedItemIds = new Set(rsvps.filter(r => r.matched_item_id).map(r => r.matched_item_id));
-        const unmatchedPlaying = playingRsvps.filter(r => !r.matched_item_id);
+        // Frontend dedup: also exclude GG RSVPs whose email or name matches an existing registrant
+        const regEmails = new Set(registrants.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+        const regNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const unmatchedPlaying = playingRsvps.filter(r => {
+            if (r.matched_item_id) return false;
+            const email = (r.player_email || "").toLowerCase();
+            if (email && regEmails.has(email)) return false;
+            const resolved = (r.resolved_name || "").toLowerCase();
+            const first = (r.player_name || "").toLowerCase();
+            if (resolved && regNames.has(resolved)) return false;
+            if (first && [...regNames].some(n => n.startsWith(first))) return false;
+            return true;
+        });
 
-        // Summary badges
+        // Create synthetic rows for unmatched GG RSVP players so they appear in the main table
+        const ggRsvpRows = unmatchedPlaying.map((r, i) => ({
+            id: `gg-rsvp-${i}`,
+            customer: r.resolved_name || r.player_name || 'Unknown',
+            customer_email: r.player_email || '',
+            item_name: ev.item_name,
+            item_price: '', side_games: '', tee_choice: '', handicap: '',
+            member_status: '', order_date: '',
+            transaction_status: 'gg_rsvp',
+            email_uid: 'gg-rsvp',
+            transferred_from_id: null,
+            has_player_card: r.has_player_card !== false
+        }));
+        stats.players += ggRsvpRows.length;
+        stats.noGames += ggRsvpRows.length;
+
+        const holesType = extractHolesType(ev.item_name);
+        const gamesView = holesType && gamesOpenForEvent[ev.id];
+
+        // View toggle: PLAYERS / GAMES (connected toggle group)
         let html = '<div class="event-game-stats">';
-        html += `<span class="game-stat-badge ${!activeFilter ? 'active' : ''}" data-event-id="${ev.id}" data-filter="">PLAYERS <strong>${stats.players}</strong></span>`;
-        html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET GAMES <strong>${stats.net}</strong></span>`;
-        html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS GAMES <strong>${stats.gross}</strong></span>`;
-        html += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NO GAMES <strong>${stats.noGames}</strong></span>`;
-        if (rsvps.length) {
-            html += `<span class="game-stat-badge rsvp-stat-badge" style="cursor:default;">GG <strong>${playingRsvps.length}</strong> / <strong style="color:var(--red);">${notPlayingRsvps.length}</strong></span>`;
+        html += '<span class="view-toggle-group">';
+        html += `<span class="game-stat-badge ${!gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+        if (holesType) {
+            html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+        }
+        html += '</span>';
+
+        // Sub-filter badges (only in PLAYERS view)
+        if (!gamesView) {
+            html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
+            html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
+            html += `<span class="game-stat-badge ${activeFilter === 'NO GAMES' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NO GAMES">NO GAMES <strong>${stats.noGames}</strong></span>`;
+            if (rsvps.length) {
+                html += `<span class="game-stat-badge rsvp-stat-badge" style="cursor:default;">GG <strong>${playingRsvps.length}</strong> / <strong style="color:var(--red);">${notPlayingRsvps.length}</strong></span>`;
+            }
         }
         html += '</div>';
 
+        // ---- GAMES VIEW ----
+        if (gamesView) {
+            html += renderGamesPanel(ev);
+            return html;
+        }
+
+        // ---- PLAYERS VIEW ----
         // Filter registrants if a game filter is active
         let filtered = registrants;
         if (activeFilter) {
@@ -912,6 +1485,11 @@
 
         // Sort the filtered registrants
         filtered = sortRegistrants(filtered);
+
+        // Append GG RSVP players (show when no filter or NO GAMES filter)
+        if (!activeFilter || activeFilter === "NO GAMES") {
+            filtered = filtered.concat(ggRsvpRows);
+        }
 
         // Detail controls row: column toggle + count + Add Player button
         html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; flex-wrap:wrap;">';
@@ -948,37 +1526,75 @@
         const overrides = allRsvpOverrides[ev.item_name] || {};
         filtered.forEach(r => {
             const txStatus = r.transaction_status || "active";
+            const isRsvpOnly = txStatus === "rsvp_only";
+            const isGgRsvp = txStatus === "gg_rsvp";
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
-            // Determine circle state: manual override wins, then auto from RSVP
+            // Determine circle state: GG RSVP = green, manual RSVP = light green, then auto from GG match
             const manualOverride = overrides[r.id];
             let circleState = "none";
-            if (manualOverride && manualOverride !== "none") {
-                circleState = manualOverride;
+            let circleSource = "none";
+            if (isGgRsvp) {
+                circleState = "playing";
+                circleSource = "auto";
+            } else if (isRsvpOnly) {
+                circleState = "manual_green";
+                circleSource = "manual";
             } else if (rsvp && rsvp.response === 'PLAYING') {
                 circleState = "playing";
+                circleSource = "auto";
             } else if (rsvp && rsvp.response === 'NOT PLAYING') {
                 circleState = "not_playing";
+                circleSource = "auto";
             }
-            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState}` : "";
-            const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (r.transferred_from_id ? ' class="row-from-transfer"' : '');
+            // Manual override applies unless a real GG RSVP supersedes manual_green
+            if (manualOverride && manualOverride !== "none") {
+                // A real GG RSVP response takes precedence over manual_green
+                // (admin added player to roster, player later responded themselves)
+                if (manualOverride === "manual_green" && rsvp && (rsvp.response === 'PLAYING' || rsvp.response === 'NOT PLAYING')) {
+                    // Keep the GG RSVP state already set above
+                } else {
+                    circleState = manualOverride;
+                    circleSource = "manual";
+                }
+            }
+            const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
+            const isManualRow = (r.email_uid || "").startsWith("manual-");
+            const isCompRow = (r.email_uid || "").startsWith("manual-comp");
+            let rowClass;
+            if (isRsvpOnly || isGgRsvp) rowClass = ' class="row-rsvp-only"';
+            else if (txStatus !== "active") rowClass = ` class="row-${txStatus}"`;
+            else if (r.transferred_from_id) rowClass = ' class="row-from-transfer"';
+            else rowClass = '';
             html += `<tr${rowClass}>`;
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
-                const style = vis ? '' : 'display:none;';
+                const rowBg = (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;' : isCompRow ? 'background-color:#dcfce7;' : isManualRow ? 'background-color:#dbeafe;' : '';
+                const style = (vis ? '' : 'display:none;') + rowBg;
                 if (c.key === "rsvp") {
-                    html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" title="${circleState === 'playing' ? 'Playing' : circleState === 'not_playing' ? 'Not Playing' : 'No RSVP'}"></span></td>`;
+                    html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
                     let tag = "";
-                    if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
+                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
+                    else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">RSVP - Remind</span>`;
+                    else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
+                    else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+                    if (isCompRow || (r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
+                    else if (isManualRow && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}</td>`;
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
                     let btns = "";
-                    if (txStatus === "active" && !r.transferred_from_id) {
+                    if (isRsvpOnly && isManualRow) {
+                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                    } else if (isCompRow) {
+                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                    } else if (txStatus === "active" && !r.transferred_from_id) {
                         btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                        if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "credited" || txStatus === "transferred") {
                         btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
                     }
@@ -994,21 +1610,6 @@
 
         // RSVP sections — only show if RSVPs exist for this event
         if (rsvps.length) {
-            // Unmatched PLAYING RSVPs — players who RSVP'd but have no transaction
-            if (unmatchedPlaying.length) {
-                html += '<div class="rsvp-section rsvp-unmatched">';
-                html += `<h4 style="color:#d97706;">RSVP'd Playing — No Transaction (${unmatchedPlaying.length})</h4>`;
-                html += '<div class="rsvp-player-list">';
-                unmatchedPlaying.forEach(r => {
-                    html += `<div class="rsvp-player-card rsvp-unmatched-card">`;
-                    html += `<span class="rsvp-badge rsvp-playing">GG</span> `;
-                    html += `<strong>${escapeHtml(r.player_name || 'Unknown')}</strong>`;
-                    if (r.player_email) html += ` <span class="rsvp-email">${escapeHtml(r.player_email)}</span>`;
-                    html += `</div>`;
-                });
-                html += '</div></div>';
-            }
-
             // NOT PLAYING RSVPs
             if (notPlayingRsvps.length) {
                 html += '<div class="rsvp-section rsvp-not-playing-section">';
@@ -1048,17 +1649,19 @@
 
         // Expand the clicked row
         expandedEventId = eventId;
+        const ev = allEvents.find(e => e.id === eventId);
+
+        // Fetch RSVPs first (needed for both desktop and mobile)
+        if (ev) await fetchRsvps(ev.item_name);
+
+        // Desktop: render detail into table row
         const row = document.querySelector(`.event-row-clickable[data-id="${eventId}"]`);
         const detailRow = document.querySelector(`.event-detail-row[data-detail-for="${eventId}"]`);
         if (row) row.classList.add("expanded");
         if (detailRow) {
             detailRow.classList.add("visible");
-            // Lazy-render content — fetch RSVPs first
-            const ev = allEvents.find(e => e.id === eventId);
             if (ev) {
                 const container = document.getElementById(`detail-content-${eventId}`);
-                container.innerHTML = '<div style="padding:1rem; color:var(--text-muted);">Loading...</div>';
-                await fetchRsvps(ev.item_name);
                 container.innerHTML = renderDetailContent(ev);
                 attachDetailHandlers(container, ev);
             }
@@ -1083,8 +1686,18 @@
     }
 
     function attachDetailHandlers(container, ev) {
-        // Game filter badges
-        container.querySelectorAll(".game-stat-badge").forEach(badge => {
+        // PLAYERS / GAMES view toggle
+        container.querySelectorAll("[data-toggle-games]").forEach(badge => {
+            badge.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const wantGames = badge.dataset.toggleGames === "1";
+                gamesOpenForEvent[ev.id] = wantGames;
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Game filter badges (PLAYERS view sub-filters)
+        container.querySelectorAll(".game-stat-badge[data-filter]").forEach(badge => {
             badge.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const filter = badge.dataset.filter;
@@ -1138,24 +1751,123 @@
                 const itemId = parseInt(circle.dataset.itemId);
                 const eventName = circle.dataset.eventName;
                 const current = circle.dataset.rsvpState;
-                // Cycle: none → playing → not_playing → none
-                const next = current === "none" ? "playing" : current === "playing" ? "not_playing" : "none";
+                const source = circle.dataset.circleSource;
+
+                // Auto-green (GG Playing) is locked — no click action
+                if (current === "playing" && source === "auto") return;
+
+                let next;
+                if (current === "none" || current === "not_playing") {
+                    // Blank or red → manual_green (with confirmation)
+                    const msg = current === "not_playing"
+                        ? "This player RSVP'd 'Not Playing' on GG. Confirm you've added them to the GG roster?"
+                        : "Confirm you've added this player to the GG roster?";
+                    if (!confirm(msg)) return;
+                    next = "manual_green";
+                } else if (current === "manual_green") {
+                    // Manual green → back to none (with confirmation)
+                    if (!confirm("Remove manual GG confirmation?")) return;
+                    next = "none";
+                } else {
+                    return; // Other states: no action
+                }
+
                 try {
-                    await fetch("/api/rsvps/overrides", {
+                    const resp = await fetch("/api/rsvps/overrides", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ item_id: itemId, event_name: eventName, status: next })
                     });
-                    // Update local cache
+                    if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
                     if (!allRsvpOverrides[eventName]) allRsvpOverrides[eventName] = {};
                     allRsvpOverrides[eventName][itemId] = next;
-                    // Update circle visually without full re-render
                     circle.dataset.rsvpState = next;
-                    circle.className = "rsvp-circle" + (next !== "none" ? ` rsvp-circle-${next}` : "");
-                    circle.title = next === "playing" ? "Playing" : next === "not_playing" ? "Not Playing" : "No RSVP";
+                    circle.dataset.circleSource = next === "none" ? "none" : "manual";
+                    const cls = next !== "none" ? ` rsvp-circle-${next.replace("_", "-")}` : "";
+                    circle.className = "rsvp-circle" + cls;
+                    circle.title = next === "manual_green" ? "Added to GG (manual)" : "No RSVP";
                 } catch (err) {
                     console.error("Failed to update RSVP override:", err);
                 }
+            });
+        });
+
+        // RSVP-Remind tag click → popover with Record Payment + Send Reminder
+        container.querySelectorAll(".rsvp-only-tag").forEach(tag => {
+            tag.addEventListener("click", (e) => {
+                e.stopPropagation();
+                // Remove any existing popover
+                document.querySelectorAll(".rsvp-popover").forEach(p => p.remove());
+
+                const itemId = tag.dataset.itemId;
+                const email = tag.dataset.customerEmail || "";
+                const isGgRsvp = String(itemId).startsWith("gg-rsvp");
+                const item = isGgRsvp ? null : allItems.find(r => r.id === parseInt(itemId));
+                // Get player name from the adjacent link or parent
+                const nameEl = tag.closest("td")?.querySelector(".cell-link") || tag.closest(".mc-header")?.querySelector("a");
+                const playerName = nameEl ? nameEl.textContent.trim() : "Player";
+                // Get event name from the expanded event context
+                const eventCard = tag.closest("[data-event-id]");
+                const eventId = eventCard ? parseInt(eventCard.dataset.eventId) : expandedEventId;
+                const ev = allEvents.find(e => e.id === eventId);
+                const eventName = ev ? ev.item_name : "";
+
+                const pop = document.createElement("div");
+                pop.className = "rsvp-popover";
+                // Record Payment button (only for real items, not GG RSVP synthetic rows)
+                const payBtn = document.createElement("button");
+                payBtn.className = "rsvp-popover-btn";
+                payBtn.textContent = "Record Payment";
+                if (item) {
+                    payBtn.addEventListener("click", (ev2) => {
+                        ev2.stopPropagation();
+                        pop.remove();
+                        openUpgradeRsvpModal(item);
+                    });
+                } else {
+                    payBtn.disabled = true;
+                    payBtn.title = "Add player first to record payment";
+                    payBtn.style.opacity = "0.5";
+                }
+                pop.appendChild(payBtn);
+
+                // Send Reminder button
+                const remindBtn = document.createElement("button");
+                remindBtn.className = "rsvp-popover-btn";
+                remindBtn.textContent = "Send Reminder";
+                if (email) {
+                    remindBtn.addEventListener("click", async (ev2) => {
+                        ev2.stopPropagation();
+                        pop.remove();
+                        if (!confirm(`Send payment reminder to ${playerName} (${email})?`)) return;
+                        try {
+                            const resp = await fetch("/api/events/send-reminder", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ to_email: email, player_name: playerName, event_name: eventName })
+                            });
+                            const result = await resp.json();
+                            if (resp.ok) alert("Reminder sent!");
+                            else alert(result.error || "Failed to send reminder.");
+                        } catch (err) {
+                            alert("Error sending reminder: " + err.message);
+                        }
+                    });
+                } else {
+                    remindBtn.disabled = true;
+                    remindBtn.title = "No email address available";
+                    remindBtn.style.opacity = "0.5";
+                }
+                pop.appendChild(remindBtn);
+
+                // Position near the tag
+                tag.style.position = "relative";
+                tag.parentElement.style.position = "relative";
+                tag.parentElement.appendChild(pop);
+
+                // Close on outside click
+                const close = (ev2) => { if (!pop.contains(ev2.target) && ev2.target !== tag) { pop.remove(); document.removeEventListener("click", close); } };
+                setTimeout(() => document.addEventListener("click", close), 0);
             });
         });
 
@@ -1170,6 +1882,26 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 reverseEvCredit(parseInt(btn.dataset.reverseId));
+            });
+        });
+
+        // Delete manual player buttons
+        container.querySelectorAll("[data-delete-id]").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const id = parseInt(btn.dataset.deleteId);
+                const name = btn.dataset.playerName || "this player";
+                if (!confirm(`Delete manually added player "${name}"? This cannot be undone.`)) return;
+                try {
+                    const res = await fetch(`/api/events/delete-manual-player/${id}`, { method: "DELETE" });
+                    if (!res.ok) {
+                        const data = await res.json();
+                        alert(data.error || "Failed to delete player.");
+                        return;
+                    }
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Failed to delete player."); }
             });
         });
 
@@ -1293,18 +2025,90 @@
     // ---- Add Player modal logic ----
     let addPlayerEventName = null;
 
+    // ---- Add Player modal (3 modes) ----
+    let addPlayerMode = "comp";
+
+    function getAddPlayerMode() {
+        const checked = document.querySelector('input[name="add-player-mode"]:checked');
+        return checked ? checked.value : "comp";
+    }
+
+    function updateAddPlayerMode() {
+        addPlayerMode = getAddPlayerMode();
+        const isComp = addPlayerMode === "comp";
+        const isRsvp = addPlayerMode === "rsvp";
+        const isPaid = addPlayerMode === "paid_separately";
+
+        // Toggle name sections
+        document.getElementById("ap-manager-select").style.display = isComp ? "" : "none";
+        document.getElementById("ap-name-input").style.display = isComp ? "none" : "";
+
+        // Toggle payment fields
+        document.getElementById("ap-payment-section").style.display = isPaid ? "" : "none";
+
+        // Toggle golf details
+        document.getElementById("ap-golf-details").style.display = isRsvp ? "none" : "";
+
+        // Auto-select Manager status in comp mode
+        const statusSelect = document.getElementById("add-player-status");
+        if (isComp) {
+            statusSelect.value = "MANAGER";
+            statusSelect.disabled = true;
+        } else {
+            statusSelect.disabled = false;
+        }
+
+        // Update submit button text
+        const btn = document.getElementById("add-player-submit-btn");
+        if (isComp) btn.textContent = "Add Manager";
+        else if (isRsvp) btn.textContent = "Add RSVP";
+        else btn.textContent = "Add Player";
+
+        // Update event info text
+        if (addPlayerEventName) {
+            const prefix = isComp ? "Comp manager for" : isRsvp ? "RSVP only for" : "Paid separately for";
+            document.getElementById("add-player-event-info").innerHTML =
+                `${prefix}: <strong>${escapeHtml(addPlayerEventName)}</strong>`;
+        }
+
+        // Update mode button styles
+        document.querySelectorAll(".ap-mode-btn").forEach(label => {
+            const radio = label.querySelector("input");
+            if (radio && radio.checked) {
+                label.style.background = "var(--primary)";
+                label.style.color = "#fff";
+            } else {
+                label.style.background = "var(--surface)";
+                label.style.color = "var(--text)";
+            }
+        });
+
+        // Populate customer autocomplete list
+        if (!isComp) {
+            const datalist = document.getElementById("ap-customer-list");
+            const names = [...new Set(allItems.map(i => i.customer).filter(Boolean))].sort();
+            datalist.innerHTML = names.map(n => `<option value="${escapeHtml(n)}">`).join("");
+        }
+    }
+
     function openAddPlayerModal(eventName) {
         addPlayerEventName = eventName;
-        document.getElementById("add-player-event-info").innerHTML =
-            `Adding comp'd player to: <strong>${escapeHtml(eventName)}</strong>`;
+        // Reset mode to comp
+        document.querySelector('input[name="add-player-mode"][value="comp"]').checked = true;
+        // Clear all fields
+        document.getElementById("add-player-manager").value = "";
         document.getElementById("add-player-name").value = "";
         document.getElementById("add-player-side-games").value = "";
         document.getElementById("add-player-tee").value = "";
         document.getElementById("add-player-handicap").value = "";
         document.getElementById("add-player-status").value = "";
-        document.getElementById("add-player-type").value = "";
+        document.getElementById("add-player-amount") && (document.getElementById("add-player-amount").value = "");
+        document.getElementById("add-player-source") && (document.getElementById("add-player-source").value = "");
+        document.getElementById("add-player-email").value = "";
+        document.getElementById("add-player-phone").value = "";
+        document.getElementById("ap-contact-fields").style.display = "none";
+        updateAddPlayerMode();
         document.getElementById("add-player-overlay").style.display = "flex";
-        document.getElementById("add-player-name").focus();
     }
 
     function closeAddPlayerModal() {
@@ -1314,21 +2118,72 @@
 
     async function handleAddPlayerSubmit(e) {
         e.preventDefault();
-        const name = document.getElementById("add-player-name").value.trim();
-        if (!name || !addPlayerEventName) return;
+        const mode = getAddPlayerMode();
+        const missing = [];
+        let name;
+
+        if (mode === "comp") {
+            name = document.getElementById("add-player-manager").value;
+            if (!name) missing.push("Manager");
+        } else {
+            name = document.getElementById("add-player-name").value.trim();
+            if (!name) missing.push("Player Name");
+        }
+        if (!addPlayerEventName) return;
+
+        // Prevent duplicate player entry
+        const existingRegs = getRegistrants(addPlayerEventName);
+        const isDuplicate = existingRegs.some(r => (r.customer || "").toLowerCase() === name.toLowerCase());
+        if (isDuplicate) {
+            alert(`${name} is already registered for this event.`);
+            return;
+        }
+
+        const payload = {
+            event_name: addPlayerEventName,
+            customer: name,
+            mode: mode,
+        };
+
+        if (mode !== "rsvp") {
+            payload.side_games = document.getElementById("add-player-side-games").value;
+            if (!payload.side_games) missing.push("Side Games");
+            payload.tee_choice = document.getElementById("add-player-tee").value;
+            payload.handicap = document.getElementById("add-player-handicap").value;
+            payload.member_status = document.getElementById("add-player-status").value;
+        }
+
+        if (mode === "paid_separately") {
+            let rawAmount = document.getElementById("add-player-amount").value.trim().replace(/[^0-9.]/g, "");
+            payload.payment_source = document.getElementById("add-player-source").value;
+            if (!rawAmount) missing.push("Amount");
+            else {
+                const num = parseFloat(rawAmount);
+                if (isNaN(num) || num <= 0) { alert("Please enter a valid dollar amount."); return; }
+                payload.payment_amount = "$" + num.toFixed(2);
+            }
+            if (!payload.payment_source) missing.push("Payment Source");
+        }
+
+        if (missing.length > 1) {
+            alert("All required fields must be entered.");
+            return;
+        } else if (missing.length === 1) {
+            alert(`Please enter ${missing[0]}.`);
+            return;
+        }
+
+        // Include optional contact fields
+        const emailEl = document.getElementById("add-player-email");
+        const phoneEl = document.getElementById("add-player-phone");
+        if (emailEl && emailEl.value.trim()) payload.customer_email = emailEl.value.trim();
+        if (phoneEl && phoneEl.value.trim()) payload.customer_phone = phoneEl.value.trim();
+
         try {
             const res = await fetch("/api/events/add-player", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    event_name: addPlayerEventName,
-                    customer: name,
-                    side_games: document.getElementById("add-player-side-games").value,
-                    tee_choice: document.getElementById("add-player-tee").value,
-                    handicap: document.getElementById("add-player-handicap").value,
-                    member_status: document.getElementById("add-player-status").value,
-                    golf_or_compete: document.getElementById("add-player-type").value,
-                }),
+                body: JSON.stringify(payload),
             });
             if (!res.ok) {
                 const data = await res.json();
@@ -1339,6 +2194,70 @@
             await fetchItems();
             await fetchEvents();
         } catch (err) { alert("Failed to add player."); }
+    }
+
+    // ---- Upgrade RSVP modal ----
+    let upgradeRsvpItemId = null;
+
+    function openUpgradeRsvpModal(item) {
+        upgradeRsvpItemId = item.id;
+        document.getElementById("upgrade-rsvp-info").innerHTML =
+            `Recording payment for: <strong>${escapeHtml(item.customer)}</strong>`;
+        document.getElementById("upgrade-rsvp-amount").value = "";
+        document.getElementById("upgrade-rsvp-source").value = "";
+        document.getElementById("upgrade-rsvp-side-games").value = "";
+        document.getElementById("upgrade-rsvp-tee").value = "";
+        document.getElementById("upgrade-rsvp-handicap").value = "";
+        document.getElementById("upgrade-rsvp-status").value = "";
+        document.getElementById("upgrade-rsvp-overlay").style.display = "flex";
+    }
+
+    function closeUpgradeRsvpModal() {
+        document.getElementById("upgrade-rsvp-overlay").style.display = "none";
+        upgradeRsvpItemId = null;
+    }
+
+    async function handleUpgradeRsvpSubmit(e) {
+        e.preventDefault();
+        if (!upgradeRsvpItemId) return;
+        const missing = [];
+        let rawAmount = document.getElementById("upgrade-rsvp-amount").value.trim().replace(/[^0-9.]/g, "");
+        const source = document.getElementById("upgrade-rsvp-source").value;
+        const sideGames = document.getElementById("upgrade-rsvp-side-games").value;
+        let formattedAmount = "";
+        if (!rawAmount) missing.push("Amount");
+        else {
+            const num = parseFloat(rawAmount);
+            if (isNaN(num) || num <= 0) { alert("Please enter a valid dollar amount."); return; }
+            formattedAmount = "$" + num.toFixed(2);
+        }
+        if (!source) missing.push("Payment Source");
+        if (!sideGames) missing.push("Side Games");
+        if (missing.length > 1) { alert("All required fields must be entered."); return; }
+        if (missing.length === 1) { alert(`Please enter ${missing[0]}.`); return; }
+        try {
+            const res = await fetch("/api/events/upgrade-rsvp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    item_id: upgradeRsvpItemId,
+                    payment_amount: formattedAmount,
+                    payment_source: source,
+                    side_games: sideGames,
+                    tee_choice: document.getElementById("upgrade-rsvp-tee").value,
+                    handicap: document.getElementById("upgrade-rsvp-handicap").value,
+                    member_status: document.getElementById("upgrade-rsvp-status").value,
+                }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || "Failed to upgrade RSVP.");
+                return;
+            }
+            closeUpgradeRsvpModal();
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) { alert("Failed to upgrade RSVP."); }
     }
 
     async function syncEvents() {
@@ -1429,6 +2348,218 @@
         }
     }
 
+    // =========================================================================
+    // Orphaned Items
+    // =========================================================================
+    let orphanedItems = [];
+
+    async function fetchOrphanedItems() {
+        if (currentRole !== "admin") return;
+        try {
+            const res = await fetch("/api/events/orphaned-items");
+            orphanedItems = await res.json();
+            renderOrphanBanner();
+        } catch (err) {
+            console.error("Failed to fetch orphaned items:", err);
+        }
+    }
+
+    function renderOrphanBanner() {
+        const banner = document.getElementById("orphan-banner");
+        if (!orphanedItems.length || currentRole !== "admin") {
+            banner.style.display = "none";
+            return;
+        }
+        banner.style.display = "block";
+        document.getElementById("orphan-count").textContent = orphanedItems.length;
+
+        const list = document.getElementById("orphan-list");
+        list.innerHTML = orphanedItems.map(o => {
+            const customers = (o.customers || "").split(",").slice(0, 3).join(", ");
+            return `
+            <div class="orphan-item">
+                <div class="orphan-item-info">
+                    <span class="orphan-item-name">${escapeHtml(o.item_name)}</span>
+                    <span class="orphan-item-meta">${o.item_count} transaction(s) &middot; ${escapeHtml(customers || "—")}</span>
+                </div>
+                <div class="orphan-item-actions">
+                    <button class="btn btn-primary" style="font-size:0.78rem; padding:0.3rem 0.75rem;" onclick="openResolveOrphan('${escapeHtml(o.item_name).replace(/'/g, "\\'")}', ${o.item_count})">Create Event</button>
+                    <button class="btn btn-edit" onclick="openResolveOrphan('${escapeHtml(o.item_name).replace(/'/g, "\\'")}', ${o.item_count}, 'assign')">Merge with Existing</button>
+                </div>
+            </div>`;
+        }).join("");
+
+        // Auto-expand the orphan list so it's immediately visible
+        list.style.display = "";
+        document.getElementById("orphan-toggle-btn").textContent = "Hide \u25B4";
+    }
+
+    // =========================================================================
+    // Merge Events
+    // =========================================================================
+    let mergeSourceId = null;
+
+    function openMergeEvent(eventId) {
+        const ev = allEvents.find(e => e.id === eventId);
+        if (!ev) return;
+        mergeSourceId = eventId;
+
+        document.getElementById("merge-source-info").innerHTML =
+            `<strong>Source:</strong> ${escapeHtml(ev.item_name)} (${ev.registrations || 0} registrations)`;
+
+        // Build target picker excluding the source
+        const sel = document.getElementById("merge-target-select");
+        const others = allEvents.filter(e => e.id !== eventId);
+        sel.innerHTML = buildEvPickerOptions(others);
+
+        document.getElementById("merge-event-overlay").style.display = "flex";
+    }
+
+    function closeMergeEvent() {
+        document.getElementById("merge-event-overlay").style.display = "none";
+        mergeSourceId = null;
+    }
+
+    async function submitMerge() {
+        const targetName = document.getElementById("merge-target-select").value;
+        if (!targetName) { alert("Please select a target event."); return; }
+        const target = allEvents.find(e => e.item_name === targetName);
+        if (!target) { alert("Target event not found."); return; }
+        const source = allEvents.find(e => e.id === mergeSourceId);
+        if (!source) return;
+
+        if (!confirm(`Merge "${source.item_name}" into "${target.item_name}"?\n\n"${source.item_name}" will become an alias of "${target.item_name}". Transactions keep their original names but will show under the target event. The source event will be deleted.`)) return;
+
+        try {
+            const res = await fetch("/api/events/merge", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ source_id: mergeSourceId, target_id: target.id }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Merge failed");
+            alert(`Merged! ${data.items_linked} transaction(s) linked to "${data.target_event}" via alias. The source event name is now an alias.`);
+            closeMergeEvent();
+            await fetchItems();
+            await fetchEvents();
+            await fetchOrphanedItems();
+        } catch (err) {
+            alert("Merge failed: " + err.message);
+        }
+    }
+
+    // =========================================================================
+    // Resolve Orphans
+    // =========================================================================
+    let resolveOrphanName = null;
+    let resolveMode = "assign";
+
+    function openResolveOrphan(itemName, count, mode) {
+        resolveOrphanName = itemName;
+        resolveMode = mode || "create";
+
+        document.getElementById("resolve-orphan-info").innerHTML =
+            `<strong>${escapeHtml(itemName)}</strong> &mdash; ${count} unattached transaction(s)`;
+
+        // Set mode toggle
+        document.querySelectorAll('input[name="resolve-mode"]').forEach(r => {
+            r.checked = r.value === resolveMode;
+        });
+        document.querySelectorAll(".resolve-mode-btn").forEach(b => {
+            b.classList.toggle("resolve-mode-active", b.querySelector("input").value === resolveMode);
+        });
+        document.getElementById("resolve-assign-section").style.display = resolveMode === "assign" ? "" : "none";
+        document.getElementById("resolve-create-section").style.display = resolveMode === "create" ? "" : "none";
+
+        // Build event picker
+        document.getElementById("resolve-target-select").innerHTML = buildEvPickerOptions(allEvents);
+
+        // Pre-fill create fields
+        document.getElementById("resolve-new-name").value = itemName;
+        const orphan = orphanedItems.find(o => o.item_name === itemName);
+        if (orphan) {
+            document.getElementById("resolve-new-date").value = orphan.event_date || "";
+            document.getElementById("resolve-new-course").value = orphan.course || "";
+            document.getElementById("resolve-new-city").value = orphan.city || "";
+        }
+
+        document.getElementById("resolve-orphan-overlay").style.display = "flex";
+    }
+
+    function closeResolveOrphan() {
+        document.getElementById("resolve-orphan-overlay").style.display = "none";
+        resolveOrphanName = null;
+    }
+
+    async function submitResolve() {
+        if (resolveMode === "assign") {
+            const target = document.getElementById("resolve-target-select").value;
+            if (!target) { alert("Please select a target event."); return; }
+            try {
+                const res = await fetch("/api/events/resolve-orphan", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ old_item_name: resolveOrphanName, target_event: target }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "Resolve failed");
+                alert(`Resolved! ${data.items_linked} transaction(s) linked to "${data.target_event}" via alias.`);
+                closeResolveOrphan();
+                await fetchItems();
+                await fetchEvents();
+                await fetchOrphanedItems();
+            } catch (err) {
+                alert("Resolve failed: " + err.message);
+            }
+        } else {
+            // Create new event then assign
+            const name = document.getElementById("resolve-new-name").value.trim();
+            if (!name) { alert("Event name is required."); return; }
+            try {
+                // Create the event (if it already exists, that's OK — just proceed to link)
+                let eventExisted = false;
+                const createRes = await fetch("/api/events", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        item_name: name,
+                        event_date: document.getElementById("resolve-new-date").value,
+                        course: document.getElementById("resolve-new-course").value,
+                        city: document.getElementById("resolve-new-city").value,
+                    }),
+                });
+                if (!createRes.ok) {
+                    const d = await createRes.json();
+                    // If event already exists, proceed to resolve — not an error
+                    if ((d.error || "").toLowerCase().includes("already exists")) {
+                        eventExisted = true;
+                    } else {
+                        throw new Error(d.error || "Failed to create event");
+                    }
+                }
+                // Now resolve orphans to this event
+                if (name !== resolveOrphanName) {
+                    const resolveRes = await fetch("/api/events/resolve-orphan", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ old_item_name: resolveOrphanName, target_event: name }),
+                    });
+                    const data = await resolveRes.json();
+                    if (!resolveRes.ok) throw new Error(data.error || "Resolve failed");
+                    alert(`${eventExisted ? "Event already existed." : "Created event."} Linked ${data.items_linked} transaction(s) to "${name}" via alias.`);
+                } else {
+                    alert(`${eventExisted ? "Event already existed" : "Created event"} "${name}". Items are now attached.`);
+                }
+                closeResolveOrphan();
+                await fetchItems();
+                await fetchEvents();
+                await fetchOrphanedItems();
+            } catch (err) {
+                alert("Failed: " + err.message);
+            }
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", async () => {
         if ("scrollRestoration" in history) history.scrollRestoration = "manual";
         window.scrollTo(0, 0);
@@ -1481,6 +2612,51 @@
         document.getElementById("add-player-close").addEventListener("click", closeAddPlayerModal);
         document.getElementById("add-player-overlay").addEventListener("click", (e) => {
             if (e.target === e.currentTarget) closeAddPlayerModal();
+        });
+        // Mode toggle for Add Player
+        document.querySelectorAll('input[name="add-player-mode"]').forEach(radio => {
+            radio.addEventListener("change", updateAddPlayerMode);
+        });
+
+        // Show email/phone fields for new players + auto-fill status
+        document.getElementById("add-player-name").addEventListener("input", function() {
+            const name = this.value.trim();
+            const knownNames = new Set(allItems.map(i => (i.customer || "").toLowerCase()));
+            const isKnown = knownNames.has(name.toLowerCase());
+            document.getElementById("ap-contact-fields").style.display = (name && !isKnown) ? "" : "none";
+
+            // Auto-fill status from existing customer data
+            if (isKnown) {
+                const customerItems = allItems.filter(i => (i.customer || "").toLowerCase() === name.toLowerCase());
+                const statuses = customerItems.map(i => (i.member_status || "").toUpperCase()).filter(Boolean);
+                const statusSelect = document.getElementById("add-player-status");
+                if (!statusSelect.disabled) {
+                    if (statuses.includes("MEMBER")) statusSelect.value = "MEMBER";
+                    else if (statuses.includes("MANAGER")) statusSelect.value = "MANAGER";
+                    else if (statuses.includes("GUEST")) statusSelect.value = "GUEST";
+                    else if (statuses.includes("1ST TIMER")) statusSelect.value = "1ST TIMER";
+                    else statusSelect.value = "";
+                }
+            }
+        });
+
+        // Auto-format amount fields on blur
+        ["add-player-amount", "upgrade-rsvp-amount"].forEach(id => {
+            document.getElementById(id).addEventListener("blur", function() {
+                let raw = this.value.trim().replace(/[^0-9.]/g, "");
+                if (raw) {
+                    const num = parseFloat(raw);
+                    if (!isNaN(num) && num > 0) this.value = num.toFixed(2);
+                }
+            });
+        });
+
+        // Upgrade RSVP modal
+        document.getElementById("upgrade-rsvp-form").addEventListener("submit", handleUpgradeRsvpSubmit);
+        document.getElementById("upgrade-rsvp-cancel").addEventListener("click", closeUpgradeRsvpModal);
+        document.getElementById("upgrade-rsvp-close").addEventListener("click", closeUpgradeRsvpModal);
+        document.getElementById("upgrade-rsvp-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeUpgradeRsvpModal();
         });
 
         // Add Event modal
@@ -1564,20 +2740,61 @@
             if (e.target === e.currentTarget) closeEditEvent();
         });
 
+        // Merge event modal
+        document.getElementById("merge-event-submit").addEventListener("click", submitMerge);
+        document.getElementById("merge-event-cancel").addEventListener("click", closeMergeEvent);
+        document.getElementById("merge-event-close").addEventListener("click", closeMergeEvent);
+        document.getElementById("merge-event-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeMergeEvent();
+        });
+
+        // Resolve orphan modal
+        document.getElementById("resolve-orphan-submit").addEventListener("click", submitResolve);
+        document.getElementById("resolve-orphan-cancel").addEventListener("click", closeResolveOrphan);
+        document.getElementById("resolve-orphan-close").addEventListener("click", closeResolveOrphan);
+        document.getElementById("resolve-orphan-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeResolveOrphan();
+        });
+        document.querySelectorAll('input[name="resolve-mode"]').forEach(radio => {
+            radio.addEventListener("change", () => {
+                resolveMode = radio.value;
+                document.querySelectorAll(".resolve-mode-btn").forEach(b => {
+                    b.classList.toggle("resolve-mode-active", b.querySelector("input").value === resolveMode);
+                });
+                document.getElementById("resolve-assign-section").style.display = resolveMode === "assign" ? "" : "none";
+                document.getElementById("resolve-create-section").style.display = resolveMode === "create" ? "" : "none";
+            });
+        });
+
+        // Orphan banner toggle
+        document.getElementById("orphan-toggle-btn").addEventListener("click", () => {
+            const list = document.getElementById("orphan-list");
+            const btn = document.getElementById("orphan-toggle-btn");
+            if (list.style.display === "none") {
+                list.style.display = "";
+                btn.textContent = "Hide \u25B4";
+            } else {
+                list.style.display = "none";
+                btn.textContent = "Show \u25BE";
+            }
+        });
+
         // Fetch items first (for registrant details), then sync events and fetch
         await fetchItems();
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
+        fetchOrphanedItems();
 
         // Auto-refresh every 30s to keep multiple users in sync
         setInterval(async () => {
-            const editOpen = document.getElementById("edit-event-overlay").style.display === "flex";
-            const creditOpen = document.getElementById("ev-credit-overlay").style.display === "flex";
-            const addEventOpen = document.getElementById("add-event-overlay").style.display === "flex";
-            const addPlayerOpen = document.getElementById("add-player-overlay").style.display === "flex";
-            const loginOpen = document.getElementById("login-overlay").style.display === "flex";
-            if (!editOpen && !creditOpen && !addEventOpen && !addPlayerOpen && !loginOpen) {
+            const anyModalOpen = [
+                "edit-event-overlay", "ev-credit-overlay", "add-event-overlay",
+                "add-player-overlay", "upgrade-rsvp-overlay", "login-overlay",
+                "merge-event-overlay", "resolve-orphan-overlay"
+            ].some(id => document.getElementById(id).style.display === "flex");
+            if (!anyModalOpen) {
                 await fetchItems();
                 await fetchEvents();
+                fetchOrphanedItems();
             }
         }, 30000);
     });

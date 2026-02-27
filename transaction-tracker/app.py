@@ -7,6 +7,8 @@ Includes a webhook connector for external integrations and a daily email report.
 """
 
 import os
+import re
+import json
 import secrets
 import logging
 import threading
@@ -28,12 +30,14 @@ from email_parser.database import (
     save_items,
     update_item,
     delete_item,
+    delete_manual_player,
     credit_item,
     transfer_item,
     reverse_credit,
     create_event,
     seed_events,
     add_player_to_event,
+    upgrade_rsvp_to_paid,
     autofix_side_games,
     autofix_all,
     normalize_tee_choices,
@@ -41,16 +45,23 @@ from email_parser.database import (
     get_all_events,
     update_event,
     delete_event,
+    merge_events,
+    get_orphaned_items,
+    resolve_orphaned_items,
+    get_all_event_aliases,
     get_known_rsvp_uids,
     save_rsvps,
     get_rsvps_for_event,
     get_all_rsvps,
     get_rsvp_stats,
     rematch_rsvps,
+    manual_match_rsvp,
+    unmatch_rsvp,
     get_rsvp_overrides,
     set_rsvp_override,
+    merge_customers,
 )
-from email_parser.fetcher import fetch_transaction_emails
+from email_parser.fetcher import fetch_transaction_emails, send_mail_graph
 from email_parser.parser import parse_email, parse_emails
 from email_parser.report import send_daily_report
 from email_parser.rsvp_parser import fetch_rsvp_emails, parse_rsvp_emails
@@ -147,6 +158,15 @@ def check_inbox():
             raise
         except Exception:
             logger.exception("Failed to parse email %d/%d uid=%s", i, len(new_emails), email_data.get("uid"))
+
+    # Auto-sync: create event entries for any new event-like items
+    if total_saved > 0:
+        try:
+            sync_result = sync_events_from_items()
+            if sync_result.get("inserted"):
+                logger.info("Auto-synced %d new events from incoming transactions", sync_result["inserted"])
+        except Exception:
+            logger.exception("Auto-sync events failed (non-fatal)")
 
     _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(new_emails)} new emails ({len(emails)} total scanned)"
     logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
@@ -347,6 +367,14 @@ def api_delete_item(item_id):
     if deleted:
         return jsonify({"status": "ok"})
     return jsonify({"error": "not found"}), 404
+
+
+@app.route("/api/events/delete-manual-player/<int:item_id>", methods=["DELETE"])
+def api_delete_manual_player(item_id):
+    """Delete a manually added player. Only works for manual entries."""
+    if delete_manual_player(item_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Not found or not a manually added player."}), 400
 
 
 @app.route("/api/check-now", methods=["POST"])
@@ -602,6 +630,22 @@ def api_audit_emails():
     })
 
 
+@app.route("/matrix")
+def matrix_page():
+    # Admin-only page
+    if session.get("role") != "admin":
+        return render_template("index.html")
+    return render_template("matrix.html")
+
+
+@app.route("/changelog")
+def changelog_page():
+    # Admin-only page — managers are redirected to home
+    if session.get("role") != "admin":
+        return render_template("index.html")
+    return render_template("changelog.html")
+
+
 @app.route("/audit")
 def audit_page():
     # Admin-only page — managers are redirected to home
@@ -610,10 +654,71 @@ def audit_page():
     return render_template("audit.html")
 
 
+@app.route("/api/matrix", methods=["PUT"])
+@require_role("admin")
+def api_matrix_save():
+    """Save edits to the side-games matrix JS file."""
+    try:
+        data = request.get_json(force=True)
+        changes = data.get("changes", {})
+        if not changes:
+            return jsonify({"error": "No changes provided"}), 400
+
+        matrix_path = os.path.join(
+            os.path.dirname(__file__), "static", "js", "games-matrix.js"
+        )
+        with open(matrix_path, "r") as f:
+            content = f.read()
+
+        # Parse existing matrices
+        m9 = re.search(r"window\.GAMES_MATRIX_9\s*=\s*(\{.*?\});", content, re.DOTALL)
+        m18 = re.search(r"window\.GAMES_MATRIX_18\s*=\s*(\{.*?\});", content, re.DOTALL)
+        matrix9 = json.loads(m9.group(1))
+        matrix18 = json.loads(m18.group(1))
+
+        for change_key, new_val in changes.items():
+            parts = change_key.split(":", 2)
+            if len(parts) != 3:
+                continue
+            holes, pc, field_key = parts
+            matrix = matrix9 if holes == "9" else matrix18
+            if pc not in matrix:
+                continue
+            entry = matrix[pc]
+
+            if field_key.startswith("skins."):
+                idx = int(field_key.split(".")[1])
+                if "skins" not in entry:
+                    entry["skins"] = []
+                while len(entry["skins"]) <= idx:
+                    entry["skins"].append(None)
+                entry["skins"][idx] = new_val
+            else:
+                entry[field_key] = new_val
+
+        # Write back
+        new_content = "// Auto-generated from 25-SideGame-PrizeMatrix.xlsx\n"
+        new_content += "// Last edited via Matrix UI\n\n"
+        new_content += "window.GAMES_MATRIX_9 = "
+        new_content += json.dumps(matrix9, indent=2)
+        new_content += ";\n\n"
+        new_content += "window.GAMES_MATRIX_18 = "
+        new_content += json.dumps(matrix18, indent=2)
+        new_content += ";\n"
+
+        with open(matrix_path, "w") as f:
+            f.write(new_content)
+
+        return jsonify({"status": "ok", "matrix9": matrix9, "matrix18": matrix18})
+    except Exception as e:
+        logger.exception("Matrix save failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/audit/autofix-side-games", methods=["POST"])
 @require_role("admin")
 def api_autofix_side_games():
-    """Fix side_games / golf_or_compete misplacement in existing DB rows."""
+    """Fix side_games misplacement in existing DB rows."""
     try:
         result = autofix_side_games()
         return jsonify({"status": "ok", **result})
@@ -661,10 +766,31 @@ def customers_page():
     return render_template("customers.html")
 
 
+@app.route("/api/customers/merge", methods=["POST"])
+@require_role("admin")
+def api_merge_customers():
+    """Merge one customer into another."""
+    data = request.get_json(force=True)
+    source = (data.get("source") or "").strip()
+    target = (data.get("target") or "").strip()
+    if not source or not target:
+        return jsonify({"error": "source and target customer names required"}), 400
+    if source == target:
+        return jsonify({"error": "source and target cannot be the same"}), 400
+    result = merge_customers(source, target)
+    return jsonify(result)
+
+
 @app.route("/api/events")
 def api_events():
-    """Return all events with registration counts."""
+    """Return all events with registration counts and aliases."""
     return jsonify(get_all_events())
+
+
+@app.route("/api/events/aliases")
+def api_event_aliases():
+    """Return alias_name → canonical_event_name map."""
+    return jsonify(get_all_event_aliases())
 
 
 @app.route("/api/events/sync", methods=["POST"])
@@ -715,6 +841,50 @@ def api_create_event():
     return jsonify({"error": "Event already exists with that name."}), 409
 
 
+@app.route("/api/events/merge", methods=["POST"])
+@require_role("admin")
+def api_merge_events():
+    """Merge source event into target event. Admin only.
+
+    All items, RSVPs, and overrides from the source event are reassigned
+    to the target event, then the source event is deleted.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required."}), 400
+    source_id = data.get("source_id")
+    target_id = data.get("target_id")
+    if not source_id or not target_id:
+        return jsonify({"error": "source_id and target_id are required."}), 400
+    if source_id == target_id:
+        return jsonify({"error": "Cannot merge an event into itself."}), 400
+    result = merge_events(source_id, target_id)
+    if result:
+        return jsonify({"status": "ok", **result})
+    return jsonify({"error": "Source or target event not found."}), 404
+
+
+@app.route("/api/events/orphaned-items")
+def api_orphaned_items():
+    """Return items whose item_name doesn't match any event."""
+    return jsonify(get_orphaned_items())
+
+
+@app.route("/api/events/resolve-orphan", methods=["POST"])
+@require_role("admin")
+def api_resolve_orphan():
+    """Reassign orphaned items to an existing event. Admin only."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required."}), 400
+    old_name = data.get("old_item_name")
+    target = data.get("target_event")
+    if not old_name or not target:
+        return jsonify({"error": "old_item_name and target_event are required."}), 400
+    result = resolve_orphaned_items(old_name, target)
+    return jsonify({"status": "ok", **result})
+
+
 # ---------------------------------------------------------------------------
 # Routes — Credit / Transfer
 # ---------------------------------------------------------------------------
@@ -749,22 +919,91 @@ def api_reverse_credit(item_id):
 
 @app.route("/api/events/add-player", methods=["POST"])
 def api_add_player():
-    """Manually add a comp'd player to an event."""
+    """Add a player to an event (comp, RSVP only, or paid separately)."""
     data = request.get_json(silent=True)
     if not data or not data.get("event_name") or not data.get("customer"):
         return jsonify({"error": "event_name and customer are required."}), 400
+    mode = data.get("mode", "comp")
+    if mode not in ("comp", "rsvp", "paid_separately"):
+        return jsonify({"error": "Invalid mode."}), 400
     item = add_player_to_event(
         event_name=data["event_name"],
         customer=data["customer"],
+        mode=mode,
         side_games=data.get("side_games", ""),
         tee_choice=data.get("tee_choice", ""),
         handicap=data.get("handicap", ""),
         member_status=data.get("member_status", ""),
-        golf_or_compete=data.get("golf_or_compete", ""),
+        payment_amount=data.get("payment_amount", ""),
+        payment_source=data.get("payment_source", ""),
+        customer_email=data.get("customer_email", ""),
+        customer_phone=data.get("customer_phone", ""),
     )
     if item:
         return jsonify({"status": "ok", "item": item}), 201
     return jsonify({"error": "Failed to add player."}), 500
+
+
+@app.route("/api/events/upgrade-rsvp", methods=["POST"])
+def api_upgrade_rsvp():
+    """Upgrade an RSVP-only placeholder to a full paid registration."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("item_id"):
+        return jsonify({"error": "item_id is required."}), 400
+    item = upgrade_rsvp_to_paid(
+        item_id=data["item_id"],
+        payment_amount=data.get("payment_amount", ""),
+        payment_source=data.get("payment_source", ""),
+        side_games=data.get("side_games", ""),
+        tee_choice=data.get("tee_choice", ""),
+        handicap=data.get("handicap", ""),
+        member_status=data.get("member_status", ""),
+    )
+    if item:
+        return jsonify({"status": "ok", "item": item})
+    return jsonify({"error": "Item not found or not in RSVP-only state."}), 400
+
+
+@app.route("/api/events/send-reminder", methods=["POST"])
+def api_send_reminder():
+    """Send a payment reminder email to an RSVP-only player."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    to_email = (data.get("to_email") or "").strip()
+    player_name = data.get("player_name", "Player")
+    event_name = data.get("event_name", "the upcoming event")
+    if not to_email:
+        return jsonify({"error": "to_email is required"}), 400
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return jsonify({"error": "Email credentials not configured"}), 500
+
+    subject = f"Payment Reminder — {event_name}"
+    html_body = (
+        f"<p>Hi {player_name},</p>"
+        f"<p>This is a friendly reminder that we have you down for "
+        f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+        f"<p>Please complete your registration at your earliest convenience.</p>"
+        f"<p>Thanks,<br>The Golf Fellowship</p>"
+    )
+
+    ok = send_mail_graph(
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+        from_address=from_address,
+        to_address=to_email,
+        subject=subject,
+        html_body=html_body,
+    )
+    if ok:
+        return jsonify({"status": "ok", "message": f"Reminder sent to {to_email}"})
+    return jsonify({"error": "Failed to send reminder email"}), 500
 
 
 @app.route("/api/events/seed", methods=["POST"])
@@ -833,6 +1072,27 @@ def api_rsvp_rematch():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/rsvps/<int:rsvp_id>/match", methods=["POST"])
+@require_role("admin")
+def api_manual_match_rsvp(rsvp_id):
+    """Manually assign an RSVP to an event. Admin only."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("event_name"):
+        return jsonify({"error": "event_name is required."}), 400
+    if manual_match_rsvp(rsvp_id, data["event_name"]):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "RSVP not found."}), 404
+
+
+@app.route("/api/rsvps/<int:rsvp_id>/unmatch", methods=["POST"])
+@require_role("admin")
+def api_unmatch_rsvp(rsvp_id):
+    """Clear the match for an RSVP. Admin only."""
+    if unmatch_rsvp(rsvp_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "RSVP not found."}), 404
+
+
 @app.route("/api/rsvps/overrides/<path:event_name>")
 def api_rsvp_overrides(event_name):
     """Return manual RSVP overrides for an event as {item_id: status}."""
@@ -848,7 +1108,7 @@ def api_set_rsvp_override():
     status = data.get("status", "none")
     if not item_id or not event_name:
         return jsonify({"error": "item_id and event_name required"}), 400
-    if status not in ("none", "playing", "not_playing"):
+    if status not in ("none", "playing", "not_playing", "manual_green"):
         return jsonify({"error": "status must be none, playing, or not_playing"}), 400
     set_rsvp_override(int(item_id), event_name, status)
     return jsonify({"status": "ok", "item_id": item_id, "event_name": event_name, "rsvp_status": status})

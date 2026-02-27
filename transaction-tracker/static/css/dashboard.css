@@ -45,6 +45,22 @@ header h1 {
     color: var(--text-muted);
     font-size: 0.875rem;
 }
+.version-link {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+    transition: color 0.15s, border-color 0.15s;
+}
+.version-link:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+}
 
 /* ---- Buttons ---- */
 .btn {
@@ -841,7 +857,8 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
 }
-.edit-grid label {
+.edit-grid label,
+.ap-field-label {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
@@ -914,6 +931,19 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
     transition: background 0.15s;
 }
 .btn-reverse:hover { background: #f3f4f6; }
+
+.btn-delete-manual {
+    background: transparent;
+    color: #dc2626;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.15s;
+}
+.btn-delete-manual:hover { background: #fef2f2; }
 
 .credit-modal {
     width: 480px;
@@ -1006,6 +1036,66 @@ tr.row-transferred { opacity: 0.6; }
     background: #ef4444;
     border-color: #dc2626;
 }
+.rsvp-circle.rsvp-circle-manual-green {
+    background: #86efac;
+    border-color: #4ade80;
+}
+.rsvp-circle.rsvp-circle-playing { cursor: default; }
+/* RSVP-only row styling */
+.rsvp-only-tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 8px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #f59e0b;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+}
+.rsvp-only-tag:hover { background: #fde68a; border-color: #d97706; }
+.rsvp-only-tag.rsvp-tag-no-card {
+    background: #fce7f3;
+    color: #9d174d;
+    border-color: #f472b6;
+}
+.rsvp-only-tag.rsvp-tag-no-card:hover { background: #fbcfe8; border-color: #ec4899; }
+.rsvp-popover {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 100;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 0.35rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 140px;
+    margin-top: 4px;
+}
+.rsvp-popover-btn {
+    display: block;
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    border: none;
+    border-radius: 6px;
+    background: #f9fafb;
+    color: #1f2937;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+}
+.rsvp-popover-btn:hover:not(:disabled) { background: #e5e7eb; }
 .registrants-table .rsvp-col { width: 30px; text-align: center; padding: 0.25rem; }
 
 /* ---- RSVP Badges & Sections ---- */
@@ -1323,4 +1413,175 @@ tr.row-transferred { opacity: 0.6; }
 
     /* Customers page: hide bottom detail panel on mobile (using inline expansion instead) */
     .customer-detail-section { display: none !important; }
+
+    /* Games panel mobile overrides moved AFTER base styles — see below */
+}
+
+/* =========================================================
+   Games Calculator Panel
+   ========================================================= */
+/* PLAYERS / GAMES connected toggle group */
+.view-toggle-group {
+    display: inline-flex;
+    border: 2px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+    margin-right: 0.35rem;
+}
+.view-toggle-group .game-stat-badge {
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    font-weight: 600;
+}
+.view-toggle-group .game-stat-badge:not(:last-child) {
+    border-right: 1px solid var(--border);
+}
+.view-toggle-group .games-badge:not(.active) {
+    background: #f0fdf4;
+    color: #166534;
+    border-color: transparent;
+}
+.games-badge.active {
+    background: #166534 !important;
+    color: #fff !important;
+    border-color: #166534 !important;
+}
+
+.games-panel {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    margin: 0.5rem 0 0.75rem 0;
+    display: inline-block;
+    min-width: 0;
+}
+.games-panel-header {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--primary);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 2px solid var(--primary);
+}
+.games-panel-empty {
+    padding: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+.games-table {
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    width: 100%;
+}
+/* Column sizing */
+.games-table col.gc-game   { width: auto; }
+.games-table col.gc-fund   { width: 5.5rem; }
+.games-table col.gc-mwp    { width: 4.5rem; }
+.games-table col.gc-flights { width: 3.5rem; }
+.games-table col.gc-1st    { width: 5rem; }
+.games-table col.gc-2nd    { width: 5rem; }
+.games-table col.gc-3rd    { width: 5rem; }
+.games-table col.gc-4th    { width: 5rem; }
+.games-table th,
+.games-table thead th {
+    background: #f1f5f9;
+    padding: 0.35rem 0.6rem;
+    text-align: center;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+}
+.games-table th:first-child,
+.games-table thead th:first-child {
+    text-align: left;
+}
+.games-table td {
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: center;
+}
+.games-table td:first-child {
+    text-align: left;
+}
+.games-indent {
+    padding-left: 1.5rem !important;
+}
+.games-section-row td {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #1b1b1b;
+    background: #d3dde4;
+    text-align: left !important;
+    padding: 0.4rem 0.6rem;
+    border-bottom: none;
+}
+.games-row-sub td {
+    color: #475569;
+    font-size: 0.78rem;
+}
+.games-row-disabled td {
+    color: #94a3b8;
+    font-style: italic;
+    text-align: left;
+}
+.games-row-total td {
+    border-top: 2px solid var(--border);
+    font-weight: 600;
+    background: #e9eef2;
+}
+.games-grand-total-row td {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--primary);
+    border-top: 3px solid var(--primary);
+    padding-top: 0.5rem;
+}
+
+/* ---- Games panel mobile (must come AFTER base styles) ---- */
+@media (max-width: 768px) {
+    .games-panel {
+        padding: 0.4rem;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0.4rem 0 0.5rem 0;
+        max-width: 100%;
+    }
+    .games-panel-header { font-size: 0.75rem; margin-bottom: 0.35rem; padding-bottom: 0.25rem; }
+    .games-table { font-size: 0.7rem; min-width: 420px; }
+    .games-table th,
+    .games-table thead th,
+    .games-table td { padding: 0.2rem 0.25rem; font-size: 0.68rem; }
+    .games-table col.gc-fund   { width: 3.8rem; }
+    .games-table col.gc-mwp    { width: 3.5rem; }
+    .games-table col.gc-flights { width: 2rem; }
+    .games-table col.gc-1st    { width: 3.5rem; }
+    .games-table col.gc-2nd    { width: 3.5rem; }
+    .games-table col.gc-3rd    { width: 3.5rem; }
+    .games-table col.gc-4th    { width: 3.5rem; }
+    .games-section-row td { font-size: 0.62rem; padding: 0.25rem; }
+    .games-indent { padding-left: 0.8rem !important; }
+    .games-row-sub td { font-size: 0.66rem; }
+    .games-row-sub td[colspan] { white-space: normal; word-break: break-word; }
+    .games-grand-total-row td { font-size: 0.78rem; padding-top: 0.35rem; }
+}
+
+/* ---- RSVP-only row amber tint (must come AFTER .mobile-card base styles) ---- */
+.registrants-table tbody tr.row-rsvp-only,
+.registrants-table tr.row-rsvp-only,
+tr.row-rsvp-only {
+    background-color: rgba(251, 191, 36, 0.15) !important;
+}
+tr.row-rsvp-only td { font-style: italic; }
+div.mobile-card.row-rsvp-only {
+    background-color: rgba(251, 191, 36, 0.15) !important;
+    font-style: italic;
 }

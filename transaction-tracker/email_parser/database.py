@@ -26,7 +26,7 @@ ITEM_COLUMNS = [
     "item_name", "event_date", "item_price", "quantity",
     "city", "chapter", "course", "handicap", "has_handicap",
     "side_games", "tee_choice",
-    "member_status", "golf_or_compete", "post_game", "returning_or_new",
+    "member_status", "post_game", "returning_or_new",
     "shirt_size", "guest_name", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
     "subject", "from_addr",
@@ -69,7 +69,6 @@ def init_db(db_path: str | Path | None = None) -> None:
             side_games       TEXT,
             tee_choice       TEXT,
             member_status    TEXT,
-            golf_or_compete  TEXT,
             post_game        TEXT,
             returning_or_new TEXT,
             shirt_size       TEXT,
@@ -175,6 +174,23 @@ def init_db(db_path: str | Path | None = None) -> None:
             UNIQUE(item_id, event_name)
         )
         """
+    )
+
+    # Event aliases — maps variant/old item names to the canonical event name.
+    # When events are merged or renamed, the old name becomes an alias so
+    # transactions keep their original item_name but still link to the event.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS event_aliases (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            alias_name           TEXT NOT NULL UNIQUE,
+            canonical_event_name TEXT NOT NULL,
+            created_at           TEXT DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_event_aliases_canonical ON event_aliases(canonical_event_name)"
     )
 
     conn.commit()
@@ -284,7 +300,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
     ]
     golf_fields = [
         "handicap", "side_games", "tee_choice", "member_status",
-        "golf_or_compete", "post_game", "returning_or_new",
+        "post_game", "returning_or_new",
         "shirt_size", "guest_name",
     ]
     all_tracked = critical_fields + golf_fields
@@ -313,7 +329,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
 
     # --- Value distributions for key columns ---------------------------------
     distributions = {}
-    for field in ["city", "course", "member_status", "golf_or_compete", "tee_choice"]:
+    for field in ["city", "course", "member_status", "tee_choice"]:
         counts: dict[str, int] = {}
         for it in items:
             val = it.get(field) or "(empty)"
@@ -367,40 +383,36 @@ def get_data_snapshot(limit: int = 50, db_path: str | Path | None = None) -> dic
 
 def autofix_side_games(db_path: str | Path | None = None) -> dict:
     """
-    Scan all rows and fix side_games / golf_or_compete misplacement.
+    Scan all rows and fix side_games misplacement.
 
     Returns a summary: { "scanned": N, "fixed": N, "details": [...] }
     """
     from email_parser.parser import _fixup_side_games_field
 
     conn = get_connection(db_path)
-    rows = conn.execute("SELECT id, golf_or_compete, side_games FROM items").fetchall()
+    rows = conn.execute("SELECT id, side_games FROM items").fetchall()
 
     fixed = 0
     details = []
     for row in rows:
         item = dict(row)
-        original_goc = item.get("golf_or_compete") or ""
         original_sg = item.get("side_games") or ""
 
         result = _fixup_side_games_field({
-            "golf_or_compete": original_goc,
+            "golf_or_compete": "",
             "side_games": original_sg,
         })
 
-        new_goc = result.get("golf_or_compete") or ""
         new_sg = result.get("side_games") or ""
 
-        if new_goc != original_goc or new_sg != original_sg:
+        if new_sg != original_sg:
             conn.execute(
-                "UPDATE items SET golf_or_compete = ?, side_games = ? WHERE id = ?",
-                (new_goc, new_sg, item["id"]),
+                "UPDATE items SET side_games = ? WHERE id = ?",
+                (new_sg, item["id"]),
             )
             fixed += 1
             details.append({
                 "id": item["id"],
-                "old_golf_or_compete": original_goc,
-                "new_golf_or_compete": new_goc,
                 "old_side_games": original_sg,
                 "new_side_games": new_sg,
             })
@@ -414,7 +426,7 @@ def autofix_side_games(db_path: str | Path | None = None) -> dict:
 def autofix_all(db_path: str | Path | None = None) -> dict:
     """
     Run all autofix passes on existing data:
-      1. side_games / golf_or_compete misplacement
+      1. side_games misplacement
       2. customer name → Title Case
       3. course name → canonical spelling
       4. item_name normalisation (e.g. membership variants)
@@ -431,7 +443,7 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
 
     conn = get_connection(db_path)
     rows = conn.execute(
-        "SELECT id, item_name, customer, course, chapter, golf_or_compete, side_games FROM items"
+        "SELECT id, item_name, customer, course, chapter, side_games FROM items"
     ).fetchall()
 
     fixes = {"side_games": 0, "customer_name": 0, "course_name": 0, "item_name": 0, "chapter": 0}
@@ -443,16 +455,13 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
         updates = {}
 
         # --- Side games fix ---
-        original_goc = item.get("golf_or_compete") or ""
         original_sg = item.get("side_games") or ""
         result = _fixup_side_games_field({
-            "golf_or_compete": original_goc,
+            "golf_or_compete": "",
             "side_games": original_sg,
         })
-        new_goc = result.get("golf_or_compete") or ""
         new_sg = result.get("side_games") or ""
-        if new_goc != original_goc or new_sg != original_sg:
-            updates["golf_or_compete"] = new_goc
+        if new_sg != original_sg:
             updates["side_games"] = new_sg
             fixes["side_games"] += 1
 
@@ -521,8 +530,9 @@ _NON_EVENT_KEYWORDS = [
 ]
 
 
-def _is_event_item(item_name: str) -> bool:
-    """Heuristic: an item is an event if it has a date-like pattern or course name."""
+def _is_event_item(item_name: str, *, course: str = "", city: str = "") -> bool:
+    """Heuristic: an item is an event if it has a date-like pattern, course name,
+    event-type keyword, series identifier, or course/city metadata."""
     if not item_name:
         return False
     lower = item_name.lower()
@@ -530,16 +540,30 @@ def _is_event_item(item_name: str) -> bool:
     for kw in _NON_EVENT_KEYWORDS:
         if kw in lower:
             return False
+    # If the item row has course or city metadata → it's an event
+    if (course and course.strip()) or (city and city.strip()):
+        return True
     # Contains a month name or date pattern → likely an event
     import re
     month_pattern = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b"
     if re.search(month_pattern, lower):
         return True
+    # Event-type keywords → definitely an event
+    event_keywords = [
+        "kickoff", "tournament", "scramble", "classic", "invitational",
+        "championship", "cup", "open ", "shootout", "challenge",
+    ]
+    for ek in event_keywords:
+        if ek in lower:
+            return True
+    # Series identifier pattern (e.g., s18.1, a18.2) → season event
+    if re.match(r"^[a-z]\d+\.\d+\s", lower):
+        return True
     # Contains a known course name keyword → likely an event
     course_keywords = [
         "cantera", "morris", "cedar", "cowboys", "wolfdancer", "falconhead",
         "moody", "quarry", "tpc", "kissing", "plum", "landa", "vaaler",
-        "hancock", "craig ranch",
+        "hancock", "craig ranch", "northern hills", "shadowglen",
     ]
     for ck in course_keywords:
         if ck in lower:
@@ -553,18 +577,32 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
 
     An 'event' is determined heuristically: items with date-like names or
     course references are events; memberships and merchandise are not.
+
+    Items whose item_name is already an alias of another event are skipped
+    (they're already linked via the alias table).
     """
     conn = get_connection(db_path)
     items = conn.execute(
         "SELECT DISTINCT item_name, event_date, course, city FROM items"
     ).fetchall()
 
+    # Load existing aliases so we can skip aliased names
+    alias_set = set(
+        r["alias_name"]
+        for r in conn.execute("SELECT alias_name FROM event_aliases").fetchall()
+    )
+
     inserted = 0
     skipped_non_event = 0
+    skipped_aliased = 0
     for item in items:
         name = item["item_name"] or ""
-        if not _is_event_item(name):
+        if not _is_event_item(name, course=item["course"] or "", city=item["city"] or ""):
             skipped_non_event += 1
+            continue
+        # Skip names that are aliases of another event
+        if name in alias_set:
+            skipped_aliased += 1
             continue
         try:
             conn.execute(
@@ -579,36 +617,86 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
 
     conn.commit()
     conn.close()
-    logger.info("Events sync: %d new events, %d non-event items skipped", inserted, skipped_non_event)
-    return {"inserted": inserted, "skipped_non_event": skipped_non_event, "total_items_scanned": len(items)}
+    logger.info("Events sync: %d new, %d non-event skipped, %d aliased skipped",
+                inserted, skipped_non_event, skipped_aliased)
+    return {"inserted": inserted, "skipped_non_event": skipped_non_event,
+            "skipped_aliased": skipped_aliased, "total_items_scanned": len(items)}
 
 
 def get_all_events(db_path: str | Path | None = None) -> list[dict]:
-    """Return all events with registration counts (active items only)."""
+    """Return all events with registration counts (active items only).
+
+    Counts items whose item_name matches the event's canonical name
+    OR any alias that points to it.
+    """
     conn = get_connection(db_path)
     rows = conn.execute(
         """
-        SELECT e.*, COUNT(i.id) as registrations
+        SELECT e.*,
+               COUNT(DISTINCT i.id) as registrations,
+               GROUP_CONCAT(DISTINCT ea.alias_name) as aliases
         FROM events e
-        LEFT JOIN items i ON i.item_name = e.item_name
+        LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+        LEFT JOIN items i
+            ON (i.item_name = e.item_name OR i.item_name = ea.alias_name)
             AND COALESCE(i.transaction_status, 'active') = 'active'
         GROUP BY e.id
         ORDER BY e.event_date DESC, e.id DESC
         """
     ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    results = []
+    for r in rows:
+        d = dict(r)
+        # Convert aliases CSV to list
+        d["aliases"] = [a for a in (d.get("aliases") or "").split(",") if a]
+        results.append(d)
+    return results
 
 
 def update_event(event_id: int, fields: dict, db_path: str | Path | None = None) -> bool:
-    """Update specific fields on an event row."""
+    """Update specific fields on an event row.
+
+    When item_name changes the old name is stored as an alias so transactions
+    keep their original item_name but still link to this event.
+    RSVPs and overrides are updated to the new canonical name.
+    Items are NEVER rewritten — they are linked via the alias table.
+    """
     allowed = {"item_name", "event_date", "course", "city", "event_type"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
+
+    conn = get_connection(db_path)
+
+    # If renaming the event, store old name as alias (don't rewrite items)
+    old_name = None
+    new_name = safe.get("item_name")
+    if new_name:
+        row = conn.execute("SELECT item_name FROM events WHERE id = ?", (event_id,)).fetchone()
+        if row:
+            old_name = row["item_name"]
+            if old_name and old_name != new_name:
+                # Store old name as alias of the new canonical name
+                conn.execute(
+                    "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) VALUES (?, ?)",
+                    (old_name, new_name),
+                )
+                # Update any existing aliases that pointed to old name
+                conn.execute(
+                    "UPDATE event_aliases SET canonical_event_name = ? WHERE canonical_event_name = ?",
+                    (new_name, old_name),
+                )
+                # Update RSVPs and overrides to new canonical name
+                conn.execute("UPDATE rsvps SET matched_event = ? WHERE matched_event = ?",
+                             (new_name, old_name))
+                conn.execute("UPDATE rsvp_overrides SET event_name = ? WHERE event_name = ?",
+                             (new_name, old_name))
+                logger.info("Renamed event '%s' → '%s': old name stored as alias, RSVPs/overrides updated",
+                            old_name, new_name)
+
     set_clause = ", ".join(f"{col} = ?" for col in safe)
     values = list(safe.values()) + [event_id]
-    conn = get_connection(db_path)
     cursor = conn.execute(f"UPDATE events SET {set_clause} WHERE id = ?", values)
     conn.commit()
     conn.close()
@@ -616,12 +704,300 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
 
 
 def delete_event(event_id: int, db_path: str | Path | None = None) -> bool:
-    """Delete an event by ID."""
+    """Delete an event by ID and clean up its aliases."""
     conn = get_connection(db_path)
+    # Get the event name so we can clean up aliases
+    row = conn.execute("SELECT item_name FROM events WHERE id = ?", (event_id,)).fetchone()
+    if row:
+        conn.execute("DELETE FROM event_aliases WHERE canonical_event_name = ?",
+                     (row["item_name"],))
     cursor = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+
+def merge_events(source_id: int, target_id: int, db_path: str | Path | None = None) -> dict | None:
+    """
+    Merge source event into target event.
+
+    The source event's item_name is stored as an alias of the target so that
+    transactions keep their original item_name.  RSVPs and overrides are
+    moved to the target canonical name.  The source event row is deleted.
+
+    Returns summary dict or None on failure.
+    """
+    conn = get_connection(db_path)
+
+    source = conn.execute("SELECT * FROM events WHERE id = ?", (source_id,)).fetchone()
+    target = conn.execute("SELECT * FROM events WHERE id = ?", (target_id,)).fetchone()
+
+    if not source or not target:
+        conn.close()
+        return None
+
+    source = dict(source)
+    target = dict(target)
+    src_name = source["item_name"]
+    tgt_name = target["item_name"]
+
+    if src_name == tgt_name:
+        conn.close()
+        return None
+
+    # Store source event name as alias of target (so items stay linked)
+    conn.execute(
+        "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) VALUES (?, ?)",
+        (src_name, tgt_name),
+    )
+
+    # Re-point any aliases that pointed to the source to now point to the target
+    conn.execute(
+        "UPDATE event_aliases SET canonical_event_name = ? WHERE canonical_event_name = ?",
+        (tgt_name, src_name),
+    )
+
+    # Count items that will now link via alias
+    items_row = conn.execute(
+        "SELECT COUNT(*) as cnt FROM items WHERE item_name = ? AND COALESCE(transaction_status, 'active') = 'active'",
+        (src_name,),
+    ).fetchone()
+    items_linked = items_row["cnt"] if items_row else 0
+
+    # Move RSVPs to target canonical name
+    cur = conn.execute("UPDATE rsvps SET matched_event = ? WHERE matched_event = ?",
+                       (tgt_name, src_name))
+    rsvps_moved = cur.rowcount
+
+    # Move overrides to target canonical name
+    cur = conn.execute("UPDATE rsvp_overrides SET event_name = ? WHERE event_name = ?",
+                       (tgt_name, src_name))
+    overrides_moved = cur.rowcount
+
+    # Delete source event
+    conn.execute("DELETE FROM events WHERE id = ?", (source_id,))
+
+    conn.commit()
+    conn.close()
+
+    logger.info("Merged event '%s' (#%d) → '%s' (#%d): %d items linked via alias, %d RSVPs, %d overrides moved",
+                src_name, source_id, tgt_name, target_id,
+                items_linked, rsvps_moved, overrides_moved)
+
+    return {
+        "source_event": src_name,
+        "target_event": tgt_name,
+        "items_linked": items_linked,
+        "rsvps_moved": rsvps_moved,
+        "overrides_moved": overrides_moved,
+    }
+
+
+def get_orphaned_items(db_path: str | Path | None = None) -> list[dict]:
+    """
+    Find items whose item_name doesn't match any event directly
+    AND doesn't match any alias in event_aliases
+    AND that look like events (not memberships, merch, etc.).
+
+    Returns list of dicts with item_name, count, and sample fields.
+    """
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        """SELECT i.item_name,
+                  COUNT(*) as item_count,
+                  MIN(i.event_date) as event_date,
+                  MIN(i.course) as course,
+                  MIN(i.city) as city,
+                  GROUP_CONCAT(DISTINCT i.customer) as customers
+           FROM items i
+           LEFT JOIN events e ON i.item_name = e.item_name
+           LEFT JOIN event_aliases ea ON i.item_name = ea.alias_name
+           WHERE e.id IS NULL
+             AND ea.id IS NULL
+             AND COALESCE(i.transaction_status, 'active') IN ('active', 'rsvp_only')
+           GROUP BY i.item_name
+           ORDER BY i.item_name"""
+    ).fetchall()
+    conn.close()
+
+    # Safety net: include everything EXCEPT obvious non-events.
+    # Better to surface a false positive than miss a real event.
+    result = []
+    for r in rows:
+        row = dict(r)
+        name = (row["item_name"] or "").lower()
+        is_non_event = any(kw in name for kw in _NON_EVENT_KEYWORDS)
+        if not is_non_event:
+            # Truncate customer list for display
+            customers = row.get("customers") or ""
+            row["customers"] = customers[:200]
+            result.append(row)
+
+    logger.info("Found %d orphaned item groups (safety-net filter)", len(result))
+    return result
+
+
+def resolve_orphaned_items(old_item_name: str, target_event_name: str,
+                           db_path: str | Path | None = None) -> dict:
+    """
+    Resolve orphaned items by adding old_item_name as an alias of target_event_name.
+
+    Items keep their original item_name — the alias table links them to the event.
+    RSVPs matched to the old name are updated to the target canonical name.
+
+    Returns summary.
+    """
+    conn = get_connection(db_path)
+
+    # Add the orphan's item_name as an alias of the target event
+    conn.execute(
+        "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) VALUES (?, ?)",
+        (old_item_name, target_event_name),
+    )
+
+    # Count how many items this links
+    row = conn.execute(
+        "SELECT COUNT(*) as cnt FROM items WHERE item_name = ? AND COALESCE(transaction_status, 'active') IN ('active', 'rsvp_only')",
+        (old_item_name,),
+    ).fetchone()
+    items_linked = row["cnt"] if row else 0
+
+    # Update RSVPs matched to the old name
+    conn.execute("UPDATE rsvps SET matched_event = ? WHERE matched_event = ?",
+                 (target_event_name, old_item_name))
+
+    conn.commit()
+    conn.close()
+
+    logger.info("Resolved orphan '%s' → '%s' (alias created, %d items linked)",
+                old_item_name, target_event_name, items_linked)
+    return {
+        "old_item_name": old_item_name,
+        "target_event": target_event_name,
+        "items_linked": items_linked,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Customer Merge
+# ---------------------------------------------------------------------------
+
+
+def merge_customers(source_name: str, target_name: str,
+                    db_path: str | Path | None = None) -> dict:
+    """
+    Merge one customer into another by updating all items rows.
+
+    Rewrites items.customer from source_name to target_name.
+    Preserves target's email/phone; fills in from source if target lacks them.
+
+    Returns summary with count of items updated.
+    """
+    conn = get_connection(db_path)
+
+    # Grab contact info from target (prefer) then source as fallback
+    target_row = conn.execute(
+        """SELECT customer_email, customer_phone FROM items
+           WHERE customer = ? AND (customer_email IS NOT NULL AND customer_email != '')
+           ORDER BY order_date DESC LIMIT 1""",
+        (target_name,),
+    ).fetchone()
+    source_row = conn.execute(
+        """SELECT customer_email, customer_phone FROM items
+           WHERE customer = ? AND (customer_email IS NOT NULL AND customer_email != '')
+           ORDER BY order_date DESC LIMIT 1""",
+        (source_name,),
+    ).fetchone()
+
+    # Determine best email/phone (target wins, source fills gaps)
+    best_email = (target_row["customer_email"] if target_row else "") or \
+                 (source_row["customer_email"] if source_row else "") or ""
+    best_phone = (target_row["customer_phone"] if target_row else "") or \
+                 (source_row["customer_phone"] if source_row else "") or ""
+
+    # Update all source items to the target customer name
+    cursor = conn.execute(
+        "UPDATE items SET customer = ? WHERE customer = ?",
+        (target_name, source_name),
+    )
+    items_updated = cursor.rowcount
+
+    # Backfill email/phone on all target items that are missing them
+    if best_email:
+        conn.execute(
+            "UPDATE items SET customer_email = ? WHERE customer = ? AND (customer_email IS NULL OR customer_email = '')",
+            (best_email, target_name),
+        )
+    if best_phone:
+        conn.execute(
+            "UPDATE items SET customer_phone = ? WHERE customer = ? AND (customer_phone IS NULL OR customer_phone = '')",
+            (best_phone, target_name),
+        )
+
+    conn.commit()
+    conn.close()
+
+    logger.info("Merged customer '%s' → '%s' (%d items updated)",
+                source_name, target_name, items_updated)
+    return {
+        "source": source_name,
+        "target": target_name,
+        "items_updated": items_updated,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Event Aliases — map variant item names to canonical event names
+# ---------------------------------------------------------------------------
+
+def add_event_alias(alias_name: str, canonical_event_name: str,
+                    db_path: str | Path | None = None) -> bool:
+    """Add an alias mapping.  Returns True if inserted, False if already exists."""
+    conn = get_connection(db_path)
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) VALUES (?, ?)",
+            (alias_name, canonical_event_name),
+        )
+        inserted = conn.execute("SELECT changes()").fetchone()[0] > 0
+        conn.commit()
+        return inserted
+    finally:
+        conn.close()
+
+
+def get_aliases_for_event(canonical_event_name: str,
+                          db_path: str | Path | None = None) -> list[str]:
+    """Return all alias names that map to the given canonical event name."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT alias_name FROM event_aliases WHERE canonical_event_name = ?",
+        (canonical_event_name,),
+    ).fetchall()
+    conn.close()
+    return [r["alias_name"] for r in rows]
+
+
+def get_all_event_aliases(db_path: str | Path | None = None) -> dict:
+    """Return dict mapping each alias_name → canonical_event_name."""
+    conn = get_connection(db_path)
+    rows = conn.execute("SELECT alias_name, canonical_event_name FROM event_aliases").fetchall()
+    conn.close()
+    return {r["alias_name"]: r["canonical_event_name"] for r in rows}
+
+
+def update_aliases_canonical(old_canonical: str, new_canonical: str,
+                             db_path: str | Path | None = None) -> int:
+    """Update all aliases that pointed to old_canonical to now point to new_canonical."""
+    conn = get_connection(db_path)
+    cur = conn.execute(
+        "UPDATE event_aliases SET canonical_event_name = ? WHERE canonical_event_name = ?",
+        (new_canonical, old_canonical),
+    )
+    updated = cur.rowcount
+    conn.commit()
+    conn.close()
+    return updated
 
 
 def update_item(item_id: int, fields: dict, db_path: str | Path | None = None) -> bool:
@@ -810,14 +1186,20 @@ def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
     return {"inserted": inserted, "skipped": skipped}
 
 
-def add_player_to_event(event_name: str, customer: str, side_games: str = "",
-                        tee_choice: str = "", handicap: str = "",
-                        member_status: str = "", golf_or_compete: str = "",
+def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
+                        side_games: str = "", tee_choice: str = "",
+                        handicap: str = "", member_status: str = "",
+                        payment_amount: str = "", payment_source: str = "",
+                        customer_email: str = "", customer_phone: str = "",
                         db_path: str | Path | None = None) -> dict | None:
     """
-    Manually add a player (comp'd entry) to an event.
+    Add a player to an event.
 
-    Creates an items row with $0.00 price linked to the event.
+    Modes:
+      - 'comp': Manager comp ($0.00 price, full golf details)
+      - 'rsvp': RSVP-only placeholder (name only, no price, no games)
+      - 'paid_separately': Paid via Venmo/Zelle/Cash (custom price, full details)
+
     Returns the new item dict or None on failure.
     """
     import time
@@ -830,25 +1212,43 @@ def add_player_to_event(event_name: str, customer: str, side_games: str = "",
     ).fetchone()
     event = dict(event) if event else {}
 
-    uid = f"manual-{int(time.time() * 1000)}"
+    uid = f"manual-{mode}-{int(time.time() * 1000)}"
 
     new_values = {col: None for col in ITEM_COLUMNS}
     new_values["email_uid"] = uid
     new_values["item_index"] = 0
-    new_values["merchant"] = "Manual Entry"
     new_values["customer"] = customer
+    new_values["customer_email"] = customer_email or None
+    new_values["customer_phone"] = customer_phone or None
     new_values["item_name"] = event_name
-    new_values["item_price"] = "$0.00 (comp)"
     new_values["order_date"] = __import__("datetime").date.today().isoformat()
     new_values["event_date"] = event.get("event_date") or ""
     new_values["course"] = event.get("course") or ""
     new_values["city"] = event.get("city") or ""
-    new_values["side_games"] = side_games or None
-    new_values["tee_choice"] = tee_choice or None
-    new_values["handicap"] = handicap or None
-    new_values["member_status"] = member_status or None
-    new_values["golf_or_compete"] = golf_or_compete or None
     new_values["transaction_status"] = "active"
+
+    if mode == "comp":
+        new_values["merchant"] = "Manual Entry"
+        new_values["item_price"] = "$0.00 (comp)"
+        new_values["side_games"] = side_games or None
+        new_values["tee_choice"] = tee_choice or None
+        new_values["handicap"] = handicap or None
+        new_values["member_status"] = member_status or None
+    elif mode == "rsvp":
+        new_values["merchant"] = "RSVP Only"
+        new_values["item_price"] = None
+        new_values["transaction_status"] = "rsvp_only"
+    elif mode == "paid_separately":
+        source_label = payment_source or "External"
+        new_values["merchant"] = f"Paid Separately ({source_label})"
+        new_values["item_price"] = payment_amount or "$0.00"
+        new_values["side_games"] = side_games or None
+        new_values["tee_choice"] = tee_choice or None
+        new_values["handicap"] = handicap or None
+        new_values["member_status"] = member_status or None
+    else:
+        new_values["merchant"] = "Manual Entry"
+        new_values["item_price"] = "$0.00"
 
     cols = ", ".join(ITEM_COLUMNS)
     placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
@@ -861,8 +1261,68 @@ def add_player_to_event(event_name: str, customer: str, side_games: str = "",
     conn.close()
 
     new_values["id"] = new_id
-    logger.info("Added player %s to event %s (id=%d)", customer, event_name, new_id)
+    logger.info("Added player %s to event %s (mode=%s, id=%d)",
+                customer, event_name, mode, new_id)
     return new_values
+
+
+def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
+                         payment_source: str = "", side_games: str = "",
+                         tee_choice: str = "", handicap: str = "",
+                         member_status: str = "",
+                         db_path: str | Path | None = None) -> dict | None:
+    """
+    Upgrade an RSVP-only placeholder to a full paid registration.
+
+    Updates the existing item row with payment and golf details.
+    Returns the updated item dict or None on failure.
+    """
+    conn = get_connection(db_path)
+
+    item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        return None
+    item = dict(item)
+
+    if item.get("transaction_status") != "rsvp_only":
+        conn.close()
+        logger.warning("Item %d is not rsvp_only (status=%s)", item_id,
+                       item.get("transaction_status"))
+        return None
+
+    source_label = payment_source or "External"
+    conn.execute(
+        """UPDATE items SET
+            merchant = ?,
+            item_price = ?,
+            side_games = ?,
+            tee_choice = ?,
+            handicap = ?,
+            member_status = ?,
+            transaction_status = 'active'
+        WHERE id = ?""",
+        (
+            f"Paid Separately ({source_label})",
+            payment_amount or "$0.00",
+            side_games or None,
+            tee_choice or None,
+            handicap or None,
+            member_status or None,
+            item_id,
+        ),
+    )
+    conn.commit()
+
+    # Re-read the updated row
+    updated = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    conn.close()
+
+    if updated:
+        updated = dict(updated)
+        logger.info("Upgraded RSVP item %d to paid registration", item_id)
+        return updated
+    return None
 
 
 def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
@@ -872,6 +1332,28 @@ def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+
+def delete_manual_player(item_id: int, db_path: str | Path | None = None) -> bool:
+    """Delete a manually added player (email_uid starts with 'manual-').
+
+    Returns True if the row was deleted, False if not found or not manual.
+    """
+    conn = get_connection(db_path)
+    item = conn.execute("SELECT email_uid FROM items WHERE id = ?", (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        return False
+    uid = dict(item).get("email_uid") or ""
+    if not uid.startswith("manual-"):
+        conn.close()
+        logger.warning("Refused to delete non-manual item %d (uid=%s)", item_id, uid)
+        return False
+    conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+    logger.info("Deleted manual player item %d (uid=%s)", item_id, uid)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -890,52 +1372,109 @@ def match_rsvp_to_event(event_identifier: str, event_date: str | None,
                          db_path: str | Path | None = None) -> str | None:
     """Try to match an RSVP event identifier to an events.item_name.
 
-    Strategies:
-      1. item_name contains the event_identifier substring
-      2. Match by event_date alone (if only one event on that date)
-      3. Normalize the identifier as a course name and match course + date
+    Only returns a match when confident. Returns None for ambiguous cases
+    so they can be resolved manually.
+
+    Strategies (in order of confidence):
+      1. item_name contains the full event_identifier substring (exact)
+      2. Extract course name from identifier and match course + date
+      3. Extract course name from identifier and match course alone (single match)
+      4. Match by event_date alone ONLY if single event on that date AND
+         the city from the identifier matches the event's city
     """
     conn = get_connection(db_path)
+    identifier_upper = (event_identifier or "").upper().strip()
 
-    # Strategy 1: Direct substring match
+    # Strategy 1: Direct substring match on full identifier
     rows = conn.execute(
-        "SELECT item_name FROM events WHERE item_name LIKE ?",
-        (f"%{event_identifier}%",),
+        "SELECT item_name FROM events WHERE UPPER(item_name) LIKE ?",
+        (f"%{identifier_upper}%",),
     ).fetchall()
     if len(rows) == 1:
         conn.close()
         return rows[0]["item_name"]
 
-    # Strategy 2: Match by event_date (if one event on that date)
-    if event_date:
-        rows = conn.execute(
-            "SELECT item_name FROM events WHERE event_date = ?",
-            (event_date,),
-        ).fetchall()
-        if len(rows) == 1:
-            conn.close()
-            return rows[0]["item_name"]
-
-    # Strategy 3: Normalize as course name and match course + date
+    # Extract the course name portion from the identifier.
+    # GG identifiers look like: "a18.2 PRIME TIME KICKOFF | SHADOWGLEN"
+    # or "s9.1 The Quarry" — the course is typically the last segment.
     from email_parser.parser import _normalize_course_name
-    normalized = _normalize_course_name(event_identifier)
-    if normalized and event_date:
+    course_part = event_identifier
+    if "|" in event_identifier:
+        course_part = event_identifier.split("|")[-1].strip()
+    elif " " in event_identifier:
+        # Try the last word(s) after any prefix like "a18.2"
+        parts = event_identifier.split()
+        # Skip leading codes like "s9.1", "a18.2"
+        import re
+        start = 0
+        for i, p in enumerate(parts):
+            if re.match(r'^[a-z]\d+\.\d+$', p, re.IGNORECASE):
+                start = i + 1
+        course_part = " ".join(parts[start:])
+
+    normalized_course = _normalize_course_name(course_part)
+
+    # Strategy 2: Normalized course name + date (high confidence)
+    if normalized_course and event_date:
         rows = conn.execute(
-            "SELECT item_name FROM events WHERE course LIKE ? AND event_date = ?",
-            (f"%{normalized}%", event_date),
-        ).fetchall()
-        if len(rows) == 1:
-            conn.close()
-            return rows[0]["item_name"]
-    elif normalized:
-        rows = conn.execute(
-            "SELECT item_name FROM events WHERE course LIKE ?",
-            (f"%{normalized}%",),
+            "SELECT item_name FROM events WHERE UPPER(course) LIKE ? AND event_date = ?",
+            (f"%{normalized_course.upper()}%", event_date),
         ).fetchall()
         if len(rows) == 1:
             conn.close()
             return rows[0]["item_name"]
 
+    # Strategy 3: Normalized course name alone (only if single match)
+    if normalized_course:
+        rows = conn.execute(
+            "SELECT item_name FROM events WHERE UPPER(course) LIKE ?",
+            (f"%{normalized_course.upper()}%",),
+        ).fetchall()
+        if len(rows) == 1:
+            conn.close()
+            return rows[0]["item_name"]
+
+    # Strategy 4: Also try the raw course_part (un-normalized) in item_name
+    if course_part and course_part != event_identifier:
+        rows = conn.execute(
+            "SELECT item_name FROM events WHERE UPPER(item_name) LIKE ?",
+            (f"%{course_part.upper()}%",),
+        ).fetchall()
+        if len(rows) == 1:
+            conn.close()
+            return rows[0]["item_name"]
+
+        # With date as additional filter
+        if event_date:
+            rows = conn.execute(
+                "SELECT item_name FROM events WHERE UPPER(item_name) LIKE ? AND event_date = ?",
+                (f"%{course_part.upper()}%", event_date),
+            ).fetchall()
+            if len(rows) == 1:
+                conn.close()
+                return rows[0]["item_name"]
+
+    # Strategy 5: Check if the identifier matches an alias name
+    rows = conn.execute(
+        "SELECT canonical_event_name FROM event_aliases WHERE UPPER(alias_name) LIKE ?",
+        (f"%{identifier_upper}%",),
+    ).fetchall()
+    if len(rows) == 1:
+        conn.close()
+        return rows[0]["canonical_event_name"]
+
+    # Also try course part against aliases
+    if course_part and course_part != event_identifier:
+        rows = conn.execute(
+            "SELECT canonical_event_name FROM event_aliases WHERE UPPER(alias_name) LIKE ?",
+            (f"%{course_part.upper()}%",),
+        ).fetchall()
+        if len(rows) == 1:
+            conn.close()
+            return rows[0]["canonical_event_name"]
+
+    # If none of the above matched confidently, return None.
+    # Do NOT fall back to date-only matching — too risky for mismatches.
     conn.close()
     return None
 
@@ -944,20 +1483,31 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
                         event_name: str, db_path: str | Path | None = None) -> int | None:
     """Try to match an RSVP player to an items row (transaction).
 
+    Searches items whose item_name matches the canonical event_name
+    OR any alias that maps to it.
+
     Strategies:
-      1. Match by player email + event name
-      2. Match by player first name + event name (only if single match)
+      1. Match by player email + event name (or alias)
+      2. Match by player first name + event name (or alias, only if single match)
     """
     conn = get_connection(db_path)
+
+    # Build list of names to search: canonical + all aliases
+    aliases = conn.execute(
+        "SELECT alias_name FROM event_aliases WHERE canonical_event_name = ?",
+        (event_name,),
+    ).fetchall()
+    name_list = [event_name] + [r["alias_name"] for r in aliases]
+    placeholders = ",".join(["?"] * len(name_list))
 
     # Strategy 1: Email match
     if player_email:
         row = conn.execute(
-            """SELECT id FROM items
+            f"""SELECT id FROM items
                WHERE LOWER(customer_email) = LOWER(?)
-                 AND item_name = ?
+                 AND item_name IN ({placeholders})
                  AND COALESCE(transaction_status, 'active') = 'active'""",
-            (player_email, event_name),
+            [player_email] + name_list,
         ).fetchone()
         if row:
             conn.close()
@@ -966,11 +1516,11 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
     # Strategy 2: First name match (loose — only if one match)
     if player_name:
         rows = conn.execute(
-            """SELECT id FROM items
+            f"""SELECT id FROM items
                WHERE customer LIKE ?
-                 AND item_name = ?
+                 AND item_name IN ({placeholders})
                  AND COALESCE(transaction_status, 'active') = 'active'""",
-            (f"{player_name}%", event_name),
+            [f"{player_name}%"] + name_list,
         ).fetchall()
         if len(rows) == 1:
             conn.close()
@@ -1055,6 +1605,8 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
     Return the latest RSVP for each player for the given event.
 
     Groups by player_email and returns only the most recent response.
+    Also resolves the full player name from existing items (player cards)
+    by matching on player_email, and flags whether a player card was found.
     """
     conn = get_connection(db_path)
     rows = conn.execute(
@@ -1071,8 +1623,29 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
            ORDER BY r1.player_name ASC""",
         (event_name, event_name),
     ).fetchall()
+
+    # Resolve full names from player cards (items table) by email
+    results = []
+    for r in rows:
+        rsvp = dict(r)
+        rsvp["resolved_name"] = rsvp.get("player_name")
+        rsvp["has_player_card"] = False
+        email = (rsvp.get("player_email") or "").strip().lower()
+        if email:
+            card = conn.execute(
+                """SELECT customer FROM items
+                   WHERE LOWER(customer_email) = ?
+                     AND customer IS NOT NULL AND customer != ''
+                   ORDER BY order_date DESC LIMIT 1""",
+                (email,),
+            ).fetchone()
+            if card:
+                rsvp["resolved_name"] = card["customer"]
+                rsvp["has_player_card"] = True
+        results.append(rsvp)
+
     conn.close()
-    return [dict(r) for r in rows]
+    return results
 
 
 def get_all_rsvps(event_name: str = "", response: str = "",
@@ -1173,6 +1746,52 @@ def rematch_rsvps(db_path: str | Path | None = None) -> dict:
     conn.close()
     logger.info("Rematch: %d events, %d items rematched", rematched_events, rematched_items)
     return {"rematched_events": rematched_events, "rematched_items": rematched_items}
+
+
+def manual_match_rsvp(rsvp_id: int, event_name: str,
+                       db_path: str | Path | None = None) -> bool:
+    """Manually set the matched_event for an RSVP.
+
+    Also attempts to match the player to a specific item in that event.
+    Returns True if the RSVP was updated.
+    """
+    conn = get_connection(db_path)
+    rsvp = conn.execute("SELECT * FROM rsvps WHERE id = ?", (rsvp_id,)).fetchone()
+    if not rsvp:
+        conn.close()
+        return False
+    rsvp = dict(rsvp)
+
+    # Try to match the player to an item
+    matched_item_id = match_rsvp_to_item(
+        rsvp.get("player_email"), rsvp.get("player_name"),
+        event_name, db_path,
+    )
+
+    conn.execute(
+        "UPDATE rsvps SET matched_event = ?, matched_item_id = ? WHERE id = ?",
+        (event_name, matched_item_id, rsvp_id),
+    )
+    conn.commit()
+    conn.close()
+    logger.info("Manual RSVP match: rsvp #%d → event '%s' (item=%s)",
+                rsvp_id, event_name, matched_item_id)
+    return True
+
+
+def unmatch_rsvp(rsvp_id: int, db_path: str | Path | None = None) -> bool:
+    """Clear the matched_event and matched_item_id for an RSVP.
+
+    Returns True if the RSVP was updated.
+    """
+    conn = get_connection(db_path)
+    cursor = conn.execute(
+        "UPDATE rsvps SET matched_event = NULL, matched_item_id = NULL WHERE id = ?",
+        (rsvp_id,),
+    )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
 
 
 def normalize_tee_choices(db_path: str | Path | None = None) -> int:

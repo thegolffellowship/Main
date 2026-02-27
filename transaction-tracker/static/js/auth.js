@@ -103,9 +103,10 @@ function updateRoleUI() {
 }
 
 function updateNavForRole() {
-    // Hide Audit tab for non-admin roles
+    // Hide admin-only tabs for non-admin roles
     document.querySelectorAll(".tab-nav a").forEach(link => {
-        if (link.getAttribute("href") === "/audit") {
+        const href = link.getAttribute("href");
+        if (href === "/audit" || href === "/matrix") {
             link.style.display = (currentRole === "admin") ? "" : "none";
         }
     });

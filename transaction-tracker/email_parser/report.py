@@ -57,7 +57,6 @@ def build_report_html(items: list[dict]) -> str:
   <td style="padding:6px 10px; border-bottom:1px solid #eee;">{r.get('item_price') or '—'}</td>
   <td style="padding:6px 10px; border-bottom:1px solid #eee;">{r.get('city') or '—'}</td>
   <td style="padding:6px 10px; border-bottom:1px solid #eee;">{r.get('side_games') or '—'}</td>
-  <td style="padding:6px 10px; border-bottom:1px solid #eee;">{r.get('golf_or_compete') or '—'}</td>
   <td style="padding:6px 10px; border-bottom:1px solid #eee;">{r.get('member_status') or '—'}</td>
   <td style="padding:6px 10px; border-bottom:1px solid #eee;">{r.get('order_id') or '—'}</td>
 </tr>"""
@@ -90,7 +89,6 @@ def build_report_html(items: list[dict]) -> str:
   <th style="padding:8px 10px; text-align:left; border-bottom:2px solid #e5e7eb; font-size:11px; text-transform:uppercase; color:#666;">Price</th>
   <th style="padding:8px 10px; text-align:left; border-bottom:2px solid #e5e7eb; font-size:11px; text-transform:uppercase; color:#666;">City</th>
   <th style="padding:8px 10px; text-align:left; border-bottom:2px solid #e5e7eb; font-size:11px; text-transform:uppercase; color:#666;">Side Games</th>
-  <th style="padding:8px 10px; text-align:left; border-bottom:2px solid #e5e7eb; font-size:11px; text-transform:uppercase; color:#666;">Type</th>
   <th style="padding:8px 10px; text-align:left; border-bottom:2px solid #e5e7eb; font-size:11px; text-transform:uppercase; color:#666;">Status</th>
   <th style="padding:8px 10px; text-align:left; border-bottom:2px solid #e5e7eb; font-size:11px; text-transform:uppercase; color:#666;">Order ID</th>
 </tr>

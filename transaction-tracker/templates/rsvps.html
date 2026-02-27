@@ -67,6 +67,33 @@
         }
         .match-yes { background: #ecfdf5; color: #065f46; }
         .match-no { background: #fef3c7; color: #92400e; }
+        /* Inline match controls */
+        .rsvp-match-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            flex-wrap: wrap;
+        }
+        .rsvp-match-select {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.3rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            max-width: 200px;
+        }
+        .rsvp-action-btn {
+            font-size: 0.68rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .rsvp-action-btn.match-btn { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .rsvp-action-btn.match-btn:hover { opacity: 0.85; }
+        .rsvp-action-btn.unmatch-btn { background: #fef3c7; color: #92400e; border-color: #f59e0b; }
+        .rsvp-action-btn.unmatch-btn:hover { background: #fde68a; }
         .empty-msg {
             text-align: center;
             padding: 3rem;
@@ -84,6 +111,7 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">RSVP Log — Player responses from GolfGenius</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.1.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -106,6 +134,7 @@
             <a href="/events">Events</a>
             <a href="/customers">Customers</a>
             <a href="/rsvps" class="active">RSVP Log</a>
+            <a href="/matrix">Matrix</a>
             <a href="/audit">Audit Log</a>
         </nav>
 
@@ -163,10 +192,11 @@
                         <th data-sort="event_date">Event Date <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="received_at">Received <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="matched_event">Matched Event <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th id="rsvp-actions-col" style="display:none;">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="rsvp-body">
-                    <tr><td colspan="7" class="empty-msg">Loading...</td></tr>
+                    <tr><td colspan="8" class="empty-msg">Loading...</td></tr>
                 </tbody>
             </table>
         </section>
@@ -192,12 +222,14 @@
         </div>
     </div>
 
+    <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script>
     /* =========================================================
        RSVP Log Page
        ========================================================= */
     let allRsvps = [];
+    let allEvents = [];
     let rsvpStats = {};
     let rsvpSearchQuery = "";
     let rsvpCategoryFilter = "all";
@@ -245,6 +277,25 @@
         } catch (err) {
             console.error("Failed to fetch RSVP stats:", err);
         }
+    }
+
+    async function fetchEvents() {
+        try {
+            const res = await fetch("/api/events");
+            allEvents = await res.json();
+        } catch (err) {
+            console.error("Failed to fetch events:", err);
+        }
+    }
+
+    function buildEventPickerHtml() {
+        const today = new Date().toISOString().split("T")[0];
+        const upcoming = allEvents.filter(e => e.event_date && e.event_date >= today).sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
+        const past = allEvents.filter(e => e.event_date && e.event_date < today).sort((a, b) => (b.event_date || "").localeCompare(a.event_date || ""));
+        let html = '<option value="">Select event…</option>';
+        if (upcoming.length) html += '<optgroup label="Upcoming">' + upcoming.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+        if (past.length) html += '<optgroup label="Past">' + past.map(e => `<option value="${escapeHtml(e.item_name)}">${escapeHtml(e.item_name)} (${e.event_date})</option>`).join("") + '</optgroup>';
+        return html;
     }
 
     // ---- Filtering & Sorting ----
@@ -343,6 +394,52 @@
         return '<span class="rsvp-match-badge match-no">Unmatched</span>';
     }
 
+    function actionsCell(r) {
+        if (currentRole !== "admin") return "";
+        if (r.matched_event) {
+            return `<td><button class="rsvp-action-btn unmatch-btn" onclick="unmatchRsvp(${r.id})">Unmatch</button></td>`;
+        }
+        return `<td class="rsvp-match-controls">
+            <select class="rsvp-match-select" id="match-sel-${r.id}">${buildEventPickerHtml()}</select>
+            <button class="rsvp-action-btn match-btn" onclick="matchRsvp(${r.id})">Match</button>
+        </td>`;
+    }
+
+    async function matchRsvp(rsvpId) {
+        const sel = document.getElementById("match-sel-" + rsvpId);
+        if (!sel || !sel.value) { alert("Please select an event."); return; }
+        try {
+            const res = await fetch(`/api/rsvps/${rsvpId}/match`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ event_name: sel.value }),
+            });
+            if (!res.ok) {
+                const d = await res.json();
+                throw new Error(d.error || "Match failed");
+            }
+            await fetchRsvps();
+            renderRsvps();
+        } catch (err) {
+            alert("Match failed: " + err.message);
+        }
+    }
+
+    async function unmatchRsvp(rsvpId) {
+        if (!confirm("Clear this RSVP match?")) return;
+        try {
+            const res = await fetch(`/api/rsvps/${rsvpId}/unmatch`, { method: "POST" });
+            if (!res.ok) {
+                const d = await res.json();
+                throw new Error(d.error || "Unmatch failed");
+            }
+            await fetchRsvps();
+            renderRsvps();
+        } catch (err) {
+            alert("Unmatch failed: " + err.message);
+        }
+    }
+
     function updateSortArrows() {
         document.querySelectorAll(".rsvp-table thead th[data-sort]").forEach(th => {
             const field = th.dataset.sort;
@@ -368,6 +465,10 @@
         updateStats();
         buildEventFilter();
 
+        // Show/hide actions column based on role
+        const actionsCol = document.getElementById("rsvp-actions-col");
+        if (actionsCol) actionsCol.style.display = currentRole === "admin" ? "" : "none";
+
         const filtered = getFilteredSortedRsvps();
         updateSortArrows();
         updateClearButton();
@@ -375,12 +476,13 @@
         const tbody = document.getElementById("rsvp-body");
 
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No RSVPs found. Click "Check RSVPs" to scan for RSVP emails.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">No RSVPs found. Click "Check RSVPs" to scan for RSVP emails.</td></tr>';
             document.getElementById("row-count").textContent = "";
             renderMobileCards([]);
             return;
         }
 
+        const isAdmin = currentRole === "admin";
         let html = "";
         filtered.forEach(r => {
             html += `<tr>
@@ -391,6 +493,7 @@
                 <td>${formatDate(r.event_date)}</td>
                 <td>${formatDateTime(r.received_at)}</td>
                 <td>${matchBadge(r.matched_event)}</td>
+                ${isAdmin ? actionsCell(r) : ''}
             </tr>`;
         });
         tbody.innerHTML = html;
@@ -568,7 +671,7 @@
 
     // ---- Init (called by auth.js after login) ----
     async function onAuthReady() {
-        await Promise.all([fetchRsvps(), fetchRsvpStats()]);
+        await Promise.all([fetchRsvps(), fetchRsvpStats(), fetchEvents()]);
         renderRsvps();
     }
 
