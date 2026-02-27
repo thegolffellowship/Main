@@ -76,6 +76,7 @@ Main/
     ├── app.py                          # Flask app — all routes, scheduler, webhook
     ├── asgi_app.py                     # ASGI wrapper (Flask + MCP on one port)
     ├── mcp_server.py                   # MCP server (21 tools for Claude)
+    ├── mcp_auth.py                     # OAuth 2.0 for MCP (client credentials + PKCE)
     ├── mcp_server_remote.py            # Remote MCP via SSE
     ├── seed_sa_events.py               # Script to seed San Antonio events
     ├── test_parser.py                  # Parser unit tests
@@ -563,6 +564,41 @@ An MCP (Model Context Protocol) server gives Claude direct database access with 
 - **Claude Code:** Auto-configured via `.mcp.json` at repo root
 - **Claude Desktop:** Connect to `https://main-production-b95c.up.railway.app/mcp/mcp` (streamable-http transport)
 
+### OAuth 2.0 Authentication (Claude.ai Custom Connector)
+
+The MCP endpoint is protected by OAuth 2.0 client credentials when `MCP_CLIENT_ID` and `MCP_CLIENT_SECRET` environment variables are set. This is required for Claude.ai's custom connector setup.
+
+**OAuth endpoints:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/.well-known/oauth-authorization-server` | GET | RFC 8414 metadata discovery |
+| `/oauth/authorize` | GET | Authorization endpoint (auto-approves for valid client) |
+| `/oauth/token` | POST | Token endpoint (client_credentials + authorization_code with PKCE) |
+
+**Environment variables to set in Railway:**
+
+```bash
+MCP_CLIENT_ID=tgf-mcp-client
+MCP_CLIENT_SECRET=<generate a secure random string>
+```
+
+**Claude.ai Custom Connector setup:**
+
+1. Go to Claude.ai Settings → Integrations → Add Custom MCP Server
+2. Enter:
+   - **Server URL:** `https://main-production-b95c.up.railway.app/mcp/mcp`
+   - **OAuth Client ID:** value of `MCP_CLIENT_ID` (e.g. `tgf-mcp-client`)
+   - **OAuth Client Secret:** value of `MCP_CLIENT_SECRET`
+3. Claude.ai will discover the OAuth metadata, obtain a Bearer token, and connect to the MCP server
+
+**How it works:**
+- Token endpoint accepts `grant_type=client_credentials` with `client_id` and `client_secret`
+- Returns a signed Bearer token (HMAC-SHA256, 1-hour expiry)
+- MCP requests require `Authorization: Bearer <token>` header
+- Authorization code flow with PKCE is also supported for browser-based OAuth redirects
+- If `MCP_CLIENT_ID` / `MCP_CLIENT_SECRET` are not set, MCP runs without auth (local dev)
+
 ---
 
 ## Scheduled Jobs
@@ -612,6 +648,10 @@ MANAGER_PIN=0000                 # View + edit only
 
 # Database (for Railway persistent volume)
 DATABASE_PATH=/data/transactions.db
+
+# MCP OAuth (for Claude.ai custom connector)
+MCP_CLIENT_ID=tgf-mcp-client       # OAuth client ID
+MCP_CLIENT_SECRET=...               # OAuth client secret (generate a secure random string)
 ```
 
 ---
