@@ -530,8 +530,9 @@ _NON_EVENT_KEYWORDS = [
 ]
 
 
-def _is_event_item(item_name: str) -> bool:
-    """Heuristic: an item is an event if it has a date-like pattern or course name."""
+def _is_event_item(item_name: str, *, course: str = "", city: str = "") -> bool:
+    """Heuristic: an item is an event if it has a date-like pattern, course name,
+    event-type keyword, series identifier, or course/city metadata."""
     if not item_name:
         return False
     lower = item_name.lower()
@@ -539,16 +540,30 @@ def _is_event_item(item_name: str) -> bool:
     for kw in _NON_EVENT_KEYWORDS:
         if kw in lower:
             return False
+    # If the item row has course or city metadata → it's an event
+    if (course and course.strip()) or (city and city.strip()):
+        return True
     # Contains a month name or date pattern → likely an event
     import re
     month_pattern = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b"
     if re.search(month_pattern, lower):
         return True
+    # Event-type keywords → definitely an event
+    event_keywords = [
+        "kickoff", "tournament", "scramble", "classic", "invitational",
+        "championship", "cup", "open ", "shootout", "challenge",
+    ]
+    for ek in event_keywords:
+        if ek in lower:
+            return True
+    # Series identifier pattern (e.g., s18.1, a18.2) → season event
+    if re.match(r"^[a-z]\d+\.\d+\s", lower):
+        return True
     # Contains a known course name keyword → likely an event
     course_keywords = [
         "cantera", "morris", "cedar", "cowboys", "wolfdancer", "falconhead",
         "moody", "quarry", "tpc", "kissing", "plum", "landa", "vaaler",
-        "hancock", "craig ranch",
+        "hancock", "craig ranch", "northern hills", "shadowglen",
     ]
     for ck in course_keywords:
         if ck in lower:
@@ -582,7 +597,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
     skipped_aliased = 0
     for item in items:
         name = item["item_name"] or ""
-        if not _is_event_item(name):
+        if not _is_event_item(name, course=item["course"] or "", city=item["city"] or ""):
             skipped_non_event += 1
             continue
         # Skip names that are aliases of another event
@@ -805,17 +820,20 @@ def get_orphaned_items(db_path: str | Path | None = None) -> list[dict]:
     ).fetchall()
     conn.close()
 
-    # Filter to event-like items only
+    # Safety net: include everything EXCEPT obvious non-events.
+    # Better to surface a false positive than miss a real event.
     result = []
     for r in rows:
         row = dict(r)
-        if _is_event_item(row["item_name"]):
+        name = (row["item_name"] or "").lower()
+        is_non_event = any(kw in name for kw in _NON_EVENT_KEYWORDS)
+        if not is_non_event:
             # Truncate customer list for display
             customers = row.get("customers") or ""
             row["customers"] = customers[:200]
             result.append(row)
 
-    logger.info("Found %d orphaned event-like item groups", len(result))
+    logger.info("Found %d orphaned item groups (safety-net filter)", len(result))
     return result
 
 
