@@ -48,6 +48,7 @@ from email_parser.database import (
     merge_events,
     get_orphaned_items,
     resolve_orphaned_items,
+    get_all_event_aliases,
     get_known_rsvp_uids,
     save_rsvps,
     get_rsvps_for_event,
@@ -766,8 +767,14 @@ def customers_page():
 
 @app.route("/api/events")
 def api_events():
-    """Return all events with registration counts."""
+    """Return all events with registration counts and aliases."""
     return jsonify(get_all_events())
+
+
+@app.route("/api/events/aliases")
+def api_event_aliases():
+    """Return alias_name → canonical_event_name map."""
+    return jsonify(get_all_event_aliases())
 
 
 @app.route("/api/events/sync", methods=["POST"])

@@ -116,45 +116,48 @@
         }
         /* Orphan banner */
         .orphan-banner {
-            background: #fffbeb;
-            border: 1px solid #f59e0b;
+            background: #fef3c7;
+            border: 2px solid #f59e0b;
+            border-left: 5px solid #d97706;
             border-radius: var(--radius);
-            margin-bottom: 0.75rem;
+            margin-bottom: 1rem;
             overflow: hidden;
+            box-shadow: 0 2px 8px rgba(217, 119, 6, 0.15);
         }
         .orphan-banner-header {
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            padding: 0.6rem 1rem;
+            padding: 0.75rem 1rem;
             flex-wrap: wrap;
+            font-size: 0.92rem;
         }
-        .orphan-icon { font-size: 1.1rem; }
-        .orphan-subtitle { font-size: 0.78rem; color: #92400e; flex: 1; }
+        .orphan-icon { font-size: 1.3rem; }
+        .orphan-subtitle { font-size: 0.82rem; color: #92400e; flex: 1; }
         .orphan-toggle-btn {
-            background: none;
+            background: #fff7ed;
             border: 1px solid #d97706;
             border-radius: 6px;
-            padding: 0.25rem 0.75rem;
-            font-size: 0.75rem;
+            padding: 0.3rem 0.85rem;
+            font-size: 0.78rem;
             font-weight: 600;
             color: #92400e;
             cursor: pointer;
         }
-        .orphan-toggle-btn:hover { background: #fef3c7; }
-        .orphan-list { padding: 0 1rem 0.75rem; }
+        .orphan-toggle-btn:hover { background: #fde68a; }
+        .orphan-list { padding: 0.25rem 1rem 0.75rem; }
         .orphan-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0.45rem 0;
-            border-top: 1px solid #fde68a;
+            padding: 0.55rem 0;
+            border-top: 1px solid #fbbf24;
             gap: 0.5rem;
             flex-wrap: wrap;
         }
-        .orphan-item-info { font-size: 0.82rem; flex: 1; min-width: 200px; }
-        .orphan-item-name { font-weight: 600; }
-        .orphan-item-meta { color: var(--text-muted); font-size: 0.75rem; }
+        .orphan-item-info { font-size: 0.85rem; flex: 1; min-width: 200px; }
+        .orphan-item-name { font-weight: 600; color: #92400e; }
+        .orphan-item-meta { color: var(--text-muted); font-size: 0.78rem; }
         .orphan-item-actions { display: flex; gap: 0.3rem; }
         /* Resolve mode toggle */
         .resolve-mode-btn { background: #f9fafb; color: var(--text-muted); transition: background 0.15s, color 0.15s; }
@@ -632,9 +635,10 @@
         return html;
     }
 
-    // Called by auth.js after successful login
+    // Called by auth.js after successful login or session restore
     function onAuthReady() {
         renderEvents();
+        fetchOrphanedItems();
     }
 
     // Column definitions for Events table
@@ -747,7 +751,13 @@
     }
 
     function getRegistrants(eventName) {
-        return allItems.filter(item => item.item_name === eventName
+        // Find the event's aliases so items with old/variant names are included
+        const ev = allEvents.find(e => e.item_name === eventName);
+        const names = new Set([eventName]);
+        if (ev && ev.aliases) {
+            ev.aliases.forEach(a => names.add(a));
+        }
+        return allItems.filter(item => names.has(item.item_name)
             && ['active', 'rsvp_only'].includes(item.transaction_status || 'active'));
     }
 
@@ -2354,13 +2364,18 @@
             <div class="orphan-item">
                 <div class="orphan-item-info">
                     <span class="orphan-item-name">${escapeHtml(o.item_name)}</span>
-                    <span class="orphan-item-meta">${o.item_count} item(s) &middot; ${escapeHtml(customers || "—")}</span>
+                    <span class="orphan-item-meta">${o.item_count} transaction(s) &middot; ${escapeHtml(customers || "—")}</span>
                 </div>
                 <div class="orphan-item-actions">
-                    <button class="btn btn-edit" onclick="openResolveOrphan('${escapeHtml(o.item_name).replace(/'/g, "\\'")}', ${o.item_count})">Resolve</button>
+                    <button class="btn btn-primary" style="font-size:0.78rem; padding:0.3rem 0.75rem;" onclick="openResolveOrphan('${escapeHtml(o.item_name).replace(/'/g, "\\'")}', ${o.item_count})">Create Event</button>
+                    <button class="btn btn-edit" onclick="openResolveOrphan('${escapeHtml(o.item_name).replace(/'/g, "\\'")}', ${o.item_count}, 'assign')">Merge with Existing</button>
                 </div>
             </div>`;
         }).join("");
+
+        // Auto-expand the orphan list so it's immediately visible
+        list.style.display = "";
+        document.getElementById("orphan-toggle-btn").textContent = "Hide \u25B4";
     }
 
     // =========================================================================
@@ -2397,7 +2412,7 @@
         const source = allEvents.find(e => e.id === mergeSourceId);
         if (!source) return;
 
-        if (!confirm(`Merge "${source.item_name}" into "${target.item_name}"?\n\nAll registrations will be moved to the target event and the source will be deleted.`)) return;
+        if (!confirm(`Merge "${source.item_name}" into "${target.item_name}"?\n\n"${source.item_name}" will become an alias of "${target.item_name}". Transactions keep their original names but will show under the target event. The source event will be deleted.`)) return;
 
         try {
             const res = await fetch("/api/events/merge", {
@@ -2407,7 +2422,7 @@
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Merge failed");
-            alert(`Merged! ${data.items_moved} items moved to "${data.target_event}".`);
+            alert(`Merged! ${data.items_linked} transaction(s) linked to "${data.target_event}" via alias. The source event name is now an alias.`);
             closeMergeEvent();
             await fetchItems();
             await fetchEvents();
@@ -2423,22 +2438,22 @@
     let resolveOrphanName = null;
     let resolveMode = "assign";
 
-    function openResolveOrphan(itemName, count) {
+    function openResolveOrphan(itemName, count, mode) {
         resolveOrphanName = itemName;
-        resolveMode = "assign";
+        resolveMode = mode || "create";
 
         document.getElementById("resolve-orphan-info").innerHTML =
-            `<strong>${escapeHtml(itemName)}</strong> &mdash; ${count} unattached item(s)`;
+            `<strong>${escapeHtml(itemName)}</strong> &mdash; ${count} unattached transaction(s)`;
 
-        // Reset mode toggle
+        // Set mode toggle
         document.querySelectorAll('input[name="resolve-mode"]').forEach(r => {
-            r.checked = r.value === "assign";
+            r.checked = r.value === resolveMode;
         });
         document.querySelectorAll(".resolve-mode-btn").forEach(b => {
-            b.classList.toggle("resolve-mode-active", b.querySelector("input").value === "assign");
+            b.classList.toggle("resolve-mode-active", b.querySelector("input").value === resolveMode);
         });
-        document.getElementById("resolve-assign-section").style.display = "";
-        document.getElementById("resolve-create-section").style.display = "none";
+        document.getElementById("resolve-assign-section").style.display = resolveMode === "assign" ? "" : "none";
+        document.getElementById("resolve-create-section").style.display = resolveMode === "create" ? "" : "none";
 
         // Build event picker
         document.getElementById("resolve-target-select").innerHTML = buildEvPickerOptions(allEvents);
@@ -2472,7 +2487,7 @@
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "Resolve failed");
-                alert(`Resolved! ${data.items_updated} items assigned to "${data.target_event}".`);
+                alert(`Resolved! ${data.items_linked} transaction(s) linked to "${data.target_event}" via alias.`);
                 closeResolveOrphan();
                 await fetchItems();
                 await fetchEvents();
@@ -2509,7 +2524,7 @@
                     });
                     const data = await resolveRes.json();
                     if (!resolveRes.ok) throw new Error(data.error || "Resolve failed");
-                    alert(`Created event "${name}" and assigned ${data.items_updated} items.`);
+                    alert(`Created event "${name}" and linked ${data.items_linked} transaction(s) via alias.`);
                 } else {
                     alert(`Created event "${name}". Items are now attached.`);
                 }
