@@ -54,6 +54,8 @@ from email_parser.database import (
     get_all_rsvps,
     get_rsvp_stats,
     rematch_rsvps,
+    manual_match_rsvp,
+    unmatch_rsvp,
     get_rsvp_overrides,
     set_rsvp_override,
 )
@@ -1045,6 +1047,27 @@ def api_rsvp_rematch():
     except Exception as e:
         logger.exception("RSVP rematch failed")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rsvps/<int:rsvp_id>/match", methods=["POST"])
+@require_role("admin")
+def api_manual_match_rsvp(rsvp_id):
+    """Manually assign an RSVP to an event. Admin only."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("event_name"):
+        return jsonify({"error": "event_name is required."}), 400
+    if manual_match_rsvp(rsvp_id, data["event_name"]):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "RSVP not found."}), 404
+
+
+@app.route("/api/rsvps/<int:rsvp_id>/unmatch", methods=["POST"])
+@require_role("admin")
+def api_unmatch_rsvp(rsvp_id):
+    """Clear the match for an RSVP. Admin only."""
+    if unmatch_rsvp(rsvp_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "RSVP not found."}), 404
 
 
 @app.route("/api/rsvps/overrides/<path:event_name>")

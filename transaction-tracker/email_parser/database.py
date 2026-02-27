@@ -1168,52 +1168,90 @@ def match_rsvp_to_event(event_identifier: str, event_date: str | None,
                          db_path: str | Path | None = None) -> str | None:
     """Try to match an RSVP event identifier to an events.item_name.
 
-    Strategies:
-      1. item_name contains the event_identifier substring
-      2. Match by event_date alone (if only one event on that date)
-      3. Normalize the identifier as a course name and match course + date
+    Only returns a match when confident. Returns None for ambiguous cases
+    so they can be resolved manually.
+
+    Strategies (in order of confidence):
+      1. item_name contains the full event_identifier substring (exact)
+      2. Extract course name from identifier and match course + date
+      3. Extract course name from identifier and match course alone (single match)
+      4. Match by event_date alone ONLY if single event on that date AND
+         the city from the identifier matches the event's city
     """
     conn = get_connection(db_path)
+    identifier_upper = (event_identifier or "").upper().strip()
 
-    # Strategy 1: Direct substring match
+    # Strategy 1: Direct substring match on full identifier
     rows = conn.execute(
-        "SELECT item_name FROM events WHERE item_name LIKE ?",
-        (f"%{event_identifier}%",),
+        "SELECT item_name FROM events WHERE UPPER(item_name) LIKE ?",
+        (f"%{identifier_upper}%",),
     ).fetchall()
     if len(rows) == 1:
         conn.close()
         return rows[0]["item_name"]
 
-    # Strategy 2: Match by event_date (if one event on that date)
-    if event_date:
-        rows = conn.execute(
-            "SELECT item_name FROM events WHERE event_date = ?",
-            (event_date,),
-        ).fetchall()
-        if len(rows) == 1:
-            conn.close()
-            return rows[0]["item_name"]
-
-    # Strategy 3: Normalize as course name and match course + date
+    # Extract the course name portion from the identifier.
+    # GG identifiers look like: "a18.2 PRIME TIME KICKOFF | SHADOWGLEN"
+    # or "s9.1 The Quarry" — the course is typically the last segment.
     from email_parser.parser import _normalize_course_name
-    normalized = _normalize_course_name(event_identifier)
-    if normalized and event_date:
+    course_part = event_identifier
+    if "|" in event_identifier:
+        course_part = event_identifier.split("|")[-1].strip()
+    elif " " in event_identifier:
+        # Try the last word(s) after any prefix like "a18.2"
+        parts = event_identifier.split()
+        # Skip leading codes like "s9.1", "a18.2"
+        import re
+        start = 0
+        for i, p in enumerate(parts):
+            if re.match(r'^[a-z]\d+\.\d+$', p, re.IGNORECASE):
+                start = i + 1
+        course_part = " ".join(parts[start:])
+
+    normalized_course = _normalize_course_name(course_part)
+
+    # Strategy 2: Normalized course name + date (high confidence)
+    if normalized_course and event_date:
         rows = conn.execute(
-            "SELECT item_name FROM events WHERE course LIKE ? AND event_date = ?",
-            (f"%{normalized}%", event_date),
-        ).fetchall()
-        if len(rows) == 1:
-            conn.close()
-            return rows[0]["item_name"]
-    elif normalized:
-        rows = conn.execute(
-            "SELECT item_name FROM events WHERE course LIKE ?",
-            (f"%{normalized}%",),
+            "SELECT item_name FROM events WHERE UPPER(course) LIKE ? AND event_date = ?",
+            (f"%{normalized_course.upper()}%", event_date),
         ).fetchall()
         if len(rows) == 1:
             conn.close()
             return rows[0]["item_name"]
 
+    # Strategy 3: Normalized course name alone (only if single match)
+    if normalized_course:
+        rows = conn.execute(
+            "SELECT item_name FROM events WHERE UPPER(course) LIKE ?",
+            (f"%{normalized_course.upper()}%",),
+        ).fetchall()
+        if len(rows) == 1:
+            conn.close()
+            return rows[0]["item_name"]
+
+    # Strategy 4: Also try the raw course_part (un-normalized) in item_name
+    if course_part and course_part != event_identifier:
+        rows = conn.execute(
+            "SELECT item_name FROM events WHERE UPPER(item_name) LIKE ?",
+            (f"%{course_part.upper()}%",),
+        ).fetchall()
+        if len(rows) == 1:
+            conn.close()
+            return rows[0]["item_name"]
+
+        # With date as additional filter
+        if event_date:
+            rows = conn.execute(
+                "SELECT item_name FROM events WHERE UPPER(item_name) LIKE ? AND event_date = ?",
+                (f"%{course_part.upper()}%", event_date),
+            ).fetchall()
+            if len(rows) == 1:
+                conn.close()
+                return rows[0]["item_name"]
+
+    # If none of the above matched confidently, return None.
+    # Do NOT fall back to date-only matching — too risky for mismatches.
     conn.close()
     return None
 
@@ -1474,6 +1512,52 @@ def rematch_rsvps(db_path: str | Path | None = None) -> dict:
     conn.close()
     logger.info("Rematch: %d events, %d items rematched", rematched_events, rematched_items)
     return {"rematched_events": rematched_events, "rematched_items": rematched_items}
+
+
+def manual_match_rsvp(rsvp_id: int, event_name: str,
+                       db_path: str | Path | None = None) -> bool:
+    """Manually set the matched_event for an RSVP.
+
+    Also attempts to match the player to a specific item in that event.
+    Returns True if the RSVP was updated.
+    """
+    conn = get_connection(db_path)
+    rsvp = conn.execute("SELECT * FROM rsvps WHERE id = ?", (rsvp_id,)).fetchone()
+    if not rsvp:
+        conn.close()
+        return False
+    rsvp = dict(rsvp)
+
+    # Try to match the player to an item
+    matched_item_id = match_rsvp_to_item(
+        rsvp.get("player_email"), rsvp.get("player_name"),
+        event_name, db_path,
+    )
+
+    conn.execute(
+        "UPDATE rsvps SET matched_event = ?, matched_item_id = ? WHERE id = ?",
+        (event_name, matched_item_id, rsvp_id),
+    )
+    conn.commit()
+    conn.close()
+    logger.info("Manual RSVP match: rsvp #%d → event '%s' (item=%s)",
+                rsvp_id, event_name, matched_item_id)
+    return True
+
+
+def unmatch_rsvp(rsvp_id: int, db_path: str | Path | None = None) -> bool:
+    """Clear the matched_event and matched_item_id for an RSVP.
+
+    Returns True if the RSVP was updated.
+    """
+    conn = get_connection(db_path)
+    cursor = conn.execute(
+        "UPDATE rsvps SET matched_event = NULL, matched_item_id = NULL WHERE id = ?",
+        (rsvp_id,),
+    )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
 
 
 def normalize_tee_choices(db_path: str | Path | None = None) -> int:
