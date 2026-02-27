@@ -593,14 +593,37 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
 
 
 def update_event(event_id: int, fields: dict, db_path: str | Path | None = None) -> bool:
-    """Update specific fields on an event row."""
+    """Update specific fields on an event row.
+
+    When item_name changes, cascades to items, rsvps, and rsvp_overrides
+    so that transactions stay attached to the renamed event.
+    """
     allowed = {"item_name", "event_date", "course", "city", "event_type"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
+
+    conn = get_connection(db_path)
+
+    # If renaming the event, cascade to all related tables
+    old_name = None
+    new_name = safe.get("item_name")
+    if new_name:
+        row = conn.execute("SELECT item_name FROM events WHERE id = ?", (event_id,)).fetchone()
+        if row:
+            old_name = row["item_name"]
+            if old_name and old_name != new_name:
+                conn.execute("UPDATE items SET item_name = ? WHERE item_name = ?",
+                             (new_name, old_name))
+                conn.execute("UPDATE rsvps SET matched_event = ? WHERE matched_event = ?",
+                             (new_name, old_name))
+                conn.execute("UPDATE rsvp_overrides SET event_name = ? WHERE event_name = ?",
+                             (new_name, old_name))
+                logger.info("Cascaded event rename '%s' → '%s' to items/rsvps/overrides",
+                            old_name, new_name)
+
     set_clause = ", ".join(f"{col} = ?" for col in safe)
     values = list(safe.values()) + [event_id]
-    conn = get_connection(db_path)
     cursor = conn.execute(f"UPDATE events SET {set_clause} WHERE id = ?", values)
     conn.commit()
     conn.close()
@@ -614,6 +637,163 @@ def delete_event(event_id: int, db_path: str | Path | None = None) -> bool:
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+
+def merge_events(source_id: int, target_id: int, db_path: str | Path | None = None) -> dict | None:
+    """
+    Merge source event into target event.
+
+    Moves all items, RSVPs, and overrides from the source event's item_name
+    to the target event's item_name, then deletes the source event.
+
+    Returns summary dict or None on failure.
+    """
+    conn = get_connection(db_path)
+
+    source = conn.execute("SELECT * FROM events WHERE id = ?", (source_id,)).fetchone()
+    target = conn.execute("SELECT * FROM events WHERE id = ?", (target_id,)).fetchone()
+
+    if not source or not target:
+        conn.close()
+        return None
+
+    source = dict(source)
+    target = dict(target)
+    src_name = source["item_name"]
+    tgt_name = target["item_name"]
+
+    if src_name == tgt_name:
+        conn.close()
+        return None
+
+    # Move items
+    cur = conn.execute("UPDATE items SET item_name = ? WHERE item_name = ?",
+                       (tgt_name, src_name))
+    items_moved = cur.rowcount
+
+    # Also update event_date/course/city on moved items to match target
+    if target.get("event_date"):
+        conn.execute("UPDATE items SET event_date = ? WHERE item_name = ? AND (event_date IS NULL OR event_date = ?)",
+                     (target["event_date"], tgt_name, source.get("event_date", "")))
+    if target.get("course"):
+        conn.execute("UPDATE items SET course = ? WHERE item_name = ? AND (course IS NULL OR course = ?)",
+                     (target["course"], tgt_name, source.get("course", "")))
+    if target.get("city"):
+        conn.execute("UPDATE items SET city = ? WHERE item_name = ? AND (city IS NULL OR city = ?)",
+                     (target["city"], tgt_name, source.get("city", "")))
+
+    # Move RSVPs
+    cur = conn.execute("UPDATE rsvps SET matched_event = ? WHERE matched_event = ?",
+                       (tgt_name, src_name))
+    rsvps_moved = cur.rowcount
+
+    # Move overrides
+    cur = conn.execute("UPDATE rsvp_overrides SET event_name = ? WHERE event_name = ?",
+                       (tgt_name, src_name))
+    overrides_moved = cur.rowcount
+
+    # Delete source event
+    conn.execute("DELETE FROM events WHERE id = ?", (source_id,))
+
+    conn.commit()
+    conn.close()
+
+    logger.info("Merged event '%s' (#%d) → '%s' (#%d): %d items, %d RSVPs, %d overrides moved",
+                src_name, source_id, tgt_name, target_id,
+                items_moved, rsvps_moved, overrides_moved)
+
+    return {
+        "source_event": src_name,
+        "target_event": tgt_name,
+        "items_moved": items_moved,
+        "rsvps_moved": rsvps_moved,
+        "overrides_moved": overrides_moved,
+    }
+
+
+def get_orphaned_items(db_path: str | Path | None = None) -> list[dict]:
+    """
+    Find items whose item_name doesn't match any event in the events table
+    AND that look like events (not memberships, merch, etc.).
+
+    Returns list of dicts with item_name, count, and sample fields.
+    """
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        """SELECT i.item_name,
+                  COUNT(*) as item_count,
+                  MIN(i.event_date) as event_date,
+                  MIN(i.course) as course,
+                  MIN(i.city) as city,
+                  GROUP_CONCAT(DISTINCT i.customer) as customers
+           FROM items i
+           LEFT JOIN events e ON i.item_name = e.item_name
+           WHERE e.id IS NULL
+             AND COALESCE(i.transaction_status, 'active') IN ('active', 'rsvp_only')
+           GROUP BY i.item_name
+           ORDER BY i.item_name"""
+    ).fetchall()
+    conn.close()
+
+    # Filter to event-like items only
+    result = []
+    for r in rows:
+        row = dict(r)
+        if _is_event_item(row["item_name"]):
+            # Truncate customer list for display
+            customers = row.get("customers") or ""
+            row["customers"] = customers[:200]
+            result.append(row)
+
+    logger.info("Found %d orphaned event-like item groups", len(result))
+    return result
+
+
+def resolve_orphaned_items(old_item_name: str, target_event_name: str,
+                           db_path: str | Path | None = None) -> dict:
+    """
+    Resolve orphaned items by reassigning them to an existing event.
+
+    Updates all items with the old_item_name to the target event's name,
+    and copies over event_date/course/city from the target event.
+
+    Returns summary.
+    """
+    conn = get_connection(db_path)
+
+    # Fetch target event info
+    target = conn.execute(
+        "SELECT * FROM events WHERE item_name = ?", (target_event_name,)
+    ).fetchone()
+    target = dict(target) if target else {}
+
+    updates = {"item_name": target_event_name}
+    if target.get("event_date"):
+        updates["event_date"] = target["event_date"]
+    if target.get("course"):
+        updates["course"] = target["course"]
+    if target.get("city"):
+        updates["city"] = target["city"]
+
+    set_clause = ", ".join(f"{col} = ?" for col in updates)
+    values = list(updates.values()) + [old_item_name]
+    cursor = conn.execute(f"UPDATE items SET {set_clause} WHERE item_name = ?", values)
+    items_updated = cursor.rowcount
+
+    # Also update RSVPs if any matched to the old name
+    conn.execute("UPDATE rsvps SET matched_event = ? WHERE matched_event = ?",
+                 (target_event_name, old_item_name))
+
+    conn.commit()
+    conn.close()
+
+    logger.info("Resolved %d orphaned items '%s' → '%s'",
+                items_updated, old_item_name, target_event_name)
+    return {
+        "old_item_name": old_item_name,
+        "target_event": target_event_name,
+        "items_updated": items_updated,
+    }
 
 
 def update_item(item_id: int, fields: dict, db_path: str | Path | None = None) -> bool:

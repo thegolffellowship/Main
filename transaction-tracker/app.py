@@ -45,6 +45,9 @@ from email_parser.database import (
     get_all_events,
     update_event,
     delete_event,
+    merge_events,
+    get_orphaned_items,
+    resolve_orphaned_items,
     get_known_rsvp_uids,
     save_rsvps,
     get_rsvps_for_event,
@@ -151,6 +154,15 @@ def check_inbox():
             raise
         except Exception:
             logger.exception("Failed to parse email %d/%d uid=%s", i, len(new_emails), email_data.get("uid"))
+
+    # Auto-sync: create event entries for any new event-like items
+    if total_saved > 0:
+        try:
+            sync_result = sync_events_from_items()
+            if sync_result.get("inserted"):
+                logger.info("Auto-synced %d new events from incoming transactions", sync_result["inserted"])
+        except Exception:
+            logger.exception("Auto-sync events failed (non-fatal)")
 
     _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(new_emails)} new emails ({len(emails)} total scanned)"
     logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
@@ -802,6 +814,50 @@ def api_create_event():
     if event:
         return jsonify({"status": "ok", "event": event}), 201
     return jsonify({"error": "Event already exists with that name."}), 409
+
+
+@app.route("/api/events/merge", methods=["POST"])
+@require_role("admin")
+def api_merge_events():
+    """Merge source event into target event. Admin only.
+
+    All items, RSVPs, and overrides from the source event are reassigned
+    to the target event, then the source event is deleted.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required."}), 400
+    source_id = data.get("source_id")
+    target_id = data.get("target_id")
+    if not source_id or not target_id:
+        return jsonify({"error": "source_id and target_id are required."}), 400
+    if source_id == target_id:
+        return jsonify({"error": "Cannot merge an event into itself."}), 400
+    result = merge_events(source_id, target_id)
+    if result:
+        return jsonify({"status": "ok", **result})
+    return jsonify({"error": "Source or target event not found."}), 404
+
+
+@app.route("/api/events/orphaned-items")
+def api_orphaned_items():
+    """Return items whose item_name doesn't match any event."""
+    return jsonify(get_orphaned_items())
+
+
+@app.route("/api/events/resolve-orphan", methods=["POST"])
+@require_role("admin")
+def api_resolve_orphan():
+    """Reassign orphaned items to an existing event. Admin only."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required."}), 400
+    old_name = data.get("old_item_name")
+    target = data.get("target_event")
+    if not old_name or not target:
+        return jsonify({"error": "old_item_name and target_event are required."}), 400
+    result = resolve_orphaned_items(old_name, target)
+    return jsonify({"status": "ok", **result})
 
 
 # ---------------------------------------------------------------------------
