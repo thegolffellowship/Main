@@ -995,7 +995,7 @@
                         filteredRegs = filteredRegs.concat(mGgRows);
                     }
 
-                    const mRsvpOnlyCount = mRegs.filter(r => (r.transaction_status || "active") === "rsvp_only" && r.customer_email).length;
+                    const mRsvpOnlyCount = registrants.filter(r => (r.transaction_status || "active") === "rsvp_only" && r.customer_email).length;
                     detailHtml = badgesHtml + `
                     <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem; flex-wrap:wrap;">
                         <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>
