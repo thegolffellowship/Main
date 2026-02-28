@@ -22,14 +22,15 @@ logger = logging.getLogger(__name__)
 # Shared styles
 # ---------------------------------------------------------------------------
 STYLES = {
-    "card": "background:#f0f7ff; padding:12px 20px; border-radius:8px; text-align:center;",
-    "card_num": "font-size:24px; font-weight:700; color:#2563eb;",
-    "card_label": "font-size:12px; color:#666; text-transform:uppercase;",
-    "th": "padding:8px 10px; text-align:left; border-bottom:2px solid #e5e7eb; font-size:11px; text-transform:uppercase; color:#666;",
-    "td": "padding:6px 10px; border-bottom:1px solid #eee;",
+    "card": "background:#f0f7ff; padding:14px 10px; border-radius:8px; text-align:center; width:33%;",
+    "card_num": "font-size:22px; font-weight:700; color:#2563eb;",
+    "card_label": "font-size:12px; color:#666; text-transform:uppercase; white-space:nowrap;",
+    "th": "padding:8px 10px; text-align:left; border-bottom:2px solid #e5e7eb; font-size:12px; text-transform:uppercase; color:#666; white-space:nowrap;",
+    "td": "padding:8px 10px; border-bottom:1px solid #eee; font-size:14px;",
+    "td_nowrap": "padding:8px 10px; border-bottom:1px solid #eee; font-size:14px; white-space:nowrap;",
     "section": "margin-top:32px;",
-    "h3": "color:#1e40af; border-bottom:2px solid #e5e7eb; padding-bottom:6px;",
-    "empty": "color:#999; font-style:italic;",
+    "h3": "color:#1e40af; border-bottom:2px solid #e5e7eb; padding-bottom:6px; font-size:18px;",
+    "empty": "color:#999; font-style:italic; font-size:14px;",
 }
 
 
@@ -76,41 +77,39 @@ def _build_transactions_section(items: list[dict]) -> str:
     for r in items:
         table_rows += f"""\
 <tr>
-  <td style="{STYLES['td']}">{r.get('order_date') or '—'}</td>
+  <td style="{STYLES['td_nowrap']}">{r.get('order_date') or '—'}</td>
   <td style="{STYLES['td']}">{r.get('customer') or '—'}</td>
   <td style="{STYLES['td']} font-weight:600;">{r.get('item_name') or '—'}</td>
-  <td style="{STYLES['td']}">{r.get('item_price') or '—'}</td>
-  <td style="{STYLES['td']}">{r.get('city') or '—'}</td>
-  <td style="{STYLES['td']}">{r.get('side_games') or '—'}</td>
-  <td style="{STYLES['td']}">{r.get('order_id') or '—'}</td>
+  <td style="{STYLES['td_nowrap']}">{r.get('item_price') or '—'}</td>
 </tr>"""
 
     return f"""
 <div style="{STYLES['section']}">
   <h3 style="{STYLES['h3']}">Transactions (Last 24 Hours)</h3>
-  <div style="display:flex; gap:20px; margin-bottom:16px;">
-    <div style="{STYLES['card']}">
+  <table cellpadding="0" cellspacing="0" border="0" style="width:100%; margin-bottom:16px;">
+  <tr>
+    <td style="{STYLES['card']}" width="33%">
       <div style="{STYLES['card_num']}">{total_items}</div>
       <div style="{STYLES['card_label']}">New Items</div>
-    </div>
-    <div style="{STYLES['card']}">
+    </td>
+    <td width="10">&nbsp;</td>
+    <td style="{STYLES['card']}" width="33%">
       <div style="{STYLES['card_num']}">{total_orders}</div>
       <div style="{STYLES['card_label']}">Orders</div>
-    </div>
-    <div style="{STYLES['card']}">
+    </td>
+    <td width="10">&nbsp;</td>
+    <td style="{STYLES['card']}" width="33%">
       <div style="{STYLES['card_num']}">${total_spent:,.2f}</div>
       <div style="{STYLES['card_label']}">Revenue</div>
-    </div>
-  </div>
-  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    </td>
+  </tr>
+  </table>
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
   <thead><tr style="background:#f9fafb;">
     <th style="{STYLES['th']}">Date</th>
     <th style="{STYLES['th']}">Customer</th>
-    <th style="{STYLES['th']}">Item</th>
+    <th style="{STYLES['th']}">Event</th>
     <th style="{STYLES['th']}">Price</th>
-    <th style="{STYLES['th']}">City</th>
-    <th style="{STYLES['th']}">Side Games</th>
-    <th style="{STYLES['th']}">Order ID</th>
   </tr></thead>
   <tbody>{table_rows}</tbody>
   </table>
@@ -137,33 +136,35 @@ def _build_rsvps_section(rsvps: list[dict]) -> str:
 <tr>
   <td style="{STYLES['td']}">{r.get('player_name') or '—'}</td>
   <td style="{STYLES['td']}">{r.get('matched_event') or r.get('gg_event_name') or '—'}</td>
-  <td style="{STYLES['td']}"><span style="color:{color}; font-weight:600;">{resp}</span></td>
-  <td style="{STYLES['td']}">{r.get('received_at') or '—'}</td>
+  <td style="{STYLES['td']}"><span style="color:{color}; font-weight:700;">{resp}</span></td>
 </tr>"""
 
     return f"""
 <div style="{STYLES['section']}">
   <h3 style="{STYLES['h3']}">RSVPs (Last 24 Hours)</h3>
-  <div style="display:flex; gap:20px; margin-bottom:16px;">
-    <div style="{STYLES['card']}">
+  <table cellpadding="0" cellspacing="0" border="0" style="width:100%; margin-bottom:16px;">
+  <tr>
+    <td style="{STYLES['card']}" width="33%">
       <div style="{STYLES['card_num']}">{len(rsvps)}</div>
       <div style="{STYLES['card_label']}">Total RSVPs</div>
-    </div>
-    <div style="background:#f0fdf4; padding:12px 20px; border-radius:8px; text-align:center;">
-      <div style="font-size:24px; font-weight:700; color:#16a34a;">{len(playing)}</div>
+    </td>
+    <td width="10">&nbsp;</td>
+    <td style="background:#f0fdf4; padding:14px 10px; border-radius:8px; text-align:center; width:33%;" width="33%">
+      <div style="font-size:22px; font-weight:700; color:#16a34a;">{len(playing)}</div>
       <div style="{STYLES['card_label']}">Playing</div>
-    </div>
-    <div style="background:#fef2f2; padding:12px 20px; border-radius:8px; text-align:center;">
-      <div style="font-size:24px; font-weight:700; color:#dc2626;">{len(not_playing)}</div>
+    </td>
+    <td width="10">&nbsp;</td>
+    <td style="background:#fef2f2; padding:14px 10px; border-radius:8px; text-align:center; width:33%;" width="33%">
+      <div style="font-size:22px; font-weight:700; color:#dc2626;">{len(not_playing)}</div>
       <div style="{STYLES['card_label']}">Not Playing</div>
-    </div>
-  </div>
-  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    </td>
+  </tr>
+  </table>
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
   <thead><tr style="background:#f9fafb;">
     <th style="{STYLES['th']}">Player</th>
     <th style="{STYLES['th']}">Event</th>
     <th style="{STYLES['th']}">Response</th>
-    <th style="{STYLES['th']}">Received</th>
   </tr></thead>
   <tbody>{table_rows}</tbody>
   </table>
@@ -182,25 +183,24 @@ def _build_upcoming_events_section(events: list[dict]) -> str:
     table_rows = ""
     for e in events:
         regs = e.get("registrations", 0)
+        course_city = e.get('course') or e.get('city') or '—'
         table_rows += f"""\
 <tr>
   <td style="{STYLES['td']} font-weight:600;">{e.get('item_name') or '—'}</td>
-  <td style="{STYLES['td']}">{e.get('event_date') or '—'}</td>
-  <td style="{STYLES['td']}">{e.get('course') or '—'}</td>
-  <td style="{STYLES['td']}">{e.get('city') or '—'}</td>
-  <td style="{STYLES['td']}"><span style="font-weight:700; color:#2563eb;">{regs}</span></td>
+  <td style="{STYLES['td_nowrap']}">{e.get('event_date') or '—'}</td>
+  <td style="{STYLES['td']}">{course_city}</td>
+  <td style="{STYLES['td']} text-align:center;"><span style="font-weight:700; color:#2563eb;">{regs}</span></td>
 </tr>"""
 
     return f"""
 <div style="{STYLES['section']}">
   <h3 style="{STYLES['h3']}">Upcoming Events</h3>
-  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
   <thead><tr style="background:#f9fafb;">
     <th style="{STYLES['th']}">Event</th>
     <th style="{STYLES['th']}">Date</th>
     <th style="{STYLES['th']}">Course</th>
-    <th style="{STYLES['th']}">City</th>
-    <th style="{STYLES['th']}">Registrations</th>
+    <th style="{STYLES['th']} text-align:center;">Regs</th>
   </tr></thead>
   <tbody>{table_rows}</tbody>
   </table>
@@ -227,21 +227,17 @@ def _build_feedback_section(recent: list[dict], open_tickets: list[dict]) -> str
             label = "Bug" if fb_type == "bug" else "Feature"
             rows += f"""\
 <tr>
-  <td style="{STYLES['td']}"><span style="background:{color}; color:#fff; padding:2px 8px; border-radius:10px; font-size:11px;">{label}</span></td>
+  <td style="{STYLES['td']}"><span style="background:{color}; color:#fff; padding:3px 10px; border-radius:10px; font-size:12px; white-space:nowrap;">{label}</span></td>
   <td style="{STYLES['td']}">{fb.get('message') or '—'}</td>
   <td style="{STYLES['td']}">{fb.get('page') or '—'}</td>
-  <td style="{STYLES['td']}">{fb.get('role') or '—'}</td>
-  <td style="{STYLES['td']}">{fb.get('created_at') or '—'}</td>
 </tr>"""
         parts.append(f"""
-  <h4 style="color:#333; margin-top:12px;">New Tickets (Last 24 Hours) — {len(recent)}</h4>
-  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+  <h4 style="color:#333; margin-top:12px; font-size:16px;">New Tickets (Last 24 Hours) — {len(recent)}</h4>
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
   <thead><tr style="background:#f9fafb;">
     <th style="{STYLES['th']}">Type</th>
     <th style="{STYLES['th']}">Message</th>
     <th style="{STYLES['th']}">Page</th>
-    <th style="{STYLES['th']}">Role</th>
-    <th style="{STYLES['th']}">Submitted</th>
   </tr></thead>
   <tbody>{rows}</tbody>
   </table>""")
@@ -257,19 +253,17 @@ def _build_feedback_section(recent: list[dict], open_tickets: list[dict]) -> str
             label = "Bug" if fb_type == "bug" else "Feature"
             rows += f"""\
 <tr>
-  <td style="{STYLES['td']}"><span style="background:{color}; color:#fff; padding:2px 8px; border-radius:10px; font-size:11px;">{label}</span></td>
+  <td style="{STYLES['td']}"><span style="background:{color}; color:#fff; padding:3px 10px; border-radius:10px; font-size:12px; white-space:nowrap;">{label}</span></td>
   <td style="{STYLES['td']}">{fb.get('message') or '—'}</td>
   <td style="{STYLES['td']}">{fb.get('page') or '—'}</td>
-  <td style="{STYLES['td']}">{fb.get('created_at') or '—'}</td>
 </tr>"""
         parts.append(f"""
-  <h4 style="color:#333; margin-top:20px;">Outstanding Open Tickets — {len(open_tickets)}</h4>
-  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+  <h4 style="color:#333; margin-top:20px; font-size:16px;">Outstanding Open Tickets — {len(open_tickets)}</h4>
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
   <thead><tr style="background:#f9fafb;">
     <th style="{STYLES['th']}">Type</th>
     <th style="{STYLES['th']}">Message</th>
     <th style="{STYLES['th']}">Page</th>
-    <th style="{STYLES['th']}">Submitted</th>
   </tr></thead>
   <tbody>{rows}</tbody>
   </table>""")
@@ -300,14 +294,38 @@ def build_digest_html(items, rsvps, upcoming_events, recent_feedback, open_feedb
     body = "\n".join(sections)
 
     return f"""\
-<html><body style="font-family: Arial, sans-serif; color: #333; max-width: 900px; margin: 0 auto;">
-<h2 style="color: #2563eb;">TGF Daily Digest — {now}</h2>
-<p style="color:#666; margin-top:-8px;">Here's everything that happened in the last 24 hours and where things stand.</p>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style>
+  body {{ margin: 0; padding: 0; }}
+  table {{ mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+  @media only screen and (max-width: 600px) {{
+    .email-wrap {{ padding: 12px !important; }}
+    h2 {{ font-size: 20px !important; }}
+    h3 {{ font-size: 16px !important; }}
+  }}
+</style>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; color: #333; margin: 0; padding: 0; background: #f5f7fa;">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f5f7fa;">
+<tr><td align="center" style="padding: 16px 8px;">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:640px; background:#ffffff; border-radius:8px; overflow:hidden;">
+<tr><td class="email-wrap" style="padding: 24px 20px;">
+
+<h2 style="color: #2563eb; font-size: 22px; margin:0 0 4px 0;">TGF Daily Digest — {now}</h2>
+<p style="color:#666; margin:0 0 8px 0; font-size:14px;">Here's everything that happened in the last 24 hours and where things stand.</p>
 {body}
 <hr style="margin-top:32px; border:none; border-top:1px solid #e5e7eb;">
 <p style="margin-top:12px; font-size:12px; color:#999;">
   This is an automated digest from TGF Transaction Tracker.
 </p>
+
+</td></tr>
+</table>
+</td></tr>
+</table>
 </body></html>"""
 
 
