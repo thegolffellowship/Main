@@ -10,6 +10,7 @@ import json
 import os
 import sqlite3
 import logging
+from datetime import datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -1926,3 +1927,66 @@ def update_feedback_status(feedback_id: int, status: str,
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+
+def get_open_feedback(db_path: str | Path | None = None) -> list[dict]:
+    """Return all feedback with status 'open', newest first."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT * FROM feedback WHERE status = 'open' ORDER BY created_at DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_recent_feedback(hours: int = 24, db_path: str | Path | None = None) -> list[dict]:
+    """Return feedback created within the last N hours."""
+    conn = get_connection(db_path)
+    cutoff = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+    rows = conn.execute(
+        "SELECT * FROM feedback WHERE created_at >= ? ORDER BY created_at DESC",
+        (cutoff,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_recent_rsvps(hours: int = 24, db_path: str | Path | None = None) -> list[dict]:
+    """Return RSVPs received within the last N hours."""
+    conn = get_connection(db_path)
+    cutoff = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+    rows = conn.execute(
+        "SELECT * FROM rsvps WHERE received_at >= ? ORDER BY received_at DESC",
+        (cutoff,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_upcoming_events(db_path: str | Path | None = None) -> list[dict]:
+    """Return future events with registration counts, sorted by date ascending."""
+    conn = get_connection(db_path)
+    today = datetime.now().strftime("%Y-%m-%d")
+    rows = conn.execute(
+        """
+        SELECT e.*,
+               COUNT(DISTINCT i.id) as registrations,
+               GROUP_CONCAT(DISTINCT ea.alias_name) as aliases
+        FROM events e
+        LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+        LEFT JOIN items i
+            ON (i.item_name = e.item_name OR i.item_name = ea.alias_name)
+            AND COALESCE(i.transaction_status, 'active') = 'active'
+        WHERE e.event_date >= ?
+        GROUP BY e.id
+        ORDER BY e.event_date ASC
+        """,
+        (today,),
+    ).fetchall()
+    conn.close()
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["aliases"] = [a for a in (d.get("aliases") or "").split(",") if a]
+        results.append(d)
+    return results

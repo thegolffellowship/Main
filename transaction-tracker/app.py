@@ -294,18 +294,21 @@ def start_scheduler():
         logger.info("RSVP scheduler: checking %s every %d minutes",
                      os.getenv("RSVP_EMAIL_ADDRESS"), interval)
 
-    # Daily report — runs at the configured hour (default 7:00 AM)
-    report_hour = int(os.getenv("DAILY_REPORT_HOUR", "7"))
+    # Daily digest — runs at 6:00 AM US/Eastern by default
+    report_hour = int(os.getenv("DAILY_REPORT_HOUR", "6"))
+    report_tz = os.getenv("DAILY_REPORT_TZ", "US/Eastern")
     if os.getenv("DAILY_REPORT_TO"):
         scheduler.add_job(
             send_daily_report,
             "cron",
             hour=report_hour,
             minute=0,
+            timezone=report_tz,
             id="daily_report",
             replace_existing=True,
         )
-        logger.info("Daily report scheduled for %02d:00 → %s", report_hour, os.getenv("DAILY_REPORT_TO"))
+        logger.info("Daily digest scheduled for %02d:00 %s → %s",
+                     report_hour, report_tz, os.getenv("DAILY_REPORT_TO"))
 
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
@@ -1264,6 +1267,57 @@ def api_send_report_now():
 # Routes — AI Support Chat & Feedback
 # ---------------------------------------------------------------------------
 
+
+def _send_feedback_notification(feedback: dict):
+    """Send an instant email notification when a new bug/feature is submitted."""
+    notify_to = os.getenv("FEEDBACK_NOTIFY_TO") or os.getenv("DAILY_REPORT_TO")
+    if not notify_to:
+        return
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_addr = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_addr]):
+        return
+
+    fb_type = feedback.get("type", "feedback").capitalize()
+    label = "Bug Report" if feedback.get("type") == "bug" else "Feature Request"
+    color = "#dc2626" if feedback.get("type") == "bug" else "#2563eb"
+    page = feedback.get("page") or "Unknown"
+    role = feedback.get("role") or "Unknown"
+    created = feedback.get("created_at") or "—"
+    message = feedback.get("message") or ""
+
+    html = f"""\
+<html><body style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
+<h2 style="color: {color};">New {label} Submitted</h2>
+<table style="font-size: 14px; margin-bottom: 16px;">
+  <tr><td style="padding:4px 12px 4px 0; font-weight:600;">Type:</td>
+      <td><span style="background:{color}; color:#fff; padding:2px 10px; border-radius:10px; font-size:12px;">{fb_type}</span></td></tr>
+  <tr><td style="padding:4px 12px 4px 0; font-weight:600;">Page:</td><td>{page}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0; font-weight:600;">Submitted by:</td><td>{role}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0; font-weight:600;">Time:</td><td>{created}</td></tr>
+</table>
+<div style="background:#f9fafb; border-left:4px solid {color}; padding:12px 16px; margin-bottom:16px; white-space:pre-wrap;">{message}</div>
+<p style="font-size:12px; color:#999;">This is an automated notification from TGF Transaction Tracker.</p>
+</body></html>"""
+
+    subject = f"[TGF {label}] New submission from {page} page"
+
+    try:
+        send_mail_graph(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            from_address=from_addr,
+            to_address=notify_to,
+            subject=subject,
+            html_body=html,
+        )
+    except Exception:
+        logger.exception("Failed to send feedback notification email")
+
 _TGF_SYSTEM_PROMPT = """You are the TGF Assistant, an AI helper built into The Golf Fellowship's Transaction Tracker.
 You help managers and admins understand and use the platform.
 
@@ -1351,6 +1405,10 @@ def api_support_feedback_post():
         page=data.get("page", ""),
         role=user_role,
     )
+
+    # Send instant email notification for new feedback
+    _send_feedback_notification(result)
+
     return jsonify({"status": "ok", "feedback": result})
 
 
