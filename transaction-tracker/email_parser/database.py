@@ -28,6 +28,7 @@ ITEM_COLUMNS = [
     "city", "chapter", "course", "handicap", "has_handicap",
     "side_games", "tee_choice",
     "member_status", "post_game", "returning_or_new",
+    "partner_request", "fellowship_after", "notes",
     "shirt_size", "guest_name", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
     "subject", "from_addr",
@@ -74,6 +75,9 @@ def init_db(db_path: str | Path | None = None) -> None:
             member_status    TEXT,
             post_game        TEXT,
             returning_or_new TEXT,
+            partner_request  TEXT,
+            fellowship_after TEXT,
+            notes            TEXT,
             shirt_size       TEXT,
             guest_name       TEXT,
             date_of_birth    TEXT,
@@ -104,6 +108,9 @@ def init_db(db_path: str | Path | None = None) -> None:
         ("chapter", "TEXT"),
         ("has_handicap", "TEXT"),
         ("transaction_fees", "TEXT"),
+        ("partner_request", "TEXT"),
+        ("fellowship_after", "TEXT"),
+        ("notes", "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
@@ -1353,24 +1360,31 @@ def delete_item(item_id: int, db_path: str | Path | None = None) -> bool:
 
 
 def delete_manual_player(item_id: int, db_path: str | Path | None = None) -> bool:
-    """Delete a manually added player (email_uid starts with 'manual-').
+    """Delete a manually added or unpaid RSVP player.
 
-    Returns True if the row was deleted, False if not found or not manual.
+    Allowed for: manual entries (email_uid starts with 'manual-'),
+    rsvp_only items, and gg_rsvp items.
+    Returns True if the row was deleted, False if not found or not allowed.
     """
     conn = get_connection(db_path)
-    item = conn.execute("SELECT email_uid FROM items WHERE id = ?", (item_id,)).fetchone()
+    item = conn.execute(
+        "SELECT email_uid, transaction_status FROM items WHERE id = ?", (item_id,)
+    ).fetchone()
     if not item:
         conn.close()
         return False
-    uid = dict(item).get("email_uid") or ""
-    if not uid.startswith("manual-"):
+    row = dict(item)
+    uid = row.get("email_uid") or ""
+    tx_status = row.get("transaction_status") or "active"
+    # Allow deletion of manual entries, rsvp_only, and gg_rsvp items
+    if not uid.startswith("manual-") and tx_status not in ("rsvp_only", "gg_rsvp"):
         conn.close()
-        logger.warning("Refused to delete non-manual item %d (uid=%s)", item_id, uid)
+        logger.warning("Refused to delete paid item %d (uid=%s, status=%s)", item_id, uid, tx_status)
         return False
     conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
     conn.commit()
     conn.close()
-    logger.info("Deleted manual player item %d (uid=%s)", item_id, uid)
+    logger.info("Deleted player item %d (uid=%s, status=%s)", item_id, uid, tx_status)
     return True
 
 

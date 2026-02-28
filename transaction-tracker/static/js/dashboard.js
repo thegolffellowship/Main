@@ -38,6 +38,9 @@ const TABLE_COLUMNS = [
     { key: "side_games", label: "Side Games", default: true },
     { key: "tee_choice", label: "Tee", default: true },
     { key: "member_status", label: "Status", default: true },
+    { key: "partner_request", label: "Partner Request", default: false },
+    { key: "fellowship_after", label: "Fellowship After", default: false },
+    { key: "notes", label: "Notes", default: false },
     { key: "order_id", label: "Order ID", default: true },
     { key: "order_date", label: "Order Date", default: true },
     { key: "actions", label: "Actions", default: true },
@@ -471,6 +474,9 @@ function renderMobileCards(items) {
             ["Course", row.course || "\u2014"],
             ["Handicap", row.handicap || "\u2014"],
             ["Status", row.member_status || "\u2014"],
+            ["Partner Request", row.partner_request || "\u2014"],
+            ["Fellowship After", row.fellowship_after || "\u2014"],
+            ["Notes", row.notes || "\u2014"],
             ["Order ID", row.order_id || "\u2014"],
             ["Order Date", row.order_date || "\u2014"],
         ];
@@ -890,6 +896,7 @@ const EDIT_FIELDS = [
     "customer", "item_name", "item_price", "transaction_fees", "event_date",
     "city", "chapter", "course", "handicap", "has_handicap", "side_games",
     "tee_choice", "member_status",
+    "partner_request", "fellowship_after", "notes",
     "returning_or_new", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
 ];
