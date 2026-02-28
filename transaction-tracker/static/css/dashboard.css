@@ -1352,20 +1352,22 @@ tr.row-transferred { opacity: 0.6; }
     /* Hide desktop table, show mobile cards */
     .table-wrapper { display: none; }
     .mobile-card-list { display: block; }
-    .row-count { font-size: 0.7rem; margin-bottom: 0.35rem; }
+    .row-count { font-size: 0.78rem; margin-bottom: 0.4rem; }
 
     /* Column toggle — not needed on mobile card view */
     .column-toggle-wrapper { display: none; }
 
-    /* Mobile cards — tighter */
-    .mobile-card { margin-bottom: 0.35rem; }
-    .mobile-card-top { padding: 0.5rem 0.75rem; min-height: 40px; gap: 0.35rem; }
-    .mobile-card-top .mc-primary { font-size: 0.82rem; }
-    .mobile-card-top .mc-primary .mc-event { font-size: 0.72rem; }
-    .mobile-card-details { padding: 0 0.75rem 0.5rem; }
-    .mc-field-grid { gap: 0.2rem 0.75rem; }
-    .mc-field-label { font-size: 0.62rem; }
-    .mc-field-value { font-size: 0.78rem; }
+    /* Mobile cards — readable sizing */
+    .mobile-card { margin-bottom: 0.5rem; }
+    .mobile-card-top { padding: 0.6rem 0.75rem; min-height: 44px; gap: 0.4rem; }
+    .mobile-card-top .mc-primary { font-size: 0.9rem; flex-wrap: wrap; display: flex; align-items: center; gap: 0.25rem 0.35rem; }
+    .mobile-card-top .mc-primary .mc-event { font-size: 0.82rem; width: 100%; margin-top: 0.15rem; }
+    .mobile-card-top .mc-primary .mc-customer { font-size: 0.92rem; }
+    .mobile-card-top .mc-primary .mc-type { font-size: 0.72rem; padding: 0.15rem 0.45rem; }
+    .mobile-card-details { padding: 0 0.75rem 0.65rem; }
+    .mc-field-grid { gap: 0.4rem 0.75rem; font-size: 0.88rem; }
+    .mc-field-label { font-size: 0.75rem; min-width: 70px; }
+    .mc-field-value { font-size: 0.88rem; }
 
     /* Events table → mobile cards */
     .events-table-wrapper { display: none; }
@@ -1390,6 +1392,17 @@ tr.row-transferred { opacity: 0.6; }
     .add-event-modal { width: calc(100vw - 2rem); max-width: 480px; }
     .add-player-modal { width: calc(100vw - 2rem); max-width: 480px; max-height: 85vh; overflow-y: auto; }
     .modal { padding: 1.25rem; }
+
+    /* Tags & badges — larger tap targets, prevent overlap */
+    .rsvp-only-tag { font-size: 0.72rem; padding: 0.2rem 0.5rem; margin-left: 0; }
+    .status-tag { font-size: 0.7rem !important; padding: 0.15rem 0.4rem !important; }
+    .rsvp-badge { font-size: 0.7rem; }
+    .mc-actions .btn { font-size: 0.85rem; min-height: 42px; padding: 0.4rem 0.85rem; }
+
+    /* Event mobile card headers — readable */
+    .reg-count { font-size: 0.75rem !important; min-width: 24px !important; height: 24px !important; }
+    .event-game-stats { flex-wrap: wrap; }
+    .game-stat-badge { font-size: 0.75rem; padding: 0.3rem 0.55rem; }
 
     /* Connector panel */
     .connector-panel { font-size: 0.82rem; }
