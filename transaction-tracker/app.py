@@ -294,9 +294,9 @@ def start_scheduler():
         logger.info("RSVP scheduler: checking %s every %d minutes",
                      os.getenv("RSVP_EMAIL_ADDRESS"), interval)
 
-    # Daily digest — runs at 6:00 AM US/Eastern by default
+    # Daily digest — runs at 6:00 AM US/Central by default
     report_hour = int(os.getenv("DAILY_REPORT_HOUR", "6"))
-    report_tz = os.getenv("DAILY_REPORT_TZ", "US/Eastern")
+    report_tz = os.getenv("DAILY_REPORT_TZ", "US/Central")
     if os.getenv("DAILY_REPORT_TO"):
         scheduler.add_job(
             send_daily_report,
