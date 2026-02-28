@@ -64,7 +64,7 @@ from email_parser.database import (
     get_all_feedback,
     update_feedback_status,
 )
-from email_parser.fetcher import fetch_transaction_emails, send_mail_graph
+from email_parser.fetcher import fetch_transaction_emails, fetch_email_by_id, send_mail_graph
 from email_parser.parser import parse_email, parse_emails
 from email_parser.report import send_daily_report
 from email_parser.rsvp_parser import fetch_rsvp_emails, parse_rsvp_emails
@@ -818,6 +818,101 @@ def api_autofix_tee_choices():
     except Exception as e:
         logger.exception("Autofix tee choices failed")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/audit/re-extract-fields", methods=["POST"])
+@require_role("admin")
+def api_re_extract_fields():
+    """Re-parse existing transaction emails to backfill new fields.
+
+    Fetches original emails from Graph API, re-runs AI extraction,
+    and updates only the specified fields (partner_request, fellowship_after,
+    notes) on existing items without overwriting other data.
+    """
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    email_address = os.getenv("EMAIL_ADDRESS")
+
+    if not all([tenant_id, client_id, client_secret, email_address]):
+        return jsonify({"error": "Azure AD credentials not configured"}), 400
+
+    BACKFILL_FIELDS = ["partner_request", "fellowship_after", "notes"]
+
+    items = get_all_items()
+    # Find items missing any of the new fields
+    candidates = [
+        it for it in items
+        if it.get("transaction_status") in (None, "active")
+        and not it.get("email_uid", "").startswith("manual-")
+        and not all(it.get(f) for f in BACKFILL_FIELDS)
+    ]
+
+    total = len(candidates)
+    updated = 0
+    skipped = 0
+    errors = 0
+
+    # Group by email_uid to avoid re-fetching the same email multiple times
+    uid_groups = {}
+    for it in candidates:
+        uid = it.get("email_uid", "")
+        if uid:
+            uid_groups.setdefault(uid, []).append(it)
+
+    for uid, group_items in uid_groups.items():
+        try:
+            email_data = fetch_email_by_id(
+                tenant_id, client_id, client_secret, email_address, uid
+            )
+            if not email_data:
+                skipped += len(group_items)
+                continue
+
+            parsed_rows = parse_email(email_data)
+            if not parsed_rows:
+                skipped += len(group_items)
+                continue
+
+            for it in group_items:
+                idx = it.get("item_index", 0) or 0
+                if idx < len(parsed_rows):
+                    parsed = parsed_rows[idx]
+                else:
+                    # Try to find by matching item name
+                    parsed = next(
+                        (p for p in parsed_rows
+                         if p.get("item_name") == it.get("item_name")),
+                        parsed_rows[0] if len(parsed_rows) == 1 else None,
+                    )
+
+                if not parsed:
+                    skipped += 1
+                    continue
+
+                changes = {}
+                for field in BACKFILL_FIELDS:
+                    new_val = parsed.get(field)
+                    if new_val and not it.get(field):
+                        changes[field] = new_val
+
+                if changes:
+                    update_item(it["id"], changes)
+                    updated += 1
+                else:
+                    skipped += 1
+
+        except Exception:
+            logger.exception("Re-extract failed for email_uid=%s", uid)
+            errors += len(group_items)
+
+    return jsonify({
+        "status": "ok",
+        "total_candidates": total,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors,
+    })
 
 
 # ---------------------------------------------------------------------------

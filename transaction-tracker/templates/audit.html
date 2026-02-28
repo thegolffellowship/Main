@@ -342,6 +342,9 @@
             <button id="btn-autofix" class="btn btn-secondary" title="Fix side games, customer names, and course names in existing records">
                 Autofix All
             </button>
+            <button id="btn-re-extract" class="btn btn-secondary" title="Re-parse emails to fill in partner requests, fellowship, and notes">
+                Re-extract Fields
+            </button>
             <button id="btn-run-audit" class="btn btn-primary" title="Re-fetch emails and compare">
                 <span class="btn-icon">&#128269;</span> Run Audit
             </button>
@@ -640,6 +643,25 @@
             }
         });
 
+        // Re-extract fields button
+        document.getElementById("btn-re-extract").addEventListener("click", async () => {
+            const btn = document.getElementById("btn-re-extract");
+            if (!confirm("This will re-parse all transaction emails through AI to backfill partner requests, fellowship, and notes. This may take a while and uses API credits. Continue?")) return;
+            btn.disabled = true;
+            btn.textContent = "Re-extracting...";
+            try {
+                const res = await fetch("/api/audit/re-extract-fields", { method: "POST" });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "Request failed");
+                alert(`Re-extraction complete:\n  Candidates: ${data.total_candidates}\n  Updated: ${data.updated}\n  Skipped: ${data.skipped}\n  Errors: ${data.errors}`);
+            } catch (err) {
+                alert("Re-extract failed: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Re-extract Fields";
+            }
+        });
+
         // Auto-run audit on page load
         runAudit();
 
@@ -653,6 +675,7 @@
                 document.getElementById("tab-feedback").style.display = target === "feedback" ? "" : "none";
                 // Show/hide audit-specific header buttons
                 document.getElementById("btn-autofix").style.display = target === "email-audit" ? "" : "none";
+                document.getElementById("btn-re-extract").style.display = target === "email-audit" ? "" : "none";
                 document.getElementById("btn-run-audit").style.display = target === "email-audit" ? "" : "none";
                 if (target === "feedback") loadFeedback();
             });
