@@ -1436,6 +1436,18 @@ def api_support_feedback_update(feedback_id):
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/support/test-digest", methods=["POST"])
+@require_role("admin")
+def api_test_digest():
+    """Send the daily digest email right now (admin only)."""
+    try:
+        send_daily_report()
+        return jsonify({"status": "ok", "message": "Daily digest sent."})
+    except Exception as e:
+        logger.exception("Test digest failed")
+        return jsonify({"error": str(e)}), 500
+
+
 # ---------------------------------------------------------------------------
 # Routes — Authentication
 # ---------------------------------------------------------------------------
