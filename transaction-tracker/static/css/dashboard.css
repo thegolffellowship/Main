@@ -1040,7 +1040,7 @@ tr.row-transferred { opacity: 0.6; }
     background: #86efac;
     border-color: #4ade80;
 }
-.rsvp-circle.rsvp-circle-playing { cursor: default; }
+.rsvp-circle.rsvp-circle-playing { cursor: pointer; }
 /* RSVP-only row styling */
 .rsvp-only-tag {
     display: inline-block;

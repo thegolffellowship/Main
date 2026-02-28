@@ -1766,6 +1766,15 @@
                 const eventName = circle.dataset.eventName;
                 const current = circle.dataset.rsvpState;
 
+                // Synthetic GG RSVP rows (gg-rsvp-0 etc.) can't be overridden
+                if (String(itemId).startsWith("gg-rsvp")) {
+                    alert("This player hasn't been added to the roster yet. Use '+ Add Player' first.");
+                    return;
+                }
+
+                const numericId = parseInt(itemId);
+                if (!numericId) return;
+
                 let next;
                 if (current === "playing" || current === "manual_green") {
                     // Green → Red (not playing)
@@ -1786,11 +1795,14 @@
                     const resp = await fetch("/api/rsvps/overrides", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ item_id: parseInt(itemId) || 0, event_name: eventName, status: next })
+                        body: JSON.stringify({ item_id: numericId, event_name: eventName, status: next })
                     });
-                    if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        throw new Error(data.error || `Server returned ${resp.status}`);
+                    }
                     if (!allRsvpOverrides[eventName]) allRsvpOverrides[eventName] = {};
-                    allRsvpOverrides[eventName][parseInt(itemId)] = next;
+                    allRsvpOverrides[eventName][numericId] = next;
                     circle.dataset.rsvpState = next;
                     circle.dataset.circleSource = "manual";
                     const cls = next !== "none" ? ` rsvp-circle-${next.replace("_", "-")}` : "";
@@ -1798,6 +1810,7 @@
                     circle.title = next === "manual_green" ? "Playing (manual)" : next === "not_playing" ? "Not Playing (manual)" : "No RSVP";
                 } catch (err) {
                     console.error("Failed to update RSVP override:", err);
+                    alert("Failed to update: " + err.message);
                 }
             });
         });
