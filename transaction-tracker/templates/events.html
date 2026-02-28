@@ -881,7 +881,9 @@
             const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
             let actionBtn = '';
-            if (isRsvpOnly && isManual) {
+            if (isSynthetic) {
+                actionBtn = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+            } else if (isRsvpOnly) {
                 actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (isComp) {
                 actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
@@ -935,8 +937,6 @@
         container.innerHTML = filtered.map(ev => {
             const isExpanded = expandedEventId === ev.id;
             const registrants = getRegistrants(ev.item_name);
-            const stats = computeGameStats(registrants);
-
             // Create synthetic rows for unmatched GG RSVP players (mobile)
             // Frontend dedup: exclude RSVPs whose email or name matches an existing registrant
             const mRsvps = allRsvps[ev.item_name] || [];
@@ -961,8 +961,9 @@
                 transaction_status: 'gg_rsvp', email_uid: 'gg-rsvp', transferred_from_id: null,
                 has_player_card: r.has_player_card !== false
             }));
-            stats.players += mGgRows.length;
-            stats.noGames += mGgRows.length;
+            // Compute stats AFTER synthetic rows so overrides are counted for all rows
+            const allRegs = [...registrants, ...mGgRows];
+            const stats = computeGameStats(allRegs, ev.item_name);
 
             let detailHtml = '';
             if (isExpanded) {
@@ -1205,9 +1206,18 @@
         return "NET";
     }
 
-    function computeGameStats(registrants) {
-        let net = 0, gross = 0, noGames = 0;
+    function computeGameStats(registrants, eventName) {
+        const overrides = allRsvpOverrides[eventName] || {};
+        const emailOverrides = allRsvpEmailOverrides[eventName] || {};
+        let net = 0, gross = 0, noGames = 0, notPlaying = 0;
         registrants.forEach(r => {
+            // Check if this player has been manually overridden to not_playing
+            const isSynthetic = String(r.id).startsWith("gg-rsvp");
+            const override = isSynthetic
+                ? (r.customer_email && emailOverrides[(r.customer_email || "").toLowerCase()])
+                : overrides[r.id];
+            if (override === "not_playing") { notPlaying++; return; }
+
             // RSVP-only players count toward total but not net/gross
             if (r.transaction_status === "rsvp_only") { noGames++; return; }
             const type = classifyGameType(r.side_games);
@@ -1216,7 +1226,7 @@
             else if (type === "GROSS") { gross++; }
             else { noGames++; }
         });
-        return { players: registrants.length, net, gross, noGames };
+        return { players: registrants.length - notPlaying, net, gross, noGames, notPlaying };
     }
 
     function getRsvpForItem(itemId, eventName) {
@@ -1249,7 +1259,7 @@
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
         const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
         const registrants = getRegistrants(ev.item_name);
-        const stats = computeGameStats(registrants);
+        const stats = computeGameStats(registrants, ev.item_name);
 
         // Each section uses its own player count for lookup
         const totalPC = stats.players;
@@ -1418,7 +1428,6 @@
                 `</div>`;
         }
 
-        const stats = computeGameStats(registrants);
         const activeFilter = eventGameFilter[ev.id] || null;
 
         // Count RSVP stats
@@ -1452,8 +1461,9 @@
             transferred_from_id: null,
             has_player_card: r.has_player_card !== false
         }));
-        stats.players += ggRsvpRows.length;
-        stats.noGames += ggRsvpRows.length;
+        // Compute stats AFTER synthetic rows so overrides are counted for all rows
+        const allDetailRegs = [...registrants, ...ggRsvpRows];
+        const stats = computeGameStats(allDetailRegs, ev.item_name);
 
         const holesType = extractHolesType(ev.item_name);
         const gamesView = holesType && gamesOpenForEvent[ev.id];
@@ -1606,8 +1616,9 @@
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
                     let btns = "";
-                    if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
-                        // Unpaid RSVP player — can be deleted
+                    if (isSynthetic) {
+                        btns = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                    } else if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isCompRow) {
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
@@ -1816,11 +1827,8 @@
                         if (!allRsvpOverrides[eventName]) allRsvpOverrides[eventName] = {};
                         allRsvpOverrides[eventName][numericId] = next;
                     }
-                    circle.dataset.rsvpState = next;
-                    circle.dataset.circleSource = "manual";
-                    const cls = next !== "none" ? ` rsvp-circle-${next.replace("_", "-")}` : "";
-                    circle.className = "rsvp-circle" + cls;
-                    circle.title = next === "manual_green" ? "Playing (manual)" : next === "not_playing" ? "Not Playing (manual)" : "No RSVP";
+                    // Re-render to update player counts and circle state
+                    rerenderDetail(container, ev);
                 } catch (err) {
                     console.error("Failed to update RSVP override:", err);
                     alert("Failed to update: " + err.message);
@@ -1938,6 +1946,34 @@
                     await fetchItems();
                     await fetchEvents();
                 } catch (err) { alert("Failed to delete player."); }
+            });
+        });
+
+        // Delete GG RSVP (synthetic) player — sets email override to not_playing
+        container.querySelectorAll(".btn-delete-gg-rsvp").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const playerEmail = btn.dataset.playerEmail;
+                const eventName = btn.dataset.eventName;
+                const name = btn.dataset.playerName || "this player";
+                if (!playerEmail) { alert("Cannot delete — no email on file."); return; }
+                if (!confirm(`Remove "${name}" from this event?`)) return;
+                try {
+                    const resp = await fetch("/api/rsvps/overrides", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ player_email: playerEmail, event_name: eventName, status: "not_playing" })
+                    });
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        alert(data.error || "Failed to remove player.");
+                        return;
+                    }
+                    if (!allRsvpEmailOverrides[eventName]) allRsvpEmailOverrides[eventName] = {};
+                    allRsvpEmailOverrides[eventName][playerEmail.toLowerCase()] = "not_playing";
+                    // Re-render the detail panel
+                    rerenderDetail(container, ev);
+                } catch (err) { alert("Failed to remove player."); }
             });
         });
 
