@@ -114,6 +114,15 @@ FIELD-SPECIFIC GUIDANCE:
   "Add GROSS Points Race?" field. Normalise to uppercase YES/NO.
 - "city_match_play": For MEMBERSHIP items — "YES" or "NO" from \
   "Add City MATCH PLAY?" field. Normalise to uppercase YES/NO.
+- "partner_request": If the player requested a specific playing partner, \
+  extract the partner's name. Look for fields like "Playing Partner Request", \
+  "Partner Request", "Who would you like to play with?", etc.
+- "fellowship_after": Whether the player plans to attend the post-game \
+  fellowship / gathering. Look for "Fellowship After?", "Post-Game Fellowship", \
+  "Staying for fellowship?", etc. Normalise to "YES" or "NO".
+- "notes": Any freeform notes, comments, or special requests from the player. \
+  Look for "Notes", "Comments", "Special Requests", "Additional Info", etc. \
+  Preserve the text as-is.
 - "date_of_birth": YYYY-MM-DD format. Often appears on membership orders.
 - "transaction_fees": The processing/transaction fee amount charged on the \
   order (e.g. "$7.53"). This is an ORDER-level field, not per-item. \
@@ -146,6 +155,9 @@ Return this exact JSON structure:
       "member_status": "<MEMBER or NON-MEMBER>",
       "golf_or_compete": "<GOLF or COMPETE only — see rules above>",
       "post_game": "<post-game fellowship selection if mentioned>",
+      "partner_request": "<requested playing partner name if mentioned>",
+      "fellowship_after": "<YES or NO — attending post-game fellowship>",
+      "notes": "<freeform notes, comments, or special requests>",
       "returning_or_new": "<New or Returning — membership only>",
       "shirt_size": "<shirt size if mentioned>",
       "guest_name": "<guest name if mentioned>",
@@ -477,6 +489,9 @@ def parse_email(email_data: dict) -> list[dict]:
             "member_status": item.get("member_status"),
             "golf_or_compete": item.get("golf_or_compete"),
             "post_game": item.get("post_game"),
+            "partner_request": item.get("partner_request"),
+            "fellowship_after": item.get("fellowship_after"),
+            "notes": item.get("notes"),
             "returning_or_new": item.get("returning_or_new"),
             "shirt_size": item.get("shirt_size"),
             "guest_name": item.get("guest_name"),
