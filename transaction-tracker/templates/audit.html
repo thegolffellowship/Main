@@ -414,6 +414,11 @@
                 <button class="filter-btn" data-fb-filter="dismissed">Dismissed</button>
                 <button class="filter-btn" data-fb-filter="bug">Bugs</button>
                 <button class="filter-btn" data-fb-filter="feature">Features</button>
+                <button class="filter-btn" id="btn-send-test-digest"
+                        style="margin-left:auto; background:#2563eb; color:#fff; border:none; padding:0.4rem 1rem; border-radius:6px; cursor:pointer;"
+                        title="Send the daily digest email to yourself right now">
+                    Send Test Digest
+                </button>
             </div>
             <div id="feedback-list"><div class="loading-msg">Loading feedback...</div></div>
         </div>
@@ -745,6 +750,36 @@
 
         // Pre-load feedback count for the tab badge
         loadFeedback();
+
+        // Send Test Digest button
+        const digestBtn = document.getElementById("btn-send-test-digest");
+        if (digestBtn) {
+            digestBtn.addEventListener("click", async () => {
+                digestBtn.disabled = true;
+                digestBtn.textContent = "Sending...";
+                try {
+                    const res = await fetch("/api/support/test-digest", { method: "POST" });
+                    const data = await res.json();
+                    if (res.ok) {
+                        digestBtn.textContent = "Sent!";
+                        digestBtn.style.background = "#16a34a";
+                    } else {
+                        digestBtn.textContent = "Failed";
+                        digestBtn.style.background = "#dc2626";
+                        alert("Error: " + (data.error || "Unknown error"));
+                    }
+                } catch (e) {
+                    digestBtn.textContent = "Failed";
+                    digestBtn.style.background = "#dc2626";
+                    alert("Network error: " + e.message);
+                }
+                setTimeout(() => {
+                    digestBtn.disabled = false;
+                    digestBtn.textContent = "Send Test Digest";
+                    digestBtn.style.background = "#2563eb";
+                }, 3000);
+            });
+        }
     });
     </script>
 </body>
