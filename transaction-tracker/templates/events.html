@@ -608,6 +608,7 @@
     let allItems = [];
     let allRsvps = {};  // keyed by event_name → array of rsvp objects
     let allRsvpOverrides = {};  // keyed by event_name → {item_id: status}
+    let allRsvpEmailOverrides = {};  // keyed by event_name → {email: status}
     let expandedEventId = null;
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let eventSortField = "event_date";
@@ -733,7 +734,9 @@
                 fetch(`/api/rsvps/overrides/${encodeURIComponent(eventName)}`)
             ]);
             allRsvps[eventName] = await rsvpRes.json();
-            allRsvpOverrides[eventName] = await overrideRes.json();
+            const overrideData = await overrideRes.json();
+            allRsvpOverrides[eventName] = overrideData.by_item || overrideData;
+            allRsvpEmailOverrides[eventName] = overrideData.by_email || {};
             return allRsvps[eventName];
         } catch (err) {
             console.error("Failed to fetch RSVPs:", err);
@@ -821,11 +824,13 @@
 
     function renderRegistrantsMobile(registrants, ev) {
         const overrides = allRsvpOverrides[ev.item_name] || {};
+        const emailOverrides = allRsvpEmailOverrides[ev.item_name] || {};
         let html = '';
         registrants.forEach(r => {
             const txStatus = r.transaction_status || "active";
             const isRsvpOnly = txStatus === "rsvp_only";
             const isGgRsvp = txStatus === "gg_rsvp";
+            const isSynthetic = String(r.id).startsWith("gg-rsvp");
             const statusClass = (isRsvpOnly || isGgRsvp) ? ' row-rsvp-only'
                 : txStatus !== "active" ? ` row-${txStatus}`
                 : (r.transferred_from_id ? ' row-from-transfer' : '');
@@ -841,7 +846,9 @@
             if (isComp || (r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
             else if (isManual && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
-            const manualOverride = overrides[r.id];
+            const manualOverride = isSynthetic
+                ? (r.customer_email && emailOverrides[(r.customer_email || "").toLowerCase()])
+                : overrides[r.id];
             let circleState = "none";
             let circleSource = "none";
             if (isGgRsvp) {
@@ -858,8 +865,6 @@
                 circleSource = "auto";
             }
             if (manualOverride && manualOverride !== "none") {
-                // A real GG RSVP response takes precedence over manual_green
-                // (admin added player to roster, player later responded themselves)
                 if (manualOverride === "manual_green" && rsvp && (rsvp.response === 'PLAYING' || rsvp.response === 'NOT PLAYING')) {
                     // Keep the GG RSVP state already set above
                 } else {
@@ -868,8 +873,8 @@
                 }
             }
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
-            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
-            const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span>`;
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (manual)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
+            const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" data-player-email="${escapeHtml(r.customer_email || '')}" title="${circleTitle}"></span>`;
             const sideGame = classifyGameType(r.side_games);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
@@ -1537,13 +1542,16 @@
         html += '</tr></thead><tbody>';
 
         const overrides = allRsvpOverrides[ev.item_name] || {};
+        const emailOverrides = allRsvpEmailOverrides[ev.item_name] || {};
         filtered.forEach(r => {
             const txStatus = r.transaction_status || "active";
             const isRsvpOnly = txStatus === "rsvp_only";
             const isGgRsvp = txStatus === "gg_rsvp";
+            const isSynthetic = String(r.id).startsWith("gg-rsvp");
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
-            // Determine circle state: GG RSVP = green, manual RSVP = light green, then auto from GG match
-            const manualOverride = overrides[r.id];
+            const manualOverride = isSynthetic
+                ? (r.customer_email && emailOverrides[(r.customer_email || "").toLowerCase()])
+                : overrides[r.id];
             let circleState = "none";
             let circleSource = "none";
             if (isGgRsvp) {
@@ -1559,10 +1567,7 @@
                 circleState = "not_playing";
                 circleSource = "auto";
             }
-            // Manual override applies unless a real GG RSVP supersedes manual_green
             if (manualOverride && manualOverride !== "none") {
-                // A real GG RSVP response takes precedence over manual_green
-                // (admin added player to roster, player later responded themselves)
                 if (manualOverride === "manual_green" && rsvp && (rsvp.response === 'PLAYING' || rsvp.response === 'NOT PLAYING')) {
                     // Keep the GG RSVP state already set above
                 } else {
@@ -1571,7 +1576,7 @@
                 }
             }
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
-            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (GG)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (manual)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
             const isManualRow = (r.email_uid || "").startsWith("manual-");
             const isCompRow = (r.email_uid || "").startsWith("manual-comp");
             let rowClass;
@@ -1585,7 +1590,7 @@
                 const rowBg = (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;' : isCompRow ? 'background-color:#dcfce7;' : isManualRow ? 'background-color:#dbeafe;' : '';
                 const style = (vis ? '' : 'display:none;') + rowBg;
                 if (c.key === "rsvp") {
-                    html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" title="${circleTitle}"></span></td>`;
+                    html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" data-player-email="${escapeHtml(r.customer_email || '')}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
                     let tag = "";
                     if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
@@ -1764,24 +1769,24 @@
                 e.stopPropagation();
                 const itemId = circle.dataset.itemId;
                 const eventName = circle.dataset.eventName;
+                const playerEmail = circle.dataset.playerEmail || "";
                 const current = circle.dataset.rsvpState;
+                const isSynthetic = String(itemId).startsWith("gg-rsvp");
 
-                // Synthetic GG RSVP rows (gg-rsvp-0 etc.) can't be overridden
-                if (String(itemId).startsWith("gg-rsvp")) {
-                    alert("This player hasn't been added to the roster yet. Use '+ Add Player' first.");
+                // Synthetic rows need an email to store the override
+                if (isSynthetic && !playerEmail) {
+                    alert("Cannot override this player — no email address on file.");
                     return;
                 }
 
-                const numericId = parseInt(itemId);
-                if (!numericId) return;
+                const numericId = isSynthetic ? null : parseInt(itemId);
+                if (!isSynthetic && !numericId) return;
 
                 let next;
                 if (current === "playing" || current === "manual_green") {
-                    // Green → Red (not playing)
                     if (!confirm("Mark this player as Not Playing?")) return;
                     next = "not_playing";
                 } else if (current === "none" || current === "not_playing") {
-                    // Blank or red → manual green
                     const msg = current === "not_playing"
                         ? "Mark this player as Playing?"
                         : "Confirm you've added this player to the GG roster?";
@@ -1792,17 +1797,25 @@
                 }
 
                 try {
+                    const body = isSynthetic
+                        ? { player_email: playerEmail, event_name: eventName, status: next }
+                        : { item_id: numericId, event_name: eventName, status: next };
                     const resp = await fetch("/api/rsvps/overrides", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ item_id: numericId, event_name: eventName, status: next })
+                        body: JSON.stringify(body)
                     });
                     if (!resp.ok) {
                         const data = await resp.json().catch(() => ({}));
                         throw new Error(data.error || `Server returned ${resp.status}`);
                     }
-                    if (!allRsvpOverrides[eventName]) allRsvpOverrides[eventName] = {};
-                    allRsvpOverrides[eventName][numericId] = next;
+                    if (isSynthetic) {
+                        if (!allRsvpEmailOverrides[eventName]) allRsvpEmailOverrides[eventName] = {};
+                        allRsvpEmailOverrides[eventName][playerEmail.toLowerCase()] = next;
+                    } else {
+                        if (!allRsvpOverrides[eventName]) allRsvpOverrides[eventName] = {};
+                        allRsvpOverrides[eventName][numericId] = next;
+                    }
                     circle.dataset.rsvpState = next;
                     circle.dataset.circleSource = "manual";
                     const cls = next !== "none" ? ` rsvp-circle-${next.replace("_", "-")}` : "";

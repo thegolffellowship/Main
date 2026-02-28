@@ -59,6 +59,8 @@ from email_parser.database import (
     unmatch_rsvp,
     get_rsvp_overrides,
     set_rsvp_override,
+    get_rsvp_email_overrides,
+    set_rsvp_email_override,
     merge_customers,
     save_feedback,
     get_all_feedback,
@@ -1312,21 +1314,33 @@ def api_unmatch_rsvp(rsvp_id):
 
 @app.route("/api/rsvps/overrides/<path:event_name>")
 def api_rsvp_overrides(event_name):
-    """Return manual RSVP overrides for an event as {item_id: status}."""
-    return jsonify(get_rsvp_overrides(event_name))
+    """Return manual RSVP overrides for an event.
+
+    Returns {"by_item": {item_id: status}, "by_email": {email: status}}.
+    """
+    return jsonify({
+        "by_item": get_rsvp_overrides(event_name),
+        "by_email": get_rsvp_email_overrides(event_name),
+    })
 
 
 @app.route("/api/rsvps/overrides", methods=["POST"])
 def api_set_rsvp_override():
-    """Set a manual RSVP override for a registrant."""
+    """Set a manual RSVP override for a registrant (by item_id or player_email)."""
     data = request.get_json(force=True)
     item_id = data.get("item_id")
+    player_email = data.get("player_email")
     event_name = data.get("event_name")
     status = data.get("status", "none")
-    if not item_id or not event_name:
-        return jsonify({"error": "item_id and event_name required"}), 400
+    if not event_name:
+        return jsonify({"error": "event_name required"}), 400
+    if not item_id and not player_email:
+        return jsonify({"error": "item_id or player_email required"}), 400
     if status not in ("none", "playing", "not_playing", "manual_green"):
-        return jsonify({"error": "status must be none, playing, or not_playing"}), 400
+        return jsonify({"error": "status must be none, playing, not_playing, or manual_green"}), 400
+    if player_email:
+        set_rsvp_email_override(player_email, event_name, status)
+        return jsonify({"status": "ok", "player_email": player_email, "event_name": event_name, "rsvp_status": status})
     set_rsvp_override(int(item_id), event_name, status)
     return jsonify({"status": "ok", "item_id": item_id, "event_name": event_name, "rsvp_status": status})
 

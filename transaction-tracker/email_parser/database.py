@@ -186,6 +186,20 @@ def init_db(db_path: str | Path | None = None) -> None:
         """
     )
 
+    # Email-based RSVP overrides — for GG RSVP players without a real item row
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS rsvp_email_overrides (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_email TEXT NOT NULL,
+            event_name   TEXT NOT NULL,
+            status       TEXT NOT NULL DEFAULT 'none',
+            updated_at   TEXT DEFAULT (datetime('now')),
+            UNIQUE(player_email, event_name)
+        )
+        """
+    )
+
     # Event aliases — maps variant/old item names to the canonical event name.
     # When events are merged or renamed, the old name becomes an alias so
     # transactions keep their original item_name but still link to the event.
@@ -717,6 +731,8 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                              (new_name, old_name))
                 conn.execute("UPDATE rsvp_overrides SET event_name = ? WHERE event_name = ?",
                              (new_name, old_name))
+                conn.execute("UPDATE rsvp_email_overrides SET event_name = ? WHERE event_name = ?",
+                             (new_name, old_name))
                 logger.info("Renamed event '%s' → '%s': old name stored as alias, RSVPs/overrides updated",
                             old_name, new_name)
 
@@ -798,6 +814,8 @@ def merge_events(source_id: int, target_id: int, db_path: str | Path | None = No
     cur = conn.execute("UPDATE rsvp_overrides SET event_name = ? WHERE event_name = ?",
                        (tgt_name, src_name))
     overrides_moved = cur.rowcount
+    conn.execute("UPDATE rsvp_email_overrides SET event_name = ? WHERE event_name = ?",
+                 (tgt_name, src_name))
 
     # Delete source event
     conn.execute("DELETE FROM events WHERE id = ?", (source_id,))
@@ -1896,6 +1914,37 @@ def set_rsvp_override(item_id: int, event_name: str, status: str, db_path=None):
                ON CONFLICT(item_id, event_name)
                DO UPDATE SET status = excluded.status, updated_at = datetime('now')""",
             (item_id, event_name, status),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_rsvp_email_overrides(event_name: str, db_path=None) -> dict:
+    """Return {player_email: status} for email-based overrides (GG RSVP players)."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT player_email, status FROM rsvp_email_overrides WHERE event_name = ?",
+        (event_name,),
+    ).fetchall()
+    conn.close()
+    return {r[0]: r[1] for r in rows}
+
+
+def set_rsvp_email_override(player_email: str, event_name: str, status: str, db_path=None):
+    """Upsert an email-based RSVP override for GG RSVP players without a real item row."""
+    conn = get_connection(db_path)
+    if status == "none":
+        conn.execute(
+            "DELETE FROM rsvp_email_overrides WHERE player_email = ? AND event_name = ?",
+            (player_email, event_name),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO rsvp_email_overrides (player_email, event_name, status)
+               VALUES (?, ?, ?)
+               ON CONFLICT(player_email, event_name)
+               DO UPDATE SET status = excluded.status, updated_at = datetime('now')""",
+            (player_email, event_name, status),
         )
     conn.commit()
     conn.close()
