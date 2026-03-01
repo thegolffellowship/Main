@@ -15,6 +15,12 @@
     --radius: 8px;
     --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
     --shadow-lg: 0 4px 12px rgba(0,0,0,0.1);
+    --row-hover: #eef2ff;
+    --detail-bg: #f8fafc;
+    --rsvp-only-tint: rgba(251, 191, 36, 0.15);
+    --games-active-bg: #166534;
+    --rsvp-stat-border: #a78bfa;
+    --rsvp-stat-color: #6d28d9;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -451,7 +457,7 @@ footer {
     cursor: pointer;
 }
 .event-row-clickable:hover {
-    background: #eef2ff !important;
+    background: var(--row-hover);
 }
 .event-row-clickable td:first-child {
     position: relative;
@@ -477,8 +483,8 @@ footer {
     display: table-row;
 }
 .event-detail-row td {
-    padding: 0 !important;
-    background: #f8fafc;
+    padding: 0;
+    background: var(--detail-bg);
     border-bottom: 1px solid var(--border);
 }
 .event-detail-content {
@@ -520,7 +526,7 @@ footer {
     cursor: pointer;
 }
 .cust-row-clickable:hover {
-    background: #eef2ff !important;
+    background: var(--row-hover);
 }
 .cust-row-clickable td:first-child {
     position: relative;
@@ -546,8 +552,8 @@ footer {
     display: table-row;
 }
 .cust-detail-row td {
-    padding: 0 !important;
-    background: #f8fafc;
+    padding: 0;
+    background: var(--detail-bg);
     border-bottom: 1px solid var(--border);
 }
 .cust-detail-content {
@@ -1121,8 +1127,8 @@ tr.row-transferred { opacity: 0.6; }
     border: 1px solid #fecaca;
 }
 .rsvp-stat-badge {
-    border-color: #a78bfa !important;
-    color: #6d28d9 !important;
+    border-color: var(--rsvp-stat-border);
+    color: var(--rsvp-stat-color);
 }
 .rsvp-section {
     margin-top: 1rem;
@@ -1455,10 +1461,10 @@ tr.row-transferred { opacity: 0.6; }
     color: #166534;
     border-color: transparent;
 }
-.games-badge.active {
-    background: #166534 !important;
-    color: #fff !important;
-    border-color: #166534 !important;
+.view-toggle-group .games-badge.active {
+    background: var(--games-active-bg);
+    color: #fff;
+    border-color: var(--games-active-bg);
 }
 
 .games-panel {
@@ -1522,8 +1528,8 @@ tr.row-transferred { opacity: 0.6; }
 .games-table td:first-child {
     text-align: left;
 }
-.games-indent {
-    padding-left: 1.5rem !important;
+.games-table td.games-indent {
+    padding-left: 1.5rem;
 }
 .games-section-row td {
     font-size: 0.72rem;
@@ -1532,7 +1538,7 @@ tr.row-transferred { opacity: 0.6; }
     letter-spacing: 0.04em;
     color: #1b1b1b;
     background: #d3dde4;
-    text-align: left !important;
+    text-align: left;
     padding: 0.4rem 0.6rem;
     border-bottom: none;
 }
@@ -1581,20 +1587,45 @@ tr.row-transferred { opacity: 0.6; }
     .games-table col.gc-3rd    { width: 3.5rem; }
     .games-table col.gc-4th    { width: 3.5rem; }
     .games-section-row td { font-size: 0.62rem; padding: 0.25rem; }
-    .games-indent { padding-left: 0.8rem !important; }
+    .games-table td.games-indent { padding-left: 0.8rem; }
     .games-row-sub td { font-size: 0.66rem; }
     .games-row-sub td[colspan] { white-space: normal; word-break: break-word; }
     .games-grand-total-row td { font-size: 0.78rem; padding-top: 0.35rem; }
 }
 
+/* ---- Add Player modal ---- */
+.add-player-modes {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.ap-mode-btn {
+    flex: 1;
+    text-align: center;
+    padding: 0.5rem 0.3rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: background 0.15s, color 0.15s;
+    border-right: 1px solid var(--border);
+}
+.ap-mode-btn:last-child { border-right: none; }
+.ap-mode-btn input[type="radio"] { display: none; }
+.ap-field-section { margin-bottom: 0.75rem; }
+.ap-field-section-sm { margin-bottom: 0.5rem; }
+.ap-required { color: #e11d48; }
+
 /* ---- RSVP-only row amber tint (must come AFTER .mobile-card base styles) ---- */
 .registrants-table tbody tr.row-rsvp-only,
 .registrants-table tr.row-rsvp-only,
 tr.row-rsvp-only {
-    background-color: rgba(251, 191, 36, 0.15) !important;
+    background-color: var(--rsvp-only-tint);
 }
 tr.row-rsvp-only td { font-style: italic; }
 div.mobile-card.row-rsvp-only {
-    background-color: rgba(251, 191, 36, 0.15) !important;
+    background-color: var(--rsvp-only-tint);
     font-style: italic;
 }

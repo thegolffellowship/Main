@@ -1,5 +1,32 @@
-window.TGF_VERSION = "1.1.0";
+window.TGF_VERSION = "1.2.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "1.2.0",
+    date: "2026-03-01",
+    title: "Security & Code Quality Audit",
+    changes: [
+      "Fixed silent DB failures — errors now logged instead of swallowed",
+      "AI parser now surfaces API auth and bad-request errors properly",
+      "XSS protection: sanitized orphan banner DOM insertion",
+      "Auto-refresh wrapped in try/catch to prevent silent failures",
+      "DB connection leaks fixed with context managers",
+      "Email send results now checked and reported to frontend",
+      "SECRET_KEY validation at startup — app refuses to run without it",
+      "Input validation on user JSON for all DB operations",
+      "RSVP popover event listener leak fixed",
+      "Added .get() guards on all API endpoints",
+      "NOT NULL constraints on customer/item_name columns",
+      "Case-insensitive duplicate checks for events",
+      "DOM null reference guards across all pages",
+      "Amount input prevents multiple decimal points",
+      "Override objects cleaned up on event collapse (memory fix)",
+      "Accessibility: aria-required, aria-label, role=dialog on modals",
+      "CSS cleanup: replaced !important with variables and specificity",
+      "Consolidated onclick handlers to event delegation pattern",
+      "Moved function-level imports to module level",
+      "Removed dead code and redundant imports"
+    ]
+  },
   {
     version: "1.1.0",
     date: "2026-02-26",

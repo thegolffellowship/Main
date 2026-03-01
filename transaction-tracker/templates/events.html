@@ -180,7 +180,7 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Events — Auto-detected from transaction data</p>
-            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.1.0</a>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.2.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -273,7 +273,7 @@
         <div class="modal login-modal">
             <h2>Dashboard Login</h2>
             <p class="modal-subtitle">Enter your PIN to access the dashboard.</p>
-            <input type="password" id="login-pin" class="modal-input" placeholder="Enter PIN" maxlength="20" autocomplete="off">
+            <input type="password" id="login-pin" class="modal-input" placeholder="Enter PIN" maxlength="20" autocomplete="off" aria-required="true" aria-label="PIN code">
             <div id="login-error" class="modal-error" style="display:none;"></div>
             <button id="login-submit" class="btn btn-primary modal-btn">Log In</button>
         </div>
@@ -340,20 +340,20 @@
                 <h2>Add Player</h2>
                 <button id="add-player-close" class="modal-close">&times;</button>
             </div>
-            <div id="add-player-event-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
+            <div id="add-player-event-info" class="credit-info ap-field-section"></div>
 
             <!-- Mode selector -->
-            <div class="add-player-modes" style="display:flex; gap:0; margin-bottom:1rem; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
-                <label class="ap-mode-btn ap-mode-active" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600; transition:background 0.15s, color 0.15s; border-right:1px solid var(--border);">
-                    <input type="radio" name="add-player-mode" value="comp" checked style="display:none;">
+            <div class="add-player-modes">
+                <label class="ap-mode-btn ap-mode-active">
+                    <input type="radio" name="add-player-mode" value="comp" checked>
                     Manager Comp
                 </label>
-                <label class="ap-mode-btn" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600; transition:background 0.15s, color 0.15s; border-right:1px solid var(--border);">
-                    <input type="radio" name="add-player-mode" value="rsvp" style="display:none;">
+                <label class="ap-mode-btn">
+                    <input type="radio" name="add-player-mode" value="rsvp">
                     RSVP Only
                 </label>
-                <label class="ap-mode-btn" style="flex:1; text-align:center; padding:0.5rem 0.3rem; cursor:pointer; font-size:0.8rem; font-weight:600; transition:background 0.15s, color 0.15s;">
-                    <input type="radio" name="add-player-mode" value="paid_separately" style="display:none;">
+                <label class="ap-mode-btn">
+                    <input type="radio" name="add-player-mode" value="paid_separately">
                     Paid Separately
                 </label>
             </div>
@@ -361,9 +361,9 @@
             <form id="add-player-form" class="edit-form">
                 <!-- Name: always shown. For comp mode, shows manager dropdown. Otherwise text input with autocomplete. -->
                 <div id="ap-name-section">
-                    <div id="ap-manager-select" style="margin-bottom:0.75rem;">
-                        <label class="ap-field-label"><span>Manager <span style="color:#e11d48;">*</span></span>
-                            <select id="add-player-manager" class="modal-input">
+                    <div id="ap-manager-select" class="ap-field-section">
+                        <label class="ap-field-label"><span>Manager <span class="ap-required">*</span></span>
+                            <select id="add-player-manager" class="modal-input" aria-required="true">
                                 <option value="">Select manager…</option>
                                 <option value="Kerry Niester">Kerry Niester</option>
                                 <option value="Robert Straiton">Robert Straiton</option>
@@ -371,13 +371,13 @@
                             </select>
                         </label>
                     </div>
-                    <div id="ap-name-input" style="display:none; margin-bottom:0.75rem;">
-                        <label class="ap-field-label"><span>Player Name <span style="color:#e11d48;">*</span></span>
-                            <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" list="ap-customer-list">
+                    <div id="ap-name-input" class="ap-field-section" style="display:none;">
+                        <label class="ap-field-label"><span>Player Name <span class="ap-required">*</span></span>
+                            <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" list="ap-customer-list" aria-required="true">
                             <datalist id="ap-customer-list"></datalist>
                         </label>
                     </div>
-                    <div id="ap-contact-fields" class="edit-grid" style="display:none; margin-bottom:0.5rem;">
+                    <div id="ap-contact-fields" class="edit-grid ap-field-section-sm" style="display:none;">
                         <label>Email
                             <input type="email" id="add-player-email" class="modal-input" placeholder="email@example.com">
                         </label>
@@ -1695,8 +1695,14 @@
     async function toggleEventDetail(eventId) {
         const wasExpanded = expandedEventId === eventId;
 
-        // Collapse any currently expanded row
+        // Collapse any currently expanded row and release cached data
         if (expandedEventId !== null) {
+            const prevEv = allEvents.find(e => e.id === expandedEventId);
+            if (prevEv) {
+                delete allRsvps[prevEv.item_name];
+                delete allRsvpOverrides[prevEv.item_name];
+                delete allRsvpEmailOverrides[prevEv.item_name];
+            }
             const prevRow = document.querySelector(`.event-row-clickable[data-id="${expandedEventId}"]`);
             const prevDetail = document.querySelector(`.event-detail-row[data-detail-for="${expandedEventId}"]`);
             if (prevRow) prevRow.classList.remove("expanded");
@@ -2773,10 +2779,24 @@
             }
         });
 
-        // Auto-format amount fields on blur
+        // Auto-format amount fields on blur + prevent multiple decimals on input
         ["add-player-amount", "upgrade-rsvp-amount"].forEach(id => {
-            document.getElementById(id).addEventListener("blur", function() {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener("input", function() {
+                // Strip non-numeric except first decimal point
+                let val = this.value.replace(/[^0-9.]/g, "");
+                const parts = val.split(".");
+                if (parts.length > 2) val = parts[0] + "." + parts.slice(1).join("");
+                // Limit to 2 decimal places while typing
+                if (parts.length === 2 && parts[1].length > 2) val = parts[0] + "." + parts[1].slice(0, 2);
+                if (val !== this.value) this.value = val;
+            });
+            el.addEventListener("blur", function() {
                 let raw = this.value.trim().replace(/[^0-9.]/g, "");
+                // Keep only first decimal point
+                const parts = raw.split(".");
+                if (parts.length > 2) raw = parts[0] + "." + parts.slice(1).join("");
                 if (raw) {
                     const num = parseFloat(raw);
                     if (!isNaN(num) && num > 0) this.value = num.toFixed(2);

@@ -11,10 +11,13 @@ import re
 import json
 import secrets
 import logging
+import shutil
+import sqlite3
 import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
+import anthropic as _anthropic
 from flask import Flask, Response, jsonify, render_template, request, send_file, session
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -67,8 +70,9 @@ from email_parser.database import (
     get_all_feedback,
     update_feedback_status,
 )
+from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import fetch_transaction_emails, fetch_email_by_id, send_mail_graph
-from email_parser.parser import parse_email, parse_emails
+from email_parser.parser import parse_email, parse_emails, _strip_html
 from email_parser.report import send_daily_report
 from email_parser.rsvp_parser import fetch_rsvp_emails, parse_rsvp_emails
 
@@ -142,8 +146,6 @@ def check_inbox():
 
     # Parse and save one email at a time so items appear on the dashboard
     # incrementally instead of waiting for the entire batch to finish.
-    import anthropic as _anthropic
-
     _inbox_check_status["emails_fetched"] = len(new_emails)
     total_saved = 0
     total_parsed = 0
@@ -466,8 +468,6 @@ def api_check_status():
 @require_role("admin")
 def admin_backup():
     """Stream the SQLite database file as a download. Admin-only."""
-    from email_parser.database import DB_PATH
-    import shutil
     db_path = str(DB_PATH)
     if not os.path.isfile(db_path):
         return jsonify({"error": "Database file not found"}), 404
@@ -476,7 +476,6 @@ def admin_backup():
     shutil.copy2(db_path, backup_path)
     # Also checkpoint WAL into the backup
     try:
-        import sqlite3
         conn = sqlite3.connect(backup_path)
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.close()
@@ -494,18 +493,16 @@ def admin_backup():
 @app.route("/api/health")
 def api_health():
     """Diagnostic endpoint for Railway troubleshooting."""
-    from email_parser.database import DB_PATH
     db_path = str(DB_PATH)
     db_exists = os.path.isfile(db_path)
     db_dir_exists = os.path.isdir(os.path.dirname(db_path))
     try:
-        from email_parser.database import get_connection
         conn = get_connection()
         row = conn.execute("SELECT COUNT(*) as cnt FROM items").fetchone()
         item_count = row["cnt"]
         conn.close()
         db_readable = True
-    except Exception as e:
+    except Exception:
         item_count = 0
         db_readable = False
     env_keys = ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET",
@@ -640,8 +637,6 @@ def api_audit_emails():
 
     limit = request.args.get("limit", 50, type=int)
     days = request.args.get("days", 90, type=int)
-
-    from email_parser.parser import _strip_html
 
     try:
         emails = fetch_transaction_emails(

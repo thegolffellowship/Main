@@ -80,10 +80,11 @@ function updateCategoryCounts() {
         else if (cat === "past") past++;
         else if (cat === "membership") membership++;
     });
-    document.getElementById("cat-count-all").textContent = allItems.length;
-    document.getElementById("cat-count-upcoming").textContent = upcoming;
-    document.getElementById("cat-count-past").textContent = past;
-    document.getElementById("cat-count-membership").textContent = membership;
+    const el = (id) => document.getElementById(id);
+    if (el("cat-count-all")) el("cat-count-all").textContent = allItems.length;
+    if (el("cat-count-upcoming")) el("cat-count-upcoming").textContent = upcoming;
+    if (el("cat-count-past")) el("cat-count-past").textContent = past;
+    if (el("cat-count-membership")) el("cat-count-membership").textContent = membership;
 }
 
 // Track which columns are visible (persisted in localStorage)
@@ -342,11 +343,12 @@ async function fetchStats() {
     try {
         const res = await fetch("/api/stats");
         const s = await res.json();
-        document.getElementById("stat-items").textContent = s.total_items;
-        document.getElementById("stat-orders").textContent = s.total_orders;
-        document.getElementById("stat-spent").textContent = s.total_spent;
-        document.getElementById("stat-earliest").textContent = s.earliest_date;
-        document.getElementById("stat-latest").textContent = s.latest_date;
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        set("stat-items", s.total_items);
+        set("stat-orders", s.total_orders);
+        set("stat-spent", s.total_spent);
+        set("stat-earliest", s.earliest_date);
+        set("stat-latest", s.latest_date);
     } catch (err) {
         console.error("Failed to fetch stats:", err);
     }
@@ -359,31 +361,32 @@ async function checkConfig() {
         const alertEl = document.getElementById("config-alert");
         const msg = document.getElementById("config-alert-msg");
 
-        if (data.configured) {
-            alertEl.style.display = "none";
-        } else {
-            alertEl.style.display = "block";
-            if (!data.email && !data.ai) {
-                msg.textContent = "Email and Anthropic API key not configured. Set up your .env file.";
-            } else if (!data.email) {
-                msg.textContent = "Email credentials not configured. Add them to your .env file.";
+        if (alertEl && msg) {
+            if (data.configured) {
+                alertEl.style.display = "none";
             } else {
-                msg.textContent = "Anthropic API key not configured. Add ANTHROPIC_API_KEY to your .env file.";
+                alertEl.style.display = "block";
+                if (!data.email && !data.ai) {
+                    msg.textContent = "Email and Anthropic API key not configured. Set up your .env file.";
+                } else if (!data.email) {
+                    msg.textContent = "Email credentials not configured. Add them to your .env file.";
+                } else {
+                    msg.textContent = "Anthropic API key not configured. Add ANTHROPIC_API_KEY to your .env file.";
+                }
             }
         }
 
         // Show connector panel if connector is configured
         const connPanel = document.getElementById("connector-panel");
-        if (data.connector) {
+        if (connPanel && data.connector) {
             connPanel.style.display = "block";
-            // Set the full URL for the connector endpoint
-            document.getElementById("connector-url").textContent =
-                window.location.origin + "/api/connector/ingest";
+            const connUrl = document.getElementById("connector-url");
+            if (connUrl) connUrl.textContent = window.location.origin + "/api/connector/ingest";
         }
 
         // Show Send Report button if daily report is configured
         const reportBtn = document.getElementById("btn-send-report");
-        if (data.daily_report) {
+        if (reportBtn && data.daily_report) {
             reportBtn.style.display = "inline-flex";
         }
     } catch (err) {
@@ -410,14 +413,14 @@ function cellForColumn(key, row) {
     if (key === "order_id") return `<span class="order-id">${cell(row.order_id, "order_id", row.id)}</span>`;
     if (key === "actions") {
         const status = row.transaction_status || "active";
-        let btns = `<button class="btn btn-edit" onclick="openEditModal(${row.id})">Edit</button>`;
+        let btns = `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
         if (status === "active" && !row.transferred_from_id) {
-            btns += ` <button class="btn btn-credit" onclick="openCreditModal(${row.id})">Credit</button>`;
+            btns += ` <button class="btn btn-credit" data-action="credit" data-id="${row.id}">Credit</button>`;
         } else if (status === "credited" || status === "transferred") {
-            btns += ` <button class="btn btn-reverse" onclick="reverseCreditAction(${row.id})">Reverse</button>`;
+            btns += ` <button class="btn btn-reverse" data-action="reverse" data-id="${row.id}">Reverse</button>`;
         }
         if (currentRole === "admin") {
-            btns += ` <button class="btn btn-danger" onclick="deleteItem(${row.id})">Delete</button>`;
+            btns += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}">Delete</button>`;
         }
         return btns;
     }
@@ -482,19 +485,19 @@ function renderMobileCards(items) {
         ];
 
         // Action buttons
-        let actionHtml = `<button class="btn btn-edit" onclick="openEditModal(${row.id})">Edit</button>`;
+        let actionHtml = `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
         if (status === "active" && !row.transferred_from_id) {
-            actionHtml += ` <button class="btn btn-credit" onclick="openCreditModal(${row.id})">Credit</button>`;
+            actionHtml += ` <button class="btn btn-credit" data-action="credit" data-id="${row.id}">Credit</button>`;
         } else if (status === "credited" || status === "transferred") {
-            actionHtml += ` <button class="btn btn-reverse" onclick="reverseCreditAction(${row.id})">Reverse</button>`;
+            actionHtml += ` <button class="btn btn-reverse" data-action="reverse" data-id="${row.id}">Reverse</button>`;
         }
         if (currentRole === "admin") {
-            actionHtml += ` <button class="btn btn-danger" onclick="deleteItem(${row.id})">Delete</button>`;
+            actionHtml += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}">Delete</button>`;
         }
 
         return `
         <div class="mobile-card${statusClass}" data-id="${row.id}">
-            <div class="mobile-card-top" onclick="this.parentElement.classList.toggle('expanded')">
+            <div class="mobile-card-top" data-action="toggle-expand">
                 <div class="mc-primary">
                     <span class="mc-customer">${escapeHtml(row.customer || "Unknown")}</span>
                     ${topTags} ${tag}
@@ -658,7 +661,7 @@ function clearAllFilters() {
 // Actions
 // ---------------------------------------------------------------------------
 async function deleteItem(id) {
-    if (!confirm("Delete this item?")) return;
+    if (!confirm("Are you sure you want to delete this item? This action cannot be undone.")) return;
     try {
         await fetch(`/api/items/${id}`, { method: "DELETE" });
         allItems = allItems.filter((r) => r.id !== id);
@@ -1076,13 +1079,15 @@ let autoRefreshInterval = null;
 function startAutoRefresh() {
     if (autoRefreshInterval) return;
     autoRefreshInterval = setInterval(async () => {
-        // Only refresh when no modal is open and no edit in progress
-        const editOpen = document.getElementById("edit-overlay").style.display === "flex";
-        const creditOpen = document.getElementById("credit-overlay").style.display === "flex";
-        const loginOpen = document.getElementById("login-overlay").style.display === "flex";
-        if (!editOpen && !creditOpen && !loginOpen && !activeEditor) {
-            await fetchItems();
-            await fetchStats();
+        try {
+            // Only refresh when no modal is open and no edit in progress
+            const isOpen = (id) => { const el = document.getElementById(id); return el && el.style.display === "flex"; };
+            if (!isOpen("edit-overlay") && !isOpen("credit-overlay") && !isOpen("login-overlay") && !activeEditor) {
+                await fetchItems();
+                await fetchStats();
+            }
+        } catch (err) {
+            console.error("Auto-refresh failed:", err);
         }
     }, 30000); // every 30 seconds
 }
@@ -1158,6 +1163,26 @@ document.addEventListener("DOMContentLoaded", async () => {
             btn.classList.add("active");
             applyFilters();
         });
+    });
+
+    // Connector panel toggle
+    const connHeader = document.getElementById("connector-header");
+    if (connHeader) connHeader.addEventListener("click", () => {
+        const body = document.getElementById("connector-body");
+        if (body) body.classList.toggle("hidden");
+    });
+
+    // Delegated action handlers for table and mobile card buttons
+    document.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-action]");
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const id = parseInt(btn.dataset.id);
+        if (action === "edit") openEditModal(id);
+        else if (action === "credit") openCreditModal(id);
+        else if (action === "reverse") reverseCreditAction(id);
+        else if (action === "delete") deleteItem(id);
+        else if (action === "toggle-expand") btn.parentElement.classList.toggle("expanded");
     });
 
     // Column toggle dropdown

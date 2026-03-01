@@ -257,6 +257,31 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # Backfill NULL/empty values in critical columns
+        conn.execute("UPDATE items SET customer = '(Unknown)' WHERE customer IS NULL OR customer = ''")
+        conn.execute("UPDATE items SET item_name = '(Unknown Item)' WHERE item_name IS NULL OR item_name = ''")
+
+        # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
+        # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
+        # and updates that would set these columns to NULL or empty string.
+        for col, label in [("customer", "customer"), ("item_name", "item_name")]:
+            conn.execute(f"""
+                CREATE TRIGGER IF NOT EXISTS trg_items_{col}_not_null_insert
+                BEFORE INSERT ON items
+                WHEN NEW.{col} IS NULL OR NEW.{col} = ''
+                BEGIN
+                    SELECT RAISE(ABORT, '{label} cannot be NULL or empty');
+                END
+            """)
+            conn.execute(f"""
+                CREATE TRIGGER IF NOT EXISTS trg_items_{col}_not_null_update
+                BEFORE UPDATE OF {col} ON items
+                WHEN NEW.{col} IS NULL OR NEW.{col} = ''
+                BEGIN
+                    SELECT RAISE(ABORT, '{label} cannot be NULL or empty');
+                END
+            """)
+
         conn.commit()
 
         # Soft constraint check: warn about NULL values in critical columns
@@ -740,7 +765,6 @@ def _is_event_item(item_name: str, *, course: str = "", city: str = "") -> bool:
     if (course and course.strip()) or (city and city.strip()):
         return True
     # Contains a month name or date pattern → likely an event
-    import re
     month_pattern = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b"
     if re.search(month_pattern, lower):
         return True
@@ -800,14 +824,19 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
             if name in alias_set:
                 skipped_aliased += 1
                 continue
+            # Case-insensitive duplicate check
+            existing = conn.execute(
+                "SELECT id FROM events WHERE LOWER(item_name) = LOWER(?)", (name,)
+            ).fetchone()
+            if existing:
+                continue
             try:
                 conn.execute(
-                    """INSERT OR IGNORE INTO events (item_name, event_date, course, city, event_type)
+                    """INSERT INTO events (item_name, event_date, course, city, event_type)
                        VALUES (?, ?, ?, ?, 'event')""",
                     (name, item["event_date"], item["course"], item["city"]),
                 )
-                if conn.execute("SELECT changes()").fetchone()[0] > 0:
-                    inserted += 1
+                inserted += 1
             except sqlite3.IntegrityError:
                 logger.debug("Duplicate event skipped during sync: %s", name)
 
@@ -1324,8 +1353,14 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
 
 def create_event(item_name: str, event_date: str = None, course: str = None,
                  city: str = None, db_path: str | Path | None = None) -> dict | None:
-    """Manually create a new event. Returns the event dict or None if duplicate."""
+    """Manually create a new event. Returns the event dict or None if duplicate (case-insensitive)."""
     with _connect(db_path) as conn:
+        # Case-insensitive duplicate check
+        existing = conn.execute(
+            "SELECT id FROM events WHERE LOWER(item_name) = LOWER(?)", (item_name,)
+        ).fetchone()
+        if existing:
+            return None
         try:
             cursor = conn.execute(
                 "INSERT INTO events (item_name, event_date, course, city, event_type) VALUES (?, ?, ?, ?, 'event')",
@@ -1342,12 +1377,21 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
 def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
     """
     Batch-insert events. Each dict should have: item_name, event_date, course, city.
-    Skips duplicates. Returns {"inserted": N, "skipped": N}.
+    Skips duplicates (case-insensitive). Returns {"inserted": N, "skipped": N}.
     """
     with _connect(db_path) as conn:
         inserted = 0
         skipped = 0
         for ev in events:
+            # Case-insensitive duplicate check
+            existing = conn.execute(
+                "SELECT id FROM events WHERE LOWER(item_name) = LOWER(?)",
+                (ev["item_name"],)
+            ).fetchone()
+            if existing:
+                skipped += 1
+                logger.debug("Duplicate event skipped during seed: %s", ev.get("item_name"))
+                continue
             try:
                 conn.execute(
                     "INSERT INTO events (item_name, event_date, course, city, event_type) VALUES (?, ?, ?, ?, 'event')",
@@ -1377,7 +1421,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
 
     Returns the new item dict or None on failure.
     """
-    import time
+    import time as _time
 
     with _connect(db_path) as conn:
 
@@ -1387,7 +1431,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         ).fetchone()
         event = dict(event) if event else {}
 
-        uid = f"manual-{mode}-{int(time.time() * 1000)}"
+        uid = f"manual-{mode}-{int(_time.time() * 1000)}"
 
         new_values = {col: None for col in ITEM_COLUMNS}
         new_values["email_uid"] = uid
@@ -1396,7 +1440,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         new_values["customer_email"] = customer_email or None
         new_values["customer_phone"] = customer_phone or None
         new_values["item_name"] = event_name
-        new_values["order_date"] = __import__("datetime").date.today().isoformat()
+        new_values["order_date"] = datetime.now().strftime("%Y-%m-%d")
         new_values["event_date"] = event.get("event_date") or ""
         new_values["course"] = event.get("course") or ""
         new_values["city"] = event.get("city") or ""
@@ -1577,7 +1621,6 @@ def match_rsvp_to_event(event_identifier: str, event_date: str | None,
             # Try the last word(s) after any prefix like "a18.2"
             parts = event_identifier.split()
             # Skip leading codes like "s9.1", "a18.2"
-            import re
             start = 0
             for i, p in enumerate(parts):
                 if re.match(r'^[a-z]\d+\.\d+$', p, re.IGNORECASE):
@@ -1953,8 +1996,6 @@ def normalize_tee_choices(db_path: str | Path | None = None) -> int:
     Standards: <50, 50-64, 65+, Forward.
     Returns the number of rows updated.
     """
-    import re
-
     _TEE_MAP = [
         (re.compile(r"\bforward\b|\bfront\b", re.IGNORECASE), "Forward"),
         (re.compile(r"\b65\s*\+", re.IGNORECASE), "65+"),

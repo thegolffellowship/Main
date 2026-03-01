@@ -1,7 +1,7 @@
 # TGF Transaction Tracker — Project Documentation
 
 > **The Golf Fellowship** — AI-powered transaction and event management platform
-> **Current Version:** v1.1.0 (February 26, 2026)
+> **Current Version:** v1.2.0 (March 1, 2026)
 > **Live URL:** https://main-production-b95c.up.railway.app
 
 ---
@@ -697,6 +697,16 @@ The app is installable as a Progressive Web App:
 ---
 
 ## Version History
+
+### v1.2.0 — March 1, 2026 — "Security & Code Quality Audit"
+- **Critical fixes:** Proper error logging for DB failures, AI parser exception surfacing, XSS sanitization, auto-refresh error handling, DB connection leak prevention
+- **High-priority fixes:** Email send result checking, SECRET_KEY startup validation, input validation on API endpoints, RSVP popover listener leak fix
+- **Database improvements:** NOT NULL constraints on customer/item_name via triggers, case-insensitive duplicate checks for events, `.get()` guards on all API endpoints
+- **Frontend improvements:** Null reference guards on DOM elements, amount input decimal validation, override object memory cleanup on event collapse
+- **Accessibility:** Added `aria-required` and `aria-label` to form inputs, `role="dialog"` and `aria-modal` to modals, improved confirm dialog messages
+- **CSS cleanup:** Replaced 12 `!important` declarations with CSS variables and increased specificity, extracted inline styles to CSS classes
+- **Code quality:** Consolidated onclick handlers to event delegation, moved all function-level imports to module level, removed redundant `import re` statements, fixed `__import__("datetime")` anti-pattern
+- **Scheduler:** Tightened multi-worker env var guard for Gunicorn deployments
 
 ### v1.1.0 — February 26, 2026 — "Add Player Overhaul + GG Dot States"
 - Redesigned Add Player dialog with 3 modes: Manager Comp, RSVP Only, Paid Separately

@@ -34,10 +34,12 @@ async function checkRole() {
 }
 
 function showLoginModal() {
-    document.getElementById("login-overlay").style.display = "flex";
-    document.getElementById("login-pin").value = "";
-    document.getElementById("login-error").style.display = "none";
-    document.getElementById("login-pin").focus();
+    const overlay = document.getElementById("login-overlay");
+    const pin = document.getElementById("login-pin");
+    const err = document.getElementById("login-error");
+    if (overlay) overlay.style.display = "flex";
+    if (pin) { pin.value = ""; pin.focus(); }
+    if (err) err.style.display = "none";
 }
 
 function hideLoginModal() {
@@ -122,10 +124,11 @@ async function initAuth() {
         if (typeof onAuthReady === "function") onAuthReady();
     }
 
-    // Bind login modal events
-    document.getElementById("login-submit").addEventListener("click", handleLogin);
-    document.getElementById("login-pin").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") handleLogin();
-    });
-    document.getElementById("btn-logout").addEventListener("click", handleLogout);
+    // Bind login modal events (with null guards)
+    const loginSubmit = document.getElementById("login-submit");
+    const loginPin = document.getElementById("login-pin");
+    const logoutBtn = document.getElementById("btn-logout");
+    if (loginSubmit) loginSubmit.addEventListener("click", handleLogin);
+    if (loginPin) loginPin.addEventListener("keydown", (e) => { if (e.key === "Enter") handleLogin(); });
+    if (logoutBtn) logoutBtn.addEventListener("click", handleLogout);
 }
