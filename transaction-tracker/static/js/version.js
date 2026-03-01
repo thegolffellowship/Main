@@ -6,20 +6,27 @@ window.TGF_CHANGELOG = [
     title: "Audit Hardening",
     changes: [
       "Log database errors instead of silently swallowing them",
+      "AI parser now surfaces API auth and bad-request errors properly",
       "Add managed_connection context manager to prevent DB connection leaks",
       "Wrap auto-refresh intervals in try/catch to prevent silent failures",
       "Fix XSS risk in orphan banner — replaced inline onclick with data-attribute handlers",
+      "Email send results now checked and reported to frontend",
       "Warn at startup if SECRET_KEY is not set in environment",
       "Add input validation (type/length) on mutation API endpoints",
       "Fix RSVP popover event listener leak on repeated clicks",
+      "Added .get() guards on all API endpoints",
+      "NOT NULL constraints on customer/item_name columns",
       "Add database index on transaction_status column",
       "Tighten scheduler race condition with PID-based guard",
+      "Case-insensitive customer name matching in merge",
+      "DOM null reference guards across all pages",
       "Fix amount inputs to prevent multiple decimal points",
       "Clean up cached RSVP overrides when collapsing events",
-      "Case-insensitive customer name matching in merge",
+      "Accessibility: aria-required, aria-label, role=dialog on modals",
+      "CSS cleanup: replaced !important with variables and specificity",
       "Consolidate inline onclick handlers to addEventListener pattern",
       "Move inline imports to module level",
-      "Add aria-required attributes to key form inputs"
+      "Removed dead code and redundant imports"
     ]
   },
   {

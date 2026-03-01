@@ -230,6 +230,50 @@ def fetch_transaction_emails(
     return results
 
 
+def fetch_email_by_id(
+    tenant_id: str,
+    client_id: str,
+    client_secret: str,
+    email_address: str,
+    message_id: str,
+) -> dict | None:
+    """Fetch a single email by Graph message ID. Returns raw email dict or None."""
+    token = _get_graph_token(tenant_id, client_id, client_secret)
+    if not token:
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    url = f"{GRAPH_BASE}/users/{email_address}/messages/{message_id}"
+    params = {"$select": "id,subject,from,receivedDateTime,body"}
+
+    try:
+        resp = requests.get(url, headers=headers, params=params, timeout=30)
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        msg = resp.json()
+        from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
+        subject = msg.get("subject", "")
+        body = msg.get("body", {})
+        body_content = body.get("content", "")
+        content_type = body.get("contentType", "text")
+        return {
+            "uid": msg["id"],
+            "subject": subject,
+            "from": from_addr,
+            "date": msg.get("receivedDateTime"),
+            "text": body_content if content_type == "text" else "",
+            "html": body_content if content_type == "html" else "",
+        }
+    except Exception:
+        logger.exception("Failed to fetch email %s", message_id)
+        return None
+
+
 def send_mail_graph(
     tenant_id: str,
     client_id: str,
