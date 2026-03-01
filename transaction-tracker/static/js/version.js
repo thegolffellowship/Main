@@ -1,5 +1,27 @@
-window.TGF_VERSION = "1.1.0";
+window.TGF_VERSION = "1.2.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "1.2.0",
+    date: "2026-03-01",
+    title: "Audit Hardening",
+    changes: [
+      "Log database errors instead of silently swallowing them",
+      "Add managed_connection context manager to prevent DB connection leaks",
+      "Wrap auto-refresh intervals in try/catch to prevent silent failures",
+      "Fix XSS risk in orphan banner — replaced inline onclick with data-attribute handlers",
+      "Warn at startup if SECRET_KEY is not set in environment",
+      "Add input validation (type/length) on mutation API endpoints",
+      "Fix RSVP popover event listener leak on repeated clicks",
+      "Add database index on transaction_status column",
+      "Tighten scheduler race condition with PID-based guard",
+      "Fix amount inputs to prevent multiple decimal points",
+      "Clean up cached RSVP overrides when collapsing events",
+      "Case-insensitive customer name matching in merge",
+      "Consolidate inline onclick handlers to addEventListener pattern",
+      "Move inline imports to module level",
+      "Add aria-required attributes to key form inputs"
+    ]
+  },
   {
     version: "1.1.0",
     date: "2026-02-26",
