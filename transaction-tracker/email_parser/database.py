@@ -469,6 +469,7 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
       2. customer name → Title Case
       3. course name → canonical spelling
       4. item_name normalisation (e.g. membership variants)
+      5. backfill missing customer_email/phone from most recent transaction
 
     Returns a combined summary.
     """
@@ -482,10 +483,10 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
 
     conn = get_connection(db_path)
     rows = conn.execute(
-        "SELECT id, item_name, customer, course, chapter, side_games FROM items"
+        "SELECT id, item_name, customer, customer_email, customer_phone, course, chapter, side_games FROM items"
     ).fetchall()
 
-    fixes = {"side_games": 0, "customer_name": 0, "course_name": 0, "item_name": 0, "chapter": 0}
+    fixes = {"side_games": 0, "customer_name": 0, "course_name": 0, "item_name": 0, "chapter": 0, "email_backfill": 0}
     details = []
 
     for row in rows:
@@ -540,16 +541,60 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
             conn.execute(f"UPDATE items SET {set_clause} WHERE id = ?", values)
             details.append({"id": row_id, "changes": updates, "old": old_values})
 
+    # --- Email/phone backfill pass ---
+    # Build lookup: customer name → best email/phone (from most recent transaction)
+    contact_rows = conn.execute(
+        """SELECT customer, customer_email, customer_phone, order_date
+           FROM items
+           WHERE customer IS NOT NULL AND customer != ''
+           ORDER BY order_date DESC"""
+    ).fetchall()
+    best_contact: dict[str, dict] = {}
+    for cr in contact_rows:
+        name = cr["customer"]
+        if name not in best_contact:
+            best_contact[name] = {"email": "", "phone": ""}
+        if not best_contact[name]["email"] and cr["customer_email"]:
+            best_contact[name]["email"] = cr["customer_email"]
+        if not best_contact[name]["phone"] and cr["customer_phone"]:
+            best_contact[name]["phone"] = cr["customer_phone"]
+
+    # Re-fetch rows that are missing email or phone
+    missing_contact = conn.execute(
+        """SELECT id, customer, customer_email, customer_phone FROM items
+           WHERE customer IS NOT NULL AND customer != ''
+             AND ((customer_email IS NULL OR customer_email = '')
+               OR (customer_phone IS NULL OR customer_phone = ''))"""
+    ).fetchall()
+    for mc in missing_contact:
+        contact = best_contact.get(mc["customer"])
+        if not contact:
+            continue
+        updates = {}
+        old_values = {}
+        if not mc["customer_email"] and contact["email"]:
+            updates["customer_email"] = contact["email"]
+            old_values["customer_email"] = mc["customer_email"] or ""
+        if not mc["customer_phone"] and contact["phone"]:
+            updates["customer_phone"] = contact["phone"]
+            old_values["customer_phone"] = mc["customer_phone"] or ""
+        if updates:
+            set_clause = ", ".join(f"{col} = ?" for col in updates)
+            values = list(updates.values()) + [mc["id"]]
+            conn.execute(f"UPDATE items SET {set_clause} WHERE id = ?", values)
+            details.append({"id": mc["id"], "changes": updates, "old": old_values})
+            fixes["email_backfill"] += 1
+
     conn.commit()
     conn.close()
 
     total_fixed = len(details)
     logger.info(
         "Autofix all: scanned %d rows, %d rows changed "
-        "(side_games=%d, customer_name=%d, course_name=%d, item_name=%d, chapter=%d)",
+        "(side_games=%d, customer_name=%d, course_name=%d, item_name=%d, chapter=%d, email_backfill=%d)",
         len(rows), total_fixed,
         fixes["side_games"], fixes["customer_name"], fixes["course_name"],
-        fixes["item_name"], fixes["chapter"],
+        fixes["item_name"], fixes["chapter"], fixes["email_backfill"],
     )
     return {
         "scanned": len(rows),

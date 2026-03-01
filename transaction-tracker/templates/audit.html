@@ -753,6 +753,7 @@
                 if (b.course_name) parts.push(`${b.course_name} courses`);
                 if (b.item_name) parts.push(`${b.item_name} items`);
                 if (b.chapter) parts.push(`${b.chapter} chapters`);
+                if (b.email_backfill) parts.push(`${b.email_backfill} emails backfilled`);
                 const msg = data.fixed > 0
                     ? `Fixed ${data.fixed} row(s): ${parts.join(", ")}`
                     : `Scanned ${data.scanned} rows — nothing to fix.`;
