@@ -1239,7 +1239,10 @@ def api_send_reminder_all():
         else:
             failed += 1
 
-    return jsonify({"status": "ok", "sent": sent, "failed": failed, "total": len(rsvp_players)})
+    if sent == 0:
+        return jsonify({"error": "All reminder emails failed to send", "sent": sent, "failed": failed, "total": len(rsvp_players)}), 500
+    status = "ok" if failed == 0 else "partial"
+    return jsonify({"status": status, "sent": sent, "failed": failed, "total": len(rsvp_players)})
 
 
 @app.route("/api/events/seed", methods=["POST"])
@@ -1432,7 +1435,7 @@ def _send_feedback_notification(feedback: dict):
     subject = f"[TGF {label}] New submission from {page} page"
 
     try:
-        send_mail_graph(
+        ok = send_mail_graph(
             tenant_id=tenant_id,
             client_id=client_id,
             client_secret=client_secret,
@@ -1441,6 +1444,8 @@ def _send_feedback_notification(feedback: dict):
             subject=subject,
             html_body=html,
         )
+        if not ok:
+            logger.warning("Feedback notification email failed to send to %s", notify_to)
     except Exception:
         logger.exception("Failed to send feedback notification email")
 
