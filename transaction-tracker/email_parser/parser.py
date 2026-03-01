@@ -397,20 +397,7 @@ def _call_ai(email_text: str) -> dict | None:
                 }
             ],
         )
-        raw = message.content[0].text.strip()
-
-        # Strip markdown fences if the model wrapped the JSON
-        if raw.startswith("```"):
-            raw = re.sub(r"^```(?:json)?\s*", "", raw)
-            raw = re.sub(r"\s*```$", "", raw)
-
-        return json.loads(raw)
-
-    except json.JSONDecodeError:
-        logger.exception("AI returned invalid JSON")
-        return None
     except anthropic.BadRequestError as e:
-        # Re-raise billing / auth errors so the caller can stop the batch
         logger.error("Anthropic API fatal error: %s", e.message)
         raise
     except anthropic.AuthenticationError as e:
@@ -418,6 +405,19 @@ def _call_ai(email_text: str) -> dict | None:
         raise
     except anthropic.APIError:
         logger.exception("Anthropic API call failed")
+        return None
+
+    raw = message.content[0].text.strip()
+
+    # Strip markdown fences if the model wrapped the JSON
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        logger.error("AI returned invalid JSON: %.500s", raw)
         return None
 
 
