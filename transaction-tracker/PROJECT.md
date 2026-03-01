@@ -745,6 +745,7 @@ The app is installable as a Progressive Web App:
 Features discussed or planned but not yet implemented:
 
 ### High Priority
+- **Bulk Event Communications (Email + SMS)** — Compose and send messages to event registrants with audience filtering, reusable templates, and Twilio SMS integration. Full spec in [Future Considerations → Bulk Event Communications](#bulk-event-communications-email--sms)
 - **SUPPORT button** — "I have a question" button for players to contact TGF directly from the app
 - **Player-facing event page** — Public page where players can see their upcoming events, RSVP status, and payment status without needing a PIN
 - ~~**Bulk email reminders**~~ — **DONE** (v1.2.0). "Remind All" button on event detail sends to all RSVP-only players at once.
@@ -759,7 +760,7 @@ Features discussed or planned but not yet implemented:
 
 ### Lower Priority
 - **Multi-city dashboard** — City-specific views (San Antonio, Dallas, Austin, Houston, Galveston) with separate stats
-- **Email template editor** — Customize reminder emails and daily reports from the UI
+- ~~**Email template editor**~~ — Covered by [Bulk Event Communications](#bulk-event-communications-email--sms) spec
 - **Webhook notifications** — Push notifications (Slack, Discord, etc.) when new registrations arrive
 - **Player profile photos** — Upload or link profile pictures for the customer directory
 - **Dark mode** — System-preference or manual toggle
@@ -1034,3 +1035,184 @@ Golf courses often have spotty cell coverage. The scorecard page needs to handle
 3. **CTP hole designation** — Are CTP holes always the same per course, or chosen per event? Should admin mark which holes are CTP when starting scoring?
 4. **Skins format** — Are skins always gross? Or net skins for some events? The matrix has both scenarios
 5. **Post-event flow** — After finalization, should payouts auto-generate transaction records in the items table (as credits/debits)?
+
+---
+
+### Bulk Event Communications (Email + SMS)
+
+A compose-and-send interface for reaching event registrants via email and SMS. Builds on the existing "Remind All" payment reminder (v1.2.0) and `send_mail_graph()` infrastructure, expanding it into a general-purpose communication tool with audience filtering, reusable templates, and SMS support.
+
+#### What Already Exists (Foundation)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Email sending | Ready | `send_mail_graph()` in `fetcher.py` — Microsoft Graph API, HTML body, works today |
+| Payment reminder template | Ready | Simple HTML template with player name + event name personalization |
+| Daily digest template | Ready | Rich HTML with inline CSS, stat cards, tables, responsive layout |
+| Bulk send endpoint | Ready | `/api/events/send-reminder-all` sends sequentially to all RSVP-only players |
+| Bulk send UI | Ready | "Remind All (N)" button with confirmation dialog on events page |
+| Customer email field | Ready | `customer_email` in items table, auto-backfilled across transactions per customer |
+| Customer phone field | Exists but unused | `customer_phone` in items table, populated by parser but never accessed |
+| Azure AD / Graph API creds | Ready | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `EMAIL_ADDRESS` all configured |
+| SMS provider | Not integrated | No Twilio or other SMS library in `requirements.txt` |
+
+#### New Database Tables
+
+**`message_templates` table** — Reusable message templates
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| name | TEXT NOT NULL | Template name (e.g. "Event Announcement", "Tee Time Update") |
+| channel | TEXT NOT NULL | `email` / `sms` / `both` |
+| subject | TEXT | Email subject line (supports `{event_name}` variables) |
+| html_body | TEXT | Email HTML body (supports `{player_name}`, `{event_name}`, `{event_date}`, `{course}`, `{city}` variables) |
+| sms_body | TEXT | SMS plain text (160-char target, same variables) |
+| is_system | INTEGER DEFAULT 0 | 1 for built-in templates (payment reminder, etc.) that can't be deleted |
+| created_at | TEXT DEFAULT (datetime('now')) | |
+| updated_at | TEXT | |
+
+**`message_log` table** — Send history and delivery tracking
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_name | TEXT | Event this message was for (nullable for non-event messages) |
+| template_id | INTEGER | FK to message_templates.id (nullable for custom one-off messages) |
+| channel | TEXT NOT NULL | `email` / `sms` |
+| recipient_name | TEXT | Player name |
+| recipient_address | TEXT NOT NULL | Email address or phone number |
+| subject | TEXT | Rendered subject (email only) |
+| body_preview | TEXT | First 200 chars of rendered body |
+| status | TEXT DEFAULT 'sent' | `sent` / `failed` / `bounced` |
+| error_message | TEXT | Error details if failed |
+| sent_by | TEXT | Admin/manager who triggered it |
+| sent_at | TEXT DEFAULT (datetime('now')) | |
+
+#### Compose & Send UI (Events Page Enhancement)
+
+Add a **"Message Players"** button to each event's detail panel, opening a compose modal:
+
+**Compose Modal — Step 1: Audience**
+- **Recipient filter chips** (multi-select):
+  - All Registered — everyone with `transaction_status` in (`active`, `rsvp_only`, `gg_rsvp`, `paid_separately`)
+  - Playing (RSVP confirmed) — green dot players only
+  - RSVP Only (unpaid) — existing remind-all audience
+  - NET Players / GROSS Players / BOTH — filter by `side_games`
+  - Not Playing — red dot players (useful for "we have a spot" messages)
+- **Preview count** — "This will reach **14 players** (12 email, 8 SMS)"
+- **Recipient list expandable** — Show names + contact info, let admin deselect individuals
+
+**Compose Modal — Step 2: Message**
+- **Channel toggle** — Email only / SMS only / Both
+- **Template picker** — Dropdown of saved templates + "Custom message" option
+- **Subject line** (email) — Editable, supports `{event_name}` variable auto-fill
+- **Body editor** — Rich text area for email, plain text area for SMS
+  - Variable buttons: click to insert `{player_name}`, `{event_name}`, `{event_date}`, `{course}`, `{city}`
+  - Character counter for SMS (160 chars / segment)
+  - **Preview toggle** — Show rendered message for a sample player
+- **Save as template** checkbox — Save this message for reuse
+
+**Compose Modal — Step 3: Confirm & Send**
+- Summary: "Send **email** to **14 players** for **Fall Classic 2026**"
+- Send button with confirmation
+- Progress bar during send (X of Y sent)
+- Results: "12 sent, 2 failed (no email on file)" with failed player list
+
+#### Built-In Templates (Seeded on First Run)
+
+| Template | Channel | Use Case |
+|----------|---------|----------|
+| **Payment Reminder** | Email | Existing reminder for RSVP-only players (migrated from hard-coded HTML) |
+| **Event Announcement** | Both | "You're registered for {event_name} at {course} on {event_date}!" |
+| **Tee Time Update** | Both | "Tee times are set for {event_name}. Check-in at..." (custom body) |
+| **Weather Alert** | Both | "Weather update for {event_name}..." (custom body) |
+| **Event Cancellation** | Both | "{event_name} has been cancelled/postponed..." |
+| **Day-Of Reminder** | Both | "See you today at {course}! First tee at..." |
+| **Post-Event Results** | Email | "Results are in for {event_name}! View the leaderboard..." |
+
+#### SMS Integration (Twilio)
+
+**New dependency:** `twilio` package in `requirements.txt`
+
+**New function in `fetcher.py`:**
+```python
+def send_sms_twilio(to_number: str, body: str) -> bool
+```
+
+**Environment variables:**
+```bash
+TWILIO_ACCOUNT_SID=AC...        # Twilio account SID
+TWILIO_AUTH_TOKEN=...           # Twilio auth token
+TWILIO_FROM_NUMBER=+1...       # Twilio phone number (or messaging service SID)
+```
+
+**SMS considerations:**
+- 160 characters per segment — template editor shows char count and segment count
+- US numbers only (TGF is Texas-based) — validate E.164 format (+1XXXXXXXXXX)
+- Opt-out compliance — Twilio handles STOP/HELP automatically on long codes
+- Cost: ~$0.0079/segment outbound — for 30 players that's ~$0.24 per blast
+- Phone number normalization — strip formatting, add +1 country code
+
+#### New API Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/messages/send` | POST | Manager | Send message to filtered audience: `{event_name, channel, audience_filter, subject, body, template_id}` |
+| `/api/messages/preview` | POST | Manager | Render template for a sample player, return HTML/text preview |
+| `/api/messages/templates` | GET | Manager | List all message templates |
+| `/api/messages/templates` | POST | Manager | Create new template |
+| `/api/messages/templates/<id>` | PATCH | Manager | Update template |
+| `/api/messages/templates/<id>` | DELETE | Admin | Delete non-system template |
+| `/api/messages/log` | GET | Manager | Send history (filterable by event, channel, status, date range) |
+| `/api/messages/log/<event_name>` | GET | Manager | Send history for specific event |
+
+#### Rate Limiting & Throttling
+
+| Provider | Limit | Strategy |
+|----------|-------|----------|
+| Microsoft Graph API | ~10,000 emails/day per tenant, 4 requests/sec | 250ms delay between sends, batch of 20 with 1s pause |
+| Twilio SMS | Varies by number type (1 msg/sec for long code) | Sequential send with 1s spacing, or use Messaging Service for higher throughput |
+
+**Implementation:** Add a `send_with_throttle()` wrapper that:
+1. Accepts a list of `(recipient, rendered_message)` tuples
+2. Sends sequentially with configurable delay (default 300ms for email, 1100ms for SMS)
+3. Logs each send to `message_log`
+4. Returns aggregate `{sent: N, failed: N, errors: [...]}`
+5. Runs in a background thread (APScheduler one-off job) so the UI isn't blocked
+
+#### Message History Panel (Events Page)
+
+Add a **"Messages"** tab to the event detail panel showing:
+- Chronological log of all messages sent for this event
+- Each entry: timestamp, channel icon (email/SMS), template name, recipient count, sent-by
+- Expandable: full recipient list with delivery status per player
+- **Resend** button on failed recipients
+
+#### Implementation Order (Recommended Build Sequence)
+
+| Session | Deliverable | What's Built |
+|---------|------------|--------------|
+| **1** | Email compose + send | New tables, compose modal on events page, audience filtering, send with throttle, message log |
+| **2** | Templates + history | Template CRUD, built-in template seeding, template picker in compose modal, message history panel |
+| **3** | SMS integration | Twilio setup, `send_sms_twilio()`, dual-channel compose, phone number validation, SMS char counter |
+
+#### Estimated Scope
+
+| Component | Files | Lines (approx) |
+|-----------|-------|-----------------|
+| Database tables + migrations | Edit `database.py` | ~60 |
+| Send logic + throttling | Edit `fetcher.py` | ~120 |
+| API endpoints | Edit `app.py` | ~200 |
+| Compose modal + message history | Edit `events.html` | ~400 |
+| SMS integration (Twilio) | Edit `fetcher.py` + `requirements.txt` | ~80 |
+| Built-in template seeding | Edit `database.py` | ~60 |
+| **Total** | **4 edited files** | **~920 lines** |
+
+#### Open Questions for Implementation Time
+
+1. **SMS opt-in** — Do players explicitly consent to SMS during registration? The current registration flow doesn't capture this. May need a consent field or assume opt-in for registered players.
+2. **From identity** — Should event emails come from the chapter's address (e.g. sanantonio@thegolffellowship.com) or a central address? Different Azure AD permissions may be needed per sender.
+3. **Non-event messages** — Should this support sending to all members across events (e.g. season announcements, membership renewals)? Or strictly per-event?
+4. **Rich email editor** — Is a basic textarea with variable insertion enough, or do you want a full rich-text editor (bold, images, links)? Rich editors add complexity.
+5. **Scheduled sends** — Should messages support scheduling (e.g. "send day-of reminder at 6 AM on event date")? This would integrate with APScheduler.
