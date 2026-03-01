@@ -1216,3 +1216,96 @@ Add a **"Messages"** tab to the event detail panel showing:
 3. **Non-event messages** — Should this support sending to all members across events (e.g. season announcements, membership renewals)? Or strictly per-event?
 4. **Rich email editor** — Is a basic textarea with variable insertion enough, or do you want a full rich-text editor (bold, images, links)? Rich editors add complexity.
 5. **Scheduled sends** — Should messages support scheduling (e.g. "send day-of reminder at 6 AM on event date")? This would integrate with APScheduler.
+
+---
+
+### Push Notifications (Customer-Side App)
+
+Web Push Notifications for the future player-facing app. Not needed until a customer-side app exists, but the infrastructure is straightforward to add when the time comes.
+
+**Prerequisite:** A player-facing PWA / customer app (separate from the admin transaction tracker). Push notifications are sent from the server and appear on the player's phone even when the app is closed.
+
+#### How It Works
+
+1. **Service worker** registers on the player's device when they install the PWA
+2. Player **subscribes** to push via the Web Push API — browser generates a unique push subscription (endpoint + keys)
+3. Subscription is saved to a `push_subscriptions` table on the server
+4. Server sends pushes using **VAPID** (Voluntary Application Server Identification) — no third-party push service needed
+5. Player's device receives the push and shows a native notification (even when app is closed)
+
+#### Platform Support
+
+| Platform | Support | Notes |
+|----------|---------|-------|
+| Android (Chrome) | Full | Works since 2015 |
+| iOS Safari | Full | Added in iOS 16.4 (March 2023), requires PWA installed to home screen |
+| Desktop browsers | Full | Chrome, Firefox, Edge all support |
+
+#### What It Takes to Build
+
+**New dependency:** `pywebpush` Python package
+
+**One-time setup:**
+- Generate VAPID keys: `vapid --gen` → produces `vapid_private.pem` and `vapid_public.pem`
+- Store as env vars: `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_CONTACT_EMAIL`
+
+**New database table:**
+
+```
+push_subscriptions
+├── id (PK)
+├── player_email (TEXT NOT NULL)
+├── endpoint (TEXT NOT NULL) — browser push endpoint URL
+├── p256dh (TEXT NOT NULL) — encryption key
+├── auth (TEXT NOT NULL) — auth secret
+├── created_at (TEXT)
+└── UNIQUE(player_email, endpoint)
+```
+
+**Server-side function (~50 lines):**
+```python
+def send_push(subscription, title, body, url=None) -> bool
+```
+
+**Service worker (~40 lines):**
+- `push` event listener — shows notification with title, body, and click-to-open URL
+- `notificationclick` event listener — opens the app to the specified URL
+
+**Subscription flow (~60 lines client JS):**
+- Request notification permission
+- Subscribe via `registration.pushManager.subscribe()`
+- POST subscription to `/api/push/subscribe`
+
+#### Integration with Messaging
+
+When the messaging compose modal gains a "Push" channel option:
+- Compose modal adds a third channel: **Email / SMS / Push**
+- Push messages use `title` (from subject) and `body` (plain text, max ~200 chars)
+- Server iterates subscriptions for the filtered audience and calls `send_push()` per device
+- No per-message cost (unlike SMS)
+
+#### Use Cases
+
+| Notification | When | Content |
+|-------------|------|---------|
+| Day-of reminder | Morning of event | "See you today at {course}!" |
+| Tee time posted | When admin sets times | "Tee times are set for {event_name}" |
+| Weather alert | As needed | "Weather update for {event_name}" |
+| Leaderboard update | During event | "New leader: John Doe at -3 thru 14" |
+| Results posted | Post-event | "Results are in! View leaderboard" |
+
+#### Estimated Scope
+
+| Component | Lines (approx) |
+|-----------|-----------------|
+| Service worker (`sw.js`) | ~40 |
+| Client subscription JS | ~60 |
+| `push_subscriptions` table | ~20 |
+| `send_push()` function | ~50 |
+| Push subscribe/unsubscribe API | ~40 |
+| Integration with compose modal | ~30 |
+| **Total** | **~240 lines** |
+
+#### When to Build
+
+Build when the customer-side app is ready. The push subscription flow must live in the player-facing app (not the admin tracker), because players are the ones granting notification permission on their devices.
