@@ -470,6 +470,7 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
       3. course name → canonical spelling
       4. item_name normalisation (e.g. membership variants)
       5. backfill missing customer_email/phone from most recent transaction
+      6. RSVP player_name → full name & backfill player_email from items
 
     Returns a combined summary.
     """
@@ -585,16 +586,77 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
             details.append({"id": mc["id"], "changes": updates, "old": old_values})
             fixes["email_backfill"] += 1
 
+    # --- RSVP name/email backfill pass ---
+    # Build email → full customer name lookup from items (most recent wins)
+    fixes["rsvp_updated"] = 0
+    email_to_name: dict[str, str] = {}
+    for cr in contact_rows:
+        em = (cr["customer_email"] or "").strip().lower()
+        if em and em not in email_to_name and cr["customer"]:
+            email_to_name[em] = cr["customer"]
+
+    # Also build first-name → (full_name, email) for RSVPs with no email.
+    # Only store if first name maps to exactly one customer to avoid ambiguity.
+    first_to_full: dict[str, list[tuple[str, str]]] = {}
+    for em, full_name in email_to_name.items():
+        first = full_name.split()[0].lower() if full_name else ""
+        if first:
+            first_to_full.setdefault(first, []).append((full_name, em))
+
+    rsvp_rows = conn.execute(
+        "SELECT id, player_name, player_email FROM rsvps"
+    ).fetchall()
+
+    for rr in rsvp_rows:
+        rsvp = dict(rr)
+        rsvp_id = rsvp["id"]
+        rsvp_updates: dict[str, str] = {}
+        rsvp_old: dict[str, str] = {}
+        email = (rsvp.get("player_email") or "").strip().lower()
+        cur_name = rsvp.get("player_name") or ""
+
+        if email and email in email_to_name:
+            full_name = email_to_name[email]
+            # Upgrade first-name-only to full name
+            if full_name and full_name != cur_name:
+                rsvp_updates["player_name"] = full_name
+                rsvp_old["player_name"] = cur_name
+        elif not email and cur_name:
+            # Try to backfill email by matching first name
+            first = cur_name.split()[0].lower()
+            candidates = first_to_full.get(first, [])
+            if len(candidates) == 1:
+                full_name, matched_email = candidates[0]
+                rsvp_updates["player_email"] = matched_email
+                rsvp_old["player_email"] = ""
+                if full_name and full_name != cur_name:
+                    rsvp_updates["player_name"] = full_name
+                    rsvp_old["player_name"] = cur_name
+
+        if rsvp_updates:
+            set_clause = ", ".join(f"{col} = ?" for col in rsvp_updates)
+            values = list(rsvp_updates.values()) + [rsvp_id]
+            conn.execute(f"UPDATE rsvps SET {set_clause} WHERE id = ?", values)
+            details.append({
+                "id": rsvp_id,
+                "table": "rsvps",
+                "changes": rsvp_updates,
+                "old": rsvp_old,
+            })
+            fixes["rsvp_updated"] += 1
+
     conn.commit()
     conn.close()
 
     total_fixed = len(details)
     logger.info(
         "Autofix all: scanned %d rows, %d rows changed "
-        "(side_games=%d, customer_name=%d, course_name=%d, item_name=%d, chapter=%d, email_backfill=%d)",
+        "(side_games=%d, customer_name=%d, course_name=%d, item_name=%d, "
+        "chapter=%d, email_backfill=%d, rsvp_updated=%d)",
         len(rows), total_fixed,
         fixes["side_games"], fixes["customer_name"], fixes["course_name"],
         fixes["item_name"], fixes["chapter"], fixes["email_backfill"],
+        fixes["rsvp_updated"],
     )
     return {
         "scanned": len(rows),
@@ -613,9 +675,10 @@ def undo_autofix(details: list[dict], db_path: str | Path | None = None) -> dict
         old_values = entry.get("old")
         if not row_id or not old_values:
             continue
+        table = entry.get("table", "items")
         set_clause = ", ".join(f"{col} = ?" for col in old_values)
         values = list(old_values.values()) + [row_id]
-        conn.execute(f"UPDATE items SET {set_clause} WHERE id = ?", values)
+        conn.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
         reverted += 1
     conn.commit()
     conn.close()
