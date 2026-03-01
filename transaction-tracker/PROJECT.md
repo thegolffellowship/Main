@@ -755,7 +755,7 @@ Features discussed or planned but not yet implemented:
 - **Historical reporting** — Season-over-season comparison, player retention metrics, revenue trends
 - **Recurring events** — Template system for weekly/monthly recurring events
 - **Team assignment** — Assign players to teams/pairings for team events
-- **Scoring integration** — Pull scores from Golf Genius post-round
+- **Live Scoring & Leaderboard** — Player-facing scorecard entry on the course + real-time leaderboard for NET, GROSS, Skins, CTP, and team games. Full spec in [Future Considerations → Live Scoring & Leaderboard](#live-scoring--leaderboard)
 
 ### Lower Priority
 - **Multi-city dashboard** — City-specific views (San Antonio, Dallas, Austin, Houston, Galveston) with separate stats
@@ -853,3 +853,184 @@ The TGF Transaction Tracker was built as an operations tool for managing golf ev
 ### The Bottom Line
 
 The Transaction Tracker evolves from "the whole system" to "the operations and data integrity layer." The email parsing pipeline, MCP server, and GG integration are permanent infrastructure. The dashboard and manual management features gradually hand off to the Platform as it matures.
+
+---
+
+### Live Scoring & Leaderboard
+
+A player-facing live scoring interface for use during events, paired with real-time leaderboards for all game types. Players enter scores hole-by-hole on their phones; spectators and other players see standings update live.
+
+#### What Already Exists (Foundation)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Player registry | Ready | `items` table has `customer`, `handicap`, `side_games` (NET/GROSS/BOTH/NONE), `tee_choice` per registrant |
+| Event registry | Ready | `events` table with course, city, date |
+| Prize matrix | Ready | Full payout structure for 2-64 players, 9 and 18 holes, all game categories in `games-matrix.js` |
+| Flight computation | Ready | Already classifying NET vs GROSS player counts and computing flight sizes per event |
+| RSVP / attendance | Ready | Know who's confirmed playing before the round starts |
+| Auth system | Ready | Admin/manager roles with PIN-based auth |
+| PWA | Ready | App is already installable on phones, standalone mode |
+| WAL mode | Ready | SQLite write-ahead logging supports concurrent reads during writes |
+
+#### New Database Tables
+
+**`scorecards` table** — One row per player per event
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_id | INTEGER NOT NULL | FK to events.id |
+| item_id | INTEGER | FK to items.id (links to registration) |
+| player_name | TEXT NOT NULL | Denormalized from items.customer |
+| handicap | REAL | Numeric handicap at time of play |
+| tee_choice | TEXT | Tee played from |
+| side_games | TEXT | NET / GROSS / BOTH / NONE |
+| holes | INTEGER NOT NULL | 9 or 18 |
+| hole_scores | TEXT | JSON array of strokes per hole, e.g. `[5,4,3,6,4,5,3,4,5]` |
+| gross_total | INTEGER | Sum of hole_scores (computed on save) |
+| net_total | REAL | gross_total - handicap adjustment (computed on save) |
+| thru | INTEGER DEFAULT 0 | How many holes completed (for "thru X" display) |
+| status | TEXT DEFAULT 'in_progress' | `in_progress` / `finalized` |
+| started_at | TEXT | When first hole was entered |
+| updated_at | TEXT | Last hole entry timestamp |
+| created_at | TEXT DEFAULT (datetime('now')) | |
+
+**`ctp_entries` table** — Closest-to-pin results per hole
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_id | INTEGER NOT NULL | FK to events.id |
+| hole_number | INTEGER NOT NULL | Which par-3 |
+| player_name | TEXT NOT NULL | |
+| distance | REAL | Distance in feet (e.g. 12.5) |
+| is_winner | INTEGER DEFAULT 0 | Set to 1 when finalized |
+| created_at | TEXT DEFAULT (datetime('now')) | |
+
+**`skin_results` table** — Computed after scores are posted
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_id | INTEGER NOT NULL | FK to events.id |
+| hole_number | INTEGER NOT NULL | |
+| winner_name | TEXT | NULL if hole was tied (carryover) |
+| is_carryover | INTEGER DEFAULT 0 | 1 if no outright winner |
+| payout | REAL | Amount won (from matrix skins array) |
+| flight | TEXT DEFAULT 'all' | `all` / `low` / `high` (for flighted skins) |
+| created_at | TEXT DEFAULT (datetime('now')) | |
+
+#### New Pages
+
+**1. Scorecard Entry — `/scorecard/<event_id>`** (Player-facing, mobile-first)
+
+- **No login required** — Player selects their name from the event roster (confirmed players only)
+- **Hole-by-hole entry** — Swipeable card per hole with large tap targets for stroke count (+/-)
+- **Running totals** — Gross and net scores update live as holes are entered
+- **CTP entry** — On designated par-3s, prompt for distance (feet/inches)
+- **Save per hole** — Each hole saves immediately via API (survives phone sleep/crash/signal loss)
+- **Offline resilience** — Service worker queues entries if signal drops, syncs when reconnected
+- **Simple UI** — Big numbers, minimal chrome, one-handed operation, think 18Birdies-style
+- **Course info header** — Event name, course, date, player's handicap and tee
+
+**2. Leaderboard — `/leaderboard/<event_id>`** (Spectator/player view, responsive)
+
+| Section | What It Shows |
+|---------|---------------|
+| **NET Leaderboard** | Ranked by net score, grouped by flight (Low/High/Mid/4th per matrix), "thru X" indicator |
+| **GROSS Leaderboard** | Ranked by gross score, shows total skins won |
+| **Skins Board** | Hole-by-hole: lowest score, ties = carryover marker, running payout per skin |
+| **CTP Board** | Par-3 holes with closest distance and current leader |
+| **Team Game** | Team standings if team format is active (cart-net, 2-ball, etc.) |
+| **Prize Projection** | "If standings hold" → projected payouts from matrix lookup |
+
+- **Auto-refresh** — Poll every 20 seconds (lightweight — only fetch changed data)
+- **Shareable link** — QR code generated per event for posting at the clubhouse / first tee
+- **Color coding** — Green highlight for in-the-money positions, bold for leader changes
+- **Responsive** — Works on phones (portrait), tablets, and TV/monitors for clubhouse display
+- **No login required** — Anyone with the link can view
+
+#### New API Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/scorecard/<event_id>` | GET | — | All scorecards for event (leaderboard data) |
+| `/api/scorecard/<event_id>/<player>` | GET | — | Single player's scorecard |
+| `/api/scorecard/<event_id>/enter` | POST | — | Submit hole score(s): `{player_name, hole_number, strokes}` |
+| `/api/scorecard/<event_id>/ctp` | POST | — | Submit CTP distance: `{hole_number, player_name, distance}` |
+| `/api/leaderboard/<event_id>` | GET | — | Computed leaderboard JSON (NET/GROSS/Skins/CTP rankings) |
+| `/api/scorecard/<event_id>/finalize` | POST | Admin | Lock all scores, compute final standings + payouts |
+| `/api/scorecard/<event_id>/export` | GET | Admin | CSV or PDF of final results |
+| `/api/events/<event_id>/start-scoring` | POST | Manager | Initialize scorecards for all confirmed players |
+
+#### Scoring Engine — New Module `email_parser/scoring.py`
+
+Core calculation logic, separate from Flask routes:
+
+- **Net score calculation** — `gross - (handicap × holes/18)` for course handicap derivation
+- **Flight assignment** — Sort NET players by handicap, divide into N flights based on matrix's `netFlights` value for the player count
+- **Skins computation** — Lowest unique score per hole wins; ties carry over to next hole; payout from matrix `skins[]` array divided by number of skins won
+- **CTP ranking** — Shortest distance per designated par-3 hole
+- **Team game scoring** — Depends on `teamType` from matrix (CART Net best-ball, 2-Ball, etc.)
+- **Prize lookup** — Player count → matrix → payout per position per flight
+- **Leaderboard assembly** — Combine all game results into a single ranked JSON response
+
+#### Admin Controls (Events Page Additions)
+
+Add to the existing event detail panel in `events.html`:
+
+- **"Start Scoring" button** — Creates scorecard rows for all confirmed-playing players, generates shareable QR code link
+- **"View Leaderboard" button** — Opens `/leaderboard/<event_id>` in new tab
+- **"Finalize Event" button** — Locks all scores, runs final prize calculation, marks event as scored
+- **Scorecard override** — Admin can edit any player's hole score after the fact
+- **Results summary** — Post-event view showing all winners and payouts per game category
+
+#### Architecture Decision: Real-Time Mechanism
+
+| Approach | Pros | Cons | Verdict |
+|----------|------|------|---------|
+| **Polling (20s)** | Works with current Flask setup, no new infra, dead simple | Slight delay, more DB reads | **Start here** |
+| **SSE** | True one-way push, moderate effort | Needs endpoint, connection management | Upgrade path if needed |
+| **WebSockets** | Bi-directional, fastest | New dependency (flask-socketio), Railway config | Overkill for this use case |
+
+**Recommendation:** Start with **20-second polling**. A golf round takes 4+ hours — 20s latency is invisible. The leaderboard endpoint should be lightweight (return only data changed since last poll via `?since=` timestamp). Upgrade to SSE only if polling creates noticeable load.
+
+#### Offline / Connectivity Strategy
+
+Golf courses often have spotty cell coverage. The scorecard page needs to handle this:
+
+1. **Service worker** — Cache the scorecard page shell and JS so it loads even offline
+2. **Local queue** — When a hole score is entered but the POST fails, store it in `localStorage` and retry when connectivity returns
+3. **Sync indicator** — Show a small badge ("2 holes pending sync") so the player knows their data will catch up
+4. **Conflict resolution** — If the same hole is submitted twice (retry + delayed original), server uses latest timestamp
+
+#### Implementation Order (Recommended Build Sequence)
+
+| Session | Deliverable | What's Built |
+|---------|------------|--------------|
+| **1** | Data model + scoring engine | New tables in `database.py`, new `scoring.py` module with net/gross/skins/CTP/flight calculations, unit tests |
+| **2** | Scorecard entry UI | `/scorecard/<event_id>` page, hole-by-hole entry, API endpoints for score submission, mobile-first CSS |
+| **3** | Leaderboard + admin controls | `/leaderboard/<event_id>` page, auto-refresh polling, "Start Scoring" / "Finalize" buttons on events page, QR code generation |
+| **4** | Polish + offline | Service worker for offline resilience, localStorage queue, CTP entry flow, export/PDF, testing with real event data |
+
+#### Estimated Scope
+
+| Component | Files | Lines (approx) |
+|-----------|-------|-----------------|
+| Database schema + migrations | Edit `database.py` | ~100 |
+| Scoring engine | New `scoring.py` | ~250 |
+| API endpoints | Edit `app.py` | ~300 |
+| Scorecard page (mobile) | New `scorecard.html` | ~400 |
+| Leaderboard page | New `leaderboard.html` | ~500 |
+| Admin controls | Edit `events.html` | ~150 |
+| CSS additions | Edit `dashboard.css` | ~150 |
+| **Total** | **2 new files + 4 edited** | **~1,850 lines** |
+
+#### Open Questions for Implementation Time
+
+1. **Course data** — Do we need a `courses` table with par per hole, or will par be entered at event setup time? (Needed for over/under par display on leaderboard)
+2. **Team format details** — How are teams formed? Cart partners? Random draw? Need to know for team game scoring
+3. **CTP hole designation** — Are CTP holes always the same per course, or chosen per event? Should admin mark which holes are CTP when starting scoring?
+4. **Skins format** — Are skins always gross? Or net skins for some events? The matrix has both scenarios
+5. **Post-event flow** — After finalization, should payouts auto-generate transaction records in the items table (as credits/debits)?
