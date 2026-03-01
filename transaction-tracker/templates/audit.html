@@ -328,6 +328,51 @@
             margin-bottom: 1rem;
             flex-wrap: wrap;
         }
+
+        /* Toast notification */
+        .audit-toast {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+            padding: 0.85rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            z-index: 9999;
+            max-width: 90vw;
+            font-size: 0.85rem;
+            animation: toast-in 0.25s ease;
+        }
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateX(-50%) translateY(1rem); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        .audit-toast .toast-msg { flex: 1; line-height: 1.4; }
+        .audit-toast .toast-undo {
+            padding: 0.3rem 0.75rem;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .audit-toast .toast-undo:hover { opacity: 0.85; }
+        .audit-toast .toast-close {
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 0 0.25rem;
+        }
     </style>
 </head>
 <body>
@@ -377,6 +422,8 @@
             <label style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
                 Days back
                 <select id="audit-days" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
+                    <option value="7">7</option>
+                    <option value="14">14</option>
                     <option value="30">30</option>
                     <option value="60">60</option>
                     <option value="90" selected>90</option>
@@ -644,7 +691,53 @@
         });
 
         // Autofix all button
+        let lastAutofixDetails = null;
+
+        function showToast(message, details) {
+            // Remove any existing toast
+            document.querySelectorAll(".audit-toast").forEach(t => t.remove());
+
+            const toast = document.createElement("div");
+            toast.className = "audit-toast";
+            const hasUndo = details && details.length > 0;
+            toast.innerHTML = `
+                <span class="toast-msg">${escapeHtml(message)}</span>
+                ${hasUndo ? '<button class="toast-undo">Undo</button>' : ''}
+                <button class="toast-close">&times;</button>`;
+
+            toast.querySelector(".toast-close").addEventListener("click", () => toast.remove());
+
+            if (hasUndo) {
+                toast.querySelector(".toast-undo").addEventListener("click", async () => {
+                    const undoBtn = toast.querySelector(".toast-undo");
+                    undoBtn.disabled = true;
+                    undoBtn.textContent = "Undoing...";
+                    try {
+                        const res = await fetch("/api/audit/undo-autofix", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ details }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Undo failed");
+                        toast.remove();
+                        showToast(`Undo complete — ${data.reverted} row(s) reverted.`, null);
+                        lastAutofixDetails = null;
+                        runAudit();
+                    } catch (err) {
+                        undoBtn.textContent = "Undo failed";
+                        undoBtn.disabled = false;
+                    }
+                });
+            }
+
+            document.body.appendChild(toast);
+            // Auto-dismiss after 30s (keep long so user has time to undo)
+            setTimeout(() => toast.remove(), 30000);
+        }
+
         document.getElementById("btn-autofix").addEventListener("click", async () => {
+            if (!confirm("This will normalize customer names, course names, side games, and item names across all records. Continue?")) return;
             const btn = document.getElementById("btn-autofix");
             btn.disabled = true;
             btn.textContent = "Fixing...";
@@ -653,16 +746,20 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "Request failed");
                 const b = data.breakdown || {};
-                const msg = `Scanned ${data.scanned} rows, ${data.fixed} rows updated:\n` +
-                    `  Side games: ${b.side_games || 0}\n` +
-                    `  Customer names: ${b.customer_name || 0}\n` +
-                    `  Course names: ${b.course_name || 0}\n` +
-                    `  Item names: ${b.item_name || 0}`;
-                alert(msg);
-                // Re-run audit to show updated data
+                lastAutofixDetails = data.details || [];
+                const parts = [];
+                if (b.side_games) parts.push(`${b.side_games} side games`);
+                if (b.customer_name) parts.push(`${b.customer_name} names`);
+                if (b.course_name) parts.push(`${b.course_name} courses`);
+                if (b.item_name) parts.push(`${b.item_name} items`);
+                if (b.chapter) parts.push(`${b.chapter} chapters`);
+                const msg = data.fixed > 0
+                    ? `Fixed ${data.fixed} row(s): ${parts.join(", ")}`
+                    : `Scanned ${data.scanned} rows — nothing to fix.`;
+                showToast(msg, data.fixed > 0 ? lastAutofixDetails : null);
                 if (data.fixed > 0) runAudit();
             } catch (err) {
-                alert("Autofix failed: " + err.message);
+                showToast("Autofix failed: " + err.message, null);
             } finally {
                 btn.disabled = false;
                 btn.textContent = "Autofix All";

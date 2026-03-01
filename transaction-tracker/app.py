@@ -40,6 +40,7 @@ from email_parser.database import (
     upgrade_rsvp_to_paid,
     autofix_side_games,
     autofix_all,
+    undo_autofix,
     normalize_tee_choices,
     sync_events_from_items,
     get_all_events,
@@ -807,6 +808,22 @@ def api_autofix_all():
         return jsonify({"status": "ok", **result})
     except Exception as e:
         logger.exception("Autofix-all failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/audit/undo-autofix", methods=["POST"])
+@require_role("admin")
+def api_undo_autofix():
+    """Revert a previous autofix using the saved details."""
+    try:
+        data = request.get_json(force=True)
+        details = data.get("details", [])
+        if not details:
+            return jsonify({"error": "No details provided"}), 400
+        result = undo_autofix(details)
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.exception("Undo autofix failed")
         return jsonify({"error": str(e)}), 500
 
 

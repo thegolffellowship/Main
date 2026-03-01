@@ -534,10 +534,11 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
 
         # Apply all updates for this row in one statement
         if updates:
+            old_values = {col: item.get(col, "") for col in updates}
             set_clause = ", ".join(f"{col} = ?" for col in updates)
             values = list(updates.values()) + [row_id]
             conn.execute(f"UPDATE items SET {set_clause} WHERE id = ?", values)
-            details.append({"id": row_id, "changes": updates})
+            details.append({"id": row_id, "changes": updates, "old": old_values})
 
     conn.commit()
     conn.close()
@@ -556,6 +557,25 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
         "breakdown": fixes,
         "details": details,
     }
+
+
+def undo_autofix(details: list[dict], db_path: str | Path | None = None) -> dict:
+    """Revert autofix changes using the old values saved in details."""
+    conn = get_connection(db_path)
+    reverted = 0
+    for entry in details:
+        row_id = entry.get("id")
+        old_values = entry.get("old")
+        if not row_id or not old_values:
+            continue
+        set_clause = ", ".join(f"{col} = ?" for col in old_values)
+        values = list(old_values.values()) + [row_id]
+        conn.execute(f"UPDATE items SET {set_clause} WHERE id = ?", values)
+        reverted += 1
+    conn.commit()
+    conn.close()
+    logger.info("Undo autofix: reverted %d rows", reverted)
+    return {"reverted": reverted}
 
 
 # ---------------------------------------------------------------------------
