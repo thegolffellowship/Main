@@ -81,7 +81,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
+_secret = os.getenv("SECRET_KEY")
+if not _secret:
+    raise RuntimeError("SECRET_KEY environment variable is not set. Refusing to start with an insecure default.")
+app.secret_key = _secret
 
 # ---------------------------------------------------------------------------
 # Email check job (with background tracking)
@@ -318,6 +321,22 @@ def start_scheduler():
 
 
 # ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+_MAX_FIELD_LEN = 1000  # max characters per field value in update requests
+
+
+def _validate_update_fields(data: dict) -> str | None:
+    """Return an error message if any field value is invalid, else None."""
+    for key, value in data.items():
+        if not isinstance(key, str):
+            return f"Field name must be a string, got {type(key).__name__}"
+        if isinstance(value, str) and len(value) > _MAX_FIELD_LEN:
+            return f"Field '{key}' exceeds max length ({_MAX_FIELD_LEN} chars)"
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Routes — Pages
 # ---------------------------------------------------------------------------
 @app.route("/")
@@ -362,6 +381,9 @@ def api_update_item(item_id):
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON."}), 400
+    err = _validate_update_fields(data)
+    if err:
+        return jsonify({"error": err}), 400
     updated = update_item(item_id, data)
     if updated:
         return jsonify({"status": "ok"})
@@ -991,6 +1013,9 @@ def api_update_event(event_id):
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON."}), 400
+    err = _validate_update_fields(data)
+    if err:
+        return jsonify({"error": err}), 400
     if update_event(event_id, data):
         return jsonify({"status": "ok"})
     return jsonify({"error": "not found or no valid fields"}), 404
@@ -1489,7 +1514,7 @@ def api_support_chat():
         return jsonify({"error": "AI not configured (missing API key)."}), 503
 
     messages = data.get("history", [])
-    messages.append({"role": "user", "content": data["message"]})
+    messages.append({"role": "user", "content": data.get("message", "")})
 
     page = data.get("page", "")
     role_context = f"\nThe user is a {user_role} currently on the {page} page." if page else f"\nThe user is a {user_role}."
@@ -1558,7 +1583,7 @@ def api_support_feedback_update(feedback_id):
     data = request.get_json(silent=True)
     if not data or not data.get("status"):
         return jsonify({"error": "Status is required."}), 400
-    new_status = data["status"]
+    new_status = data.get("status", "")
     if new_status not in ("open", "resolved", "dismissed"):
         return jsonify({"error": "Status must be 'open', 'resolved', or 'dismissed'."}), 400
     ok = update_feedback_status(feedback_id, new_status)
@@ -1592,7 +1617,7 @@ def api_auth_login():
     if not data or not data.get("pin"):
         return jsonify({"error": "PIN is required."}), 400
 
-    pin = str(data["pin"]).strip()
+    pin = str(data.get("pin", "")).strip()
     admin_pin = os.getenv("ADMIN_PIN", "")
     manager_pin = os.getenv("MANAGER_PIN", "")
 
@@ -1651,9 +1676,10 @@ if _seed_result["inserted"]:
 # Only start the scheduler in one Gunicorn worker (or in dev mode).
 # Gunicorn's --preload flag shares module-level state, but with forked workers
 # each gets its own scheduler.  We use an env-based guard so only one runs.
-_is_main_worker = not os.getenv("_SCHEDULER_STARTED")
+# setdefault is atomic: only the first caller gets back the value it set;
+# subsequent workers find the key already exists and get back the existing value.
+_is_main_worker = os.environ.setdefault("_SCHEDULER_STARTED", str(os.getpid())) == str(os.getpid())
 if os.getenv("EMAIL_ADDRESS") and _is_main_worker:
-    os.environ["_SCHEDULER_STARTED"] = "1"
     start_scheduler()
 elif not os.getenv("EMAIL_ADDRESS"):
     logger.info("Email not configured — scheduler not started. Set up .env to enable auto-checking.")

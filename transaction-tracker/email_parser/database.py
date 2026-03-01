@@ -185,6 +185,9 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_items_customer ON items(customer)"
         )
         conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_transaction_status ON items(transaction_status)"
+        )
+        conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_event_date ON events(event_date DESC)"
         )
         conn.execute(
@@ -255,6 +258,15 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
 
         conn.commit()
+
+        # Soft constraint check: warn about NULL values in critical columns
+        for col in ("customer", "item_name"):
+            row = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM items WHERE {col} IS NULL OR {col} = ''"
+            ).fetchone()
+            if row["cnt"] > 0:
+                logger.warning("Data quality: %d items have NULL/empty %s", row["cnt"], col)
+
         logger.info("Database initialized at %s", db_path or DB_PATH)
 
 
