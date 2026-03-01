@@ -2,7 +2,7 @@
 
 > **The Golf Fellowship** — AI-powered transaction and event management platform
 > **Current Version:** v1.1.0 (February 26, 2026)
-> **Live URL:** https://main-production-b95c.up.railway.app
+> **Live URL:** https://tgf-tracker.up.railway.app
 
 ---
 
@@ -562,7 +562,7 @@ An MCP (Model Context Protocol) server gives Claude direct database access with 
 
 **Setup:**
 - **Claude Code:** Auto-configured via `.mcp.json` at repo root
-- **Claude Desktop:** Connect to `https://main-production-b95c.up.railway.app/mcp/mcp` (streamable-http transport)
+- **Claude Desktop:** Connect to `https://tgf-tracker.up.railway.app/mcp/mcp` (streamable-http transport)
 
 ### OAuth 2.0 Authentication (Claude.ai Custom Connector)
 
@@ -587,7 +587,7 @@ MCP_CLIENT_SECRET=<generate a secure random string>
 
 1. Go to Claude.ai Settings → Integrations → Add Custom MCP Server
 2. Enter:
-   - **Server URL:** `https://main-production-b95c.up.railway.app/mcp/mcp`
+   - **Server URL:** `https://tgf-tracker.up.railway.app/mcp/mcp`
    - **OAuth Client ID:** value of `MCP_CLIENT_ID` (e.g. `tgf-mcp-client`)
    - **OAuth Client Secret:** value of `MCP_CLIENT_SECRET`
 3. Claude.ai will discover the OAuth metadata, obtain a Bearer token, and connect to the MCP server
