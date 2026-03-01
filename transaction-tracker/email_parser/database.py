@@ -8,8 +8,10 @@ so they can be filtered and sorted directly from the dashboard.
 
 import json
 import os
+import re
 import sqlite3
 import logging
+from contextlib import contextmanager
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,16 @@ def get_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
+
+
+@contextmanager
+def managed_connection(db_path: str | Path | None = None):
+    """Context manager that guarantees connection is closed even on exceptions."""
+    conn = get_connection(db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def init_db(db_path: str | Path | None = None) -> None:
@@ -163,6 +175,9 @@ def init_db(db_path: str | Path | None = None) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_rsvps_player_email ON rsvps(player_email)"
     )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_items_transaction_status ON items(transaction_status)"
+    )
 
     # Manual RSVP overrides — tap-to-change circle on event detail
     conn.execute(
@@ -220,23 +235,23 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
     Insert item rows into the database, skipping duplicates
     (by email_uid + item_index).  Returns the number of newly inserted rows.
     """
-    conn = get_connection(db_path)
-    placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
-    col_names = ", ".join(ITEM_COLUMNS)
-    sql = f"INSERT OR IGNORE INTO items ({col_names}) VALUES ({placeholders})"
+    with managed_connection(db_path) as conn:
+        placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+        col_names = ", ".join(ITEM_COLUMNS)
+        sql = f"INSERT OR IGNORE INTO items ({col_names}) VALUES ({placeholders})"
 
-    inserted = 0
-    for row in rows:
-        values = tuple(row.get(col) for col in ITEM_COLUMNS)
-        try:
-            cursor = conn.execute(sql, values)
-            if cursor.rowcount > 0:
-                inserted += 1
-        except sqlite3.IntegrityError:
-            pass
+        inserted = 0
+        for row in rows:
+            values = tuple(row.get(col) for col in ITEM_COLUMNS)
+            try:
+                cursor = conn.execute(sql, values)
+                if cursor.rowcount > 0:
+                    inserted += 1
+            except sqlite3.IntegrityError:
+                logger.debug("Duplicate item skipped: uid=%s idx=%s",
+                             row.get("email_uid"), row.get("item_index"))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
     logger.info("Saved %d new item rows (%d total provided)", inserted, len(rows))
     return inserted
 
@@ -561,7 +576,6 @@ def _is_event_item(item_name: str, *, course: str = "", city: str = "") -> bool:
     if (course and course.strip()) or (city and city.strip()):
         return True
     # Contains a month name or date pattern → likely an event
-    import re
     month_pattern = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b"
     if re.search(month_pattern, lower):
         return True
@@ -630,7 +644,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
             if conn.execute("SELECT changes()").fetchone()[0] > 0:
                 inserted += 1
         except sqlite3.IntegrityError:
-            pass
+            logger.debug("Event already exists: %s", name)
 
     conn.commit()
     conn.close()
@@ -744,58 +758,54 @@ def merge_events(source_id: int, target_id: int, db_path: str | Path | None = No
 
     Returns summary dict or None on failure.
     """
-    conn = get_connection(db_path)
+    with managed_connection(db_path) as conn:
+        source = conn.execute("SELECT * FROM events WHERE id = ?", (source_id,)).fetchone()
+        target = conn.execute("SELECT * FROM events WHERE id = ?", (target_id,)).fetchone()
 
-    source = conn.execute("SELECT * FROM events WHERE id = ?", (source_id,)).fetchone()
-    target = conn.execute("SELECT * FROM events WHERE id = ?", (target_id,)).fetchone()
+        if not source or not target:
+            return None
 
-    if not source or not target:
-        conn.close()
-        return None
+        source = dict(source)
+        target = dict(target)
+        src_name = source["item_name"]
+        tgt_name = target["item_name"]
 
-    source = dict(source)
-    target = dict(target)
-    src_name = source["item_name"]
-    tgt_name = target["item_name"]
+        if src_name == tgt_name:
+            return None
 
-    if src_name == tgt_name:
-        conn.close()
-        return None
+        # Store source event name as alias of target (so items stay linked)
+        conn.execute(
+            "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) VALUES (?, ?)",
+            (src_name, tgt_name),
+        )
 
-    # Store source event name as alias of target (so items stay linked)
-    conn.execute(
-        "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) VALUES (?, ?)",
-        (src_name, tgt_name),
-    )
+        # Re-point any aliases that pointed to the source to now point to the target
+        conn.execute(
+            "UPDATE event_aliases SET canonical_event_name = ? WHERE canonical_event_name = ?",
+            (tgt_name, src_name),
+        )
 
-    # Re-point any aliases that pointed to the source to now point to the target
-    conn.execute(
-        "UPDATE event_aliases SET canonical_event_name = ? WHERE canonical_event_name = ?",
-        (tgt_name, src_name),
-    )
+        # Count items that will now link via alias
+        items_row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM items WHERE item_name = ? AND COALESCE(transaction_status, 'active') = 'active'",
+            (src_name,),
+        ).fetchone()
+        items_linked = items_row["cnt"] if items_row else 0
 
-    # Count items that will now link via alias
-    items_row = conn.execute(
-        "SELECT COUNT(*) as cnt FROM items WHERE item_name = ? AND COALESCE(transaction_status, 'active') = 'active'",
-        (src_name,),
-    ).fetchone()
-    items_linked = items_row["cnt"] if items_row else 0
+        # Move RSVPs to target canonical name
+        cur = conn.execute("UPDATE rsvps SET matched_event = ? WHERE matched_event = ?",
+                           (tgt_name, src_name))
+        rsvps_moved = cur.rowcount
 
-    # Move RSVPs to target canonical name
-    cur = conn.execute("UPDATE rsvps SET matched_event = ? WHERE matched_event = ?",
-                       (tgt_name, src_name))
-    rsvps_moved = cur.rowcount
+        # Move overrides to target canonical name
+        cur = conn.execute("UPDATE rsvp_overrides SET event_name = ? WHERE event_name = ?",
+                           (tgt_name, src_name))
+        overrides_moved = cur.rowcount
 
-    # Move overrides to target canonical name
-    cur = conn.execute("UPDATE rsvp_overrides SET event_name = ? WHERE event_name = ?",
-                       (tgt_name, src_name))
-    overrides_moved = cur.rowcount
+        # Delete source event
+        conn.execute("DELETE FROM events WHERE id = ?", (source_id,))
 
-    # Delete source event
-    conn.execute("DELETE FROM events WHERE id = ?", (source_id,))
-
-    conn.commit()
-    conn.close()
+        conn.commit()
 
     logger.info("Merged event '%s' (#%d) → '%s' (#%d): %d items linked via alias, %d RSVPs, %d overrides moved",
                 src_name, source_id, tgt_name, target_id,
@@ -932,9 +942,9 @@ def merge_customers(source_name: str, target_name: str,
     best_phone = (target_row["customer_phone"] if target_row else "") or \
                  (source_row["customer_phone"] if source_row else "") or ""
 
-    # Update all source items to the target customer name
+    # Update all source items to the target customer name (case-insensitive match)
     cursor = conn.execute(
-        "UPDATE items SET customer = ? WHERE customer = ?",
+        "UPDATE items SET customer = ? WHERE customer = ? COLLATE NOCASE",
         (target_name, source_name),
     )
     items_updated = cursor.rowcount
@@ -1067,63 +1077,59 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
     at the target event with $0 price (credit applied).
     Returns the new item dict or None on failure.
     """
-    conn = get_connection(db_path)
+    with managed_connection(db_path) as conn:
+        # Fetch the original item
+        orig = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not orig:
+            return None
+        orig = dict(orig)
 
-    # Fetch the original item
-    orig = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-    if not orig:
-        conn.close()
-        return None
-    orig = dict(orig)
+        if orig.get("transaction_status") not in (None, "active"):
+            return None  # already credited/transferred
 
-    if orig.get("transaction_status") not in (None, "active"):
-        conn.close()
-        return None  # already credited/transferred
+        # Fetch the target event for date/course/city
+        target_event = conn.execute(
+            "SELECT * FROM events WHERE item_name = ?", (target_event_name,)
+        ).fetchone()
+        target_event = dict(target_event) if target_event else {}
 
-    # Fetch the target event for date/course/city
-    target_event = conn.execute(
-        "SELECT * FROM events WHERE item_name = ?", (target_event_name,)
-    ).fetchone()
-    target_event = dict(target_event) if target_event else {}
+        # Mark original as transferred
+        transfer_note = note or f"Transferred to {target_event_name}"
+        conn.execute(
+            "UPDATE items SET transaction_status = 'transferred', credit_note = ? WHERE id = ?",
+            (transfer_note, item_id),
+        )
 
-    # Mark original as transferred
-    transfer_note = note or f"Transferred to {target_event_name}"
-    conn.execute(
-        "UPDATE items SET transaction_status = 'transferred', credit_note = ? WHERE id = ?",
-        (transfer_note, item_id),
-    )
+        # Create new item at target event
+        new_values = {col: orig.get(col) for col in ITEM_COLUMNS}
+        new_values["item_name"] = target_event_name
+        new_values["event_date"] = target_event.get("event_date") or orig.get("event_date")
+        new_values["course"] = target_event.get("course") or orig.get("course")
+        new_values["city"] = target_event.get("city") or orig.get("city")
+        new_values["item_price"] = "$0.00 (credit)"
+        new_values["email_uid"] = f"transfer-{item_id}"
+        new_values["item_index"] = 0
+        new_values["order_date"] = orig.get("order_date") or ""
+        new_values["transaction_status"] = "active"
+        new_values["credit_note"] = f"Transferred from {orig.get('item_name', '')} (#{item_id})"
+        new_values["transferred_from_id"] = str(item_id)
+        new_values["transferred_to_id"] = None
 
-    # Create new item at target event
-    new_values = {col: orig.get(col) for col in ITEM_COLUMNS}
-    new_values["item_name"] = target_event_name
-    new_values["event_date"] = target_event.get("event_date") or orig.get("event_date")
-    new_values["course"] = target_event.get("course") or orig.get("course")
-    new_values["city"] = target_event.get("city") or orig.get("city")
-    new_values["item_price"] = "$0.00 (credit)"
-    new_values["email_uid"] = f"transfer-{item_id}"
-    new_values["item_index"] = 0
-    new_values["order_date"] = orig.get("order_date") or ""
-    new_values["transaction_status"] = "active"
-    new_values["credit_note"] = f"Transferred from {orig.get('item_name', '')} (#{item_id})"
-    new_values["transferred_from_id"] = str(item_id)
-    new_values["transferred_to_id"] = None
+        cols = ", ".join(ITEM_COLUMNS)
+        placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+        cursor = conn.execute(
+            f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+            tuple(new_values.get(c) for c in ITEM_COLUMNS),
+        )
+        new_id = cursor.lastrowid
 
-    cols = ", ".join(ITEM_COLUMNS)
-    placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
-    cursor = conn.execute(
-        f"INSERT INTO items ({cols}) VALUES ({placeholders})",
-        tuple(new_values.get(c) for c in ITEM_COLUMNS),
-    )
-    new_id = cursor.lastrowid
+        # Link original to the new row
+        conn.execute(
+            "UPDATE items SET transferred_to_id = ? WHERE id = ?",
+            (new_id, item_id),
+        )
 
-    # Link original to the new row
-    conn.execute(
-        "UPDATE items SET transferred_to_id = ? WHERE id = ?",
-        (new_id, item_id),
-    )
-
-    conn.commit()
-    conn.close()
+        conn.commit()
 
     new_values["id"] = new_id
     return new_values
@@ -1136,29 +1142,26 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
     For credits: simply resets to active.
     For transfers: resets original to active and deletes the transferred-to item.
     """
-    conn = get_connection(db_path)
-    item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-    if not item:
-        conn.close()
-        return False
-    item = dict(item)
+    with managed_connection(db_path) as conn:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return False
+        item = dict(item)
 
-    status = item.get("transaction_status")
-    if status not in ("credited", "transferred"):
-        conn.close()
-        return False
+        status = item.get("transaction_status")
+        if status not in ("credited", "transferred"):
+            return False
 
-    if status == "transferred" and item.get("transferred_to_id"):
-        # Delete the destination item
-        conn.execute("DELETE FROM items WHERE id = ?", (item["transferred_to_id"],))
+        if status == "transferred" and item.get("transferred_to_id"):
+            # Delete the destination item
+            conn.execute("DELETE FROM items WHERE id = ?", (item["transferred_to_id"],))
 
-    # Reset original
-    conn.execute(
-        "UPDATE items SET transaction_status = 'active', credit_note = NULL, transferred_to_id = NULL WHERE id = ?",
-        (item_id,),
-    )
-    conn.commit()
-    conn.close()
+        # Reset original
+        conn.execute(
+            "UPDATE items SET transaction_status = 'active', credit_note = NULL, transferred_to_id = NULL WHERE id = ?",
+            (item_id,),
+        )
+        conn.commit()
     return True
 
 
@@ -1294,46 +1297,42 @@ def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
     Updates the existing item row with payment and golf details.
     Returns the updated item dict or None on failure.
     """
-    conn = get_connection(db_path)
+    with managed_connection(db_path) as conn:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return None
+        item = dict(item)
 
-    item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-    if not item:
-        conn.close()
-        return None
-    item = dict(item)
+        if item.get("transaction_status") != "rsvp_only":
+            logger.warning("Item %d is not rsvp_only (status=%s)", item_id,
+                           item.get("transaction_status"))
+            return None
 
-    if item.get("transaction_status") != "rsvp_only":
-        conn.close()
-        logger.warning("Item %d is not rsvp_only (status=%s)", item_id,
-                       item.get("transaction_status"))
-        return None
+        source_label = payment_source or "External"
+        conn.execute(
+            """UPDATE items SET
+                merchant = ?,
+                item_price = ?,
+                side_games = ?,
+                tee_choice = ?,
+                handicap = ?,
+                member_status = ?,
+                transaction_status = 'active'
+            WHERE id = ?""",
+            (
+                f"Paid Separately ({source_label})",
+                payment_amount or "$0.00",
+                side_games or None,
+                tee_choice or None,
+                handicap or None,
+                member_status or None,
+                item_id,
+            ),
+        )
+        conn.commit()
 
-    source_label = payment_source or "External"
-    conn.execute(
-        """UPDATE items SET
-            merchant = ?,
-            item_price = ?,
-            side_games = ?,
-            tee_choice = ?,
-            handicap = ?,
-            member_status = ?,
-            transaction_status = 'active'
-        WHERE id = ?""",
-        (
-            f"Paid Separately ({source_label})",
-            payment_amount or "$0.00",
-            side_games or None,
-            tee_choice or None,
-            handicap or None,
-            member_status or None,
-            item_id,
-        ),
-    )
-    conn.commit()
-
-    # Re-read the updated row
-    updated = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-    conn.close()
+        # Re-read the updated row
+        updated = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
 
     if updated:
         updated = dict(updated)
@@ -1422,7 +1421,6 @@ def match_rsvp_to_event(event_identifier: str, event_date: str | None,
         # Try the last word(s) after any prefix like "a18.2"
         parts = event_identifier.split()
         # Skip leading codes like "s9.1", "a18.2"
-        import re
         start = 0
         for i, p in enumerate(parts):
             if re.match(r'^[a-z]\d+\.\d+$', p, re.IGNORECASE):
@@ -1600,7 +1598,7 @@ def save_rsvp(rsvp: dict, db_path: str | Path | None = None) -> int | None:
             )
             return rsvp_id
     except sqlite3.IntegrityError:
-        pass
+        logger.debug("Duplicate RSVP skipped: uid=%s", rsvp.get("email_uid"))
 
     conn.close()
     return None
@@ -1817,8 +1815,6 @@ def normalize_tee_choices(db_path: str | Path | None = None) -> int:
     Standards: <50, 50-64, 65+, Forward.
     Returns the number of rows updated.
     """
-    import re
-
     _TEE_MAP = [
         (re.compile(r"\bforward\b|\bfront\b", re.IGNORECASE), "Forward"),
         (re.compile(r"\b65\s*\+", re.IGNORECASE), "65+"),

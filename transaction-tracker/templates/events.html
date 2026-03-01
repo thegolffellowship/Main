@@ -180,7 +180,7 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Events — Auto-detected from transaction data</p>
-            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.1.0</a>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.2.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -373,7 +373,7 @@
                     </div>
                     <div id="ap-name-input" style="display:none; margin-bottom:0.75rem;">
                         <label class="ap-field-label"><span>Player Name <span style="color:#e11d48;">*</span></span>
-                            <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" list="ap-customer-list">
+                            <input type="text" id="add-player-name" class="modal-input" placeholder="First Last" autocomplete="off" list="ap-customer-list" required aria-required="true">
                             <datalist id="ap-customer-list"></datalist>
                         </label>
                     </div>
@@ -518,7 +518,7 @@
             </div>
             <form id="add-event-form" class="edit-form">
                 <div class="edit-grid">
-                    <label>Event Name<input type="text" id="add-event-name" class="modal-input" required></label>
+                    <label>Event Name<input type="text" id="add-event-name" class="modal-input" required aria-required="true"></label>
                     <label>Date<input type="date" id="add-event-date" class="modal-input"></label>
                     <label>Course<input type="text" id="add-event-course" class="modal-input"></label>
                     <label>City<input type="text" id="add-event-city" class="modal-input"></label>
@@ -1072,9 +1072,9 @@
                 <td>${escapeHtml(ev.city || "\u2014")}</td>
                 <td><span class="reg-count">${ev.registrations || 0}</span></td>
                 <td>
-                    <button class="btn btn-edit" onclick="event.stopPropagation(); openEditEvent(${ev.id})">Edit</button>
-                    ${currentRole === "admin" ? `<button class="btn btn-edit" onclick="event.stopPropagation(); openMergeEvent(${ev.id})" title="Merge into another event">Merge</button>` : ''}
-                    ${currentRole === "admin" ? `<button class="btn btn-danger" onclick="event.stopPropagation(); deleteEvent(${ev.id})">Delete</button>` : ''}
+                    <button class="btn btn-edit" data-edit-event="${ev.id}">Edit</button>
+                    ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-event="${ev.id}" title="Merge into another event">Merge</button>` : ''}
+                    ${currentRole === "admin" ? `<button class="btn btn-danger" data-delete-event="${ev.id}">Delete</button>` : ''}
                 </td>
             </tr>`;
 
@@ -1097,6 +1097,16 @@
                 const id = parseInt(row.dataset.id);
                 toggleEventDetail(id);
             });
+        });
+        // Attach event action button handlers (Edit/Merge/Delete)
+        tbody.querySelectorAll("[data-edit-event]").forEach(btn => {
+            btn.addEventListener("click", (e) => { e.stopPropagation(); openEditEvent(parseInt(btn.dataset.editEvent)); });
+        });
+        tbody.querySelectorAll("[data-merge-event]").forEach(btn => {
+            btn.addEventListener("click", (e) => { e.stopPropagation(); openMergeEvent(parseInt(btn.dataset.mergeEvent)); });
+        });
+        tbody.querySelectorAll("[data-delete-event]").forEach(btn => {
+            btn.addEventListener("click", (e) => { e.stopPropagation(); deleteEvent(parseInt(btn.dataset.deleteEvent)); });
         });
 
         // Re-attach detail handlers for any already-expanded row
@@ -1639,12 +1649,18 @@
     async function toggleEventDetail(eventId) {
         const wasExpanded = expandedEventId === eventId;
 
-        // Collapse any currently expanded row
+        // Collapse any currently expanded row and clean up cached data
         if (expandedEventId !== null) {
             const prevRow = document.querySelector(`.event-row-clickable[data-id="${expandedEventId}"]`);
             const prevDetail = document.querySelector(`.event-detail-row[data-detail-for="${expandedEventId}"]`);
             if (prevRow) prevRow.classList.remove("expanded");
             if (prevDetail) prevDetail.classList.remove("visible");
+            // Clean up cached RSVPs/overrides for collapsed event to prevent unbounded growth
+            const prevEv = allEvents.find(e => e.id === expandedEventId);
+            if (prevEv) {
+                delete allRsvps[prevEv.item_name];
+                delete allRsvpOverrides[prevEv.item_name];
+            }
             expandedEventId = null;
         }
 
@@ -1803,8 +1819,11 @@
         container.querySelectorAll(".rsvp-only-tag").forEach(tag => {
             tag.addEventListener("click", (e) => {
                 e.stopPropagation();
-                // Remove any existing popover
-                document.querySelectorAll(".rsvp-popover").forEach(p => p.remove());
+                // Remove any existing popover and clean up its close listener
+                document.querySelectorAll(".rsvp-popover").forEach(p => {
+                    if (p._closeHandler) document.removeEventListener("click", p._closeHandler);
+                    p.remove();
+                });
 
                 const itemId = tag.dataset.itemId;
                 const email = tag.dataset.customerEmail || "";
@@ -1872,8 +1891,9 @@
                 tag.parentElement.style.position = "relative";
                 tag.parentElement.appendChild(pop);
 
-                // Close on outside click
+                // Close on outside click — store handler on element for cleanup
                 const close = (ev2) => { if (!pop.contains(ev2.target) && ev2.target !== tag) { pop.remove(); document.removeEventListener("click", close); } };
+                pop._closeHandler = close;
                 setTimeout(() => document.addEventListener("click", close), 0);
             });
         });
@@ -2418,11 +2438,19 @@
                     <span class="orphan-item-meta">${o.item_count} transaction(s) &middot; ${escapeHtml(customers || "—")}</span>
                 </div>
                 <div class="orphan-item-actions">
-                    <button class="btn btn-primary" style="font-size:0.78rem; padding:0.3rem 0.75rem;" onclick="openResolveOrphan('${escapeHtml(o.item_name).replace(/'/g, "\\'")}', ${o.item_count})">Create Event</button>
-                    <button class="btn btn-edit" onclick="openResolveOrphan('${escapeHtml(o.item_name).replace(/'/g, "\\'")}', ${o.item_count}, 'assign')">Merge with Existing</button>
+                    <button class="btn btn-primary" style="font-size:0.78rem; padding:0.3rem 0.75rem;" data-orphan-create="${escapeHtml(o.item_name)}" data-orphan-count="${o.item_count}">Create Event</button>
+                    <button class="btn btn-edit" data-orphan-assign="${escapeHtml(o.item_name)}" data-orphan-count="${o.item_count}">Merge with Existing</button>
                 </div>
             </div>`;
         }).join("");
+
+        // Attach handlers via data attributes instead of inline onclick
+        list.querySelectorAll("[data-orphan-create]").forEach(btn => {
+            btn.addEventListener("click", () => openResolveOrphan(btn.dataset.orphanCreate, parseInt(btn.dataset.orphanCount)));
+        });
+        list.querySelectorAll("[data-orphan-assign]").forEach(btn => {
+            btn.addEventListener("click", () => openResolveOrphan(btn.dataset.orphanAssign, parseInt(btn.dataset.orphanCount), "assign"));
+        });
 
         // Auto-expand the orphan list so it's immediately visible
         list.style.display = "";
@@ -2675,9 +2703,18 @@
             }
         });
 
-        // Auto-format amount fields on blur
+        // Auto-format amount fields: prevent multiple decimals and format on blur
         ["add-player-amount", "upgrade-rsvp-amount"].forEach(id => {
-            document.getElementById(id).addEventListener("blur", function() {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener("input", function() {
+                // Strip non-numeric except first decimal point
+                let v = this.value.replace(/[^0-9.]/g, "");
+                const parts = v.split(".");
+                if (parts.length > 2) v = parts[0] + "." + parts.slice(1).join("");
+                if (v !== this.value) this.value = v;
+            });
+            el.addEventListener("blur", function() {
                 let raw = this.value.trim().replace(/[^0-9.]/g, "");
                 if (raw) {
                     const num = parseFloat(raw);
@@ -2821,15 +2858,22 @@
 
         // Auto-refresh every 30s to keep multiple users in sync
         setInterval(async () => {
-            const anyModalOpen = [
-                "edit-event-overlay", "ev-credit-overlay", "add-event-overlay",
-                "add-player-overlay", "upgrade-rsvp-overlay", "login-overlay",
-                "merge-event-overlay", "resolve-orphan-overlay"
-            ].some(id => document.getElementById(id).style.display === "flex");
-            if (!anyModalOpen) {
-                await fetchItems();
-                await fetchEvents();
-                fetchOrphanedItems();
+            try {
+                const anyModalOpen = [
+                    "edit-event-overlay", "ev-credit-overlay", "add-event-overlay",
+                    "add-player-overlay", "upgrade-rsvp-overlay", "login-overlay",
+                    "merge-event-overlay", "resolve-orphan-overlay"
+                ].some(id => {
+                    const el = document.getElementById(id);
+                    return el && el.style.display === "flex";
+                });
+                if (!anyModalOpen) {
+                    await fetchItems();
+                    await fetchEvents();
+                    fetchOrphanedItems();
+                }
+            } catch (err) {
+                console.warn("Auto-refresh failed:", err);
             }
         }, 30000);
     });

@@ -78,7 +78,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
+_secret_key = os.getenv("SECRET_KEY")
+if not _secret_key:
+    logger.warning("SECRET_KEY not set — using insecure default. Set SECRET_KEY in environment for production.")
+    _secret_key = "dev-secret-key"
+app.secret_key = _secret_key
 
 # ---------------------------------------------------------------------------
 # Email check job (with background tracking)
@@ -249,6 +253,25 @@ def require_connector_key(f):
 
 
 # ---------------------------------------------------------------------------
+# Input validation helper
+# ---------------------------------------------------------------------------
+MAX_STRING_LENGTH = 1000
+
+
+def validate_json_fields(data: dict, required: list[str] = None,
+                         max_len: int = MAX_STRING_LENGTH) -> str | None:
+    """Validate JSON input fields. Returns an error message or None if valid."""
+    if required:
+        for field in required:
+            if not data.get(field):
+                return f"'{field}' is required."
+    for key, value in data.items():
+        if isinstance(value, str) and len(value) > max_len:
+            return f"'{key}' exceeds maximum length of {max_len} characters."
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Role-based access helpers
 # ---------------------------------------------------------------------------
 def require_role(role):
@@ -356,6 +379,9 @@ def api_update_item(item_id):
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON."}), 400
+    err = validate_json_fields(data)
+    if err:
+        return jsonify({"error": err}), 400
     updated = update_item(item_id, data)
     if updated:
         return jsonify({"status": "ok"})
@@ -987,6 +1013,9 @@ def api_add_player():
     data = request.get_json(silent=True)
     if not data or not data.get("event_name") or not data.get("customer"):
         return jsonify({"error": "event_name and customer are required."}), 400
+    err = validate_json_fields(data)
+    if err:
+        return jsonify({"error": err}), 400
     mode = data.get("mode", "comp")
     if mode not in ("comp", "rsvp", "paid_separately"):
         return jsonify({"error": "Invalid mode."}), 400
@@ -1340,6 +1369,9 @@ def api_support_feedback_post():
     data = request.get_json(silent=True)
     if not data or not data.get("message"):
         return jsonify({"error": "Message is required."}), 400
+    err = validate_json_fields(data)
+    if err:
+        return jsonify({"error": err}), 400
 
     fb_type = data.get("type", "bug")
     if fb_type not in ("bug", "feature"):
@@ -1449,13 +1481,16 @@ if _seed_result["inserted"]:
 
 # Only start the scheduler in one Gunicorn worker (or in dev mode).
 # Gunicorn's --preload flag shares module-level state, but with forked workers
-# each gets its own scheduler.  We use an env-based guard so only one runs.
-_is_main_worker = not os.getenv("_SCHEDULER_STARTED")
-if os.getenv("EMAIL_ADDRESS") and _is_main_worker:
-    os.environ["_SCHEDULER_STARTED"] = "1"
-    start_scheduler()
-elif not os.getenv("EMAIL_ADDRESS"):
-    logger.info("Email not configured — scheduler not started. Set up .env to enable auto-checking.")
+# each gets its own scheduler.  We use a PID-based guard so only one runs.
+_scheduler_lock = threading.Lock()
+with _scheduler_lock:
+    _scheduler_pid = os.getenv("_SCHEDULER_STARTED_PID")
+    _is_main_worker = _scheduler_pid is None or _scheduler_pid == str(os.getpid())
+    if os.getenv("EMAIL_ADDRESS") and _is_main_worker:
+        os.environ["_SCHEDULER_STARTED_PID"] = str(os.getpid())
+        start_scheduler()
+    elif not os.getenv("EMAIL_ADDRESS"):
+        logger.info("Email not configured — scheduler not started. Set up .env to enable auto-checking.")
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

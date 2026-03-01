@@ -18,7 +18,7 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Customers — Purchase history by player</p>
-            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.1.0</a>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.2.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -1233,10 +1233,16 @@
 
         // Auto-refresh every 30s to keep multiple users in sync
         setInterval(async () => {
-            const creditOpen = document.getElementById("cust-credit-overlay").style.display === "flex";
-            const loginOpen = document.getElementById("login-overlay").style.display === "flex";
-            if (!creditOpen && !loginOpen) {
-                await init();
+            try {
+                const creditOverlay = document.getElementById("cust-credit-overlay");
+                const loginOverlay = document.getElementById("login-overlay");
+                const creditOpen = creditOverlay && creditOverlay.style.display === "flex";
+                const loginOpen = loginOverlay && loginOverlay.style.display === "flex";
+                if (!creditOpen && !loginOpen) {
+                    await init();
+                }
+            } catch (err) {
+                console.warn("Auto-refresh failed:", err);
             }
         }, 30000);
     });

@@ -1069,13 +1069,20 @@ let autoRefreshInterval = null;
 function startAutoRefresh() {
     if (autoRefreshInterval) return;
     autoRefreshInterval = setInterval(async () => {
-        // Only refresh when no modal is open and no edit in progress
-        const editOpen = document.getElementById("edit-overlay").style.display === "flex";
-        const creditOpen = document.getElementById("credit-overlay").style.display === "flex";
-        const loginOpen = document.getElementById("login-overlay").style.display === "flex";
-        if (!editOpen && !creditOpen && !loginOpen && !activeEditor) {
-            await fetchItems();
-            await fetchStats();
+        try {
+            // Only refresh when no modal is open and no edit in progress
+            const editOverlay = document.getElementById("edit-overlay");
+            const creditOverlay = document.getElementById("credit-overlay");
+            const loginOverlay = document.getElementById("login-overlay");
+            const editOpen = editOverlay && editOverlay.style.display === "flex";
+            const creditOpen = creditOverlay && creditOverlay.style.display === "flex";
+            const loginOpen = loginOverlay && loginOverlay.style.display === "flex";
+            if (!editOpen && !creditOpen && !loginOpen && !activeEditor) {
+                await fetchItems();
+                await fetchStats();
+            }
+        } catch (err) {
+            console.warn("Auto-refresh failed:", err);
         }
     }, 30000); // every 30 seconds
 }

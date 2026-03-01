@@ -1,7 +1,7 @@
 # TGF Transaction Tracker — Project Documentation
 
 > **The Golf Fellowship** — AI-powered transaction and event management platform
-> **Current Version:** v1.1.0 (February 26, 2026)
+> **Current Version:** v1.2.0 (March 1, 2026)
 > **Live URL:** https://tgf-tracker.up.railway.app
 
 ---
@@ -697,6 +697,24 @@ The app is installable as a Progressive Web App:
 ---
 
 ## Version History
+
+### v1.2.0 — March 1, 2026 — "Audit Hardening"
+- **Critical:** Log database IntegrityErrors instead of silently swallowing them
+- **Critical:** Add `managed_connection` context manager to prevent DB connection leaks
+- **Critical:** Wrap auto-refresh intervals in try/catch to prevent silent failures
+- **Critical:** Fix XSS risk in orphan banner by replacing inline onclick with data-attribute handlers
+- **Critical:** Warn at startup if SECRET_KEY is not set in environment
+- **High:** Add input validation (type/length) on mutation API endpoints
+- **High:** Fix RSVP popover event listener leak on repeated clicks
+- **Medium:** Add database index on `transaction_status` column for query performance
+- **Medium:** Tighten scheduler race condition with PID-based guard
+- **Medium:** Fix amount inputs to prevent multiple decimal points
+- **Medium:** Clean up cached RSVP overrides when collapsing events to prevent memory growth
+- **Medium:** Case-insensitive customer name matching in merge operation
+- **Low:** Consolidate inline `onclick` handlers to `addEventListener` pattern on event action buttons
+- **Low:** Move inline `import re` / `import time` to module-level imports
+- **Low:** Add `aria-required` attributes to key form inputs
+- **Low:** Null-safe DOM element checks in auto-refresh callbacks
 
 ### v1.1.0 — February 26, 2026 — "Add Player Overhaul + GG Dot States"
 - Redesigned Add Player dialog with 3 modes: Manager Comp, RSVP Only, Paid Separately
