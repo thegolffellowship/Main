@@ -248,6 +248,7 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
     sql = f"INSERT OR IGNORE INTO items ({col_names}) VALUES ({placeholders})"
 
     inserted = 0
+    skipped = 0
     for row in rows:
         values = tuple(row.get(col) for col in ITEM_COLUMNS)
         try:
@@ -255,11 +256,14 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
             if cursor.rowcount > 0:
                 inserted += 1
         except sqlite3.IntegrityError:
-            pass
+            skipped += 1
+            logger.debug("Duplicate item skipped: email_uid=%s item_index=%s",
+                         row.get("email_uid"), row.get("item_index"))
 
     conn.commit()
     conn.close()
-    logger.info("Saved %d new item rows (%d total provided)", inserted, len(rows))
+    logger.info("Saved %d new item rows, %d duplicates skipped (%d total provided)",
+                inserted, skipped, len(rows))
     return inserted
 
 
@@ -780,7 +784,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
             if conn.execute("SELECT changes()").fetchone()[0] > 0:
                 inserted += 1
         except sqlite3.IntegrityError:
-            pass
+            logger.debug("Duplicate event skipped during sync: %s", name)
 
     conn.commit()
     conn.close()
@@ -1352,6 +1356,7 @@ def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
             inserted += 1
         except sqlite3.IntegrityError:
             skipped += 1
+            logger.debug("Duplicate event skipped during seed: %s", ev.get("item_name"))
     conn.commit()
     conn.close()
     return {"inserted": inserted, "skipped": skipped}
@@ -1761,7 +1766,7 @@ def save_rsvp(rsvp: dict, db_path: str | Path | None = None) -> int | None:
             )
             return rsvp_id
     except sqlite3.IntegrityError:
-        pass
+        logger.debug("Duplicate RSVP skipped: email_uid=%s", rsvp.get("email_uid"))
 
     conn.close()
     return None
