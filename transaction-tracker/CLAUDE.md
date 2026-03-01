@@ -110,3 +110,43 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `email_parser/fetcher.py` — Microsoft Graph email fetching
 - `templates/index.html` — dashboard HTML
 - `static/js/dashboard.js` — client-side search/filter/export
+
+## Git Merge & PR Best Practices
+
+When merging branches that have diverged (especially long-running feature branches),
+follow these steps to avoid losing work:
+
+### Before merging
+
+1. **Inventory both sides** — Run `git log main..feature` and `git log feature..main`
+   to see exactly what commits exist on each side. Every commit must survive the merge.
+2. **Back up the branch** — Create a safety tag: `git tag pre-merge-backup`
+   so you can always recover.
+
+### During conflict resolution
+
+3. **Never blindly accept one side** — Use `git diff` to understand each conflict.
+   Most conflicts need *both* sides combined, not one or the other.
+4. **Watch for duplicate declarations** — When both branches add similar code
+   (e.g., a `const` variable), merging both creates a syntax error.
+   Keep only one declaration but preserve the logic from both.
+5. **Check the surrounding context** — Conflict markers only show the changed lines.
+   Read 20+ lines above and below to make sure the merge fits the larger function.
+
+### After merging
+
+6. **Verify nothing was lost** — Search for key identifiers from each branch
+   (function names, variable names, CSS classes) to confirm they're still present.
+7. **Test the app** — Run the server locally or deploy to a staging environment
+   before merging to `main`.
+8. **Keep commits atomic** — Don't squash a 26-commit feature branch into one commit.
+   Preserve individual commits so `git log` tells the full story.
+
+### Common pitfalls
+
+- **Rebase vs merge** — Prefer `git merge` for long-lived branches with many commits.
+  Rebase rewrites history and can silently drop changes.
+- **Force-push** — Never `git push --force` to a shared branch. If a push is
+  rejected, investigate why before overriding.
+- **Large template files** — Files like `events.html` (3000+ lines) are
+  conflict-prone. When resolving, check every function/block boundary carefully.
