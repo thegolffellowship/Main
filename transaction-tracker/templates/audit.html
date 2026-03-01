@@ -372,6 +372,30 @@
 
         <!-- EMAIL AUDIT TAB -->
         <div id="tab-email-audit">
+        <!-- Audit controls -->
+        <div class="audit-controls" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem;">
+            <label style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
+                Days back
+                <select id="audit-days" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
+                    <option value="30">30</option>
+                    <option value="60">60</option>
+                    <option value="90" selected>90</option>
+                    <option value="180">180</option>
+                    <option value="365">365</option>
+                </select>
+            </label>
+            <label style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
+                Max emails
+                <select id="audit-limit" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                </select>
+            </label>
+        </div>
+
         <div id="loading" class="loading-msg">Click "Run Audit" to fetch emails and compare against parsed data.</div>
 
         <div id="audit-content" style="display:none;">
@@ -572,7 +596,9 @@
         contentEl.style.display = "none";
 
         try {
-            const res = await fetch("/api/audit/emails?limit=100");
+            const auditDays = document.getElementById("audit-days").value;
+            const auditLimit = document.getElementById("audit-limit").value;
+            const res = await fetch(`/api/audit/emails?limit=${auditLimit}&days=${auditDays}`);
             if (!res.ok) {
                 const err = await res.json();
                 throw new Error(err.error || "Request failed");
