@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hospital Staff Scheduler</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Hospital Staff Scheduler</h1>
+        <nav>
+            <button class="nav-btn active" data-tab="schedule">Schedule Grid</button>
+            <button class="nav-btn" data-tab="preferences">Preferences</button>
+            <button class="nav-btn" data-tab="employees">Employees</button>
+        </nav>
+    </header>
+
+    <main>
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SCHEDULE GRID TAB                           -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section id="tab-schedule" class="tab-content active">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <label>Period:
+                        <select id="schedule-period-select"></select>
+                    </label>
+                    <div class="shift-tabs">
+                        <button class="shift-tab active" data-shift="Day">Day Shift</button>
+                        <button class="shift-tab" data-shift="Night">Night Shift</button>
+                    </div>
+                </div>
+                <div class="toolbar-right">
+                    <button id="btn-undo" class="btn btn-secondary btn-sm" title="Undo (Ctrl+Z)">&#8630; Undo</button>
+                    <button id="btn-redo" class="btn btn-secondary btn-sm" title="Redo (Ctrl+Y)">&#8631; Redo</button>
+                    <button id="btn-save-schedule" class="btn btn-secondary" title="Save current schedule">Save</button>
+                    <button id="btn-versions" class="btn btn-secondary" title="View saved versions">Versions</button>
+                    <button id="btn-print-schedule" class="btn btn-secondary" title="Print schedule">Print</button>
+                    <button id="btn-generate" class="btn btn-primary">Generate Schedule</button>
+                </div>
+            </div>
+
+            <div class="pref-legend" style="flex-wrap:wrap">
+                <span class="legend-item"><span class="legend-swatch" style="background:#d1e7dd;border:1px solid #badbcc"></span> A/P - Working</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#fff3cd"></span> RO - Request Off</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#cce5ff"></span> PTO</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#f8d7da"></span> X - Cannot Work</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#fde8d0"></span> CI - Called In</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#e8d5f5"></span> CX - Canceled</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#ffd6d6"></span> LCO - Late Clock Off</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#ffe0b2"></span> LCI - Late Clock In</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#c8e6c9"></span> E - Early Clock In</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#b3e5fc"></span> NB - No Lunch Break</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#d1c4e9"></span> SB - Short Break</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#90caf9"></span> LD - Lite Duty</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#1a237e;border:1px solid #0d1642"></span> SS - Switched Shifts</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#b3e5fc"></span> PU - Picked Up</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#f50057"></span> NC - Needs Clarification</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#f8bbd0"></span> LV - Leave</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#ce93d8"></span> TR - Transferred</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#fff9c4;border:1px solid #f0e68c"></span> OD - Other Dept</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#a5d6a7"></span> VAC - Vacation</span>
+            </div>
+
+            <div id="schedule-grid-container" class="grid-container">
+                <p class="empty-state">Select a period and shift to view the schedule.</p>
+            </div>
+
+            <!-- Note Popup -->
+            <div id="note-popup" class="note-popup hidden">
+                <div class="note-popup-header">
+                    <span>Cell Note</span>
+                    <button id="note-popup-close" class="modal-close">&times;</button>
+                </div>
+                <textarea id="note-popup-text" rows="3" placeholder="Enter note (e.g. reason for CI, shift details...)"></textarea>
+                <div class="note-popup-actions">
+                    <button class="btn btn-sm btn-primary" id="note-popup-save">Save Note</button>
+                    <button class="btn btn-sm btn-secondary" id="note-popup-clear">Clear</button>
+                </div>
+            </div>
+
+            <div id="summary-panel" class="summary-panel hidden">
+                <h3>Generation Summary</h3>
+                <div class="summary-tabs">
+                    <button class="summary-tab active" data-summary="flags">Flags</button>
+                    <button class="summary-tab" data-summary="employees">Employee Stats</button>
+                    <button class="summary-tab" data-summary="overrides">RO Overrides</button>
+                </div>
+                <div id="summary-content"></div>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- PREFERENCES TAB                             -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section id="tab-preferences" class="tab-content">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <label>Period:
+                        <select id="pref-period-select"></select>
+                    </label>
+                    <label>Employee:
+                        <select id="pref-employee-select">
+                            <option value="">-- Select Employee --</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="toolbar-right">
+                    <button id="btn-save-prefs" class="btn btn-primary" disabled>Save Preferences</button>
+                    <button id="btn-master-view" class="btn btn-secondary">Master View</button>
+                </div>
+            </div>
+
+            <div class="pref-legend">
+                <span class="legend-item"><span class="legend-swatch" style="background:#fff;border:1px solid #ccc"></span> Available</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#fff3cd"></span> RO - Request Off</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#cce5ff"></span> PTO</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#f8d7da"></span> X - Cannot Work</span>
+                <small style="color:var(--text-secondary);margin-left:8px">Click cell to cycle codes</small>
+            </div>
+
+            <div id="pref-grid-container" class="grid-container">
+                <p class="empty-state">Select an employee to enter preferences.</p>
+            </div>
+
+            <!-- Master View Modal -->
+            <div id="master-view-modal" class="modal hidden">
+                <div class="modal-content modal-wide">
+                    <div class="modal-header">
+                        <h3>Master Preference View (Read-Only)</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="toolbar-left" style="margin-bottom:10px">
+                            <div class="shift-tabs">
+                                <button class="master-shift-tab active" data-shift="Day">Day Shift</button>
+                                <button class="master-shift-tab" data-shift="Night">Night Shift</button>
+                            </div>
+                        </div>
+                        <div id="master-grid-container" class="grid-container"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- EMPLOYEES TAB                               -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section id="tab-employees" class="tab-content">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <label>Role:
+                        <select id="emp-filter-role">
+                            <option value="">All Roles</option>
+                            <option value="ICU RN">ICU RN</option>
+                            <option value="Floor RN">Floor RN</option>
+                            <option value="LVN">LVN</option>
+                            <option value="PCT">PCT</option>
+                            <option value="Unit Clerk">Unit Clerk</option>
+                            <option value="House Supervisor">House Supervisor</option>
+                        </select>
+                    </label>
+                    <label>Shift:
+                        <select id="emp-filter-shift">
+                            <option value="">All Shifts</option>
+                            <option value="Day">Day</option>
+                            <option value="Night">Night</option>
+                        </select>
+                    </label>
+                    <label>Type:
+                        <select id="emp-filter-type">
+                            <option value="">All Types</option>
+                            <option value="Full-Time">Full-Time</option>
+                            <option value="PRN">PRN</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="toolbar-right">
+                    <button id="btn-clear-filters" class="btn btn-secondary">Clear Filters</button>
+                    <button id="btn-add-employee" class="btn btn-primary">+ Add Employee</button>
+                </div>
+            </div>
+
+            <div id="employee-table-container">
+                <table class="data-table" id="employee-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Shift</th>
+                            <th>Type</th>
+                            <th>PRN Tier</th>
+                            <th>Max/Wk</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="employee-tbody"></tbody>
+                </table>
+            </div>
+
+            <!-- Add/Edit Employee Modal -->
+            <div id="employee-modal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 id="employee-modal-title">Add Employee</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="employee-form">
+                            <input type="hidden" id="emp-edit-id">
+                            <div class="form-group">
+                                <label for="emp-name">Name</label>
+                                <input type="text" id="emp-name" required maxlength="100">
+                            </div>
+                            <div class="form-group">
+                                <label for="emp-role">Role</label>
+                                <select id="emp-role" required>
+                                    <option value="ICU RN">ICU RN</option>
+                                    <option value="Floor RN">Floor RN</option>
+                                    <option value="LVN">LVN</option>
+                                    <option value="PCT">PCT</option>
+                                    <option value="Unit Clerk">Unit Clerk</option>
+                                    <option value="House Supervisor">House Supervisor</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="emp-shift">Shift</label>
+                                <select id="emp-shift" required>
+                                    <option value="Day">Day</option>
+                                    <option value="Night">Night</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="emp-type">Employment Type</label>
+                                <select id="emp-type" required>
+                                    <option value="Full-Time">Full-Time</option>
+                                    <option value="PRN">PRN</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="prn-tier-group" style="display:none">
+                                <label for="emp-prn-tier">PRN Tier</label>
+                                <select id="emp-prn-tier">
+                                    <option value="Tier 1">Tier 1 (6 shifts/month)</option>
+                                    <option value="Tier 2">Tier 2 (8 shifts/month)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="emp-max-shifts">Max Shifts Per Week</label>
+                                <input type="number" id="emp-max-shifts" min="1" max="7" value="3">
+                                <small style="color:var(--text-secondary);font-size:11px">Default 3. Increase only if employee opts in for more.</small>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save</button>
+                                <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Versions Modal -->
+        <div id="versions-modal" class="modal hidden">
+            <div class="modal-content" style="max-width:600px">
+                <div class="modal-header">
+                    <h3>Saved Schedule Versions</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="versions-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Employee Report Modal -->
+        <div id="report-modal" class="modal hidden">
+            <div class="modal-content modal-wide">
+                <div class="modal-header">
+                    <h3 id="report-modal-title">Employee Report</h3>
+                    <div>
+                        <button id="btn-print-report" class="btn btn-secondary btn-sm">Print Report</button>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                </div>
+                <div class="modal-body" id="report-content"></div>
+            </div>
+        </div>
+
+        <!-- Schedule Period Modal -->
+        <div id="period-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Create Schedule Period</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="period-form">
+                        <div class="form-group">
+                            <label for="period-name">Period Name</label>
+                            <input type="text" id="period-name" required maxlength="100"
+                                   placeholder="e.g. Mar 2 - Apr 12, 2026">
+                        </div>
+                        <div class="form-group">
+                            <label for="period-start">Start Date (must be a Sunday)</label>
+                            <input type="date" id="period-start" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Create</button>
+                            <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
