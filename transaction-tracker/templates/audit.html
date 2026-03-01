@@ -778,9 +778,14 @@
                 const res = await fetch("/api/audit/re-extract-fields", { method: "POST" });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "Request failed");
-                alert(`Re-extraction complete:\n  Candidates: ${data.total_candidates}\n  Updated: ${data.updated}\n  Skipped: ${data.skipped}\n  Errors: ${data.errors}`);
+                const parts = [`${data.total_candidates} candidates`];
+                if (data.updated) parts.push(`${data.updated} updated`);
+                if (data.skipped) parts.push(`${data.skipped} skipped`);
+                if (data.errors) parts.push(`${data.errors} errors`);
+                showToast(`Re-extraction complete: ${parts.join(", ")}`, null);
+                if (data.updated > 0) runAudit();
             } catch (err) {
-                alert("Re-extract failed: " + err.message);
+                showToast("Re-extract failed: " + err.message, null);
             } finally {
                 btn.disabled = false;
                 btn.textContent = "Re-extract Fields";
