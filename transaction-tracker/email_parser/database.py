@@ -8,12 +8,23 @@ so they can be filtered and sorted directly from the dashboard.
 
 import json
 import os
+import re
 import sqlite3
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_SAFE_COL_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _validate_column_names(columns: list[str]) -> None:
+    """Raise ValueError if any column name contains unexpected characters."""
+    for col in columns:
+        if not _SAFE_COL_RE.match(col):
+            raise ValueError(f"Invalid column name: {col!r}")
+
 
 # Allow overriding via env var so Railway can point to a persistent volume.
 _default_db = Path(__file__).resolve().parent.parent / "transactions.db"
@@ -541,6 +552,7 @@ def autofix_all(db_path: str | Path | None = None) -> dict:
         # Apply all updates for this row in one statement
         if updates:
             old_values = {col: item.get(col, "") for col in updates}
+            _validate_column_names(list(updates))
             set_clause = ", ".join(f"{col} = ?" for col in updates)
             values = list(updates.values()) + [row_id]
             conn.execute(f"UPDATE items SET {set_clause} WHERE id = ?", values)
@@ -868,6 +880,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 logger.info("Renamed event '%s' → '%s': old name stored as alias, RSVPs/overrides updated",
                             old_name, new_name)
 
+    _validate_column_names(list(safe))
     set_clause = ", ".join(f"{col} = ?" for col in safe)
     values = list(safe.values()) + [event_id]
     cursor = conn.execute(f"UPDATE events SET {set_clause} WHERE id = ?", values)
@@ -1187,6 +1200,7 @@ def update_item(item_id: int, fields: dict, db_path: str | Path | None = None) -
     if not safe_fields:
         return False
 
+    _validate_column_names(list(safe_fields))
     set_clause = ", ".join(f"{col} = ?" for col in safe_fields)
     values = list(safe_fields.values()) + [item_id]
 
