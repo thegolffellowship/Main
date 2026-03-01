@@ -704,17 +704,21 @@ The app is installable as a Progressive Web App:
 - **Critical:** Wrap auto-refresh intervals in try/catch to prevent silent failures
 - **Critical:** Fix XSS risk in orphan banner by replacing inline onclick with data-attribute handlers
 - **Critical:** Warn at startup if SECRET_KEY is not set in environment
+- **Critical:** AI parser exception surfacing for better error visibility
 - **High:** Add input validation (type/length) on mutation API endpoints
 - **High:** Fix RSVP popover event listener leak on repeated clicks
+- **High:** Email send result checking
 - **Medium:** Add database index on `transaction_status` column for query performance
 - **Medium:** Tighten scheduler race condition with PID-based guard
 - **Medium:** Fix amount inputs to prevent multiple decimal points
 - **Medium:** Clean up cached RSVP overrides when collapsing events to prevent memory growth
 - **Medium:** Case-insensitive customer name matching in merge operation
-- **Low:** Consolidate inline `onclick` handlers to `addEventListener` pattern on event action buttons
-- **Low:** Move inline `import re` / `import time` to module-level imports
-- **Low:** Add `aria-required` attributes to key form inputs
-- **Low:** Null-safe DOM element checks in auto-refresh callbacks
+- **Database improvements:** NOT NULL constraints on customer/item_name via triggers, case-insensitive duplicate checks for events, `.get()` guards on all API endpoints
+- **Frontend improvements:** Null-safe DOM element checks in auto-refresh callbacks
+- **Accessibility:** Added `aria-required` and `aria-label` to form inputs, `role="dialog"` and `aria-modal` to modals, improved confirm dialog messages
+- **CSS cleanup:** Replaced 12 `!important` declarations with CSS variables and increased specificity, extracted inline styles to CSS classes
+- **Code quality:** Consolidated inline `onclick` handlers to `addEventListener` pattern / event delegation, moved all function-level imports to module level, removed redundant `import re` statements, fixed `__import__("datetime")` anti-pattern
+- **Scheduler:** Tightened multi-worker env var guard for Gunicorn deployments
 
 ### v1.1.0 — February 26, 2026 — "Add Player Overhaul + GG Dot States"
 - Redesigned Add Player dialog with 3 modes: Manager Comp, RSVP Only, Paid Separately

@@ -11,10 +11,13 @@ import re
 import json
 import secrets
 import logging
+import shutil
+import sqlite3
 import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
+import anthropic as _anthropic
 from flask import Flask, Response, jsonify, render_template, request, send_file, session
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -40,6 +43,7 @@ from email_parser.database import (
     upgrade_rsvp_to_paid,
     autofix_side_games,
     autofix_all,
+    undo_autofix,
     normalize_tee_choices,
     sync_events_from_items,
     get_all_events,
@@ -59,13 +63,16 @@ from email_parser.database import (
     unmatch_rsvp,
     get_rsvp_overrides,
     set_rsvp_override,
+    get_rsvp_email_overrides,
+    set_rsvp_email_override,
     merge_customers,
     save_feedback,
     get_all_feedback,
     update_feedback_status,
 )
-from email_parser.fetcher import fetch_transaction_emails, send_mail_graph
-from email_parser.parser import parse_email, parse_emails
+from email_parser.database import DB_PATH, get_connection
+from email_parser.fetcher import fetch_transaction_emails, fetch_email_by_id, send_mail_graph
+from email_parser.parser import parse_email, parse_emails, _strip_html
 from email_parser.report import send_daily_report
 from email_parser.rsvp_parser import fetch_rsvp_emails, parse_rsvp_emails
 
@@ -140,8 +147,6 @@ def check_inbox():
 
     # Parse and save one email at a time so items appear on the dashboard
     # incrementally instead of waiting for the entire batch to finish.
-    import anthropic as _anthropic
-
     _inbox_check_status["emails_fetched"] = len(new_emails)
     total_saved = 0
     total_parsed = 0
@@ -317,21 +322,40 @@ def start_scheduler():
         logger.info("RSVP scheduler: checking %s every %d minutes",
                      os.getenv("RSVP_EMAIL_ADDRESS"), interval)
 
-    # Daily report — runs at the configured hour (default 7:00 AM)
-    report_hour = int(os.getenv("DAILY_REPORT_HOUR", "7"))
+    # Daily digest — runs at 6:00 AM US/Central by default
+    report_hour = int(os.getenv("DAILY_REPORT_HOUR", "6"))
+    report_tz = os.getenv("DAILY_REPORT_TZ", "US/Central")
     if os.getenv("DAILY_REPORT_TO"):
         scheduler.add_job(
             send_daily_report,
             "cron",
             hour=report_hour,
             minute=0,
+            timezone=report_tz,
             id="daily_report",
             replace_existing=True,
         )
-        logger.info("Daily report scheduled for %02d:00 → %s", report_hour, os.getenv("DAILY_REPORT_TO"))
+        logger.info("Daily digest scheduled for %02d:00 %s → %s",
+                     report_hour, report_tz, os.getenv("DAILY_REPORT_TO"))
 
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
+
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+_MAX_FIELD_LEN = 1000  # max characters per field value in update requests
+
+
+def _validate_update_fields(data: dict) -> str | None:
+    """Return an error message if any field value is invalid, else None."""
+    for key, value in data.items():
+        if not isinstance(key, str):
+            return f"Field name must be a string, got {type(key).__name__}"
+        if isinstance(value, str) and len(value) > _MAX_FIELD_LEN:
+            return f"Field '{key}' exceeds max length ({_MAX_FIELD_LEN} chars)"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -464,8 +488,6 @@ def api_check_status():
 @require_role("admin")
 def admin_backup():
     """Stream the SQLite database file as a download. Admin-only."""
-    from email_parser.database import DB_PATH
-    import shutil
     db_path = str(DB_PATH)
     if not os.path.isfile(db_path):
         return jsonify({"error": "Database file not found"}), 404
@@ -474,7 +496,6 @@ def admin_backup():
     shutil.copy2(db_path, backup_path)
     # Also checkpoint WAL into the backup
     try:
-        import sqlite3
         conn = sqlite3.connect(backup_path)
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.close()
@@ -492,18 +513,16 @@ def admin_backup():
 @app.route("/api/health")
 def api_health():
     """Diagnostic endpoint for Railway troubleshooting."""
-    from email_parser.database import DB_PATH
     db_path = str(DB_PATH)
     db_exists = os.path.isfile(db_path)
     db_dir_exists = os.path.isdir(os.path.dirname(db_path))
     try:
-        from email_parser.database import get_connection
         conn = get_connection()
         row = conn.execute("SELECT COUNT(*) as cnt FROM items").fetchone()
         item_count = row["cnt"]
         conn.close()
         db_readable = True
-    except Exception as e:
+    except Exception:
         item_count = 0
         db_readable = False
     env_keys = ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET",
@@ -638,8 +657,6 @@ def api_audit_emails():
 
     limit = request.args.get("limit", 50, type=int)
     days = request.args.get("days", 90, type=int)
-
-    from email_parser.parser import _strip_html
 
     try:
         emails = fetch_transaction_emails(
@@ -831,6 +848,22 @@ def api_autofix_all():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/audit/undo-autofix", methods=["POST"])
+@require_role("admin")
+def api_undo_autofix():
+    """Revert a previous autofix using the saved details."""
+    try:
+        data = request.get_json(force=True)
+        details = data.get("details", [])
+        if not details:
+            return jsonify({"error": "No details provided"}), 400
+        result = undo_autofix(details)
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.exception("Undo autofix failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/audit/autofix-tee-choices", methods=["POST"])
 @require_role("admin")
 def api_autofix_tee_choices():
@@ -841,6 +874,101 @@ def api_autofix_tee_choices():
     except Exception as e:
         logger.exception("Autofix tee choices failed")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/audit/re-extract-fields", methods=["POST"])
+@require_role("admin")
+def api_re_extract_fields():
+    """Re-parse existing transaction emails to backfill new fields.
+
+    Fetches original emails from Graph API, re-runs AI extraction,
+    and updates only the specified fields (partner_request, fellowship_after,
+    notes) on existing items without overwriting other data.
+    """
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    email_address = os.getenv("EMAIL_ADDRESS")
+
+    if not all([tenant_id, client_id, client_secret, email_address]):
+        return jsonify({"error": "Azure AD credentials not configured"}), 400
+
+    BACKFILL_FIELDS = ["partner_request", "fellowship_after", "notes"]
+
+    items = get_all_items()
+    # Find items missing any of the new fields
+    candidates = [
+        it for it in items
+        if it.get("transaction_status") in (None, "active")
+        and not it.get("email_uid", "").startswith("manual-")
+        and not all(it.get(f) for f in BACKFILL_FIELDS)
+    ]
+
+    total = len(candidates)
+    updated = 0
+    skipped = 0
+    errors = 0
+
+    # Group by email_uid to avoid re-fetching the same email multiple times
+    uid_groups = {}
+    for it in candidates:
+        uid = it.get("email_uid", "")
+        if uid:
+            uid_groups.setdefault(uid, []).append(it)
+
+    for uid, group_items in uid_groups.items():
+        try:
+            email_data = fetch_email_by_id(
+                tenant_id, client_id, client_secret, email_address, uid
+            )
+            if not email_data:
+                skipped += len(group_items)
+                continue
+
+            parsed_rows = parse_email(email_data)
+            if not parsed_rows:
+                skipped += len(group_items)
+                continue
+
+            for it in group_items:
+                idx = it.get("item_index", 0) or 0
+                if idx < len(parsed_rows):
+                    parsed = parsed_rows[idx]
+                else:
+                    # Try to find by matching item name
+                    parsed = next(
+                        (p for p in parsed_rows
+                         if p.get("item_name") == it.get("item_name")),
+                        parsed_rows[0] if len(parsed_rows) == 1 else None,
+                    )
+
+                if not parsed:
+                    skipped += 1
+                    continue
+
+                changes = {}
+                for field in BACKFILL_FIELDS:
+                    new_val = parsed.get(field)
+                    if new_val and not it.get(field):
+                        changes[field] = new_val
+
+                if changes:
+                    update_item(it["id"], changes)
+                    updated += 1
+                else:
+                    skipped += 1
+
+        except Exception:
+            logger.exception("Re-extract failed for email_uid=%s", uid)
+            errors += len(group_items)
+
+    return jsonify({
+        "status": "ok",
+        "total_candidates": total,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -900,6 +1028,9 @@ def api_update_event(event_id):
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON."}), 400
+    err = _validate_update_fields(data)
+    if err:
+        return jsonify({"error": err}), 400
     if update_event(event_id, data):
         return jsonify({"status": "ok"})
     return jsonify({"error": "not found or no valid fields"}), 404
@@ -1151,7 +1282,10 @@ def api_send_reminder_all():
         else:
             failed += 1
 
-    return jsonify({"status": "ok", "sent": sent, "failed": failed, "total": len(rsvp_players)})
+    if sent == 0:
+        return jsonify({"error": "All reminder emails failed to send", "sent": sent, "failed": failed, "total": len(rsvp_players)}), 500
+    status = "ok" if failed == 0 else "partial"
+    return jsonify({"status": status, "sent": sent, "failed": failed, "total": len(rsvp_players)})
 
 
 @app.route("/api/events/seed", methods=["POST"])
@@ -1243,21 +1377,33 @@ def api_unmatch_rsvp(rsvp_id):
 
 @app.route("/api/rsvps/overrides/<path:event_name>")
 def api_rsvp_overrides(event_name):
-    """Return manual RSVP overrides for an event as {item_id: status}."""
-    return jsonify(get_rsvp_overrides(event_name))
+    """Return manual RSVP overrides for an event.
+
+    Returns {"by_item": {item_id: status}, "by_email": {email: status}}.
+    """
+    return jsonify({
+        "by_item": get_rsvp_overrides(event_name),
+        "by_email": get_rsvp_email_overrides(event_name),
+    })
 
 
 @app.route("/api/rsvps/overrides", methods=["POST"])
 def api_set_rsvp_override():
-    """Set a manual RSVP override for a registrant."""
+    """Set a manual RSVP override for a registrant (by item_id or player_email)."""
     data = request.get_json(force=True)
     item_id = data.get("item_id")
+    player_email = data.get("player_email")
     event_name = data.get("event_name")
     status = data.get("status", "none")
-    if not item_id or not event_name:
-        return jsonify({"error": "item_id and event_name required"}), 400
+    if not event_name:
+        return jsonify({"error": "event_name required"}), 400
+    if not item_id and not player_email:
+        return jsonify({"error": "item_id or player_email required"}), 400
     if status not in ("none", "playing", "not_playing", "manual_green"):
-        return jsonify({"error": "status must be none, playing, or not_playing"}), 400
+        return jsonify({"error": "status must be none, playing, not_playing, or manual_green"}), 400
+    if player_email:
+        set_rsvp_email_override(player_email, event_name, status)
+        return jsonify({"status": "ok", "player_email": player_email, "event_name": event_name, "rsvp_status": status})
     set_rsvp_override(int(item_id), event_name, status)
     return jsonify({"status": "ok", "item_id": item_id, "event_name": event_name, "rsvp_status": status})
 
@@ -1292,6 +1438,59 @@ def api_send_report_now():
 # ---------------------------------------------------------------------------
 # Routes — AI Support Chat & Feedback
 # ---------------------------------------------------------------------------
+
+
+def _send_feedback_notification(feedback: dict):
+    """Send an instant email notification when a new bug/feature is submitted."""
+    notify_to = os.getenv("FEEDBACK_NOTIFY_TO") or os.getenv("DAILY_REPORT_TO")
+    if not notify_to:
+        return
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_addr = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_addr]):
+        return
+
+    fb_type = feedback.get("type", "feedback").capitalize()
+    label = "Bug Report" if feedback.get("type") == "bug" else "Feature Request"
+    color = "#dc2626" if feedback.get("type") == "bug" else "#2563eb"
+    page = feedback.get("page") or "Unknown"
+    role = feedback.get("role") or "Unknown"
+    created = feedback.get("created_at") or "—"
+    message = feedback.get("message") or ""
+
+    html = f"""\
+<html><body style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
+<h2 style="color: {color};">New {label} Submitted</h2>
+<table style="font-size: 14px; margin-bottom: 16px;">
+  <tr><td style="padding:4px 12px 4px 0; font-weight:600;">Type:</td>
+      <td><span style="background:{color}; color:#fff; padding:2px 10px; border-radius:10px; font-size:12px;">{fb_type}</span></td></tr>
+  <tr><td style="padding:4px 12px 4px 0; font-weight:600;">Page:</td><td>{page}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0; font-weight:600;">Submitted by:</td><td>{role}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0; font-weight:600;">Time:</td><td>{created}</td></tr>
+</table>
+<div style="background:#f9fafb; border-left:4px solid {color}; padding:12px 16px; margin-bottom:16px; white-space:pre-wrap;">{message}</div>
+<p style="font-size:12px; color:#999;">This is an automated notification from TGF Transaction Tracker.</p>
+</body></html>"""
+
+    subject = f"[TGF {label}] New submission from {page} page"
+
+    try:
+        ok = send_mail_graph(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            from_address=from_addr,
+            to_address=notify_to,
+            subject=subject,
+            html_body=html,
+        )
+        if not ok:
+            logger.warning("Feedback notification email failed to send to %s", notify_to)
+    except Exception:
+        logger.exception("Failed to send feedback notification email")
 
 _TGF_SYSTEM_PROMPT = """You are the TGF Assistant, an AI helper built into The Golf Fellowship's Transaction Tracker.
 You help managers and admins understand and use the platform.
@@ -1333,7 +1532,7 @@ def api_support_chat():
         return jsonify({"error": "AI not configured (missing API key)."}), 503
 
     messages = data.get("history", [])
-    messages.append({"role": "user", "content": data["message"]})
+    messages.append({"role": "user", "content": data.get("message", "")})
 
     page = data.get("page", "")
     role_context = f"\nThe user is a {user_role} currently on the {page} page." if page else f"\nThe user is a {user_role}."
@@ -1383,6 +1582,10 @@ def api_support_feedback_post():
         page=data.get("page", ""),
         role=user_role,
     )
+
+    # Send instant email notification for new feedback
+    _send_feedback_notification(result)
+
     return jsonify({"status": "ok", "feedback": result})
 
 
@@ -1401,13 +1604,25 @@ def api_support_feedback_update(feedback_id):
     data = request.get_json(silent=True)
     if not data or not data.get("status"):
         return jsonify({"error": "Status is required."}), 400
-    new_status = data["status"]
+    new_status = data.get("status", "")
     if new_status not in ("open", "resolved", "dismissed"):
         return jsonify({"error": "Status must be 'open', 'resolved', or 'dismissed'."}), 400
     ok = update_feedback_status(feedback_id, new_status)
     if not ok:
         return jsonify({"error": "Feedback not found."}), 404
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/support/test-digest", methods=["POST"])
+@require_role("admin")
+def api_test_digest():
+    """Send the daily digest email right now (admin only)."""
+    try:
+        send_daily_report()
+        return jsonify({"status": "ok", "message": "Daily digest sent."})
+    except Exception as e:
+        logger.exception("Test digest failed")
+        return jsonify({"error": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -1423,7 +1638,7 @@ def api_auth_login():
     if not data or not data.get("pin"):
         return jsonify({"error": "PIN is required."}), 400
 
-    pin = str(data["pin"]).strip()
+    pin = str(data.get("pin", "")).strip()
     admin_pin = os.getenv("ADMIN_PIN", "")
     manager_pin = os.getenv("MANAGER_PIN", "")
 

@@ -328,6 +328,51 @@
             margin-bottom: 1rem;
             flex-wrap: wrap;
         }
+
+        /* Toast notification */
+        .audit-toast {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+            padding: 0.85rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            z-index: 9999;
+            max-width: 90vw;
+            font-size: 0.85rem;
+            animation: toast-in 0.25s ease;
+        }
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateX(-50%) translateY(1rem); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        .audit-toast .toast-msg { flex: 1; line-height: 1.4; }
+        .audit-toast .toast-undo {
+            padding: 0.3rem 0.75rem;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .audit-toast .toast-undo:hover { opacity: 0.85; }
+        .audit-toast .toast-close {
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 0 0.25rem;
+        }
     </style>
 </head>
 <body>
@@ -341,6 +386,9 @@
             <span id="role-badge" class="role-badge" style="display:none;"></span>
             <button id="btn-autofix" class="btn btn-secondary" title="Fix side games, customer names, and course names in existing records">
                 Autofix All
+            </button>
+            <button id="btn-re-extract" class="btn btn-secondary" title="Re-parse emails to fill in partner requests, fellowship, and notes">
+                Re-extract Fields
             </button>
             <button id="btn-run-audit" class="btn btn-primary" title="Re-fetch emails and compare">
                 <span class="btn-icon">&#128269;</span> Run Audit
@@ -369,6 +417,32 @@
 
         <!-- EMAIL AUDIT TAB -->
         <div id="tab-email-audit">
+        <!-- Audit controls -->
+        <div class="audit-controls" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem;">
+            <label style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
+                Days back
+                <select id="audit-days" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
+                    <option value="7">7</option>
+                    <option value="14">14</option>
+                    <option value="30">30</option>
+                    <option value="60">60</option>
+                    <option value="90" selected>90</option>
+                    <option value="180">180</option>
+                    <option value="365">365</option>
+                </select>
+            </label>
+            <label style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
+                Max emails
+                <select id="audit-limit" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                </select>
+            </label>
+        </div>
+
         <div id="loading" class="loading-msg">Click "Run Audit" to fetch emails and compare against parsed data.</div>
 
         <div id="audit-content" style="display:none;">
@@ -414,6 +488,11 @@
                 <button class="filter-btn" data-fb-filter="dismissed">Dismissed</button>
                 <button class="filter-btn" data-fb-filter="bug">Bugs</button>
                 <button class="filter-btn" data-fb-filter="feature">Features</button>
+                <button class="filter-btn" id="btn-send-test-digest"
+                        style="margin-left:auto; background:#2563eb; color:#fff; border:none; padding:0.4rem 1rem; border-radius:6px; cursor:pointer;"
+                        title="Send the daily digest email to yourself right now">
+                    Send Test Digest
+                </button>
             </div>
             <div id="feedback-list"><div class="loading-msg">Loading feedback...</div></div>
         </div>
@@ -428,7 +507,7 @@
         <div class="modal login-modal">
             <h2>Dashboard Login</h2>
             <p class="modal-subtitle">Enter your PIN to access the dashboard.</p>
-            <input type="password" id="login-pin" class="modal-input" placeholder="Enter PIN" maxlength="20" autocomplete="off">
+            <input type="password" id="login-pin" class="modal-input" placeholder="Enter PIN" maxlength="20" autocomplete="off" aria-required="true" aria-label="PIN code">
             <div id="login-error" class="modal-error" style="display:none;"></div>
             <button id="login-submit" class="btn btn-primary modal-btn">Log In</button>
         </div>
@@ -564,7 +643,9 @@
         contentEl.style.display = "none";
 
         try {
-            const res = await fetch("/api/audit/emails?limit=100");
+            const auditDays = document.getElementById("audit-days").value;
+            const auditLimit = document.getElementById("audit-limit").value;
+            const res = await fetch(`/api/audit/emails?limit=${auditLimit}&days=${auditDays}`);
             if (!res.ok) {
                 const err = await res.json();
                 throw new Error(err.error || "Request failed");
@@ -610,7 +691,53 @@
         });
 
         // Autofix all button
+        let lastAutofixDetails = null;
+
+        function showToast(message, details) {
+            // Remove any existing toast
+            document.querySelectorAll(".audit-toast").forEach(t => t.remove());
+
+            const toast = document.createElement("div");
+            toast.className = "audit-toast";
+            const hasUndo = details && details.length > 0;
+            toast.innerHTML = `
+                <span class="toast-msg">${escapeHtml(message)}</span>
+                ${hasUndo ? '<button class="toast-undo">Undo</button>' : ''}
+                <button class="toast-close">&times;</button>`;
+
+            toast.querySelector(".toast-close").addEventListener("click", () => toast.remove());
+
+            if (hasUndo) {
+                toast.querySelector(".toast-undo").addEventListener("click", async () => {
+                    const undoBtn = toast.querySelector(".toast-undo");
+                    undoBtn.disabled = true;
+                    undoBtn.textContent = "Undoing...";
+                    try {
+                        const res = await fetch("/api/audit/undo-autofix", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ details }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Undo failed");
+                        toast.remove();
+                        showToast(`Undo complete — ${data.reverted} row(s) reverted.`, null);
+                        lastAutofixDetails = null;
+                        runAudit();
+                    } catch (err) {
+                        undoBtn.textContent = "Undo failed";
+                        undoBtn.disabled = false;
+                    }
+                });
+            }
+
+            document.body.appendChild(toast);
+            // Auto-dismiss after 30s (keep long so user has time to undo)
+            setTimeout(() => toast.remove(), 30000);
+        }
+
         document.getElementById("btn-autofix").addEventListener("click", async () => {
+            if (!confirm("This will normalize customer names, course names, side games, and item names across all records. Continue?")) return;
             const btn = document.getElementById("btn-autofix");
             btn.disabled = true;
             btn.textContent = "Fixing...";
@@ -619,19 +746,49 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "Request failed");
                 const b = data.breakdown || {};
-                const msg = `Scanned ${data.scanned} rows, ${data.fixed} rows updated:\n` +
-                    `  Side games: ${b.side_games || 0}\n` +
-                    `  Customer names: ${b.customer_name || 0}\n` +
-                    `  Course names: ${b.course_name || 0}\n` +
-                    `  Item names: ${b.item_name || 0}`;
-                alert(msg);
-                // Re-run audit to show updated data
+                lastAutofixDetails = data.details || [];
+                const parts = [];
+                if (b.side_games) parts.push(`${b.side_games} side games`);
+                if (b.customer_name) parts.push(`${b.customer_name} names`);
+                if (b.course_name) parts.push(`${b.course_name} courses`);
+                if (b.item_name) parts.push(`${b.item_name} items`);
+                if (b.chapter) parts.push(`${b.chapter} chapters`);
+                if (b.email_backfill) parts.push(`${b.email_backfill} emails backfilled`);
+                if (b.rsvp_updated) parts.push(`${b.rsvp_updated} RSVPs updated`);
+                const msg = data.fixed > 0
+                    ? `Fixed ${data.fixed} row(s): ${parts.join(", ")}`
+                    : `Scanned ${data.scanned} rows — nothing to fix.`;
+                showToast(msg, data.fixed > 0 ? lastAutofixDetails : null);
                 if (data.fixed > 0) runAudit();
             } catch (err) {
-                alert("Autofix failed: " + err.message);
+                showToast("Autofix failed: " + err.message, null);
             } finally {
                 btn.disabled = false;
                 btn.textContent = "Autofix All";
+            }
+        });
+
+        // Re-extract fields button
+        document.getElementById("btn-re-extract").addEventListener("click", async () => {
+            const btn = document.getElementById("btn-re-extract");
+            if (!confirm("This will re-parse all transaction emails through AI to backfill partner requests, fellowship, and notes. This may take a while and uses API credits. Continue?")) return;
+            btn.disabled = true;
+            btn.textContent = "Re-extracting...";
+            try {
+                const res = await fetch("/api/audit/re-extract-fields", { method: "POST" });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "Request failed");
+                const parts = [`${data.total_candidates} candidates`];
+                if (data.updated) parts.push(`${data.updated} updated`);
+                if (data.skipped) parts.push(`${data.skipped} skipped`);
+                if (data.errors) parts.push(`${data.errors} errors`);
+                showToast(`Re-extraction complete: ${parts.join(", ")}`, null);
+                if (data.updated > 0) runAudit();
+            } catch (err) {
+                showToast("Re-extract failed: " + err.message, null);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Re-extract Fields";
             }
         });
 
@@ -648,6 +805,7 @@
                 document.getElementById("tab-feedback").style.display = target === "feedback" ? "" : "none";
                 // Show/hide audit-specific header buttons
                 document.getElementById("btn-autofix").style.display = target === "email-audit" ? "" : "none";
+                document.getElementById("btn-re-extract").style.display = target === "email-audit" ? "" : "none";
                 document.getElementById("btn-run-audit").style.display = target === "email-audit" ? "" : "none";
                 if (target === "feedback") loadFeedback();
             });
@@ -745,6 +903,36 @@
 
         // Pre-load feedback count for the tab badge
         loadFeedback();
+
+        // Send Test Digest button
+        const digestBtn = document.getElementById("btn-send-test-digest");
+        if (digestBtn) {
+            digestBtn.addEventListener("click", async () => {
+                digestBtn.disabled = true;
+                digestBtn.textContent = "Sending...";
+                try {
+                    const res = await fetch("/api/support/test-digest", { method: "POST" });
+                    const data = await res.json();
+                    if (res.ok) {
+                        digestBtn.textContent = "Sent!";
+                        digestBtn.style.background = "#16a34a";
+                    } else {
+                        digestBtn.textContent = "Failed";
+                        digestBtn.style.background = "#dc2626";
+                        alert("Error: " + (data.error || "Unknown error"));
+                    }
+                } catch (e) {
+                    digestBtn.textContent = "Failed";
+                    digestBtn.style.background = "#dc2626";
+                    alert("Network error: " + e.message);
+                }
+                setTimeout(() => {
+                    digestBtn.disabled = false;
+                    digestBtn.textContent = "Send Test Digest";
+                    digestBtn.style.background = "#2563eb";
+                }, 3000);
+            });
+        }
     });
     </script>
 </body>
