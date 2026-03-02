@@ -1502,7 +1502,12 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
     Each dict should have 'customer' (required) plus optional fields like
     customer_email, customer_phone, chapter, handicap, date_of_birth, shirt_size.
 
-    For existing customers: updates their info fields.
+    Matching: finds existing customers by name (case-insensitive) first,
+    then falls back to email matching if the name doesn't match.
+
+    Fill-in-the-blanks: only updates fields that are currently empty/NULL
+    on the customer's items — never overwrites existing data.
+
     For new customers: creates a standalone Customer Entry item row.
 
     Returns { created: int, updated: int, skipped: int, errors: list[str] }.
@@ -1524,26 +1529,59 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
                 result["skipped"] += 1
                 continue
 
-            # Check if customer already exists
+            email = (row.get("customer_email") or "").strip().lower()
+
+            # 1) Try matching by name (case-insensitive)
             existing = conn.execute(
-                "SELECT id FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
+                "SELECT id, customer FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
                 (name,),
             ).fetchone()
+
+            # 2) If no name match, try matching by email
+            if not existing and email:
+                existing = conn.execute(
+                    """SELECT id, customer FROM items
+                       WHERE LOWER(customer_email) = ?
+                         AND customer IS NOT NULL AND customer != ''
+                       ORDER BY order_date DESC LIMIT 1""",
+                    (email,),
+                ).fetchone()
 
             safe = {k: v for k, v in row.items()
                     if k in allowed_fields and k != "customer" and v}
 
             if existing:
-                # Update existing customer's info across all their items
+                existing_name = existing["customer"]
+                # Fill-in-the-blanks: only update fields that are currently
+                # empty or NULL on the customer's items
                 if safe:
                     _validate_column_names(list(safe))
-                    set_clause = ", ".join(f"{col} = ?" for col in safe)
-                    values = list(safe.values()) + [name]
-                    conn.execute(
-                        f"UPDATE items SET {set_clause} WHERE customer = ? COLLATE NOCASE",
-                        values,
-                    )
-                    result["updated"] += 1
+                    # Check which fields are already populated
+                    current = conn.execute(
+                        """SELECT * FROM items
+                           WHERE customer = ? COLLATE NOCASE
+                           ORDER BY order_date DESC LIMIT 1""",
+                        (existing_name,),
+                    ).fetchone()
+                    blanks = {}
+                    if current:
+                        for col, val in safe.items():
+                            existing_val = current[col] if col in current.keys() else None
+                            if not existing_val or not str(existing_val).strip():
+                                blanks[col] = val
+                    else:
+                        blanks = safe
+
+                    if blanks:
+                        set_clause = ", ".join(f"{col} = ?" for col in blanks)
+                        values = list(blanks.values()) + [existing_name]
+                        conn.execute(
+                            f"UPDATE items SET {set_clause} WHERE customer = ? COLLATE NOCASE",
+                            values,
+                        )
+                        result["updated"] += 1
+                    else:
+                        result["skipped"] += 1
                 else:
                     result["skipped"] += 1
             else:

@@ -1600,7 +1600,12 @@
         ).join("")
         + '<th style="font-size:0.75rem;">Status</th>';
 
+        // Build lookup maps for existing customers: by name and by email
         const existingNames = new Set(allCustomers.map(c => c.name.toLowerCase()));
+        const existingEmails = {};  // email → customer name
+        allCustomers.forEach(c => {
+            if (c.email) existingEmails[c.email.toLowerCase()] = c.name;
+        });
         let newCount = 0, updateCount = 0, skippedNoEmail = 0;
 
         const tbody = document.getElementById("roster-preview-body");
@@ -1615,7 +1620,12 @@
                 if (!email) { skippedNoEmail++; return ""; }
             }
 
-            const isExisting = existingNames.has(name.toLowerCase());
+            // Check match: by name first, then by email
+            const nameMatch = existingNames.has(name.toLowerCase());
+            const rowEmail = (emailIdx !== null && emailIdx !== undefined && row[emailIdx])
+                ? String(row[emailIdx]).trim().toLowerCase() : "";
+            const emailMatchName = !nameMatch && rowEmail ? existingEmails[rowEmail] : null;
+            const isExisting = nameMatch || !!emailMatchName;
             if (isExisting) updateCount++; else newCount++;
 
             const cells = mappedFields.map(f => {
@@ -1629,9 +1639,14 @@
                 return `<td style="color:#7c3aed;">${escapeHtml(val)}</td>`;
             }).join("");
 
-            const statusBadge = isExisting
-                ? '<span style="color:#2563eb; font-weight:600;">Update</span>'
-                : '<span style="color:#16a34a; font-weight:600;">New</span>';
+            let statusBadge;
+            if (emailMatchName) {
+                statusBadge = `<span style="color:#2563eb; font-weight:600;" title="Matched by email to ${escapeHtml(emailMatchName)}">Update <span style="font-size:0.7rem; font-weight:400;">(email match)</span></span>`;
+            } else if (nameMatch) {
+                statusBadge = '<span style="color:#2563eb; font-weight:600;">Update</span>';
+            } else {
+                statusBadge = '<span style="color:#16a34a; font-weight:600;">New</span>';
+            }
 
             return `<tr>${cells}${newCells}<td>${statusBadge}</td></tr>`;
         }).filter(Boolean).join("");
