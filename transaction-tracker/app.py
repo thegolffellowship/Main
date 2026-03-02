@@ -1351,7 +1351,8 @@ def api_send_messages():
         template_id: int (optional — use template subject/body),
         subject: str (overrides template subject if provided),
         html_body: str (overrides template body if provided),
-        audience: str (all|playing|rsvp_only|net|gross|both|not_playing),
+        audience: str (all|playing|rsvp_only|net|gross|both|not_playing|custom),
+        custom_emails: [str] (required when audience=custom — specific email addresses),
         exclude_ids: [int] (optional — item IDs to exclude)
     }
     """
@@ -1392,6 +1393,12 @@ def api_send_messages():
 
     # Filter audience
     audience = (data.get("audience") or "all").lower()
+    custom_emails = set()
+    if audience == "custom":
+        raw = data.get("custom_emails") or []
+        custom_emails = {e.strip().lower() for e in raw if isinstance(e, str) and e.strip()}
+        if not custom_emails:
+            return jsonify({"error": "custom_emails list is required for custom audience"}), 400
     exclude_ids = set(data.get("exclude_ids") or [])
     items = get_all_items()
 
@@ -1480,6 +1487,9 @@ def api_send_messages():
                 filtered.append(r)
         elif audience == "not_playing":
             if rsvp == "not_playing":
+                filtered.append(r)
+        elif audience == "custom":
+            if (r.get("customer_email") or "").strip().lower() in custom_emails:
                 filtered.append(r)
         else:
             filtered.append(r)

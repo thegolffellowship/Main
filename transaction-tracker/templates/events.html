@@ -620,9 +620,17 @@
                         <option value="gross">GROSS Players</option>
                         <option value="both">BOTH (Net + Gross)</option>
                         <option value="not_playing">Not Playing</option>
+                        <option value="custom">Custom Selection</option>
                     </select>
                 </label>
                 <div id="compose-recipient-count" style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.5rem;"></div>
+                <div id="compose-custom-select" style="display:none; max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem; font-size:0.78rem; margin-bottom:0.75rem;">
+                    <div style="display:flex; gap:0.5rem; margin-bottom:0.4rem;">
+                        <button type="button" id="compose-select-all" class="btn btn-secondary" style="font-size:0.7rem; padding:0.15rem 0.5rem;">Select All</button>
+                        <button type="button" id="compose-select-none" class="btn btn-secondary" style="font-size:0.7rem; padding:0.15rem 0.5rem;">Deselect All</button>
+                    </div>
+                    <div id="compose-custom-list"></div>
+                </div>
                 <div id="compose-recipient-list" style="max-height:120px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem; font-size:0.78rem; margin-bottom:0.75rem; display:none;"></div>
                 <div style="display:flex; gap:0.5rem; margin-bottom:0.3rem;">
                     <button type="button" id="compose-toggle-recipients" class="btn btn-secondary" style="font-size:0.75rem; padding:0.25rem 0.6rem;">Show Recipients</button>
@@ -1100,6 +1108,9 @@
                         <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">+ Add Player</button>
                         ${mRsvpOnlyCount > 0 ? `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Remind All (${mRsvpOnlyCount})</button>` : ''}
                         <button class="btn btn-message-players" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;">Message Players</button>
+                        <button class="btn btn-edit btn-mobile-edit-event" data-edit-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Edit</button>
+                        ${currentRole === "admin" ? `<button class="btn btn-edit btn-mobile-merge-event" data-merge-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Merge</button>` : ''}
+                        ${currentRole === "admin" ? `<button class="btn btn-danger btn-mobile-delete-event" data-delete-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Delete</button>` : ''}
                     </div>
                     ${filteredRegs.length ? renderRegistrantsMobile(filteredRegs, ev) : '<div style="color:var(--text-muted); font-style:italic; font-size:0.85rem;">No registrations.</div>'}`;
                 }
@@ -2209,6 +2220,17 @@
             });
         });
 
+        // Edit / Merge / Delete event buttons (mobile cards)
+        container.querySelectorAll(".btn-mobile-edit-event").forEach(btn => {
+            btn.addEventListener("click", (e) => { e.stopPropagation(); openEditEvent(parseInt(btn.dataset.editEvent)); });
+        });
+        container.querySelectorAll(".btn-mobile-merge-event").forEach(btn => {
+            btn.addEventListener("click", (e) => { e.stopPropagation(); openMergeEvent(parseInt(btn.dataset.mergeEvent)); });
+        });
+        container.querySelectorAll(".btn-mobile-delete-event").forEach(btn => {
+            btn.addEventListener("click", (e) => { e.stopPropagation(); deleteEvent(parseInt(btn.dataset.deleteEvent)); });
+        });
+
         // Message History toggle
         container.querySelectorAll(".btn-toggle-msg-history").forEach(btn => {
             btn.addEventListener("click", (e) => {
@@ -2270,17 +2292,50 @@
 
     function updateRecipientCount() {
         const audience = document.getElementById("compose-audience").value;
-        const recipients = getComposeRecipients(composeEventName, audience);
-        const countEl = document.getElementById("compose-recipient-count");
-        countEl.textContent = `This will reach ${recipients.length} player${recipients.length !== 1 ? "s" : ""} with email addresses`;
-
+        const customDiv = document.getElementById("compose-custom-select");
         const listEl = document.getElementById("compose-recipient-list");
-        listEl.innerHTML = recipients.map(r =>
-            `<div style="padding:0.15rem 0; border-bottom:1px solid var(--border);">` +
-            `<strong>${escapeHtml(r.customer || "Unknown")}</strong>` +
-            ` <span style="color:var(--text-muted);">${escapeHtml(r.customer_email || "")}</span>` +
-            `</div>`
-        ).join("");
+
+        if (audience === "custom") {
+            customDiv.style.display = "block";
+            // Build checkbox list from all registrants with emails
+            const allRegs = getComposeRecipients(composeEventName, "all");
+            const customList = document.getElementById("compose-custom-list");
+            customList.innerHTML = allRegs.map(r =>
+                `<label style="display:flex; align-items:center; gap:0.4rem; padding:0.2rem 0; border-bottom:1px solid var(--border); cursor:pointer;">` +
+                `<input type="checkbox" class="compose-custom-cb" value="${escapeHtml(r.customer_email)}" checked>` +
+                `<strong>${escapeHtml(r.customer || "Unknown")}</strong>` +
+                ` <span style="color:var(--text-muted);">${escapeHtml(r.customer_email || "")}</span>` +
+                `</label>`
+            ).join("");
+            // Attach change handlers to update count
+            customList.querySelectorAll(".compose-custom-cb").forEach(cb => {
+                cb.addEventListener("change", updateCustomCount);
+            });
+            updateCustomCount();
+            listEl.style.display = "none";
+        } else {
+            customDiv.style.display = "none";
+            const recipients = getComposeRecipients(composeEventName, audience);
+            const countEl = document.getElementById("compose-recipient-count");
+            countEl.textContent = `This will reach ${recipients.length} player${recipients.length !== 1 ? "s" : ""} with email addresses`;
+            listEl.innerHTML = recipients.map(r =>
+                `<div style="padding:0.15rem 0; border-bottom:1px solid var(--border);">` +
+                `<strong>${escapeHtml(r.customer || "Unknown")}</strong>` +
+                ` <span style="color:var(--text-muted);">${escapeHtml(r.customer_email || "")}</span>` +
+                `</div>`
+            ).join("");
+        }
+    }
+
+    function updateCustomCount() {
+        const checked = document.querySelectorAll("#compose-custom-list .compose-custom-cb:checked");
+        const countEl = document.getElementById("compose-recipient-count");
+        countEl.textContent = `${checked.length} player${checked.length !== 1 ? "s" : ""} selected`;
+    }
+
+    function getCustomSelectedEmails() {
+        const checked = document.querySelectorAll("#compose-custom-list .compose-custom-cb:checked");
+        return Array.from(checked).map(cb => cb.value);
     }
 
     function openComposeModal(eventName) {
@@ -2303,6 +2358,7 @@
         document.getElementById("compose-send-btn").textContent = "Send Email";
         document.getElementById("compose-recipient-list").style.display = "none";
         document.getElementById("compose-toggle-recipients").textContent = "Show Recipients";
+        document.getElementById("compose-custom-select").style.display = "none";
 
         // Populate templates dropdown
         const tplSelect = document.getElementById("compose-template");
@@ -2335,6 +2391,16 @@
 
     // Audience change handler
     document.getElementById("compose-audience").addEventListener("change", updateRecipientCount);
+
+    // Select All / Deselect All for custom selection
+    document.getElementById("compose-select-all").addEventListener("click", function() {
+        document.querySelectorAll("#compose-custom-list .compose-custom-cb").forEach(cb => { cb.checked = true; });
+        updateCustomCount();
+    });
+    document.getElementById("compose-select-none").addEventListener("click", function() {
+        document.querySelectorAll("#compose-custom-list .compose-custom-cb").forEach(cb => { cb.checked = false; });
+        updateCustomCount();
+    });
 
     // Toggle recipient list
     document.getElementById("compose-toggle-recipients").addEventListener("click", function() {
@@ -2407,16 +2473,23 @@
         if (!subject) { alert("Subject is required"); return; }
         if (!body) { alert("Message body is required"); return; }
 
-        const recipients = getComposeRecipients(composeEventName, audience);
-        if (!recipients.length) { alert("No recipients found for this audience"); return; }
+        let recipientCount;
+        let customEmails = null;
+        if (audience === "custom") {
+            customEmails = getCustomSelectedEmails();
+            recipientCount = customEmails.length;
+        } else {
+            recipientCount = getComposeRecipients(composeEventName, audience).length;
+        }
+        if (!recipientCount) { alert("No recipients selected"); return; }
 
-        if (!confirm(`Send email to ${recipients.length} player${recipients.length !== 1 ? "s" : ""} for "${composeEventName}"?`)) return;
+        if (!confirm(`Send email to ${recipientCount} player${recipientCount !== 1 ? "s" : ""} for "${composeEventName}"?`)) return;
 
         this.disabled = true;
         this.textContent = "Sending...";
         document.getElementById("compose-progress").style.display = "block";
         document.getElementById("compose-progress-bar").style.width = "10%";
-        document.getElementById("compose-progress-text").textContent = `Sending to ${recipients.length} recipients...`;
+        document.getElementById("compose-progress-text").textContent = `Sending to ${recipientCount} recipients...`;
 
         // Save as template if checked
         if (saveAsTemplate) {
@@ -2435,12 +2508,12 @@
             const resp = await fetch("/api/messages/send", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
+                body: JSON.stringify(Object.assign({
                     event_name: composeEventName,
                     template_id: templateId,
                     subject, html_body: body,
                     audience,
-                }),
+                }, customEmails ? { custom_emails: customEmails } : {})),
             });
             const data = await resp.json();
             document.getElementById("compose-progress-bar").style.width = "100%";
