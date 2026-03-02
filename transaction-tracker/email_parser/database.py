@@ -261,6 +261,128 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # Message templates — reusable email/SMS message templates
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS message_templates (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                name       TEXT NOT NULL,
+                channel    TEXT NOT NULL DEFAULT 'email',
+                subject    TEXT,
+                html_body  TEXT,
+                sms_body   TEXT,
+                is_system  INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT
+            )
+            """
+        )
+
+        # Message log — tracks every message sent (email or SMS)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS message_log (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_name        TEXT,
+                template_id       INTEGER,
+                channel           TEXT NOT NULL,
+                recipient_name    TEXT,
+                recipient_address TEXT NOT NULL,
+                subject           TEXT,
+                body_preview      TEXT,
+                status            TEXT DEFAULT 'sent',
+                error_message     TEXT,
+                sent_by           TEXT,
+                sent_at           TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_message_log_event ON message_log(event_name)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_message_log_sent_at ON message_log(sent_at DESC)"
+        )
+
+        # Seed built-in message templates on first run
+        existing = conn.execute("SELECT COUNT(*) as cnt FROM message_templates WHERE is_system = 1").fetchone()
+        if existing["cnt"] == 0:
+            system_templates = [
+                (
+                    "Payment Reminder", "email",
+                    "Payment Reminder — {event_name}",
+                    "<p>Hi {player_name},</p>"
+                    "<p>This is a friendly reminder that we have you down for "
+                    "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+                    "<p>Please complete your registration at your earliest convenience.</p>"
+                    "<p>Thanks,<br>The Golf Fellowship</p>",
+                    None,
+                ),
+                (
+                    "Event Announcement", "both",
+                    "{event_name} — You're Registered!",
+                    "<p>Hi {player_name},</p>"
+                    "<p>You're registered for <strong>{event_name}</strong> at "
+                    "<strong>{course}</strong> on <strong>{event_date}</strong>!</p>"
+                    "<p>We look forward to seeing you there.</p>"
+                    "<p>Thanks,<br>The Golf Fellowship</p>",
+                    "You're registered for {event_name} at {course} on {event_date}! See you there.",
+                ),
+                (
+                    "Tee Time Update", "both",
+                    "Tee Times — {event_name}",
+                    "<p>Hi {player_name},</p>"
+                    "<p>Tee times are set for <strong>{event_name}</strong> at "
+                    "<strong>{course}</strong> on <strong>{event_date}</strong>.</p>"
+                    "<p>Thanks,<br>The Golf Fellowship</p>",
+                    "Tee times are set for {event_name} at {course} on {event_date}.",
+                ),
+                (
+                    "Weather Alert", "both",
+                    "Weather Update — {event_name}",
+                    "<p>Hi {player_name},</p>"
+                    "<p>Weather update for <strong>{event_name}</strong> on "
+                    "<strong>{event_date}</strong>.</p>"
+                    "<p>Thanks,<br>The Golf Fellowship</p>",
+                    "Weather update for {event_name} on {event_date}.",
+                ),
+                (
+                    "Event Cancellation", "both",
+                    "{event_name} — Cancelled",
+                    "<p>Hi {player_name},</p>"
+                    "<p>Unfortunately, <strong>{event_name}</strong> scheduled for "
+                    "<strong>{event_date}</strong> at <strong>{course}</strong> has been "
+                    "cancelled.</p>"
+                    "<p>We'll be in touch with more details.</p>"
+                    "<p>Thanks,<br>The Golf Fellowship</p>",
+                    "{event_name} on {event_date} at {course} has been cancelled. More details to follow.",
+                ),
+                (
+                    "Day-Of Reminder", "both",
+                    "See You Today — {event_name}",
+                    "<p>Hi {player_name},</p>"
+                    "<p>See you today at <strong>{course}</strong> for "
+                    "<strong>{event_name}</strong>!</p>"
+                    "<p>Thanks,<br>The Golf Fellowship</p>",
+                    "See you today at {course} for {event_name}!",
+                ),
+                (
+                    "Post-Event Results", "email",
+                    "Results — {event_name}",
+                    "<p>Hi {player_name},</p>"
+                    "<p>Results are in for <strong>{event_name}</strong> at "
+                    "<strong>{course}</strong>!</p>"
+                    "<p>Thanks for playing,<br>The Golf Fellowship</p>",
+                    None,
+                ),
+            ]
+            for name, channel, subj, html, sms in system_templates:
+                conn.execute(
+                    "INSERT INTO message_templates (name, channel, subject, html_body, sms_body, is_system) "
+                    "VALUES (?, ?, ?, ?, ?, 1)",
+                    (name, channel, subj, html, sms),
+                )
+
         # Backfill NULL/empty values in critical columns
         conn.execute("UPDATE items SET customer = '(Unknown)' WHERE customer IS NULL OR customer = ''")
         conn.execute("UPDATE items SET item_name = '(Unknown Item)' WHERE item_name IS NULL OR item_name = ''")
@@ -2189,3 +2311,126 @@ def get_upcoming_events(db_path: str | Path | None = None) -> list[dict]:
             d["aliases"] = [a for a in (d.get("aliases") or "").split(",") if a]
             results.append(d)
         return results
+
+
+# ---------------------------------------------------------------------------
+# Messaging — templates & send log
+# ---------------------------------------------------------------------------
+
+
+def get_message_templates(db_path: str | Path | None = None) -> list[dict]:
+    """Return all message templates, system templates first."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM message_templates ORDER BY is_system DESC, name ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_message_template(template_id: int, db_path: str | Path | None = None) -> dict | None:
+    """Return a single template by ID."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM message_templates WHERE id = ?", (template_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def create_message_template(data: dict, db_path: str | Path | None = None) -> dict:
+    """Create a new message template. Returns the created template."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO message_templates (name, channel, subject, html_body, sms_body) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (data["name"], data.get("channel", "email"), data.get("subject"),
+             data.get("html_body"), data.get("sms_body")),
+        )
+        conn.commit()
+        return dict(conn.execute(
+            "SELECT * FROM message_templates WHERE id = ?", (cur.lastrowid,)
+        ).fetchone())
+
+
+def update_message_template(template_id: int, data: dict, db_path: str | Path | None = None) -> dict | None:
+    """Update a message template. Cannot edit system template names. Returns updated template."""
+    with _connect(db_path) as conn:
+        existing = conn.execute(
+            "SELECT * FROM message_templates WHERE id = ?", (template_id,)
+        ).fetchone()
+        if not existing:
+            return None
+        fields = []
+        values = []
+        for col in ("name", "channel", "subject", "html_body", "sms_body"):
+            if col in data:
+                if col == "name" and existing["is_system"]:
+                    continue
+                fields.append(f"{col} = ?")
+                values.append(data[col])
+        if not fields:
+            return dict(existing)
+        fields.append("updated_at = datetime('now')")
+        values.append(template_id)
+        conn.execute(
+            f"UPDATE message_templates SET {', '.join(fields)} WHERE id = ?",
+            values,
+        )
+        conn.commit()
+        return dict(conn.execute(
+            "SELECT * FROM message_templates WHERE id = ?", (template_id,)
+        ).fetchone())
+
+
+def delete_message_template(template_id: int, db_path: str | Path | None = None) -> bool:
+    """Delete a non-system template. Returns True if deleted."""
+    with _connect(db_path) as conn:
+        existing = conn.execute(
+            "SELECT is_system FROM message_templates WHERE id = ?", (template_id,)
+        ).fetchone()
+        if not existing or existing["is_system"]:
+            return False
+        conn.execute("DELETE FROM message_templates WHERE id = ?", (template_id,))
+        conn.commit()
+        return True
+
+
+def log_message(data: dict, db_path: str | Path | None = None) -> int:
+    """Log a sent message. Returns the new log entry ID."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO message_log "
+            "(event_name, template_id, channel, recipient_name, recipient_address, "
+            " subject, body_preview, status, error_message, sent_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                data.get("event_name"),
+                data.get("template_id"),
+                data["channel"],
+                data.get("recipient_name"),
+                data["recipient_address"],
+                data.get("subject"),
+                data.get("body_preview"),
+                data.get("status", "sent"),
+                data.get("error_message"),
+                data.get("sent_by"),
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def get_message_log(event_name: str | None = None, limit: int = 200,
+                    db_path: str | Path | None = None) -> list[dict]:
+    """Return message log entries, optionally filtered by event."""
+    with _connect(db_path) as conn:
+        if event_name:
+            rows = conn.execute(
+                "SELECT * FROM message_log WHERE event_name = ? ORDER BY sent_at DESC LIMIT ?",
+                (event_name, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM message_log ORDER BY sent_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]

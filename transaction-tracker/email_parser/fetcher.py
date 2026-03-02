@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 from datetime import datetime, timedelta
 
 import msal
@@ -320,3 +321,71 @@ def send_mail_graph(
         logger.exception("Failed to send email via Graph API")
 
     return False
+
+
+def render_msg_template(template_text: str, variables: dict) -> str:
+    """Render a message template by substituting {variable} placeholders.
+
+    Only replaces known variable names to avoid KeyError on user-typed braces.
+    """
+    if not template_text:
+        return template_text or ""
+    result = template_text
+    for key, value in variables.items():
+        result = result.replace("{" + key + "}", str(value or ""))
+    return result
+
+
+def send_bulk_emails(
+    recipients: list[dict],
+    subject_template: str,
+    body_template: str,
+    event_vars: dict,
+    delay_ms: int = 300,
+) -> dict:
+    """Send emails to a list of recipients with template variable substitution.
+
+    Each recipient dict must have: player_name, email
+    event_vars provides: event_name, event_date, course, city
+
+    Returns: {"sent": N, "failed": N, "errors": [...]}
+    """
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return {"sent": 0, "failed": len(recipients),
+                "errors": [{"recipient": "all", "error": "Email credentials not configured"}]}
+
+    sent = 0
+    failed = 0
+    errors = []
+
+    for i, recip in enumerate(recipients):
+        variables = {**event_vars, "player_name": recip["player_name"]}
+        rendered_subject = render_msg_template(subject_template, variables)
+        rendered_body = render_msg_template(body_template, variables)
+
+        ok = send_mail_graph(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            from_address=from_address,
+            to_address=recip["email"],
+            subject=rendered_subject,
+            html_body=rendered_body,
+        )
+
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+            errors.append({"recipient": recip["email"], "error": "Graph API send failed"})
+
+        # Throttle between sends (skip delay after last)
+        if delay_ms > 0 and i < len(recipients) - 1:
+            time.sleep(delay_ms / 1000.0)
+
+    return {"sent": sent, "failed": failed, "errors": errors}

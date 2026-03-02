@@ -599,6 +599,93 @@
         </div>
     </div>
 
+    <!-- Compose Message Modal -->
+    <div id="compose-msg-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:580px;">
+            <div class="modal-header">
+                <h2 id="compose-msg-title">Message Players</h2>
+                <button id="compose-msg-close" class="modal-close">&times;</button>
+            </div>
+            <div id="compose-msg-event-info" class="credit-info" style="margin-bottom:0.75rem;"></div>
+
+            <!-- Step 1: Audience -->
+            <div id="compose-step-audience">
+                <label style="display:block; margin-bottom:0.75rem;">
+                    <span style="font-weight:600; font-size:0.82rem;">Audience</span>
+                    <select id="compose-audience" class="modal-input" style="margin-top:0.3rem;">
+                        <option value="all">All Registered</option>
+                        <option value="playing">Playing (RSVP Confirmed)</option>
+                        <option value="rsvp_only">RSVP Only (Unpaid)</option>
+                        <option value="net">NET Players</option>
+                        <option value="gross">GROSS Players</option>
+                        <option value="both">BOTH (Net + Gross)</option>
+                        <option value="not_playing">Not Playing</option>
+                    </select>
+                </label>
+                <div id="compose-recipient-count" style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.5rem;"></div>
+                <div id="compose-recipient-list" style="max-height:120px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem; font-size:0.78rem; margin-bottom:0.75rem; display:none;"></div>
+                <div style="display:flex; gap:0.5rem; margin-bottom:0.3rem;">
+                    <button type="button" id="compose-toggle-recipients" class="btn btn-secondary" style="font-size:0.75rem; padding:0.25rem 0.6rem;">Show Recipients</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Message -->
+            <div id="compose-step-message" style="margin-top:0.75rem; border-top:1px solid var(--border); padding-top:0.75rem;">
+                <label style="display:block; margin-bottom:0.5rem;">
+                    <span style="font-weight:600; font-size:0.82rem;">Template</span>
+                    <select id="compose-template" class="modal-input" style="margin-top:0.3rem;">
+                        <option value="">Custom Message</option>
+                    </select>
+                </label>
+                <label style="display:block; margin-bottom:0.5rem;">
+                    <span style="font-weight:600; font-size:0.82rem;">Subject</span>
+                    <input type="text" id="compose-subject" class="modal-input" style="margin-top:0.3rem;" placeholder="Email subject line...">
+                </label>
+                <label style="display:block; margin-bottom:0.5rem;">
+                    <span style="font-weight:600; font-size:0.82rem;">Message Body</span>
+                    <div id="compose-var-btns" style="display:flex; gap:0.3rem; flex-wrap:wrap; margin:0.3rem 0;">
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="player_name" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{player_name}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="event_name" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{event_name}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="event_date" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{event_date}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="course" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{course}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="city" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{city}</button>
+                    </div>
+                    <textarea id="compose-body" class="modal-input" rows="8" style="margin-top:0.2rem; font-family:inherit; resize:vertical;" placeholder="Type your message here... Use the variable buttons above to insert personalization tags."></textarea>
+                </label>
+                <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+                    <button type="button" id="compose-preview-btn" class="btn btn-secondary" style="font-size:0.75rem; padding:0.25rem 0.6rem;">Preview</button>
+                    <label style="font-size:0.78rem; display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+                        <input type="checkbox" id="compose-save-template"> Save as template
+                    </label>
+                </div>
+                <div id="compose-preview-box" style="display:none; border:1px solid var(--border); border-radius:var(--radius); padding:0.75rem; margin-bottom:0.75rem; background:var(--bg-card); font-size:0.82rem;">
+                    <div style="font-weight:600; margin-bottom:0.3rem;">Preview:</div>
+                    <div id="compose-preview-subject" style="color:var(--text-muted); margin-bottom:0.3rem;"></div>
+                    <div id="compose-preview-body"></div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="modal-actions" style="margin-top:0.75rem;">
+                <button type="button" id="compose-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="compose-send-btn" class="btn btn-primary" style="background:#2563eb;">
+                    Send Email
+                </button>
+            </div>
+
+            <!-- Progress -->
+            <div id="compose-progress" style="display:none; margin-top:0.75rem;">
+                <div style="background:var(--border); border-radius:4px; height:6px; overflow:hidden;">
+                    <div id="compose-progress-bar" style="background:#2563eb; height:100%; width:0%; transition:width 0.3s;"></div>
+                </div>
+                <div id="compose-progress-text" style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;"></div>
+            </div>
+
+            <!-- Results -->
+            <div id="compose-results" style="display:none; margin-top:0.75rem; padding:0.75rem; border-radius:var(--radius); font-size:0.82rem;"></div>
+        </div>
+    </div>
+
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/chat-widget.js"></script>
@@ -1012,6 +1099,7 @@
                     <div style="display:flex; gap:0.5rem; margin-bottom:0.65rem; flex-wrap:wrap;">
                         <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">+ Add Player</button>
                         ${mRsvpOnlyCount > 0 ? `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Remind All (${mRsvpOnlyCount})</button>` : ''}
+                        <button class="btn btn-message-players" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;">Message Players</button>
                     </div>
                     ${filteredRegs.length ? renderRegistrantsMobile(filteredRegs, ev) : '<div style="color:var(--text-muted); font-style:italic; font-size:0.85rem;">No registrations.</div>'}`;
                 }
@@ -1566,6 +1654,7 @@
         if (rsvpOnlyCount > 0) {
             html += `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Send payment reminder to all ${rsvpOnlyCount} RSVP-only player(s)">Remind All (${rsvpOnlyCount})</button>`;
         }
+        html += `<button class="btn btn-message-players" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Send email to event players">Message Players</button>`;
         html += '<div class="column-toggle-wrapper">';
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
@@ -1699,7 +1788,52 @@
             }
         }
 
+        // ---- MESSAGE HISTORY ----
+        html += `<div class="msg-history-section" style="margin-top:1rem; border-top:1px solid var(--border); padding-top:0.75rem;">`;
+        html += `<button class="btn btn-secondary btn-toggle-msg-history" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.25rem 0.6rem;">Message History</button>`;
+        html += `<div class="msg-history-content" data-event-name="${escapeHtml(ev.item_name)}" style="display:none; margin-top:0.5rem;"></div>`;
+        html += `</div>`;
+
         return html;
+    }
+
+    // Message history loading
+    async function loadMessageHistory(eventName, container) {
+        container.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem;">Loading...</div>';
+        try {
+            const resp = await fetch(`/api/messages/log/${encodeURIComponent(eventName)}`);
+            if (!resp.ok) throw new Error("Failed to load");
+            const logs = await resp.json();
+            if (!logs.length) {
+                container.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem; font-style:italic;">No messages sent for this event yet.</div>';
+                return;
+            }
+            // Group by sent_at (batch sends have the same second)
+            const batches = {};
+            logs.forEach(l => {
+                const key = (l.sent_at || "").substring(0, 19);  // trim to second
+                if (!batches[key]) batches[key] = { sent_at: l.sent_at, subject: l.subject, sent_by: l.sent_by, channel: l.channel, recipients: [] };
+                batches[key].recipients.push(l);
+            });
+            let html = '<div style="font-size:0.8rem;">';
+            Object.values(batches).forEach(batch => {
+                const sentCount = batch.recipients.filter(r => r.status === "sent").length;
+                const failedCount = batch.recipients.filter(r => r.status === "failed").length;
+                const statusColor = failedCount === 0 ? "#16a34a" : (sentCount === 0 ? "#dc2626" : "#d97706");
+                const dateStr = batch.sent_at ? new Date(batch.sent_at + "Z").toLocaleString() : "Unknown";
+                html += `<div style="padding:0.4rem 0; border-bottom:1px solid var(--border);">`;
+                html += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
+                html += `<strong>${escapeHtml(batch.subject || "(no subject)")}</strong>`;
+                html += `<span style="font-size:0.72rem; color:var(--text-muted);">${dateStr}</span>`;
+                html += `</div>`;
+                html += `<div style="color:${statusColor}; font-size:0.75rem;">${sentCount} sent${failedCount ? ", " + failedCount + " failed" : ""} &bull; by ${escapeHtml(batch.sent_by || "unknown")}</div>`;
+                html += `</div>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        } catch (err) {
+            container.innerHTML = `<div style="color:#dc2626; font-size:0.8rem;">Failed to load message history</div>`;
+        }
     }
 
     async function toggleEventDetail(eventId) {
@@ -2066,7 +2200,281 @@
                 if (ev && expandedEventId === ev.id) rerenderDetail(container, ev);
             });
         });
+
+        // Message Players button
+        container.querySelectorAll(".btn-message-players").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openComposeModal(btn.dataset.eventName);
+            });
+        });
+
+        // Message History toggle
+        container.querySelectorAll(".btn-toggle-msg-history").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const eventName = btn.dataset.eventName;
+                const content = container.querySelector(`.msg-history-content[data-event-name="${CSS.escape(eventName)}"]`);
+                if (!content) return;
+                if (content.style.display === "none") {
+                    content.style.display = "block";
+                    btn.textContent = "Hide Message History";
+                    loadMessageHistory(eventName, content);
+                } else {
+                    content.style.display = "none";
+                    btn.textContent = "Message History";
+                }
+            });
+        });
     }
+
+    // ---- Compose Message Modal Logic ----
+    let composeEventName = "";
+    let composeTemplates = [];
+
+    async function loadMessageTemplates() {
+        try {
+            const resp = await fetch("/api/messages/templates");
+            if (resp.ok) composeTemplates = await resp.json();
+        } catch (e) { /* ignore */ }
+    }
+
+    function getComposeRecipients(eventName, audience) {
+        const allAliases = {};
+        allEvents.forEach(ev => {
+            if (ev.aliases) ev.aliases.forEach(a => { allAliases[a] = ev.item_name; });
+        });
+        const registrants = allItems.filter(i => {
+            const iname = i.item_name || "";
+            return iname === eventName || allAliases[iname] === eventName;
+        });
+
+        return registrants.filter(r => {
+            const status = (r.transaction_status || "active");
+            if (status === "credited" || status === "transferred") return false;
+            if (!r.customer_email) return false;
+            const sg = (r.side_games || "").toUpperCase().trim();
+
+            if (audience === "all") return true;
+            if (audience === "rsvp_only") return status === "rsvp_only";
+            if (audience === "net") return sg === "NET" || sg === "BOTH";
+            if (audience === "gross") return sg === "GROSS" || sg === "BOTH";
+            if (audience === "both") return sg === "BOTH";
+            if (audience === "playing" || audience === "not_playing") {
+                // Approximate: use RSVP data if available
+                return true; // server-side will do accurate filtering
+            }
+            return true;
+        });
+    }
+
+    function updateRecipientCount() {
+        const audience = document.getElementById("compose-audience").value;
+        const recipients = getComposeRecipients(composeEventName, audience);
+        const countEl = document.getElementById("compose-recipient-count");
+        countEl.textContent = `This will reach ${recipients.length} player${recipients.length !== 1 ? "s" : ""} with email addresses`;
+
+        const listEl = document.getElementById("compose-recipient-list");
+        listEl.innerHTML = recipients.map(r =>
+            `<div style="padding:0.15rem 0; border-bottom:1px solid var(--border);">` +
+            `<strong>${escapeHtml(r.customer || "Unknown")}</strong>` +
+            ` <span style="color:var(--text-muted);">${escapeHtml(r.customer_email || "")}</span>` +
+            `</div>`
+        ).join("");
+    }
+
+    function openComposeModal(eventName) {
+        composeEventName = eventName;
+        const ev = allEvents.find(e => e.item_name === eventName);
+        document.getElementById("compose-msg-event-info").innerHTML =
+            `<strong>${escapeHtml(eventName)}</strong>` +
+            (ev ? ` &mdash; ${escapeHtml(ev.event_date || "")} &bull; ${escapeHtml(ev.course || "")}` : "");
+
+        // Reset form
+        document.getElementById("compose-audience").value = "all";
+        document.getElementById("compose-subject").value = "";
+        document.getElementById("compose-body").value = "";
+        document.getElementById("compose-template").value = "";
+        document.getElementById("compose-save-template").checked = false;
+        document.getElementById("compose-preview-box").style.display = "none";
+        document.getElementById("compose-progress").style.display = "none";
+        document.getElementById("compose-results").style.display = "none";
+        document.getElementById("compose-send-btn").disabled = false;
+        document.getElementById("compose-send-btn").textContent = "Send Email";
+        document.getElementById("compose-recipient-list").style.display = "none";
+        document.getElementById("compose-toggle-recipients").textContent = "Show Recipients";
+
+        // Populate templates dropdown
+        const tplSelect = document.getElementById("compose-template");
+        tplSelect.innerHTML = '<option value="">Custom Message</option>';
+        composeTemplates.forEach(t => {
+            if (t.channel === "sms") return; // skip SMS-only templates
+            const opt = document.createElement("option");
+            opt.value = t.id;
+            opt.textContent = t.name + (t.is_system ? " (built-in)" : "");
+            tplSelect.appendChild(opt);
+        });
+
+        updateRecipientCount();
+        document.getElementById("compose-msg-overlay").style.display = "flex";
+    }
+
+    function closeComposeModal() {
+        document.getElementById("compose-msg-overlay").style.display = "none";
+    }
+
+    // Template selection handler
+    document.getElementById("compose-template").addEventListener("change", function() {
+        const tplId = parseInt(this.value);
+        if (!tplId) return;
+        const tpl = composeTemplates.find(t => t.id === tplId);
+        if (!tpl) return;
+        document.getElementById("compose-subject").value = tpl.subject || "";
+        document.getElementById("compose-body").value = tpl.html_body || "";
+    });
+
+    // Audience change handler
+    document.getElementById("compose-audience").addEventListener("change", updateRecipientCount);
+
+    // Toggle recipient list
+    document.getElementById("compose-toggle-recipients").addEventListener("click", function() {
+        const listEl = document.getElementById("compose-recipient-list");
+        if (listEl.style.display === "none") {
+            listEl.style.display = "block";
+            this.textContent = "Hide Recipients";
+        } else {
+            listEl.style.display = "none";
+            this.textContent = "Show Recipients";
+        }
+    });
+
+    // Variable insertion buttons
+    document.querySelectorAll(".compose-var-btn").forEach(btn => {
+        btn.addEventListener("click", function() {
+            const textarea = document.getElementById("compose-body");
+            const varTag = "{" + this.dataset.var + "}";
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+            textarea.value = text.substring(0, start) + varTag + text.substring(end);
+            textarea.selectionStart = textarea.selectionEnd = start + varTag.length;
+            textarea.focus();
+        });
+    });
+
+    // Preview button
+    document.getElementById("compose-preview-btn").addEventListener("click", async function() {
+        const subject = document.getElementById("compose-subject").value;
+        const body = document.getElementById("compose-body").value;
+        const ev = allEvents.find(e => e.item_name === composeEventName);
+        try {
+            const resp = await fetch("/api/messages/preview", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    subject, html_body: body,
+                    player_name: "John Doe",
+                    event_name: composeEventName,
+                    event_date: ev?.event_date || "",
+                    course: ev?.course || "",
+                    city: ev?.city || "",
+                }),
+            });
+            const data = await resp.json();
+            document.getElementById("compose-preview-subject").textContent = "Subject: " + (data.subject || "");
+            document.getElementById("compose-preview-body").innerHTML = data.html_body || "";
+            document.getElementById("compose-preview-box").style.display = "block";
+        } catch (err) {
+            alert("Preview failed: " + err.message);
+        }
+    });
+
+    // Close handlers
+    document.getElementById("compose-msg-close").addEventListener("click", closeComposeModal);
+    document.getElementById("compose-cancel").addEventListener("click", closeComposeModal);
+    document.getElementById("compose-msg-overlay").addEventListener("click", function(e) {
+        if (e.target === this) closeComposeModal();
+    });
+
+    // Send button
+    document.getElementById("compose-send-btn").addEventListener("click", async function() {
+        const subject = document.getElementById("compose-subject").value.trim();
+        const body = document.getElementById("compose-body").value.trim();
+        const audience = document.getElementById("compose-audience").value;
+        const templateId = parseInt(document.getElementById("compose-template").value) || null;
+        const saveAsTemplate = document.getElementById("compose-save-template").checked;
+
+        if (!subject) { alert("Subject is required"); return; }
+        if (!body) { alert("Message body is required"); return; }
+
+        const recipients = getComposeRecipients(composeEventName, audience);
+        if (!recipients.length) { alert("No recipients found for this audience"); return; }
+
+        if (!confirm(`Send email to ${recipients.length} player${recipients.length !== 1 ? "s" : ""} for "${composeEventName}"?`)) return;
+
+        this.disabled = true;
+        this.textContent = "Sending...";
+        document.getElementById("compose-progress").style.display = "block";
+        document.getElementById("compose-progress-bar").style.width = "10%";
+        document.getElementById("compose-progress-text").textContent = `Sending to ${recipients.length} recipients...`;
+
+        // Save as template if checked
+        if (saveAsTemplate) {
+            try {
+                await fetch("/api/messages/templates", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: subject.substring(0, 50), channel: "email", subject, html_body: body }),
+                });
+                loadMessageTemplates();
+            } catch (e) { /* ignore save failure */ }
+        }
+
+        try {
+            document.getElementById("compose-progress-bar").style.width = "30%";
+            const resp = await fetch("/api/messages/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    event_name: composeEventName,
+                    template_id: templateId,
+                    subject, html_body: body,
+                    audience,
+                }),
+            });
+            const data = await resp.json();
+            document.getElementById("compose-progress-bar").style.width = "100%";
+
+            const resultsEl = document.getElementById("compose-results");
+            if (!resp.ok) {
+                resultsEl.style.background = "#fef2f2";
+                resultsEl.innerHTML = `<strong style="color:#dc2626;">Failed:</strong> ${escapeHtml(data.error || "Unknown error")}`;
+            } else if (data.failed > 0) {
+                resultsEl.style.background = "#fffbeb";
+                resultsEl.innerHTML = `<strong style="color:#d97706;">Partial:</strong> ${data.sent} sent, ${data.failed} failed out of ${data.total}`;
+                if (data.errors && data.errors.length) {
+                    resultsEl.innerHTML += "<div style='margin-top:0.3rem; font-size:0.75rem;'>" +
+                        data.errors.map(e => escapeHtml(e.recipient) + ": " + escapeHtml(e.error)).join("<br>") + "</div>";
+                }
+            } else {
+                resultsEl.style.background = "#f0fdf4";
+                resultsEl.innerHTML = `<strong style="color:#16a34a;">Success!</strong> ${data.sent} email${data.sent !== 1 ? "s" : ""} sent.`;
+            }
+            resultsEl.style.display = "block";
+            document.getElementById("compose-progress-text").textContent = "Done!";
+        } catch (err) {
+            const resultsEl = document.getElementById("compose-results");
+            resultsEl.style.background = "#fef2f2";
+            resultsEl.innerHTML = `<strong style="color:#dc2626;">Error:</strong> ${escapeHtml(err.message)}`;
+            resultsEl.style.display = "block";
+        }
+
+        this.disabled = false;
+        this.textContent = "Send Email";
+    });
+
+    // Load templates on page init
+    loadMessageTemplates();
 
     // ---- Events-page Credit/Transfer modal logic ----
     let evCreditItemId = null;

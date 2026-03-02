@@ -69,9 +69,19 @@ from email_parser.database import (
     save_feedback,
     get_all_feedback,
     update_feedback_status,
+    get_message_templates,
+    get_message_template,
+    create_message_template,
+    update_message_template,
+    delete_message_template,
+    log_message,
+    get_message_log,
 )
 from email_parser.database import DB_PATH, get_connection
-from email_parser.fetcher import fetch_transaction_emails, fetch_email_by_id, send_mail_graph
+from email_parser.fetcher import (
+    fetch_transaction_emails, fetch_email_by_id, send_mail_graph,
+    render_msg_template, send_bulk_emails,
+)
 from email_parser.parser import parse_email, parse_emails, _strip_html
 from email_parser.report import send_daily_report
 from email_parser.rsvp_parser import fetch_rsvp_emails, parse_rsvp_emails
@@ -1286,6 +1296,288 @@ def api_send_reminder_all():
         return jsonify({"error": "All reminder emails failed to send", "sent": sent, "failed": failed, "total": len(rsvp_players)}), 500
     status = "ok" if failed == 0 else "partial"
     return jsonify({"status": status, "sent": sent, "failed": failed, "total": len(rsvp_players)})
+
+
+# ---------------------------------------------------------------------------
+# Routes — Messaging (Bulk Email Communications)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/messages/templates", methods=["GET"])
+def api_get_templates():
+    """Return all message templates."""
+    return jsonify(get_message_templates())
+
+
+@app.route("/api/messages/templates", methods=["POST"])
+@require_role("manager")
+def api_create_template():
+    """Create a new message template."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("name"):
+        return jsonify({"error": "name is required"}), 400
+    template = create_message_template(data)
+    return jsonify(template), 201
+
+
+@app.route("/api/messages/templates/<int:template_id>", methods=["PATCH"])
+@require_role("manager")
+def api_update_template(template_id):
+    """Update a message template."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    result = update_message_template(template_id, data)
+    if result is None:
+        return jsonify({"error": "Template not found"}), 404
+    return jsonify(result)
+
+
+@app.route("/api/messages/templates/<int:template_id>", methods=["DELETE"])
+@require_role("admin")
+def api_delete_template(template_id):
+    """Delete a non-system message template."""
+    if delete_message_template(template_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Template not found or is a system template"}), 400
+
+
+@app.route("/api/messages/send", methods=["POST"])
+@require_role("manager")
+def api_send_messages():
+    """Send a message to a filtered audience for an event.
+
+    Body: {
+        event_name: str,
+        template_id: int (optional — use template subject/body),
+        subject: str (overrides template subject if provided),
+        html_body: str (overrides template body if provided),
+        audience: str (all|playing|rsvp_only|net|gross|both|not_playing),
+        exclude_ids: [int] (optional — item IDs to exclude)
+    }
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    event_name = (data.get("event_name") or "").strip()
+    if not event_name:
+        return jsonify({"error": "event_name is required"}), 400
+
+    # Resolve subject + body from template or direct input
+    subject_tpl = data.get("subject") or ""
+    body_tpl = data.get("html_body") or ""
+    template_id = data.get("template_id")
+
+    if template_id:
+        tpl = get_message_template(template_id)
+        if not tpl:
+            return jsonify({"error": "Template not found"}), 404
+        if not subject_tpl:
+            subject_tpl = tpl.get("subject") or ""
+        if not body_tpl:
+            body_tpl = tpl.get("html_body") or ""
+
+    if not subject_tpl or not body_tpl:
+        return jsonify({"error": "subject and html_body are required (directly or via template)"}), 400
+
+    # Build event variables for template rendering
+    all_events = get_all_events()
+    event_info = next((e for e in all_events if e["item_name"] == event_name), {})
+    event_vars = {
+        "event_name": event_name,
+        "event_date": event_info.get("event_date") or "",
+        "course": event_info.get("course") or "",
+        "city": event_info.get("city") or "",
+    }
+
+    # Filter audience
+    audience = (data.get("audience") or "all").lower()
+    exclude_ids = set(data.get("exclude_ids") or [])
+    items = get_all_items()
+
+    # Get event aliases for matching
+    all_aliases = get_all_event_aliases()
+    alias_to_canonical = {}
+    for alias_name, canonical in all_aliases.items():
+        alias_to_canonical[alias_name] = canonical
+
+    def matches_event(item):
+        iname = item.get("item_name") or ""
+        if iname == event_name:
+            return True
+        if alias_to_canonical.get(iname) == event_name:
+            return True
+        return False
+
+    registrants = [i for i in items if matches_event(i)]
+
+    # Get RSVP override data for playing/not_playing filtering
+    rsvp_overrides = {}
+    try:
+        overrides = get_rsvp_overrides(event_name)
+        for ov in overrides:
+            rsvp_overrides[ov["item_id"]] = ov["status"]
+    except Exception:
+        pass
+
+    rsvps_for_event = {}
+    try:
+        rsvp_list = get_rsvps_for_event(event_name)
+        for rv in rsvp_list:
+            if rv.get("matched_item_id"):
+                rsvps_for_event[rv["matched_item_id"]] = rv["response"]
+    except Exception:
+        pass
+
+    def get_rsvp_status(item):
+        item_id = item["id"]
+        override = rsvp_overrides.get(item_id)
+        if override and override != "none":
+            return override  # playing, not_playing, manual_green
+        rsvp_resp = rsvps_for_event.get(item_id)
+        if rsvp_resp == "PLAYING":
+            return "playing"
+        if rsvp_resp == "NOT PLAYING":
+            return "not_playing"
+        return "unknown"
+
+    def classify_side_games(sg):
+        sg = (sg or "").strip().upper()
+        if sg in ("NET", "GROSS", "BOTH", "NONE"):
+            return sg
+        return "NONE"
+
+    filtered = []
+    for r in registrants:
+        if r["id"] in exclude_ids:
+            continue
+        status = (r.get("transaction_status") or "active")
+        # Skip credited/transferred
+        if status in ("credited", "transferred"):
+            continue
+        if not r.get("customer_email"):
+            continue
+
+        sg = classify_side_games(r.get("side_games"))
+        rsvp = get_rsvp_status(r)
+
+        if audience == "all":
+            filtered.append(r)
+        elif audience == "playing":
+            if rsvp in ("playing", "manual_green"):
+                filtered.append(r)
+        elif audience == "rsvp_only":
+            if status == "rsvp_only":
+                filtered.append(r)
+        elif audience == "net":
+            if sg in ("NET", "BOTH"):
+                filtered.append(r)
+        elif audience == "gross":
+            if sg in ("GROSS", "BOTH"):
+                filtered.append(r)
+        elif audience == "both":
+            if sg == "BOTH":
+                filtered.append(r)
+        elif audience == "not_playing":
+            if rsvp == "not_playing":
+                filtered.append(r)
+        else:
+            filtered.append(r)
+
+    if not filtered:
+        return jsonify({"error": "No recipients found matching the audience filter", "sent": 0, "failed": 0}), 404
+
+    # Build recipient list
+    recipients = [
+        {"player_name": r.get("customer") or "Player", "email": r["customer_email"].strip()}
+        for r in filtered
+    ]
+
+    # Send with throttle
+    result = send_bulk_emails(
+        recipients=recipients,
+        subject_template=subject_tpl,
+        body_template=body_tpl,
+        event_vars=event_vars,
+    )
+
+    # Log each send
+    role = session.get("role", "unknown")
+    body_preview = render_msg_template(body_tpl, {**event_vars, "player_name": "..."})[:200]
+    for r in filtered:
+        email = r["customer_email"].strip()
+        was_sent = email not in [e["recipient"] for e in result.get("errors", [])]
+        log_message({
+            "event_name": event_name,
+            "template_id": template_id,
+            "channel": "email",
+            "recipient_name": r.get("customer"),
+            "recipient_address": email,
+            "subject": render_msg_template(subject_tpl, {**event_vars, "player_name": r.get("customer") or "Player"}),
+            "body_preview": body_preview,
+            "status": "sent" if was_sent else "failed",
+            "error_message": None if was_sent else "Send failed",
+            "sent_by": role,
+        })
+
+    status = "ok" if result["failed"] == 0 else "partial"
+    return jsonify({
+        "status": status,
+        "sent": result["sent"],
+        "failed": result["failed"],
+        "total": len(recipients),
+        "errors": result["errors"],
+    })
+
+
+@app.route("/api/messages/preview", methods=["POST"])
+@require_role("manager")
+def api_preview_message():
+    """Render a message template with sample data. Returns rendered subject + body."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    subject_tpl = data.get("subject") or ""
+    body_tpl = data.get("html_body") or ""
+    template_id = data.get("template_id")
+
+    if template_id:
+        tpl = get_message_template(template_id)
+        if tpl:
+            if not subject_tpl:
+                subject_tpl = tpl.get("subject") or ""
+            if not body_tpl:
+                body_tpl = tpl.get("html_body") or ""
+
+    variables = {
+        "player_name": data.get("player_name", "John Doe"),
+        "event_name": data.get("event_name", "Sample Event"),
+        "event_date": data.get("event_date", "2026-03-15"),
+        "course": data.get("course", "Sample Course"),
+        "city": data.get("city", "San Antonio"),
+    }
+
+    return jsonify({
+        "subject": render_msg_template(subject_tpl, variables),
+        "html_body": render_msg_template(body_tpl, variables),
+    })
+
+
+@app.route("/api/messages/log", methods=["GET"])
+@require_role("manager")
+def api_message_log():
+    """Return message send history, optionally filtered by event."""
+    event_name = request.args.get("event_name")
+    limit = min(int(request.args.get("limit", 200)), 1000)
+    return jsonify(get_message_log(event_name=event_name, limit=limit))
+
+
+@app.route("/api/messages/log/<path:event_name>", methods=["GET"])
+@require_role("manager")
+def api_message_log_event(event_name):
+    """Return message log for a specific event."""
+    return jsonify(get_message_log(event_name=event_name))
 
 
 @app.route("/api/events/seed", methods=["POST"])

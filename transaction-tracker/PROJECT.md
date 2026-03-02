@@ -745,6 +745,7 @@ The app is installable as a Progressive Web App:
 Features discussed or planned but not yet implemented:
 
 ### High Priority
+- **Bulk Event Communications (Email + SMS)** — Compose and send messages to event registrants with audience filtering, reusable templates, and Twilio SMS integration. Full spec in [Future Considerations → Bulk Event Communications](#bulk-event-communications-email--sms)
 - **SUPPORT button** — "I have a question" button for players to contact TGF directly from the app
 - **Player-facing event page** — Public page where players can see their upcoming events, RSVP status, and payment status without needing a PIN
 - ~~**Bulk email reminders**~~ — **DONE** (v1.2.0). "Remind All" button on event detail sends to all RSVP-only players at once.
@@ -755,11 +756,11 @@ Features discussed or planned but not yet implemented:
 - **Historical reporting** — Season-over-season comparison, player retention metrics, revenue trends
 - **Recurring events** — Template system for weekly/monthly recurring events
 - **Team assignment** — Assign players to teams/pairings for team events
-- **Scoring integration** — Pull scores from Golf Genius post-round
+- **Live Scoring & Leaderboard** — Player-facing scorecard entry on the course + real-time leaderboard for NET, GROSS, Skins, CTP, and team games. Full spec in [Future Considerations → Live Scoring & Leaderboard](#live-scoring--leaderboard)
 
 ### Lower Priority
 - **Multi-city dashboard** — City-specific views (San Antonio, Dallas, Austin, Houston, Galveston) with separate stats
-- **Email template editor** — Customize reminder emails and daily reports from the UI
+- ~~**Email template editor**~~ — Covered by [Bulk Event Communications](#bulk-event-communications-email--sms) spec
 - **Webhook notifications** — Push notifications (Slack, Discord, etc.) when new registrations arrive
 - **Player profile photos** — Upload or link profile pictures for the customer directory
 - **Dark mode** — System-preference or manual toggle
@@ -853,3 +854,458 @@ The TGF Transaction Tracker was built as an operations tool for managing golf ev
 ### The Bottom Line
 
 The Transaction Tracker evolves from "the whole system" to "the operations and data integrity layer." The email parsing pipeline, MCP server, and GG integration are permanent infrastructure. The dashboard and manual management features gradually hand off to the Platform as it matures.
+
+---
+
+### Live Scoring & Leaderboard
+
+A player-facing live scoring interface for use during events, paired with real-time leaderboards for all game types. Players enter scores hole-by-hole on their phones; spectators and other players see standings update live.
+
+#### What Already Exists (Foundation)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Player registry | Ready | `items` table has `customer`, `handicap`, `side_games` (NET/GROSS/BOTH/NONE), `tee_choice` per registrant |
+| Event registry | Ready | `events` table with course, city, date |
+| Prize matrix | Ready | Full payout structure for 2-64 players, 9 and 18 holes, all game categories in `games-matrix.js` |
+| Flight computation | Ready | Already classifying NET vs GROSS player counts and computing flight sizes per event |
+| RSVP / attendance | Ready | Know who's confirmed playing before the round starts |
+| Auth system | Ready | Admin/manager roles with PIN-based auth |
+| PWA | Ready | App is already installable on phones, standalone mode |
+| WAL mode | Ready | SQLite write-ahead logging supports concurrent reads during writes |
+
+#### New Database Tables
+
+**`scorecards` table** — One row per player per event
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_id | INTEGER NOT NULL | FK to events.id |
+| item_id | INTEGER | FK to items.id (links to registration) |
+| player_name | TEXT NOT NULL | Denormalized from items.customer |
+| handicap | REAL | Numeric handicap at time of play |
+| tee_choice | TEXT | Tee played from |
+| side_games | TEXT | NET / GROSS / BOTH / NONE |
+| holes | INTEGER NOT NULL | 9 or 18 |
+| hole_scores | TEXT | JSON array of strokes per hole, e.g. `[5,4,3,6,4,5,3,4,5]` |
+| gross_total | INTEGER | Sum of hole_scores (computed on save) |
+| net_total | REAL | gross_total - handicap adjustment (computed on save) |
+| thru | INTEGER DEFAULT 0 | How many holes completed (for "thru X" display) |
+| status | TEXT DEFAULT 'in_progress' | `in_progress` / `finalized` |
+| started_at | TEXT | When first hole was entered |
+| updated_at | TEXT | Last hole entry timestamp |
+| created_at | TEXT DEFAULT (datetime('now')) | |
+
+**`ctp_entries` table** — Closest-to-pin results per hole
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_id | INTEGER NOT NULL | FK to events.id |
+| hole_number | INTEGER NOT NULL | Which par-3 |
+| player_name | TEXT NOT NULL | |
+| distance | REAL | Distance in feet (e.g. 12.5) |
+| is_winner | INTEGER DEFAULT 0 | Set to 1 when finalized |
+| created_at | TEXT DEFAULT (datetime('now')) | |
+
+**`skin_results` table** — Computed after scores are posted
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_id | INTEGER NOT NULL | FK to events.id |
+| hole_number | INTEGER NOT NULL | |
+| winner_name | TEXT | NULL if hole was tied (carryover) |
+| is_carryover | INTEGER DEFAULT 0 | 1 if no outright winner |
+| payout | REAL | Amount won (from matrix skins array) |
+| flight | TEXT DEFAULT 'all' | `all` / `low` / `high` (for flighted skins) |
+| created_at | TEXT DEFAULT (datetime('now')) | |
+
+#### New Pages
+
+**1. Scorecard Entry — `/scorecard/<event_id>`** (Player-facing, mobile-first)
+
+- **No login required** — Player selects their name from the event roster (confirmed players only)
+- **Hole-by-hole entry** — Swipeable card per hole with large tap targets for stroke count (+/-)
+- **Running totals** — Gross and net scores update live as holes are entered
+- **CTP entry** — On designated par-3s, prompt for distance (feet/inches)
+- **Save per hole** — Each hole saves immediately via API (survives phone sleep/crash/signal loss)
+- **Offline resilience** — Service worker queues entries if signal drops, syncs when reconnected
+- **Simple UI** — Big numbers, minimal chrome, one-handed operation, think 18Birdies-style
+- **Course info header** — Event name, course, date, player's handicap and tee
+
+**2. Leaderboard — `/leaderboard/<event_id>`** (Spectator/player view, responsive)
+
+| Section | What It Shows |
+|---------|---------------|
+| **NET Leaderboard** | Ranked by net score, grouped by flight (Low/High/Mid/4th per matrix), "thru X" indicator |
+| **GROSS Leaderboard** | Ranked by gross score, shows total skins won |
+| **Skins Board** | Hole-by-hole: lowest score, ties = carryover marker, running payout per skin |
+| **CTP Board** | Par-3 holes with closest distance and current leader |
+| **Team Game** | Team standings if team format is active (cart-net, 2-ball, etc.) |
+| **Prize Projection** | "If standings hold" → projected payouts from matrix lookup |
+
+- **Auto-refresh** — Poll every 20 seconds (lightweight — only fetch changed data)
+- **Shareable link** — QR code generated per event for posting at the clubhouse / first tee
+- **Color coding** — Green highlight for in-the-money positions, bold for leader changes
+- **Responsive** — Works on phones (portrait), tablets, and TV/monitors for clubhouse display
+- **No login required** — Anyone with the link can view
+
+#### New API Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/scorecard/<event_id>` | GET | — | All scorecards for event (leaderboard data) |
+| `/api/scorecard/<event_id>/<player>` | GET | — | Single player's scorecard |
+| `/api/scorecard/<event_id>/enter` | POST | — | Submit hole score(s): `{player_name, hole_number, strokes}` |
+| `/api/scorecard/<event_id>/ctp` | POST | — | Submit CTP distance: `{hole_number, player_name, distance}` |
+| `/api/leaderboard/<event_id>` | GET | — | Computed leaderboard JSON (NET/GROSS/Skins/CTP rankings) |
+| `/api/scorecard/<event_id>/finalize` | POST | Admin | Lock all scores, compute final standings + payouts |
+| `/api/scorecard/<event_id>/export` | GET | Admin | CSV or PDF of final results |
+| `/api/events/<event_id>/start-scoring` | POST | Manager | Initialize scorecards for all confirmed players |
+
+#### Scoring Engine — New Module `email_parser/scoring.py`
+
+Core calculation logic, separate from Flask routes:
+
+- **Net score calculation** — `gross - (handicap × holes/18)` for course handicap derivation
+- **Flight assignment** — Sort NET players by handicap, divide into N flights based on matrix's `netFlights` value for the player count
+- **Skins computation** — Lowest unique score per hole wins; ties carry over to next hole; payout from matrix `skins[]` array divided by number of skins won
+- **CTP ranking** — Shortest distance per designated par-3 hole
+- **Team game scoring** — Depends on `teamType` from matrix (CART Net best-ball, 2-Ball, etc.)
+- **Prize lookup** — Player count → matrix → payout per position per flight
+- **Leaderboard assembly** — Combine all game results into a single ranked JSON response
+
+#### Admin Controls (Events Page Additions)
+
+Add to the existing event detail panel in `events.html`:
+
+- **"Start Scoring" button** — Creates scorecard rows for all confirmed-playing players, generates shareable QR code link
+- **"View Leaderboard" button** — Opens `/leaderboard/<event_id>` in new tab
+- **"Finalize Event" button** — Locks all scores, runs final prize calculation, marks event as scored
+- **Scorecard override** — Admin can edit any player's hole score after the fact
+- **Results summary** — Post-event view showing all winners and payouts per game category
+
+#### Architecture Decision: Real-Time Mechanism
+
+| Approach | Pros | Cons | Verdict |
+|----------|------|------|---------|
+| **Polling (20s)** | Works with current Flask setup, no new infra, dead simple | Slight delay, more DB reads | **Start here** |
+| **SSE** | True one-way push, moderate effort | Needs endpoint, connection management | Upgrade path if needed |
+| **WebSockets** | Bi-directional, fastest | New dependency (flask-socketio), Railway config | Overkill for this use case |
+
+**Recommendation:** Start with **20-second polling**. A golf round takes 4+ hours — 20s latency is invisible. The leaderboard endpoint should be lightweight (return only data changed since last poll via `?since=` timestamp). Upgrade to SSE only if polling creates noticeable load.
+
+#### Offline / Connectivity Strategy
+
+Golf courses often have spotty cell coverage. The scorecard page needs to handle this:
+
+1. **Service worker** — Cache the scorecard page shell and JS so it loads even offline
+2. **Local queue** — When a hole score is entered but the POST fails, store it in `localStorage` and retry when connectivity returns
+3. **Sync indicator** — Show a small badge ("2 holes pending sync") so the player knows their data will catch up
+4. **Conflict resolution** — If the same hole is submitted twice (retry + delayed original), server uses latest timestamp
+
+#### Implementation Order (Recommended Build Sequence)
+
+| Session | Deliverable | What's Built |
+|---------|------------|--------------|
+| **1** | Data model + scoring engine | New tables in `database.py`, new `scoring.py` module with net/gross/skins/CTP/flight calculations, unit tests |
+| **2** | Scorecard entry UI | `/scorecard/<event_id>` page, hole-by-hole entry, API endpoints for score submission, mobile-first CSS |
+| **3** | Leaderboard + admin controls | `/leaderboard/<event_id>` page, auto-refresh polling, "Start Scoring" / "Finalize" buttons on events page, QR code generation |
+| **4** | Polish + offline | Service worker for offline resilience, localStorage queue, CTP entry flow, export/PDF, testing with real event data |
+
+#### Estimated Scope
+
+| Component | Files | Lines (approx) |
+|-----------|-------|-----------------|
+| Database schema + migrations | Edit `database.py` | ~100 |
+| Scoring engine | New `scoring.py` | ~250 |
+| API endpoints | Edit `app.py` | ~300 |
+| Scorecard page (mobile) | New `scorecard.html` | ~400 |
+| Leaderboard page | New `leaderboard.html` | ~500 |
+| Admin controls | Edit `events.html` | ~150 |
+| CSS additions | Edit `dashboard.css` | ~150 |
+| **Total** | **2 new files + 4 edited** | **~1,850 lines** |
+
+#### Open Questions for Implementation Time
+
+1. **Course data** — Do we need a `courses` table with par per hole, or will par be entered at event setup time? (Needed for over/under par display on leaderboard)
+2. **Team format details** — How are teams formed? Cart partners? Random draw? Need to know for team game scoring
+3. **CTP hole designation** — Are CTP holes always the same per course, or chosen per event? Should admin mark which holes are CTP when starting scoring?
+4. **Skins format** — Are skins always gross? Or net skins for some events? The matrix has both scenarios
+5. **Post-event flow** — After finalization, should payouts auto-generate transaction records in the items table (as credits/debits)?
+
+---
+
+### Bulk Event Communications (Email + SMS)
+
+A compose-and-send interface for reaching event registrants via email and SMS. Builds on the existing "Remind All" payment reminder (v1.2.0) and `send_mail_graph()` infrastructure, expanding it into a general-purpose communication tool with audience filtering, reusable templates, and SMS support.
+
+#### What Already Exists (Foundation)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Email sending | Ready | `send_mail_graph()` in `fetcher.py` — Microsoft Graph API, HTML body, works today |
+| Payment reminder template | Ready | Simple HTML template with player name + event name personalization |
+| Daily digest template | Ready | Rich HTML with inline CSS, stat cards, tables, responsive layout |
+| Bulk send endpoint | Ready | `/api/events/send-reminder-all` sends sequentially to all RSVP-only players |
+| Bulk send UI | Ready | "Remind All (N)" button with confirmation dialog on events page |
+| Customer email field | Ready | `customer_email` in items table, auto-backfilled across transactions per customer |
+| Customer phone field | Exists but unused | `customer_phone` in items table, populated by parser but never accessed |
+| Azure AD / Graph API creds | Ready | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `EMAIL_ADDRESS` all configured |
+| SMS provider | Not integrated | No Twilio or other SMS library in `requirements.txt` |
+
+#### New Database Tables
+
+**`message_templates` table** — Reusable message templates
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| name | TEXT NOT NULL | Template name (e.g. "Event Announcement", "Tee Time Update") |
+| channel | TEXT NOT NULL | `email` / `sms` / `both` |
+| subject | TEXT | Email subject line (supports `{event_name}` variables) |
+| html_body | TEXT | Email HTML body (supports `{player_name}`, `{event_name}`, `{event_date}`, `{course}`, `{city}` variables) |
+| sms_body | TEXT | SMS plain text (160-char target, same variables) |
+| is_system | INTEGER DEFAULT 0 | 1 for built-in templates (payment reminder, etc.) that can't be deleted |
+| created_at | TEXT DEFAULT (datetime('now')) | |
+| updated_at | TEXT | |
+
+**`message_log` table** — Send history and delivery tracking
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_name | TEXT | Event this message was for (nullable for non-event messages) |
+| template_id | INTEGER | FK to message_templates.id (nullable for custom one-off messages) |
+| channel | TEXT NOT NULL | `email` / `sms` |
+| recipient_name | TEXT | Player name |
+| recipient_address | TEXT NOT NULL | Email address or phone number |
+| subject | TEXT | Rendered subject (email only) |
+| body_preview | TEXT | First 200 chars of rendered body |
+| status | TEXT DEFAULT 'sent' | `sent` / `failed` / `bounced` |
+| error_message | TEXT | Error details if failed |
+| sent_by | TEXT | Admin/manager who triggered it |
+| sent_at | TEXT DEFAULT (datetime('now')) | |
+
+#### Compose & Send UI (Events Page Enhancement)
+
+Add a **"Message Players"** button to each event's detail panel, opening a compose modal:
+
+**Compose Modal — Step 1: Audience**
+- **Recipient filter chips** (multi-select):
+  - All Registered — everyone with `transaction_status` in (`active`, `rsvp_only`, `gg_rsvp`, `paid_separately`)
+  - Playing (RSVP confirmed) — green dot players only
+  - RSVP Only (unpaid) — existing remind-all audience
+  - NET Players / GROSS Players / BOTH — filter by `side_games`
+  - Not Playing — red dot players (useful for "we have a spot" messages)
+- **Preview count** — "This will reach **14 players** (12 email, 8 SMS)"
+- **Recipient list expandable** — Show names + contact info, let admin deselect individuals
+
+**Compose Modal — Step 2: Message**
+- **Channel toggle** — Email only / SMS only / Both
+- **Template picker** — Dropdown of saved templates + "Custom message" option
+- **Subject line** (email) — Editable, supports `{event_name}` variable auto-fill
+- **Body editor** — Rich text area for email, plain text area for SMS
+  - Variable buttons: click to insert `{player_name}`, `{event_name}`, `{event_date}`, `{course}`, `{city}`
+  - Character counter for SMS (160 chars / segment)
+  - **Preview toggle** — Show rendered message for a sample player
+- **Save as template** checkbox — Save this message for reuse
+
+**Compose Modal — Step 3: Confirm & Send**
+- Summary: "Send **email** to **14 players** for **Fall Classic 2026**"
+- Send button with confirmation
+- Progress bar during send (X of Y sent)
+- Results: "12 sent, 2 failed (no email on file)" with failed player list
+
+#### Built-In Templates (Seeded on First Run)
+
+| Template | Channel | Use Case |
+|----------|---------|----------|
+| **Payment Reminder** | Email | Existing reminder for RSVP-only players (migrated from hard-coded HTML) |
+| **Event Announcement** | Both | "You're registered for {event_name} at {course} on {event_date}!" |
+| **Tee Time Update** | Both | "Tee times are set for {event_name}. Check-in at..." (custom body) |
+| **Weather Alert** | Both | "Weather update for {event_name}..." (custom body) |
+| **Event Cancellation** | Both | "{event_name} has been cancelled/postponed..." |
+| **Day-Of Reminder** | Both | "See you today at {course}! First tee at..." |
+| **Post-Event Results** | Email | "Results are in for {event_name}! View the leaderboard..." |
+
+#### SMS Integration (Twilio)
+
+**New dependency:** `twilio` package in `requirements.txt`
+
+**New function in `fetcher.py`:**
+```python
+def send_sms_twilio(to_number: str, body: str) -> bool
+```
+
+**Environment variables:**
+```bash
+TWILIO_ACCOUNT_SID=AC...        # Twilio account SID
+TWILIO_AUTH_TOKEN=...           # Twilio auth token
+TWILIO_FROM_NUMBER=+1...       # Twilio phone number (or messaging service SID)
+```
+
+**SMS considerations:**
+- 160 characters per segment — template editor shows char count and segment count
+- US numbers only (TGF is Texas-based) — validate E.164 format (+1XXXXXXXXXX)
+- Opt-out compliance — Twilio handles STOP/HELP automatically on long codes
+- Cost: ~$0.0079/segment outbound — for 30 players that's ~$0.24 per blast
+- Phone number normalization — strip formatting, add +1 country code
+
+#### New API Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/messages/send` | POST | Manager | Send message to filtered audience: `{event_name, channel, audience_filter, subject, body, template_id}` |
+| `/api/messages/preview` | POST | Manager | Render template for a sample player, return HTML/text preview |
+| `/api/messages/templates` | GET | Manager | List all message templates |
+| `/api/messages/templates` | POST | Manager | Create new template |
+| `/api/messages/templates/<id>` | PATCH | Manager | Update template |
+| `/api/messages/templates/<id>` | DELETE | Admin | Delete non-system template |
+| `/api/messages/log` | GET | Manager | Send history (filterable by event, channel, status, date range) |
+| `/api/messages/log/<event_name>` | GET | Manager | Send history for specific event |
+
+#### Rate Limiting & Throttling
+
+| Provider | Limit | Strategy |
+|----------|-------|----------|
+| Microsoft Graph API | ~10,000 emails/day per tenant, 4 requests/sec | 250ms delay between sends, batch of 20 with 1s pause |
+| Twilio SMS | Varies by number type (1 msg/sec for long code) | Sequential send with 1s spacing, or use Messaging Service for higher throughput |
+
+**Implementation:** Add a `send_with_throttle()` wrapper that:
+1. Accepts a list of `(recipient, rendered_message)` tuples
+2. Sends sequentially with configurable delay (default 300ms for email, 1100ms for SMS)
+3. Logs each send to `message_log`
+4. Returns aggregate `{sent: N, failed: N, errors: [...]}`
+5. Runs in a background thread (APScheduler one-off job) so the UI isn't blocked
+
+#### Message History Panel (Events Page)
+
+Add a **"Messages"** tab to the event detail panel showing:
+- Chronological log of all messages sent for this event
+- Each entry: timestamp, channel icon (email/SMS), template name, recipient count, sent-by
+- Expandable: full recipient list with delivery status per player
+- **Resend** button on failed recipients
+
+#### Implementation Order (Recommended Build Sequence)
+
+| Session | Deliverable | What's Built |
+|---------|------------|--------------|
+| **1** | Email compose + send | New tables, compose modal on events page, audience filtering, send with throttle, message log |
+| **2** | Templates + history | Template CRUD, built-in template seeding, template picker in compose modal, message history panel |
+| **3** | SMS integration | Twilio setup, `send_sms_twilio()`, dual-channel compose, phone number validation, SMS char counter |
+
+#### Estimated Scope
+
+| Component | Files | Lines (approx) |
+|-----------|-------|-----------------|
+| Database tables + migrations | Edit `database.py` | ~60 |
+| Send logic + throttling | Edit `fetcher.py` | ~120 |
+| API endpoints | Edit `app.py` | ~200 |
+| Compose modal + message history | Edit `events.html` | ~400 |
+| SMS integration (Twilio) | Edit `fetcher.py` + `requirements.txt` | ~80 |
+| Built-in template seeding | Edit `database.py` | ~60 |
+| **Total** | **4 edited files** | **~920 lines** |
+
+#### Open Questions for Implementation Time
+
+1. **SMS opt-in** — Do players explicitly consent to SMS during registration? The current registration flow doesn't capture this. May need a consent field or assume opt-in for registered players.
+2. **From identity** — Should event emails come from the chapter's address (e.g. sanantonio@thegolffellowship.com) or a central address? Different Azure AD permissions may be needed per sender.
+3. **Non-event messages** — Should this support sending to all members across events (e.g. season announcements, membership renewals)? Or strictly per-event?
+4. **Rich email editor** — Is a basic textarea with variable insertion enough, or do you want a full rich-text editor (bold, images, links)? Rich editors add complexity.
+5. **Scheduled sends** — Should messages support scheduling (e.g. "send day-of reminder at 6 AM on event date")? This would integrate with APScheduler.
+
+---
+
+### Push Notifications (Customer-Side App)
+
+Web Push Notifications for the future player-facing app. Not needed until a customer-side app exists, but the infrastructure is straightforward to add when the time comes.
+
+**Prerequisite:** A player-facing PWA / customer app (separate from the admin transaction tracker). Push notifications are sent from the server and appear on the player's phone even when the app is closed.
+
+#### How It Works
+
+1. **Service worker** registers on the player's device when they install the PWA
+2. Player **subscribes** to push via the Web Push API — browser generates a unique push subscription (endpoint + keys)
+3. Subscription is saved to a `push_subscriptions` table on the server
+4. Server sends pushes using **VAPID** (Voluntary Application Server Identification) — no third-party push service needed
+5. Player's device receives the push and shows a native notification (even when app is closed)
+
+#### Platform Support
+
+| Platform | Support | Notes |
+|----------|---------|-------|
+| Android (Chrome) | Full | Works since 2015 |
+| iOS Safari | Full | Added in iOS 16.4 (March 2023), requires PWA installed to home screen |
+| Desktop browsers | Full | Chrome, Firefox, Edge all support |
+
+#### What It Takes to Build
+
+**New dependency:** `pywebpush` Python package
+
+**One-time setup:**
+- Generate VAPID keys: `vapid --gen` → produces `vapid_private.pem` and `vapid_public.pem`
+- Store as env vars: `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_CONTACT_EMAIL`
+
+**New database table:**
+
+```
+push_subscriptions
+├── id (PK)
+├── player_email (TEXT NOT NULL)
+├── endpoint (TEXT NOT NULL) — browser push endpoint URL
+├── p256dh (TEXT NOT NULL) — encryption key
+├── auth (TEXT NOT NULL) — auth secret
+├── created_at (TEXT)
+└── UNIQUE(player_email, endpoint)
+```
+
+**Server-side function (~50 lines):**
+```python
+def send_push(subscription, title, body, url=None) -> bool
+```
+
+**Service worker (~40 lines):**
+- `push` event listener — shows notification with title, body, and click-to-open URL
+- `notificationclick` event listener — opens the app to the specified URL
+
+**Subscription flow (~60 lines client JS):**
+- Request notification permission
+- Subscribe via `registration.pushManager.subscribe()`
+- POST subscription to `/api/push/subscribe`
+
+#### Integration with Messaging
+
+When the messaging compose modal gains a "Push" channel option:
+- Compose modal adds a third channel: **Email / SMS / Push**
+- Push messages use `title` (from subject) and `body` (plain text, max ~200 chars)
+- Server iterates subscriptions for the filtered audience and calls `send_push()` per device
+- No per-message cost (unlike SMS)
+
+#### Use Cases
+
+| Notification | When | Content |
+|-------------|------|---------|
+| Day-of reminder | Morning of event | "See you today at {course}!" |
+| Tee time posted | When admin sets times | "Tee times are set for {event_name}" |
+| Weather alert | As needed | "Weather update for {event_name}" |
+| Leaderboard update | During event | "New leader: John Doe at -3 thru 14" |
+| Results posted | Post-event | "Results are in! View leaderboard" |
+
+#### Estimated Scope
+
+| Component | Lines (approx) |
+|-----------|-----------------|
+| Service worker (`sw.js`) | ~40 |
+| Client subscription JS | ~60 |
+| `push_subscriptions` table | ~20 |
+| `send_push()` function | ~50 |
+| Push subscribe/unsubscribe API | ~40 |
+| Integration with compose modal | ~30 |
+| **Total** | **~240 lines** |
+
+#### When to Build
+
+Build when the customer-side app is ready. The push subscription flow must live in the player-facing app (not the admin tracker), because players are the ones granting notification permission on their devices.
