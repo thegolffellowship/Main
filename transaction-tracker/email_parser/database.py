@@ -413,6 +413,49 @@ def init_db(db_path: str | Path | None = None) -> None:
                 END
             """)
 
+        # Repair: clear matched_item_id on RSVPs that point to wrong items.
+        # Two cases:
+        #   1. Points to non-event items (Customer Entry, RSVP Import, etc.)
+        #   2. Points to an item whose item_name doesn't match the RSVP's
+        #      matched_event (e.g. linked to a customer's item for event Y
+        #      but the RSVP is for event X)
+        try:
+            # Case 1: non-event merchant items
+            r1 = conn.execute(
+                """UPDATE rsvps SET matched_item_id = NULL
+                   WHERE matched_item_id IS NOT NULL
+                     AND matched_item_id IN (
+                         SELECT id FROM items
+                         WHERE merchant IN ('Customer Entry', 'RSVP Import',
+                                            'RSVP Email Link', 'Roster Import')
+                     )"""
+            ).rowcount
+
+            # Case 2: matched_item_id points to item for a different event.
+            # An RSVP for event X should only have matched_item_id pointing
+            # to an item whose item_name = X or is an alias of X.
+            r2 = conn.execute(
+                """UPDATE rsvps SET matched_item_id = NULL
+                   WHERE id IN (
+                       SELECT r.id FROM rsvps r
+                       JOIN items i ON i.id = r.matched_item_id
+                       WHERE r.matched_item_id IS NOT NULL
+                         AND r.matched_event IS NOT NULL
+                         AND i.item_name != r.matched_event
+                         AND i.item_name NOT IN (
+                             SELECT alias_name FROM event_aliases
+                             WHERE canonical_event_name = r.matched_event
+                         )
+                   )"""
+            ).rowcount
+
+            repaired = r1 + r2
+            if repaired:
+                logger.info("Repaired %d RSVPs with bad matched_item_id (%d non-event, %d wrong-event)",
+                            repaired, r1, r2)
+        except sqlite3.OperationalError:
+            pass  # rsvps table may not exist yet on first run
+
         conn.commit()
 
         # Soft constraint check: warn about NULL values in critical columns
@@ -1307,12 +1350,17 @@ def create_customer_from_rsvp(
     name: str, email: str, rsvp_event: str = "",
     db_path: str | Path | None = None,
 ) -> dict:
-    """Create a customer entry from an unmatched RSVP and link back.
+    """Create a customer entry from an unmatched RSVP.
 
     If a customer with this email already exists, returns info about them
     instead of creating a duplicate (for the frontend to offer merge).
 
-    Returns {status: "created"|"exists", customer: {...}, item_id: int}.
+    Does NOT set matched_item_id on RSVPs — that field links RSVPs to
+    event-specific registrations, not to generic customer entries.
+    The has_player_card flag will resolve to True automatically because
+    the customer's email now exists in the items table.
+
+    Returns {status: "created"|"exists"|"linked", customer: {...}, item_id: int}.
     """
     name = (name or "").strip()
     email = (email or "").strip().lower()
@@ -1338,12 +1386,17 @@ def create_customer_from_rsvp(
 
         # Check by name (case-insensitive)
         by_name = conn.execute(
-            "SELECT id, customer FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
+            "SELECT id, customer, customer_email FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
             (name,),
         ).fetchone()
         if by_name:
-            # Customer exists by name — link RSVP to them
             item_id = by_name["id"]
+            # If existing customer has no email, set it so has_player_card resolves
+            if email and not (by_name["customer_email"] or "").strip():
+                conn.execute(
+                    "UPDATE items SET customer_email = ? WHERE customer = ? COLLATE NOCASE",
+                    (email, name),
+                )
         else:
             # Create new customer entry
             today = datetime.now().strftime("%Y-%m-%d")
@@ -1364,14 +1417,6 @@ def create_customer_from_rsvp(
             item_id = cursor.lastrowid
             logger.info("Created customer from RSVP: %s <%s> (id=%d)", name, email, item_id)
 
-        # Update matching RSVPs to link to this customer
-        if email:
-            conn.execute(
-                """UPDATE rsvps SET matched_item_id = ?
-                   WHERE LOWER(player_email) = ? AND matched_item_id IS NULL""",
-                (item_id, email),
-            )
-
         conn.commit()
 
         return {
@@ -1387,10 +1432,13 @@ def link_rsvp_to_customer(
 ) -> dict:
     """Link an unmatched RSVP email to an existing customer.
 
-    Updates the customer's email if they don't have one, and links
-    all RSVPs from this email to the customer's item records.
+    Updates the customer's email if they don't have one so that
+    has_player_card resolves to True for RSVPs from this address.
 
-    Returns {linked: int, customer_name: str}.
+    Does NOT set matched_item_id on RSVPs — that field links RSVPs to
+    event-specific registrations, not to generic customer entries.
+
+    Returns {linked: bool, customer_name: str}.
     """
     rsvp_email = (rsvp_email or "").strip().lower()
     target_customer_name = (target_customer_name or "").strip()
@@ -1408,27 +1456,44 @@ def link_rsvp_to_customer(
         if not target:
             raise ValueError(f"Customer '{target_customer_name}' not found")
 
-        target_id = target["id"]
-
-        # If target customer has no email, set it
+        # If target customer has no email, set it so has_player_card resolves
         if not (target["customer_email"] or "").strip():
             conn.execute(
                 "UPDATE items SET customer_email = ? WHERE customer = ? COLLATE NOCASE",
                 (rsvp_email, target_customer_name),
             )
+            conn.commit()
+            logger.info("Set email <%s> on customer %s", rsvp_email, target_customer_name)
+            return {"linked": True, "customer_name": target_customer_name}
 
-        # Link all RSVPs from this email to the customer
-        cursor = conn.execute(
-            """UPDATE rsvps SET matched_item_id = ?
-               WHERE LOWER(player_email) = ? AND matched_item_id IS NULL""",
-            (target_id, rsvp_email),
+        # Customer already has an email — check if it's the same
+        existing_email = (target["customer_email"] or "").strip().lower()
+        if existing_email == rsvp_email:
+            # Already linked
+            return {"linked": True, "customer_name": target_customer_name}
+
+        # Customer has a DIFFERENT email — create a secondary item entry
+        # with the RSVP email so has_player_card can find them
+        today = datetime.now().strftime("%Y-%m-%d")
+        new_values = {c: None for c in ITEM_COLUMNS}
+        new_values["customer"] = target_customer_name
+        new_values["customer_email"] = rsvp_email
+        new_values["merchant"] = "RSVP Email Link"
+        new_values["order_date"] = today
+        new_values["email_uid"] = f"rsvp_link_{rsvp_email}_{today}"
+        new_values["item_index"] = 0
+
+        cols = ", ".join(ITEM_COLUMNS)
+        placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+        conn.execute(
+            f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+            tuple(new_values.get(c) for c in ITEM_COLUMNS),
         )
-        linked = cursor.rowcount
         conn.commit()
 
-        logger.info("Linked %d RSVPs from <%s> to customer %s (id=%d)",
-                     linked, rsvp_email, target_customer_name, target_id)
-        return {"linked": linked, "customer_name": target_customer_name}
+        logger.info("Linked RSVP email <%s> to customer %s (secondary email entry)",
+                     rsvp_email, target_customer_name)
+        return {"linked": True, "customer_name": target_customer_name}
 
 
 def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
