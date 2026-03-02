@@ -822,6 +822,18 @@
         }
     }
 
+    async function fetchAllRsvps() {
+        try {
+            const res = await fetch("/api/rsvps/bulk");
+            const data = await res.json();
+            allRsvps = data.rsvps || {};
+            allRsvpOverrides = data.overrides || {};
+            allRsvpEmailOverrides = data.email_overrides || {};
+        } catch (err) {
+            console.error("Failed to bulk-fetch RSVPs:", err);
+        }
+    }
+
     async function fetchRsvps(eventName) {
         try {
             const [rsvpRes, overrideRes] = await Promise.all([
@@ -841,8 +853,11 @@
 
     async function fetchEvents() {
         try {
-            const res = await fetch("/api/events");
-            allEvents = await res.json();
+            const [evRes] = await Promise.all([
+                fetch("/api/events"),
+                fetchAllRsvps(),
+            ]);
+            allEvents = await evRes.json();
             renderEvents();
         } catch (err) {
             console.error("Failed to fetch events:", err);
@@ -1856,19 +1871,12 @@
     async function toggleEventDetail(eventId) {
         const wasExpanded = expandedEventId === eventId;
 
-        // Collapse any currently expanded row and clean up cached data
+        // Collapse any currently expanded row
         if (expandedEventId !== null) {
             const prevRow = document.querySelector(`.event-row-clickable[data-id="${expandedEventId}"]`);
             const prevDetail = document.querySelector(`.event-detail-row[data-detail-for="${expandedEventId}"]`);
             if (prevRow) prevRow.classList.remove("expanded");
             if (prevDetail) prevDetail.classList.remove("visible");
-            // Clean up cached RSVPs/overrides for collapsed event to prevent unbounded growth
-            const prevEv = allEvents.find(e => e.id === expandedEventId);
-            if (prevEv) {
-                delete allRsvps[prevEv.item_name];
-                delete allRsvpOverrides[prevEv.item_name];
-                delete allRsvpEmailOverrides[prevEv.item_name];
-            }
             expandedEventId = null;
         }
 
