@@ -1303,6 +1303,76 @@ def create_customer(name: str, email: str = "", phone: str = "",
         return new_values
 
 
+def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
+    """Bulk-import customer rows from a roster spreadsheet.
+
+    Each dict should have 'customer' (required) plus optional fields like
+    customer_email, customer_phone, chapter, handicap, date_of_birth, shirt_size.
+
+    For existing customers: updates their info fields.
+    For new customers: creates a standalone Customer Entry item row.
+
+    Returns { created: int, updated: int, skipped: int, errors: list[str] }.
+    """
+    allowed_fields = {"customer", "customer_email", "customer_phone", "chapter",
+                      "handicap", "date_of_birth", "shirt_size"}
+    result = {"created": 0, "updated": 0, "skipped": 0, "errors": []}
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    with _connect(db_path) as conn:
+        for i, row in enumerate(rows):
+            name = (row.get("customer") or "").strip()
+            if not name:
+                result["skipped"] += 1
+                continue
+
+            # Check if customer already exists
+            existing = conn.execute(
+                "SELECT id FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
+                (name,),
+            ).fetchone()
+
+            safe = {k: v for k, v in row.items()
+                    if k in allowed_fields and k != "customer" and v}
+
+            if existing:
+                # Update existing customer's info across all their items
+                if safe:
+                    _validate_column_names(list(safe))
+                    set_clause = ", ".join(f"{col} = ?" for col in safe)
+                    values = list(safe.values()) + [name]
+                    conn.execute(
+                        f"UPDATE items SET {set_clause} WHERE customer = ? COLLATE NOCASE",
+                        values,
+                    )
+                    result["updated"] += 1
+                else:
+                    result["skipped"] += 1
+            else:
+                # Create new customer entry
+                new_values = {c: None for c in ITEM_COLUMNS}
+                new_values["customer"] = name
+                new_values["merchant"] = "Roster Import"
+                new_values["order_date"] = today
+                new_values["email_uid"] = f"roster_import_{name}_{today}"
+                new_values["item_index"] = 0
+                for k, v in safe.items():
+                    new_values[k] = v
+
+                cols = ", ".join(ITEM_COLUMNS)
+                placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+                conn.execute(
+                    f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+                    tuple(new_values.get(c) for c in ITEM_COLUMNS),
+                )
+                result["created"] += 1
+
+        conn.commit()
+    logger.info("Roster import: %d created, %d updated, %d skipped",
+                result["created"], result["updated"], result["skipped"])
+    return result
+
+
 def merge_customers(source_name: str, target_name: str,
                     db_path: str | Path | None = None) -> dict:
     """

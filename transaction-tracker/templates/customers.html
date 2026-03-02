@@ -87,6 +87,7 @@
             </div>
             <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
             <button class="btn btn-primary" id="btn-add-customer" style="font-size:0.78rem; padding:0.35rem 0.8rem;">+ Add Customer</button>
+            <button class="btn btn-secondary" id="btn-upload-roster" style="font-size:0.78rem; padding:0.35rem 0.8rem;">Upload Roster</button>
             <div class="view-toggle">
                 <button class="view-toggle-btn active" data-view="list">List</button>
                 <button class="view-toggle-btn" data-view="cards">Cards</button>
@@ -216,6 +217,52 @@
             <div class="modal-actions">
                 <button type="button" id="add-customer-cancel" class="btn btn-secondary">Cancel</button>
                 <button type="button" id="add-customer-submit" class="btn btn-primary">Add Customer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Roster Upload Modal -->
+    <div id="roster-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal" style="max-width:700px; width:95vw;">
+            <div class="modal-header">
+                <h2 id="roster-modal-title">Upload Roster</h2>
+                <button id="roster-close" class="modal-close">&times;</button>
+            </div>
+            <div id="roster-body">
+                <!-- Step 1: File Upload -->
+                <div id="roster-step-upload">
+                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">Upload an Excel file (.xlsx) to import customers. The first row should contain column headers.</p>
+                    <input type="file" id="roster-file" accept=".xlsx,.xls" class="modal-input" style="padding:0.5rem;">
+                    <div id="roster-upload-error" style="color:#dc2626; font-size:0.8rem; margin-top:0.5rem; display:none;"></div>
+                </div>
+                <!-- Step 2: Column Mapping -->
+                <div id="roster-step-map" style="display:none;">
+                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">Map each database field to a column from your spreadsheet.</p>
+                    <div id="roster-mapping-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; font-size:0.82rem;"></div>
+                </div>
+                <!-- Step 3: Preview -->
+                <div id="roster-step-preview" style="display:none;">
+                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">
+                        Preview of import — <strong id="roster-preview-count">0</strong> rows.
+                        <span style="color:#16a34a;" id="roster-new-count"></span>
+                        <span style="color:#2563eb;" id="roster-update-count"></span>
+                    </p>
+                    <div style="max-height:350px; overflow:auto; border:1px solid var(--border); border-radius:6px;">
+                        <table class="registrants-table" id="roster-preview-table" style="font-size:0.78rem;">
+                            <thead><tr id="roster-preview-header"></tr></thead>
+                            <tbody id="roster-preview-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- Step 4: Done -->
+                <div id="roster-step-done" style="display:none;">
+                    <div id="roster-result" style="font-size:0.9rem; padding:1rem; text-align:center;"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="roster-back" class="btn btn-secondary" style="display:none;">Back</button>
+                <button type="button" id="roster-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="roster-next" class="btn btn-primary">Upload &amp; Parse</button>
             </div>
         </div>
     </div>
@@ -1305,6 +1352,271 @@
         }
     }
 
+    // ---- Roster Upload ----
+    const ROSTER_DB_FIELDS = [
+        { key: "customer", label: "Name", required: true },
+        { key: "customer_email", label: "Email" },
+        { key: "customer_phone", label: "Phone" },
+        { key: "chapter", label: "Chapter" },
+        { key: "handicap", label: "Handicap" },
+        { key: "date_of_birth", label: "Date of Birth" },
+        { key: "shirt_size", label: "Shirt Size" },
+    ];
+
+    // Auto-match patterns: db_field → regex patterns to match Excel column headers
+    const AUTO_MATCH = {
+        customer: /^(name|full\s*name|player|customer|golfer|member\s*name)$/i,
+        customer_email: /^(email|e-?mail|email\s*address)$/i,
+        customer_phone: /^(phone|cell|mobile|telephone|phone\s*number)$/i,
+        chapter: /^(chapter|city|location|region)$/i,
+        handicap: /^(handicap|hcp|hdcp|index)$/i,
+        date_of_birth: /^(dob|date\s*of\s*birth|birth\s*date|birthday)$/i,
+        shirt_size: /^(shirt\s*size|size|tee\s*size)$/i,
+    };
+
+    let rosterStep = "upload";  // upload | map | preview | done
+    let rosterHeaders = [];
+    let rosterData = [];
+    let rosterMapping = {};     // { db_field: col_index | null }
+
+    function openRosterModal() {
+        rosterStep = "upload";
+        rosterHeaders = [];
+        rosterData = [];
+        rosterMapping = {};
+        document.getElementById("roster-file").value = "";
+        document.getElementById("roster-upload-error").style.display = "none";
+        updateRosterUI();
+        document.getElementById("roster-overlay").style.display = "flex";
+    }
+
+    function closeRosterModal() {
+        document.getElementById("roster-overlay").style.display = "none";
+    }
+
+    function updateRosterUI() {
+        document.getElementById("roster-step-upload").style.display = rosterStep === "upload" ? "" : "none";
+        document.getElementById("roster-step-map").style.display = rosterStep === "map" ? "" : "none";
+        document.getElementById("roster-step-preview").style.display = rosterStep === "preview" ? "" : "none";
+        document.getElementById("roster-step-done").style.display = rosterStep === "done" ? "" : "none";
+
+        const nextBtn = document.getElementById("roster-next");
+        const backBtn = document.getElementById("roster-back");
+        const cancelBtn = document.getElementById("roster-cancel");
+
+        if (rosterStep === "upload") {
+            nextBtn.textContent = "Upload & Parse";
+            nextBtn.style.display = "";
+            backBtn.style.display = "none";
+            cancelBtn.style.display = "";
+            document.getElementById("roster-modal-title").textContent = "Upload Roster";
+        } else if (rosterStep === "map") {
+            nextBtn.textContent = "Preview Import";
+            nextBtn.style.display = "";
+            backBtn.style.display = "";
+            cancelBtn.style.display = "";
+            document.getElementById("roster-modal-title").textContent = "Map Columns";
+        } else if (rosterStep === "preview") {
+            nextBtn.textContent = "Import";
+            nextBtn.style.display = "";
+            backBtn.style.display = "";
+            cancelBtn.style.display = "";
+            document.getElementById("roster-modal-title").textContent = "Preview Import";
+        } else {
+            nextBtn.textContent = "Done";
+            nextBtn.style.display = "";
+            backBtn.style.display = "none";
+            cancelBtn.style.display = "none";
+            document.getElementById("roster-modal-title").textContent = "Import Complete";
+        }
+    }
+
+    async function rosterNext() {
+        if (rosterStep === "upload") {
+            await rosterParseFile();
+        } else if (rosterStep === "map") {
+            rosterBuildPreview();
+        } else if (rosterStep === "preview") {
+            await rosterDoImport();
+        } else {
+            closeRosterModal();
+            await init();
+        }
+    }
+
+    function rosterBack() {
+        if (rosterStep === "map") {
+            rosterStep = "upload";
+        } else if (rosterStep === "preview") {
+            rosterStep = "map";
+        }
+        updateRosterUI();
+    }
+
+    async function rosterParseFile() {
+        const fileInput = document.getElementById("roster-file");
+        const errDiv = document.getElementById("roster-upload-error");
+        if (!fileInput.files.length) {
+            errDiv.textContent = "Please select a file.";
+            errDiv.style.display = "";
+            return;
+        }
+        errDiv.style.display = "none";
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+
+        const nextBtn = document.getElementById("roster-next");
+        nextBtn.disabled = true;
+        nextBtn.textContent = "Parsing...";
+        try {
+            const res = await fetch("/api/customers/parse-roster", { method: "POST", body: formData });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Parse failed");
+
+            rosterHeaders = data.headers;
+            rosterData = data.preview;
+
+            // Auto-match columns
+            rosterMapping = {};
+            ROSTER_DB_FIELDS.forEach(f => {
+                const pattern = AUTO_MATCH[f.key];
+                if (pattern) {
+                    const idx = rosterHeaders.findIndex(h => pattern.test(h.trim()));
+                    rosterMapping[f.key] = idx >= 0 ? idx : null;
+                } else {
+                    rosterMapping[f.key] = null;
+                }
+            });
+
+            rosterBuildMappingUI();
+            rosterStep = "map";
+            updateRosterUI();
+        } catch (err) {
+            errDiv.textContent = err.message;
+            errDiv.style.display = "";
+        } finally {
+            nextBtn.disabled = false;
+            nextBtn.textContent = "Upload & Parse";
+        }
+    }
+
+    function rosterBuildMappingUI() {
+        const grid = document.getElementById("roster-mapping-grid");
+        grid.innerHTML = ROSTER_DB_FIELDS.map(f => {
+            const options = rosterHeaders.map((h, i) =>
+                `<option value="${i}" ${rosterMapping[f.key] === i ? 'selected' : ''}>${escapeHtml(h)}</option>`
+            ).join("");
+            return `<label style="display:flex; flex-direction:column; gap:0.15rem;">
+                <span style="font-weight:600; font-size:0.75rem; text-transform:uppercase; color:var(--text-muted);">
+                    ${f.label}${f.required ? ' <span style="color:red;">*</span>' : ''}
+                </span>
+                <select class="modal-input roster-map-select" data-field="${f.key}" style="font-size:0.82rem; padding:0.3rem;">
+                    <option value="">— Skip —</option>
+                    ${options}
+                </select>
+            </label>`;
+        }).join("");
+
+        // Show sample data for the first mapped field
+        grid.querySelectorAll(".roster-map-select").forEach(sel => {
+            sel.addEventListener("change", () => {
+                const field = sel.dataset.field;
+                const val = sel.value;
+                rosterMapping[field] = val !== "" ? parseInt(val) : null;
+            });
+        });
+    }
+
+    function rosterBuildPreview() {
+        // Read current mapping from selects
+        document.querySelectorAll(".roster-map-select").forEach(sel => {
+            const field = sel.dataset.field;
+            const val = sel.value;
+            rosterMapping[field] = val !== "" ? parseInt(val) : null;
+        });
+
+        if (rosterMapping.customer === null || rosterMapping.customer === undefined) {
+            alert("Name field mapping is required.");
+            return;
+        }
+
+        // Build preview table
+        const mappedFields = ROSTER_DB_FIELDS.filter(f => rosterMapping[f.key] !== null && rosterMapping[f.key] !== undefined);
+        const headerRow = document.getElementById("roster-preview-header");
+        headerRow.innerHTML = mappedFields.map(f =>
+            `<th style="font-size:0.75rem;">${f.label}</th>`
+        ).join("") + '<th style="font-size:0.75rem;">Status</th>';
+
+        const existingNames = new Set(allCustomers.map(c => c.name.toLowerCase()));
+        let newCount = 0, updateCount = 0;
+
+        const tbody = document.getElementById("roster-preview-body");
+        tbody.innerHTML = rosterData.map(row => {
+            const nameIdx = rosterMapping.customer;
+            const name = (nameIdx !== null && row[nameIdx]) ? String(row[nameIdx]).trim() : "";
+            if (!name) return "";
+
+            const isExisting = existingNames.has(name.toLowerCase());
+            if (isExisting) updateCount++; else newCount++;
+
+            const cells = mappedFields.map(f => {
+                const idx = rosterMapping[f.key];
+                const val = idx !== null && row[idx] ? String(row[idx]).trim() : "";
+                return `<td>${escapeHtml(val)}</td>`;
+            }).join("");
+
+            const statusBadge = isExisting
+                ? '<span style="color:#2563eb; font-weight:600;">Update</span>'
+                : '<span style="color:#16a34a; font-weight:600;">New</span>';
+
+            return `<tr>${cells}<td>${statusBadge}</td></tr>`;
+        }).filter(Boolean).join("");
+
+        const validRows = rosterData.filter(row => {
+            const idx = rosterMapping.customer;
+            return idx !== null && row[idx] && String(row[idx]).trim();
+        });
+
+        document.getElementById("roster-preview-count").textContent = validRows.length;
+        document.getElementById("roster-new-count").textContent = newCount ? `(${newCount} new)` : "";
+        document.getElementById("roster-update-count").textContent = updateCount ? `(${updateCount} updates)` : "";
+
+        rosterStep = "preview";
+        updateRosterUI();
+    }
+
+    async function rosterDoImport() {
+        const nextBtn = document.getElementById("roster-next");
+        nextBtn.disabled = true;
+        nextBtn.textContent = "Importing...";
+
+        try {
+            const res = await fetch("/api/customers/import-roster", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mapping: rosterMapping, data: rosterData }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Import failed");
+
+            const parts = [];
+            if (data.created) parts.push(`<strong>${data.created}</strong> new customer${data.created !== 1 ? 's' : ''} created`);
+            if (data.updated) parts.push(`<strong>${data.updated}</strong> existing customer${data.updated !== 1 ? 's' : ''} updated`);
+            if (data.skipped) parts.push(`${data.skipped} skipped`);
+
+            document.getElementById("roster-result").innerHTML =
+                `<div style="font-size:1.1rem; margin-bottom:0.5rem; color:#16a34a;">Import Complete</div>` +
+                (parts.length ? parts.join(", ") + "." : "No changes made.");
+
+            rosterStep = "done";
+            updateRosterUI();
+        } catch (err) {
+            alert("Import failed: " + err.message);
+        } finally {
+            nextBtn.disabled = false;
+        }
+    }
+
     function switchView(view) {
         currentView = view;
         document.querySelectorAll(".view-toggle-btn").forEach(b => b.classList.remove("active"));
@@ -1455,6 +1767,16 @@
         document.getElementById("add-customer-close").addEventListener("click", closeAddCustomerModal);
         document.getElementById("add-customer-overlay").addEventListener("click", (e) => {
             if (e.target === e.currentTarget) closeAddCustomerModal();
+        });
+
+        // Roster Upload modal
+        document.getElementById("btn-upload-roster").addEventListener("click", openRosterModal);
+        document.getElementById("roster-next").addEventListener("click", rosterNext);
+        document.getElementById("roster-back").addEventListener("click", rosterBack);
+        document.getElementById("roster-cancel").addEventListener("click", closeRosterModal);
+        document.getElementById("roster-close").addEventListener("click", closeRosterModal);
+        document.getElementById("roster-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeRosterModal();
         });
 
         document.getElementById("customer-search").addEventListener("input", renderCustomers);
