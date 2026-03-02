@@ -70,7 +70,10 @@ from email_parser.database import (
     merge_customers,
     update_customer_info,
     create_customer,
+    create_customer_from_rsvp,
+    link_rsvp_to_customer,
     import_roster,
+    add_custom_field,
     save_feedback,
     get_all_feedback,
     update_feedback_status,
@@ -1087,13 +1090,30 @@ def api_parse_roster():
 def api_import_roster():
     """Import roster data with column mapping.
 
-    Body: { mapping: {db_field: excel_col_index, ...}, data: [[...], ...] }
+    Body: { mapping: {db_field: excel_col_index, ...}, data: [[...], ...],
+            new_fields: [{name: "field_name", col_index: N}, ...] }
     """
     data = request.get_json(force=True)
     mapping = data.get("mapping") or {}
     rows_data = data.get("data") or []
+    new_fields = data.get("new_fields") or []
     if not mapping or not rows_data:
         return jsonify({"error": "mapping and data are required"}), 400
+
+    # Create any new custom fields first
+    fields_created = []
+    for nf in new_fields:
+        field_name = (nf.get("name") or "").strip().lower().replace(" ", "_")
+        col_idx = nf.get("col_index")
+        if field_name and col_idx is not None:
+            try:
+                created = add_custom_field(field_name)
+                if created:
+                    fields_created.append(field_name)
+                # Add to the mapping
+                mapping[field_name] = col_idx
+            except ValueError as e:
+                return jsonify({"error": str(e)}), 400
 
     # mapping is like {"customer": 0, "customer_email": 2, ...}
     # rows_data is the array of arrays from the preview
@@ -1112,6 +1132,7 @@ def api_import_roster():
         return jsonify({"error": "No valid rows to import (customer name required)"}), 400
 
     result = import_roster(import_rows)
+    result["fields_created"] = fields_created
     return jsonify(result)
 
 
@@ -1128,6 +1149,38 @@ def api_merge_customers():
         return jsonify({"error": "source and target cannot be the same"}), 400
     result = merge_customers(source, target)
     return jsonify(result)
+
+
+@app.route("/api/customers/from-rsvp", methods=["POST"])
+@require_role("manager")
+def api_create_customer_from_rsvp():
+    """Create a customer from an unmatched RSVP and link them."""
+    data = request.get_json(force=True)
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    try:
+        result = create_customer_from_rsvp(name, email)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/customers/link-rsvp", methods=["POST"])
+@require_role("manager")
+def api_link_rsvp_to_customer():
+    """Link an unmatched RSVP email to an existing customer."""
+    data = request.get_json(force=True)
+    rsvp_email = (data.get("rsvp_email") or "").strip()
+    target_name = (data.get("target_customer") or "").strip()
+    if not rsvp_email or not target_name:
+        return jsonify({"error": "rsvp_email and target_customer are required"}), 400
+    try:
+        result = link_rsvp_to_customer(rsvp_email, target_name)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/events")

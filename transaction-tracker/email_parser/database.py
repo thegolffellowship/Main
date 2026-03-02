@@ -1303,6 +1303,134 @@ def create_customer(name: str, email: str = "", phone: str = "",
         return new_values
 
 
+def create_customer_from_rsvp(
+    name: str, email: str, rsvp_event: str = "",
+    db_path: str | Path | None = None,
+) -> dict:
+    """Create a customer entry from an unmatched RSVP and link back.
+
+    If a customer with this email already exists, returns info about them
+    instead of creating a duplicate (for the frontend to offer merge).
+
+    Returns {status: "created"|"exists", customer: {...}, item_id: int}.
+    """
+    name = (name or "").strip()
+    email = (email or "").strip().lower()
+    if not name:
+        raise ValueError("Customer name is required")
+
+    with _connect(db_path) as conn:
+        # Check if email already belongs to an existing customer
+        if email:
+            existing = conn.execute(
+                """SELECT id, customer FROM items
+                   WHERE LOWER(customer_email) = ?
+                     AND customer IS NOT NULL AND customer != ''
+                   ORDER BY order_date DESC LIMIT 1""",
+                (email,),
+            ).fetchone()
+            if existing:
+                return {
+                    "status": "exists",
+                    "customer": {"id": existing["id"], "name": existing["customer"]},
+                    "item_id": existing["id"],
+                }
+
+        # Check by name (case-insensitive)
+        by_name = conn.execute(
+            "SELECT id, customer FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
+            (name,),
+        ).fetchone()
+        if by_name:
+            # Customer exists by name — link RSVP to them
+            item_id = by_name["id"]
+        else:
+            # Create new customer entry
+            today = datetime.now().strftime("%Y-%m-%d")
+            new_values = {c: None for c in ITEM_COLUMNS}
+            new_values["customer"] = name
+            new_values["customer_email"] = email or None
+            new_values["merchant"] = "RSVP Import"
+            new_values["order_date"] = today
+            new_values["email_uid"] = f"rsvp_import_{email or name}_{today}"
+            new_values["item_index"] = 0
+
+            cols = ", ".join(ITEM_COLUMNS)
+            placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+            cursor = conn.execute(
+                f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+                tuple(new_values.get(c) for c in ITEM_COLUMNS),
+            )
+            item_id = cursor.lastrowid
+            logger.info("Created customer from RSVP: %s <%s> (id=%d)", name, email, item_id)
+
+        # Update matching RSVPs to link to this customer
+        if email:
+            conn.execute(
+                """UPDATE rsvps SET matched_item_id = ?
+                   WHERE LOWER(player_email) = ? AND matched_item_id IS NULL""",
+                (item_id, email),
+            )
+
+        conn.commit()
+
+        return {
+            "status": "created" if not by_name else "linked",
+            "customer": {"id": item_id, "name": name},
+            "item_id": item_id,
+        }
+
+
+def link_rsvp_to_customer(
+    rsvp_email: str, target_customer_name: str,
+    db_path: str | Path | None = None,
+) -> dict:
+    """Link an unmatched RSVP email to an existing customer.
+
+    Updates the customer's email if they don't have one, and links
+    all RSVPs from this email to the customer's item records.
+
+    Returns {linked: int, customer_name: str}.
+    """
+    rsvp_email = (rsvp_email or "").strip().lower()
+    target_customer_name = (target_customer_name or "").strip()
+    if not rsvp_email or not target_customer_name:
+        raise ValueError("Both rsvp_email and target_customer_name are required")
+
+    with _connect(db_path) as conn:
+        # Find target customer's item
+        target = conn.execute(
+            """SELECT id, customer_email FROM items
+               WHERE customer = ? COLLATE NOCASE
+               ORDER BY order_date DESC LIMIT 1""",
+            (target_customer_name,),
+        ).fetchone()
+        if not target:
+            raise ValueError(f"Customer '{target_customer_name}' not found")
+
+        target_id = target["id"]
+
+        # If target customer has no email, set it
+        if not (target["customer_email"] or "").strip():
+            conn.execute(
+                "UPDATE items SET customer_email = ? WHERE customer = ? COLLATE NOCASE",
+                (rsvp_email, target_customer_name),
+            )
+
+        # Link all RSVPs from this email to the customer
+        cursor = conn.execute(
+            """UPDATE rsvps SET matched_item_id = ?
+               WHERE LOWER(player_email) = ? AND matched_item_id IS NULL""",
+            (target_id, rsvp_email),
+        )
+        linked = cursor.rowcount
+        conn.commit()
+
+        logger.info("Linked %d RSVPs from <%s> to customer %s (id=%d)",
+                     linked, rsvp_email, target_customer_name, target_id)
+        return {"linked": linked, "customer_name": target_customer_name}
+
+
 def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
     """Bulk-import customer rows from a roster spreadsheet.
 
@@ -1314,8 +1442,13 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
 
     Returns { created: int, updated: int, skipped: int, errors: list[str] }.
     """
-    allowed_fields = {"customer", "customer_email", "customer_phone", "chapter",
-                      "handicap", "date_of_birth", "shirt_size"}
+    allowed_fields = set(ITEM_COLUMNS) - {
+        "email_uid", "item_index", "merchant", "order_id", "order_date",
+        "total_amount", "item_name", "item_price", "quantity",
+        "subject", "from_addr", "transaction_status", "credit_note",
+        "transferred_from_id", "transferred_to_id",
+        "wd_reason", "wd_note", "wd_credits", "credit_amount",
+    }
     result = {"created": 0, "updated": 0, "skipped": 0, "errors": []}
     today = datetime.now().strftime("%Y-%m-%d")
 
@@ -1371,6 +1504,31 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
     logger.info("Roster import: %d created, %d updated, %d skipped",
                 result["created"], result["updated"], result["skipped"])
     return result
+
+
+def add_custom_field(field_name: str, db_path: str | Path | None = None) -> bool:
+    """Add a new custom TEXT column to the items table at runtime.
+
+    Validates the name, adds the column via ALTER TABLE, and appends to
+    ITEM_COLUMNS so the rest of the app recognises it immediately.
+    Returns True if the column was created, False if it already exists.
+    """
+    field_name = (field_name or "").strip().lower().replace(" ", "_")
+    if not _SAFE_COL_RE.match(field_name):
+        raise ValueError(f"Invalid field name: {field_name!r}")
+    if field_name in ITEM_COLUMNS:
+        return False  # already exists
+
+    with _connect(db_path) as conn:
+        try:
+            conn.execute(f"ALTER TABLE items ADD COLUMN {field_name} TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            return False  # column already exists in DB
+
+    ITEM_COLUMNS.append(field_name)
+    logger.info("Added custom field: %s", field_name)
+    return True
 
 
 def merge_customers(source_name: str, target_name: str,

@@ -1500,9 +1500,14 @@
         }
     }
 
+    let rosterNewFields = [];  // [{name, col_index}]
+
     function rosterBuildMappingUI() {
+        rosterNewFields = [];
         const grid = document.getElementById("roster-mapping-grid");
-        grid.innerHTML = ROSTER_DB_FIELDS.map(f => {
+
+        // Standard field mapping
+        let html = ROSTER_DB_FIELDS.map(f => {
             const options = rosterHeaders.map((h, i) =>
                 `<option value="${i}" ${rosterMapping[f.key] === i ? 'selected' : ''}>${escapeHtml(h)}</option>`
             ).join("");
@@ -1517,7 +1522,27 @@
             </label>`;
         }).join("");
 
-        // Show sample data for the first mapped field
+        // Find unmapped columns (not auto-matched to any existing field)
+        const mappedIndices = new Set(Object.values(rosterMapping).filter(v => v !== null));
+        const unmapped = rosterHeaders
+            .map((h, i) => ({ header: h, index: i }))
+            .filter(c => !mappedIndices.has(c.index));
+
+        if (unmapped.length) {
+            html += `<div style="grid-column:1/-1; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border);">
+                <div style="font-weight:600; font-size:0.78rem; margin-bottom:0.4rem;">Unmapped Columns — create new fields?</div>
+                <div style="display:flex; flex-direction:column; gap:0.3rem;" id="roster-new-fields-list">
+                    ${unmapped.map(c => `<label style="display:flex; align-items:center; gap:0.4rem; font-size:0.82rem;">
+                        <input type="checkbox" class="roster-new-field-cb" data-col-index="${c.index}" data-header="${escapeHtml(c.header)}">
+                        <span style="font-weight:500;">${escapeHtml(c.header)}</span>
+                        <span style="color:var(--text-muted); font-size:0.75rem;">→ field: <code style="background:var(--bg-card); padding:0.1rem 0.3rem; border-radius:3px;">${escapeHtml(c.header.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''))}</code></span>
+                    </label>`).join("")}
+                </div>
+            </div>`;
+        }
+
+        grid.innerHTML = html;
+
         grid.querySelectorAll(".roster-map-select").forEach(sel => {
             sel.addEventListener("change", () => {
                 const field = sel.dataset.field;
@@ -1540,12 +1565,27 @@
             return;
         }
 
-        // Build preview table
+        // Collect checked new-field checkboxes
+        rosterNewFields = [];
+        document.querySelectorAll(".roster-new-field-cb:checked").forEach(cb => {
+            const header = cb.dataset.header;
+            const colIndex = parseInt(cb.dataset.colIndex);
+            const fieldName = header.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+            if (fieldName) {
+                rosterNewFields.push({ name: fieldName, col_index: colIndex, label: header });
+            }
+        });
+
+        // Build preview table — standard mapped fields + new fields
         const mappedFields = ROSTER_DB_FIELDS.filter(f => rosterMapping[f.key] !== null && rosterMapping[f.key] !== undefined);
         const headerRow = document.getElementById("roster-preview-header");
         headerRow.innerHTML = mappedFields.map(f =>
             `<th style="font-size:0.75rem;">${f.label}</th>`
-        ).join("") + '<th style="font-size:0.75rem;">Status</th>';
+        ).join("")
+        + rosterNewFields.map(nf =>
+            `<th style="font-size:0.75rem; color:#7c3aed;">${escapeHtml(nf.label)} <span style="font-size:0.65rem; font-weight:400;">(new)</span></th>`
+        ).join("")
+        + '<th style="font-size:0.75rem;">Status</th>';
 
         const existingNames = new Set(allCustomers.map(c => c.name.toLowerCase()));
         let newCount = 0, updateCount = 0;
@@ -1565,11 +1605,16 @@
                 return `<td>${escapeHtml(val)}</td>`;
             }).join("");
 
+            const newCells = rosterNewFields.map(nf => {
+                const val = row[nf.col_index] ? String(row[nf.col_index]).trim() : "";
+                return `<td style="color:#7c3aed;">${escapeHtml(val)}</td>`;
+            }).join("");
+
             const statusBadge = isExisting
                 ? '<span style="color:#2563eb; font-weight:600;">Update</span>'
                 : '<span style="color:#16a34a; font-weight:600;">New</span>';
 
-            return `<tr>${cells}<td>${statusBadge}</td></tr>`;
+            return `<tr>${cells}${newCells}<td>${statusBadge}</td></tr>`;
         }).filter(Boolean).join("");
 
         const validRows = rosterData.filter(row => {
@@ -1591,15 +1636,22 @@
         nextBtn.textContent = "Importing...";
 
         try {
+            const payload = { mapping: rosterMapping, data: rosterData };
+            if (rosterNewFields.length) {
+                payload.new_fields = rosterNewFields.map(nf => ({ name: nf.name, col_index: nf.col_index }));
+            }
             const res = await fetch("/api/customers/import-roster", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ mapping: rosterMapping, data: rosterData }),
+                body: JSON.stringify(payload),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Import failed");
 
             const parts = [];
+            if (data.fields_created && data.fields_created.length) {
+                parts.push(`<strong>${data.fields_created.length}</strong> new field${data.fields_created.length !== 1 ? 's' : ''} created (${data.fields_created.join(', ')})`);
+            }
             if (data.created) parts.push(`<strong>${data.created}</strong> new customer${data.created !== 1 ? 's' : ''} created`);
             if (data.updated) parts.push(`<strong>${data.updated}</strong> existing customer${data.updated !== 1 ? 's' : ''} updated`);
             if (data.skipped) parts.push(`${data.skipped} skipped`);
