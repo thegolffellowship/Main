@@ -109,6 +109,14 @@ if not _secret_key:
     _secret_key = "dev-secret-key"
 app.secret_key = _secret_key
 
+
+@app.errorhandler(500)
+def handle_500(e):
+    """Return JSON instead of HTML for unhandled server errors."""
+    logger.exception("Unhandled server error: %s", e)
+    return jsonify({"error": "Internal server error"}), 500
+
+
 # ---------------------------------------------------------------------------
 # Email check job (with background tracking)
 # ---------------------------------------------------------------------------
@@ -1165,6 +1173,9 @@ def api_create_customer_from_rsvp():
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Error creating customer from RSVP: %s", e)
+        return jsonify({"error": f"Server error: {e}"}), 500
 
 
 @app.route("/api/customers/link-rsvp", methods=["POST"])
@@ -1181,6 +1192,9 @@ def api_link_rsvp_to_customer():
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Error linking RSVP to customer: %s", e)
+        return jsonify({"error": f"Server error: {e}"}), 500
 
 
 @app.route("/api/events")
@@ -1346,22 +1360,26 @@ def api_add_player():
     mode = data.get("mode", "comp")
     if mode not in ("comp", "rsvp", "paid_separately"):
         return jsonify({"error": "Invalid mode."}), 400
-    item = add_player_to_event(
-        event_name=data["event_name"],
-        customer=data["customer"],
-        mode=mode,
-        side_games=data.get("side_games", ""),
-        tee_choice=data.get("tee_choice", ""),
-        handicap=data.get("handicap", ""),
-        member_status=data.get("member_status", ""),
-        payment_amount=data.get("payment_amount", ""),
-        payment_source=data.get("payment_source", ""),
-        customer_email=data.get("customer_email", ""),
-        customer_phone=data.get("customer_phone", ""),
-    )
-    if item:
-        return jsonify({"status": "ok", "item": item}), 201
-    return jsonify({"error": "Failed to add player."}), 500
+    try:
+        item = add_player_to_event(
+            event_name=data["event_name"],
+            customer=data["customer"],
+            mode=mode,
+            side_games=data.get("side_games", ""),
+            tee_choice=data.get("tee_choice", ""),
+            handicap=data.get("handicap", ""),
+            member_status=data.get("member_status", ""),
+            payment_amount=data.get("payment_amount", ""),
+            payment_source=data.get("payment_source", ""),
+            customer_email=data.get("customer_email", ""),
+            customer_phone=data.get("customer_phone", ""),
+        )
+        if item:
+            return jsonify({"status": "ok", "item": item}), 201
+        return jsonify({"error": "Failed to add player."}), 500
+    except Exception as e:
+        logger.exception("Error adding player: %s", e)
+        return jsonify({"error": f"Server error: {e}"}), 500
 
 
 @app.route("/api/events/upgrade-rsvp", methods=["POST"])
