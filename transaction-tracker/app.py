@@ -70,6 +70,7 @@ from email_parser.database import (
     merge_customers,
     update_customer_info,
     create_customer,
+    import_roster,
     save_feedback,
     get_all_feedback,
     update_feedback_status,
@@ -1042,6 +1043,76 @@ def api_create_customer():
     if result is None:
         return jsonify({"error": "Customer already exists"}), 409
     return jsonify({"status": "ok", "item": result})
+
+
+@app.route("/api/customers/parse-roster", methods=["POST"])
+@require_role("manager")
+def api_parse_roster():
+    """Parse an uploaded Excel file and return headers + preview rows."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    import io
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(file.read()), read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        header_row = next(rows_iter, None)
+        if not header_row:
+            return jsonify({"error": "Empty spreadsheet"}), 400
+
+        headers = [str(h).strip() if h else f"Column {i+1}"
+                   for i, h in enumerate(header_row)]
+
+        # Read up to 100 preview rows
+        preview = []
+        for row in rows_iter:
+            if len(preview) >= 100:
+                break
+            preview.append([str(c).strip() if c is not None else "" for c in row])
+
+        wb.close()
+        return jsonify({"headers": headers, "preview": preview,
+                        "total_rows": len(preview)})
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse file: {str(e)}"}), 400
+
+
+@app.route("/api/customers/import-roster", methods=["POST"])
+@require_role("manager")
+def api_import_roster():
+    """Import roster data with column mapping.
+
+    Body: { mapping: {db_field: excel_col_index, ...}, data: [[...], ...] }
+    """
+    data = request.get_json(force=True)
+    mapping = data.get("mapping") or {}
+    rows_data = data.get("data") or []
+    if not mapping or not rows_data:
+        return jsonify({"error": "mapping and data are required"}), 400
+
+    # mapping is like {"customer": 0, "customer_email": 2, ...}
+    # rows_data is the array of arrays from the preview
+    import_rows = []
+    for row in rows_data:
+        mapped = {}
+        for db_field, col_idx in mapping.items():
+            if col_idx is not None and 0 <= col_idx < len(row):
+                val = str(row[col_idx]).strip() if row[col_idx] else ""
+                if val:
+                    mapped[db_field] = val
+        if mapped.get("customer"):
+            import_rows.append(mapped)
+
+    if not import_rows:
+        return jsonify({"error": "No valid rows to import (customer name required)"}), 400
+
+    result = import_roster(import_rows)
+    return jsonify(result)
 
 
 @app.route("/api/customers/merge", methods=["POST"])
