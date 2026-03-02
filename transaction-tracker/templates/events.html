@@ -3233,7 +3233,7 @@
             });
             const data = await res.json();
             if (!res.ok) { alert(data.error || "Failed to link."); return; }
-            alert(`Linked ${data.linked} RSVP(s) from "${linkRsvpPlayerName}" to customer "${target}".`);
+            alert(`Linked "${linkRsvpPlayerName}" to customer "${target}". RSVP badge will update on refresh.`);
             closeLinkRsvpModal();
             await fetchItems();
             await fetchEvents();
