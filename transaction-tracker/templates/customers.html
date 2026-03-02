@@ -785,20 +785,40 @@
             { key: "customer_phone", label: "Phone", value: customer.phone || "" },
             { key: "chapter", label: "Chapter", value: customer.chapter || "" },
             { key: "handicap", label: "Handicap", value: (customer.items[0] || {}).handicap || "" },
-            { key: "date_of_birth", label: "Date of Birth", value: customer.items.map(i => i.date_of_birth).find(Boolean) || "" },
+            { key: "date_of_birth", label: "DOB", value: customer.items.map(i => i.date_of_birth).find(Boolean) || "" },
             { key: "shirt_size", label: "Shirt Size", value: customer.items.map(i => i.shirt_size).find(Boolean) || "" },
         ];
-        return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 0.75rem; max-width:500px; font-size:0.82rem;">` +
-            infoFields.map(f =>
-                `<label style="display:block;">` +
-                `<span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${f.label}</span>` +
-                `<input type="text" class="cust-edit-input modal-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="margin-top:0.15rem;">` +
-                `</label>`
-            ).join("") +
-            `</div>
-            <div style="margin-top:0.6rem;">
-                <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.78rem; padding:0.35rem 0.8rem;">Save</button>
-            </div>`;
+
+        // Read-only view
+        let html = '<div class="cust-info-view">';
+        html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; max-width:500px; font-size:0.82rem;">';
+        html += infoFields.map(f =>
+            `<div>` +
+            `<div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">${f.label}</div>` +
+            `<div style="margin-top:0.1rem; min-height:1.2em;">${escapeHtml(f.value) || '<span style="color:var(--text-muted);">\u2014</span>'}</div>` +
+            `</div>`
+        ).join("");
+        html += '</div>';
+        html += `<div style="margin-top:0.6rem;">
+            <button type="button" class="btn btn-edit cust-edit-toggle" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Edit</button>
+        </div></div>`;
+
+        // Editable view (hidden by default)
+        html += '<div class="cust-info-edit" style="display:none;">';
+        html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; max-width:500px; font-size:0.82rem;">';
+        html += infoFields.map(f =>
+            `<label style="display:flex; flex-direction:column;">` +
+            `<span style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">${f.label}</span>` +
+            `<input type="text" class="cust-edit-input modal-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="margin-top:0.2rem; padding:0.3rem 0.5rem; font-size:0.82rem;">` +
+            `</label>`
+        ).join("");
+        html += '</div>';
+        html += `<div style="margin-top:0.6rem; display:flex; gap:0.4rem;">
+            <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Save</button>
+            <button type="button" class="btn btn-secondary cust-cancel-edit" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Cancel</button>
+        </div></div>';
+
+        return html;
     }
 
     function renderCustDetailContent(customer) {
@@ -919,6 +939,25 @@
                 });
                 container.querySelector(".cust-tab-transactions").style.display = target === "transactions" ? "" : "none";
                 container.querySelector(".cust-tab-info").style.display = target === "info" ? "" : "none";
+            });
+        });
+
+        // Edit toggle: switch from read-only to editable
+        container.querySelectorAll(".cust-edit-toggle").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const panel = btn.closest(".cust-tab-info") || btn.closest(".cust-info-view").parentElement;
+                panel.querySelector(".cust-info-view").style.display = "none";
+                panel.querySelector(".cust-info-edit").style.display = "";
+            });
+        });
+        // Cancel edit: switch back to read-only
+        container.querySelectorAll(".cust-cancel-edit").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const panel = btn.closest(".cust-tab-info") || btn.closest(".cust-info-edit").parentElement;
+                panel.querySelector(".cust-info-edit").style.display = "none";
+                panel.querySelector(".cust-info-view").style.display = "";
             });
         });
 

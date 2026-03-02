@@ -1155,6 +1155,7 @@
                     filteredRegs = sortRegistrants(filteredRegs);
                     if (!activeFilter || activeFilter === "NO GAMES") {
                         filteredRegs = filteredRegs.concat(mGgRows);
+                        filteredRegs = sortRegistrants(filteredRegs);
                     }
 
                     const mRsvpOnlyCount = registrants.filter(r => (r.transaction_status || "active") === "rsvp_only" && r.customer_email).length;
@@ -1740,6 +1741,7 @@
         // Append GG RSVP players (show when no filter or NO GAMES filter)
         if (!activeFilter || activeFilter === "NO GAMES") {
             filtered = filtered.concat(ggRsvpRows);
+            filtered = sortRegistrants(filtered);
         }
 
         // Detail controls row: column toggle + count + Add Player + Remind All
