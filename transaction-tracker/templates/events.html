@@ -2227,8 +2227,12 @@
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ name: playerName, email }),
                             });
+                            if (!resp.ok) {
+                                const errData = await resp.json().catch(() => ({}));
+                                alert(errData.error || `Failed (HTTP ${resp.status})`);
+                                return;
+                            }
                             const result = await resp.json();
-                            if (!resp.ok) { alert(result.error || "Failed"); return; }
                             if (result.status === "exists") {
                                 alert(`This email already belongs to customer "${result.customer.name}". Use "Link to Customer" instead.`);
                             } else {
@@ -3277,8 +3281,12 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ rsvp_email: linkRsvpEmail, target_customer: target }),
             });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                alert(errData.error || `Failed to link (HTTP ${res.status}).`);
+                return;
+            }
             const data = await res.json();
-            if (!res.ok) { alert(data.error || "Failed to link."); return; }
             alert(`Linked "${linkRsvpPlayerName}" to customer "${target}". RSVP badge will update on refresh.`);
             closeLinkRsvpModal();
             await fetchItems();
