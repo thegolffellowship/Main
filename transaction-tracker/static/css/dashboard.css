@@ -782,6 +782,8 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
     align-items: center;
     justify-content: center;
     z-index: 1000;
+    overflow-y: auto;
+    padding: 1rem 0;
 }
 .modal {
     background: var(--surface);
@@ -789,6 +791,8 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
     padding: 2rem;
     max-width: 90vw;
+    max-height: 90vh;
+    overflow-y: auto;
     animation: modalIn 0.2s ease-out;
 }
 @keyframes modalIn {
