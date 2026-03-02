@@ -323,7 +323,7 @@ def send_mail_graph(
     return False
 
 
-def render_template(template_text: str, variables: dict) -> str:
+def render_msg_template(template_text: str, variables: dict) -> str:
     """Render a message template by substituting {variable} placeholders.
 
     Only replaces known variable names to avoid KeyError on user-typed braces.
@@ -365,8 +365,8 @@ def send_bulk_emails(
 
     for i, recip in enumerate(recipients):
         variables = {**event_vars, "player_name": recip["player_name"]}
-        rendered_subject = render_template(subject_template, variables)
-        rendered_body = render_template(body_template, variables)
+        rendered_subject = render_msg_template(subject_template, variables)
+        rendered_body = render_msg_template(body_template, variables)
 
         ok = send_mail_graph(
             tenant_id=tenant_id,

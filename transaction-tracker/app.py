@@ -80,7 +80,7 @@ from email_parser.database import (
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
     fetch_transaction_emails, fetch_email_by_id, send_mail_graph,
-    render_template, send_bulk_emails,
+    render_msg_template, send_bulk_emails,
 )
 from email_parser.parser import parse_email, parse_emails, _strip_html
 from email_parser.report import send_daily_report
@@ -1503,7 +1503,7 @@ def api_send_messages():
 
     # Log each send
     role = session.get("role", "unknown")
-    body_preview = render_template(body_tpl, {**event_vars, "player_name": "..."})[:200]
+    body_preview = render_msg_template(body_tpl, {**event_vars, "player_name": "..."})[:200]
     for r in filtered:
         email = r["customer_email"].strip()
         was_sent = email not in [e["recipient"] for e in result.get("errors", [])]
@@ -1513,7 +1513,7 @@ def api_send_messages():
             "channel": "email",
             "recipient_name": r.get("customer"),
             "recipient_address": email,
-            "subject": render_template(subject_tpl, {**event_vars, "player_name": r.get("customer") or "Player"}),
+            "subject": render_msg_template(subject_tpl, {**event_vars, "player_name": r.get("customer") or "Player"}),
             "body_preview": body_preview,
             "status": "sent" if was_sent else "failed",
             "error_message": None if was_sent else "Send failed",
@@ -1559,8 +1559,8 @@ def api_preview_message():
     }
 
     return jsonify({
-        "subject": render_template(subject_tpl, variables),
-        "html_body": render_template(body_tpl, variables),
+        "subject": render_msg_template(subject_tpl, variables),
+        "html_body": render_msg_template(body_tpl, variables),
     })
 
 
