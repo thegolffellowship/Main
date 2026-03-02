@@ -28,12 +28,10 @@ const SEARCHABLE_FIELDS = [
 
 // Column definitions for toggle and rendering
 const TABLE_COLUMNS = [
-    { key: "event_date", label: "Event Date", default: true },
+    { key: "order_date", label: "Order Date", default: true },
     { key: "customer", label: "Customer", default: true },
     { key: "item_name", label: "Item", default: true },
     { key: "item_price", label: "Price", default: true },
-    { key: "city", label: "City", default: true },
-    { key: "course", label: "Course", default: true },
     { key: "handicap", label: "Handicap", default: true },
     { key: "side_games", label: "Side Games", default: true },
     { key: "tee_choice", label: "Tee", default: true },
@@ -42,7 +40,6 @@ const TABLE_COLUMNS = [
     { key: "fellowship_after", label: "Fellowship After", default: false },
     { key: "notes", label: "Notes", default: false },
     { key: "order_id", label: "Order ID", default: true },
-    { key: "order_date", label: "Order Date", default: true },
     { key: "actions", label: "Actions", default: true },
 ];
 
@@ -406,7 +403,6 @@ function statusTag(row) {
 }
 
 function cellForColumn(key, row) {
-    if (key === "event_date") return cell(row.event_date || row.order_date, "event_date", row.id);
     if (key === "customer") return linkedCell(row.customer, "customer", row.id);
     if (key === "item_name") return linkedCell(row.item_name, "item_name", row.id) + statusTag(row);
     if (key === "item_price") return cell(row.item_price, "item_price", row.id);
@@ -471,17 +467,14 @@ function renderMobileCards(items) {
 
         // Detail fields
         const fields = [
-            ["Date", row.event_date || row.order_date || "\u2014"],
+            ["Order Date", row.order_date || "\u2014"],
             ["Price", row.item_price || "\u2014"],
-            ["City", row.city || "\u2014"],
-            ["Course", row.course || "\u2014"],
             ["Handicap", row.handicap || "\u2014"],
             ["Status", row.member_status || "\u2014"],
             ["Partner Request", row.partner_request || "\u2014"],
             ["Fellowship After", row.fellowship_after || "\u2014"],
             ["Notes", row.notes || "\u2014"],
             ["Order ID", row.order_id || "\u2014"],
-            ["Order Date", row.order_date || "\u2014"],
         ];
 
         // Action buttons
@@ -648,9 +641,9 @@ function updateClearButton() {
 function clearAllFilters() {
     document.getElementById("search-input").value = "";
     document.getElementById("filter-column").value = "";
-    currentSortField = "event_date";
+    currentSortField = "order_date";
     currentSortDir = "desc";
-    document.getElementById("sort-select").value = "event_date-desc";
+    document.getElementById("sort-select").value = "order_date-desc";
     activeCategory = "all";
     document.querySelectorAll(".category-btn").forEach(b => b.classList.remove("active"));
     document.querySelector('.category-btn[data-category="all"]').classList.add("active");

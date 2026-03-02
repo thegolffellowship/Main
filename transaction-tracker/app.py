@@ -69,6 +69,7 @@ from email_parser.database import (
     set_rsvp_email_override,
     merge_customers,
     update_customer_info,
+    create_customer,
     save_feedback,
     get_all_feedback,
     update_feedback_status,
@@ -1022,6 +1023,25 @@ def api_update_customer():
 
     updated = update_customer_info(customer_name, safe)
     return jsonify({"status": "ok", "items_updated": updated})
+
+
+@app.route("/api/customers/create", methods=["POST"])
+@require_role("manager")
+def api_create_customer():
+    """Create a new standalone customer."""
+    data = request.get_json(force=True)
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    result = create_customer(
+        name,
+        email=data.get("email", ""),
+        phone=data.get("phone", ""),
+        chapter=data.get("chapter", ""),
+    )
+    if result is None:
+        return jsonify({"error": "Customer already exists"}), 409
+    return jsonify({"status": "ok", "item": result})
 
 
 @app.route("/api/customers/merge", methods=["POST"])

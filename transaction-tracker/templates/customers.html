@@ -86,6 +86,7 @@
                 <div class="column-toggle-dropdown" id="cust-col-toggle-dropdown"></div>
             </div>
             <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
+            <button class="btn btn-primary" id="btn-add-customer" style="font-size:0.78rem; padding:0.35rem 0.8rem;">+ Add Customer</button>
             <div class="view-toggle">
                 <button class="view-toggle-btn active" data-view="list">List</button>
                 <button class="view-toggle-btn" data-view="cards">Cards</button>
@@ -187,6 +188,34 @@
             <div class="modal-actions">
                 <button type="button" id="cust-merge-cancel" class="btn btn-secondary">Cancel</button>
                 <button type="button" id="cust-merge-submit" class="btn btn-primary">Merge</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Customer Modal -->
+    <div id="add-customer-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal">
+            <div class="modal-header">
+                <h2>Add Customer</h2>
+                <button id="add-customer-close" class="modal-close">&times;</button>
+            </div>
+            <div class="credit-fields" style="display:flex; flex-direction:column; gap:0.5rem;">
+                <label>Name <span style="color:red;">*</span>
+                    <input type="text" id="add-customer-name" class="modal-input" placeholder="First Last" required>
+                </label>
+                <label>Email
+                    <input type="email" id="add-customer-email" class="modal-input" placeholder="email@example.com">
+                </label>
+                <label>Phone
+                    <input type="tel" id="add-customer-phone" class="modal-input" placeholder="(555) 123-4567">
+                </label>
+                <label>Chapter
+                    <input type="text" id="add-customer-chapter" class="modal-input" placeholder="Austin, San Antonio, Dallas...">
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="add-customer-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="add-customer-submit" class="btn btn-primary">Add Customer</button>
             </div>
         </div>
     </div>
@@ -363,7 +392,7 @@
             }
             if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
             if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
-            const date = item.event_date || item.order_date || "";
+            const date = item.order_date || item.event_date || "";
             if (date > map[name].latestDate) map[name].latestDate = date;
         });
 
@@ -514,7 +543,7 @@
 
     function renderCustDetailMobile(customer) {
         const sorted = [...customer.items].sort((a, b) =>
-            (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""));
+            (b.order_date || "").localeCompare(a.order_date || ""));
 
         return sorted.map(item => {
             const txStatus = item.transaction_status || "active";
@@ -536,10 +565,8 @@
             }
 
             const fields = [
-                ["Date", item.event_date || item.order_date || "\u2014"],
+                ["Order Date", item.order_date || "\u2014"],
                 ["Price", item.item_price || "\u2014"],
-                ["City", item.city || "\u2014"],
-                ["Course", item.course || "\u2014"],
             ];
 
             return `
@@ -785,20 +812,40 @@
             { key: "customer_phone", label: "Phone", value: customer.phone || "" },
             { key: "chapter", label: "Chapter", value: customer.chapter || "" },
             { key: "handicap", label: "Handicap", value: (customer.items[0] || {}).handicap || "" },
-            { key: "date_of_birth", label: "Date of Birth", value: customer.items.map(i => i.date_of_birth).find(Boolean) || "" },
+            { key: "date_of_birth", label: "DOB", value: customer.items.map(i => i.date_of_birth).find(Boolean) || "" },
             { key: "shirt_size", label: "Shirt Size", value: customer.items.map(i => i.shirt_size).find(Boolean) || "" },
         ];
-        return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 0.75rem; max-width:500px; font-size:0.82rem;">` +
-            infoFields.map(f =>
-                `<label style="display:block;">` +
-                `<span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${f.label}</span>` +
-                `<input type="text" class="cust-edit-input modal-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="margin-top:0.15rem;">` +
-                `</label>`
-            ).join("") +
-            `</div>
-            <div style="margin-top:0.6rem;">
-                <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.78rem; padding:0.35rem 0.8rem;">Save</button>
-            </div>`;
+
+        // Read-only view
+        let html = '<div class="cust-info-view">';
+        html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; max-width:500px; font-size:0.82rem;">';
+        html += infoFields.map(f =>
+            `<div>` +
+            `<div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">${f.label}</div>` +
+            `<div style="margin-top:0.1rem; min-height:1.2em;">${escapeHtml(f.value) || '<span style="color:var(--text-muted);">\u2014</span>'}</div>` +
+            `</div>`
+        ).join("");
+        html += '</div>';
+        html += `<div style="margin-top:0.6rem;">
+            <button type="button" class="btn btn-edit cust-edit-toggle" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Edit</button>
+        </div></div>`;
+
+        // Editable view (hidden by default)
+        html += '<div class="cust-info-edit" style="display:none;">';
+        html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; max-width:500px; font-size:0.82rem;">';
+        html += infoFields.map(f =>
+            `<label style="display:flex; flex-direction:column;">` +
+            `<span style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">${f.label}</span>` +
+            `<input type="text" class="cust-edit-input modal-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="margin-top:0.2rem; padding:0.3rem 0.5rem; font-size:0.82rem;">` +
+            `</label>`
+        ).join("");
+        html += '</div>';
+        html += `<div style="margin-top:0.6rem; display:flex; gap:0.4rem;">
+            <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Save</button>
+            <button type="button" class="btn btn-secondary cust-cancel-edit" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Cancel</button>
+        </div></div>';
+
+        return html;
     }
 
     function renderCustDetailContent(customer) {
@@ -841,11 +888,11 @@
         // Transactions tab content
         html += '<div class="cust-tab-content cust-tab-transactions">';
         html += '<table class="registrants-table"><thead><tr>';
-        html += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Order Date</th><th>Actions</th>';
+        html += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
         html += '</tr></thead><tbody>';
 
         const sorted = [...customer.items].sort((a, b) =>
-            (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""));
+            (b.order_date || "").localeCompare(a.order_date || ""));
 
         sorted.forEach(item => {
             const txStatus = item.transaction_status || "active";
@@ -862,13 +909,10 @@
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
             html += `<tr${rowClass}>
-                <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
+                <td>${escapeHtml(item.order_date || "\u2014")}</td>
                 <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
                 <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
-                <td>${escapeHtml(item.city || "\u2014")}</td>
-                <td>${escapeHtml(item.course || "\u2014")}</td>
                 <td>${escapeHtml(item.side_games || "\u2014")}</td>
-                <td>${escapeHtml(item.order_date || "\u2014")}</td>
                 <td>${actionBtn}</td>
             </tr>`;
         });
@@ -919,6 +963,25 @@
                 });
                 container.querySelector(".cust-tab-transactions").style.display = target === "transactions" ? "" : "none";
                 container.querySelector(".cust-tab-info").style.display = target === "info" ? "" : "none";
+            });
+        });
+
+        // Edit toggle: switch from read-only to editable
+        container.querySelectorAll(".cust-edit-toggle").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const panel = btn.closest(".cust-tab-info") || btn.closest(".cust-info-view").parentElement;
+                panel.querySelector(".cust-info-view").style.display = "none";
+                panel.querySelector(".cust-info-edit").style.display = "";
+            });
+        });
+        // Cancel edit: switch back to read-only
+        container.querySelectorAll(".cust-cancel-edit").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const panel = btn.closest(".cust-tab-info") || btn.closest(".cust-info-edit").parentElement;
+                panel.querySelector(".cust-info-edit").style.display = "none";
+                panel.querySelector(".cust-info-view").style.display = "";
             });
         });
 
@@ -1013,10 +1076,10 @@
         // Transactions tab
         panelHtml += '<div class="cust-tab-content cust-tab-transactions">';
         panelHtml += '<table style="width:100%; border-collapse:collapse;"><thead><tr>';
-        panelHtml += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Order Date</th><th>Actions</th>';
+        panelHtml += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
         panelHtml += '</tr></thead><tbody>';
         customer.items
-            .sort((a, b) => (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""))
+            .sort((a, b) => (b.order_date || "").localeCompare(a.order_date || ""))
             .forEach(item => {
                 const txStatus = item.transaction_status || "active";
                 const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (item.transferred_from_id ? ' class="row-from-transfer"' : '');
@@ -1032,13 +1095,10 @@
                     actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                 }
                 panelHtml += `<tr${rowClass}>
-                    <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
+                    <td>${escapeHtml(item.order_date || "\u2014")}</td>
                     <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
                     <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
-                    <td>${escapeHtml(item.city || "\u2014")}</td>
-                    <td>${escapeHtml(item.course || "\u2014")}</td>
                     <td>${escapeHtml(item.side_games || "\u2014")}</td>
-                    <td>${escapeHtml(item.order_date || "\u2014")}</td>
                     <td>${actionBtn}</td>
                 </tr>`;
             });
@@ -1211,6 +1271,40 @@
         }
     }
 
+    function openAddCustomerModal() {
+        document.getElementById("add-customer-name").value = "";
+        document.getElementById("add-customer-email").value = "";
+        document.getElementById("add-customer-phone").value = "";
+        document.getElementById("add-customer-chapter").value = "";
+        document.getElementById("add-customer-overlay").style.display = "flex";
+        document.getElementById("add-customer-name").focus();
+    }
+
+    function closeAddCustomerModal() {
+        document.getElementById("add-customer-overlay").style.display = "none";
+    }
+
+    async function submitAddCustomer() {
+        const name = document.getElementById("add-customer-name").value.trim();
+        if (!name) { alert("Customer name is required."); return; }
+        const email = document.getElementById("add-customer-email").value.trim();
+        const phone = document.getElementById("add-customer-phone").value.trim();
+        const chapter = document.getElementById("add-customer-chapter").value.trim();
+        try {
+            const res = await fetch("/api/customers/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, email, phone, chapter }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to add customer");
+            closeAddCustomerModal();
+            await init();
+        } catch (err) {
+            alert("Error: " + err.message);
+        }
+    }
+
     function switchView(view) {
         currentView = view;
         document.querySelectorAll(".view-toggle-btn").forEach(b => b.classList.remove("active"));
@@ -1234,8 +1328,8 @@
             alert("Select a customer first to export their data.");
             return;
         }
-        const headers = ["Event Date", "Item", "Price", "City", "Course", "Side Games", "Order Date"];
-        const fields = ["event_date", "item_name", "item_price", "city", "course", "side_games", "order_date"];
+        const headers = ["Order Date", "Item", "Price", "Side Games"];
+        const fields = ["order_date", "item_name", "item_price", "side_games"];
         const rows = selectedCustomer.items.map(r => fields.map(f => r[f] || ""));
         const csvContent = [headers, ...rows]
             .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))
@@ -1352,6 +1446,15 @@
         document.getElementById("cust-merge-close").addEventListener("click", closeCustMergeModal);
         document.getElementById("cust-merge-overlay").addEventListener("click", (e) => {
             if (e.target === e.currentTarget) closeCustMergeModal();
+        });
+
+        // Add Customer modal
+        document.getElementById("btn-add-customer").addEventListener("click", openAddCustomerModal);
+        document.getElementById("add-customer-submit").addEventListener("click", submitAddCustomer);
+        document.getElementById("add-customer-cancel").addEventListener("click", closeAddCustomerModal);
+        document.getElementById("add-customer-close").addEventListener("click", closeAddCustomerModal);
+        document.getElementById("add-customer-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeAddCustomerModal();
         });
 
         document.getElementById("customer-search").addEventListener("input", renderCustomers);
