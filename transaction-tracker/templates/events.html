@@ -631,6 +631,15 @@
                     </div>
                     <div id="compose-custom-list"></div>
                 </div>
+                <!-- Add extra recipients not on the player list -->
+                <div id="compose-extra-recipients" style="margin-bottom:0.75rem;">
+                    <div id="compose-extra-list" style="font-size:0.78rem;"></div>
+                    <div style="display:flex; gap:0.3rem; align-items:center; margin-top:0.3rem;">
+                        <input type="text" id="compose-extra-name" class="modal-input" placeholder="Name" style="flex:1; font-size:0.78rem; padding:0.25rem 0.4rem;">
+                        <input type="email" id="compose-extra-email" class="modal-input" placeholder="Email" style="flex:1.5; font-size:0.78rem; padding:0.25rem 0.4rem;">
+                        <button type="button" id="compose-add-extra" class="btn btn-secondary" style="font-size:0.7rem; padding:0.25rem 0.5rem; white-space:nowrap;">+ Add</button>
+                    </div>
+                </div>
                 <div id="compose-recipient-list" style="max-height:120px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem; font-size:0.78rem; margin-bottom:0.75rem; display:none;"></div>
                 <div style="display:flex; gap:0.5rem; margin-bottom:0.3rem;">
                     <button type="button" id="compose-toggle-recipients" class="btn btn-secondary" style="font-size:0.75rem; padding:0.25rem 0.6rem;">Show Recipients</button>
@@ -691,6 +700,74 @@
 
             <!-- Results -->
             <div id="compose-results" style="display:none; margin-top:0.75rem; padding:0.75rem; border-radius:var(--radius); font-size:0.82rem;"></div>
+        </div>
+    </div>
+
+    <!-- Edit Player Modal -->
+    <div id="edit-player-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2 id="edit-player-title">Edit Player</h2>
+                <button id="edit-player-close" class="modal-close">&times;</button>
+            </div>
+            <div id="edit-player-body" style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 0.75rem; font-size:0.82rem;">
+                <label style="display:block;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Name</span>
+                    <input type="text" id="edit-player-name" class="modal-input" style="margin-top:0.15rem;">
+                </label>
+                <label style="display:block;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Email</span>
+                    <input type="email" id="edit-player-email" class="modal-input" style="margin-top:0.15rem;">
+                </label>
+                <label style="display:block;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Phone</span>
+                    <input type="text" id="edit-player-phone" class="modal-input" style="margin-top:0.15rem;">
+                </label>
+                <label style="display:block;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Handicap</span>
+                    <input type="text" id="edit-player-handicap" class="modal-input" style="margin-top:0.15rem;">
+                </label>
+                <label style="display:block;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Side Games</span>
+                    <select id="edit-player-side-games" class="modal-input" style="margin-top:0.15rem;">
+                        <option value="">--</option>
+                        <option value="NET">NET</option>
+                        <option value="GROSS">GROSS</option>
+                        <option value="BOTH">BOTH</option>
+                        <option value="NONE">NONE</option>
+                    </select>
+                </label>
+                <label style="display:block;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Tee Choice</span>
+                    <input type="text" id="edit-player-tee" class="modal-input" style="margin-top:0.15rem;">
+                </label>
+                <label style="display:block;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Member Status</span>
+                    <select id="edit-player-member-status" class="modal-input" style="margin-top:0.15rem;">
+                        <option value="">--</option>
+                        <option value="MEMBER">MEMBER</option>
+                        <option value="GUEST">GUEST</option>
+                        <option value="1st TIMER">1st TIMER</option>
+                        <option value="Manager">Manager</option>
+                    </select>
+                </label>
+                <label style="display:block;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Chapter</span>
+                    <input type="text" id="edit-player-chapter" class="modal-input" style="margin-top:0.15rem;">
+                </label>
+                <label style="display:block; grid-column:1/-1;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Partner Request</span>
+                    <input type="text" id="edit-player-partner" class="modal-input" style="margin-top:0.15rem;">
+                </label>
+                <label style="display:block; grid-column:1/-1;">
+                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Notes</span>
+                    <textarea id="edit-player-notes" class="modal-input" rows="2" style="margin-top:0.15rem; resize:vertical;"></textarea>
+                </label>
+            </div>
+            <div class="modal-actions" style="margin-top:0.75rem;">
+                <button type="button" id="edit-player-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="edit-player-save" class="btn btn-primary">Save Changes</button>
+            </div>
         </div>
     </div>
 
@@ -990,15 +1067,16 @@
             const tee = (r.tee_choice || "").trim();
             const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
+            const editBtn = !isSynthetic ? `<button class="btn btn-edit" data-edit-item="${r.id}" style="font-size:0.7rem; padding:0.15rem 0.4rem;">Edit</button> ` : '';
             let actionBtn = '';
             if (isSynthetic) {
                 actionBtn = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (isRsvpOnly) {
-                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                actionBtn = editBtn + `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (isComp) {
-                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                actionBtn = editBtn + `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "active" && !r.transferred_from_id) {
-                actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                actionBtn = editBtn + `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                 if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred") {
                 actionBtn = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
@@ -1783,11 +1861,14 @@
                     if (isSynthetic) {
                         btns = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
-                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        btns = `<button class="btn btn-edit" data-edit-item="${r.id}" style="font-size:0.7rem; padding:0.15rem 0.4rem;">Edit</button> `;
+                        btns += `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isCompRow) {
-                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        btns = `<button class="btn btn-edit" data-edit-item="${r.id}" style="font-size:0.7rem; padding:0.15rem 0.4rem;">Edit</button> `;
+                        btns += `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "active" && !r.transferred_from_id) {
-                        btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                        btns = `<button class="btn btn-edit" data-edit-item="${r.id}" style="font-size:0.7rem; padding:0.15rem 0.4rem;">Edit</button> `;
+                        btns += `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                         if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "credited" || txStatus === "transferred") {
                         btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
@@ -2262,11 +2343,21 @@
                 }
             });
         });
+
+        // Edit player button
+        container.querySelectorAll("[data-edit-item]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(btn.dataset.editItem);
+                openEditPlayerModal(itemId);
+            });
+        });
     }
 
     // ---- Compose Message Modal Logic ----
     let composeEventName = "";
     let composeTemplates = [];
+    let composeExtraRecipients = [];  // [{name, email}] — manually added recipients not on the player list
 
     async function loadMessageTemplates() {
         try {
@@ -2330,8 +2421,10 @@
         } else {
             customDiv.style.display = "none";
             const recipients = getComposeRecipients(composeEventName, audience);
+            const total = recipients.length + composeExtraRecipients.length;
             const countEl = document.getElementById("compose-recipient-count");
-            countEl.textContent = `This will reach ${recipients.length} player${recipients.length !== 1 ? "s" : ""} with email addresses`;
+            const extraNote = composeExtraRecipients.length ? ` (+ ${composeExtraRecipients.length} extra)` : "";
+            countEl.textContent = `This will reach ${total} player${total !== 1 ? "s" : ""} with email addresses${extraNote}`;
             listEl.innerHTML = recipients.map(r =>
                 `<div style="padding:0.15rem 0; border-bottom:1px solid var(--border);">` +
                 `<strong>${escapeHtml(r.customer || "Unknown")}</strong>` +
@@ -2343,14 +2436,57 @@
 
     function updateCustomCount() {
         const checked = document.querySelectorAll("#compose-custom-list .compose-custom-cb:checked");
+        const total = checked.length + composeExtraRecipients.length;
         const countEl = document.getElementById("compose-recipient-count");
-        countEl.textContent = `${checked.length} player${checked.length !== 1 ? "s" : ""} selected`;
+        const extraNote = composeExtraRecipients.length ? ` + ${composeExtraRecipients.length} extra` : "";
+        countEl.textContent = `${total} player${total !== 1 ? "s" : ""} selected${extraNote}`;
     }
 
     function getCustomSelectedEmails() {
         const checked = document.querySelectorAll("#compose-custom-list .compose-custom-cb:checked");
         return Array.from(checked).map(cb => cb.value);
     }
+
+    function renderExtraRecipients() {
+        const el = document.getElementById("compose-extra-list");
+        if (!composeExtraRecipients.length) { el.innerHTML = ""; return; }
+        el.innerHTML = composeExtraRecipients.map((r, i) =>
+            `<div style="display:flex; align-items:center; gap:0.4rem; padding:0.2rem 0; border-bottom:1px solid var(--border);">` +
+            `<button type="button" class="compose-remove-extra" data-idx="${i}" style="background:none; border:none; color:#dc2626; cursor:pointer; font-size:0.85rem; padding:0 0.2rem;" title="Remove">&times;</button>` +
+            `<strong>${escapeHtml(r.name || "")}</strong>` +
+            ` <span style="color:var(--text-muted);">${escapeHtml(r.email)}</span>` +
+            `<span style="color:#7c3aed; font-size:0.65rem; font-weight:600; margin-left:0.3rem;">EXTRA</span>` +
+            `</div>`
+        ).join("");
+        el.querySelectorAll(".compose-remove-extra").forEach(btn => {
+            btn.addEventListener("click", function() {
+                composeExtraRecipients.splice(parseInt(this.dataset.idx), 1);
+                renderExtraRecipients();
+                updateRecipientCount();
+            });
+        });
+    }
+
+    document.getElementById("compose-add-extra").addEventListener("click", function() {
+        const nameInput = document.getElementById("compose-extra-name");
+        const emailInput = document.getElementById("compose-extra-email");
+        const email = emailInput.value.trim();
+        const name = nameInput.value.trim() || email.split("@")[0];
+        if (!email || !email.includes("@")) { alert("Enter a valid email address"); return; }
+        if (composeExtraRecipients.some(r => r.email.toLowerCase() === email.toLowerCase())) {
+            alert("This email is already added"); return;
+        }
+        composeExtraRecipients.push({ name, email });
+        nameInput.value = "";
+        emailInput.value = "";
+        renderExtraRecipients();
+        updateRecipientCount();
+    });
+
+    // Allow pressing Enter in the email input to add
+    document.getElementById("compose-extra-email").addEventListener("keydown", function(e) {
+        if (e.key === "Enter") { e.preventDefault(); document.getElementById("compose-add-extra").click(); }
+    });
 
     function openComposeModal(eventName) {
         composeEventName = eventName;
@@ -2373,6 +2509,10 @@
         document.getElementById("compose-recipient-list").style.display = "none";
         document.getElementById("compose-toggle-recipients").textContent = "Show Recipients";
         document.getElementById("compose-custom-select").style.display = "none";
+        composeExtraRecipients = [];
+        renderExtraRecipients();
+        document.getElementById("compose-extra-name").value = "";
+        document.getElementById("compose-extra-email").value = "";
 
         // Populate templates dropdown
         const tplSelect = document.getElementById("compose-template");
@@ -2489,11 +2629,14 @@
 
         let recipientCount;
         let customEmails = null;
+        const extraRecipients = composeExtraRecipients.length ? [...composeExtraRecipients] : null;
         if (audience === "custom") {
             customEmails = getCustomSelectedEmails();
+            // Include extra recipients in custom emails list
+            if (extraRecipients) extraRecipients.forEach(r => { if (!customEmails.includes(r.email)) customEmails.push(r.email); });
             recipientCount = customEmails.length;
         } else {
-            recipientCount = getComposeRecipients(composeEventName, audience).length;
+            recipientCount = getComposeRecipients(composeEventName, audience).length + (extraRecipients ? extraRecipients.length : 0);
         }
         if (!recipientCount) { alert("No recipients selected"); return; }
 
@@ -2527,7 +2670,8 @@
                     template_id: templateId,
                     subject, html_body: body,
                     audience,
-                }, customEmails ? { custom_emails: customEmails } : {})),
+                }, customEmails ? { custom_emails: customEmails } : {},
+                   extraRecipients ? { extra_recipients: extraRecipients } : {})),
             });
             const data = await resp.json();
             document.getElementById("compose-progress-bar").style.width = "100%";
@@ -2565,6 +2709,89 @@
 
     // ---- Events-page Credit/Transfer modal logic ----
     let evCreditItemId = null;
+    // ---- Edit Player Modal Logic ----
+    let editPlayerItemId = null;
+
+    function openEditPlayerModal(itemId) {
+        const item = allItems.find(r => r.id === itemId);
+        if (!item) { alert("Player not found"); return; }
+        editPlayerItemId = itemId;
+        document.getElementById("edit-player-title").textContent = `Edit: ${item.customer || "Player"}`;
+        document.getElementById("edit-player-name").value = item.customer || "";
+        document.getElementById("edit-player-email").value = item.customer_email || "";
+        document.getElementById("edit-player-phone").value = item.customer_phone || "";
+        document.getElementById("edit-player-handicap").value = item.handicap || "";
+        document.getElementById("edit-player-side-games").value = (item.side_games || "").toUpperCase().trim();
+        document.getElementById("edit-player-tee").value = item.tee_choice || "";
+        document.getElementById("edit-player-member-status").value = item.member_status || "";
+        document.getElementById("edit-player-chapter").value = item.chapter || "";
+        document.getElementById("edit-player-partner").value = item.partner_request || "";
+        document.getElementById("edit-player-notes").value = item.notes || "";
+        document.getElementById("edit-player-overlay").style.display = "flex";
+    }
+
+    function closeEditPlayerModal() {
+        document.getElementById("edit-player-overlay").style.display = "none";
+        editPlayerItemId = null;
+    }
+
+    document.getElementById("edit-player-close").addEventListener("click", closeEditPlayerModal);
+    document.getElementById("edit-player-cancel").addEventListener("click", closeEditPlayerModal);
+    document.getElementById("edit-player-overlay").addEventListener("click", function(e) {
+        if (e.target === this) closeEditPlayerModal();
+    });
+
+    document.getElementById("edit-player-save").addEventListener("click", async function() {
+        if (!editPlayerItemId) return;
+        const fields = {
+            customer: document.getElementById("edit-player-name").value.trim(),
+            customer_email: document.getElementById("edit-player-email").value.trim(),
+            customer_phone: document.getElementById("edit-player-phone").value.trim(),
+            handicap: document.getElementById("edit-player-handicap").value.trim(),
+            side_games: document.getElementById("edit-player-side-games").value,
+            tee_choice: document.getElementById("edit-player-tee").value.trim(),
+            member_status: document.getElementById("edit-player-member-status").value,
+            chapter: document.getElementById("edit-player-chapter").value.trim(),
+            partner_request: document.getElementById("edit-player-partner").value.trim(),
+            notes: document.getElementById("edit-player-notes").value.trim(),
+        };
+        this.disabled = true;
+        this.textContent = "Saving...";
+        try {
+            const resp = await fetch(`/api/items/${editPlayerItemId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(fields),
+            });
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                throw new Error(data.error || `Server returned ${resp.status}`);
+            }
+            // Update the local item cache
+            const item = allItems.find(r => r.id === editPlayerItemId);
+            if (item) Object.assign(item, fields);
+            closeEditPlayerModal();
+            // Re-render the expanded event detail
+            if (expandedEventId !== null) {
+                const ev = allEvents.find(e => e.id === expandedEventId);
+                if (ev) {
+                    // Desktop
+                    const desktopContainer = document.getElementById(`detail-content-${expandedEventId}`);
+                    if (desktopContainer) {
+                        desktopContainer.innerHTML = renderDetailContent(ev);
+                        attachDetailHandlers(desktopContainer, ev);
+                    }
+                    // Mobile
+                    renderEventsMobile(getFilteredSortedEvents());
+                }
+            }
+        } catch (err) {
+            alert("Failed to save: " + err.message);
+        }
+        this.disabled = false;
+        this.textContent = "Save Changes";
+    });
+
     let evCreditType = "credit";
 
     function openEvCreditModal(itemId) {

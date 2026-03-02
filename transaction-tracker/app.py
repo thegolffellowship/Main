@@ -1495,14 +1495,23 @@ def api_send_messages():
         else:
             filtered.append(r)
 
-    if not filtered:
-        return jsonify({"error": "No recipients found matching the audience filter", "sent": 0, "failed": 0}), 404
-
-    # Build recipient list
+    # Build recipient list from filtered registrants
     recipients = [
         {"player_name": r.get("customer") or "Player", "email": r["customer_email"].strip()}
         for r in filtered
     ]
+
+    # Add extra recipients (manually entered emails not on the player list)
+    extra_recipients = data.get("extra_recipients") or []
+    seen_emails = {r["email"].lower() for r in recipients}
+    for er in extra_recipients:
+        email = (er.get("email") or "").strip()
+        if email and email.lower() not in seen_emails:
+            recipients.append({"player_name": er.get("name") or email.split("@")[0], "email": email})
+            seen_emails.add(email.lower())
+
+    if not recipients:
+        return jsonify({"error": "No recipients found matching the audience filter", "sent": 0, "failed": 0}), 404
 
     # Send with throttle
     result = send_bulk_emails(
@@ -1515,16 +1524,17 @@ def api_send_messages():
     # Log each send
     role = session.get("role", "unknown")
     body_preview = render_msg_template(body_tpl, {**event_vars, "player_name": "..."})[:200]
-    for r in filtered:
-        email = r["customer_email"].strip()
-        was_sent = email not in [e["recipient"] for e in result.get("errors", [])]
+    error_emails = [e["recipient"] for e in result.get("errors", [])]
+    for r in recipients:
+        email = r["email"]
+        was_sent = email not in error_emails
         log_message({
             "event_name": event_name,
             "template_id": template_id,
             "channel": "email",
-            "recipient_name": r.get("customer"),
+            "recipient_name": r.get("player_name"),
             "recipient_address": email,
-            "subject": render_msg_template(subject_tpl, {**event_vars, "player_name": r.get("customer") or "Player"}),
+            "subject": render_msg_template(subject_tpl, {**event_vars, "player_name": r.get("player_name") or "Player"}),
             "body_preview": body_preview,
             "status": "sent" if was_sent else "failed",
             "error_message": None if was_sent else "Send failed",
