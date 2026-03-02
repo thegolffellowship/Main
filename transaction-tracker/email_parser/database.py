@@ -45,6 +45,7 @@ ITEM_COLUMNS = [
     "net_points_race", "gross_points_race", "city_match_play",
     "subject", "from_addr",
     "transaction_status", "credit_note", "transferred_from_id", "transferred_to_id",
+    "wd_reason", "wd_note", "wd_credits", "credit_amount",
 ]
 
 
@@ -137,6 +138,10 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("partner_request", "TEXT"),
             ("fellowship_after", "TEXT"),
             ("notes", "TEXT"),
+            ("wd_reason", "TEXT"),
+            ("wd_note", "TEXT"),
+            ("wd_credits", "TEXT"),
+            ("credit_amount", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
@@ -1405,6 +1410,37 @@ def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None)
         return cursor.rowcount > 0
 
 
+def wd_item(
+    item_id: int,
+    note: str = "",
+    credits: dict | None = None,
+    credit_amount: str = "",
+    db_path: str | Path | None = None,
+) -> bool:
+    """Mark an item as WD (withdrawn). Player stays on list but may be
+    excluded from counts based on which credit components are selected.
+
+    ``credits`` is a dict like {"included_games": 14, "net_games": 30, ...}.
+    ``credit_amount`` is the formatted total credit string, e.g. "$59.00".
+    """
+    import json as _json
+
+    credits_json = _json.dumps(credits) if credits else None
+    with _connect(db_path) as conn:
+        cursor = conn.execute(
+            """UPDATE items
+               SET transaction_status = 'wd',
+                   wd_reason = 'WD',
+                   wd_note = ?,
+                   wd_credits = ?,
+                   credit_amount = ?
+               WHERE id = ? AND COALESCE(transaction_status, 'active') = 'active'""",
+            (note or "", credits_json or "", credit_amount or "", item_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path: str | Path | None = None) -> dict | None:
     """
     Transfer an item to a different event.
@@ -1474,10 +1510,11 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
 
 def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
     """
-    Reverse a credit or transfer.
+    Reverse a credit, transfer, or WD.
 
     For credits: simply resets to active.
     For transfers: resets original to active and deletes the transferred-to item.
+    For WD: resets to active and clears WD fields.
     """
     with _connect(db_path) as conn:
         item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
@@ -1486,7 +1523,7 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
         item = dict(item)
 
         status = item.get("transaction_status")
-        if status not in ("credited", "transferred"):
+        if status not in ("credited", "transferred", "wd"):
             return False
 
         if status == "transferred" and item.get("transferred_to_id"):
@@ -1495,7 +1532,11 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
 
         # Reset original
         conn.execute(
-            "UPDATE items SET transaction_status = 'active', credit_note = NULL, transferred_to_id = NULL WHERE id = ?",
+            """UPDATE items
+               SET transaction_status = 'active', credit_note = NULL,
+                   transferred_to_id = NULL,
+                   wd_reason = NULL, wd_note = NULL, wd_credits = NULL, credit_amount = NULL
+               WHERE id = ?""",
             (item_id,),
         )
         conn.commit()

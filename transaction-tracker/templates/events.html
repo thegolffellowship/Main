@@ -333,6 +333,33 @@
         </div>
     </div>
 
+    <!-- WD (Withdrawal) Modal -->
+    <div id="wd-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2>Withdraw Player</h2>
+                <button id="wd-close" class="modal-close">&times;</button>
+            </div>
+            <div id="wd-player-info" class="credit-info"></div>
+            <div class="credit-fields" style="margin-top:0.75rem;">
+                <label>Note
+                    <input type="text" id="wd-note" class="modal-input" placeholder="Reason for withdrawal...">
+                </label>
+            </div>
+            <div id="wd-credit-section" style="margin-top:0.75rem;">
+                <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.4rem;">Credit Components</div>
+                <div id="wd-credit-items" style="display:flex; flex-direction:column; gap:0.35rem;"></div>
+                <div id="wd-credit-total" style="margin-top:0.5rem; font-weight:700; font-size:0.9rem; border-top:2px solid var(--border); padding-top:0.4rem;">
+                    Credit Total: $0.00
+                </div>
+            </div>
+            <div class="modal-actions" style="margin-top:0.75rem;">
+                <button type="button" id="wd-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="wd-submit" class="btn btn-primary" style="background:#dc2626;">Approve WD</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Player Modal -->
     <div id="add-player-overlay" class="modal-overlay" style="display:none;">
         <div class="modal add-player-modal">
@@ -881,7 +908,7 @@
             ev.aliases.forEach(a => names.add(a));
         }
         return allItems.filter(item => names.has(item.item_name)
-            && ['active', 'rsvp_only'].includes(item.transaction_status || 'active'));
+            && ['active', 'rsvp_only', 'wd'].includes(item.transaction_status || 'active'));
     }
 
     function getFilteredSortedEvents() {
@@ -961,6 +988,7 @@
             else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
             else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+            else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${r.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>` : ''}`;
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
             if (isComp || (r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
             else if (isManual && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
@@ -1008,8 +1036,9 @@
                 actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "active" && !r.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                actionBtn += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.75rem;">WD</button>`;
                 if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
-            } else if (txStatus === "credited" || txStatus === "transferred") {
+            } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
             }
 
@@ -1386,6 +1415,30 @@
                 ? (r.customer_email && emailOverrides[(r.customer_email || "").toLowerCase()])
                 : overrides[r.id];
             if (override === "not_playing") { notPlaying++; return; }
+
+            // WD players: count exclusions driven by which credits were given
+            if (r.transaction_status === "wd") {
+                let wdCredits = {};
+                try { wdCredits = r.wd_credits ? JSON.parse(r.wd_credits) : {}; } catch(e) {}
+                const creditedIncluded = "included_games" in wdCredits;
+                const creditedNet = "net_games" in wdCredits;
+                const creditedGross = "gross_games" in wdCredits;
+                // If included_games credited, remove from PLAYERS count
+                if (creditedIncluded) { notPlaying++; }
+                // Only count in game types that were NOT credited
+                const type = classifyGameType(r.side_games);
+                if (!creditedNet && (type === "NET" || type === "BOTH")) { net++; }
+                if (!creditedGross && (type === "GROSS" || type === "BOTH")) { gross++; }
+                // If all their games were credited, and included was credited, they're fully out
+                // If only some credited, they remain in uncredited game counts
+                if (!creditedIncluded) {
+                    // Still in PLAYERS, classify into noGames if no remaining game types
+                    const inNet = !creditedNet && (type === "NET" || type === "BOTH");
+                    const inGross = !creditedGross && (type === "GROSS" || type === "BOTH");
+                    if (!inNet && !inGross) { noGames++; }
+                }
+                return;
+            }
 
             // RSVP-only players count toward total but not net/gross
             if (r.transaction_status === "rsvp_only") { noGames++; return; }
@@ -1781,6 +1834,7 @@
                     else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
                     else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+                    else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${r.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>` : ''}`;
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
                     if (isCompRow || (r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
                     else if (isManualRow && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
@@ -1797,8 +1851,9 @@
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "active" && !r.transferred_from_id) {
                         btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                        btns += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.72rem;">WD</button>`;
                         if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
-                    } else if (txStatus === "credited" || txStatus === "transferred") {
+                    } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "wd") {
                         btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
                     }
                     html += `<td style="${style}">${btns}</td>`;
@@ -2137,7 +2192,7 @@
             });
         });
 
-        // Credit/Reverse buttons in registrant rows
+        // Credit/Reverse/WD buttons in registrant rows
         container.querySelectorAll("[data-credit-id]").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -2148,6 +2203,12 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 reverseEvCredit(parseInt(btn.dataset.reverseId));
+            });
+        });
+        container.querySelectorAll("[data-wd-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openWdModal(parseInt(btn.dataset.wdId), btn.dataset.wdEvent);
             });
         });
 
@@ -2687,7 +2748,8 @@
     async function reverseEvCredit(itemId) {
         const item = allItems.find(r => r.id === itemId);
         if (!item) return;
-        if (!confirm(`Reverse ${item.transaction_status} for ${item.customer}?`)) return;
+        const label = item.transaction_status === "wd" ? "WD" : item.transaction_status;
+        if (!confirm(`Reverse ${label} for ${item.customer}?`)) return;
         try {
             const res = await fetch(`/api/items/${itemId}/reverse-credit`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
@@ -2696,6 +2758,151 @@
             await fetchItems();
             await fetchEvents();
         } catch (err) { alert(err.message); }
+    }
+
+    // ---- WD (Withdrawal) modal logic ----
+    let wdItemId = null;
+    let wdEventName = null;
+
+    function calculateWdComponents(item, eventName) {
+        const holes = extractHolesType(eventName);
+        if (!holes) return null;
+        const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
+        if (!matrix) return null;
+
+        const tgfEventMarkup = holes === 9 ? 8 : 15;
+        const tgfGamesMarkup = holes === 9 ? 3 : 4;
+
+        // Get current stats for the event (before WD)
+        const registrants = getRegistrants(eventName);
+        const stats = computeGameStats(registrants, eventName);
+        const totalPC = stats.players;
+        const netPC = stats.net;
+        const grossPC = stats.gross;
+
+        const gEvent = matrix[String(totalPC)];
+        const gNet = matrix[String(netPC)];
+        const gGross = matrix[String(grossPC)];
+
+        const includedGames = (gEvent && totalPC > 0)
+            ? Math.round(gEvent.eventTotalPot / totalPC * 100) / 100 : 0;
+
+        const gameType = classifyGameType(item.side_games);
+        let netGames = 0, grossGames = 0;
+
+        if ((gameType === "NET" || gameType === "BOTH") && gNet && netPC > 0) {
+            netGames = Math.round(gNet.netTotalPot / netPC * 100) / 100 + tgfGamesMarkup;
+        }
+        if ((gameType === "GROSS" || gameType === "BOTH") && gGross && grossPC > 0) {
+            grossGames = Math.round(gGross.grossTotalPot / grossPC * 100) / 100 + tgfGamesMarkup;
+        }
+
+        const itemPrice = parseFloat((item.item_price || "0").replace(/[^0-9.]/g, ""));
+        const courseFee = Math.max(0, Math.round(
+            (itemPrice - includedGames - netGames - grossGames - tgfEventMarkup) * 100
+        ) / 100);
+
+        const components = [];
+        components.push({ key: "course_fee", label: "Course Fee", amount: courseFee });
+        components.push({ key: "included_games", label: "Included Games", amount: includedGames });
+        components.push({ key: "tgf_markup", label: "TGF Markup", amount: tgfEventMarkup });
+        if (netGames > 0) {
+            components.push({ key: "net_games", label: "Net Games", amount: netGames });
+        }
+        if (grossGames > 0) {
+            components.push({ key: "gross_games", label: "Gross Games", amount: grossGames });
+        }
+        return components;
+    }
+
+    function updateWdTotal() {
+        let total = 0;
+        document.querySelectorAll("#wd-credit-items input[type='checkbox']:checked").forEach(cb => {
+            total += parseFloat(cb.dataset.amount) || 0;
+        });
+        document.getElementById("wd-credit-total").textContent =
+            `Credit Total: $${total.toFixed(2)}`;
+    }
+
+    function openWdModal(itemId, eventName) {
+        const item = allItems.find(r => r.id === itemId);
+        if (!item) return;
+        wdItemId = itemId;
+        wdEventName = eventName;
+
+        document.getElementById("wd-player-info").innerHTML =
+            `<strong>${escapeHtml(item.customer || "Unknown")}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
+            `Price: <strong>${escapeHtml(item.item_price || "$0")}</strong>` +
+            `<span style="margin-left:0.5rem; font-size:0.8rem; color:var(--text-muted);">Games: ${escapeHtml(classifyGameType(item.side_games))}</span>`;
+        document.getElementById("wd-note").value = "";
+
+        // Build credit component checkboxes
+        const container = document.getElementById("wd-credit-items");
+        const components = calculateWdComponents(item, eventName);
+        if (components && components.length) {
+            container.innerHTML = components.map(c => `
+                <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem; padding:0.35rem 0.5rem; background:var(--bg-card); border:1px solid var(--border); border-radius:6px; cursor:pointer;">
+                    <input type="checkbox" class="wd-credit-cb" data-key="${c.key}" data-amount="${c.amount}" style="width:16px; height:16px;">
+                    <span style="flex:1; font-weight:500;">${escapeHtml(c.label)}</span>
+                    <span style="font-variant-numeric:tabular-nums; font-weight:600;">$${c.amount.toFixed(2)}</span>
+                </label>
+            `).join("");
+            container.querySelectorAll(".wd-credit-cb").forEach(cb => {
+                cb.addEventListener("change", updateWdTotal);
+            });
+            document.getElementById("wd-credit-section").style.display = "";
+        } else {
+            container.innerHTML = '<div style="font-size:0.82rem; color:var(--text-muted);">Unable to calculate component prices.</div>';
+            document.getElementById("wd-credit-section").style.display = "";
+        }
+
+        document.getElementById("wd-credit-total").textContent = "Credit Total: $0.00";
+        document.getElementById("wd-submit").disabled = false;
+        document.getElementById("wd-submit").textContent = "Approve WD";
+        document.getElementById("wd-overlay").style.display = "flex";
+    }
+
+    function closeWdModal() {
+        document.getElementById("wd-overlay").style.display = "none";
+        wdItemId = null;
+        wdEventName = null;
+    }
+
+    async function submitWd() {
+        if (!wdItemId) return;
+        const note = document.getElementById("wd-note").value.trim();
+        const credits = {};
+        let total = 0;
+        document.querySelectorAll("#wd-credit-items input[type='checkbox']:checked").forEach(cb => {
+            const amt = parseFloat(cb.dataset.amount) || 0;
+            credits[cb.dataset.key] = amt;
+            total += amt;
+        });
+        const creditAmount = total > 0 ? `$${total.toFixed(2)}` : "";
+
+        const btn = document.getElementById("wd-submit");
+        btn.disabled = true;
+        btn.textContent = "Processing...";
+
+        try {
+            const res = await fetch(`/api/items/${wdItemId}/wd`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    note,
+                    credits: Object.keys(credits).length ? credits : null,
+                    credit_amount: creditAmount,
+                }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error || "WD failed");
+            closeWdModal();
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) {
+            alert(err.message);
+            btn.disabled = false;
+            btn.textContent = "Approve WD";
+        }
     }
 
     // ---- Add Event modal logic ----
@@ -3420,6 +3627,14 @@
             });
         });
 
+        // WD modal listeners
+        document.getElementById("wd-submit").addEventListener("click", submitWd);
+        document.getElementById("wd-cancel").addEventListener("click", closeWdModal);
+        document.getElementById("wd-close").addEventListener("click", closeWdModal);
+        document.getElementById("wd-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeWdModal();
+        });
+
         // Search
         document.getElementById("event-search").addEventListener("input", () => {
             eventSearchQuery = document.getElementById("event-search").value.trim();
@@ -3524,7 +3739,7 @@
         setInterval(async () => {
             try {
                 const anyModalOpen = [
-                    "edit-event-overlay", "ev-credit-overlay", "add-event-overlay",
+                    "edit-event-overlay", "ev-credit-overlay", "wd-overlay", "add-event-overlay",
                     "add-player-overlay", "upgrade-rsvp-overlay", "login-overlay",
                     "merge-event-overlay", "resolve-orphan-overlay"
                 ].some(id => {
