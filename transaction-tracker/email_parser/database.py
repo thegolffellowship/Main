@@ -15,9 +15,204 @@ from datetime import datetime, timedelta
 from contextlib import contextmanager
 from pathlib import Path
 
+import anthropic as _anthropic
+
 logger = logging.getLogger(__name__)
 
 _SAFE_COL_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+# ---------------------------------------------------------------------------
+# Email / phone validation & normalization
+# ---------------------------------------------------------------------------
+
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+
+
+def validate_email(email: str) -> str | None:
+    """Return cleaned email or None if invalid."""
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    if _EMAIL_RE.match(email):
+        return email
+    return None
+
+
+def normalize_phone(phone: str) -> str:
+    """Normalize phone to (XXX) XXX-XXXX for 10-digit US numbers, passthrough otherwise."""
+    phone = (phone or "").strip()
+    if not phone:
+        return ""
+    digits = re.sub(r"\D", "", phone)
+    # Strip leading 1 for US numbers
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) == 10:
+        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+    # Return original for international / non-standard numbers
+    return phone
+
+
+def validate_phone(phone: str) -> str | None:
+    """Return normalized phone or None if clearly invalid (fewer than 7 digits)."""
+    phone = (phone or "").strip()
+    if not phone:
+        return None
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) < 7:
+        return None
+    return normalize_phone(phone)
+
+
+# ---------------------------------------------------------------------------
+# AI-powered name parsing
+# ---------------------------------------------------------------------------
+
+_NAME_PARSE_PROMPT = """\
+You are a name parsing assistant. Given a list of raw name strings, parse each \
+one into its component parts and return a JSON array. Each element should be an \
+object with these keys:
+- "first_name": The person's first/given name, in Title Case
+- "last_name": The person's last/family name, in Title Case
+- "middle_name": Middle name or initial if present, in Title Case, else null
+- "suffix": Generational suffix like Jr., Sr., III, IV, etc., else null
+
+RULES:
+- Handle ALL common formats: "First Last", "LAST, First", "First Middle Last", \
+  "Last, First Middle", "LASTNAME, First M.", etc.
+- ALL-CAPS names should be converted to Title Case (ARONBERG → Aronberg).
+- Strip extra whitespace and punctuation artifacts.
+- If a name is ambiguous or cannot be parsed, make your best guess.
+- Return ONLY the JSON array — no markdown, no explanation.
+
+Examples:
+Input: ["ARONBERG, Mark", "John Michael Smith Jr.", "Jane Doe"]
+Output: [{"first_name":"Mark","last_name":"Aronberg","middle_name":null,"suffix":null},{"first_name":"John","last_name":"Smith","middle_name":"Michael","suffix":"Jr."},{"first_name":"Jane","last_name":"Doe","middle_name":null,"suffix":null}]
+"""
+
+
+def parse_names_ai(names: list[str]) -> list[dict]:
+    """Use Claude to parse a batch of name strings into first/last/middle/suffix.
+
+    Falls back to simple splitting if the AI call fails.
+    """
+    if not names:
+        return []
+
+    # Try AI parsing in batches of 100
+    results = []
+    batch_size = 100
+    for i in range(0, len(names), batch_size):
+        batch = names[i:i + batch_size]
+        try:
+            client = _anthropic.Anthropic()
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=4096,
+                messages=[{
+                    "role": "user",
+                    "content": _NAME_PARSE_PROMPT + "\n\nInput: " + json.dumps(batch),
+                }],
+            )
+            text = resp.content[0].text.strip()
+            # Strip markdown fences if present
+            if text.startswith("```"):
+                text = re.sub(r"^```\w*\n?", "", text)
+                text = re.sub(r"\n?```$", "", text)
+            parsed = json.loads(text)
+            if isinstance(parsed, list) and len(parsed) == len(batch):
+                results.extend(parsed)
+            else:
+                results.extend(_parse_names_fallback(batch))
+        except Exception:
+            logger.warning("AI name parsing failed for batch %d, using fallback", i)
+            results.extend(_parse_names_fallback(batch))
+
+    return results
+
+
+def _parse_names_fallback(names: list[str]) -> list[dict]:
+    """Simple regex-based fallback for name parsing."""
+    results = []
+    suffixes = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"}
+    for raw in names:
+        name = (raw or "").strip()
+        if not name:
+            results.append({"first_name": None, "last_name": None,
+                            "middle_name": None, "suffix": None})
+            continue
+
+        # Title-case if all upper
+        if name == name.upper():
+            name = name.title()
+
+        # Detect "Last, First [Middle]" format
+        if "," in name:
+            parts = [p.strip() for p in name.split(",", 1)]
+            last = parts[0]
+            rest = parts[1].split() if len(parts) > 1 else []
+        else:
+            parts = name.split()
+            if len(parts) == 1:
+                results.append({"first_name": parts[0], "last_name": None,
+                                "middle_name": None, "suffix": None})
+                continue
+            last = parts[-1]
+            rest = parts[:-1]
+
+        # Extract suffix
+        sfx = None
+        if rest and rest[-1].lower().rstrip(".") in {s.rstrip(".") for s in suffixes}:
+            sfx = rest.pop()
+        elif last.lower().rstrip(".") in {s.rstrip(".") for s in suffixes}:
+            sfx = last
+            # Last was actually suffix, need to re-parse
+            if "," not in raw:
+                all_parts = name.split()
+                sfx = all_parts[-1]
+                last = all_parts[-2] if len(all_parts) > 2 else None
+                rest = all_parts[:-2]
+
+        first = rest[0] if rest else None
+        middle = " ".join(rest[1:]) if len(rest) > 1 else None
+
+        results.append({
+            "first_name": first,
+            "last_name": last,
+            "middle_name": middle,
+            "suffix": sfx,
+        })
+
+    return results
+
+
+def _backfill_name_parts(conn: sqlite3.Connection) -> None:
+    """One-time backfill: parse existing customer names into first/last parts."""
+    # Only process rows that have a customer but no first_name yet
+    rows = conn.execute(
+        """SELECT DISTINCT customer FROM items
+           WHERE customer IS NOT NULL AND customer != ''
+             AND (first_name IS NULL OR first_name = '')"""
+    ).fetchall()
+
+    if not rows:
+        return
+
+    names = [r["customer"] for r in rows]
+    logger.info("Backfilling name parts for %d customers", len(names))
+
+    parsed = parse_names_ai(names)
+
+    for name, parts in zip(names, parsed):
+        conn.execute(
+            """UPDATE items SET first_name = ?, last_name = ?, middle_name = ?, suffix = ?
+               WHERE customer = ? COLLATE NOCASE
+                 AND (first_name IS NULL OR first_name = '')""",
+            (parts.get("first_name"), parts.get("last_name"),
+             parts.get("middle_name"), parts.get("suffix"), name),
+        )
+    conn.commit()
+    logger.info("Backfilled name parts for %d customers", len(names))
 
 
 def _validate_column_names(columns: list[str]) -> None:
@@ -34,6 +229,7 @@ DB_PATH = Path(os.environ.get("DATABASE_PATH", str(_default_db)))
 # All item-level columns (order matches the CREATE TABLE below)
 ITEM_COLUMNS = [
     "email_uid", "item_index", "merchant", "customer",
+    "first_name", "last_name", "middle_name", "suffix",
     "customer_email", "customer_phone",
     "order_id", "order_date", "total_amount", "transaction_fees",
     "item_name", "event_date", "item_price", "quantity",
@@ -85,6 +281,10 @@ def init_db(db_path: str | Path | None = None) -> None:
                 item_index       INTEGER NOT NULL DEFAULT 0,
                 merchant         TEXT NOT NULL,
                 customer         TEXT,
+                first_name       TEXT,
+                last_name        TEXT,
+                middle_name      TEXT,
+                suffix           TEXT,
                 customer_email   TEXT,
                 customer_phone   TEXT,
                 order_id         TEXT,
@@ -142,12 +342,31 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("wd_note", "TEXT"),
             ("wd_credits", "TEXT"),
             ("credit_amount", "TEXT"),
+            ("first_name", "TEXT"),
+            ("last_name", "TEXT"),
+            ("middle_name", "TEXT"),
+            ("suffix", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
                 logger.info("Added new column: %s", col)
             except sqlite3.OperationalError:
                 pass  # column already exists
+
+        # Customer aliases table — supports multiple alias names/emails per customer
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS customer_aliases (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_name   TEXT NOT NULL,
+                alias_type      TEXT NOT NULL CHECK(alias_type IN ('name', 'email')),
+                alias_value     TEXT NOT NULL,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+        """)
+
+        # Backfill: parse existing customer names into first/last name parts.
+        # Only runs once — skips rows that already have first_name populated.
+        _backfill_name_parts(conn)
 
         # Events table — canonical event list, auto-populated from items
         conn.execute(
@@ -1283,12 +1502,35 @@ def update_customer_info(customer_name: str, fields: dict,
     """Update personal info fields across all items for a customer.
 
     Only updates columns in the provided dict. Returns count of rows updated.
+    Validates email/phone. Syncs display name from first/last if changed.
     """
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
-               "date_of_birth", "shirt_size", "customer"}
+               "date_of_birth", "shirt_size", "customer",
+               "first_name", "last_name", "middle_name", "suffix"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return 0
+
+    # Validate email and phone if provided
+    if "customer_email" in safe and safe["customer_email"]:
+        valid = validate_email(safe["customer_email"])
+        if valid is None:
+            raise ValueError(f"Invalid email: {safe['customer_email']}")
+        safe["customer_email"] = valid
+    if "customer_phone" in safe and safe["customer_phone"]:
+        valid = validate_phone(safe["customer_phone"])
+        if valid is None:
+            raise ValueError(f"Invalid phone: {safe['customer_phone']}")
+        safe["customer_phone"] = valid
+
+    # If first/last name changed, sync the display name
+    if any(k in safe for k in ("first_name", "last_name", "suffix")):
+        display = " ".join(filter(None, [
+            safe.get("first_name", ""), safe.get("last_name", ""),
+            safe.get("suffix", ""),
+        ]))
+        if display:
+            safe["customer"] = display
 
     _validate_column_names(list(safe))
     set_clause = ", ".join(f"{col} = ?" for col in safe)
@@ -1299,19 +1541,50 @@ def update_customer_info(customer_name: str, fields: dict,
             f"UPDATE items SET {set_clause} WHERE customer = ? COLLATE NOCASE",
             values,
         )
+        # Update alias references if display name changed
+        if "customer" in safe and safe["customer"] != customer_name:
+            conn.execute(
+                "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+                (safe["customer"], customer_name),
+            )
         conn.commit()
         return cursor.rowcount
 
 
 def create_customer(name: str, email: str = "", phone: str = "",
-                    chapter: str = "", db_path: str | Path | None = None) -> dict | None:
+                    chapter: str = "", first_name: str = "",
+                    last_name: str = "", middle_name: str = "",
+                    suffix: str = "",
+                    db_path: str | Path | None = None) -> dict | None:
     """Create a standalone customer by inserting a minimal item row.
 
-    Returns the new item dict or None if the customer already exists.
+    Parses name into first/last parts via AI if not provided explicitly.
+    Validates email/phone. Returns the new item dict or None if already exists.
     """
     name = (name or "").strip()
+    first_name = (first_name or "").strip()
+    last_name = (last_name or "").strip()
+
+    # Build display name from parts if not provided
+    if not name and (first_name or last_name):
+        name = " ".join(filter(None, [first_name, last_name, (suffix or "").strip()]))
     if not name:
         return None
+
+    # Parse name into parts if not provided
+    if not first_name and not last_name:
+        parsed = parse_names_ai([name])
+        if parsed:
+            first_name = parsed[0].get("first_name") or ""
+            last_name = parsed[0].get("last_name") or ""
+            middle_name = parsed[0].get("middle_name") or middle_name or ""
+            suffix = parsed[0].get("suffix") or suffix or ""
+
+    # Validate email/phone
+    if email:
+        email = validate_email(email) or ""
+    if phone:
+        phone = validate_phone(phone) or ""
 
     with _connect(db_path) as conn:
         existing = conn.execute(
@@ -1324,6 +1597,10 @@ def create_customer(name: str, email: str = "", phone: str = "",
         today = datetime.now().strftime("%Y-%m-%d")
         new_values = {c: None for c in ITEM_COLUMNS}
         new_values["customer"] = name
+        new_values["first_name"] = first_name or None
+        new_values["last_name"] = last_name or None
+        new_values["middle_name"] = middle_name or None
+        new_values["suffix"] = suffix or None
         new_values["customer_email"] = email or None
         new_values["customer_phone"] = phone or None
         new_values["chapter"] = chapter or None
@@ -1398,10 +1675,17 @@ def create_customer_from_rsvp(
                     (email, name),
                 )
         else:
-            # Create new customer entry
+            # Create new customer entry with parsed name parts
+            parsed = parse_names_ai([name])
+            parts = parsed[0] if parsed else {}
+
             today = datetime.now().strftime("%Y-%m-%d")
             new_values = {c: None for c in ITEM_COLUMNS}
             new_values["customer"] = name
+            new_values["first_name"] = parts.get("first_name") or None
+            new_values["last_name"] = parts.get("last_name") or None
+            new_values["middle_name"] = parts.get("middle_name") or None
+            new_values["suffix"] = parts.get("suffix") or None
             new_values["customer_email"] = email or None
             new_values["merchant"] = "RSVP Import"
             new_values["order_date"] = today
@@ -1499,18 +1783,22 @@ def link_rsvp_to_customer(
 def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
     """Bulk-import customer rows from a roster spreadsheet.
 
-    Each dict should have 'customer' (required) plus optional fields like
-    customer_email, customer_phone, chapter, handicap, date_of_birth, shirt_size.
+    Each dict should have 'customer' (required, OR first_name+last_name) plus
+    optional fields like customer_email, customer_phone, chapter, handicap, etc.
 
-    Matching: finds existing customers by name (case-insensitive) first,
-    then falls back to email matching if the name doesn't match.
+    Name handling:
+    - If first_name/last_name are provided directly, uses them as-is.
+    - If only 'customer' (full name string), runs AI name parsing to split into parts.
+    - Reconstructs display name as "First Last" (+ suffix) from parsed parts.
 
-    Fill-in-the-blanks: only updates fields that are currently empty/NULL
-    on the customer's items — never overwrites existing data.
+    Matching: finds existing customers by name (case-insensitive) first, then
+    by alias name, then falls back to email matching, then alias email matching.
 
-    For new customers: creates a standalone Customer Entry item row.
+    Aliases: alias_name and alias_email fields are stored in customer_aliases table.
 
-    Returns { created: int, updated: int, skipped: int, errors: list[str] }.
+    Validation: emails are validated, phones are normalized to (XXX) XXX-XXXX.
+
+    Returns { created, updated, skipped, errors, validation_warnings }.
     """
     allowed_fields = set(ITEM_COLUMNS) - {
         "email_uid", "item_index", "merchant", "order_id", "order_date",
@@ -1519,12 +1807,97 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
         "transferred_from_id", "transferred_to_id",
         "wd_reason", "wd_note", "wd_credits", "credit_amount",
     }
-    result = {"created": 0, "updated": 0, "skipped": 0, "errors": []}
+    result = {"created": 0, "updated": 0, "skipped": 0, "errors": [],
+              "validation_warnings": []}
     today = datetime.now().strftime("%Y-%m-%d")
 
+    # --- Phase 1: resolve names via AI parsing if needed ---
+    needs_parsing = []
+    for i, row in enumerate(rows):
+        has_parts = (row.get("first_name") or "").strip() and (row.get("last_name") or "").strip()
+        has_full = (row.get("customer") or "").strip()
+        if has_full and not has_parts:
+            needs_parsing.append((i, row["customer"].strip()))
+
+    if needs_parsing:
+        raw_names = [n for _, n in needs_parsing]
+        parsed = parse_names_ai(raw_names)
+        for (idx, _raw), parts in zip(needs_parsing, parsed):
+            rows[idx]["first_name"] = parts.get("first_name") or ""
+            rows[idx]["last_name"] = parts.get("last_name") or ""
+            rows[idx]["middle_name"] = parts.get("middle_name") or ""
+            rows[idx]["suffix"] = parts.get("suffix") or ""
+            # Rebuild display name from parsed parts
+            display = " ".join(filter(None, [
+                parts.get("first_name"), parts.get("last_name"),
+                parts.get("suffix"),
+            ]))
+            if display:
+                rows[idx]["customer"] = display
+
+    # --- Phase 2: validate and normalize ---
+    for i, row in enumerate(rows):
+        email = row.get("customer_email", "")
+        if email:
+            valid = validate_email(email)
+            if valid is None:
+                result["validation_warnings"].append(
+                    f"Row {i+1}: invalid email '{email}' — skipped email field")
+                row["customer_email"] = ""
+            else:
+                row["customer_email"] = valid
+        phone = row.get("customer_phone", "")
+        if phone:
+            valid = validate_phone(phone)
+            if valid is None:
+                result["validation_warnings"].append(
+                    f"Row {i+1}: invalid phone '{phone}' — skipped phone field")
+                row["customer_phone"] = ""
+            else:
+                row["customer_phone"] = valid
+
+    # --- Phase 3: deduplicate within the spreadsheet ---
+    seen_names = {}  # lowercase name → first row index
+    seen_emails = {}  # lowercase email → first row index
+    for i, row in enumerate(rows):
+        name = (row.get("customer") or "").strip().lower()
+        email = (row.get("customer_email") or "").strip().lower()
+        if name and name in seen_names:
+            # Mark as duplicate within spreadsheet — will be merged into first occurrence
+            row["_dedup_target_idx"] = seen_names[name]
+        elif email and email in seen_emails:
+            row["_dedup_target_idx"] = seen_emails[email]
+        else:
+            if name:
+                seen_names[name] = i
+            if email:
+                seen_emails[email] = i
+
     with _connect(db_path) as conn:
+        # Build alias lookup for matching
+        alias_name_map = {}  # lowercase alias → customer_name
+        alias_email_map = {}  # lowercase alias → customer_name
+        for arow in conn.execute("SELECT customer_name, alias_type, alias_value FROM customer_aliases").fetchall():
+            val = (arow["alias_value"] or "").strip().lower()
+            if arow["alias_type"] == "name":
+                alias_name_map[val] = arow["customer_name"]
+            elif arow["alias_type"] == "email":
+                alias_email_map[val] = arow["customer_name"]
+
         for i, row in enumerate(rows):
+            # Skip spreadsheet-internal duplicates (already handled by first occurrence)
+            if "_dedup_target_idx" in row:
+                result["skipped"] += 1
+                continue
+
             name = (row.get("customer") or "").strip()
+            if not name:
+                # Try to build name from first/last
+                first = (row.get("first_name") or "").strip()
+                last = (row.get("last_name") or "").strip()
+                if first or last:
+                    name = " ".join(filter(None, [first, last, (row.get("suffix") or "").strip()]))
+                    row["customer"] = name
             if not name:
                 result["skipped"] += 1
                 continue
@@ -1537,7 +1910,16 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
                 (name,),
             ).fetchone()
 
-            # 2) If no name match, try matching by email
+            # 2) Try matching by alias name
+            if not existing:
+                alias_target = alias_name_map.get(name.lower())
+                if alias_target:
+                    existing = conn.execute(
+                        "SELECT id, customer FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
+                        (alias_target,),
+                    ).fetchone()
+
+            # 3) Try matching by email
             if not existing and email:
                 existing = conn.execute(
                     """SELECT id, customer FROM items
@@ -1547,16 +1929,27 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
                     (email,),
                 ).fetchone()
 
+            # 4) Try matching by alias email
+            if not existing and email:
+                alias_target = alias_email_map.get(email)
+                if alias_target:
+                    existing = conn.execute(
+                        "SELECT id, customer FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
+                        (alias_target,),
+                    ).fetchone()
+
             safe = {k: v for k, v in row.items()
-                    if k in allowed_fields and k != "customer" and v}
+                    if k in allowed_fields and k != "customer" and v
+                    and not k.startswith("_")}
+
+            # Extract alias fields (not stored in items table)
+            alias_names = [v.strip() for v in (row.get("alias_name") or "").split(",") if v.strip()]
+            alias_emails = [v.strip().lower() for v in (row.get("alias_email") or "").split(",") if v.strip()]
 
             if existing:
                 existing_name = existing["customer"]
-                # Fill-in-the-blanks: only update fields that are currently
-                # empty or NULL on the customer's items
                 if safe:
                     _validate_column_names(list(safe))
-                    # Check which fields are already populated
                     current = conn.execute(
                         """SELECT * FROM items
                            WHERE customer = ? COLLATE NOCASE
@@ -1584,10 +1977,17 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
                         result["skipped"] += 1
                 else:
                     result["skipped"] += 1
+
+                # Store aliases for existing customer
+                _save_customer_aliases(conn, existing_name, alias_names, alias_emails)
             else:
                 # Create new customer entry
                 new_values = {c: None for c in ITEM_COLUMNS}
                 new_values["customer"] = name
+                new_values["first_name"] = (row.get("first_name") or "").strip() or None
+                new_values["last_name"] = (row.get("last_name") or "").strip() or None
+                new_values["middle_name"] = (row.get("middle_name") or "").strip() or None
+                new_values["suffix"] = (row.get("suffix") or "").strip() or None
                 new_values["merchant"] = "Roster Import"
                 new_values["order_date"] = today
                 new_values["email_uid"] = f"roster_import_{name}_{today}"
@@ -1603,10 +2003,230 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
                 )
                 result["created"] += 1
 
+                # Store aliases for new customer
+                _save_customer_aliases(conn, name, alias_names, alias_emails)
+
         conn.commit()
     logger.info("Roster import: %d created, %d updated, %d skipped",
                 result["created"], result["updated"], result["skipped"])
     return result
+
+
+def _save_customer_aliases(conn: sqlite3.Connection, customer_name: str,
+                           alias_names: list[str], alias_emails: list[str]) -> None:
+    """Insert alias names/emails for a customer, skipping duplicates."""
+    for alias in alias_names:
+        if not alias:
+            continue
+        existing = conn.execute(
+            """SELECT id FROM customer_aliases
+               WHERE customer_name = ? COLLATE NOCASE AND alias_type = 'name'
+                 AND LOWER(alias_value) = ?""",
+            (customer_name, alias.lower()),
+        ).fetchone()
+        if not existing:
+            conn.execute(
+                "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
+                (customer_name, alias),
+            )
+
+    for alias in alias_emails:
+        if not alias:
+            continue
+        existing = conn.execute(
+            """SELECT id FROM customer_aliases
+               WHERE customer_name = ? COLLATE NOCASE AND alias_type = 'email'
+                 AND LOWER(alias_value) = ?""",
+            (customer_name, alias.lower()),
+        ).fetchone()
+        if not existing:
+            conn.execute(
+                "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'email', ?)",
+                (customer_name, alias),
+            )
+
+
+def get_customer_aliases(customer_name: str,
+                         db_path: str | Path | None = None) -> list[dict]:
+    """Return all aliases for a customer."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, alias_type, alias_value FROM customer_aliases WHERE customer_name = ? COLLATE NOCASE ORDER BY alias_type, alias_value",
+            (customer_name,),
+        ).fetchall()
+        return [{"id": r["id"], "type": r["alias_type"], "value": r["alias_value"]} for r in rows]
+
+
+def add_customer_alias(customer_name: str, alias_type: str, alias_value: str,
+                       db_path: str | Path | None = None) -> dict:
+    """Add an alias (name or email) for a customer."""
+    if alias_type not in ("name", "email"):
+        raise ValueError("alias_type must be 'name' or 'email'")
+    alias_value = alias_value.strip()
+    if not alias_value:
+        raise ValueError("alias_value cannot be empty")
+    if alias_type == "email":
+        alias_value = alias_value.lower()
+    with _connect(db_path) as conn:
+        existing = conn.execute(
+            """SELECT id FROM customer_aliases
+               WHERE customer_name = ? COLLATE NOCASE AND alias_type = ?
+                 AND LOWER(alias_value) = ?""",
+            (customer_name, alias_type, alias_value.lower()),
+        ).fetchone()
+        if existing:
+            return {"id": existing["id"], "type": alias_type, "value": alias_value, "existed": True}
+        cursor = conn.execute(
+            "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, ?, ?)",
+            (customer_name, alias_type, alias_value),
+        )
+        conn.commit()
+        return {"id": cursor.lastrowid, "type": alias_type, "value": alias_value, "existed": False}
+
+
+def delete_customer_alias(alias_id: int, db_path: str | Path | None = None) -> bool:
+    """Delete an alias by ID."""
+    with _connect(db_path) as conn:
+        cursor = conn.execute("DELETE FROM customer_aliases WHERE id = ?", (alias_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def preview_roster_import(rows: list[dict], db_path: str | Path | None = None) -> dict:
+    """Preview a roster import: run AI name parsing + duplicate detection, return enriched rows.
+
+    Returns { rows: [{...original fields + parsed name parts + match_status + match_detail}],
+              validation_warnings: [...] }.
+    """
+    warnings = []
+
+    # AI-parse names that need it
+    needs_parsing = []
+    for i, row in enumerate(rows):
+        has_parts = (row.get("first_name") or "").strip() and (row.get("last_name") or "").strip()
+        has_full = (row.get("customer") or "").strip()
+        if has_full and not has_parts:
+            needs_parsing.append((i, row["customer"].strip()))
+
+    if needs_parsing:
+        raw_names = [n for _, n in needs_parsing]
+        parsed = parse_names_ai(raw_names)
+        for (idx, _raw), parts in zip(needs_parsing, parsed):
+            rows[idx]["first_name"] = parts.get("first_name") or ""
+            rows[idx]["last_name"] = parts.get("last_name") or ""
+            rows[idx]["middle_name"] = parts.get("middle_name") or ""
+            rows[idx]["suffix"] = parts.get("suffix") or ""
+            display = " ".join(filter(None, [
+                parts.get("first_name"), parts.get("last_name"),
+                parts.get("suffix"),
+            ]))
+            if display:
+                rows[idx]["_parsed_name"] = display
+
+    # Validate emails/phones
+    for i, row in enumerate(rows):
+        email = row.get("customer_email", "")
+        if email and validate_email(email) is None:
+            warnings.append(f"Row {i+1}: invalid email '{email}'")
+        phone = row.get("customer_phone", "")
+        if phone and validate_phone(phone) is None:
+            warnings.append(f"Row {i+1}: invalid phone '{phone}'")
+
+    # Detect duplicates within spreadsheet
+    seen_names = {}
+    seen_emails = {}
+    for i, row in enumerate(rows):
+        name = (row.get("_parsed_name") or row.get("customer") or "").strip().lower()
+        email = (row.get("customer_email") or "").strip().lower()
+        if name and name in seen_names:
+            row["_dupe_of_row"] = seen_names[name] + 1  # 1-indexed
+        elif email and email in seen_emails:
+            row["_dupe_of_row"] = seen_emails[email] + 1
+        else:
+            if name:
+                seen_names[name] = i
+            if email:
+                seen_emails[email] = i
+
+    # Check against database
+    with _connect(db_path) as conn:
+        alias_name_map = {}
+        alias_email_map = {}
+        for arow in conn.execute("SELECT customer_name, alias_type, alias_value FROM customer_aliases").fetchall():
+            val = (arow["alias_value"] or "").strip().lower()
+            if arow["alias_type"] == "name":
+                alias_name_map[val] = arow["customer_name"]
+            elif arow["alias_type"] == "email":
+                alias_email_map[val] = arow["customer_name"]
+
+        for i, row in enumerate(rows):
+            name = (row.get("_parsed_name") or row.get("customer") or "").strip()
+            email = (row.get("customer_email") or "").strip().lower()
+
+            if not name and not email:
+                row["_match_status"] = "skip"
+                continue
+
+            # Exact name match
+            match = conn.execute(
+                "SELECT customer, customer_email FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
+                (name,),
+            ).fetchone() if name else None
+
+            if match:
+                row["_match_status"] = "update"
+                row["_match_detail"] = f"Name match: {match['customer']}"
+                # Figure out which fields will be filled in
+                current = conn.execute(
+                    """SELECT * FROM items WHERE customer = ? COLLATE NOCASE
+                       ORDER BY order_date DESC LIMIT 1""",
+                    (match["customer"],),
+                ).fetchone()
+                if current:
+                    blanks = []
+                    for col in ["customer_email", "customer_phone", "chapter",
+                                "handicap", "date_of_birth", "shirt_size",
+                                "first_name", "last_name"]:
+                        cur_val = current[col] if col in current.keys() else None
+                        row_val = row.get(col, "")
+                        if row_val and (not cur_val or not str(cur_val).strip()):
+                            blanks.append(col)
+                    if blanks:
+                        row["_will_fill"] = blanks
+                continue
+
+            # Alias name match
+            if name:
+                alias_target = alias_name_map.get(name.lower())
+                if alias_target:
+                    row["_match_status"] = "update"
+                    row["_match_detail"] = f"Alias name match → {alias_target}"
+                    continue
+
+            # Email match
+            if email:
+                ematch = conn.execute(
+                    """SELECT customer FROM items
+                       WHERE LOWER(customer_email) = ?
+                         AND customer IS NOT NULL AND customer != ''
+                       ORDER BY order_date DESC LIMIT 1""",
+                    (email,),
+                ).fetchone()
+                if ematch:
+                    row["_match_status"] = "update"
+                    row["_match_detail"] = f"Email match → {ematch['customer']}"
+                    continue
+
+                # Alias email match
+                alias_target = alias_email_map.get(email)
+                if alias_target:
+                    row["_match_status"] = "update"
+                    row["_match_detail"] = f"Alias email match → {alias_target}"
+                    continue
+
+            row["_match_status"] = "new"
+
+    return {"rows": rows, "validation_warnings": warnings}
 
 
 def add_custom_field(field_name: str, db_path: str | Path | None = None) -> bool:
@@ -1684,6 +2304,60 @@ def merge_customers(source_name: str, target_name: str,
                 "UPDATE items SET customer_phone = ? WHERE customer = ? AND (customer_phone IS NULL OR customer_phone = '')",
                 (best_phone, target_name),
             )
+
+        # Backfill name parts from source if target lacks them
+        target_parts = conn.execute(
+            """SELECT first_name, last_name, middle_name, suffix FROM items
+               WHERE customer = ? AND first_name IS NOT NULL AND first_name != ''
+               ORDER BY order_date DESC LIMIT 1""",
+            (target_name,),
+        ).fetchone()
+        source_parts = conn.execute(
+            """SELECT first_name, last_name, middle_name, suffix FROM items
+               WHERE customer = ? COLLATE NOCASE AND first_name IS NOT NULL AND first_name != ''
+               ORDER BY order_date DESC LIMIT 1""",
+            (source_name,),
+        ).fetchone()
+        if source_parts and not target_parts:
+            conn.execute(
+                """UPDATE items SET first_name = ?, last_name = ?, middle_name = ?, suffix = ?
+                   WHERE customer = ? AND (first_name IS NULL OR first_name = '')""",
+                (source_parts["first_name"], source_parts["last_name"],
+                 source_parts["middle_name"], source_parts["suffix"], target_name),
+            )
+
+        # Merge aliases: move source's aliases to target, add source name as alias
+        conn.execute(
+            "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+            (target_name, source_name),
+        )
+        # Add the source's name as an alias of the target (for future matching)
+        existing_alias = conn.execute(
+            """SELECT id FROM customer_aliases
+               WHERE customer_name = ? COLLATE NOCASE AND alias_type = 'name'
+                 AND LOWER(alias_value) = ?""",
+            (target_name, source_name.lower()),
+        ).fetchone()
+        if not existing_alias:
+            conn.execute(
+                "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
+                (target_name, source_name),
+            )
+        # If source had a different email, add it as alias email
+        source_email = (source_row["customer_email"] if source_row else "") or ""
+        target_email = (target_row["customer_email"] if target_row else "") or ""
+        if source_email and source_email.lower() != target_email.lower():
+            existing_alias = conn.execute(
+                """SELECT id FROM customer_aliases
+                   WHERE customer_name = ? COLLATE NOCASE AND alias_type = 'email'
+                     AND LOWER(alias_value) = ?""",
+                (target_name, source_email.lower()),
+            ).fetchone()
+            if not existing_alias:
+                conn.execute(
+                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'email', ?)",
+                    (target_name, source_email),
+                )
 
         conn.commit()
 

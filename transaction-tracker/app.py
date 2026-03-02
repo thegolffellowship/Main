@@ -73,6 +73,13 @@ from email_parser.database import (
     create_customer_from_rsvp,
     link_rsvp_to_customer,
     import_roster,
+    preview_roster_import,
+    get_customer_aliases,
+    add_customer_alias,
+    delete_customer_alias,
+    parse_names_ai,
+    validate_email,
+    validate_phone,
     add_custom_field,
     save_feedback,
     get_all_feedback,
@@ -1028,12 +1035,16 @@ def api_update_customer():
 
     # Only allow personal-info columns, not transaction data
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
-               "date_of_birth", "shirt_size", "customer"}
+               "date_of_birth", "shirt_size", "customer",
+               "first_name", "last_name", "middle_name", "suffix"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return jsonify({"error": "No valid fields to update"}), 400
 
-    updated = update_customer_info(customer_name, safe)
+    try:
+        updated = update_customer_info(customer_name, safe)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify({"status": "ok", "items_updated": updated})
 
 
@@ -1042,7 +1053,12 @@ def api_update_customer():
 def api_create_customer():
     """Create a new standalone customer."""
     data = request.get_json(force=True)
+    first_name = (data.get("first_name") or "").strip()
+    last_name = (data.get("last_name") or "").strip()
     name = (data.get("name") or "").strip()
+    # Build name from parts if not given directly
+    if not name and (first_name or last_name):
+        name = " ".join(filter(None, [first_name, last_name]))
     if not name:
         return jsonify({"error": "name is required"}), 400
     result = create_customer(
@@ -1050,6 +1066,10 @@ def api_create_customer():
         email=data.get("email", ""),
         phone=data.get("phone", ""),
         chapter=data.get("chapter", ""),
+        first_name=first_name,
+        last_name=last_name,
+        middle_name=data.get("middle_name", ""),
+        suffix=data.get("suffix", ""),
     )
     if result is None:
         return jsonify({"error": "Customer already exists"}), 409
@@ -1154,6 +1174,12 @@ def api_import_roster():
                 val = str(row[col_idx]).strip() if row[col_idx] else ""
                 if val:
                     mapped[db_field] = val
+        # Support name from first+last OR full name
+        if not mapped.get("customer"):
+            first = mapped.get("first_name", "")
+            last = mapped.get("last_name", "")
+            if first or last:
+                mapped["customer"] = " ".join(filter(None, [first, last]))
         if mapped.get("customer"):
             import_rows.append(mapped)
 
@@ -1162,6 +1188,45 @@ def api_import_roster():
 
     result = import_roster(import_rows)
     result["fields_created"] = fields_created
+    return jsonify(result)
+
+
+@app.route("/api/customers/preview-roster", methods=["POST"])
+@require_role("manager")
+def api_preview_roster():
+    """Preview a roster import with AI name parsing and duplicate detection.
+
+    Body: { mapping: {db_field: excel_col_index, ...}, data: [[...], ...] }
+    Returns enriched row data with parsed names, match status, and validation warnings.
+    """
+    data = request.get_json(force=True)
+    mapping = data.get("mapping") or {}
+    rows_data = data.get("data") or []
+    if not mapping or not rows_data:
+        return jsonify({"error": "mapping and data are required"}), 400
+
+    # Build mapped rows
+    preview_rows = []
+    for row in rows_data:
+        mapped = {}
+        for db_field, col_idx in mapping.items():
+            if col_idx is not None and 0 <= col_idx < len(row):
+                val = str(row[col_idx]).strip() if row[col_idx] else ""
+                if val:
+                    mapped[db_field] = val
+        # Support name from first+last OR full name
+        if not mapped.get("customer"):
+            first = mapped.get("first_name", "")
+            last = mapped.get("last_name", "")
+            if first or last:
+                mapped["customer"] = " ".join(filter(None, [first, last]))
+        if mapped.get("customer"):
+            preview_rows.append(mapped)
+
+    if not preview_rows:
+        return jsonify({"error": "No valid rows"}), 400
+
+    result = preview_roster_import(preview_rows)
     return jsonify(result)
 
 
@@ -1178,6 +1243,44 @@ def api_merge_customers():
         return jsonify({"error": "source and target cannot be the same"}), 400
     result = merge_customers(source, target)
     return jsonify(result)
+
+
+@app.route("/api/customers/aliases", methods=["GET"])
+@require_role("manager")
+def api_get_aliases():
+    """Get aliases for a customer. Query: ?customer_name=..."""
+    customer_name = request.args.get("customer_name", "").strip()
+    if not customer_name:
+        return jsonify({"error": "customer_name is required"}), 400
+    aliases = get_customer_aliases(customer_name)
+    return jsonify({"aliases": aliases})
+
+
+@app.route("/api/customers/aliases", methods=["POST"])
+@require_role("manager")
+def api_add_alias():
+    """Add an alias for a customer."""
+    data = request.get_json(force=True)
+    customer_name = (data.get("customer_name") or "").strip()
+    alias_type = (data.get("alias_type") or "").strip()
+    alias_value = (data.get("alias_value") or "").strip()
+    if not customer_name or not alias_type or not alias_value:
+        return jsonify({"error": "customer_name, alias_type, and alias_value are required"}), 400
+    try:
+        result = add_customer_alias(customer_name, alias_type, alias_value)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(result)
+
+
+@app.route("/api/customers/aliases/<int:alias_id>", methods=["DELETE"])
+@require_role("manager")
+def api_delete_alias(alias_id):
+    """Delete an alias by ID."""
+    deleted = delete_customer_alias(alias_id)
+    if not deleted:
+        return jsonify({"error": "Alias not found"}), 404
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/customers/from-rsvp", methods=["POST"])
