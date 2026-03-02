@@ -1260,6 +1260,49 @@ def update_customer_info(customer_name: str, fields: dict,
         return cursor.rowcount
 
 
+def create_customer(name: str, email: str = "", phone: str = "",
+                    chapter: str = "", db_path: str | Path | None = None) -> dict | None:
+    """Create a standalone customer by inserting a minimal item row.
+
+    Returns the new item dict or None if the customer already exists.
+    """
+    name = (name or "").strip()
+    if not name:
+        return None
+
+    with _connect(db_path) as conn:
+        existing = conn.execute(
+            "SELECT id FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
+            (name,),
+        ).fetchone()
+        if existing:
+            return None
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        new_values = {c: None for c in ITEM_COLUMNS}
+        new_values["customer"] = name
+        new_values["customer_email"] = email or None
+        new_values["customer_phone"] = phone or None
+        new_values["chapter"] = chapter or None
+        new_values["merchant"] = "Customer Entry"
+        new_values["order_date"] = today
+        new_values["email_uid"] = f"customer_entry_{name}_{today}"
+        new_values["item_index"] = 0
+
+        cols = ", ".join(ITEM_COLUMNS)
+        placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+        cursor = conn.execute(
+            f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+            tuple(new_values.get(c) for c in ITEM_COLUMNS),
+        )
+        new_id = cursor.lastrowid
+        conn.commit()
+
+        new_values["id"] = new_id
+        logger.info("Created customer %s (id=%d)", name, new_id)
+        return new_values
+
+
 def merge_customers(source_name: str, target_name: str,
                     db_path: str | Path | None = None) -> dict:
     """

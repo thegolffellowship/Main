@@ -86,6 +86,7 @@
                 <div class="column-toggle-dropdown" id="cust-col-toggle-dropdown"></div>
             </div>
             <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
+            <button class="btn btn-primary" id="btn-add-customer" style="font-size:0.78rem; padding:0.35rem 0.8rem;">+ Add Customer</button>
             <div class="view-toggle">
                 <button class="view-toggle-btn active" data-view="list">List</button>
                 <button class="view-toggle-btn" data-view="cards">Cards</button>
@@ -187,6 +188,34 @@
             <div class="modal-actions">
                 <button type="button" id="cust-merge-cancel" class="btn btn-secondary">Cancel</button>
                 <button type="button" id="cust-merge-submit" class="btn btn-primary">Merge</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Customer Modal -->
+    <div id="add-customer-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal">
+            <div class="modal-header">
+                <h2>Add Customer</h2>
+                <button id="add-customer-close" class="modal-close">&times;</button>
+            </div>
+            <div class="credit-fields" style="display:flex; flex-direction:column; gap:0.5rem;">
+                <label>Name <span style="color:red;">*</span>
+                    <input type="text" id="add-customer-name" class="modal-input" placeholder="First Last" required>
+                </label>
+                <label>Email
+                    <input type="email" id="add-customer-email" class="modal-input" placeholder="email@example.com">
+                </label>
+                <label>Phone
+                    <input type="tel" id="add-customer-phone" class="modal-input" placeholder="(555) 123-4567">
+                </label>
+                <label>Chapter
+                    <input type="text" id="add-customer-chapter" class="modal-input" placeholder="Austin, San Antonio, Dallas...">
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="add-customer-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="add-customer-submit" class="btn btn-primary">Add Customer</button>
             </div>
         </div>
     </div>
@@ -1242,6 +1271,40 @@
         }
     }
 
+    function openAddCustomerModal() {
+        document.getElementById("add-customer-name").value = "";
+        document.getElementById("add-customer-email").value = "";
+        document.getElementById("add-customer-phone").value = "";
+        document.getElementById("add-customer-chapter").value = "";
+        document.getElementById("add-customer-overlay").style.display = "flex";
+        document.getElementById("add-customer-name").focus();
+    }
+
+    function closeAddCustomerModal() {
+        document.getElementById("add-customer-overlay").style.display = "none";
+    }
+
+    async function submitAddCustomer() {
+        const name = document.getElementById("add-customer-name").value.trim();
+        if (!name) { alert("Customer name is required."); return; }
+        const email = document.getElementById("add-customer-email").value.trim();
+        const phone = document.getElementById("add-customer-phone").value.trim();
+        const chapter = document.getElementById("add-customer-chapter").value.trim();
+        try {
+            const res = await fetch("/api/customers/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, email, phone, chapter }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to add customer");
+            closeAddCustomerModal();
+            await init();
+        } catch (err) {
+            alert("Error: " + err.message);
+        }
+    }
+
     function switchView(view) {
         currentView = view;
         document.querySelectorAll(".view-toggle-btn").forEach(b => b.classList.remove("active"));
@@ -1383,6 +1446,15 @@
         document.getElementById("cust-merge-close").addEventListener("click", closeCustMergeModal);
         document.getElementById("cust-merge-overlay").addEventListener("click", (e) => {
             if (e.target === e.currentTarget) closeCustMergeModal();
+        });
+
+        // Add Customer modal
+        document.getElementById("btn-add-customer").addEventListener("click", openAddCustomerModal);
+        document.getElementById("add-customer-submit").addEventListener("click", submitAddCustomer);
+        document.getElementById("add-customer-cancel").addEventListener("click", closeAddCustomerModal);
+        document.getElementById("add-customer-close").addEventListener("click", closeAddCustomerModal);
+        document.getElementById("add-customer-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeAddCustomerModal();
         });
 
         document.getElementById("customer-search").addEventListener("input", renderCustomers);
