@@ -1976,6 +1976,80 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
         return results
 
 
+def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
+    """Return latest RSVP per player per event, grouped by event name.
+
+    Also includes all rsvp_overrides and rsvp_email_overrides so the
+    frontend can compute accurate player counts without per-event fetches.
+
+    Returns {
+        rsvps: {event_name: [rsvp, ...]},
+        overrides: {event_name: {item_id: status, ...}},
+        email_overrides: {event_name: {email: status, ...}},
+    }
+    """
+    with _connect(db_path) as conn:
+        # Latest RSVP per player per event
+        rows = conn.execute(
+            """SELECT r1.*
+               FROM rsvps r1
+               INNER JOIN (
+                   SELECT matched_event, player_email, MAX(received_at) AS max_date
+                   FROM rsvps
+                   WHERE matched_event IS NOT NULL AND matched_event != ''
+                     AND player_email IS NOT NULL AND player_email != ''
+                   GROUP BY matched_event, player_email
+               ) r2 ON r1.matched_event = r2.matched_event
+                    AND r1.player_email = r2.player_email
+                    AND r1.received_at = r2.max_date
+               ORDER BY r1.matched_event, r1.player_name ASC"""
+        ).fetchall()
+
+        # Resolve player names from items table (bulk)
+        emails = {(r["player_email"] or "").strip().lower() for r in rows if r["player_email"]}
+        name_map = {}
+        if emails:
+            placeholders = ",".join("?" * len(emails))
+            cards = conn.execute(
+                f"""SELECT LOWER(customer_email) as email, customer
+                    FROM items
+                    WHERE LOWER(customer_email) IN ({placeholders})
+                      AND customer IS NOT NULL AND customer != ''
+                    ORDER BY order_date DESC""",
+                list(emails),
+            ).fetchall()
+            for c in cards:
+                if c["email"] not in name_map:
+                    name_map[c["email"]] = c["customer"]
+
+        rsvps_by_event = {}
+        for r in rows:
+            rsvp = dict(r)
+            email = (rsvp.get("player_email") or "").strip().lower()
+            rsvp["resolved_name"] = name_map.get(email, rsvp.get("player_name"))
+            rsvp["has_player_card"] = email in name_map
+            evt = rsvp.get("matched_event") or ""
+            rsvps_by_event.setdefault(evt, []).append(rsvp)
+
+        # All overrides by event
+        ov_rows = conn.execute("SELECT item_id, event_name, status FROM rsvp_overrides").fetchall()
+        overrides = {}
+        for r in ov_rows:
+            overrides.setdefault(r["event_name"], {})[r["item_id"]] = r["status"]
+
+        # All email overrides by event
+        eov_rows = conn.execute("SELECT player_email, event_name, status FROM rsvp_email_overrides").fetchall()
+        email_overrides = {}
+        for r in eov_rows:
+            email_overrides.setdefault(r["event_name"], {})[r["player_email"]] = r["status"]
+
+        return {
+            "rsvps": rsvps_by_event,
+            "overrides": overrides,
+            "email_overrides": email_overrides,
+        }
+
+
 def get_all_rsvps(event_name: str = "", response: str = "",
                    db_path: str | Path | None = None) -> list[dict]:
     """Return RSVPs with optional filtering by event and/or response."""

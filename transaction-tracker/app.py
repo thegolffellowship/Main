@@ -57,6 +57,7 @@ from email_parser.database import (
     save_rsvps,
     get_rsvps_for_event,
     get_all_rsvps,
+    get_all_rsvps_bulk,
     get_rsvp_stats,
     rematch_rsvps,
     manual_match_rsvp,
@@ -1621,6 +1622,16 @@ def api_rsvps():
 def api_rsvps_for_event(event_name):
     """Return the latest RSVP per player for a specific event."""
     return jsonify(get_rsvps_for_event(event_name))
+
+
+@app.route("/api/rsvps/bulk")
+def api_rsvps_bulk():
+    """Return all RSVPs, overrides, and email overrides grouped by event.
+
+    Used by the events page to show accurate player counts on collapsed cards
+    without requiring per-event fetches.
+    """
+    return jsonify(get_all_rsvps_bulk())
 
 
 @app.route("/api/rsvps/stats")
