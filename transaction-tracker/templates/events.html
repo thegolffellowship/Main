@@ -1043,13 +1043,13 @@
             }
 
             const fields = [
+                ["Order Date", r.order_date || "\u2014"],
                 ["Price", r.item_price || "\u2014"],
                 ["Handicap", r.handicap || "\u2014"],
                 ["Status", r.member_status || "\u2014"],
                 ["Partner Request", r.partner_request || "\u2014"],
                 ["Fellowship After", r.fellowship_after || "\u2014"],
                 ["Notes", r.notes || "\u2014"],
-                ["Order Date", r.order_date || "\u2014"],
             ];
 
             html += `
@@ -1315,6 +1315,7 @@
     // Detail table column definitions and visibility
     const DETAIL_COLUMNS = [
         { key: "rsvp", label: "", default: true },
+        { key: "order_date", label: "Order Date", default: true },
         { key: "customer", label: "Customer", default: true },
         { key: "item_price", label: "Price", default: true },
         { key: "handicap", label: "Handicap", default: true },
@@ -1324,7 +1325,6 @@
         { key: "partner_request", label: "Partner", default: false },
         { key: "fellowship_after", label: "Fellowship", default: false },
         { key: "notes", label: "Notes", default: false },
-        { key: "order_date", label: "Order Date", default: true },
         { key: "actions", label: "Actions", default: true },
     ];
 

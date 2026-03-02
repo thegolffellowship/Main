@@ -363,7 +363,7 @@
             }
             if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
             if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
-            const date = item.event_date || item.order_date || "";
+            const date = item.order_date || item.event_date || "";
             if (date > map[name].latestDate) map[name].latestDate = date;
         });
 
@@ -514,7 +514,7 @@
 
     function renderCustDetailMobile(customer) {
         const sorted = [...customer.items].sort((a, b) =>
-            (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""));
+            (b.order_date || "").localeCompare(a.order_date || ""));
 
         return sorted.map(item => {
             const txStatus = item.transaction_status || "active";
@@ -536,10 +536,8 @@
             }
 
             const fields = [
-                ["Date", item.event_date || item.order_date || "\u2014"],
+                ["Order Date", item.order_date || "\u2014"],
                 ["Price", item.item_price || "\u2014"],
-                ["City", item.city || "\u2014"],
-                ["Course", item.course || "\u2014"],
             ];
 
             return `
@@ -861,11 +859,11 @@
         // Transactions tab content
         html += '<div class="cust-tab-content cust-tab-transactions">';
         html += '<table class="registrants-table"><thead><tr>';
-        html += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Order Date</th><th>Actions</th>';
+        html += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
         html += '</tr></thead><tbody>';
 
         const sorted = [...customer.items].sort((a, b) =>
-            (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""));
+            (b.order_date || "").localeCompare(a.order_date || ""));
 
         sorted.forEach(item => {
             const txStatus = item.transaction_status || "active";
@@ -882,13 +880,10 @@
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
             html += `<tr${rowClass}>
-                <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
+                <td>${escapeHtml(item.order_date || "\u2014")}</td>
                 <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
                 <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
-                <td>${escapeHtml(item.city || "\u2014")}</td>
-                <td>${escapeHtml(item.course || "\u2014")}</td>
                 <td>${escapeHtml(item.side_games || "\u2014")}</td>
-                <td>${escapeHtml(item.order_date || "\u2014")}</td>
                 <td>${actionBtn}</td>
             </tr>`;
         });
@@ -1052,10 +1047,10 @@
         // Transactions tab
         panelHtml += '<div class="cust-tab-content cust-tab-transactions">';
         panelHtml += '<table style="width:100%; border-collapse:collapse;"><thead><tr>';
-        panelHtml += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Order Date</th><th>Actions</th>';
+        panelHtml += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
         panelHtml += '</tr></thead><tbody>';
         customer.items
-            .sort((a, b) => (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""))
+            .sort((a, b) => (b.order_date || "").localeCompare(a.order_date || ""))
             .forEach(item => {
                 const txStatus = item.transaction_status || "active";
                 const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (item.transferred_from_id ? ' class="row-from-transfer"' : '');
@@ -1071,13 +1066,10 @@
                     actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                 }
                 panelHtml += `<tr${rowClass}>
-                    <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
+                    <td>${escapeHtml(item.order_date || "\u2014")}</td>
                     <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
                     <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
-                    <td>${escapeHtml(item.city || "\u2014")}</td>
-                    <td>${escapeHtml(item.course || "\u2014")}</td>
                     <td>${escapeHtml(item.side_games || "\u2014")}</td>
-                    <td>${escapeHtml(item.order_date || "\u2014")}</td>
                     <td>${actionBtn}</td>
                 </tr>`;
             });
@@ -1273,8 +1265,8 @@
             alert("Select a customer first to export their data.");
             return;
         }
-        const headers = ["Event Date", "Item", "Price", "City", "Course", "Side Games", "Order Date"];
-        const fields = ["event_date", "item_name", "item_price", "city", "course", "side_games", "order_date"];
+        const headers = ["Order Date", "Item", "Price", "Side Games"];
+        const fields = ["order_date", "item_name", "item_price", "side_games"];
         const rows = selectedCustomer.items.map(r => fields.map(f => r[f] || ""));
         const csvContent = [headers, ...rows]
             .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))
