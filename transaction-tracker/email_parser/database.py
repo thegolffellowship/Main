@@ -413,10 +413,15 @@ def init_db(db_path: str | Path | None = None) -> None:
                 END
             """)
 
-        # Repair: clear matched_item_id on RSVPs that point to non-event items
-        # (Customer Entry, RSVP Import, RSVP Email Link, Roster Import)
+        # Repair: clear matched_item_id on RSVPs that point to wrong items.
+        # Two cases:
+        #   1. Points to non-event items (Customer Entry, RSVP Import, etc.)
+        #   2. Points to an item whose item_name doesn't match the RSVP's
+        #      matched_event (e.g. linked to a customer's item for event Y
+        #      but the RSVP is for event X)
         try:
-            repaired = conn.execute(
+            # Case 1: non-event merchant items
+            r1 = conn.execute(
                 """UPDATE rsvps SET matched_item_id = NULL
                    WHERE matched_item_id IS NOT NULL
                      AND matched_item_id IN (
@@ -425,8 +430,29 @@ def init_db(db_path: str | Path | None = None) -> None:
                                             'RSVP Email Link', 'Roster Import')
                      )"""
             ).rowcount
+
+            # Case 2: matched_item_id points to item for a different event.
+            # An RSVP for event X should only have matched_item_id pointing
+            # to an item whose item_name = X or is an alias of X.
+            r2 = conn.execute(
+                """UPDATE rsvps SET matched_item_id = NULL
+                   WHERE id IN (
+                       SELECT r.id FROM rsvps r
+                       JOIN items i ON i.id = r.matched_item_id
+                       WHERE r.matched_item_id IS NOT NULL
+                         AND r.matched_event IS NOT NULL
+                         AND i.item_name != r.matched_event
+                         AND i.item_name NOT IN (
+                             SELECT alias_name FROM event_aliases
+                             WHERE canonical_event_name = r.matched_event
+                         )
+                   )"""
+            ).rowcount
+
+            repaired = r1 + r2
             if repaired:
-                logger.info("Repaired %d RSVPs with bad matched_item_id", repaired)
+                logger.info("Repaired %d RSVPs with bad matched_item_id (%d non-event, %d wrong-event)",
+                            repaired, r1, r2)
         except sqlite3.OperationalError:
             pass  # rsvps table may not exist yet on first run
 
