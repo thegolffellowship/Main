@@ -246,6 +246,7 @@
                         Preview of import — <strong id="roster-preview-count">0</strong> rows.
                         <span style="color:#16a34a;" id="roster-new-count"></span>
                         <span style="color:#2563eb;" id="roster-update-count"></span>
+                        <span style="color:#9ca3af;" id="roster-skip-note"></span>
                     </p>
                     <div style="max-height:350px; overflow:auto; border:1px solid var(--border); border-radius:6px;">
                         <table class="registrants-table" id="roster-preview-table" style="font-size:0.78rem;">
@@ -1365,10 +1366,10 @@
 
     // Auto-match patterns: db_field → regex patterns to match Excel column headers
     const AUTO_MATCH = {
-        customer: /^(name|full\s*name|player|customer|golfer|member\s*name)$/i,
+        customer: /^(name|full\s*name|player|customer|golfer|member\s*name|handle|display\s*name)$/i,
         customer_email: /^(email|e-?mail|email\s*address)$/i,
         customer_phone: /^(phone|cell|mobile|telephone|phone\s*number)$/i,
-        chapter: /^(chapter|city|location|region)$/i,
+        chapter: /^(chapter|city|location|region|affiliation)$/i,
         handicap: /^(handicap|hcp|hdcp|index)$/i,
         date_of_birth: /^(dob|date\s*of\s*birth|birth\s*date|birthday)$/i,
         shirt_size: /^(shirt\s*size|size|tee\s*size)$/i,
@@ -1541,6 +1542,14 @@
             </div>`;
         }
 
+        // Import options
+        html += `<div style="grid-column:1/-1; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border);">
+            <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.82rem; cursor:pointer;">
+                <input type="checkbox" id="roster-skip-no-email" checked>
+                <span style="font-weight:500;">Skip entries without an email address</span>
+            </label>
+        </div>`;
+
         grid.innerHTML = html;
 
         grid.querySelectorAll(".roster-map-select").forEach(sel => {
@@ -1576,6 +1585,10 @@
             }
         });
 
+        // Check skip-no-email option
+        const skipNoEmail = document.getElementById("roster-skip-no-email")?.checked;
+        const emailIdx = rosterMapping.customer_email;
+
         // Build preview table — standard mapped fields + new fields
         const mappedFields = ROSTER_DB_FIELDS.filter(f => rosterMapping[f.key] !== null && rosterMapping[f.key] !== undefined);
         const headerRow = document.getElementById("roster-preview-header");
@@ -1588,13 +1601,19 @@
         + '<th style="font-size:0.75rem;">Status</th>';
 
         const existingNames = new Set(allCustomers.map(c => c.name.toLowerCase()));
-        let newCount = 0, updateCount = 0;
+        let newCount = 0, updateCount = 0, skippedNoEmail = 0;
 
         const tbody = document.getElementById("roster-preview-body");
         tbody.innerHTML = rosterData.map(row => {
             const nameIdx = rosterMapping.customer;
             const name = (nameIdx !== null && row[nameIdx]) ? String(row[nameIdx]).trim() : "";
             if (!name) return "";
+
+            // Skip rows without email if option is checked
+            if (skipNoEmail && emailIdx !== null && emailIdx !== undefined) {
+                const email = row[emailIdx] ? String(row[emailIdx]).trim() : "";
+                if (!email) { skippedNoEmail++; return ""; }
+            }
 
             const isExisting = existingNames.has(name.toLowerCase());
             if (isExisting) updateCount++; else newCount++;
@@ -1619,12 +1638,21 @@
 
         const validRows = rosterData.filter(row => {
             const idx = rosterMapping.customer;
-            return idx !== null && row[idx] && String(row[idx]).trim();
+            if (!(idx !== null && row[idx] && String(row[idx]).trim())) return false;
+            if (skipNoEmail && emailIdx !== null && emailIdx !== undefined) {
+                const email = row[emailIdx] ? String(row[emailIdx]).trim() : "";
+                if (!email) return false;
+            }
+            return true;
         });
 
         document.getElementById("roster-preview-count").textContent = validRows.length;
         document.getElementById("roster-new-count").textContent = newCount ? `(${newCount} new)` : "";
         document.getElementById("roster-update-count").textContent = updateCount ? `(${updateCount} updates)` : "";
+        const skipNote = document.getElementById("roster-skip-note");
+        if (skipNote) {
+            skipNote.textContent = skippedNoEmail ? `(${skippedNoEmail} skipped — no email)` : "";
+        }
 
         rosterStep = "preview";
         updateRosterUI();
@@ -1636,7 +1664,17 @@
         nextBtn.textContent = "Importing...";
 
         try {
-            const payload = { mapping: rosterMapping, data: rosterData };
+            // Filter out rows without email if skip option was checked
+            const skipNoEmail = document.getElementById("roster-skip-no-email")?.checked;
+            const emailIdx = rosterMapping.customer_email;
+            let importData = rosterData;
+            if (skipNoEmail && emailIdx !== null && emailIdx !== undefined) {
+                importData = rosterData.filter(row => {
+                    const email = row[emailIdx] ? String(row[emailIdx]).trim() : "";
+                    return !!email;
+                });
+            }
+            const payload = { mapping: rosterMapping, data: importData };
             if (rosterNewFields.length) {
                 payload.new_fields = rosterNewFields.map(nf => ({ name: nf.name, col_index: nf.col_index }));
             }

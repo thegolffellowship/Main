@@ -1072,15 +1072,36 @@ def api_parse_roster():
         wb = load_workbook(io.BytesIO(file.read()), read_only=True, data_only=True)
         ws = wb.active
         rows_iter = ws.iter_rows(values_only=True)
-        header_row = next(rows_iter, None)
-        if not header_row:
+
+        # Read up to first 5 rows to find the actual header row.
+        # Spreadsheets often have a title/metadata row before real headers.
+        candidate_rows = []
+        for raw_row in rows_iter:
+            candidate_rows.append(raw_row)
+            if len(candidate_rows) >= 5:
+                break
+        if not candidate_rows:
             return jsonify({"error": "Empty spreadsheet"}), 400
 
+        # Heuristic: the header row is the first row where >40% of cells
+        # are non-empty.  Title rows typically have only 1-2 filled cells.
+        header_idx = 0
+        total_cols = len(candidate_rows[0])
+        for i, row in enumerate(candidate_rows):
+            non_empty = sum(1 for c in row if c is not None and str(c).strip())
+            if non_empty >= max(2, total_cols * 0.4):
+                header_idx = i
+                break
+
+        header_row = candidate_rows[header_idx]
         headers = [str(h).strip() if h else f"Column {i+1}"
                    for i, h in enumerate(header_row)]
 
-        # Read up to 100 preview rows
+        # Data rows = remaining candidate rows after header + rest of sheet
+        data_candidate = candidate_rows[header_idx + 1:]
         preview = []
+        for row in data_candidate:
+            preview.append([str(c).strip() if c is not None else "" for c in row])
         for row in rows_iter:
             if len(preview) >= 100:
                 break
