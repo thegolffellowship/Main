@@ -2430,14 +2430,53 @@
             return iname === eventName || allAliases[iname] === eventName;
         });
 
-        return registrants.filter(r => {
+        // Build email lookup by customer name from all items (for resolving missing emails)
+        const emailByName = {};
+        allItems.forEach(i => {
+            if (i.customer_email && i.customer) {
+                const key = i.customer.toLowerCase();
+                if (!emailByName[key]) emailByName[key] = i.customer_email;
+            }
+        });
+
+        // Build GG RSVP synthetic rows (unmatched RSVPs with player_email)
+        const rsvps = allRsvps[eventName] || [];
+        const emailOvr = allRsvpEmailOverrides[eventName] || {};
+        const regEmails = new Set(registrants.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+        const regNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const unmatchedPlaying = rsvps.filter(r => {
+            if (r.response !== 'PLAYING') return false;
+            if (r.matched_item_id) return false;
+            const email = (r.player_email || "").toLowerCase();
+            if (email && emailOvr[email] === "not_playing") return false;
+            if (email && regEmails.has(email)) return false;
+            const resolved = (r.resolved_name || "").toLowerCase();
+            const first = (r.player_name || "").toLowerCase();
+            if (resolved && regNames.has(resolved)) return false;
+            if (first && [...regNames].some(n => n.startsWith(first))) return false;
+            return true;
+        });
+        const ggRows = unmatchedPlaying.map((r, i) => ({
+            id: `gg-rsvp-${i}`,
+            customer: r.resolved_name || r.player_name || 'Unknown',
+            customer_email: r.player_email || '',
+            item_name: eventName,
+            transaction_status: 'gg_rsvp',
+            side_games: '',
+        }));
+
+        const allRegs = [...registrants, ...ggRows];
+
+        return allRegs.filter(r => {
             const status = (r.transaction_status || "active");
             if (status === "credited" || status === "transferred") return false;
-            if (!r.customer_email) return false;
+            // Resolve email: use customer_email, or look up from other items by name
+            const email = r.customer_email || (r.customer ? emailByName[(r.customer || "").toLowerCase()] : "") || "";
+            if (!email) return false;
             const sg = (r.side_games || "").toUpperCase().trim();
 
             if (audience === "all") return true;
-            if (audience === "rsvp_only") return status === "rsvp_only";
+            if (audience === "rsvp_only") return status === "rsvp_only" || status === "gg_rsvp";
             if (audience === "net") return sg === "NET" || sg === "BOTH";
             if (audience === "gross") return sg === "GROSS" || sg === "BOTH";
             if (audience === "both") return sg === "BOTH";
@@ -2446,6 +2485,13 @@
                 return true; // server-side will do accurate filtering
             }
             return true;
+        }).map(r => {
+            // Ensure customer_email is populated for display and sending
+            if (!r.customer_email && r.customer) {
+                const resolved = emailByName[(r.customer || "").toLowerCase()] || "";
+                if (resolved) return { ...r, customer_email: resolved };
+            }
+            return r;
         });
     }
 

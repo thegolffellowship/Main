@@ -1604,6 +1604,24 @@ def api_send_messages():
 
     registrants = [i for i in items if matches_event(i)]
 
+    # Build email lookup by customer name (for resolving missing customer_email)
+    email_by_name = {}
+    for it in items:
+        cname = (it.get("customer") or "").strip().lower()
+        cemail = (it.get("customer_email") or "").strip()
+        if cname and cemail and cname not in email_by_name:
+            email_by_name[cname] = cemail
+
+    def resolve_email(r):
+        """Return email from item row, or look up from other items by customer name."""
+        email = (r.get("customer_email") or "").strip()
+        if email:
+            return email
+        cname = (r.get("customer") or "").strip().lower()
+        if cname:
+            return email_by_name.get(cname, "")
+        return ""
+
     # Get RSVP override data for playing/not_playing filtering
     rsvp_overrides = {}
     try:
@@ -1614,6 +1632,7 @@ def api_send_messages():
         pass
 
     rsvps_for_event = {}
+    rsvp_list = []
     try:
         rsvp_list = get_rsvps_for_event(event_name)
         for rv in rsvp_list:
@@ -1622,8 +1641,49 @@ def api_send_messages():
     except Exception:
         pass
 
+    # Build GG RSVP synthetic rows (unmatched RSVPs with player_email)
+    email_overrides = {}
+    try:
+        email_overrides = get_rsvp_email_overrides(event_name)
+    except Exception:
+        pass
+
+    reg_emails = {(r.get("customer_email") or "").strip().lower() for r in registrants if r.get("customer_email")}
+    reg_names = {(r.get("customer") or "").strip().lower() for r in registrants if r.get("customer")}
+    gg_rsvp_rows = []
+    for rv in rsvp_list:
+        if rv.get("response") != "PLAYING":
+            continue
+        if rv.get("matched_item_id"):
+            continue
+        email = (rv.get("player_email") or "").strip().lower()
+        if email and email_overrides.get(email) == "not_playing":
+            continue
+        if email and email in reg_emails:
+            continue
+        resolved = (rv.get("resolved_name") or "").strip().lower()
+        first_name = (rv.get("player_name") or "").strip().lower()
+        if resolved and resolved in reg_names:
+            continue
+        if first_name and any(n.startswith(first_name) for n in reg_names):
+            continue
+        if not (rv.get("player_email") or "").strip():
+            continue  # No email — can't message them
+        gg_rsvp_rows.append({
+            "id": f"gg-rsvp-{len(gg_rsvp_rows)}",
+            "customer": rv.get("resolved_name") or rv.get("player_name") or "Unknown",
+            "customer_email": (rv.get("player_email") or "").strip(),
+            "item_name": event_name,
+            "transaction_status": "gg_rsvp",
+            "side_games": "",
+        })
+
+    all_registrants = registrants + gg_rsvp_rows
+
     def get_rsvp_status(item):
         item_id = item["id"]
+        if isinstance(item_id, str) and item_id.startswith("gg-rsvp"):
+            return "playing"  # GG RSVP players are playing by definition
         override = rsvp_overrides.get(item_id)
         if override and override != "none":
             return override  # playing, not_playing, manual_green
@@ -1641,14 +1701,16 @@ def api_send_messages():
         return "NONE"
 
     filtered = []
-    for r in registrants:
-        if r["id"] in exclude_ids:
+    for r in all_registrants:
+        rid = r["id"]
+        if not (isinstance(rid, str) and rid.startswith("gg-rsvp")) and rid in exclude_ids:
             continue
         status = (r.get("transaction_status") or "active")
         # Skip credited/transferred
         if status in ("credited", "transferred"):
             continue
-        if not r.get("customer_email"):
+        email = resolve_email(r)
+        if not email:
             continue
 
         sg = classify_side_games(r.get("side_games"))
@@ -1660,7 +1722,7 @@ def api_send_messages():
             if rsvp in ("playing", "manual_green"):
                 filtered.append(r)
         elif audience == "rsvp_only":
-            if status == "rsvp_only":
+            if status in ("rsvp_only", "gg_rsvp"):
                 filtered.append(r)
         elif audience == "net":
             if sg in ("NET", "BOTH"):
@@ -1675,14 +1737,14 @@ def api_send_messages():
             if rsvp == "not_playing":
                 filtered.append(r)
         elif audience == "custom":
-            if (r.get("customer_email") or "").strip().lower() in custom_emails:
+            if email.lower() in custom_emails:
                 filtered.append(r)
         else:
             filtered.append(r)
 
     # Build recipient list from filtered registrants
     recipients = [
-        {"player_name": r.get("customer") or "Player", "email": r["customer_email"].strip()}
+        {"player_name": r.get("customer") or "Player", "email": resolve_email(r)}
         for r in filtered
     ]
 
