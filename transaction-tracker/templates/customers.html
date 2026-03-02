@@ -201,9 +201,22 @@
                 <button id="add-customer-close" class="modal-close">&times;</button>
             </div>
             <div class="credit-fields" style="display:flex; flex-direction:column; gap:0.5rem;">
-                <label>Name <span style="color:red;">*</span>
-                    <input type="text" id="add-customer-name" class="modal-input" placeholder="First Last" required>
-                </label>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                    <label>First Name <span style="color:red;">*</span>
+                        <input type="text" id="add-customer-first-name" class="modal-input" placeholder="First" required>
+                    </label>
+                    <label>Last Name <span style="color:red;">*</span>
+                        <input type="text" id="add-customer-last-name" class="modal-input" placeholder="Last" required>
+                    </label>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                    <label>Middle Name
+                        <input type="text" id="add-customer-middle-name" class="modal-input" placeholder="Middle">
+                    </label>
+                    <label>Suffix
+                        <input type="text" id="add-customer-suffix" class="modal-input" placeholder="Jr., Sr., III...">
+                    </label>
+                </div>
                 <label>Email
                     <input type="email" id="add-customer-email" class="modal-input" placeholder="email@example.com">
                 </label>
@@ -420,12 +433,17 @@
             if (!map[name]) {
                 map[name] = {
                     name: name,
+                    first_name: item.first_name || "",
+                    last_name: item.last_name || "",
+                    middle_name: item.middle_name || "",
+                    suffix: item.suffix || "",
                     email: item.customer_email || "",
                     phone: item.customer_phone || "",
                     items: [],
                     totalSpent: 0,
                     creditTotal: 0,
                     latestDate: "",
+                    aliases: [],
                 };
             }
             map[name].items.push(item);
@@ -440,6 +458,10 @@
             }
             if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
             if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
+            if (!map[name].first_name && item.first_name) map[name].first_name = item.first_name;
+            if (!map[name].last_name && item.last_name) map[name].last_name = item.last_name;
+            if (!map[name].middle_name && item.middle_name) map[name].middle_name = item.middle_name;
+            if (!map[name].suffix && item.suffix) map[name].suffix = item.suffix;
             const date = item.order_date || item.event_date || "";
             if (date > map[name].latestDate) map[name].latestDate = date;
         });
@@ -555,7 +577,10 @@
 
     function renderCustExpandedContent(customer) {
         const infoFields = [
-            { key: "customer", label: "Name", value: customer.name || "" },
+            { key: "first_name", label: "First Name", value: customer.first_name || "" },
+            { key: "last_name", label: "Last Name", value: customer.last_name || "" },
+            { key: "middle_name", label: "Middle Name", value: customer.middle_name || "" },
+            { key: "suffix", label: "Suffix", value: customer.suffix || "" },
             { key: "customer_email", label: "Email", value: customer.email || "" },
             { key: "customer_phone", label: "Phone", value: customer.phone || "" },
             { key: "chapter", label: "Chapter", value: customer.chapter || "" },
@@ -855,7 +880,10 @@
 
     function renderCustInfoPanel(customer) {
         const infoFields = [
-            { key: "customer", label: "Name", value: customer.name || "" },
+            { key: "first_name", label: "First Name", value: customer.first_name || "" },
+            { key: "last_name", label: "Last Name", value: customer.last_name || "" },
+            { key: "middle_name", label: "Middle Name", value: customer.middle_name || "" },
+            { key: "suffix", label: "Suffix", value: customer.suffix || "" },
             { key: "customer_email", label: "Email", value: customer.email || "" },
             { key: "customer_phone", label: "Phone", value: customer.phone || "" },
             { key: "chapter", label: "Chapter", value: customer.chapter || "" },
@@ -874,6 +902,15 @@
             `</div>`
         ).join("");
         html += '</div>';
+
+        // Aliases section (read-only)
+        html += `<div class="cust-aliases-section" style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border);">
+            <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Aliases</div>
+            <div class="cust-aliases-list" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.82rem; min-height:1.2em;">
+                <span style="color:var(--text-muted);">Loading...</span>
+            </div>
+        </div>`;
+
         html += `<div style="margin-top:0.6rem;">
             <button type="button" class="btn btn-edit cust-edit-toggle" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Edit</button>
         </div></div>`;
@@ -888,12 +925,73 @@
             `</label>`
         ).join("");
         html += '</div>';
+
+        // Aliases editor
+        html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border);">
+            <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Aliases</div>
+            <div class="cust-aliases-edit-list" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.82rem;">
+                <span style="color:var(--text-muted);">Loading...</span>
+            </div>
+            <div style="display:flex; gap:0.3rem; margin-top:0.4rem; align-items:center;">
+                <select class="modal-input cust-alias-type-select" style="width:auto; padding:0.2rem; font-size:0.78rem;">
+                    <option value="name">Name</option>
+                    <option value="email">Email</option>
+                </select>
+                <input type="text" class="modal-input cust-alias-value-input" placeholder="Alias value..." style="flex:1; padding:0.2rem 0.4rem; font-size:0.78rem;">
+                <button type="button" class="btn btn-primary cust-add-alias-btn" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.72rem; padding:0.2rem 0.5rem;">+ Add</button>
+            </div>
+        </div>`;
+
         html += `<div style="margin-top:0.6rem; display:flex; gap:0.4rem;">
             <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Save</button>
             <button type="button" class="btn btn-secondary cust-cancel-edit" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Cancel</button>
         </div></div>`;
 
         return html;
+    }
+
+    // Load and render aliases for a customer in the info panel
+    async function loadCustomerAliases(container) {
+        const viewList = container.querySelector(".cust-aliases-list");
+        const editList = container.querySelector(".cust-aliases-edit-list");
+        const customerName = (viewList || editList)?.dataset?.customerName;
+        if (!customerName) return;
+
+        try {
+            const res = await fetch(`/api/customers/aliases?customer_name=${encodeURIComponent(customerName)}`);
+            const data = await res.json();
+            const aliases = data.aliases || [];
+
+            // Render read-only view
+            if (viewList) {
+                if (aliases.length === 0) {
+                    viewList.innerHTML = '<span style="color:var(--text-muted);">None</span>';
+                } else {
+                    viewList.innerHTML = aliases.map(a =>
+                        `<span style="display:inline-block; background:var(--bg-card); border:1px solid var(--border); border-radius:4px; padding:0.1rem 0.4rem; margin:0.1rem; font-size:0.78rem;">` +
+                        `<span style="color:var(--text-muted); font-size:0.65rem;">${a.type === 'email' ? '📧' : '👤'}</span> ${escapeHtml(a.value)}</span>`
+                    ).join(" ");
+                }
+            }
+
+            // Render editable view
+            if (editList) {
+                if (aliases.length === 0) {
+                    editList.innerHTML = '<span style="color:var(--text-muted);">No aliases yet</span>';
+                } else {
+                    editList.innerHTML = aliases.map(a =>
+                        `<div style="display:flex; align-items:center; gap:0.3rem; margin-bottom:0.2rem;">` +
+                        `<span style="font-size:0.65rem; color:var(--text-muted);">${a.type === 'email' ? '📧' : '👤'}</span>` +
+                        `<span>${escapeHtml(a.value)}</span>` +
+                        `<button type="button" class="cust-delete-alias-btn" data-alias-id="${a.id}" style="background:none; border:none; color:#dc2626; cursor:pointer; font-size:0.7rem; padding:0.1rem 0.3rem;">✕</button>` +
+                        `</div>`
+                    ).join("");
+                }
+            }
+        } catch (err) {
+            if (viewList) viewList.innerHTML = '<span style="color:#dc2626;">Failed to load</span>';
+            if (editList) editList.innerHTML = '<span style="color:#dc2626;">Failed to load</span>';
+        }
     }
 
     function renderCustDetailContent(customer) {
@@ -1065,6 +1163,56 @@
                 }
             });
         }
+
+        // Load aliases when info tab is shown
+        loadCustomerAliases(container);
+
+        // Add alias button
+        container.querySelectorAll(".cust-add-alias-btn").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const parent = btn.closest("div");
+                const typeSelect = parent.parentElement.querySelector(".cust-alias-type-select");
+                const valueInput = parent.parentElement.querySelector(".cust-alias-value-input");
+                const aliasType = typeSelect.value;
+                const aliasValue = valueInput.value.trim();
+                if (!aliasValue) return;
+                try {
+                    const resp = await fetch("/api/customers/aliases", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            customer_name: btn.dataset.customerName,
+                            alias_type: aliasType,
+                            alias_value: aliasValue,
+                        }),
+                    });
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        throw new Error(data.error || "Failed");
+                    }
+                    valueInput.value = "";
+                    loadCustomerAliases(container);
+                } catch (err) {
+                    alert("Failed to add alias: " + err.message);
+                }
+            });
+        });
+
+        // Delete alias buttons (delegated)
+        container.addEventListener("click", async (e) => {
+            const deleteBtn = e.target.closest(".cust-delete-alias-btn");
+            if (!deleteBtn) return;
+            e.stopPropagation();
+            const aliasId = deleteBtn.dataset.aliasId;
+            try {
+                const resp = await fetch(`/api/customers/aliases/${aliasId}`, { method: "DELETE" });
+                if (!resp.ok) throw new Error("Failed to delete");
+                loadCustomerAliases(container);
+            } catch (err) {
+                alert("Failed to delete alias: " + err.message);
+            }
+        });
     }
 
     function toggleCustomerDetail(customer) {
@@ -1320,12 +1468,15 @@
     }
 
     function openAddCustomerModal() {
-        document.getElementById("add-customer-name").value = "";
+        document.getElementById("add-customer-first-name").value = "";
+        document.getElementById("add-customer-last-name").value = "";
+        document.getElementById("add-customer-middle-name").value = "";
+        document.getElementById("add-customer-suffix").value = "";
         document.getElementById("add-customer-email").value = "";
         document.getElementById("add-customer-phone").value = "";
         document.getElementById("add-customer-chapter").value = "";
         document.getElementById("add-customer-overlay").style.display = "flex";
-        document.getElementById("add-customer-name").focus();
+        document.getElementById("add-customer-first-name").focus();
     }
 
     function closeAddCustomerModal() {
@@ -1333,8 +1484,12 @@
     }
 
     async function submitAddCustomer() {
-        const name = document.getElementById("add-customer-name").value.trim();
-        if (!name) { alert("Customer name is required."); return; }
+        const firstName = document.getElementById("add-customer-first-name").value.trim();
+        const lastName = document.getElementById("add-customer-last-name").value.trim();
+        if (!firstName && !lastName) { alert("First or Last name is required."); return; }
+        const middleName = document.getElementById("add-customer-middle-name").value.trim();
+        const suffix = document.getElementById("add-customer-suffix").value.trim();
+        const name = [firstName, lastName, suffix].filter(Boolean).join(" ");
         const email = document.getElementById("add-customer-email").value.trim();
         const phone = document.getElementById("add-customer-phone").value.trim();
         const chapter = document.getElementById("add-customer-chapter").value.trim();
@@ -1342,7 +1497,7 @@
             const res = await fetch("/api/customers/create", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, email, phone, chapter }),
+                body: JSON.stringify({ name, first_name: firstName, last_name: lastName, middle_name: middleName, suffix, email, phone, chapter }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to add customer");
@@ -1355,9 +1510,15 @@
 
     // ---- Roster Upload ----
     const ROSTER_DB_FIELDS = [
-        { key: "customer", label: "Name", required: true },
+        { key: "customer", label: "Full Name (auto-parsed)", required: false, hint: "AI splits into First/Last" },
+        { key: "first_name", label: "First Name" },
+        { key: "last_name", label: "Last Name" },
+        { key: "middle_name", label: "Middle Name" },
+        { key: "suffix", label: "Suffix" },
         { key: "customer_email", label: "Email" },
         { key: "customer_phone", label: "Phone" },
+        { key: "alias_name", label: "Alias Name(s)" },
+        { key: "alias_email", label: "Alias Email(s)" },
         { key: "chapter", label: "Chapter" },
         { key: "handicap", label: "Handicap" },
         { key: "date_of_birth", label: "Date of Birth" },
@@ -1367,8 +1528,14 @@
     // Auto-match patterns: db_field → regex patterns to match Excel column headers
     const AUTO_MATCH = {
         customer: /^(name|full\s*name|player|customer|golfer|member\s*name|handle|display\s*name)$/i,
+        first_name: /^(first\s*name|given\s*name|first)$/i,
+        last_name: /^(last\s*name|surname|family\s*name|last)$/i,
+        middle_name: /^(middle\s*name|middle\s*initial|middle)$/i,
+        suffix: /^(suffix|generational|jr|sr)$/i,
         customer_email: /^(email|e-?mail|email\s*address)$/i,
         customer_phone: /^(phone|cell|mobile|telephone|phone\s*number)$/i,
+        alias_name: /^(alias|alias\s*name|alternate\s*name|aka|nick\s*name|maiden)$/i,
+        alias_email: /^(alias\s*email|alt\s*email|secondary\s*email|other\s*email)$/i,
         chapter: /^(chapter|city|location|region|affiliation)$/i,
         handicap: /^(handicap|hcp|hdcp|index)$/i,
         date_of_birth: /^(dob|date\s*of\s*birth|birth\s*date|birthday)$/i,
@@ -1436,7 +1603,7 @@
         if (rosterStep === "upload") {
             await rosterParseFile();
         } else if (rosterStep === "map") {
-            rosterBuildPreview();
+            await rosterBuildPreview();
         } else if (rosterStep === "preview") {
             await rosterDoImport();
         } else {
@@ -1561,7 +1728,7 @@
         });
     }
 
-    function rosterBuildPreview() {
+    async function rosterBuildPreview() {
         // Read current mapping from selects
         document.querySelectorAll(".roster-map-select").forEach(sel => {
             const field = sel.dataset.field;
@@ -1569,8 +1736,11 @@
             rosterMapping[field] = val !== "" ? parseInt(val) : null;
         });
 
-        if (rosterMapping.customer === null || rosterMapping.customer === undefined) {
-            alert("Name field mapping is required.");
+        const hasFullName = rosterMapping.customer !== null && rosterMapping.customer !== undefined;
+        const hasFirstLast = (rosterMapping.first_name !== null && rosterMapping.first_name !== undefined) ||
+                             (rosterMapping.last_name !== null && rosterMapping.last_name !== undefined);
+        if (!hasFullName && !hasFirstLast) {
+            alert("A name field mapping is required — either Full Name, or First/Last Name.");
             return;
         }
 
@@ -1589,73 +1759,112 @@
         const skipNoEmail = document.getElementById("roster-skip-no-email")?.checked;
         const emailIdx = rosterMapping.customer_email;
 
-        // Build preview table — standard mapped fields + new fields
-        const mappedFields = ROSTER_DB_FIELDS.filter(f => rosterMapping[f.key] !== null && rosterMapping[f.key] !== undefined);
-        const headerRow = document.getElementById("roster-preview-header");
-        headerRow.innerHTML = mappedFields.map(f =>
-            `<th style="font-size:0.75rem;">${f.label}</th>`
-        ).join("")
-        + rosterNewFields.map(nf =>
-            `<th style="font-size:0.75rem; color:#7c3aed;">${escapeHtml(nf.label)} <span style="font-size:0.65rem; font-weight:400;">(new)</span></th>`
-        ).join("")
-        + '<th style="font-size:0.75rem;">Status</th>';
-
-        const existingNames = new Set(allCustomers.map(c => c.name.toLowerCase()));
-        let newCount = 0, updateCount = 0, skippedNoEmail = 0;
-
-        const tbody = document.getElementById("roster-preview-body");
-        tbody.innerHTML = rosterData.map(row => {
-            const nameIdx = rosterMapping.customer;
-            const name = (nameIdx !== null && row[nameIdx]) ? String(row[nameIdx]).trim() : "";
-            if (!name) return "";
-
-            // Skip rows without email if option is checked
-            if (skipNoEmail && emailIdx !== null && emailIdx !== undefined) {
+        // Filter data if skip-no-email is checked
+        let previewData = rosterData;
+        let skippedNoEmail = 0;
+        if (skipNoEmail && emailIdx !== null && emailIdx !== undefined) {
+            previewData = rosterData.filter(row => {
                 const email = row[emailIdx] ? String(row[emailIdx]).trim() : "";
-                if (!email) { skippedNoEmail++; return ""; }
-            }
-
-            const isExisting = existingNames.has(name.toLowerCase());
-            if (isExisting) updateCount++; else newCount++;
-
-            const cells = mappedFields.map(f => {
-                const idx = rosterMapping[f.key];
-                const val = idx !== null && row[idx] ? String(row[idx]).trim() : "";
-                return `<td>${escapeHtml(val)}</td>`;
-            }).join("");
-
-            const newCells = rosterNewFields.map(nf => {
-                const val = row[nf.col_index] ? String(row[nf.col_index]).trim() : "";
-                return `<td style="color:#7c3aed;">${escapeHtml(val)}</td>`;
-            }).join("");
-
-            const statusBadge = isExisting
-                ? '<span style="color:#2563eb; font-weight:600;">Update</span>'
-                : '<span style="color:#16a34a; font-weight:600;">New</span>';
-
-            return `<tr>${cells}${newCells}<td>${statusBadge}</td></tr>`;
-        }).filter(Boolean).join("");
-
-        const validRows = rosterData.filter(row => {
-            const idx = rosterMapping.customer;
-            if (!(idx !== null && row[idx] && String(row[idx]).trim())) return false;
-            if (skipNoEmail && emailIdx !== null && emailIdx !== undefined) {
-                const email = row[emailIdx] ? String(row[emailIdx]).trim() : "";
-                if (!email) return false;
-            }
-            return true;
-        });
-
-        document.getElementById("roster-preview-count").textContent = validRows.length;
-        document.getElementById("roster-new-count").textContent = newCount ? `(${newCount} new)` : "";
-        document.getElementById("roster-update-count").textContent = updateCount ? `(${updateCount} updates)` : "";
-        const skipNote = document.getElementById("roster-skip-note");
-        if (skipNote) {
-            skipNote.textContent = skippedNoEmail ? `(${skippedNoEmail} skipped — no email)` : "";
+                if (!email) { skippedNoEmail++; return false; }
+                return true;
+            });
         }
 
-        rosterStep = "preview";
-        updateRosterUI();
+        // Call server for AI-powered preview with name parsing + duplicate detection
+        const nextBtn = document.getElementById("roster-next");
+        nextBtn.disabled = true;
+        nextBtn.textContent = "Analyzing names...";
+
+        try {
+            const res = await fetch("/api/customers/preview-roster", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mapping: rosterMapping, data: previewData }),
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || "Preview failed");
+
+            const enrichedRows = result.rows || [];
+            const warnings = result.validation_warnings || [];
+
+            // Build preview table with enriched data
+            const headerRow = document.getElementById("roster-preview-header");
+            headerRow.innerHTML =
+                '<th style="font-size:0.75rem;">First</th>' +
+                '<th style="font-size:0.75rem;">Last</th>' +
+                '<th style="font-size:0.75rem;">Email</th>' +
+                '<th style="font-size:0.75rem;">Phone</th>' +
+                rosterNewFields.map(nf =>
+                    `<th style="font-size:0.75rem; color:#7c3aed;">${escapeHtml(nf.label)} <span style="font-size:0.65rem; font-weight:400;">(new)</span></th>`
+                ).join("") +
+                '<th style="font-size:0.75rem;">Status</th>' +
+                '<th style="font-size:0.75rem;">Details</th>';
+
+            let newCount = 0, updateCount = 0, dupeCount = 0;
+            const tbody = document.getElementById("roster-preview-body");
+            tbody.innerHTML = enrichedRows.map((row, idx) => {
+                const status = row._match_status || "new";
+                const detail = row._match_detail || "";
+                const willFill = row._will_fill || [];
+                const dupeOfRow = row._dupe_of_row;
+                const parsedName = row._parsed_name || row.customer || "";
+
+                if (status === "skip") return "";
+                if (status === "update") updateCount++;
+                else newCount++;
+                if (dupeOfRow) dupeCount++;
+
+                let statusBadge, detailText = "";
+                if (dupeOfRow) {
+                    statusBadge = `<span style="color:#d97706; font-weight:600;">Duplicate</span>`;
+                    detailText = `Same as row ${dupeOfRow} — will be skipped`;
+                } else if (status === "update") {
+                    statusBadge = `<span style="color:#2563eb; font-weight:600;">Update</span>`;
+                    detailText = detail;
+                    if (willFill.length) {
+                        detailText += `<br><span style="font-size:0.7rem; color:#16a34a;">Will fill: ${willFill.join(", ")}</span>`;
+                    }
+                } else {
+                    statusBadge = '<span style="color:#16a34a; font-weight:600;">New</span>';
+                }
+
+                return `<tr>
+                    <td>${escapeHtml(row.first_name || "")}</td>
+                    <td>${escapeHtml(row.last_name || "")}</td>
+                    <td>${escapeHtml(row.customer_email || "")}</td>
+                    <td>${escapeHtml(row.customer_phone || "")}</td>
+                    ${rosterNewFields.map(nf => {
+                        const mappedIdx = rosterMapping[nf.name];
+                        return `<td style="color:#7c3aed;">${escapeHtml(row[nf.name] || "")}</td>`;
+                    }).join("")}
+                    <td>${statusBadge}</td>
+                    <td style="font-size:0.72rem; color:var(--text-muted);">${detailText}</td>
+                </tr>`;
+            }).filter(Boolean).join("");
+
+            document.getElementById("roster-preview-count").textContent = enrichedRows.filter(r => r._match_status !== "skip").length;
+            document.getElementById("roster-new-count").textContent = newCount ? `(${newCount} new)` : "";
+            document.getElementById("roster-update-count").textContent = updateCount ? `(${updateCount} updates)` : "";
+            const skipNote = document.getElementById("roster-skip-note");
+            if (skipNote) {
+                const parts = [];
+                if (skippedNoEmail) parts.push(`${skippedNoEmail} skipped — no email`);
+                if (dupeCount) parts.push(`${dupeCount} duplicates within spreadsheet`);
+                if (warnings.length) parts.push(`${warnings.length} validation warning(s)`);
+                skipNote.textContent = parts.length ? `(${parts.join("; ")})` : "";
+                if (warnings.length) {
+                    skipNote.title = warnings.join("\n");
+                }
+            }
+
+            rosterStep = "preview";
+            updateRosterUI();
+        } catch (err) {
+            alert("Preview failed: " + err.message);
+        } finally {
+            nextBtn.disabled = false;
+            nextBtn.textContent = "Preview Import";
+        }
     }
 
     async function rosterDoImport() {
