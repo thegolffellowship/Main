@@ -37,6 +37,7 @@ from email_parser.database import (
     credit_item,
     transfer_item,
     reverse_credit,
+    wd_item,
     create_event,
     seed_events,
     add_player_to_event,
@@ -1155,6 +1156,18 @@ def api_credit_item(item_id):
     if credit_item(item_id, note=data.get("note", "")):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
+
+
+@app.route("/api/items/<int:item_id>/wd", methods=["POST"])
+def api_wd_item(item_id):
+    """Mark an item as WD (withdrawn) with optional partial credit."""
+    data = request.get_json(silent=True) or {}
+    note = data.get("note", "")
+    credits = data.get("credits")  # dict like {"included_games": 14, ...}
+    credit_amount = data.get("credit_amount", "")
+    if wd_item(item_id, note=note, credits=credits, credit_amount=credit_amount):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Item not found or already credited/transferred/WD."}), 400
 
 
 @app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
