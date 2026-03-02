@@ -1067,30 +1067,51 @@
             const tee = (r.tee_choice || "").trim();
             const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
-            const editBtn = !isSynthetic ? `<button class="btn btn-edit" data-edit-item="${r.id}" style="font-size:0.7rem; padding:0.15rem 0.4rem;">Edit</button> ` : '';
             let actionBtn = '';
             if (isSynthetic) {
                 actionBtn = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (isRsvpOnly) {
-                actionBtn = editBtn + `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (isComp) {
-                actionBtn = editBtn + `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "active" && !r.transferred_from_id) {
-                actionBtn = editBtn + `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                 if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred") {
                 actionBtn = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
             }
 
-            const fields = [
+            const txFields = [
                 ["Price", r.item_price || "\u2014"],
-                ["Handicap", r.handicap || "\u2014"],
-                ["Status", r.member_status || "\u2014"],
-                ["Partner Request", r.partner_request || "\u2014"],
-                ["Fellowship After", r.fellowship_after || "\u2014"],
-                ["Notes", r.notes || "\u2014"],
+                ["Side Games", sideGameLabel],
                 ["Order Date", r.order_date || "\u2014"],
+                ["Tee", r.tee_choice || "\u2014"],
             ];
+
+            const infoFields = !isSynthetic ? [
+                { key: "customer", label: "Name", value: r.customer || "", type: "text" },
+                { key: "customer_email", label: "Email", value: r.customer_email || "", type: "email" },
+                { key: "customer_phone", label: "Phone", value: r.customer_phone || "", type: "text" },
+                { key: "handicap", label: "Handicap", value: r.handicap || "", type: "text" },
+                { key: "side_games", label: "Side Games", value: (r.side_games || "").toUpperCase().trim(), type: "select", options: ["", "NET", "GROSS", "BOTH", "NONE"] },
+                { key: "tee_choice", label: "Tee Choice", value: r.tee_choice || "", type: "text" },
+                { key: "member_status", label: "Member Status", value: r.member_status || "", type: "select", options: ["", "MEMBER", "GUEST", "1st TIMER", "Manager"] },
+                { key: "chapter", label: "Chapter", value: r.chapter || "", type: "text" },
+                { key: "partner_request", label: "Partner Request", value: r.partner_request || "", type: "text" },
+                { key: "notes", label: "Notes", value: r.notes || "", type: "text" },
+            ] : null;
+
+            const infoFieldsHtml = infoFields ? infoFields.map(f => {
+                let input;
+                if (f.type === "select") {
+                    input = `<select class="mc-edit-input" data-field="${f.key}" style="width:100%; font-size:0.78rem; padding:0.2rem 0.3rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-card);">` +
+                        f.options.map(o => `<option value="${escapeHtml(o)}"${o === f.value ? ' selected' : ''}>${o || '--'}</option>`).join("") +
+                        `</select>`;
+                } else {
+                    input = `<input type="${f.type}" class="mc-edit-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="width:100%; font-size:0.78rem; padding:0.2rem 0.3rem; border:1px solid var(--border); border-radius:4px;">`;
+                }
+                return `<div class="mc-field"><span class="mc-field-label">${f.label}</span>${input}</div>`;
+            }).join("") : '';
 
             html += `
             <div class="mobile-card${statusClass}" style="${(isRsvpOnly || isGgRsvp) ? 'background:#fef3c7;font-style:italic;' : isComp ? 'background:#dcfce7;' : isManual ? 'background:#dbeafe;' : ''}" data-id="${r.id}">
@@ -1103,10 +1124,24 @@
                     <span class="mc-chevron">&#9656;</span>
                 </div>
                 <div class="mobile-card-details">
-                    <div class="mc-field-grid">
-                        ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
+                    ${!isSynthetic ? `<div class="mc-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border);">
+                        <button type="button" class="mc-tab active" data-tab="transactions" style="flex:1; padding:0.3rem 0; font-size:0.75rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
+                        <button type="button" class="mc-tab" data-tab="info" style="flex:1; padding:0.3rem 0; font-size:0.75rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
+                    </div>` : ''}
+                    <div class="mc-tab-content mc-tab-transactions">
+                        <div class="mc-field-grid">
+                            ${txFields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
+                        </div>
+                        ${actionBtn ? `<div class="mc-actions">${actionBtn}</div>` : ''}
                     </div>
-                    ${actionBtn ? `<div class="mc-actions">${actionBtn}</div>` : ''}
+                    ${infoFields ? `<div class="mc-tab-content mc-tab-info" style="display:none;">
+                        <div class="mc-field-grid">
+                            ${infoFieldsHtml}
+                        </div>
+                        <div class="mc-actions" style="margin-top:0.4rem;">
+                            <button type="button" class="btn btn-primary mc-save-info" data-item-id="${r.id}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Save</button>
+                        </div>
+                    </div>` : ''}
                 </div>
             </div>`;
         });
@@ -2344,7 +2379,79 @@
             });
         });
 
-        // Edit player button
+        // Player card tab switching (Transactions / Info)
+        container.querySelectorAll(".mc-tab").forEach(tab => {
+            tab.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const card = tab.closest(".mobile-card-details");
+                if (!card) return;
+                const target = tab.dataset.tab;
+                card.querySelectorAll(".mc-tab").forEach(t => {
+                    const isActive = t.dataset.tab === target;
+                    t.classList.toggle("active", isActive);
+                    t.style.borderBottomColor = isActive ? "#2563eb" : "transparent";
+                    t.style.color = isActive ? "#2563eb" : "var(--text-muted)";
+                });
+                card.querySelector(".mc-tab-transactions").style.display = target === "transactions" ? "" : "none";
+                const infoPanel = card.querySelector(".mc-tab-info");
+                if (infoPanel) infoPanel.style.display = target === "info" ? "" : "none";
+            });
+        });
+
+        // Inline save on Info tab
+        container.querySelectorAll(".mc-save-info").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(btn.dataset.itemId);
+                if (!itemId) return;
+                const card = btn.closest(".mc-tab-info");
+                if (!card) return;
+                const fields = {};
+                card.querySelectorAll(".mc-edit-input").forEach(inp => {
+                    fields[inp.dataset.field] = inp.value.trim();
+                });
+                btn.disabled = true;
+                btn.textContent = "Saving...";
+                try {
+                    const resp = await fetch(`/api/items/${itemId}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(fields),
+                    });
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        throw new Error(data.error || `Server returned ${resp.status}`);
+                    }
+                    const item = allItems.find(r => r.id === itemId);
+                    if (item) Object.assign(item, fields);
+                    btn.textContent = "Saved!";
+                    btn.style.background = "#16a34a";
+                    setTimeout(() => {
+                        btn.textContent = "Save";
+                        btn.style.background = "";
+                        btn.disabled = false;
+                        // Re-render to update top tags (side games, tee, name, etc.)
+                        if (expandedEventId !== null) {
+                            const ev = allEvents.find(e => e.id === expandedEventId);
+                            if (ev) {
+                                const desktopContainer = document.getElementById(`detail-content-${expandedEventId}`);
+                                if (desktopContainer) {
+                                    desktopContainer.innerHTML = renderDetailContent(ev);
+                                    attachDetailHandlers(desktopContainer, ev);
+                                }
+                                renderEventsMobile(getFilteredSortedEvents());
+                            }
+                        }
+                    }, 800);
+                } catch (err) {
+                    alert("Failed to save: " + err.message);
+                    btn.disabled = false;
+                    btn.textContent = "Save";
+                }
+            });
+        });
+
+        // Edit player button (desktop table)
         container.querySelectorAll("[data-edit-item]").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
