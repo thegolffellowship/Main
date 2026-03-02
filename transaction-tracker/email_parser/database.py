@@ -1230,6 +1230,31 @@ def resolve_orphaned_items(old_item_name: str, target_event_name: str,
 # ---------------------------------------------------------------------------
 
 
+def update_customer_info(customer_name: str, fields: dict,
+                        db_path: str | Path | None = None) -> int:
+    """Update personal info fields across all items for a customer.
+
+    Only updates columns in the provided dict. Returns count of rows updated.
+    """
+    allowed = {"customer_email", "customer_phone", "chapter", "handicap",
+               "date_of_birth", "shirt_size", "customer"}
+    safe = {k: v for k, v in fields.items() if k in allowed}
+    if not safe:
+        return 0
+
+    _validate_column_names(list(safe))
+    set_clause = ", ".join(f"{col} = ?" for col in safe)
+    values = list(safe.values()) + [customer_name]
+
+    with _connect(db_path) as conn:
+        cursor = conn.execute(
+            f"UPDATE items SET {set_clause} WHERE customer = ? COLLATE NOCASE",
+            values,
+        )
+        conn.commit()
+        return cursor.rowcount
+
+
 def merge_customers(source_name: str, target_name: str,
                     db_path: str | Path | None = None) -> dict:
     """
