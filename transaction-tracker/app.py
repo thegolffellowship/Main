@@ -67,6 +67,7 @@ from email_parser.database import (
     get_rsvp_email_overrides,
     set_rsvp_email_override,
     merge_customers,
+    update_customer_info,
     save_feedback,
     get_all_feedback,
     update_feedback_status,
@@ -993,6 +994,33 @@ def events_page():
 @app.route("/customers")
 def customers_page():
     return render_template("customers.html")
+
+
+@app.route("/api/customers/update", methods=["POST"])
+@require_role("manager")
+def api_update_customer():
+    """Update personal info fields across all items for a customer.
+
+    Body: { customer_name: str, fields: {customer_email, customer_phone, chapter, ...} }
+    Updates every item row matching this customer name.
+    """
+    data = request.get_json(force=True)
+    customer_name = (data.get("customer_name") or "").strip()
+    fields = data.get("fields") or {}
+    if not customer_name:
+        return jsonify({"error": "customer_name is required"}), 400
+    if not fields:
+        return jsonify({"error": "fields object is required"}), 400
+
+    # Only allow personal-info columns, not transaction data
+    allowed = {"customer_email", "customer_phone", "chapter", "handicap",
+               "date_of_birth", "shirt_size", "customer"}
+    safe = {k: v for k, v in fields.items() if k in allowed}
+    if not safe:
+        return jsonify({"error": "No valid fields to update"}), 400
+
+    updated = update_customer_info(customer_name, safe)
+    return jsonify({"status": "ok", "items_updated": updated})
 
 
 @app.route("/api/customers/merge", methods=["POST"])

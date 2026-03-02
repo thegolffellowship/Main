@@ -119,23 +119,7 @@
         <section id="customer-detail" style="display:none;" class="customer-detail-section">
             <h3 id="detail-title" style="margin-bottom: 0.75rem; font-size: 1.1rem;"></h3>
             <div id="detail-meta" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;"></div>
-            <div class="customer-detail-panel">
-                <table id="detail-table" style="width:100%; border-collapse:collapse;">
-                    <thead>
-                        <tr>
-                            <th>Event Date</th>
-                            <th>Item</th>
-                            <th>Price</th>
-                            <th>City</th>
-                            <th>Course</th>
-                            <th>Side Games</th>
-                            <th>Order Date</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="detail-body"></tbody>
-                </table>
-            </div>
+            <div id="detail-panel-body" class="customer-detail-panel"></div>
         </section>
     </main>
 
@@ -489,6 +473,42 @@
         document.getElementById("stat-total-spent").textContent = "$" + Math.round(totalSpent).toLocaleString();
     }
 
+    function renderCustExpandedContent(customer) {
+        const infoFields = [
+            { key: "customer", label: "Name", value: customer.name || "" },
+            { key: "customer_email", label: "Email", value: customer.email || "" },
+            { key: "customer_phone", label: "Phone", value: customer.phone || "" },
+            { key: "chapter", label: "Chapter", value: customer.chapter || "" },
+            { key: "handicap", label: "Handicap", value: (customer.items[0] || {}).handicap || "" },
+            { key: "date_of_birth", label: "Date of Birth", value: (customer.items[0] || {}).date_of_birth || "" },
+            { key: "shirt_size", label: "Shirt Size", value: (customer.items[0] || {}).shirt_size || "" },
+        ];
+        const infoHtml = infoFields.map(f =>
+            `<div class="mc-field">` +
+            `<span class="mc-field-label">${f.label}</span>` +
+            `<input type="text" class="cust-edit-input" data-field="${f.key}" value="${escapeHtml(f.value)}" ` +
+            `style="width:100%; font-size:0.78rem; padding:0.25rem 0.4rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-card);">` +
+            `</div>`
+        ).join("");
+
+        return `
+        <div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border);">
+            <button type="button" class="cust-tab active" data-tab="transactions" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
+            <button type="button" class="cust-tab" data-tab="info" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
+        </div>
+        <div class="cust-tab-content cust-tab-transactions">
+            ${renderCustDetailMobile(customer)}
+        </div>
+        <div class="cust-tab-content cust-tab-info" style="display:none;">
+            <div class="mc-field-grid">
+                ${infoHtml}
+            </div>
+            <div class="mc-actions" style="margin-top:0.5rem;">
+                <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.78rem; padding:0.35rem 0.8rem;">Save</button>
+            </div>
+        </div>`;
+    }
+
     function renderCustDetailMobile(customer) {
         const sorted = [...customer.items].sort((a, b) =>
             (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""));
@@ -566,7 +586,7 @@
                     <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
                 </div>
                 <div class="mobile-card-details" ${isExpanded ? 'style="display:block;"' : ''}>
-                    ${isExpanded ? renderCustDetailMobile(c) : ''}
+                    ${isExpanded ? renderCustExpandedContent(c) : ''}
                 </div>
             </div>`;
         }).join("");
@@ -599,6 +619,55 @@
                         reverseCustCredit(parseInt(btn.dataset.custReverseId));
                     });
                 });
+
+                // Tab switching (Transactions / Info)
+                expandedCard.querySelectorAll(".cust-tab").forEach(tab => {
+                    tab.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        const target = tab.dataset.tab;
+                        expandedCard.querySelectorAll(".cust-tab").forEach(t => {
+                            const isActive = t.dataset.tab === target;
+                            t.classList.toggle("active", isActive);
+                            t.style.borderBottomColor = isActive ? "#2563eb" : "transparent";
+                            t.style.color = isActive ? "#2563eb" : "var(--text-muted)";
+                        });
+                        expandedCard.querySelector(".cust-tab-transactions").style.display = target === "transactions" ? "" : "none";
+                        expandedCard.querySelector(".cust-tab-info").style.display = target === "info" ? "" : "none";
+                    });
+                });
+
+                // Save customer info
+                const saveBtn = expandedCard.querySelector(".cust-save-info");
+                if (saveBtn) {
+                    saveBtn.addEventListener("click", async (e) => {
+                        e.stopPropagation();
+                        const customerName = saveBtn.dataset.customerName;
+                        const fields = {};
+                        expandedCard.querySelectorAll(".cust-edit-input").forEach(inp => {
+                            fields[inp.dataset.field] = inp.value.trim();
+                        });
+                        saveBtn.disabled = true;
+                        saveBtn.textContent = "Saving...";
+                        try {
+                            const resp = await fetch("/api/customers/update", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ customer_name: customerName, fields }),
+                            });
+                            if (!resp.ok) {
+                                const data = await resp.json().catch(() => ({}));
+                                throw new Error(data.error || `Server returned ${resp.status}`);
+                            }
+                            saveBtn.textContent = "Saved!";
+                            saveBtn.style.background = "#16a34a";
+                            setTimeout(() => init(), 800);
+                        } catch (err) {
+                            alert("Failed to save: " + err.message);
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = "Save";
+                        }
+                    });
+                }
             }
         }
     }
@@ -705,6 +774,29 @@
         });
     }
 
+    function renderCustInfoPanel(customer) {
+        const infoFields = [
+            { key: "customer", label: "Name", value: customer.name || "" },
+            { key: "customer_email", label: "Email", value: customer.email || "" },
+            { key: "customer_phone", label: "Phone", value: customer.phone || "" },
+            { key: "chapter", label: "Chapter", value: customer.chapter || "" },
+            { key: "handicap", label: "Handicap", value: (customer.items[0] || {}).handicap || "" },
+            { key: "date_of_birth", label: "Date of Birth", value: customer.items.map(i => i.date_of_birth).find(Boolean) || "" },
+            { key: "shirt_size", label: "Shirt Size", value: customer.items.map(i => i.shirt_size).find(Boolean) || "" },
+        ];
+        return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 0.75rem; max-width:500px; font-size:0.82rem;">` +
+            infoFields.map(f =>
+                `<label style="display:block;">` +
+                `<span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${f.label}</span>` +
+                `<input type="text" class="cust-edit-input modal-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="margin-top:0.15rem;">` +
+                `</label>`
+            ).join("") +
+            `</div>
+            <div style="margin-top:0.6rem;">
+                <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.78rem; padding:0.35rem 0.8rem;">Save</button>
+            </div>`;
+    }
+
     function renderCustDetailContent(customer) {
         // Extract membership-specific info from their items
         const membershipItem = customer.items.find(i => (i.item_name || "").toUpperCase().includes("MEMBERSHIP"));
@@ -735,6 +827,15 @@
         if (badges.length) {
             html += `<div style="margin-bottom:0.5rem; display:flex; gap:0.3rem; flex-wrap:wrap;">${badges.join("")}</div>`;
         }
+
+        // Tab bar
+        html += `<div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.75rem; border-bottom:2px solid var(--border);">
+            <button type="button" class="cust-tab active" data-tab="transactions" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
+            <button type="button" class="cust-tab" data-tab="info" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
+        </div>`;
+
+        // Transactions tab content
+        html += '<div class="cust-tab-content cust-tab-transactions">';
         html += '<table class="registrants-table"><thead><tr>';
         html += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Order Date</th><th>Actions</th>';
         html += '</tr></thead><tbody>';
@@ -767,7 +868,11 @@
             </tr>`;
         });
 
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
+
+        // Info tab content
+        html += `<div class="cust-tab-content cust-tab-info" style="display:none;">${renderCustInfoPanel(customer)}</div>`;
+
         return html;
     }
 
@@ -795,6 +900,55 @@
         container.querySelectorAll("a.cell-link").forEach(a => {
             a.addEventListener("click", (e) => e.stopPropagation());
         });
+
+        // Tab switching (Transactions / Info)
+        container.querySelectorAll(".cust-tab").forEach(tab => {
+            tab.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const target = tab.dataset.tab;
+                container.querySelectorAll(".cust-tab").forEach(t => {
+                    const isActive = t.dataset.tab === target;
+                    t.classList.toggle("active", isActive);
+                    t.style.borderBottomColor = isActive ? "#2563eb" : "transparent";
+                    t.style.color = isActive ? "#2563eb" : "var(--text-muted)";
+                });
+                container.querySelector(".cust-tab-transactions").style.display = target === "transactions" ? "" : "none";
+                container.querySelector(".cust-tab-info").style.display = target === "info" ? "" : "none";
+            });
+        });
+
+        // Save customer info
+        const saveBtn = container.querySelector(".cust-save-info");
+        if (saveBtn) {
+            saveBtn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const customerName = saveBtn.dataset.customerName;
+                const fields = {};
+                container.querySelectorAll(".cust-edit-input").forEach(inp => {
+                    fields[inp.dataset.field] = inp.value.trim();
+                });
+                saveBtn.disabled = true;
+                saveBtn.textContent = "Saving...";
+                try {
+                    const resp = await fetch("/api/customers/update", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ customer_name: customerName, fields }),
+                    });
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        throw new Error(data.error || `Server returned ${resp.status}`);
+                    }
+                    saveBtn.textContent = "Saved!";
+                    saveBtn.style.background = "#16a34a";
+                    setTimeout(() => init(), 800);
+                } catch (err) {
+                    alert("Failed to save: " + err.message);
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = "Save";
+                }
+            });
+        }
     }
 
     function toggleCustomerDetail(customer) {
@@ -841,10 +995,24 @@
         meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} total`);
         document.getElementById("detail-meta").innerHTML = meta.join(" | ");
 
-        const tbody = document.getElementById("detail-body");
-        tbody.innerHTML = customer.items
+        // Build tabbed content for the detail panel
+        const panelBody = document.getElementById("detail-panel-body");
+        let panelHtml = '';
+
+        // Tab bar
+        panelHtml += `<div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.75rem; border-bottom:2px solid var(--border);">
+            <button type="button" class="cust-tab active" data-tab="transactions" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
+            <button type="button" class="cust-tab" data-tab="info" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
+        </div>`;
+
+        // Transactions tab
+        panelHtml += '<div class="cust-tab-content cust-tab-transactions">';
+        panelHtml += '<table style="width:100%; border-collapse:collapse;"><thead><tr>';
+        panelHtml += '<th>Event Date</th><th>Item</th><th>Price</th><th>City</th><th>Course</th><th>Side Games</th><th>Order Date</th><th>Actions</th>';
+        panelHtml += '</tr></thead><tbody>';
+        customer.items
             .sort((a, b) => (b.event_date || b.order_date || "").localeCompare(a.event_date || a.order_date || ""))
-            .map(item => {
+            .forEach(item => {
                 const txStatus = item.transaction_status || "active";
                 const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (item.transferred_from_id ? ' class="row-from-transfer"' : '');
                 let tag = "";
@@ -857,26 +1025,26 @@
                 } else if (txStatus === "credited" || txStatus === "transferred") {
                     actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                 }
-                return `
-            <tr${rowClass}>
-                <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
-                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
-                <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
-                <td>${escapeHtml(item.city || "\u2014")}</td>
-                <td>${escapeHtml(item.course || "\u2014")}</td>
-                <td>${escapeHtml(item.side_games || "\u2014")}</td>
-                <td>${escapeHtml(item.order_date || "\u2014")}</td>
-                <td>${actionBtn}</td>
-            </tr>`;
-            }).join("");
+                panelHtml += `<tr${rowClass}>
+                    <td>${escapeHtml(item.event_date || item.order_date || "\u2014")}</td>
+                    <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
+                    <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
+                    <td>${escapeHtml(item.city || "\u2014")}</td>
+                    <td>${escapeHtml(item.course || "\u2014")}</td>
+                    <td>${escapeHtml(item.side_games || "\u2014")}</td>
+                    <td>${escapeHtml(item.order_date || "\u2014")}</td>
+                    <td>${actionBtn}</td>
+                </tr>`;
+            });
+        panelHtml += '</tbody></table></div>';
 
-        // Wire up credit/reverse buttons
-        tbody.querySelectorAll("[data-cust-credit-id]").forEach(btn => {
-            btn.addEventListener("click", () => openCustCreditModal(parseInt(btn.dataset.custCreditId)));
-        });
-        tbody.querySelectorAll("[data-cust-reverse-id]").forEach(btn => {
-            btn.addEventListener("click", () => reverseCustCredit(parseInt(btn.dataset.custReverseId)));
-        });
+        // Info tab
+        panelHtml += `<div class="cust-tab-content cust-tab-info" style="display:none;">${renderCustInfoPanel(customer)}</div>`;
+
+        panelBody.innerHTML = panelHtml;
+
+        // Wire up all handlers (tabs, save, credit/reverse, merge, links)
+        attachCustDetailHandlers(panelBody);
 
         // Highlight in current view
         if (currentView === "list") {

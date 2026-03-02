@@ -703,74 +703,6 @@
         </div>
     </div>
 
-    <!-- Edit Player Modal -->
-    <div id="edit-player-overlay" class="modal-overlay" style="display:none;">
-        <div class="modal" style="max-width:480px;">
-            <div class="modal-header">
-                <h2 id="edit-player-title">Edit Player</h2>
-                <button id="edit-player-close" class="modal-close">&times;</button>
-            </div>
-            <div id="edit-player-body" style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 0.75rem; font-size:0.82rem;">
-                <label style="display:block;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Name</span>
-                    <input type="text" id="edit-player-name" class="modal-input" style="margin-top:0.15rem;">
-                </label>
-                <label style="display:block;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Email</span>
-                    <input type="email" id="edit-player-email" class="modal-input" style="margin-top:0.15rem;">
-                </label>
-                <label style="display:block;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Phone</span>
-                    <input type="text" id="edit-player-phone" class="modal-input" style="margin-top:0.15rem;">
-                </label>
-                <label style="display:block;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Handicap</span>
-                    <input type="text" id="edit-player-handicap" class="modal-input" style="margin-top:0.15rem;">
-                </label>
-                <label style="display:block;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Side Games</span>
-                    <select id="edit-player-side-games" class="modal-input" style="margin-top:0.15rem;">
-                        <option value="">--</option>
-                        <option value="NET">NET</option>
-                        <option value="GROSS">GROSS</option>
-                        <option value="BOTH">BOTH</option>
-                        <option value="NONE">NONE</option>
-                    </select>
-                </label>
-                <label style="display:block;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Tee Choice</span>
-                    <input type="text" id="edit-player-tee" class="modal-input" style="margin-top:0.15rem;">
-                </label>
-                <label style="display:block;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Member Status</span>
-                    <select id="edit-player-member-status" class="modal-input" style="margin-top:0.15rem;">
-                        <option value="">--</option>
-                        <option value="MEMBER">MEMBER</option>
-                        <option value="GUEST">GUEST</option>
-                        <option value="1st TIMER">1st TIMER</option>
-                        <option value="Manager">Manager</option>
-                    </select>
-                </label>
-                <label style="display:block;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Chapter</span>
-                    <input type="text" id="edit-player-chapter" class="modal-input" style="margin-top:0.15rem;">
-                </label>
-                <label style="display:block; grid-column:1/-1;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Partner Request</span>
-                    <input type="text" id="edit-player-partner" class="modal-input" style="margin-top:0.15rem;">
-                </label>
-                <label style="display:block; grid-column:1/-1;">
-                    <span style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">Notes</span>
-                    <textarea id="edit-player-notes" class="modal-input" rows="2" style="margin-top:0.15rem; resize:vertical;"></textarea>
-                </label>
-            </div>
-            <div class="modal-actions" style="margin-top:0.75rem;">
-                <button type="button" id="edit-player-cancel" class="btn btn-secondary">Cancel</button>
-                <button type="button" id="edit-player-save" class="btn btn-primary">Save Changes</button>
-            </div>
-        </div>
-    </div>
-
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/chat-widget.js"></script>
@@ -1081,37 +1013,15 @@
                 actionBtn = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
             }
 
-            const txFields = [
+            const fields = [
                 ["Price", r.item_price || "\u2014"],
-                ["Side Games", sideGameLabel],
+                ["Handicap", r.handicap || "\u2014"],
+                ["Status", r.member_status || "\u2014"],
+                ["Partner Request", r.partner_request || "\u2014"],
+                ["Fellowship After", r.fellowship_after || "\u2014"],
+                ["Notes", r.notes || "\u2014"],
                 ["Order Date", r.order_date || "\u2014"],
-                ["Tee", r.tee_choice || "\u2014"],
             ];
-
-            const infoFields = !isSynthetic ? [
-                { key: "customer", label: "Name", value: r.customer || "", type: "text" },
-                { key: "customer_email", label: "Email", value: r.customer_email || "", type: "email" },
-                { key: "customer_phone", label: "Phone", value: r.customer_phone || "", type: "text" },
-                { key: "handicap", label: "Handicap", value: r.handicap || "", type: "text" },
-                { key: "side_games", label: "Side Games", value: (r.side_games || "").toUpperCase().trim(), type: "select", options: ["", "NET", "GROSS", "BOTH", "NONE"] },
-                { key: "tee_choice", label: "Tee Choice", value: r.tee_choice || "", type: "text" },
-                { key: "member_status", label: "Member Status", value: r.member_status || "", type: "select", options: ["", "MEMBER", "GUEST", "1st TIMER", "Manager"] },
-                { key: "chapter", label: "Chapter", value: r.chapter || "", type: "text" },
-                { key: "partner_request", label: "Partner Request", value: r.partner_request || "", type: "text" },
-                { key: "notes", label: "Notes", value: r.notes || "", type: "text" },
-            ] : null;
-
-            const infoFieldsHtml = infoFields ? infoFields.map(f => {
-                let input;
-                if (f.type === "select") {
-                    input = `<select class="mc-edit-input" data-field="${f.key}" style="width:100%; font-size:0.78rem; padding:0.2rem 0.3rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-card);">` +
-                        f.options.map(o => `<option value="${escapeHtml(o)}"${o === f.value ? ' selected' : ''}>${o || '--'}</option>`).join("") +
-                        `</select>`;
-                } else {
-                    input = `<input type="${f.type}" class="mc-edit-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="width:100%; font-size:0.78rem; padding:0.2rem 0.3rem; border:1px solid var(--border); border-radius:4px;">`;
-                }
-                return `<div class="mc-field"><span class="mc-field-label">${f.label}</span>${input}</div>`;
-            }).join("") : '';
 
             html += `
             <div class="mobile-card${statusClass}" style="${(isRsvpOnly || isGgRsvp) ? 'background:#fef3c7;font-style:italic;' : isComp ? 'background:#dcfce7;' : isManual ? 'background:#dbeafe;' : ''}" data-id="${r.id}">
@@ -1124,24 +1034,10 @@
                     <span class="mc-chevron">&#9656;</span>
                 </div>
                 <div class="mobile-card-details">
-                    ${!isSynthetic ? `<div class="mc-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border);">
-                        <button type="button" class="mc-tab active" data-tab="transactions" style="flex:1; padding:0.3rem 0; font-size:0.75rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
-                        <button type="button" class="mc-tab" data-tab="info" style="flex:1; padding:0.3rem 0; font-size:0.75rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
-                    </div>` : ''}
-                    <div class="mc-tab-content mc-tab-transactions">
-                        <div class="mc-field-grid">
-                            ${txFields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
-                        </div>
-                        ${actionBtn ? `<div class="mc-actions">${actionBtn}</div>` : ''}
+                    <div class="mc-field-grid">
+                        ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
                     </div>
-                    ${infoFields ? `<div class="mc-tab-content mc-tab-info" style="display:none;">
-                        <div class="mc-field-grid">
-                            ${infoFieldsHtml}
-                        </div>
-                        <div class="mc-actions" style="margin-top:0.4rem;">
-                            <button type="button" class="btn btn-primary mc-save-info" data-item-id="${r.id}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Save</button>
-                        </div>
-                    </div>` : ''}
+                    ${actionBtn ? `<div class="mc-actions">${actionBtn}</div>` : ''}
                 </div>
             </div>`;
         });
@@ -1896,14 +1792,11 @@
                     if (isSynthetic) {
                         btns = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
-                        btns = `<button class="btn btn-edit" data-edit-item="${r.id}" style="font-size:0.7rem; padding:0.15rem 0.4rem;">Edit</button> `;
-                        btns += `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isCompRow) {
-                        btns = `<button class="btn btn-edit" data-edit-item="${r.id}" style="font-size:0.7rem; padding:0.15rem 0.4rem;">Edit</button> `;
-                        btns += `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "active" && !r.transferred_from_id) {
-                        btns = `<button class="btn btn-edit" data-edit-item="${r.id}" style="font-size:0.7rem; padding:0.15rem 0.4rem;">Edit</button> `;
-                        btns += `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                        btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                         if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "credited" || txStatus === "transferred") {
                         btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
@@ -2379,86 +2272,6 @@
             });
         });
 
-        // Player card tab switching (Transactions / Info)
-        container.querySelectorAll(".mc-tab").forEach(tab => {
-            tab.addEventListener("click", (e) => {
-                e.stopPropagation();
-                const card = tab.closest(".mobile-card-details");
-                if (!card) return;
-                const target = tab.dataset.tab;
-                card.querySelectorAll(".mc-tab").forEach(t => {
-                    const isActive = t.dataset.tab === target;
-                    t.classList.toggle("active", isActive);
-                    t.style.borderBottomColor = isActive ? "#2563eb" : "transparent";
-                    t.style.color = isActive ? "#2563eb" : "var(--text-muted)";
-                });
-                card.querySelector(".mc-tab-transactions").style.display = target === "transactions" ? "" : "none";
-                const infoPanel = card.querySelector(".mc-tab-info");
-                if (infoPanel) infoPanel.style.display = target === "info" ? "" : "none";
-            });
-        });
-
-        // Inline save on Info tab
-        container.querySelectorAll(".mc-save-info").forEach(btn => {
-            btn.addEventListener("click", async (e) => {
-                e.stopPropagation();
-                const itemId = parseInt(btn.dataset.itemId);
-                if (!itemId) return;
-                const card = btn.closest(".mc-tab-info");
-                if (!card) return;
-                const fields = {};
-                card.querySelectorAll(".mc-edit-input").forEach(inp => {
-                    fields[inp.dataset.field] = inp.value.trim();
-                });
-                btn.disabled = true;
-                btn.textContent = "Saving...";
-                try {
-                    const resp = await fetch(`/api/items/${itemId}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(fields),
-                    });
-                    if (!resp.ok) {
-                        const data = await resp.json().catch(() => ({}));
-                        throw new Error(data.error || `Server returned ${resp.status}`);
-                    }
-                    const item = allItems.find(r => r.id === itemId);
-                    if (item) Object.assign(item, fields);
-                    btn.textContent = "Saved!";
-                    btn.style.background = "#16a34a";
-                    setTimeout(() => {
-                        btn.textContent = "Save";
-                        btn.style.background = "";
-                        btn.disabled = false;
-                        // Re-render to update top tags (side games, tee, name, etc.)
-                        if (expandedEventId !== null) {
-                            const ev = allEvents.find(e => e.id === expandedEventId);
-                            if (ev) {
-                                const desktopContainer = document.getElementById(`detail-content-${expandedEventId}`);
-                                if (desktopContainer) {
-                                    desktopContainer.innerHTML = renderDetailContent(ev);
-                                    attachDetailHandlers(desktopContainer, ev);
-                                }
-                                renderEventsMobile(getFilteredSortedEvents());
-                            }
-                        }
-                    }, 800);
-                } catch (err) {
-                    alert("Failed to save: " + err.message);
-                    btn.disabled = false;
-                    btn.textContent = "Save";
-                }
-            });
-        });
-
-        // Edit player button (desktop table)
-        container.querySelectorAll("[data-edit-item]").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                const itemId = parseInt(btn.dataset.editItem);
-                openEditPlayerModal(itemId);
-            });
-        });
     }
 
     // ---- Compose Message Modal Logic ----
@@ -2816,88 +2629,6 @@
 
     // ---- Events-page Credit/Transfer modal logic ----
     let evCreditItemId = null;
-    // ---- Edit Player Modal Logic ----
-    let editPlayerItemId = null;
-
-    function openEditPlayerModal(itemId) {
-        const item = allItems.find(r => r.id === itemId);
-        if (!item) { alert("Player not found"); return; }
-        editPlayerItemId = itemId;
-        document.getElementById("edit-player-title").textContent = `Edit: ${item.customer || "Player"}`;
-        document.getElementById("edit-player-name").value = item.customer || "";
-        document.getElementById("edit-player-email").value = item.customer_email || "";
-        document.getElementById("edit-player-phone").value = item.customer_phone || "";
-        document.getElementById("edit-player-handicap").value = item.handicap || "";
-        document.getElementById("edit-player-side-games").value = (item.side_games || "").toUpperCase().trim();
-        document.getElementById("edit-player-tee").value = item.tee_choice || "";
-        document.getElementById("edit-player-member-status").value = item.member_status || "";
-        document.getElementById("edit-player-chapter").value = item.chapter || "";
-        document.getElementById("edit-player-partner").value = item.partner_request || "";
-        document.getElementById("edit-player-notes").value = item.notes || "";
-        document.getElementById("edit-player-overlay").style.display = "flex";
-    }
-
-    function closeEditPlayerModal() {
-        document.getElementById("edit-player-overlay").style.display = "none";
-        editPlayerItemId = null;
-    }
-
-    document.getElementById("edit-player-close").addEventListener("click", closeEditPlayerModal);
-    document.getElementById("edit-player-cancel").addEventListener("click", closeEditPlayerModal);
-    document.getElementById("edit-player-overlay").addEventListener("click", function(e) {
-        if (e.target === this) closeEditPlayerModal();
-    });
-
-    document.getElementById("edit-player-save").addEventListener("click", async function() {
-        if (!editPlayerItemId) return;
-        const fields = {
-            customer: document.getElementById("edit-player-name").value.trim(),
-            customer_email: document.getElementById("edit-player-email").value.trim(),
-            customer_phone: document.getElementById("edit-player-phone").value.trim(),
-            handicap: document.getElementById("edit-player-handicap").value.trim(),
-            side_games: document.getElementById("edit-player-side-games").value,
-            tee_choice: document.getElementById("edit-player-tee").value.trim(),
-            member_status: document.getElementById("edit-player-member-status").value,
-            chapter: document.getElementById("edit-player-chapter").value.trim(),
-            partner_request: document.getElementById("edit-player-partner").value.trim(),
-            notes: document.getElementById("edit-player-notes").value.trim(),
-        };
-        this.disabled = true;
-        this.textContent = "Saving...";
-        try {
-            const resp = await fetch(`/api/items/${editPlayerItemId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(fields),
-            });
-            if (!resp.ok) {
-                const data = await resp.json().catch(() => ({}));
-                throw new Error(data.error || `Server returned ${resp.status}`);
-            }
-            // Update the local item cache
-            const item = allItems.find(r => r.id === editPlayerItemId);
-            if (item) Object.assign(item, fields);
-            closeEditPlayerModal();
-            // Re-render the expanded event detail
-            if (expandedEventId !== null) {
-                const ev = allEvents.find(e => e.id === expandedEventId);
-                if (ev) {
-                    // Desktop
-                    const desktopContainer = document.getElementById(`detail-content-${expandedEventId}`);
-                    if (desktopContainer) {
-                        desktopContainer.innerHTML = renderDetailContent(ev);
-                        attachDetailHandlers(desktopContainer, ev);
-                    }
-                    // Mobile
-                    renderEventsMobile(getFilteredSortedEvents());
-                }
-            }
-        } catch (err) {
-            alert("Failed to save: " + err.message);
-        }
-        this.disabled = false;
-        this.textContent = "Save Changes";
-    });
 
     let evCreditType = "credit";
 
