@@ -358,6 +358,9 @@
             if (item.transaction_status === "credited") {
                 map[name].creditTotal += parsePrice(item.item_price);
             }
+            if (item.transaction_status === "wd" && item.credit_amount) {
+                map[name].creditTotal += parseFloat((item.credit_amount || "0").replace(/[^0-9.]/g, "")) || 0;
+            }
             if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
             if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
             const date = item.event_date || item.order_date || "";
@@ -519,6 +522,7 @@
             let tag = '';
             if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+            else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${item.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(item.credit_amount)}</span>` : ''}`;
             else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
             const sideGameLabel = classifyGameType(item.side_games);
             const tee = (item.tee_choice || "").trim();
@@ -527,7 +531,7 @@
             let actionBtn = '';
             if (txStatus === "active" && !item.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
-            } else if (txStatus === "credited" || txStatus === "transferred") {
+            } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
 
@@ -849,11 +853,12 @@
             let tag = "";
             if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+            else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${item.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(item.credit_amount)}</span>` : ''}`;
             else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
             let actionBtn = "";
             if (txStatus === "active" && !item.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
-            } else if (txStatus === "credited" || txStatus === "transferred") {
+            } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
             html += `<tr${rowClass}>
@@ -1018,11 +1023,12 @@
                 let tag = "";
                 if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                 else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
+                else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${item.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(item.credit_amount)}</span>` : ''}`;
                 else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
                 let actionBtn = "";
                 if (txStatus === "active" && !item.transferred_from_id) {
                     actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
-                } else if (txStatus === "credited" || txStatus === "transferred") {
+                } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "wd") {
                     actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                 }
                 panelHtml += `<tr${rowClass}>
@@ -1143,7 +1149,8 @@
     async function reverseCustCredit(itemId) {
         const item = allItems.find(r => r.id === itemId);
         if (!item) return;
-        if (!confirm(`Reverse ${item.transaction_status} for ${item.customer}?`)) return;
+        const label = item.transaction_status === "wd" ? "WD" : item.transaction_status;
+        if (!confirm(`Reverse ${label} for ${item.customer}?`)) return;
         try {
             const res = await fetch(`/api/items/${itemId}/reverse-credit`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
