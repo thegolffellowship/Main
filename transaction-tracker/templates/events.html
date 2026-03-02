@@ -730,6 +730,28 @@
         </div>
     </div>
 
+    <!-- Link RSVP to Customer modal -->
+    <div id="link-rsvp-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal">
+            <div class="modal-header">
+                <h2>Link RSVP to Customer</h2>
+                <button id="link-rsvp-close" class="modal-close">&times;</button>
+            </div>
+            <div id="link-rsvp-info" class="credit-info"></div>
+            <div class="credit-fields">
+                <label>Link to existing customer
+                    <select id="link-rsvp-target" class="modal-input">
+                        <option value="">Select a customer...</option>
+                    </select>
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="link-rsvp-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="link-rsvp-submit" class="btn btn-primary">Link</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/chat-widget.js"></script>
@@ -2184,6 +2206,53 @@
                 }
                 pop.appendChild(remindBtn);
 
+                // For pink badges (no player card) — Add as Customer + Link to Existing
+                const isNoCard = tag.classList.contains("rsvp-tag-no-card");
+                if (isNoCard && email) {
+                    const sep = document.createElement("div");
+                    sep.style.cssText = "border-top:1px solid #e5e7eb; margin:0.2rem 0;";
+                    pop.appendChild(sep);
+
+                    // Add as Customer
+                    const addBtn = document.createElement("button");
+                    addBtn.className = "rsvp-popover-btn";
+                    addBtn.style.cssText = "color:#16a34a; font-weight:600;";
+                    addBtn.textContent = "Add as Customer";
+                    addBtn.addEventListener("click", async (ev2) => {
+                        ev2.stopPropagation();
+                        pop.remove();
+                        try {
+                            const resp = await fetch("/api/customers/from-rsvp", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ name: playerName, email }),
+                            });
+                            const result = await resp.json();
+                            if (!resp.ok) { alert(result.error || "Failed"); return; }
+                            if (result.status === "exists") {
+                                alert(`This email already belongs to customer "${result.customer.name}". Use "Link to Customer" instead.`);
+                            } else {
+                                alert(`Customer "${playerName}" created and RSVPs linked!`);
+                                await fetchItems();
+                                await fetchEvents();
+                            }
+                        } catch (err) { alert("Error: " + err.message); }
+                    });
+                    pop.appendChild(addBtn);
+
+                    // Link to Existing Customer
+                    const linkBtn = document.createElement("button");
+                    linkBtn.className = "rsvp-popover-btn";
+                    linkBtn.style.cssText = "color:#2563eb; font-weight:600;";
+                    linkBtn.textContent = "Link to Customer";
+                    linkBtn.addEventListener("click", (ev2) => {
+                        ev2.stopPropagation();
+                        pop.remove();
+                        openLinkRsvpModal(playerName, email);
+                    });
+                    pop.appendChild(linkBtn);
+                }
+
                 // Position near the tag
                 tag.style.position = "relative";
                 tag.parentElement.style.position = "relative";
@@ -3120,6 +3189,56 @@
             await fetchEvents();
         } catch (err) { alert("Failed to add player."); }
     }
+
+    // ---- Link RSVP to Customer modal ----
+    let linkRsvpEmail = "";
+    let linkRsvpPlayerName = "";
+
+    function openLinkRsvpModal(playerName, email) {
+        linkRsvpEmail = email;
+        linkRsvpPlayerName = playerName;
+        document.getElementById("link-rsvp-info").innerHTML =
+            `Link <strong>${escapeHtml(playerName)}</strong> (${escapeHtml(email)}) to an existing customer.`;
+
+        // Populate customer dropdown from allItems
+        const names = new Set();
+        allItems.forEach(i => { if (i.customer) names.add(i.customer); });
+        const sorted = [...names].sort((a, b) => a.localeCompare(b));
+        const sel = document.getElementById("link-rsvp-target");
+        sel.innerHTML = '<option value="">Select a customer...</option>' +
+            sorted.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+        document.getElementById("link-rsvp-overlay").style.display = "flex";
+    }
+
+    function closeLinkRsvpModal() {
+        document.getElementById("link-rsvp-overlay").style.display = "none";
+        linkRsvpEmail = "";
+        linkRsvpPlayerName = "";
+    }
+
+    document.getElementById("link-rsvp-close").addEventListener("click", closeLinkRsvpModal);
+    document.getElementById("link-rsvp-cancel").addEventListener("click", closeLinkRsvpModal);
+    document.getElementById("link-rsvp-overlay").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeLinkRsvpModal();
+    });
+
+    document.getElementById("link-rsvp-submit").addEventListener("click", async () => {
+        const target = document.getElementById("link-rsvp-target").value;
+        if (!target) { alert("Please select a customer."); return; }
+        try {
+            const res = await fetch("/api/customers/link-rsvp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rsvp_email: linkRsvpEmail, target_customer: target }),
+            });
+            const data = await res.json();
+            if (!res.ok) { alert(data.error || "Failed to link."); return; }
+            alert(`Linked ${data.linked} RSVP(s) from "${linkRsvpPlayerName}" to customer "${target}".`);
+            closeLinkRsvpModal();
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) { alert("Error: " + err.message); }
+    });
 
     // ---- Upgrade RSVP modal ----
     let upgradeRsvpItemId = null;
