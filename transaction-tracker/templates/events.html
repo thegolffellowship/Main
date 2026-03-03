@@ -3279,7 +3279,7 @@
             const res = await fetch("/api/customers/link-rsvp", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ rsvp_email: linkRsvpEmail, target_customer: target }),
+                body: JSON.stringify({ rsvp_email: linkRsvpEmail, target_customer: target, rsvp_player_name: linkRsvpPlayerName }),
             });
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));

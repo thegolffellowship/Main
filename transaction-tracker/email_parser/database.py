@@ -1721,12 +1721,15 @@ def create_customer_from_rsvp(
 
 def link_rsvp_to_customer(
     rsvp_email: str, target_customer_name: str,
+    rsvp_player_name: str = "",
     db_path: str | Path | None = None,
 ) -> dict:
     """Link an unmatched RSVP email to an existing customer.
 
     Updates the customer's email if they don't have one so that
     has_player_card resolves to True for RSVPs from this address.
+    Adds the RSVP email as a customer alias so future matching works.
+    Updates RSVPs from this email to show the full customer name.
 
     Does NOT set matched_item_id on RSVPs — that field links RSVPs to
     event-specific registrations, not to generic customer entries.
@@ -1749,43 +1752,76 @@ def link_rsvp_to_customer(
         if not target:
             raise ValueError(f"Customer '{target_customer_name}' not found")
 
+        existing_email = (target["customer_email"] or "").strip().lower()
+
         # If target customer has no email, set it so has_player_card resolves
-        if not (target["customer_email"] or "").strip():
+        if not existing_email:
             conn.execute(
                 "UPDATE items SET customer_email = ? WHERE customer = ? COLLATE NOCASE",
                 (rsvp_email, target_customer_name),
             )
-            conn.commit()
             logger.info("Set email <%s> on customer %s", rsvp_email, target_customer_name)
-            return {"linked": True, "customer_name": target_customer_name}
+        elif existing_email != rsvp_email:
+            # Customer has a DIFFERENT email — create a secondary item entry
+            # with the RSVP email so has_player_card can find them
+            today = datetime.now().strftime("%Y-%m-%d")
+            new_values = {c: None for c in ITEM_COLUMNS}
+            new_values["customer"] = target_customer_name
+            new_values["customer_email"] = rsvp_email
+            new_values["merchant"] = "RSVP Email Link"
+            new_values["item_name"] = "RSVP Email Link"
+            new_values["order_date"] = today
+            new_values["email_uid"] = f"rsvp_link_{rsvp_email}_{today}"
+            new_values["item_index"] = 0
 
-        # Customer already has an email — check if it's the same
-        existing_email = (target["customer_email"] or "").strip().lower()
-        if existing_email == rsvp_email:
-            # Already linked
-            return {"linked": True, "customer_name": target_customer_name}
+            cols = ", ".join(ITEM_COLUMNS)
+            placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+            conn.execute(
+                f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+                tuple(new_values.get(c) for c in ITEM_COLUMNS),
+            )
+            logger.info("Linked RSVP email <%s> to customer %s (secondary email entry)",
+                         rsvp_email, target_customer_name)
 
-        # Customer has a DIFFERENT email — create a secondary item entry
-        # with the RSVP email so has_player_card can find them
-        today = datetime.now().strftime("%Y-%m-%d")
-        new_values = {c: None for c in ITEM_COLUMNS}
-        new_values["customer"] = target_customer_name
-        new_values["customer_email"] = rsvp_email
-        new_values["merchant"] = "RSVP Email Link"
-        new_values["order_date"] = today
-        new_values["email_uid"] = f"rsvp_link_{rsvp_email}_{today}"
-        new_values["item_index"] = 0
+        # Add the RSVP email as an alias so future imports/matching find this customer
+        if rsvp_email and rsvp_email != existing_email:
+            existing_alias = conn.execute(
+                """SELECT id FROM customer_aliases
+                   WHERE customer_name = ? COLLATE NOCASE AND alias_type = 'email'
+                     AND LOWER(alias_value) = ?""",
+                (target_customer_name, rsvp_email),
+            ).fetchone()
+            if not existing_alias:
+                conn.execute(
+                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'email', ?)",
+                    (target_customer_name, rsvp_email),
+                )
+                logger.info("Added alias email <%s> for customer %s",
+                             rsvp_email, target_customer_name)
 
-        cols = ", ".join(ITEM_COLUMNS)
-        placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
-        conn.execute(
-            f"INSERT INTO items ({cols}) VALUES ({placeholders})",
-            tuple(new_values.get(c) for c in ITEM_COLUMNS),
-        )
+        # Update RSVPs from this email to show the full customer name
+        rsvp_player_name = (rsvp_player_name or "").strip()
+        if rsvp_player_name and rsvp_player_name.lower() != target_customer_name.lower():
+            conn.execute(
+                "UPDATE rsvps SET player_name = ? WHERE LOWER(player_email) = ?",
+                (target_customer_name, rsvp_email),
+            )
+            # Add the short RSVP name as an alias too
+            existing_name_alias = conn.execute(
+                """SELECT id FROM customer_aliases
+                   WHERE customer_name = ? COLLATE NOCASE AND alias_type = 'name'
+                     AND LOWER(alias_value) = ?""",
+                (target_customer_name, rsvp_player_name.lower()),
+            ).fetchone()
+            if not existing_name_alias:
+                conn.execute(
+                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
+                    (target_customer_name, rsvp_player_name),
+                )
+                logger.info("Added alias name '%s' for customer %s",
+                             rsvp_player_name, target_customer_name)
+
         conn.commit()
-
-        logger.info("Linked RSVP email <%s> to customer %s (secondary email entry)",
-                     rsvp_email, target_customer_name)
         return {"linked": True, "customer_name": target_customer_name}
 
 
