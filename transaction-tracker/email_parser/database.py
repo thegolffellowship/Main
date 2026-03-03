@@ -1820,6 +1820,7 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
             needs_parsing.append((i, row["customer"].strip()))
 
     if needs_parsing:
+        logger.info("Parsing %d names via AI...", len(needs_parsing))
         raw_names = [n for _, n in needs_parsing]
         parsed = parse_names_ai(raw_names)
         for (idx, _raw), parts in zip(needs_parsing, parsed):

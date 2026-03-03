@@ -1773,7 +1773,7 @@
         // Call server for AI-powered preview with name parsing + duplicate detection
         const nextBtn = document.getElementById("roster-next");
         nextBtn.disabled = true;
-        nextBtn.textContent = "Analyzing names...";
+        nextBtn.innerHTML = '<span style="display:inline-block; width:14px; height:14px; border:2px solid #fff; border-top-color:transparent; border-radius:50%; animation:spin 0.6s linear infinite; vertical-align:middle; margin-right:6px;"></span> Analyzing names...';
 
         try {
             const res = await fetch("/api/customers/preview-roster", {
@@ -1870,7 +1870,7 @@
     async function rosterDoImport() {
         const nextBtn = document.getElementById("roster-next");
         nextBtn.disabled = true;
-        nextBtn.textContent = "Importing...";
+        nextBtn.innerHTML = '<span style="display:inline-block; width:14px; height:14px; border:2px solid #fff; border-top-color:transparent; border-radius:50%; animation:spin 0.6s linear infinite; vertical-align:middle; margin-right:6px;"></span> Importing — parsing names & checking duplicates...';
 
         try {
             // Filter out rows without email if skip option was checked
@@ -1903,16 +1903,44 @@
             if (data.updated) parts.push(`<strong>${data.updated}</strong> existing customer${data.updated !== 1 ? 's' : ''} updated`);
             if (data.skipped) parts.push(`${data.skipped} skipped`);
 
-            document.getElementById("roster-result").innerHTML =
+            let resultHtml =
                 `<div style="font-size:1.1rem; margin-bottom:0.5rem; color:#16a34a;">Import Complete</div>` +
                 (parts.length ? parts.join(", ") + "." : "No changes made.");
+
+            // Show validation warnings if any
+            const warnings = data.validation_warnings || [];
+            if (warnings.length) {
+                resultHtml += `<div style="margin-top:0.5rem; padding:0.5rem; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px; font-size:0.78rem;">
+                    <strong>Validation warnings (${warnings.length}):</strong><br>
+                    ${warnings.slice(0, 10).map(w => escapeHtml(w)).join("<br>")}
+                    ${warnings.length > 10 ? `<br>... and ${warnings.length - 10} more` : ""}
+                </div>`;
+            }
+
+            // Show errors if any
+            const errors = data.errors || [];
+            if (errors.length) {
+                resultHtml += `<div style="margin-top:0.5rem; padding:0.5rem; background:#fef2f2; border:1px solid #ef4444; border-radius:4px; font-size:0.78rem;">
+                    <strong>Errors (${errors.length}):</strong><br>
+                    ${errors.slice(0, 10).map(e => escapeHtml(e)).join("<br>")}
+                    ${errors.length > 10 ? `<br>... and ${errors.length - 10} more` : ""}
+                </div>`;
+            }
+
+            document.getElementById("roster-result").innerHTML = resultHtml;
 
             rosterStep = "done";
             updateRosterUI();
         } catch (err) {
-            alert("Import failed: " + err.message);
+            // Show error inline instead of alert
+            document.getElementById("roster-result").innerHTML =
+                `<div style="font-size:1.1rem; margin-bottom:0.5rem; color:#dc2626;">Import Failed</div>` +
+                `<div style="padding:0.5rem; background:#fef2f2; border:1px solid #ef4444; border-radius:4px; font-size:0.82rem;">${escapeHtml(err.message)}</div>`;
+            rosterStep = "done";
+            updateRosterUI();
         } finally {
             nextBtn.disabled = false;
+            nextBtn.textContent = "Done";
         }
     }
 

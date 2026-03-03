@@ -1186,7 +1186,11 @@ def api_import_roster():
     if not import_rows:
         return jsonify({"error": "No valid rows to import (customer name required)"}), 400
 
-    result = import_roster(import_rows)
+    try:
+        result = import_roster(import_rows)
+    except Exception as e:
+        logger.exception("Roster import failed")
+        return jsonify({"error": f"Import failed: {str(e)}"}), 500
     result["fields_created"] = fields_created
     return jsonify(result)
 
@@ -1226,7 +1230,11 @@ def api_preview_roster():
     if not preview_rows:
         return jsonify({"error": "No valid rows"}), 400
 
-    result = preview_roster_import(preview_rows)
+    try:
+        result = preview_roster_import(preview_rows)
+    except Exception as e:
+        logger.exception("Roster preview failed")
+        return jsonify({"error": f"Preview analysis failed: {str(e)}"}), 500
     return jsonify(result)
 
 
