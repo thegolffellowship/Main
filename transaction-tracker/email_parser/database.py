@@ -1605,6 +1605,7 @@ def create_customer(name: str, email: str = "", phone: str = "",
         new_values["customer_phone"] = phone or None
         new_values["chapter"] = chapter or None
         new_values["merchant"] = "Customer Entry"
+        new_values["item_name"] = "Customer Entry"
         new_values["order_date"] = today
         new_values["email_uid"] = f"customer_entry_{name}_{today}"
         new_values["item_index"] = 0
@@ -1688,6 +1689,7 @@ def create_customer_from_rsvp(
             new_values["suffix"] = parts.get("suffix") or None
             new_values["customer_email"] = email or None
             new_values["merchant"] = "RSVP Import"
+            new_values["item_name"] = "RSVP Import"
             new_values["order_date"] = today
             new_values["email_uid"] = f"rsvp_import_{email or name}_{today}"
             new_values["item_index"] = 0
@@ -1990,6 +1992,7 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
                 new_values["middle_name"] = (row.get("middle_name") or "").strip() or None
                 new_values["suffix"] = (row.get("suffix") or "").strip() or None
                 new_values["merchant"] = "Roster Import"
+                new_values["item_name"] = "Roster Import"
                 new_values["order_date"] = today
                 new_values["email_uid"] = f"roster_import_{name}_{today}"
                 new_values["item_index"] = 0
