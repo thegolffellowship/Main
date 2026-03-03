@@ -727,7 +727,12 @@ def get_known_email_uids(db_path: str | Path | None = None) -> set[str]:
 def get_all_items(db_path: str | Path | None = None) -> list[dict]:
     """Return all item rows ordered by order_date descending."""
     with _connect(db_path) as conn:
-        rows = conn.execute("SELECT * FROM items ORDER BY order_date DESC, id ASC").fetchall()
+        rows = conn.execute(
+            """SELECT * FROM items
+               WHERE merchant NOT IN ('Roster Import', 'Customer Entry',
+                                      'RSVP Import', 'RSVP Email Link')
+               ORDER BY order_date DESC, id ASC"""
+        ).fetchall()
         return [dict(row) for row in rows]
 
 
@@ -735,19 +740,21 @@ def get_item_stats(db_path: str | Path | None = None) -> dict:
     """Return summary statistics about stored items."""
     with _connect(db_path) as conn:
 
+        _exclude = """WHERE merchant NOT IN ('Roster Import', 'Customer Entry',
+                                              'RSVP Import', 'RSVP Email Link')"""
         row = conn.execute(
-            """
+            f"""
             SELECT
                 COUNT(*)                 AS total_items,
                 COUNT(DISTINCT order_id) AS total_orders,
                 MIN(order_date)          AS earliest,
                 MAX(order_date)          AS latest
-            FROM items
+            FROM items {_exclude}
             """
         ).fetchone()
 
         # Sum item prices (strip $ and commas)
-        price_rows = conn.execute("SELECT item_price FROM items").fetchall()
+        price_rows = conn.execute(f"SELECT item_price FROM items {_exclude}").fetchall()
 
         total_spent = 0.0
         for r in price_rows:
@@ -842,23 +849,25 @@ def get_data_snapshot(limit: int = 50, db_path: str | Path | None = None) -> dic
     without dumping the entire table.
     """
     with _connect(db_path) as conn:
+        _exclude = """WHERE merchant NOT IN ('Roster Import', 'Customer Entry',
+                                              'RSVP Import', 'RSVP Email Link')"""
 
         # Stats
         row = conn.execute(
-            """
+            f"""
             SELECT
                 COUNT(*)                 AS total_items,
                 COUNT(DISTINCT order_id) AS total_orders,
                 COUNT(DISTINCT customer) AS unique_customers,
                 MIN(order_date)          AS earliest,
                 MAX(order_date)          AS latest
-            FROM items
+            FROM items {_exclude}
             """
         ).fetchone()
 
         # Most recent items
         recent = conn.execute(
-            "SELECT * FROM items ORDER BY created_at DESC, id DESC LIMIT ?",
+            f"SELECT * FROM items {_exclude} ORDER BY created_at DESC, id DESC LIMIT ?",
             (limit,),
         ).fetchall()
 
