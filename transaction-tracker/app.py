@@ -1317,10 +1317,11 @@ def api_link_rsvp_to_customer():
     data = request.get_json(force=True)
     rsvp_email = (data.get("rsvp_email") or "").strip()
     target_name = (data.get("target_customer") or "").strip()
+    rsvp_player_name = (data.get("rsvp_player_name") or "").strip()
     if not rsvp_email or not target_name:
         return jsonify({"error": "rsvp_email and target_customer are required"}), 400
     try:
-        result = link_rsvp_to_customer(rsvp_email, target_name)
+        result = link_rsvp_to_customer(rsvp_email, target_name, rsvp_player_name)
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

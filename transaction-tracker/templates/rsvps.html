@@ -94,6 +94,8 @@
         .rsvp-action-btn.match-btn:hover { opacity: 0.85; }
         .rsvp-action-btn.unmatch-btn { background: #fef3c7; color: #92400e; border-color: #f59e0b; }
         .rsvp-action-btn.unmatch-btn:hover { background: #fde68a; }
+        .rsvp-action-btn.link-cust-btn { background: #eff6ff; color: #1e40af; border-color: #93c5fd; }
+        .rsvp-action-btn.link-cust-btn:hover { background: #dbeafe; }
         .empty-msg {
             text-align: center;
             padding: 3rem;
@@ -154,6 +156,7 @@
             <button class="category-btn" data-rsvp-filter="not_playing"><span class="label-full">Not Playing</span><span class="label-short">Not Play</span> <span class="cat-count" id="cat-count-not-playing">0</span></button>
             <button class="category-btn" data-rsvp-filter="matched"><span class="label-full">Matched</span><span class="label-short">Match</span> <span class="cat-count" id="cat-count-matched">0</span></button>
             <button class="category-btn" data-rsvp-filter="unmatched"><span class="label-full">Unmatched</span><span class="label-short">Unmatch</span> <span class="cat-count" id="cat-count-unmatched">0</span></button>
+            <button class="category-btn" data-rsvp-filter="unlinked"><span class="label-full">Unlinked</span><span class="label-short">Unlink</span> <span class="cat-count" id="cat-count-unlinked">0</span></button>
         </section>
 
         <!-- Summary Stats -->
@@ -222,6 +225,28 @@
         </div>
     </div>
 
+    <!-- Link RSVP to Customer modal -->
+    <div id="link-rsvp-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal">
+            <div class="modal-header">
+                <h2>Link RSVP to Customer</h2>
+                <button id="link-rsvp-close" class="modal-close">&times;</button>
+            </div>
+            <div id="link-rsvp-info" class="credit-info"></div>
+            <div class="credit-fields">
+                <label>Link to existing customer
+                    <select id="link-rsvp-target" class="modal-input">
+                        <option value="">Select a customer...</option>
+                    </select>
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="link-rsvp-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="link-rsvp-submit" class="btn btn-primary">Link</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/chat-widget.js"></script>
@@ -231,6 +256,7 @@
        ========================================================= */
     let allRsvps = [];
     let allEvents = [];
+    let allCustomerNames = [];  // unique customer names for link modal
     let rsvpStats = {};
     let rsvpSearchQuery = "";
     let rsvpCategoryFilter = "all";
@@ -289,6 +315,18 @@
         }
     }
 
+    async function fetchCustomerNames() {
+        try {
+            const res = await fetch("/api/items");
+            const items = await res.json();
+            const names = new Set();
+            items.forEach(i => { if (i.customer) names.add(i.customer); });
+            allCustomerNames = [...names].sort((a, b) => a.localeCompare(b));
+        } catch (err) {
+            console.error("Failed to fetch customer names:", err);
+        }
+    }
+
     function buildEventPickerHtml() {
         const today = new Date().toISOString().split("T")[0];
         const upcoming = allEvents.filter(e => e.event_date && e.event_date >= today).sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
@@ -312,6 +350,8 @@
             filtered = filtered.filter(r => r.matched_event);
         } else if (rsvpCategoryFilter === "unmatched") {
             filtered = filtered.filter(r => !r.matched_event);
+        } else if (rsvpCategoryFilter === "unlinked") {
+            filtered = filtered.filter(r => !r.has_player_card);
         }
 
         // Event dropdown filter
@@ -326,6 +366,7 @@
         if (q) {
             filtered = filtered.filter(r => {
                 return (r.player_name || "").toLowerCase().includes(q) ||
+                       (r.resolved_name || "").toLowerCase().includes(q) ||
                        (r.player_email || "").toLowerCase().includes(q) ||
                        (r.gg_event_name || "").toLowerCase().includes(q) ||
                        (r.matched_event || "").toLowerCase().includes(q) ||
@@ -354,6 +395,7 @@
         const notPlaying = allRsvps.filter(r => r.response === "NOT PLAYING").length;
         const matched = allRsvps.filter(r => r.matched_event).length;
         const unmatched = allRsvps.filter(r => !r.matched_event).length;
+        const unlinked = allRsvps.filter(r => !r.has_player_card).length;
 
         document.getElementById("stat-total").textContent = total;
         document.getElementById("stat-playing").textContent = playing;
@@ -366,6 +408,7 @@
         document.getElementById("cat-count-not-playing").textContent = notPlaying;
         document.getElementById("cat-count-matched").textContent = matched;
         document.getElementById("cat-count-unmatched").textContent = unmatched;
+        document.getElementById("cat-count-unlinked").textContent = unlinked;
     }
 
     function buildEventFilter() {
@@ -397,13 +440,18 @@
 
     function actionsCell(r) {
         if (currentRole !== "admin") return "";
+        let html = '<td class="rsvp-match-controls">';
         if (r.matched_event) {
-            return `<td><button class="rsvp-action-btn unmatch-btn" onclick="unmatchRsvp(${r.id})">Unmatch</button></td>`;
+            html += `<button class="rsvp-action-btn unmatch-btn" onclick="unmatchRsvp(${r.id})">Unmatch</button>`;
+        } else {
+            html += `<select class="rsvp-match-select" id="match-sel-${r.id}">${buildEventPickerHtml()}</select>`;
+            html += `<button class="rsvp-action-btn match-btn" onclick="matchRsvp(${r.id})">Match</button>`;
         }
-        return `<td class="rsvp-match-controls">
-            <select class="rsvp-match-select" id="match-sel-${r.id}">${buildEventPickerHtml()}</select>
-            <button class="rsvp-action-btn match-btn" onclick="matchRsvp(${r.id})">Match</button>
-        </td>`;
+        if (!r.has_player_card) {
+            html += ` <button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link</button>`;
+        }
+        html += '</td>';
+        return html;
     }
 
     async function matchRsvp(rsvpId) {
@@ -439,6 +487,47 @@
         } catch (err) {
             alert("Unmatch failed: " + err.message);
         }
+    }
+
+    // ---- Link RSVP to Customer ----
+    let linkRsvpEmail = "";
+    let linkRsvpPlayerName = "";
+
+    function openLinkRsvpModal(playerName, email) {
+        linkRsvpEmail = email;
+        linkRsvpPlayerName = playerName;
+        document.getElementById("link-rsvp-info").innerHTML =
+            `Link <strong>${escapeHtml(playerName)}</strong> (${escapeHtml(email)}) to an existing customer.`;
+        const sel = document.getElementById("link-rsvp-target");
+        sel.innerHTML = '<option value="">Select a customer...</option>' +
+            allCustomerNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+        document.getElementById("link-rsvp-overlay").style.display = "flex";
+    }
+
+    function closeLinkRsvpModal() {
+        document.getElementById("link-rsvp-overlay").style.display = "none";
+        linkRsvpEmail = "";
+        linkRsvpPlayerName = "";
+    }
+
+    async function submitLinkRsvp() {
+        const target = document.getElementById("link-rsvp-target").value;
+        if (!target) { alert("Please select a customer."); return; }
+        try {
+            const res = await fetch("/api/customers/link-rsvp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rsvp_email: linkRsvpEmail, target_customer: target, rsvp_player_name: linkRsvpPlayerName }),
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                alert(errData.error || `Failed to link (HTTP ${res.status}).`);
+                return;
+            }
+            closeLinkRsvpModal();
+            await Promise.all([fetchRsvps(), fetchCustomerNames()]);
+            renderRsvps();
+        } catch (err) { alert("Error: " + err.message); }
     }
 
     function updateSortArrows() {
@@ -486,8 +575,11 @@
         const isAdmin = currentRole === "admin";
         let html = "";
         filtered.forEach(r => {
+            const displayName = r.resolved_name || r.player_name || "\u2014";
+            const nameExtra = r.has_player_card && r.resolved_name !== r.player_name
+                ? ` <span style="color:var(--text-muted);font-size:0.75rem;">(${escapeHtml(r.player_name)})</span>` : "";
             html += `<tr>
-                <td><strong>${escapeHtml(r.player_name || "\u2014")}</strong></td>
+                <td><strong>${escapeHtml(displayName)}</strong>${nameExtra}</td>
                 <td>${escapeHtml(r.player_email || "\u2014")}</td>
                 <td>${escapeHtml(r.gg_event_name || "\u2014")}</td>
                 <td>${responseBadge(r.response)}</td>
@@ -513,6 +605,7 @@
         }
 
         container.innerHTML = filtered.map(r => {
+            const mobileDisplayName = r.resolved_name || r.player_name || "\u2014";
             const fields = [
                 ["Email", r.player_email || "\u2014"],
                 ["Event", r.gg_event_name || "\u2014"],
@@ -527,7 +620,7 @@
             <div class="mobile-card">
                 <div class="mobile-card-top" onclick="this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
-                        <span class="mc-customer">${escapeHtml(r.player_name || "\u2014")}</span>
+                        <span class="mc-customer">${escapeHtml(mobileDisplayName)}</span>
                         <span class="rsvp-response ${respClass}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(r.response || "\u2014")}</span>
                         <br><span class="mc-event">${escapeHtml(r.gg_event_name || "\u2014")}</span>
                     </div>
@@ -537,6 +630,7 @@
                     <div class="mc-field-grid">
                         ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
                     </div>
+                    ${currentRole === "admin" && !r.has_player_card ? `<div style="margin-top:0.5rem;"><button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link to Customer</button></div>` : ""}
                 </div>
             </div>`;
         }).join("");
@@ -650,6 +744,20 @@
             }
         });
 
+        // Delegated click for Link buttons (data attributes avoid quoting issues)
+        document.addEventListener("click", (e) => {
+            const btn = e.target.closest(".link-cust-btn");
+            if (btn) openLinkRsvpModal(btn.dataset.player, btn.dataset.email);
+        });
+
+        // Link RSVP modal handlers
+        document.getElementById("link-rsvp-close").addEventListener("click", closeLinkRsvpModal);
+        document.getElementById("link-rsvp-cancel").addEventListener("click", closeLinkRsvpModal);
+        document.getElementById("link-rsvp-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeLinkRsvpModal();
+        });
+        document.getElementById("link-rsvp-submit").addEventListener("click", submitLinkRsvp);
+
         // Check URL params for pre-filtering
         const params = new URLSearchParams(window.location.search);
         const eventParam = params.get("event");
@@ -672,7 +780,7 @@
 
     // ---- Init (called by auth.js after login) ----
     async function onAuthReady() {
-        await Promise.all([fetchRsvps(), fetchRsvpStats(), fetchEvents()]);
+        await Promise.all([fetchRsvps(), fetchRsvpStats(), fetchEvents(), fetchCustomerNames()]);
         renderRsvps();
     }
 
