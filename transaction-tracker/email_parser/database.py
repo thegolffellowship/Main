@@ -1150,6 +1150,7 @@ def undo_autofix(details: list[dict], db_path: str | Path | None = None) -> dict
 _NON_EVENT_KEYWORDS = [
     "member", "membership", "shirt", "merch", "hat", "polo",
     "donation", "gift card", "season pass",
+    "roster import", "rsvp import", "rsvp email link", "customer entry",
 ]
 
 
@@ -1440,6 +1441,8 @@ def get_orphaned_items(db_path: str | Path | None = None) -> list[dict]:
                WHERE e.id IS NULL
                  AND ea.id IS NULL
                  AND COALESCE(i.transaction_status, 'active') IN ('active', 'rsvp_only')
+                 AND i.merchant NOT IN ('Roster Import', 'Customer Entry',
+                                        'RSVP Import', 'RSVP Email Link')
                GROUP BY i.item_name
                ORDER BY i.item_name"""
         ).fetchall()
