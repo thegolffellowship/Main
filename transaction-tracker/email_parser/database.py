@@ -727,12 +727,7 @@ def get_known_email_uids(db_path: str | Path | None = None) -> set[str]:
 def get_all_items(db_path: str | Path | None = None) -> list[dict]:
     """Return all item rows ordered by order_date descending."""
     with _connect(db_path) as conn:
-        rows = conn.execute(
-            """SELECT * FROM items
-               WHERE merchant NOT IN ('Roster Import', 'Customer Entry',
-                                      'RSVP Import', 'RSVP Email Link')
-               ORDER BY order_date DESC, id ASC"""
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM items ORDER BY order_date DESC, id ASC").fetchall()
         return [dict(row) for row in rows]
 
 
