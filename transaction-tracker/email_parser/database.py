@@ -3213,7 +3213,12 @@ def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
 
 def get_all_rsvps(event_name: str = "", response: str = "",
                    db_path: str | Path | None = None) -> list[dict]:
-    """Return RSVPs with optional filtering by event and/or response."""
+    """Return RSVPs with optional filtering by event and/or response.
+
+    Also resolves the full customer name from the items table and
+    customer_aliases (email type) so the frontend can show the canonical
+    name and knows which RSVPs still need manual linking.
+    """
     with _connect(db_path) as conn:
         clauses = []
         params = []
@@ -3230,7 +3235,50 @@ def get_all_rsvps(event_name: str = "", response: str = "",
             f"SELECT * FROM rsvps{where} ORDER BY received_at DESC",
             params,
         ).fetchall()
-        return [dict(r) for r in rows]
+
+        # Bulk-resolve customer names from items table by email
+        emails = {(r["player_email"] or "").strip().lower()
+                  for r in rows if r["player_email"]}
+        name_map: dict[str, str] = {}
+        if emails:
+            placeholders = ",".join("?" * len(emails))
+            # Primary: match on items.customer_email
+            cards = conn.execute(
+                f"""SELECT LOWER(customer_email) as email, customer
+                    FROM items
+                    WHERE LOWER(customer_email) IN ({placeholders})
+                      AND customer IS NOT NULL AND customer != ''
+                    ORDER BY order_date DESC""",
+                list(emails),
+            ).fetchall()
+            for c in cards:
+                if c["email"] not in name_map:
+                    name_map[c["email"]] = c["customer"]
+
+            # Secondary: match on customer_aliases (email type)
+            unresolved = emails - set(name_map.keys())
+            if unresolved:
+                ph2 = ",".join("?" * len(unresolved))
+                alias_rows = conn.execute(
+                    f"""SELECT LOWER(alias_value) as email, customer_name
+                        FROM customer_aliases
+                        WHERE alias_type = 'email'
+                          AND LOWER(alias_value) IN ({ph2})""",
+                    list(unresolved),
+                ).fetchall()
+                for a in alias_rows:
+                    if a["email"] not in name_map:
+                        name_map[a["email"]] = a["customer_name"]
+
+        results = []
+        for r in rows:
+            rsvp = dict(r)
+            email = (rsvp.get("player_email") or "").strip().lower()
+            rsvp["resolved_name"] = name_map.get(email, rsvp.get("player_name"))
+            rsvp["has_player_card"] = email in name_map
+            results.append(rsvp)
+
+        return results
 
 
 def get_rsvp_stats(db_path: str | Path | None = None) -> dict:

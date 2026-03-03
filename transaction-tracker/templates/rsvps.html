@@ -156,6 +156,7 @@
             <button class="category-btn" data-rsvp-filter="not_playing"><span class="label-full">Not Playing</span><span class="label-short">Not Play</span> <span class="cat-count" id="cat-count-not-playing">0</span></button>
             <button class="category-btn" data-rsvp-filter="matched"><span class="label-full">Matched</span><span class="label-short">Match</span> <span class="cat-count" id="cat-count-matched">0</span></button>
             <button class="category-btn" data-rsvp-filter="unmatched"><span class="label-full">Unmatched</span><span class="label-short">Unmatch</span> <span class="cat-count" id="cat-count-unmatched">0</span></button>
+            <button class="category-btn" data-rsvp-filter="unlinked"><span class="label-full">Unlinked</span><span class="label-short">Unlink</span> <span class="cat-count" id="cat-count-unlinked">0</span></button>
         </section>
 
         <!-- Summary Stats -->
@@ -349,6 +350,8 @@
             filtered = filtered.filter(r => r.matched_event);
         } else if (rsvpCategoryFilter === "unmatched") {
             filtered = filtered.filter(r => !r.matched_event);
+        } else if (rsvpCategoryFilter === "unlinked") {
+            filtered = filtered.filter(r => !r.has_player_card);
         }
 
         // Event dropdown filter
@@ -363,6 +366,7 @@
         if (q) {
             filtered = filtered.filter(r => {
                 return (r.player_name || "").toLowerCase().includes(q) ||
+                       (r.resolved_name || "").toLowerCase().includes(q) ||
                        (r.player_email || "").toLowerCase().includes(q) ||
                        (r.gg_event_name || "").toLowerCase().includes(q) ||
                        (r.matched_event || "").toLowerCase().includes(q) ||
@@ -391,6 +395,7 @@
         const notPlaying = allRsvps.filter(r => r.response === "NOT PLAYING").length;
         const matched = allRsvps.filter(r => r.matched_event).length;
         const unmatched = allRsvps.filter(r => !r.matched_event).length;
+        const unlinked = allRsvps.filter(r => !r.has_player_card).length;
 
         document.getElementById("stat-total").textContent = total;
         document.getElementById("stat-playing").textContent = playing;
@@ -403,6 +408,7 @@
         document.getElementById("cat-count-not-playing").textContent = notPlaying;
         document.getElementById("cat-count-matched").textContent = matched;
         document.getElementById("cat-count-unmatched").textContent = unmatched;
+        document.getElementById("cat-count-unlinked").textContent = unlinked;
     }
 
     function buildEventFilter() {
@@ -441,7 +447,9 @@
             html += `<select class="rsvp-match-select" id="match-sel-${r.id}">${buildEventPickerHtml()}</select>`;
             html += `<button class="rsvp-action-btn match-btn" onclick="matchRsvp(${r.id})">Match</button>`;
         }
-        html += ` <button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link</button>`;
+        if (!r.has_player_card) {
+            html += ` <button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link</button>`;
+        }
         html += '</td>';
         return html;
     }
@@ -567,8 +575,11 @@
         const isAdmin = currentRole === "admin";
         let html = "";
         filtered.forEach(r => {
+            const displayName = r.resolved_name || r.player_name || "\u2014";
+            const nameExtra = r.has_player_card && r.resolved_name !== r.player_name
+                ? ` <span style="color:var(--text-muted);font-size:0.75rem;">(${escapeHtml(r.player_name)})</span>` : "";
             html += `<tr>
-                <td><strong>${escapeHtml(r.player_name || "\u2014")}</strong></td>
+                <td><strong>${escapeHtml(displayName)}</strong>${nameExtra}</td>
                 <td>${escapeHtml(r.player_email || "\u2014")}</td>
                 <td>${escapeHtml(r.gg_event_name || "\u2014")}</td>
                 <td>${responseBadge(r.response)}</td>
@@ -594,6 +605,7 @@
         }
 
         container.innerHTML = filtered.map(r => {
+            const mobileDisplayName = r.resolved_name || r.player_name || "\u2014";
             const fields = [
                 ["Email", r.player_email || "\u2014"],
                 ["Event", r.gg_event_name || "\u2014"],
@@ -608,7 +620,7 @@
             <div class="mobile-card">
                 <div class="mobile-card-top" onclick="this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
-                        <span class="mc-customer">${escapeHtml(r.player_name || "\u2014")}</span>
+                        <span class="mc-customer">${escapeHtml(mobileDisplayName)}</span>
                         <span class="rsvp-response ${respClass}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(r.response || "\u2014")}</span>
                         <br><span class="mc-event">${escapeHtml(r.gg_event_name || "\u2014")}</span>
                     </div>
@@ -618,7 +630,7 @@
                     <div class="mc-field-grid">
                         ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
                     </div>
-                    ${currentRole === "admin" ? `<div style="margin-top:0.5rem;"><button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link to Customer</button></div>` : ""}
+                    ${currentRole === "admin" && !r.has_player_card ? `<div style="margin-top:0.5rem;"><button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link to Customer</button></div>` : ""}
                 </div>
             </div>`;
         }).join("");
