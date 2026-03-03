@@ -78,7 +78,11 @@ def get_transactions(
         limit: Max rows to return (default 100)
     """
     conn = get_connection()
-    clauses = []
+    # Always exclude non-transaction placeholder rows
+    clauses = [
+        "merchant NOT IN ('Roster Import', 'Customer Entry', "
+        "'RSVP Import', 'RSVP Email Link')"
+    ]
     params = []
 
     if customer:
@@ -100,7 +104,7 @@ def get_transactions(
         clauses.append("order_date <= ?")
         params.append(date_to)
 
-    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    where = " WHERE " + " AND ".join(clauses)
     sql = f"SELECT * FROM items{where} ORDER BY order_date DESC, id DESC LIMIT ?"
     params.append(limit)
 
