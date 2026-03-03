@@ -52,6 +52,11 @@ const NON_EVENT_KEYWORDS = [
     "donation", "gift card", "season pass",
 ];
 
+// Placeholder merchants that are not real transactions (roster imports, manual entries, etc.)
+const PLACEHOLDER_MERCHANTS = [
+    "Roster Import", "Customer Entry", "RSVP Import", "RSVP Email Link",
+];
+
 // Classify an item as "membership", "upcoming", or "past" event
 function classifyItem(item) {
     const name = (item.item_name || "").toLowerCase();
@@ -326,7 +331,8 @@ function revertToSpan(input, value, field, rowId) {
 async function fetchItems() {
     try {
         const res = await fetch("/api/items");
-        allItems = await res.json();
+        const raw = await res.json();
+        allItems = raw.filter(i => !PLACEHOLDER_MERCHANTS.includes(i.merchant));
         updateCategoryCounts();
         applyFilters();
     } catch (err) {
