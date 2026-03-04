@@ -24,8 +24,8 @@ transaction-tracker/
 │   └── report.py                 # Daily email report sender
 ├── templates/
 │   ├── index.html                # Main transactions dashboard
-│   ├── events.html               # Events management page
-│   ├── customers.html            # Customer history page
+│   ├── events.html               # Events management + Tee Time Advisor
+│   ├── customers.html            # Customer directory + history
 │   └── audit.html                # Email audit/QA page (admin)
 └── static/
     ├── js/
@@ -91,7 +91,15 @@ transaction-tracker/
 | item_name | TEXT NOT NULL UNIQUE | Matches items.item_name |
 | event_date | TEXT | |
 | course | TEXT | |
-| city | TEXT | |
+| chapter | TEXT | Chapter (San Antonio / Austin) — renamed from `city` |
+| format | TEXT | 9 Holes / 18 Holes / 9/18 Combo |
+| start_type | TEXT | Tee Times / Shotgun (or 9-hole start type in combo) |
+| start_time | TEXT | Start time (HH:MM) or 9-hole start time in combo |
+| tee_time_count | INTEGER | Number of tee time slots (or 9-hole count in combo) |
+| tee_time_interval | INTEGER | Minutes between tee times |
+| start_time_18 | TEXT | 18-hole start time (combo mode only) |
+| start_type_18 | TEXT | 18-hole start type (combo mode only) |
+| tee_time_count_18 | INTEGER | 18-hole tee time count (combo mode only) |
 | event_type | TEXT DEFAULT 'event' | |
 | created_at | TEXT | |
 
@@ -130,8 +138,8 @@ transaction-tracker/
 
 | Endpoint | Method | Auth | Body | Response |
 |----------|--------|------|------|----------|
-| `/api/events` | GET | — | — | `[{id, item_name, event_date, course, city, registrations}]` |
-| `/api/events` | POST | — | `{item_name, event_date, course, city}` | `{event}` |
+| `/api/events` | GET | — | — | `[{id, item_name, event_date, course, chapter, format, start_type, start_time, ..., registrations}]` |
+| `/api/events` | POST | — | `{item_name, event_date, course, chapter, format, start_type, start_time, ...}` | `{event}` |
 | `/api/events/<id>` | PATCH | — | `{field: value}` | `{status: "ok"}` |
 | `/api/events/<id>` | DELETE | admin | — | `{status: "ok"}` |
 | `/api/events/sync` | POST | — | — | Auto-creates events from item_name patterns |
@@ -173,6 +181,12 @@ transaction-tracker/
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/report/send-now` | POST | Sends daily summary email immediately |
+
+### Sunset / Tee Time Advisor
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/sunset` | GET | Proxy to Sunrise-Sunset.org API. Params: `date` (YYYY-MM-DD), `chapter` (San Antonio/Austin). Returns sunset time, civil twilight end, and 24h equivalents. DST-aware via pytz. |
 
 ---
 
@@ -223,7 +237,7 @@ All pages use **vanilla JavaScript** (no frameworks). Each HTML template contain
 
 **Transactions** (`index.html` + `dashboard.js`): Most complex page. Column drag-to-reorder, inline cell editing via modal, category filter buttons (All/Upcoming/Past/Memberships), 24-column CSV export, "Check Now" button with real-time progress polling.
 
-**Events** (`events.html`): Expandable rows showing registrants per event. Add Player modal. Sync Events button auto-detects events from transaction item names.
+**Events** (`events.html`): Expandable rows showing registrants per event. Add Player modal. Sync Events button auto-detects events from transaction item names. Edit Event modal with format (9/18/Combo), start type (Tee Times/Shotgun — independent per group in combo mode), start time, and tee time planning fields. **Tee Time Advisor** panel auto-populates when date + chapter are set: fetches sunset data via `/api/sunset`, shows last recommended tee times with traffic light indicators (green/yellow/red), and generates tee time sheets with per-slot finish estimates. Combo mode shows side-by-side tee sheets with independent start times, start types, and counts for 9-hole and 18-hole groups.
 
 **Customers** (`customers.html`): List view with expandable inline detail rows (like Events). Card view with bottom detail panel. Derives status (MEMBER/GUEST/1st TIMER) and chapter (most frequent city) from transaction history. Email addresses are clickable mailto: links.
 
