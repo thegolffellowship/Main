@@ -1,7 +1,7 @@
 # TGF Transaction Tracker — Project Documentation
 
 > **The Golf Fellowship** — AI-powered transaction and event management platform
-> **Current Version:** v1.2.0 (March 1, 2026)
+> **Current Version:** v1.3.0 (March 4, 2026)
 > **Live URL:** https://tgf-tracker.up.railway.app
 
 ---
@@ -164,6 +164,15 @@ Shows all events with registration details. Events are auto-created from transac
   - **Paid Separately** — Adds a player who paid via cash/Venmo/etc.
 - **Upgrade RSVP** — Convert RSVP-only placeholder to full paid registration (Record Payment action)
 - **Send Reminder** — Email a payment reminder to RSVP-only players
+- **Send Reminder All** — Bulk-send payment reminders to all RSVP-only players in an event
+- **Withdraw (WD)** — Mark a player as withdrawn; tracks credit amount and shows WD badge
+- **Bulk Email Messaging** — Compose and send emails to event registrants with audience filtering, template variables, and preview
+- **Message Templates** — Create, edit, and delete reusable email templates with variable placeholders (`{player_name}`, `{event_name}`, etc.)
+- **Message Log** — View all sent messages per event with timestamps and recipients
+- **Extra Email Recipients** — Add CC recipients when sending event communications
+- **Player card editing** — Inline edit player details (handicap, tee, side games) from mobile cards
+- **Transactions/Info tabs** — Toggle between transaction details and player info on mobile cards
+- **NET/GROSS/NONE toggle** — Connected button bar for side games filter (replaces separate dropdowns)
 - **Delete manual player** — Remove manually-added entries
 - **Sync Events** — Auto-detect and create events from transaction item names
 - **Check RSVPs** — Trigger manual RSVP inbox check
@@ -190,7 +199,14 @@ Customer directory derived from transaction history.
 - **Column visibility toggle**
 - **CSV export**
 - **Credit/Transfer** — Available from customer detail rows
-- **Mobile cards** — Automatic card layout on small screens
+- **Add Customer** — Create a new customer record manually (without a transaction)
+- **Transactions/Info tabs** — Toggle between transaction history and editable customer info panel
+- **Customer update** — Edit customer email, phone, chapter, status inline from the Info tab
+- **Roster upload** — Import customers in bulk from Excel (.xlsx) files with column auto-detection, email matching, and skip-no-email option
+- **Customer aliases** — Link alternate names, emails, and phone numbers to a single customer
+- **AI name parsing** — Structured first/last/full name fields with AI-powered parsing and validation
+- **Mobile cards** — Automatic card layout on small screens with merge/edit/delete buttons
+- **WD badge** — Show withdrawal status and credit amounts on customer cards
 - **Clickable emails** — `mailto:` links
 
 ### 4. RSVP Log (`/rsvps`)
@@ -203,6 +219,9 @@ Shows all Golf Genius RSVP responses with matching status.
 - **Table columns** — Player name, Email, GG Event name, Response (badge), Event Date, Received date, Matched Event
 - **Check RSVPs** — Manual inbox check
 - **Rematch** — Re-run matching logic on unmatched RSVPs
+- **Link to Customer** — Connect an unmatched RSVP to an existing customer record
+- **New Customer from RSVP** — Create a new customer directly from an unlinked RSVP entry
+- **Auto-resolve names** — Automatically match RSVP player names from known customer emails
 - **Search** — By player name, event, email
 - **Event filter dropdown**
 - **Sortable columns**
@@ -243,9 +262,13 @@ Data quality assurance page comparing raw emails to parsed data.
   - **Missing** — Email fetched but no items parsed/saved
 - **Autofix buttons:**
   - Fix Side Games — Moves misplaced side_games data from golf_or_compete
-  - Fix All — Normalizes customer names, course names, side games, item names
+  - Fix All — Normalizes customer names, course names, side games, item names; backfills customer emails/phones and RSVP full-names/emails
   - Fix Tee Choices — Standardizes tee choice values (<50, 50-64, 65+, Forward)
+  - Re-extract Fields — Backfill new item data fields from original email text using AI
+- **Autofix confirmation + undo** — Preview changes before applying; one-click rollback of last autofix
+- **Date range and limit controls** — Filter audit emails by 7/14/30/90 days with adjustable result limits
 - **Search** — Filter by subject, sender, status
+- **Feedback tab** — View user-submitted support feedback with Send Test Digest button
 
 ### 7. Changelog (`/changelog`) — Admin Only
 
@@ -293,10 +316,21 @@ Version history and release notes page. Data comes from `version.js`.
 | city_match_play | TEXT | YES / NO (memberships) |
 | subject | TEXT | Original email subject line |
 | from_addr | TEXT | Original email sender |
-| transaction_status | TEXT | active / credited / transferred |
+| transaction_status | TEXT | active / credited / transferred / wd |
 | credit_note | TEXT | Reason for credit/transfer |
+| partner_request | TEXT | Partner/pairing request from email |
+| fellowship_after | TEXT | Post-event fellowship selection |
+| notes | TEXT | General notes field |
+| first_name | TEXT | Parsed first name |
+| last_name | TEXT | Parsed last name |
+| middle_name | TEXT | Parsed middle name |
+| suffix | TEXT | Name suffix (Jr., Sr., III, etc.) |
 | transferred_from_id | INTEGER | FK to originating item |
 | transferred_to_id | INTEGER | FK to destination item |
+| wd_reason | TEXT | Reason for withdrawal |
+| wd_note | TEXT | Additional withdrawal notes |
+| wd_credits | TEXT | JSON object of partial credit components |
+| credit_amount | TEXT | Dollar amount credited on WD |
 | created_at | TEXT | Auto-set to datetime('now') |
 
 **Constraint:** `UNIQUE(email_uid, item_index)` — prevents duplicate parsing
@@ -342,6 +376,79 @@ Version history and release notes page. Data comes from `version.js`.
 
 **Constraint:** `UNIQUE(item_id, event_name)`
 
+### `rsvp_email_overrides` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| player_email | TEXT NOT NULL | GG player email |
+| event_name | TEXT NOT NULL | Event item_name |
+| status | TEXT NOT NULL | none / playing / not_playing / manual_green |
+| updated_at | TEXT | |
+
+### `customer_aliases` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| customer_name | TEXT NOT NULL | Primary customer name (FK to items.customer) |
+| alias_type | TEXT NOT NULL | `name` or `email` |
+| alias_value | TEXT NOT NULL | The alternate name or email |
+| created_at | TEXT | |
+
+### `event_aliases` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| alias_name | TEXT NOT NULL | Variant/old event name |
+| canonical_event_name | TEXT NOT NULL | Canonical event name (FK to events.item_name) |
+| created_at | TEXT | |
+
+### `message_templates` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| name | TEXT NOT NULL | Template display name |
+| channel | TEXT | `email` or `sms` |
+| subject | TEXT | Email subject line (supports variables) |
+| html_body | TEXT | Email body HTML (supports variables like `{player_name}`, `{event_name}`) |
+| sms_body | TEXT | SMS text (for future Twilio integration) |
+| is_system | INTEGER DEFAULT 0 | 1 for built-in templates |
+| created_at | TEXT | |
+| updated_at | TEXT | |
+
+### `message_log` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_name | TEXT | Event context for the message |
+| template_id | INTEGER | FK to message_templates.id |
+| channel | TEXT | `email` or `sms` |
+| recipient_name | TEXT | |
+| recipient_address | TEXT | Email address or phone number |
+| subject | TEXT | Rendered subject |
+| body_preview | TEXT | First ~200 chars of rendered body |
+| status | TEXT | `sent` / `failed` |
+| error_message | TEXT | Error detail if failed |
+| sent_by | TEXT | Role of sender (admin/manager) |
+| sent_at | TEXT | |
+| created_at | TEXT | |
+
+### `feedback` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| type | TEXT | `bug` or `feature` |
+| message | TEXT NOT NULL | User-submitted feedback text |
+| page | TEXT | Page the feedback was submitted from |
+| role | TEXT | User's role at time of submission |
+| status | TEXT DEFAULT 'open' | `open` / `resolved` / `dismissed` |
+| created_at | TEXT | |
+
 ---
 
 ## API Endpoints
@@ -369,13 +476,14 @@ Version history and release notes page. Data comes from `version.js`.
 | `/api/audit` | GET | — | Data quality report (fill rates, problems, distributions) |
 | `/api/data-snapshot` | GET | — | Recent items + stats (accepts `?limit=N`) |
 
-### Credit / Transfer
+### Credit / Transfer / Withdrawal
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/items/<id>/credit` | POST | Mark as credited (body: `{note}`) |
 | `/api/items/<id>/transfer` | POST | Transfer to another event (body: `{target_event, note}`) |
 | `/api/items/<id>/reverse-credit` | POST | Undo credit/transfer, restore to active |
+| `/api/items/<id>/wd` | POST | Mark as withdrawn (body: `{reason, note, credits, credit_amount}`) |
 
 ### Events
 
@@ -389,6 +497,11 @@ Version history and release notes page. Data comes from `version.js`.
 | `/api/events/add-player` | POST | — | Add player (body: `{event_name, customer, mode, ...}`) |
 | `/api/events/upgrade-rsvp` | POST | — | Convert RSVP placeholder to paid (body: `{item_id, ...}`) |
 | `/api/events/send-reminder` | POST | — | Email payment reminder (body: `{to_email, player_name, event_name}`) |
+| `/api/events/send-reminder-all` | POST | — | Bulk-send reminders to all RSVP-only players in an event |
+| `/api/events/merge` | POST | — | Merge two events (body: `{source_event, target_event}`) |
+| `/api/events/orphaned-items` | GET | — | Items not linked to any event |
+| `/api/events/resolve-orphan` | POST | — | Link an orphaned item to an event |
+| `/api/events/aliases` | GET | — | All event name aliases |
 | `/api/events/delete-manual-player/<id>` | DELETE | — | Remove manually-added player |
 | `/api/events/seed` | POST | Admin | Batch-create events from JSON array |
 
@@ -402,6 +515,9 @@ Version history and release notes page. Data comes from `version.js`.
 | `/api/rsvps/check-now` | POST | Manual RSVP inbox check |
 | `/api/rsvps/rematch` | POST | Re-run matching on unmatched RSVPs |
 | `/api/rsvps/overrides/<event>` | GET | Manual RSVP overrides for an event |
+| `/api/rsvps/bulk` | GET | Bulk fetch RSVPs for multiple events |
+| `/api/rsvps/<id>/match` | POST | Manually match an RSVP to an event |
+| `/api/rsvps/<id>/unmatch` | POST | Unmatch an RSVP from its event |
 | `/api/rsvps/overrides` | POST | Set RSVP override (body: `{item_id, event_name, status}`) |
 | `/api/rsvps/config-status` | GET | Check RSVP credentials configured |
 
@@ -426,8 +542,49 @@ Version history and release notes page. Data comes from `version.js`.
 |----------|--------|-------------|
 | `/api/audit/emails` | GET | Compare raw emails vs parsed data |
 | `/api/audit/autofix-side-games` | POST | Fix side_games misplacement |
-| `/api/audit/autofix-all` | POST | Normalize names, courses, side games, tees |
+| `/api/audit/autofix-all` | POST | Normalize names, courses, side games, tees; backfill emails/phones |
+| `/api/audit/undo-autofix` | POST | Undo the last autofix operation |
 | `/api/audit/autofix-tee-choices` | POST | Standardize tee choices |
+| `/api/audit/re-extract-fields` | POST | Re-extract item fields from original email using AI |
+
+### Customers
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/customers/create` | POST | — | Create a new customer (body: `{first_name, last_name, email, phone, chapter}`) |
+| `/api/customers/update` | POST | — | Update customer fields (body: `{customer_name, field, value}`) |
+| `/api/customers/merge` | POST | — | Merge one customer into another |
+| `/api/customers/aliases` | GET | — | All customer aliases |
+| `/api/customers/aliases` | POST | — | Add alias (body: `{customer_name, alias_type, alias_value}`) |
+| `/api/customers/aliases/<id>` | DELETE | — | Delete an alias |
+| `/api/customers/from-rsvp` | POST | — | Create customer from RSVP data |
+| `/api/customers/link-rsvp` | POST | — | Link RSVP to existing customer |
+| `/api/customers/parse-roster` | POST | — | Parse uploaded Excel file for column mapping |
+| `/api/customers/preview-roster` | POST | — | Preview roster import before confirming |
+| `/api/customers/import-roster` | POST | — | Import parsed roster data into database |
+
+### Messaging
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/messages/templates` | GET | — | All message templates |
+| `/api/messages/templates` | POST | — | Create template (body: `{name, subject, html_body}`) |
+| `/api/messages/templates/<id>` | PATCH | — | Update template fields |
+| `/api/messages/templates/<id>` | DELETE | — | Delete template |
+| `/api/messages/send` | POST | — | Send bulk messages (body: `{event_name, template_id, audience, ...}`) |
+| `/api/messages/preview` | POST | — | Preview rendered message with template variables |
+| `/api/messages/log` | GET | — | All sent messages |
+| `/api/messages/log/<event_name>` | GET | — | Messages for a specific event |
+
+### Support / Feedback
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/support/chat` | POST | AI-assisted support chat |
+| `/api/support/feedback` | POST | Submit bug report or feature request |
+| `/api/support/feedback` | GET | List all feedback (admin) |
+| `/api/support/feedback/<id>` | PATCH | Update feedback status |
+| `/api/support/test-digest` | POST | Send test daily digest email |
 
 ### Matrix (Admin)
 
@@ -448,6 +605,13 @@ Version history and release notes page. Data comes from `version.js`.
 | `/api/auth/login` | POST | Authenticate with PIN (body: `{pin}`) |
 | `/api/auth/role` | GET | Current session role |
 | `/api/auth/logout` | POST | Clear session |
+
+### Admin / System
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/admin/backup` | GET | Admin | Download SQLite database file |
+| `/api/health` | GET | — | App health check (scheduler status, DB connectivity) |
 
 ---
 
@@ -700,6 +864,58 @@ The app is installable as a Progressive Web App:
 
 ## Version History
 
+### v1.3.0 — March 4, 2026 — "Messaging, Roster Import & RSVP Linking"
+
+**Bulk Messaging:**
+- Compose and send emails to event registrants with audience filtering (all, playing, RSVP-only, NET, GROSS, not playing, custom)
+- Reusable message templates with variable placeholders (`{player_name}`, `{event_name}`, `{course}`, etc.)
+- Message preview before sending
+- Message log — track all sent messages per event with delivery status
+- Extra email recipients (CC) on event communications
+- "Remind All" bulk reminder for RSVP-only players
+
+**Customer Management:**
+- Add Customer button — create customers manually without a transaction
+- Customer update API — edit email, phone, chapter, status, handicap inline from Info tab
+- Transactions/Info tabs on customer cards (desktop and mobile)
+- Excel roster upload — bulk import from spreadsheets with column auto-detection, email matching, and skip-no-email
+- Structured name fields — first/last/middle/suffix with AI-powered name parsing and validation
+- Customer aliases — link alternate names, emails, and phones to a single customer record
+- WD badge and credit amounts shown on customer cards
+
+**RSVP Linking:**
+- "Link to Customer" button on RSVP Log — connect unmatched RSVPs to existing customers
+- "New Customer" button on RSVP Log — create a customer directly from an unlinked RSVP
+- Auto-resolve RSVP player names from known customer emails
+
+**Event Management:**
+- WD (withdrawal) action — mark players as withdrawn with optional partial credit tracking
+- Player card editing — inline edit player details from mobile cards
+- NET/GROSS/NONE connected toggle group replacing separate dropdowns
+
+**Audit Improvements:**
+- Date range and limit controls — filter by 7/14/30/90 days
+- Autofix confirmation + undo — preview before applying, one-click rollback
+- Re-extract Fields tool — backfill new item fields from original email with AI
+- Customer email/phone and RSVP full-name/email backfill in Autofix All
+
+**Support & Feedback:**
+- Support feedback system — collect user bug reports and feature requests
+- Daily digest email with feedback summary
+- Test Digest button on Audit > Feedback tab
+
+**Infrastructure:**
+- Fix OAuth flow for Claude.ai MCP connector (PKCE + stateless HMAC tokens)
+- MCP_CLIENT_SECRET alphanumeric-only guidance
+- Startup diagnostic log for MCP OAuth env var visibility
+- Pin mcp, uvicorn, and a2wsgi dependency versions
+- Exclude non-transaction placeholder rows from Transactions and Events views
+
+**Mobile:**
+- Merge/edit/delete buttons on mobile cards
+- Game stat badges on collapsed mobile event cards
+- Transactions/Info tab toggles on mobile player cards
+
 ### v1.2.0 — March 1, 2026 — "Audit Hardening"
 - **Critical:** Log database IntegrityErrors instead of silently swallowing them
 - **Critical:** Add `managed_connection` context manager to prevent DB connection leaks
@@ -747,8 +963,8 @@ The app is installable as a Progressive Web App:
 Features discussed or planned but not yet implemented:
 
 ### High Priority
-- **Bulk Event Communications (Email + SMS)** — Compose and send messages to event registrants with audience filtering, reusable templates, and Twilio SMS integration. Full spec in [Future Considerations → Bulk Event Communications](#bulk-event-communications-email--sms)
-- **SUPPORT button** — "I have a question" button for players to contact TGF directly from the app
+- ~~**Bulk Event Communications (Email + SMS)**~~ — **DONE** (v1.3.0). Email messaging implemented with audience filtering, reusable templates, preview, and message log. SMS (Twilio) still pending.
+- ~~**SUPPORT button**~~ — **DONE** (v1.3.0). Support feedback system with bug/feature submission, admin review, and daily digest.
 - **Player-facing event page** — Public page where players can see their upcoming events, RSVP status, and payment status without needing a PIN
 - ~~**Bulk email reminders**~~ — **DONE** (v1.2.0). "Remind All" button on event detail sends to all RSVP-only players at once.
 
@@ -762,7 +978,7 @@ Features discussed or planned but not yet implemented:
 
 ### Lower Priority
 - **Multi-city dashboard** — City-specific views (San Antonio, Dallas, Austin, Houston, Galveston) with separate stats
-- ~~**Email template editor**~~ — Covered by [Bulk Event Communications](#bulk-event-communications-email--sms) spec
+- ~~**Email template editor**~~ — **DONE** (v1.3.0). Covered by message templates in Bulk Event Communications.
 - **Webhook notifications** — Push notifications (Slack, Discord, etc.) when new registrations arrive
 - **Player profile photos** — Upload or link profile pictures for the customer directory
 - **Dark mode** — System-preference or manual toggle
