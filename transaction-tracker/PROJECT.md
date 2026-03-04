@@ -176,10 +176,13 @@ Shows all events with registration details. Events are auto-created from transac
 - **Delete manual player** — Remove manually-added entries
 - **Sync Events** — Auto-detect and create events from transaction item names
 - **Check RSVPs** — Trigger manual RSVP inbox check
-- **Search** — Filter events by name, course, city
+- **Search** — Filter events by name, course, chapter
 - **Column visibility toggle**
-- **Sortable columns** — Event name, date, course, city, registration count
-- **Add Event** — Manually create a new event
+- **Sortable columns** — Event name, date, course, chapter, registration count
+- **Add Event** — Manually create a new event with format, start type, and tee time planning
+- **Tee Time Advisor** — Auto-populates when date + chapter are set; fetches sunset data, shows last recommended tee times with traffic light indicators (green/yellow/red), generates tee time sheets with per-slot finish estimates
+- **Format support** — 9 Holes, 18 Holes, 9/18 Combo with independent start types (Tee Times/Shotgun) and start times per group in combo mode
+- **Tee time planning** — Configurable tee time count, interval; combo mode has separate counts for 9-hole and 18-hole groups with side-by-side tee sheets
 
 ### 3. Customers Page (`/customers`)
 
@@ -344,7 +347,15 @@ Version history and release notes page. Data comes from `version.js`.
 | item_name | TEXT UNIQUE | Matches items.item_name exactly |
 | event_date | TEXT | |
 | course | TEXT | |
-| city | TEXT | |
+| chapter | TEXT | Chapter (San Antonio / Austin) — renamed from `city` |
+| format | TEXT | 9 Holes / 18 Holes / 9/18 Combo |
+| start_type | TEXT | Tee Times / Shotgun (or 9-hole start type in combo) |
+| start_time | TEXT | Start time HH:MM (or 9-hole start time in combo) |
+| tee_time_count | INTEGER | Number of tee time slots (or 9-hole count in combo) |
+| tee_time_interval | INTEGER | Minutes between tee times |
+| start_time_18 | TEXT | 18-hole start time (combo mode only) |
+| start_type_18 | TEXT | 18-hole start type (combo mode only) |
+| tee_time_count_18 | INTEGER | 18-hole tee time count (combo mode only) |
 | event_type | TEXT | Default 'event' |
 | created_at | TEXT | |
 
@@ -490,7 +501,7 @@ Version history and release notes page. Data comes from `version.js`.
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/api/events` | GET | — | All events with registration counts |
-| `/api/events` | POST | — | Create event (body: `{item_name, event_date, course, city}`) |
+| `/api/events` | POST | — | Create event (body: `{item_name, event_date, course, chapter, format, start_type, start_time, ...}`) |
 | `/api/events/<id>` | PATCH | — | Update event fields |
 | `/api/events/<id>` | DELETE | Admin | Delete event |
 | `/api/events/sync` | POST | — | Auto-create events from item_name patterns |
@@ -504,6 +515,7 @@ Version history and release notes page. Data comes from `version.js`.
 | `/api/events/aliases` | GET | — | All event name aliases |
 | `/api/events/delete-manual-player/<id>` | DELETE | — | Remove manually-added player |
 | `/api/events/seed` | POST | Admin | Batch-create events from JSON array |
+| `/api/sunset` | GET | — | Sunset data for tee time advisor (params: `date`, `chapter`). Returns sunset, civil twilight, 24h times. DST-aware. |
 
 ### RSVPs
 

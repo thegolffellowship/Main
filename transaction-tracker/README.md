@@ -403,7 +403,10 @@ transaction-tracker/
 │   ├── database.py           # SQLite storage layer
 │   └── report.py             # Daily email report (SMTP)
 ├── templates/
-│   └── index.html            # Dashboard HTML
+│   ├── index.html            # Transactions dashboard
+│   ├── events.html           # Events management + Tee Time Advisor
+│   ├── customers.html        # Customer directory
+│   └── audit.html            # Email audit/QA (admin)
 └── static/
     ├── css/
     │   └── dashboard.css     # Dashboard styles
