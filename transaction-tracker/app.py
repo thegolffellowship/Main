@@ -732,7 +732,7 @@ def api_audit_emails():
             issues = []
             for row in db_rows:
                 missing = []
-                for f in ["customer", "order_id", "item_name", "item_price", "event_date", "city"]:
+                for f in ["customer", "order_id", "item_name", "item_price", "event_date"]:
                     if not row.get(f):
                         missing.append(f)
                 if missing:
@@ -1386,7 +1386,10 @@ def api_create_event():
         item_name=data["item_name"],
         event_date=data.get("event_date"),
         course=data.get("course"),
-        city=data.get("city"),
+        chapter=data.get("chapter"),
+        format=data.get("format"),
+        start_type=data.get("start_type"),
+        start_time=data.get("start_time"),
     )
     if event:
         return jsonify({"status": "ok", "event": event}), 201
@@ -1420,6 +1423,61 @@ def api_merge_events():
 def api_orphaned_items():
     """Return items whose item_name doesn't match any event."""
     return jsonify(get_orphaned_items())
+
+
+@app.route("/api/sunset")
+def api_sunset():
+    """Return sunset and civil twilight times for a chapter + date, in Central Time."""
+    import pytz
+    import requests as _requests
+    from datetime import datetime as _dt
+
+    # TODO: pull chapter coordinates from a chapters table when full platform is built
+    CHAPTER_COORDS = {
+        "San Antonio": (29.4241, -98.4936),
+        "Austin": (30.2672, -97.7431),
+    }
+
+    date_str = request.args.get("date")
+    chapter = request.args.get("chapter")
+    if not date_str or not chapter:
+        return jsonify({"error": "date and chapter are required"}), 400
+    coords = CHAPTER_COORDS.get(chapter)
+    if not coords:
+        return jsonify({"error": f"Unknown chapter: {chapter}"}), 400
+
+    try:
+        resp = _requests.get(
+            "https://api.sunrise-sunset.org/json",
+            params={"lat": coords[0], "lng": coords[1], "date": date_str, "formatted": 0},
+            timeout=10,
+        )
+        data = resp.json()
+        if data.get("status") != "OK":
+            return jsonify({"error": "Sunrise-Sunset API error"}), 502
+
+        results = data["results"]
+        central = pytz.timezone("America/Chicago")
+
+        def to_central_12h(iso_str):
+            utc_dt = _dt.fromisoformat(iso_str.replace("Z", "+00:00"))
+            local_dt = utc_dt.astimezone(central)
+            return local_dt.strftime("%-I:%M %p"), local_dt.strftime("%H:%M")
+
+        sunset_12h, sunset_24h = to_central_12h(results["sunset"])
+        twilight_12h, twilight_24h = to_central_12h(results["civil_twilight_end"])
+
+        return jsonify({
+            "sunset": sunset_12h,
+            "sunset_24h": sunset_24h,
+            "civil_twilight_end": twilight_12h,
+            "civil_twilight_end_24h": twilight_24h,
+        })
+    except _requests.RequestException:
+        return jsonify({"error": "Failed to reach Sunrise-Sunset API"}), 502
+    except Exception as exc:
+        logger.exception("Sunset API error")
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/events/resolve-orphan", methods=["POST"])
@@ -1725,7 +1783,7 @@ def api_send_messages():
         "event_name": event_name,
         "event_date": event_info.get("event_date") or "",
         "course": event_info.get("course") or "",
-        "city": event_info.get("city") or "",
+        "chapter": event_info.get("chapter") or "",
     }
 
     # Filter audience
@@ -1974,7 +2032,7 @@ def api_preview_message():
         "event_name": data.get("event_name", "Sample Event"),
         "event_date": data.get("event_date", "2026-03-15"),
         "course": data.get("course", "Sample Course"),
-        "city": data.get("city", "San Antonio"),
+        "chapter": data.get("chapter", "San Antonio"),
     }
 
     return jsonify({
@@ -2394,22 +2452,22 @@ init_db()
 
 # Seed upcoming San Antonio events (idempotent — skips existing)
 _SA_EVENTS = [
-    {"item_name": "s9.1 The Quarry", "event_date": "2026-03-17", "course": "The Quarry", "city": "San Antonio"},
-    {"item_name": "s9.2 Canyon Springs", "event_date": "2026-03-24", "course": "Canyon Springs", "city": "San Antonio"},
-    {"item_name": "s9.3 Silverhorn", "event_date": "2026-03-31", "course": "Silverhorn", "city": "San Antonio"},
-    {"item_name": "s9.4 Willow Springs", "event_date": "2026-04-07", "course": "Willow Springs", "city": "San Antonio"},
-    {"item_name": "s18.4 LANDA PARK", "event_date": "2026-04-11", "course": "Landa Park", "city": "San Antonio"},
-    {"item_name": "s9.5 Cedar Creek", "event_date": "2026-04-14", "course": "Cedar Creek", "city": "San Antonio"},
-    {"item_name": "s9.6 The Quarry", "event_date": "2026-04-21", "course": "The Quarry", "city": "San Antonio"},
-    {"item_name": "s9.7 Canyon Springs", "event_date": "2026-04-28", "course": "Canyon Springs", "city": "San Antonio"},
-    {"item_name": "s18.5 WILLOW SPRINGS", "event_date": "2026-05-02", "course": "Willow Springs", "city": "San Antonio"},
-    {"item_name": "s9.8 Silverhorn", "event_date": "2026-05-05", "course": "Silverhorn", "city": "San Antonio"},
-    {"item_name": "s9.9 TPC San Antonio | Canyons", "event_date": "2026-05-12", "course": "TPC San Antonio - Canyons", "city": "San Antonio"},
-    {"item_name": "HILL COUNTRY MATCHES | Comanche Trace", "event_date": "2026-05-16", "course": "Comanche Trace", "city": "San Antonio"},
-    {"item_name": "s9.10 Brackenridge", "event_date": "2026-05-19", "course": "Brackenridge", "city": "San Antonio"},
-    {"item_name": "s9.11 The Quarry", "event_date": "2026-05-26", "course": "The Quarry", "city": "San Antonio"},
-    {"item_name": "s18.6 KISSING TREE", "event_date": "2026-05-30", "course": "Kissing Tree", "city": "San Antonio"},
-    {"item_name": "s9.12 Canyon Springs", "event_date": "2026-06-02", "course": "Canyon Springs", "city": "San Antonio"},
+    {"item_name": "s9.1 The Quarry", "event_date": "2026-03-17", "course": "The Quarry", "chapter": "San Antonio"},
+    {"item_name": "s9.2 Canyon Springs", "event_date": "2026-03-24", "course": "Canyon Springs", "chapter": "San Antonio"},
+    {"item_name": "s9.3 Silverhorn", "event_date": "2026-03-31", "course": "Silverhorn", "chapter": "San Antonio"},
+    {"item_name": "s9.4 Willow Springs", "event_date": "2026-04-07", "course": "Willow Springs", "chapter": "San Antonio"},
+    {"item_name": "s18.4 LANDA PARK", "event_date": "2026-04-11", "course": "Landa Park", "chapter": "San Antonio"},
+    {"item_name": "s9.5 Cedar Creek", "event_date": "2026-04-14", "course": "Cedar Creek", "chapter": "San Antonio"},
+    {"item_name": "s9.6 The Quarry", "event_date": "2026-04-21", "course": "The Quarry", "chapter": "San Antonio"},
+    {"item_name": "s9.7 Canyon Springs", "event_date": "2026-04-28", "course": "Canyon Springs", "chapter": "San Antonio"},
+    {"item_name": "s18.5 WILLOW SPRINGS", "event_date": "2026-05-02", "course": "Willow Springs", "chapter": "San Antonio"},
+    {"item_name": "s9.8 Silverhorn", "event_date": "2026-05-05", "course": "Silverhorn", "chapter": "San Antonio"},
+    {"item_name": "s9.9 TPC San Antonio | Canyons", "event_date": "2026-05-12", "course": "TPC San Antonio - Canyons", "chapter": "San Antonio"},
+    {"item_name": "HILL COUNTRY MATCHES | Comanche Trace", "event_date": "2026-05-16", "course": "Comanche Trace", "chapter": "San Antonio"},
+    {"item_name": "s9.10 Brackenridge", "event_date": "2026-05-19", "course": "Brackenridge", "chapter": "San Antonio"},
+    {"item_name": "s9.11 The Quarry", "event_date": "2026-05-26", "course": "The Quarry", "chapter": "San Antonio"},
+    {"item_name": "s18.6 KISSING TREE", "event_date": "2026-05-30", "course": "Kissing Tree", "chapter": "San Antonio"},
+    {"item_name": "s9.12 Canyon Springs", "event_date": "2026-06-02", "course": "Canyon Springs", "chapter": "San Antonio"},
 ]
 _seed_result = seed_events(_SA_EVENTS)
 if _seed_result["inserted"]:
