@@ -52,7 +52,7 @@ application = Starlette(
     routes=[
         Route("/.well-known/oauth-authorization-server", oauth_metadata, methods=["GET"]),
         Route("/oauth/authorize", oauth_authorize, methods=["GET"]),
-        Route("/oauth/token", oauth_token, methods=["POST"]),
+        Route("/oauth/token", oauth_token, methods=["POST", "OPTIONS"]),
         Mount("/mcp", app=mcp_protected),
         Mount("/", app=WSGIMiddleware(flask_app)),
     ],
