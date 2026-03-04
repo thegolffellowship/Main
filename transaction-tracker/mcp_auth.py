@@ -1,13 +1,14 @@
 """
-OAuth 2.0 Client Credentials support for the MCP endpoint.
+OAuth 2.0 support for the MCP endpoint.
 
 Implements:
   - /.well-known/oauth-authorization-server  (RFC 8414 metadata)
   - /oauth/authorize   (authorization endpoint — auto-approves for known clients)
   - /oauth/token       (token endpoint — client_credentials + authorization_code)
 
-Tokens are self-contained HMAC-SHA256 signed payloads (no external DB needed).
-Works safely across multiple Gunicorn workers since verification is stateless.
+Tokens AND authorization codes are self-contained HMAC-SHA256 signed
+payloads — no shared state needed, works safely across multiple
+Gunicorn workers.
 
 Environment variables:
   MCP_CLIENT_ID      — OAuth client ID for the connector
@@ -18,6 +19,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -25,10 +27,13 @@ import urllib.parse
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, RedirectResponse
 
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 TOKEN_LIFETIME = 3600  # 1 hour
+AUTH_CODE_LIFETIME = 120  # 2 minutes (generous for network round-trips)
 
 def _client_id():
     return os.getenv("MCP_CLIENT_ID", "")
@@ -42,6 +47,13 @@ def _signing_key():
     if not secret:
         return b""
     return hashlib.sha256(("mcp-token-sign:" + secret).encode()).digest()
+
+def _code_signing_key():
+    """Separate signing key for authorization codes."""
+    secret = _client_secret()
+    if not secret:
+        return b""
+    return hashlib.sha256(("mcp-auth-code:" + secret).encode()).digest()
 
 
 # ---------------------------------------------------------------------------
@@ -57,21 +69,14 @@ def _b64url_decode(s: str) -> bytes:
         s += "=" * padding
     return base64.urlsafe_b64decode(s)
 
-def generate_token(client_id: str, lifetime: int = TOKEN_LIFETIME) -> str:
-    """Create a signed access token."""
-    payload = json.dumps({
-        "client_id": client_id,
-        "exp": int(time.time()) + lifetime,
-        "jti": secrets.token_hex(8),
-    }).encode()
-    payload_b64 = _b64url_encode(payload)
-    sig = hmac.new(_signing_key(), payload_b64.encode(), hashlib.sha256).digest()
-    sig_b64 = _b64url_encode(sig)
-    return f"{payload_b64}.{sig_b64}"
+def _sign_payload(payload_dict: dict, key: bytes) -> str:
+    """Create a signed payload string: base64(json).base64(hmac)."""
+    payload_b64 = _b64url_encode(json.dumps(payload_dict).encode())
+    sig = hmac.new(key, payload_b64.encode(), hashlib.sha256).digest()
+    return f"{payload_b64}.{_b64url_encode(sig)}"
 
-def verify_token(token: str) -> dict | None:
-    """Verify a token's signature and expiration. Returns payload dict or None."""
-    key = _signing_key()
+def _verify_signed(token: str, key: bytes) -> dict | None:
+    """Verify a signed payload. Returns payload dict or None."""
     if not key:
         return None
     parts = token.split(".")
@@ -91,18 +96,48 @@ def verify_token(token: str) -> dict | None:
         return None
 
 
-# ---------------------------------------------------------------------------
-# In-memory authorization code store (short-lived, per-worker)
-# Codes expire in 60 seconds and are single-use.
-# ---------------------------------------------------------------------------
-_auth_codes: dict[str, dict] = {}
+def generate_token(client_id: str, lifetime: int = TOKEN_LIFETIME) -> str:
+    """Create a signed access token."""
+    return _sign_payload({
+        "client_id": client_id,
+        "exp": int(time.time()) + lifetime,
+        "jti": secrets.token_hex(8),
+    }, _signing_key())
 
-def _cleanup_codes():
-    """Remove expired codes."""
-    now = time.time()
-    expired = [k for k, v in _auth_codes.items() if v["exp"] < now]
-    for k in expired:
-        del _auth_codes[k]
+def verify_token(token: str) -> dict | None:
+    """Verify a token's signature and expiration."""
+    return _verify_signed(token, _signing_key())
+
+
+def _generate_auth_code(client_id: str, redirect_uri: str,
+                        code_challenge: str, code_challenge_method: str) -> str:
+    """Create a stateless signed authorization code (works across workers)."""
+    return _sign_payload({
+        "type": "auth_code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "code_challenge": code_challenge,
+        "code_challenge_method": code_challenge_method,
+        "exp": int(time.time()) + AUTH_CODE_LIFETIME,
+        "jti": secrets.token_hex(8),
+    }, _code_signing_key())
+
+def _verify_auth_code(code: str) -> dict | None:
+    """Verify an authorization code's signature and expiration."""
+    payload = _verify_signed(code, _code_signing_key())
+    if payload and payload.get("type") != "auth_code":
+        return None
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# CORS helper
+# ---------------------------------------------------------------------------
+_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +154,7 @@ def _get_issuer(request: Request) -> str:
 async def oauth_metadata(request: Request) -> JSONResponse:
     """RFC 8414 — OAuth 2.0 Authorization Server Metadata."""
     issuer = _get_issuer(request)
+    logger.info("OAuth metadata requested from %s", request.client.host if request.client else "unknown")
     return JSONResponse({
         "issuer": issuer,
         "authorization_endpoint": f"{issuer}/oauth/authorize",
@@ -126,6 +162,7 @@ async def oauth_metadata(request: Request) -> JSONResponse:
         "token_endpoint_auth_methods_supported": [
             "client_secret_post",
             "client_secret_basic",
+            "none",
         ],
         "grant_types_supported": [
             "authorization_code",
@@ -134,7 +171,7 @@ async def oauth_metadata(request: Request) -> JSONResponse:
         "response_types_supported": ["code"],
         "code_challenge_methods_supported": ["S256"],
         "scopes_supported": ["mcp"],
-    })
+    }, headers=_CORS_HEADERS)
 
 
 async def oauth_authorize(request: Request) -> Response:
@@ -146,8 +183,16 @@ async def oauth_authorize(request: Request) -> Response:
     response_type = params.get("response_type", "")
     code_challenge = params.get("code_challenge", "")
     code_challenge_method = params.get("code_challenge_method", "")
+    scope = params.get("scope", "")
+
+    logger.info(
+        "OAuth authorize: client_id=%s redirect_uri=%s response_type=%s "
+        "code_challenge_method=%s scope=%s",
+        client_id, redirect_uri, response_type, code_challenge_method, scope,
+    )
 
     if response_type != "code":
+        logger.warning("OAuth authorize: unsupported response_type=%s", response_type)
         return JSONResponse(
             {"error": "unsupported_response_type"},
             status_code=400,
@@ -155,35 +200,35 @@ async def oauth_authorize(request: Request) -> Response:
 
     expected_id = _client_id()
     if not expected_id or not secrets.compare_digest(client_id, expected_id):
+        logger.warning("OAuth authorize: invalid client_id=%s (expected=%s)", client_id, expected_id)
         return JSONResponse({"error": "invalid_client"}, status_code=401)
 
     if not redirect_uri:
+        logger.warning("OAuth authorize: missing redirect_uri")
         return JSONResponse(
             {"error": "invalid_request", "error_description": "redirect_uri required"},
             status_code=400,
         )
 
-    # Generate authorization code
-    _cleanup_codes()
-    code = secrets.token_urlsafe(32)
-    _auth_codes[code] = {
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "code_challenge": code_challenge,
-        "code_challenge_method": code_challenge_method,
-        "exp": time.time() + 60,
-    }
+    # Generate stateless signed authorization code
+    code = _generate_auth_code(client_id, redirect_uri, code_challenge, code_challenge_method)
 
     # Redirect back with the code
     sep = "&" if "?" in redirect_uri else "?"
     location = f"{redirect_uri}{sep}code={urllib.parse.quote(code)}"
     if state:
         location += f"&state={urllib.parse.quote(state)}"
+
+    logger.info("OAuth authorize: issuing code, redirecting to %s", redirect_uri)
     return RedirectResponse(url=location, status_code=302)
 
 
-async def oauth_token(request: Request) -> JSONResponse:
+async def oauth_token(request: Request) -> Response:
     """Token endpoint — supports client_credentials and authorization_code."""
+    # Handle CORS preflight
+    if request.method == "OPTIONS":
+        return Response(status_code=204, headers=_CORS_HEADERS)
+
     content_type = request.headers.get("content-type", "")
 
     # Parse form body or JSON
@@ -211,33 +256,42 @@ async def oauth_token(request: Request) -> JSONResponse:
             data.setdefault("client_id", basic_id)
             data.setdefault("client_secret", basic_secret)
         except Exception:
-            pass
+            logger.warning("OAuth token: malformed Basic auth header")
 
     client_id = data.get("client_id", "")
     client_secret = data.get("client_secret", "")
+
+    logger.info(
+        "OAuth token: grant_type=%s client_id=%s has_secret=%s content_type=%s",
+        grant_type, client_id, bool(client_secret), content_type,
+    )
 
     expected_id = _client_id()
     expected_secret = _client_secret()
 
     if not expected_id or not expected_secret:
+        logger.error("OAuth token: MCP_CLIENT_ID or MCP_CLIENT_SECRET not configured")
         return JSONResponse(
             {"error": "server_error", "error_description": "MCP OAuth not configured"},
             status_code=500,
+            headers=_CORS_HEADERS,
         )
 
     # ── Client Credentials Grant ──
     if grant_type == "client_credentials":
         if not (secrets.compare_digest(client_id, expected_id) and
                 secrets.compare_digest(client_secret, expected_secret)):
-            return JSONResponse({"error": "invalid_client"}, status_code=401)
+            logger.warning("OAuth token: client_credentials invalid credentials")
+            return JSONResponse({"error": "invalid_client"}, status_code=401, headers=_CORS_HEADERS)
 
         token = generate_token(client_id)
+        logger.info("OAuth token: client_credentials grant succeeded")
         return JSONResponse({
             "access_token": token,
             "token_type": "Bearer",
             "expires_in": TOKEN_LIFETIME,
             "scope": "mcp",
-        })
+        }, headers=_CORS_HEADERS)
 
     # ── Authorization Code Grant ──
     if grant_type == "authorization_code":
@@ -245,53 +299,78 @@ async def oauth_token(request: Request) -> JSONResponse:
         redirect_uri = data.get("redirect_uri", "")
         code_verifier = data.get("code_verifier", "")
 
-        _cleanup_codes()
-        code_data = _auth_codes.pop(code, None)
+        logger.info(
+            "OAuth token: auth_code exchange — has_code=%s has_redirect_uri=%s "
+            "has_code_verifier=%s",
+            bool(code), bool(redirect_uri), bool(code_verifier),
+        )
+
+        # Verify the stateless signed auth code
+        code_data = _verify_auth_code(code)
 
         if not code_data:
+            logger.warning("OAuth token: invalid or expired authorization code")
             return JSONResponse(
                 {"error": "invalid_grant", "error_description": "Invalid or expired code"},
                 status_code=400,
+                headers=_CORS_HEADERS,
             )
 
-        # Validate client
-        if not secrets.compare_digest(code_data["client_id"], client_id or expected_id):
-            return JSONResponse({"error": "invalid_client"}, status_code=401)
+        logger.info("OAuth token: code verified — code_client=%s code_redirect=%s",
+                     code_data.get("client_id"), code_data.get("redirect_uri"))
+
+        # Validate client — accept if client_id matches OR if not provided (PKCE public client)
+        if client_id and not secrets.compare_digest(code_data["client_id"], client_id):
+            logger.warning("OAuth token: client_id mismatch (code=%s, request=%s)",
+                           code_data["client_id"], client_id)
+            return JSONResponse({"error": "invalid_client"}, status_code=401, headers=_CORS_HEADERS)
 
         # Validate redirect_uri if present
         if redirect_uri and redirect_uri != code_data["redirect_uri"]:
+            logger.warning("OAuth token: redirect_uri mismatch (code=%s, request=%s)",
+                           code_data["redirect_uri"], redirect_uri)
             return JSONResponse(
                 {"error": "invalid_grant", "error_description": "redirect_uri mismatch"},
                 status_code=400,
+                headers=_CORS_HEADERS,
             )
 
         # Validate PKCE code_verifier
         if code_data.get("code_challenge"):
             if not code_verifier:
+                logger.warning("OAuth token: code_verifier required but missing")
                 return JSONResponse(
                     {"error": "invalid_grant", "error_description": "code_verifier required"},
                     status_code=400,
+                    headers=_CORS_HEADERS,
                 )
             # S256: BASE64URL(SHA256(code_verifier)) == code_challenge
             digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
             computed = _b64url_encode(digest)
             if not secrets.compare_digest(computed, code_data["code_challenge"]):
+                logger.warning("OAuth token: PKCE code_verifier mismatch")
                 return JSONResponse(
                     {"error": "invalid_grant", "error_description": "code_verifier mismatch"},
                     status_code=400,
+                    headers=_CORS_HEADERS,
                 )
+            logger.info("OAuth token: PKCE verification passed")
 
         token = generate_token(code_data["client_id"])
+        logger.info("OAuth token: authorization_code grant succeeded for client=%s",
+                     code_data["client_id"])
         return JSONResponse({
             "access_token": token,
             "token_type": "Bearer",
             "expires_in": TOKEN_LIFETIME,
             "scope": "mcp",
-        })
+        }, headers=_CORS_HEADERS)
 
+    logger.warning("OAuth token: unsupported grant_type=%s", grant_type)
     return JSONResponse(
         {"error": "unsupported_grant_type"},
         status_code=400,
+        headers=_CORS_HEADERS,
     )
 
 
