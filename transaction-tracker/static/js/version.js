@@ -1,5 +1,39 @@
-window.TGF_VERSION = "1.2.0";
+window.TGF_VERSION = "1.3.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "1.3.0",
+    date: "2026-03-04",
+    title: "Messaging, Roster Import & RSVP Linking",
+    changes: [
+      "Bulk email messaging for events — compose, preview, send to filtered audiences with reusable templates",
+      "Message templates — create, edit, delete reusable email templates with variable placeholders",
+      "Message log — track all sent messages per event with delivery status",
+      "Excel roster upload — bulk import customers from spreadsheets with column detection and email matching",
+      "Structured name fields — first/last/full names with AI parsing and validation",
+      "Customer aliases — link alternate emails, phones, and names to a single customer record",
+      "Add Customer button on Customers page — create customers manually without a transaction",
+      "Customer Info panel — read-only default with Transactions/Info tab toggle on customer cards",
+      "Customer update API — edit customer details (email, phone, chapter, status) inline",
+      "Link to Customer on RSVP Log — connect unmatched RSVPs to existing customers",
+      "New Customer from RSVP — create a customer record directly from an unlinked RSVP entry",
+      "Auto-resolve RSVP player names from known customer emails",
+      "WD (withdrawal) action for event players — mark players as withdrawn with credit tracking",
+      "Player card editing on Events page — inline edit player details on mobile cards",
+      "Extra email recipients — add CC recipients when sending event reminders",
+      "NET/GROSS/NONE connected toggle group — unified button bar replacing separate dropdowns",
+      "Audit date range and limit controls — filter audit emails by 7/14/30/90 days",
+      "Autofix confirmation + undo — preview changes before applying, one-click rollback",
+      "Re-extract fields audit tool — backfill new item fields from original email text",
+      "Customer email/phone backfill in Autofix All",
+      "RSVP full-name and email backfill in Autofix All",
+      "Support feedback system — collect and review user feedback with daily digest emails",
+      "Test digest button on Audit > Feedback tab",
+      "Fix OAuth flow for Claude.ai MCP connector — PKCE + stateless HMAC tokens",
+      "Mobile improvements — merge/edit/delete on cards, game stat badges on collapsed cards",
+      "Exclude non-transaction placeholder rows from Transactions and Events views",
+      "Pin mcp, uvicorn, and a2wsgi dependency versions"
+    ]
+  },
   {
     version: "1.2.0",
     date: "2026-03-01",
