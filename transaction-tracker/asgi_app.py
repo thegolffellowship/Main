@@ -10,11 +10,13 @@ Or:        gunicorn asgi_app:application -k uvicorn.workers.UvicornWorker
 """
 
 import contextlib
+import os
 from collections.abc import AsyncIterator
 
 from a2wsgi import WSGIMiddleware
 from starlette.applications import Starlette
 from starlette.routing import Mount, Route
+from mcp.server.transport_security import TransportSecuritySettings
 
 # Import existing Flask app (triggers init_db, scheduler, event seeding)
 from app import app as flask_app
@@ -37,6 +39,19 @@ mcp.settings.stateless_http = True
 # the full endpoint URL becomes /mcp/mcp — which matches the Claude.ai
 # connector config and the docs.  Do NOT override to "/" or the connector
 # will get McpEndpointNotFound after a successful OAuth handshake.
+
+# Allow Railway's public hostname through MCP's DNS rebinding protection.
+# Without this, the StreamableHTTP transport rejects non-localhost Host headers.
+_railway_host = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
+_allowed_hosts = ["tgf-tracker.up.railway.app", "main-production-b95c.up.railway.app",
+                   "127.0.0.1:*", "localhost:*", "[::1]:*"]
+if _railway_host and _railway_host not in _allowed_hosts:
+    _allowed_hosts.insert(0, _railway_host)
+mcp.settings.transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=_allowed_hosts,
+)
+
 mcp_starlette = mcp.streamable_http_app()
 
 # Wrap MCP with Bearer-token auth middleware
