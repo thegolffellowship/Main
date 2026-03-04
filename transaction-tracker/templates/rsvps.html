@@ -98,6 +98,11 @@
         .rsvp-action-btn.link-cust-btn:hover { background: #dbeafe; }
         .rsvp-action-btn.add-cust-btn { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
         .rsvp-action-btn.add-cust-btn:hover { background: #d1fae5; }
+        .rsvp-unlinked-actions {
+            display: flex;
+            gap: 0.3rem;
+            margin-top: 0.25rem;
+        }
         .empty-msg {
             text-align: center;
             padding: 3rem;
@@ -483,12 +488,13 @@
             html += `<select class="rsvp-match-select" id="match-sel-${r.id}">${buildEventPickerHtml()}</select>`;
             html += `<button class="rsvp-action-btn match-btn" onclick="matchRsvp(${r.id})">Match</button>`;
         }
-        if (!r.has_player_card) {
-            html += ` <button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link</button>`;
-            html += ` <button class="rsvp-action-btn add-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">+ New</button>`;
-        }
         html += '</td>';
         return html;
+    }
+
+    function unlinkedBtns(r) {
+        if (currentRole !== "admin" || r.has_player_card) return "";
+        return `<div class="rsvp-unlinked-actions"><button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link</button> <button class="rsvp-action-btn add-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">+ New</button></div>`;
     }
 
     async function matchRsvp(rsvpId) {
@@ -683,7 +689,7 @@
             const nameExtra = r.has_player_card && r.resolved_name !== r.player_name
                 ? ` <span style="color:var(--text-muted);font-size:0.75rem;">(${escapeHtml(r.player_name)})</span>` : "";
             html += `<tr>
-                <td><strong>${escapeHtml(displayName)}</strong>${nameExtra}</td>
+                <td style="${!r.has_player_card && isAdmin ? 'white-space:normal;' : ''}"><strong>${escapeHtml(displayName)}</strong>${nameExtra}${unlinkedBtns(r)}</td>
                 <td>${escapeHtml(r.player_email || "\u2014")}</td>
                 <td>${escapeHtml(r.gg_event_name || "\u2014")}</td>
                 <td>${responseBadge(r.response)}</td>
