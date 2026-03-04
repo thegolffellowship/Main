@@ -24,7 +24,9 @@ from mcp_server import mcp
 
 # Import OAuth handlers and middleware
 from mcp_auth import (
+    oauth_protected_resource,
     oauth_metadata,
+    oauth_register,
     oauth_authorize,
     oauth_token,
     MCPAuthMiddleware,
@@ -53,7 +55,14 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
 # Combine: OAuth routes, MCP at /mcp/*, everything else → Flask
 application = Starlette(
     routes=[
+        # RFC 9728 — Protected Resource Metadata (path-aware discovery)
+        Route("/.well-known/oauth-protected-resource/{path:path}", oauth_protected_resource, methods=["GET"]),
+        Route("/.well-known/oauth-protected-resource", oauth_protected_resource, methods=["GET"]),
+        # RFC 8414 — Authorization Server Metadata (also path-aware)
+        Route("/.well-known/oauth-authorization-server/{path:path}", oauth_metadata, methods=["GET"]),
         Route("/.well-known/oauth-authorization-server", oauth_metadata, methods=["GET"]),
+        # RFC 7591 — Dynamic Client Registration
+        Route("/oauth/register", oauth_register, methods=["POST", "OPTIONS"]),
         Route("/oauth/authorize", oauth_authorize, methods=["GET"]),
         Route("/oauth/token", oauth_token, methods=["POST", "OPTIONS"]),
         Mount("/mcp", app=mcp_protected),
