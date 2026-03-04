@@ -31,7 +31,10 @@ from mcp_auth import (
 )
 
 mcp.settings.stateless_http = True
-mcp.settings.streamable_http_path = "/"
+# Default streamable_http_path is "/mcp".  Combined with Mount("/mcp") below,
+# the full endpoint URL becomes /mcp/mcp — which matches the Claude.ai
+# connector config and the docs.  Do NOT override to "/" or the connector
+# will get McpEndpointNotFound after a successful OAuth handshake.
 mcp_starlette = mcp.streamable_http_app()
 
 # Wrap MCP with Bearer-token auth middleware
