@@ -580,8 +580,10 @@ The MCP endpoint is protected by OAuth 2.0 client credentials when `MCP_CLIENT_I
 
 ```bash
 MCP_CLIENT_ID=tgf-mcp-client
-MCP_CLIENT_SECRET=<generate a secure random string>
+MCP_CLIENT_SECRET=TGFmcpSecret2026Railway
 ```
+
+> **Important:** The client secret must be **alphanumeric only** — underscores are fine, but avoid dashes (especially `--`), quotes, backslashes, or other special characters. Railway's variable parser may strip or mishandle values containing double dashes or special symbols, causing the secret to never reach the process environment.
 
 **Claude.ai Custom Connector setup:**
 
@@ -651,7 +653,7 @@ DATABASE_PATH=/data/transactions.db
 
 # MCP OAuth (for Claude.ai custom connector)
 MCP_CLIENT_ID=tgf-mcp-client       # OAuth client ID
-MCP_CLIENT_SECRET=...               # OAuth client secret (generate a secure random string)
+MCP_CLIENT_SECRET=...               # OAuth client secret (alphanumeric only, no dashes/special chars)
 ```
 
 ---
