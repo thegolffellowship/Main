@@ -96,6 +96,8 @@
         .rsvp-action-btn.unmatch-btn:hover { background: #fde68a; }
         .rsvp-action-btn.link-cust-btn { background: #eff6ff; color: #1e40af; border-color: #93c5fd; }
         .rsvp-action-btn.link-cust-btn:hover { background: #dbeafe; }
+        .rsvp-action-btn.add-cust-btn { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+        .rsvp-action-btn.add-cust-btn:hover { background: #d1fae5; }
         .empty-msg {
             text-align: center;
             padding: 3rem;
@@ -243,6 +245,40 @@
             <div class="modal-actions">
                 <button type="button" id="link-rsvp-cancel" class="btn btn-secondary">Cancel</button>
                 <button type="button" id="link-rsvp-submit" class="btn btn-primary">Link</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Customer from RSVP modal -->
+    <div id="add-cust-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal">
+            <div class="modal-header">
+                <h2>Add New Customer</h2>
+                <button id="add-cust-close" class="modal-close">&times;</button>
+            </div>
+            <div id="add-cust-info" class="credit-info"></div>
+            <div class="credit-fields" style="display:flex; flex-direction:column; gap:0.5rem;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                    <label>First Name <span style="color:red;">*</span>
+                        <input type="text" id="add-cust-first" class="modal-input" placeholder="First" required>
+                    </label>
+                    <label>Last Name <span style="color:red;">*</span>
+                        <input type="text" id="add-cust-last" class="modal-input" placeholder="Last" required>
+                    </label>
+                </div>
+                <label>Email
+                    <input type="email" id="add-cust-email" class="modal-input" placeholder="email@example.com">
+                </label>
+                <label>Phone
+                    <input type="tel" id="add-cust-phone" class="modal-input" placeholder="(555) 123-4567">
+                </label>
+                <label>Chapter
+                    <input type="text" id="add-cust-chapter" class="modal-input" placeholder="Austin, San Antonio, Dallas...">
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="add-cust-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="add-cust-submit" class="btn btn-primary">Add &amp; Link</button>
             </div>
         </div>
     </div>
@@ -449,6 +485,7 @@
         }
         if (!r.has_player_card) {
             html += ` <button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link</button>`;
+            html += ` <button class="rsvp-action-btn add-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">+ New</button>`;
         }
         html += '</td>';
         return html;
@@ -528,6 +565,73 @@
             await Promise.all([fetchRsvps(), fetchCustomerNames()]);
             renderRsvps();
         } catch (err) { alert("Error: " + err.message); }
+    }
+
+    // ---- Add New Customer from RSVP ----
+    let addCustRsvpEmail = "";
+    let addCustRsvpPlayerName = "";
+
+    function openAddCustModal(playerName, email) {
+        addCustRsvpEmail = email;
+        addCustRsvpPlayerName = playerName;
+        document.getElementById("add-cust-info").innerHTML =
+            `Create a new customer for <strong>${escapeHtml(playerName)}</strong> (${escapeHtml(email)}).`;
+        document.getElementById("add-cust-first").value = playerName || "";
+        document.getElementById("add-cust-last").value = "";
+        document.getElementById("add-cust-email").value = email || "";
+        document.getElementById("add-cust-phone").value = "";
+        document.getElementById("add-cust-chapter").value = "";
+        document.getElementById("add-cust-overlay").style.display = "flex";
+        document.getElementById("add-cust-last").focus();
+    }
+
+    function closeAddCustModal() {
+        document.getElementById("add-cust-overlay").style.display = "none";
+        addCustRsvpEmail = "";
+        addCustRsvpPlayerName = "";
+    }
+
+    async function submitAddCust() {
+        const firstName = document.getElementById("add-cust-first").value.trim();
+        const lastName = document.getElementById("add-cust-last").value.trim();
+        if (!firstName && !lastName) { alert("First or last name is required."); return; }
+        const email = document.getElementById("add-cust-email").value.trim();
+        const phone = document.getElementById("add-cust-phone").value.trim();
+        const chapter = document.getElementById("add-cust-chapter").value.trim();
+        const fullName = [firstName, lastName].filter(Boolean).join(" ");
+
+        const submitBtn = document.getElementById("add-cust-submit");
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Creating...";
+        try {
+            // 1. Create the customer
+            const res = await fetch("/api/customers/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: fullName, first_name: firstName, last_name: lastName, email, phone, chapter }),
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                alert(errData.error || `Failed to create customer (HTTP ${res.status}).`);
+                return;
+            }
+            // 2. Auto-link the RSVP email to this new customer
+            if (addCustRsvpEmail) {
+                await fetch("/api/customers/link-rsvp", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ rsvp_email: addCustRsvpEmail, target_customer: fullName, rsvp_player_name: addCustRsvpPlayerName }),
+                });
+            }
+            closeAddCustModal();
+            await Promise.all([fetchRsvps(), fetchCustomerNames()]);
+            renderRsvps();
+        } catch (err) {
+            alert("Error: " + err.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = "Add &amp; Link";
+        }
     }
 
     function updateSortArrows() {
@@ -630,7 +734,7 @@
                     <div class="mc-field-grid">
                         ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
                     </div>
-                    ${currentRole === "admin" && !r.has_player_card ? `<div style="margin-top:0.5rem;"><button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link to Customer</button></div>` : ""}
+                    ${currentRole === "admin" && !r.has_player_card ? `<div style="margin-top:0.5rem; display:flex; gap:0.35rem; flex-wrap:wrap;"><button class="rsvp-action-btn link-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">Link</button><button class="rsvp-action-btn add-cust-btn" data-player="${escapeHtml(r.player_name || "")}" data-email="${escapeHtml(r.player_email || "")}">+ New Customer</button></div>` : ""}
                 </div>
             </div>`;
         }).join("");
@@ -744,10 +848,12 @@
             }
         });
 
-        // Delegated click for Link buttons (data attributes avoid quoting issues)
+        // Delegated click for Link / Add New buttons (data attributes avoid quoting issues)
         document.addEventListener("click", (e) => {
-            const btn = e.target.closest(".link-cust-btn");
-            if (btn) openLinkRsvpModal(btn.dataset.player, btn.dataset.email);
+            const linkBtn = e.target.closest(".link-cust-btn");
+            if (linkBtn) { openLinkRsvpModal(linkBtn.dataset.player, linkBtn.dataset.email); return; }
+            const addBtn = e.target.closest(".add-cust-btn");
+            if (addBtn) { openAddCustModal(addBtn.dataset.player, addBtn.dataset.email); }
         });
 
         // Link RSVP modal handlers
@@ -757,6 +863,14 @@
             if (e.target === e.currentTarget) closeLinkRsvpModal();
         });
         document.getElementById("link-rsvp-submit").addEventListener("click", submitLinkRsvp);
+
+        // Add Customer modal handlers
+        document.getElementById("add-cust-close").addEventListener("click", closeAddCustModal);
+        document.getElementById("add-cust-cancel").addEventListener("click", closeAddCustModal);
+        document.getElementById("add-cust-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeAddCustModal();
+        });
+        document.getElementById("add-cust-submit").addEventListener("click", submitAddCust);
 
         // Check URL params for pre-filtering
         const params = new URLSearchParams(window.location.search);
