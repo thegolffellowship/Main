@@ -318,17 +318,37 @@
                         <label class="seg-option"><input type="radio" name="edit-event-start_type" value="Shotgun"> Shotgun</label>
                     </div>
                 </div>
-                <!-- Start Time -->
-                <div style="margin-top:0.75rem;">
+                <!-- Start Time (single — shown for 9 Holes, 18 Holes, or no format) -->
+                <div id="edit-start-time-single" style="margin-top:0.75rem;">
                     <label style="font-weight:600; font-size:0.82rem;">Start Time
                         <input type="time" id="edit-event-start_time" class="modal-input" style="margin-top:0.2rem;">
                     </label>
                 </div>
+                <!-- Start Times (dual — shown for 9/18 Combo) -->
+                <div id="edit-start-time-combo" style="display:none; margin-top:0.75rem;">
+                    <div class="edit-grid">
+                        <label style="font-weight:600; font-size:0.82rem;">9-Hole Start Time
+                            <input type="time" id="edit-event-start_time_9" class="modal-input" style="margin-top:0.2rem;">
+                        </label>
+                        <label style="font-weight:600; font-size:0.82rem;">18-Hole Start Time
+                            <input type="time" id="edit-event-start_time_18" class="modal-input" style="margin-top:0.2rem;">
+                        </label>
+                    </div>
+                </div>
                 <!-- Optional tee time planning fields (shown only when Start Type = Tee Times) -->
+                <!-- Single mode (9 or 18 Holes) -->
                 <div id="edit-tee-planning" style="display:none; margin-top:0.75rem;">
                     <div class="edit-grid">
                         <label>Number of Tee Times<input type="number" id="edit-tee-count" class="modal-input" min="1" max="60" placeholder="e.g., 12"></label>
                         <label>Tee Time Interval (min)<input type="number" id="edit-tee-interval" class="modal-input" min="1" max="30" placeholder="e.g., 10"></label>
+                    </div>
+                </div>
+                <!-- Combo mode (9/18) -->
+                <div id="edit-tee-planning-combo" style="display:none; margin-top:0.75rem;">
+                    <div class="edit-grid">
+                        <label>9-Hole Tee Times<input type="number" id="edit-tee-count-9" class="modal-input" min="1" max="60" placeholder="e.g., 8"></label>
+                        <label>18-Hole Tee Times<input type="number" id="edit-tee-count-18" class="modal-input" min="1" max="60" placeholder="e.g., 8"></label>
+                        <label>Tee Time Interval (min)<input type="number" id="edit-tee-interval-combo" class="modal-input" min="1" max="30" placeholder="e.g., 10"></label>
                     </div>
                 </div>
                 <!-- Tee Time Advisor Panel -->
@@ -613,17 +633,37 @@
                         <label class="seg-option"><input type="radio" name="add-event-start_type" value="Shotgun"> Shotgun</label>
                     </div>
                 </div>
-                <!-- Start Time -->
-                <div style="margin-top:0.75rem;">
+                <!-- Start Time (single — shown for 9 Holes, 18 Holes, or no format) -->
+                <div id="add-start-time-single" style="margin-top:0.75rem;">
                     <label style="font-weight:600; font-size:0.82rem;">Start Time
                         <input type="time" id="add-event-start_time" class="modal-input" style="margin-top:0.2rem;">
                     </label>
                 </div>
+                <!-- Start Times (dual — shown for 9/18 Combo) -->
+                <div id="add-start-time-combo" style="display:none; margin-top:0.75rem;">
+                    <div class="edit-grid">
+                        <label style="font-weight:600; font-size:0.82rem;">9-Hole Start Time
+                            <input type="time" id="add-event-start_time_9" class="modal-input" style="margin-top:0.2rem;">
+                        </label>
+                        <label style="font-weight:600; font-size:0.82rem;">18-Hole Start Time
+                            <input type="time" id="add-event-start_time_18" class="modal-input" style="margin-top:0.2rem;">
+                        </label>
+                    </div>
+                </div>
                 <!-- Optional tee time planning fields (shown only when Start Type = Tee Times) -->
+                <!-- Single mode (9 or 18 Holes) -->
                 <div id="add-tee-planning" style="display:none; margin-top:0.75rem;">
                     <div class="edit-grid">
                         <label>Number of Tee Times<input type="number" id="add-tee-count" class="modal-input" min="1" max="60" placeholder="e.g., 12"></label>
                         <label>Tee Time Interval (min)<input type="number" id="add-tee-interval" class="modal-input" min="1" max="30" placeholder="e.g., 10"></label>
+                    </div>
+                </div>
+                <!-- Combo mode (9/18) -->
+                <div id="add-tee-planning-combo" style="display:none; margin-top:0.75rem;">
+                    <div class="edit-grid">
+                        <label>9-Hole Tee Times<input type="number" id="add-tee-count-9" class="modal-input" min="1" max="60" placeholder="e.g., 8"></label>
+                        <label>18-Hole Tee Times<input type="number" id="add-tee-count-18" class="modal-input" min="1" max="60" placeholder="e.g., 8"></label>
+                        <label>Tee Time Interval (min)<input type="number" id="add-tee-interval-combo" class="modal-input" min="1" max="30" placeholder="e.g., 10"></label>
                     </div>
                 </div>
                 <!-- Tee Time Advisor Panel -->
@@ -3116,11 +3156,24 @@
         document.getElementById("add-event-course").value = "";
         document.getElementById("add-event-chapter").value = "";
         document.getElementById("add-event-start_time").value = "";
+        document.getElementById("add-event-start_time_9").value = "";
+        document.getElementById("add-event-start_time_18").value = "";
         document.querySelectorAll('input[name="add-event-format"]').forEach(r => r.checked = false);
         document.querySelectorAll('input[name="add-event-start_type"]').forEach(r => r.checked = false);
         document.getElementById("add-tee-count").value = "";
         document.getElementById("add-tee-interval").value = "";
+        document.getElementById("add-tee-count-9").value = "";
+        document.getElementById("add-tee-count-18").value = "";
+        document.getElementById("add-tee-interval-combo").value = "";
         document.getElementById("add-tee-planning").style.display = "none";
+        document.getElementById("add-tee-planning-combo").style.display = "none";
+        document.getElementById("add-start-time-single").style.display = "";
+        document.getElementById("add-start-time-combo").style.display = "none";
+        // Reset user override flags
+        ["add-event-start_time", "add-event-start_time_9", "add-event-start_time_18"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) delete el.dataset.userOverride;
+        });
         document.getElementById("add-advisor-panel").style.display = "none";
         document.getElementById("add-advisor-panel").innerHTML = "";
         document.getElementById("add-event-overlay").style.display = "flex";
@@ -3136,19 +3189,31 @@
         if (!name) return;
         const formatEl = document.querySelector('input[name="add-event-format"]:checked');
         const startTypeEl = document.querySelector('input[name="add-event-start_type"]:checked');
+        const isCombo = formatEl && formatEl.value === "9/18 Combo";
         try {
+            const payload = {
+                item_name: name,
+                event_date: document.getElementById("add-event-date").value || null,
+                course: document.getElementById("add-event-course").value.trim() || null,
+                chapter: document.getElementById("add-event-chapter").value || null,
+                format: formatEl ? formatEl.value : null,
+                start_type: startTypeEl ? startTypeEl.value : null,
+            };
+            if (isCombo) {
+                payload.start_time = document.getElementById("add-event-start_time_9").value || null;
+                payload.start_time_18 = document.getElementById("add-event-start_time_18").value || null;
+                payload.tee_time_count = parseInt(document.getElementById("add-tee-count-9").value) || null;
+                payload.tee_time_count_18 = parseInt(document.getElementById("add-tee-count-18").value) || null;
+                payload.tee_time_interval = parseInt(document.getElementById("add-tee-interval-combo").value) || null;
+            } else {
+                payload.start_time = document.getElementById("add-event-start_time").value || null;
+                payload.tee_time_count = parseInt(document.getElementById("add-tee-count").value) || null;
+                payload.tee_time_interval = parseInt(document.getElementById("add-tee-interval").value) || null;
+            }
             const res = await fetch("/api/events", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    item_name: name,
-                    event_date: document.getElementById("add-event-date").value || null,
-                    course: document.getElementById("add-event-course").value.trim() || null,
-                    chapter: document.getElementById("add-event-chapter").value || null,
-                    format: formatEl ? formatEl.value : null,
-                    start_type: startTypeEl ? startTypeEl.value : null,
-                    start_time: document.getElementById("add-event-start_time").value || null,
-                }),
+                body: JSON.stringify(payload),
             });
             if (!res.ok) {
                 const data = await res.json();
@@ -3494,11 +3559,14 @@
         const ev = allEvents.find(e => e.id === eventId);
         if (!ev) return;
         document.getElementById("edit-event-id").value = eventId;
+        const isCombo = ev.format === "9/18 Combo";
+
         // Standard text/date/select fields
-        ["item_name", "event_date", "course", "chapter", "start_time"].forEach(field => {
+        ["item_name", "event_date", "course", "chapter"].forEach(field => {
             const input = document.getElementById("edit-event-" + field);
             if (input) input.value = ev[field] || "";
         });
+
         // Radio buttons: format
         document.querySelectorAll('input[name="edit-event-format"]').forEach(r => {
             r.checked = (r.value === (ev.format || ""));
@@ -3507,12 +3575,38 @@
         document.querySelectorAll('input[name="edit-event-start_type"]').forEach(r => {
             r.checked = (r.value === (ev.start_type || ""));
         });
-        // Reset planning fields
-        document.getElementById("edit-tee-count").value = "";
-        document.getElementById("edit-tee-interval").value = "";
-        // Show/hide tee planning based on start_type
-        const isTee = ev.start_type === "Tee Times";
-        document.getElementById("edit-tee-planning").style.display = isTee ? "" : "none";
+
+        // Start times: combo uses dual fields, others use single
+        const stSingle = document.getElementById("edit-event-start_time");
+        const st9 = document.getElementById("edit-event-start_time_9");
+        const st18 = document.getElementById("edit-event-start_time_18");
+        if (isCombo) {
+            st9.value = ev.start_time || "";
+            st18.value = ev.start_time_18 || "";
+            stSingle.value = "";
+        } else {
+            stSingle.value = ev.start_time || "";
+            st9.value = "";
+            st18.value = "";
+        }
+
+        // Restore planning fields — single mode
+        document.getElementById("edit-tee-count").value = ev.tee_time_count || "";
+        document.getElementById("edit-tee-interval").value = ev.tee_time_interval || "";
+        // Restore planning fields — combo mode
+        document.getElementById("edit-tee-count-9").value = ev.tee_time_count || "";
+        document.getElementById("edit-tee-count-18").value = ev.tee_time_count_18 || "";
+        document.getElementById("edit-tee-interval-combo").value = ev.tee_time_interval || "";
+
+        // Toggle single/combo visibility
+        updateComboVisibility("edit");
+
+        // Mark saved start times as user-set so advisor won't overwrite
+        [stSingle, st9, st18].forEach(el => {
+            if (el.value) el.dataset.userOverride = "1";
+            else delete el.dataset.userOverride;
+        });
+
         // Reset and trigger advisor
         document.getElementById("edit-advisor-panel").innerHTML = "";
         document.getElementById("edit-advisor-panel").style.display = "none";
@@ -3534,8 +3628,8 @@
         if (!ev) return;
 
         const changes = {};
-        // Standard text/date/select fields
-        ["item_name", "event_date", "course", "chapter", "start_time"].forEach(field => {
+        // Standard text/date/select fields (non-start-time)
+        ["item_name", "event_date", "course", "chapter"].forEach(field => {
             const input = document.getElementById("edit-event-" + field);
             if (!input) return;
             const newVal = input.value.trim() || null;
@@ -3549,6 +3643,32 @@
         const startTypeEl = document.querySelector('input[name="edit-event-start_type"]:checked');
         const startTypeVal = startTypeEl ? startTypeEl.value : null;
         if (startTypeVal !== (ev.start_type || null)) changes.start_type = startTypeVal;
+
+        const isCombo = formatVal === "9/18 Combo";
+        if (isCombo) {
+            // Combo: start_time = 9-hole start, start_time_18 = 18-hole start
+            const st9 = document.getElementById("edit-event-start_time_9").value.trim() || null;
+            const st18 = document.getElementById("edit-event-start_time_18").value.trim() || null;
+            if (st9 !== (ev.start_time || null)) changes.start_time = st9;
+            if (st18 !== (ev.start_time_18 || null)) changes.start_time_18 = st18;
+            const tc9 = parseInt(document.getElementById("edit-tee-count-9").value) || null;
+            const tc18 = parseInt(document.getElementById("edit-tee-count-18").value) || null;
+            const ti = parseInt(document.getElementById("edit-tee-interval-combo").value) || null;
+            if (tc9 !== (ev.tee_time_count || null)) changes.tee_time_count = tc9;
+            if (tc18 !== (ev.tee_time_count_18 || null)) changes.tee_time_count_18 = tc18;
+            if (ti !== (ev.tee_time_interval || null)) changes.tee_time_interval = ti;
+        } else {
+            // Single mode
+            const st = document.getElementById("edit-event-start_time").value.trim() || null;
+            if (st !== (ev.start_time || null)) changes.start_time = st;
+            // Clear 18-hole fields when switching away from combo
+            if (ev.start_time_18) changes.start_time_18 = null;
+            if (ev.tee_time_count_18) changes.tee_time_count_18 = null;
+            const teeCount = parseInt(document.getElementById("edit-tee-count").value) || null;
+            const teeInterval = parseInt(document.getElementById("edit-tee-interval").value) || null;
+            if (teeCount !== (ev.tee_time_count || null)) changes.tee_time_count = teeCount;
+            if (teeInterval !== (ev.tee_time_interval || null)) changes.tee_time_interval = teeInterval;
+        }
 
         if (Object.keys(changes).length === 0) {
             closeEditEvent();
@@ -3793,32 +3913,56 @@
     // ---- Tee Time Advisor ----
     let advisorCache = {}; // key: "chapter|date" → {sunset, sunset_24h, civil_twilight_end, civil_twilight_end_24h}
 
-    function getFormPrefix(prefix) {
-        // "add" or "edit"
-        return prefix;
-    }
-
     function getAdvisorInputs(prefix) {
         const dateEl = document.getElementById(`${prefix}-event-${prefix === "add" ? "date" : "event_date"}`);
         const chapterEl = document.getElementById(`${prefix}-event-chapter`);
         const formatEl = document.querySelector(`input[name="${prefix}-event-format"]:checked`);
         const startTypeEl = document.querySelector(`input[name="${prefix}-event-start_type"]:checked`);
-        const startTimeEl = document.getElementById(`${prefix}-event-start_time`);
-        const teeCountEl = document.getElementById(`${prefix}-tee-count`);
-        const teeIntervalEl = document.getElementById(`${prefix}-tee-interval`);
+        const fmt = formatEl ? formatEl.value : null;
+        const isCombo = fmt === "9/18 Combo";
+
+        // Start time: single field for 9/18 Holes, dual fields for combo
+        let startTime, startTime9, startTime18;
+        if (isCombo) {
+            const st9El = document.getElementById(`${prefix}-event-start_time_9`);
+            const st18El = document.getElementById(`${prefix}-event-start_time_18`);
+            startTime9 = st9El ? st9El.value : "";
+            startTime18 = st18El ? st18El.value : "";
+            startTime = startTime9; // primary start for generic use
+        } else {
+            const stEl = document.getElementById(`${prefix}-event-start_time`);
+            startTime = stEl ? stEl.value : "";
+            startTime9 = startTime;
+            startTime18 = startTime;
+        }
+
+        // Tee counts: single for 9/18 Holes, dual for combo
+        let teeCount, teeCount9, teeCount18, teeInterval;
+        if (isCombo) {
+            teeCount9 = parseInt(document.getElementById(`${prefix}-tee-count-9`)?.value) || 0;
+            teeCount18 = parseInt(document.getElementById(`${prefix}-tee-count-18`)?.value) || 0;
+            teeInterval = parseInt(document.getElementById(`${prefix}-tee-interval-combo`)?.value) || 0;
+            teeCount = teeCount9; // for generic checks
+        } else {
+            teeCount = parseInt(document.getElementById(`${prefix}-tee-count`)?.value) || 0;
+            teeInterval = parseInt(document.getElementById(`${prefix}-tee-interval`)?.value) || 0;
+            teeCount9 = teeCount;
+            teeCount18 = teeCount;
+        }
+
         return {
             date: dateEl ? dateEl.value : "",
             chapter: chapterEl ? chapterEl.value : "",
-            format: formatEl ? formatEl.value : null,
+            format: fmt,
+            isCombo,
             startType: startTypeEl ? startTypeEl.value : null,
-            startTime: startTimeEl ? startTimeEl.value : "",
-            teeCount: teeCountEl ? parseInt(teeCountEl.value) || 0 : 0,
-            teeInterval: teeIntervalEl ? parseInt(teeIntervalEl.value) || 0 : 0,
+            startTime, startTime9, startTime18,
+            teeCount, teeCount9, teeCount18, teeInterval,
         };
     }
 
     function timeToMinutes(t24) {
-        // "HH:MM" → minutes since midnight
+        if (!t24) return 0;
         const [h, m] = t24.split(":").map(Number);
         return h * 60 + m;
     }
@@ -3844,23 +3988,16 @@
 
     function trafficLight(finishMins, twilightMins) {
         const margin = twilightMins - finishMins;
-        if (margin >= 45) return { icon: "\u{1F7E2}", cls: "green", text: "" };        // green circle
-        if (margin >= 20) return { icon: "\u{1F7E1}", cls: "yellow", text: "" };       // yellow circle
-        return { icon: "\u{1F534}", cls: "red", text: "Cutting it close" };            // red circle
+        if (margin >= 45) return { icon: "\u{1F7E2}", cls: "green", text: "" };
+        if (margin >= 20) return { icon: "\u{1F7E1}", cls: "yellow", text: "" };
+        return { icon: "\u{1F534}", cls: "red", text: "Cutting it close" };
     }
 
     function statusIcon(finishMins, twilightMins) {
         const margin = twilightMins - finishMins;
-        if (margin >= 45) return "\u2705";   // check mark
-        if (margin >= 20) return "\u{1F7E1}"; // yellow circle
-        return "\u{1F534}";                    // red circle
-    }
-
-    function getDuration(fmt) {
-        // Returns round duration in minutes
-        if (fmt === "9 Holes") return 150;   // 2.5 hours
-        if (fmt === "18 Holes") return 300;  // 5 hours
-        return 150; // default to 9 for combo (earliest start)
+        if (margin >= 45) return "\u2705";
+        if (margin >= 20) return "\u{1F7E1}";
+        return "\u{1F534}";
     }
 
     async function fetchSunData(date, chapter) {
@@ -3874,6 +4011,19 @@
         return data;
     }
 
+    // Toggle which start-time / tee-planning sections are visible based on format
+    function updateComboVisibility(prefix) {
+        const formatEl = document.querySelector(`input[name="${prefix}-event-format"]:checked`);
+        const isCombo = formatEl && formatEl.value === "9/18 Combo";
+        const startTypeEl = document.querySelector(`input[name="${prefix}-event-start_type"]:checked`);
+        const isTee = startTypeEl && startTypeEl.value === "Tee Times";
+
+        document.getElementById(`${prefix}-start-time-single`).style.display = isCombo ? "none" : "";
+        document.getElementById(`${prefix}-start-time-combo`).style.display = isCombo ? "" : "none";
+        document.getElementById(`${prefix}-tee-planning`).style.display = (!isCombo && isTee) ? "" : "none";
+        document.getElementById(`${prefix}-tee-planning-combo`).style.display = (isCombo && isTee) ? "" : "none";
+    }
+
     async function triggerAdvisor(prefix) {
         const inputs = getAdvisorInputs(prefix);
         const panel = document.getElementById(`${prefix}-advisor-panel`);
@@ -3881,7 +4031,6 @@
             panel.style.display = "none";
             return;
         }
-        // Show loading
         panel.style.display = "";
         panel.innerHTML = '<div class="advisor-loading">Loading sun times...</div>';
 
@@ -3904,7 +4053,6 @@
         const last9 = roundDown15(twilightMins - 150);  // twilight - 2:30
         const last18 = roundDown15(twilightMins - 300);  // twilight - 5:00
 
-        // Traffic lights for recommended times
         const finish9 = last9 + 150;
         const finish18 = last18 + 300;
         const tl9 = trafficLight(finish9, twilightMins);
@@ -3931,48 +4079,61 @@
             </div>
         </div>`;
 
-        // Pre-populate start time based on format
-        const startTimeEl = document.getElementById(`${prefix}-event-start_time`);
-        if (startTimeEl && !startTimeEl.dataset.userOverride) {
-            let recMins;
-            if (inputs.format === "18 Holes") recMins = last18;
-            else recMins = last9; // 9 Holes or 9/18 Combo → use 9-hole time (earliest)
-            startTimeEl.value = minutesToTime24(recMins);
-        }
-
-        // Tee time sheet or shotgun estimate
-        const currentStartTime = startTimeEl ? startTimeEl.value : "";
-        if (inputs.startType === "Shotgun" && currentStartTime) {
-            const startMins = timeToMinutes(currentStartTime);
-            if (inputs.format === "9/18 Combo") {
-                const finish9s = startMins + 150;
-                const finish18s = startMins + 300;
-                const si9 = statusIcon(finish9s, twilightMins);
-                const si18 = statusIcon(finish18s, twilightMins);
-                html += `<div class="shotgun-estimate">
-                    <div>9-hole groups est. finish: <strong>${minutesToTime12(finish9s)}</strong> ${si9}</div>
-                    <div>18-hole groups est. finish: <strong>${minutesToTime12(finish18s)}</strong> ${si18}</div>
-                </div>`;
-            } else {
-                const dur = getDuration(inputs.format);
-                const finishMins = startMins + dur;
-                const si = statusIcon(finishMins, twilightMins);
-                html += `<div class="shotgun-estimate">All groups estimated finish: <strong>${minutesToTime12(finishMins)}</strong> ${si}</div>`;
+        // Pre-populate start times based on format
+        if (inputs.isCombo) {
+            // Combo: separate 9-hole and 18-hole start times
+            const st9El = document.getElementById(`${prefix}-event-start_time_9`);
+            const st18El = document.getElementById(`${prefix}-event-start_time_18`);
+            if (st9El && !st9El.dataset.userOverride) st9El.value = minutesToTime24(last9);
+            if (st18El && !st18El.dataset.userOverride) st18El.value = minutesToTime24(last18);
+        } else {
+            // Single start time
+            const startTimeEl = document.getElementById(`${prefix}-event-start_time`);
+            if (startTimeEl && !startTimeEl.dataset.userOverride) {
+                const recMins = inputs.format === "18 Holes" ? last18 : last9;
+                startTimeEl.value = minutesToTime24(recMins);
             }
         }
 
-        if (inputs.startType === "Tee Times" && inputs.teeCount > 0 && inputs.teeInterval > 0 && currentStartTime) {
-            const startMins = timeToMinutes(currentStartTime);
+        // Re-read current start times after pre-population
+        const cur9 = inputs.isCombo
+            ? (document.getElementById(`${prefix}-event-start_time_9`)?.value || "")
+            : (document.getElementById(`${prefix}-event-start_time`)?.value || "");
+        const cur18 = inputs.isCombo
+            ? (document.getElementById(`${prefix}-event-start_time_18`)?.value || "")
+            : cur9;
 
-            if (inputs.format === "9/18 Combo") {
-                // Side-by-side sheets
-                html += '<div class="tee-sheet-container">';
-                html += buildTeeSheet("9-Hole Players", startMins, inputs.teeCount, inputs.teeInterval, 150, twilightMins, sunData);
-                html += buildTeeSheet("18-Hole Players", startMins, inputs.teeCount, inputs.teeInterval, 300, twilightMins, sunData);
-                html += '</div>';
-            } else {
-                const dur = getDuration(inputs.format);
-                html += buildTeeSheet(null, startMins, inputs.teeCount, inputs.teeInterval, dur, twilightMins, sunData);
+        // Shotgun estimate
+        if (inputs.startType === "Shotgun") {
+            if (inputs.isCombo && cur9 && cur18) {
+                const s9 = timeToMinutes(cur9), s18 = timeToMinutes(cur18);
+                const f9 = s9 + 150, f18 = s18 + 300;
+                html += `<div class="shotgun-estimate">
+                    <div>9-hole groups est. finish: <strong>${minutesToTime12(f9)}</strong> ${statusIcon(f9, twilightMins)}</div>
+                    <div>18-hole groups est. finish: <strong>${minutesToTime12(f18)}</strong> ${statusIcon(f18, twilightMins)}</div>
+                </div>`;
+            } else if (!inputs.isCombo && cur9) {
+                const dur = inputs.format === "18 Holes" ? 300 : 150;
+                const f = timeToMinutes(cur9) + dur;
+                html += `<div class="shotgun-estimate">All groups estimated finish: <strong>${minutesToTime12(f)}</strong> ${statusIcon(f, twilightMins)}</div>`;
+            }
+        }
+
+        // Tee time sheets
+        if (inputs.startType === "Tee Times" && inputs.teeInterval > 0) {
+            if (inputs.isCombo) {
+                // Combo: side-by-side tee sheets with independent start times and counts
+                const has9 = cur9 && inputs.teeCount9 > 0;
+                const has18 = cur18 && inputs.teeCount18 > 0;
+                if (has9 || has18) {
+                    html += '<div class="tee-sheet-container">';
+                    if (has9) html += buildTeeSheet("9-Hole Players", timeToMinutes(cur9), inputs.teeCount9, inputs.teeInterval, 150, twilightMins, sunData);
+                    if (has18) html += buildTeeSheet("18-Hole Players", timeToMinutes(cur18), inputs.teeCount18, inputs.teeInterval, 300, twilightMins, sunData);
+                    html += '</div>';
+                }
+            } else if (cur9 && inputs.teeCount > 0) {
+                const dur = inputs.format === "18 Holes" ? 300 : 150;
+                html += buildTeeSheet(null, timeToMinutes(cur9), inputs.teeCount, inputs.teeInterval, dur, twilightMins, sunData);
             }
         }
 
@@ -3989,7 +4150,6 @@
             const teeMins = startMins + (i * interval);
             const finishMins = teeMins + duration;
 
-            // Insert twilight reference row if this finish passes twilight
             if (!twilightRowInserted && finishMins >= twilightMins) {
                 html += `<tr class="twilight-row"><td colspan="3">\u2691 Civil Twilight: ${sunData.civil_twilight_end}</td></tr>`;
                 twilightRowInserted = true;
@@ -3999,7 +4159,6 @@
             html += `<tr><td>${minutesToTime12(teeMins)}</td><td>${minutesToTime12(finishMins)}</td><td>${si}</td></tr>`;
         }
 
-        // If twilight wasn't inserted (all finish before it), add at end
         if (!twilightRowInserted) {
             html += `<tr class="twilight-row"><td colspan="3">\u2691 Civil Twilight: ${sunData.civil_twilight_end}</td></tr>`;
         }
@@ -4021,10 +4180,6 @@
     function setupAdvisorListeners(prefix) {
         const dateId = `${prefix}-event-${prefix === "add" ? "date" : "event_date"}`;
         const chapterId = `${prefix}-event-chapter`;
-        const startTimeId = `${prefix}-event-start_time`;
-        const teeCountId = `${prefix}-tee-count`;
-        const teeIntervalId = `${prefix}-tee-interval`;
-        const teePlanningId = `${prefix}-tee-planning`;
 
         // Date or chapter change → fetch sun data
         [dateId, chapterId].forEach(id => {
@@ -4032,36 +4187,48 @@
             if (el) el.addEventListener("change", () => triggerAdvisor(prefix));
         });
 
-        // Start type change → show/hide tee planning fields + rebuild
+        // Start type change → update visibility + rebuild
         document.querySelectorAll(`input[name="${prefix}-event-start_type"]`).forEach(r => {
             r.addEventListener("change", () => {
-                const isTee = r.value === "Tee Times";
-                document.getElementById(teePlanningId).style.display = isTee ? "" : "none";
+                updateComboVisibility(prefix);
                 updateTeeSheet(prefix);
             });
         });
 
-        // Format change → update recommendation + rebuild
+        // Format change → toggle single/combo UI, reset overrides, rebuild
         document.querySelectorAll(`input[name="${prefix}-event-format"]`).forEach(r => {
             r.addEventListener("change", () => {
-                // Reset user override flag so advisor can re-populate start time
-                const st = document.getElementById(startTimeId);
-                if (st) delete st.dataset.userOverride;
+                updateComboVisibility(prefix);
+                // Reset user override flags so advisor can re-populate
+                [
+                    `${prefix}-event-start_time`,
+                    `${prefix}-event-start_time_9`,
+                    `${prefix}-event-start_time_18`,
+                ].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) delete el.dataset.userOverride;
+                });
                 updateTeeSheet(prefix);
             });
         });
 
         // Start time manual edit → mark as user override + rebuild
-        const stEl = document.getElementById(startTimeId);
-        if (stEl) {
-            stEl.addEventListener("input", () => {
-                stEl.dataset.userOverride = "1";
-                updateTeeSheet(prefix);
-            });
-        }
+        // Single mode
+        const stEl = document.getElementById(`${prefix}-event-start_time`);
+        if (stEl) stEl.addEventListener("input", () => { stEl.dataset.userOverride = "1"; updateTeeSheet(prefix); });
+        // Combo mode
+        const st9El = document.getElementById(`${prefix}-event-start_time_9`);
+        if (st9El) st9El.addEventListener("input", () => { st9El.dataset.userOverride = "1"; updateTeeSheet(prefix); });
+        const st18El = document.getElementById(`${prefix}-event-start_time_18`);
+        if (st18El) st18El.addEventListener("input", () => { st18El.dataset.userOverride = "1"; updateTeeSheet(prefix); });
 
-        // Tee count / interval change → rebuild sheet
-        [teeCountId, teeIntervalId].forEach(id => {
+        // Tee count / interval change → rebuild sheet (single mode)
+        [`${prefix}-tee-count`, `${prefix}-tee-interval`].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener("input", () => updateTeeSheet(prefix));
+        });
+        // Tee count / interval change → rebuild sheet (combo mode)
+        [`${prefix}-tee-count-9`, `${prefix}-tee-count-18`, `${prefix}-tee-interval-combo`].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener("input", () => updateTeeSheet(prefix));
         });
