@@ -1646,3 +1646,128 @@ div.mobile-card.row-rsvp-only {
     background-color: var(--rsvp-only-tint);
     font-style: italic;
 }
+
+/* ---- Segmented Controls (radio-button groups) ---- */
+.segmented-control {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg);
+}
+.segmented-control .seg-option {
+    padding: 0.4rem 0.85rem;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+    transition: background 0.15s, color 0.15s;
+    user-select: none;
+    white-space: nowrap;
+}
+.segmented-control .seg-option:last-child { border-right: none; }
+.segmented-control .seg-option input[type="radio"] { display: none; }
+.segmented-control .seg-option:has(input:checked) {
+    background: var(--primary);
+    color: #fff;
+}
+
+/* ---- Tee Time Advisor Panel ---- */
+.advisor-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    background: #f0fdf4;
+}
+.advisor-panel .advisor-loading {
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 0.5rem;
+}
+.advisor-panel .advisor-header {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    padding: 0.6rem 0.8rem;
+    background: #dcfce7;
+    border-radius: var(--radius);
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    flex-wrap: wrap;
+}
+.advisor-panel .advisor-header .sun-label {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.82rem;
+    margin-right: 0.25rem;
+}
+.advisor-panel .advisor-recs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.advisor-panel .advisor-rec {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+    padding: 0.4rem 0.6rem;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+.advisor-panel .advisor-rec .rec-label { font-weight: 600; flex:1; }
+.advisor-panel .advisor-rec .rec-time { font-weight: 700; font-size: 1rem; }
+.advisor-panel .advisor-rec .rec-warning { color: var(--red); font-size: 0.78rem; font-weight: 500; }
+
+/* Tee time sheet table */
+.tee-sheet-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    margin-top: 0.5rem;
+}
+.tee-sheet-table th {
+    background: var(--bg);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.35rem 0.5rem;
+    border-bottom: 2px solid var(--border);
+}
+.tee-sheet-table td {
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+.tee-sheet-table .twilight-row td {
+    background: #fef3c7;
+    font-weight: 600;
+    font-size: 0.78rem;
+    color: #92400e;
+    border-bottom: 2px solid #f59e0b;
+    padding: 0.2rem 0.5rem;
+}
+.tee-sheet-container {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.tee-sheet-container .tee-sheet-section {
+    flex: 1;
+    min-width: 250px;
+}
+.tee-sheet-container .tee-sheet-section h4 {
+    font-size: 0.85rem;
+    margin-bottom: 0.3rem;
+    color: var(--text-muted);
+}
+.shotgun-estimate {
+    padding: 0.5rem 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.88rem;
+    margin-top: 0.5rem;
+}

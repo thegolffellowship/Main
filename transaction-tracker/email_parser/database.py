@@ -376,12 +376,30 @@ def init_db(db_path: str | Path | None = None) -> None:
                 item_name   TEXT NOT NULL UNIQUE,
                 event_date  TEXT,
                 course      TEXT,
-                city        TEXT,
+                chapter     TEXT,
                 event_type  TEXT DEFAULT 'event',
+                format      TEXT,
+                start_type  TEXT,
+                start_time  TEXT,
                 created_at  TEXT DEFAULT (datetime('now'))
             )
             """
         )
+
+        # Migration: rename city → chapter in events table (existing DBs)
+        try:
+            conn.execute("ALTER TABLE events RENAME COLUMN city TO chapter")
+            logger.info("Migrated events.city → events.chapter")
+        except sqlite3.OperationalError:
+            pass  # column already named chapter, or doesn't exist
+
+        # Migration: add new event planning columns
+        for col in ["format", "start_type", "start_time"]:
+            try:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {col} TEXT")
+                logger.info("Added events.%s column", col)
+            except sqlite3.OperationalError:
+                pass  # already exists
 
         # RSVPs table — Golf Genius round signup confirmations
         conn.execute(
@@ -1230,7 +1248,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
                 continue
             try:
                 conn.execute(
-                    """INSERT INTO events (item_name, event_date, course, city, event_type)
+                    """INSERT INTO events (item_name, event_date, course, chapter, event_type)
                        VALUES (?, ?, ?, ?, 'event')""",
                     (name, item["event_date"], item["course"], item["city"]),
                 )
@@ -1283,7 +1301,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
     RSVPs and overrides are updated to the new canonical name.
     Items are NEVER rewritten — they are linked via the alias table.
     """
-    allowed = {"item_name", "event_date", "course", "city", "event_type"}
+    allowed = {"item_name", "event_date", "course", "chapter", "format", "start_type", "start_time", "event_type"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
@@ -2639,7 +2657,8 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
 
 
 def create_event(item_name: str, event_date: str = None, course: str = None,
-                 city: str = None, db_path: str | Path | None = None) -> dict | None:
+                 chapter: str = None, format: str = None, start_type: str = None,
+                 start_time: str = None, db_path: str | Path | None = None) -> dict | None:
     """Manually create a new event. Returns the event dict or None if duplicate (case-insensitive)."""
     with _connect(db_path) as conn:
         # Case-insensitive duplicate check
@@ -2650,8 +2669,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
             return None
         try:
             cursor = conn.execute(
-                "INSERT INTO events (item_name, event_date, course, city, event_type) VALUES (?, ?, ?, ?, 'event')",
-                (item_name, event_date, course, city),
+                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, 'event')",
+                (item_name, event_date, course, chapter, format, start_type, start_time),
             )
             conn.commit()
             new_id = cursor.lastrowid
@@ -2663,7 +2682,7 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
 
 def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
     """
-    Batch-insert events. Each dict should have: item_name, event_date, course, city.
+    Batch-insert events. Each dict should have: item_name, event_date, course, chapter.
     Skips duplicates (case-insensitive). Returns {"inserted": N, "skipped": N}.
     """
     with _connect(db_path) as conn:
@@ -2681,8 +2700,8 @@ def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
                 continue
             try:
                 conn.execute(
-                    "INSERT INTO events (item_name, event_date, course, city, event_type) VALUES (?, ?, ?, ?, 'event')",
-                    (ev["item_name"], ev.get("event_date"), ev.get("course"), ev.get("city")),
+                    "INSERT INTO events (item_name, event_date, course, chapter, event_type) VALUES (?, ?, ?, ?, 'event')",
+                    (ev["item_name"], ev.get("event_date"), ev.get("course"), ev.get("chapter")),
                 )
                 inserted += 1
             except sqlite3.IntegrityError:

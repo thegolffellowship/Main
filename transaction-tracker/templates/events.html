@@ -209,7 +209,7 @@
 
         <!-- Controls -->
         <section class="controls" style="margin-bottom: 0.75rem;">
-            <input type="text" id="event-search" class="search-box" placeholder="Search events by name, course, city...">
+            <input type="text" id="event-search" class="search-box" placeholder="Search events by name, course, chapter...">
             <div class="column-toggle-wrapper">
                 <button class="column-toggle-btn" id="ev-col-toggle-btn">Columns &#9662;</button>
                 <div class="column-toggle-dropdown" id="ev-col-toggle-dropdown"></div>
@@ -251,7 +251,7 @@
                         <th data-col="item_name" data-sort="item_name">Event Name <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-col="event_date" data-sort="event_date">Date <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-col="course" data-sort="course">Course <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-col="city" data-sort="city">City <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-col="chapter" data-sort="chapter">Chapter <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-col="registrations" data-sort="registrations">Registrations <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-col="actions">Actions</th>
                     </tr>
@@ -281,7 +281,7 @@
 
     <!-- Edit Event Modal -->
     <div id="edit-event-overlay" class="modal-overlay" style="display:none;">
-        <div class="modal edit-modal">
+        <div class="modal edit-modal" style="max-width:620px;">
             <div class="modal-header">
                 <h2>Edit Event</h2>
                 <button id="edit-event-close" class="modal-close">&times;</button>
@@ -292,8 +292,47 @@
                     <label>Event Name<input type="text" id="edit-event-item_name" class="modal-input"></label>
                     <label>Date<input type="date" id="edit-event-event_date" class="modal-input"></label>
                     <label>Course<input type="text" id="edit-event-course" class="modal-input"></label>
-                    <label>City<input type="text" id="edit-event-city" class="modal-input"></label>
+                    <!-- TODO: pull chapters from a chapters table when the full platform is built -->
+                    <label>Chapter
+                        <select id="edit-event-chapter" class="modal-input">
+                            <option value="">Select chapter...</option>
+                            <option value="San Antonio">San Antonio</option>
+                            <option value="Austin">Austin</option>
+                        </select>
+                    </label>
                 </div>
+                <!-- Format -->
+                <div style="margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Format</label>
+                    <div class="segmented-control" id="edit-event-format-group">
+                        <label class="seg-option"><input type="radio" name="edit-event-format" value="9 Holes"> 9 Holes</label>
+                        <label class="seg-option"><input type="radio" name="edit-event-format" value="18 Holes"> 18 Holes</label>
+                        <label class="seg-option"><input type="radio" name="edit-event-format" value="9/18 Combo"> 9/18 Combo</label>
+                    </div>
+                </div>
+                <!-- Start Type -->
+                <div style="margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Start Type</label>
+                    <div class="segmented-control" id="edit-event-start-type-group">
+                        <label class="seg-option"><input type="radio" name="edit-event-start_type" value="Tee Times"> Tee Times</label>
+                        <label class="seg-option"><input type="radio" name="edit-event-start_type" value="Shotgun"> Shotgun</label>
+                    </div>
+                </div>
+                <!-- Start Time -->
+                <div style="margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem;">Start Time
+                        <input type="time" id="edit-event-start_time" class="modal-input" style="margin-top:0.2rem;">
+                    </label>
+                </div>
+                <!-- Optional tee time planning fields (shown only when Start Type = Tee Times) -->
+                <div id="edit-tee-planning" style="display:none; margin-top:0.75rem;">
+                    <div class="edit-grid">
+                        <label>Number of Tee Times<input type="number" id="edit-tee-count" class="modal-input" min="1" max="60" placeholder="e.g., 12"></label>
+                        <label>Tee Time Interval (min)<input type="number" id="edit-tee-interval" class="modal-input" min="1" max="30" placeholder="e.g., 10"></label>
+                    </div>
+                </div>
+                <!-- Tee Time Advisor Panel -->
+                <div id="edit-advisor-panel" class="advisor-panel" style="display:none; margin-top:1rem;"></div>
                 <div class="modal-actions">
                     <button type="button" id="edit-event-cancel" class="btn btn-secondary">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -538,7 +577,7 @@
 
     <!-- Add Event Modal -->
     <div id="add-event-overlay" class="modal-overlay" style="display:none;">
-        <div class="modal add-event-modal">
+        <div class="modal add-event-modal" style="max-width:620px;">
             <div class="modal-header">
                 <h2>Add Event</h2>
                 <button id="add-event-close" class="modal-close">&times;</button>
@@ -548,8 +587,47 @@
                     <label>Event Name<input type="text" id="add-event-name" class="modal-input" required aria-required="true"></label>
                     <label>Date<input type="date" id="add-event-date" class="modal-input"></label>
                     <label>Course<input type="text" id="add-event-course" class="modal-input"></label>
-                    <label>City<input type="text" id="add-event-city" class="modal-input"></label>
+                    <!-- TODO: pull chapters from a chapters table when the full platform is built -->
+                    <label>Chapter
+                        <select id="add-event-chapter" class="modal-input">
+                            <option value="">Select chapter...</option>
+                            <option value="San Antonio">San Antonio</option>
+                            <option value="Austin">Austin</option>
+                        </select>
+                    </label>
                 </div>
+                <!-- Format -->
+                <div style="margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Format</label>
+                    <div class="segmented-control" id="add-event-format-group">
+                        <label class="seg-option"><input type="radio" name="add-event-format" value="9 Holes"> 9 Holes</label>
+                        <label class="seg-option"><input type="radio" name="add-event-format" value="18 Holes"> 18 Holes</label>
+                        <label class="seg-option"><input type="radio" name="add-event-format" value="9/18 Combo"> 9/18 Combo</label>
+                    </div>
+                </div>
+                <!-- Start Type -->
+                <div style="margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Start Type</label>
+                    <div class="segmented-control" id="add-event-start-type-group">
+                        <label class="seg-option"><input type="radio" name="add-event-start_type" value="Tee Times"> Tee Times</label>
+                        <label class="seg-option"><input type="radio" name="add-event-start_type" value="Shotgun"> Shotgun</label>
+                    </div>
+                </div>
+                <!-- Start Time -->
+                <div style="margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem;">Start Time
+                        <input type="time" id="add-event-start_time" class="modal-input" style="margin-top:0.2rem;">
+                    </label>
+                </div>
+                <!-- Optional tee time planning fields (shown only when Start Type = Tee Times) -->
+                <div id="add-tee-planning" style="display:none; margin-top:0.75rem;">
+                    <div class="edit-grid">
+                        <label>Number of Tee Times<input type="number" id="add-tee-count" class="modal-input" min="1" max="60" placeholder="e.g., 12"></label>
+                        <label>Tee Time Interval (min)<input type="number" id="add-tee-interval" class="modal-input" min="1" max="30" placeholder="e.g., 10"></label>
+                    </div>
+                </div>
+                <!-- Tee Time Advisor Panel -->
+                <div id="add-advisor-panel" class="advisor-panel" style="display:none; margin-top:1rem;"></div>
                 <div class="modal-actions">
                     <button type="button" id="add-event-cancel" class="btn btn-secondary">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create Event</button>
@@ -616,7 +694,14 @@
                     <label>Event Name<input type="text" id="resolve-new-name" class="modal-input"></label>
                     <label>Date<input type="date" id="resolve-new-date" class="modal-input"></label>
                     <label>Course<input type="text" id="resolve-new-course" class="modal-input"></label>
-                    <label>City<input type="text" id="resolve-new-city" class="modal-input"></label>
+                    <!-- TODO: pull chapters from a chapters table when the full platform is built -->
+                    <label>Chapter
+                        <select id="resolve-new-chapter" class="modal-input">
+                            <option value="">Select chapter...</option>
+                            <option value="San Antonio">San Antonio</option>
+                            <option value="Austin">Austin</option>
+                        </select>
+                    </label>
                 </div>
             </div>
             <div class="modal-actions">
@@ -692,7 +777,7 @@
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="event_name" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{event_name}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="event_date" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{event_date}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="course" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{course}</button>
-                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="city" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{city}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="chapter" style="font-size:0.7rem; padding:0.15rem 0.4rem;">{chapter}</button>
                     </div>
                     <textarea id="compose-body" class="modal-input" rows="8" style="margin-top:0.2rem; font-family:inherit; resize:vertical;" placeholder="Type your message here... Use the variable buttons above to insert personalization tags."></textarea>
                 </label>
@@ -801,7 +886,7 @@
         { key: "item_name", label: "Event Name", default: true },
         { key: "event_date", label: "Date", default: true },
         { key: "course", label: "Course", default: true },
-        { key: "city", label: "City", default: true },
+        { key: "chapter", label: "Chapter", default: true },
         { key: "registrations", label: "Registrations", default: true },
         { key: "actions", label: "Actions", default: true },
     ];
@@ -952,7 +1037,7 @@
             filtered = filtered.filter(e =>
                 (e.item_name || "").toLowerCase().includes(q) ||
                 (e.course || "").toLowerCase().includes(q) ||
-                (e.city || "").toLowerCase().includes(q)
+                (e.chapter || "").toLowerCase().includes(q)
             );
         }
 
@@ -1201,7 +1286,7 @@
                         <span class="mc-customer">${escapeHtml(ev.item_name)}</span>
                         <span class="reg-count" style="font-size:0.78rem; min-width:auto; height:24px; border-radius:12px; margin-left:0.35rem; vertical-align:middle; padding:0 0.4rem;">${stats.players}/${ev.registrations || 0}</span>
                         ${ev.aliases && ev.aliases.length ? `<div style="margin-top:0.25rem; display:flex; gap:0.25rem; flex-wrap:wrap;">${ev.aliases.map(a => `<span style="display:inline-block; background:#e0e7ff; color:#3730a3; padding:0.15rem 0.4rem; border-radius:4px; font-size:0.72rem; font-weight:500; line-height:1.3;">${escapeHtml(a)}</span>`).join("")}</div>` : ''}
-                        <br><span class="mc-event" style="font-size:0.85rem;">${escapeHtml(ev.event_date || "\u2014")} &bull; ${escapeHtml(ev.course || ev.city || "\u2014")}</span>
+                        <br><span class="mc-event" style="font-size:0.85rem;">${escapeHtml(ev.event_date || "\u2014")} &bull; ${escapeHtml(ev.course || ev.chapter || "\u2014")}</span>
                     </div>
                     <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
                 </div>
@@ -1258,7 +1343,7 @@
                 </td>
                 <td>${escapeHtml(ev.event_date || "\u2014")}</td>
                 <td>${escapeHtml(ev.course || "\u2014")}</td>
-                <td>${escapeHtml(ev.city || "\u2014")}</td>
+                <td>${escapeHtml(ev.chapter || "\u2014")}</td>
                 <td><span class="reg-count">${getEventTotalPlayers(ev)}/${ev.registrations || 0}</span></td>
                 <td>
                     <button class="btn btn-edit" data-edit-event="${ev.id}">Edit</button>
@@ -2697,7 +2782,7 @@
                     event_name: composeEventName,
                     event_date: ev?.event_date || "",
                     course: ev?.course || "",
-                    city: ev?.city || "",
+                    chapter: ev?.chapter || "",
                 }),
             });
             const data = await resp.json();
@@ -3029,7 +3114,15 @@
         document.getElementById("add-event-name").value = "";
         document.getElementById("add-event-date").value = "";
         document.getElementById("add-event-course").value = "";
-        document.getElementById("add-event-city").value = "";
+        document.getElementById("add-event-chapter").value = "";
+        document.getElementById("add-event-start_time").value = "";
+        document.querySelectorAll('input[name="add-event-format"]').forEach(r => r.checked = false);
+        document.querySelectorAll('input[name="add-event-start_type"]').forEach(r => r.checked = false);
+        document.getElementById("add-tee-count").value = "";
+        document.getElementById("add-tee-interval").value = "";
+        document.getElementById("add-tee-planning").style.display = "none";
+        document.getElementById("add-advisor-panel").style.display = "none";
+        document.getElementById("add-advisor-panel").innerHTML = "";
         document.getElementById("add-event-overlay").style.display = "flex";
     }
 
@@ -3041,6 +3134,8 @@
         e.preventDefault();
         const name = document.getElementById("add-event-name").value.trim();
         if (!name) return;
+        const formatEl = document.querySelector('input[name="add-event-format"]:checked');
+        const startTypeEl = document.querySelector('input[name="add-event-start_type"]:checked');
         try {
             const res = await fetch("/api/events", {
                 method: "POST",
@@ -3049,7 +3144,10 @@
                     item_name: name,
                     event_date: document.getElementById("add-event-date").value || null,
                     course: document.getElementById("add-event-course").value.trim() || null,
-                    city: document.getElementById("add-event-city").value.trim() || null,
+                    chapter: document.getElementById("add-event-chapter").value || null,
+                    format: formatEl ? formatEl.value : null,
+                    start_type: startTypeEl ? startTypeEl.value : null,
+                    start_time: document.getElementById("add-event-start_time").value || null,
                 }),
             });
             if (!res.ok) {
@@ -3390,17 +3488,39 @@
     }
 
     // Edit event modal
-    const EVENT_EDIT_FIELDS = ["item_name", "event_date", "course", "city"];
+    const EVENT_EDIT_FIELDS = ["item_name", "event_date", "course", "chapter", "format", "start_type", "start_time"];
 
     function openEditEvent(eventId) {
         const ev = allEvents.find(e => e.id === eventId);
         if (!ev) return;
         document.getElementById("edit-event-id").value = eventId;
-        EVENT_EDIT_FIELDS.forEach(field => {
+        // Standard text/date/select fields
+        ["item_name", "event_date", "course", "chapter", "start_time"].forEach(field => {
             const input = document.getElementById("edit-event-" + field);
             if (input) input.value = ev[field] || "";
         });
+        // Radio buttons: format
+        document.querySelectorAll('input[name="edit-event-format"]').forEach(r => {
+            r.checked = (r.value === (ev.format || ""));
+        });
+        // Radio buttons: start_type
+        document.querySelectorAll('input[name="edit-event-start_type"]').forEach(r => {
+            r.checked = (r.value === (ev.start_type || ""));
+        });
+        // Reset planning fields
+        document.getElementById("edit-tee-count").value = "";
+        document.getElementById("edit-tee-interval").value = "";
+        // Show/hide tee planning based on start_type
+        const isTee = ev.start_type === "Tee Times";
+        document.getElementById("edit-tee-planning").style.display = isTee ? "" : "none";
+        // Reset and trigger advisor
+        document.getElementById("edit-advisor-panel").innerHTML = "";
+        document.getElementById("edit-advisor-panel").style.display = "none";
         document.getElementById("edit-event-overlay").style.display = "flex";
+        // Trigger advisor if date + chapter present
+        if (ev.event_date && ev.chapter) {
+            triggerAdvisor("edit");
+        }
     }
 
     function closeEditEvent() {
@@ -3414,13 +3534,21 @@
         if (!ev) return;
 
         const changes = {};
-        EVENT_EDIT_FIELDS.forEach(field => {
+        // Standard text/date/select fields
+        ["item_name", "event_date", "course", "chapter", "start_time"].forEach(field => {
             const input = document.getElementById("edit-event-" + field);
             if (!input) return;
             const newVal = input.value.trim() || null;
             const oldVal = ev[field] || null;
             if (newVal !== oldVal) changes[field] = newVal;
         });
+        // Radio fields
+        const formatEl = document.querySelector('input[name="edit-event-format"]:checked');
+        const formatVal = formatEl ? formatEl.value : null;
+        if (formatVal !== (ev.format || null)) changes.format = formatVal;
+        const startTypeEl = document.querySelector('input[name="edit-event-start_type"]:checked');
+        const startTypeVal = startTypeEl ? startTypeEl.value : null;
+        if (startTypeVal !== (ev.start_type || null)) changes.start_type = startTypeVal;
 
         if (Object.keys(changes).length === 0) {
             closeEditEvent();
@@ -3582,7 +3710,7 @@
         if (orphan) {
             document.getElementById("resolve-new-date").value = orphan.event_date || "";
             document.getElementById("resolve-new-course").value = orphan.course || "";
-            document.getElementById("resolve-new-city").value = orphan.city || "";
+            document.getElementById("resolve-new-chapter").value = orphan.chapter || orphan.city || "";
         }
 
         document.getElementById("resolve-orphan-overlay").style.display = "flex";
@@ -3627,7 +3755,7 @@
                         item_name: name,
                         event_date: document.getElementById("resolve-new-date").value,
                         course: document.getElementById("resolve-new-course").value,
-                        city: document.getElementById("resolve-new-city").value,
+                        chapter: document.getElementById("resolve-new-chapter").value,
                     }),
                 });
                 if (!createRes.ok) {
@@ -3660,6 +3788,283 @@
                 alert("Failed: " + err.message);
             }
         }
+    }
+
+    // ---- Tee Time Advisor ----
+    let advisorCache = {}; // key: "chapter|date" → {sunset, sunset_24h, civil_twilight_end, civil_twilight_end_24h}
+
+    function getFormPrefix(prefix) {
+        // "add" or "edit"
+        return prefix;
+    }
+
+    function getAdvisorInputs(prefix) {
+        const dateEl = document.getElementById(`${prefix}-event-${prefix === "add" ? "date" : "event_date"}`);
+        const chapterEl = document.getElementById(`${prefix}-event-chapter`);
+        const formatEl = document.querySelector(`input[name="${prefix}-event-format"]:checked`);
+        const startTypeEl = document.querySelector(`input[name="${prefix}-event-start_type"]:checked`);
+        const startTimeEl = document.getElementById(`${prefix}-event-start_time`);
+        const teeCountEl = document.getElementById(`${prefix}-tee-count`);
+        const teeIntervalEl = document.getElementById(`${prefix}-tee-interval`);
+        return {
+            date: dateEl ? dateEl.value : "",
+            chapter: chapterEl ? chapterEl.value : "",
+            format: formatEl ? formatEl.value : null,
+            startType: startTypeEl ? startTypeEl.value : null,
+            startTime: startTimeEl ? startTimeEl.value : "",
+            teeCount: teeCountEl ? parseInt(teeCountEl.value) || 0 : 0,
+            teeInterval: teeIntervalEl ? parseInt(teeIntervalEl.value) || 0 : 0,
+        };
+    }
+
+    function timeToMinutes(t24) {
+        // "HH:MM" → minutes since midnight
+        const [h, m] = t24.split(":").map(Number);
+        return h * 60 + m;
+    }
+
+    function minutesToTime12(mins) {
+        let h = Math.floor(mins / 60) % 24;
+        const m = mins % 60;
+        const ampm = h >= 12 ? "PM" : "AM";
+        if (h === 0) h = 12;
+        else if (h > 12) h -= 12;
+        return `${h}:${String(m).padStart(2, "0")} ${ampm}`;
+    }
+
+    function minutesToTime24(mins) {
+        const h = Math.floor(mins / 60) % 24;
+        const m = mins % 60;
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+
+    function roundDown15(mins) {
+        return Math.floor(mins / 15) * 15;
+    }
+
+    function trafficLight(finishMins, twilightMins) {
+        const margin = twilightMins - finishMins;
+        if (margin >= 45) return { icon: "\u{1F7E2}", cls: "green", text: "" };        // green circle
+        if (margin >= 20) return { icon: "\u{1F7E1}", cls: "yellow", text: "" };       // yellow circle
+        return { icon: "\u{1F534}", cls: "red", text: "Cutting it close" };            // red circle
+    }
+
+    function statusIcon(finishMins, twilightMins) {
+        const margin = twilightMins - finishMins;
+        if (margin >= 45) return "\u2705";   // check mark
+        if (margin >= 20) return "\u{1F7E1}"; // yellow circle
+        return "\u{1F534}";                    // red circle
+    }
+
+    function getDuration(fmt) {
+        // Returns round duration in minutes
+        if (fmt === "9 Holes") return 150;   // 2.5 hours
+        if (fmt === "18 Holes") return 300;  // 5 hours
+        return 150; // default to 9 for combo (earliest start)
+    }
+
+    async function fetchSunData(date, chapter) {
+        const key = `${chapter}|${date}`;
+        if (advisorCache[key]) return advisorCache[key];
+        const res = await fetch(`/api/sunset?date=${encodeURIComponent(date)}&chapter=${encodeURIComponent(chapter)}`);
+        if (!res.ok) throw new Error("API error");
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        advisorCache[key] = data;
+        return data;
+    }
+
+    async function triggerAdvisor(prefix) {
+        const inputs = getAdvisorInputs(prefix);
+        const panel = document.getElementById(`${prefix}-advisor-panel`);
+        if (!inputs.date || !inputs.chapter) {
+            panel.style.display = "none";
+            return;
+        }
+        // Show loading
+        panel.style.display = "";
+        panel.innerHTML = '<div class="advisor-loading">Loading sun times...</div>';
+
+        let sunData;
+        try {
+            sunData = await fetchSunData(inputs.date, inputs.chapter);
+        } catch (err) {
+            panel.innerHTML = '<div class="advisor-loading" style="color:var(--red);">Unable to load sun times. Enter start time manually.</div>';
+            return;
+        }
+
+        renderAdvisor(prefix, sunData, inputs);
+    }
+
+    function renderAdvisor(prefix, sunData, inputs) {
+        const panel = document.getElementById(`${prefix}-advisor-panel`);
+        const twilightMins = timeToMinutes(sunData.civil_twilight_end_24h);
+
+        // Last recommended tee times
+        const last9 = roundDown15(twilightMins - 150);  // twilight - 2:30
+        const last18 = roundDown15(twilightMins - 300);  // twilight - 5:00
+
+        // Traffic lights for recommended times
+        const finish9 = last9 + 150;
+        const finish18 = last18 + 300;
+        const tl9 = trafficLight(finish9, twilightMins);
+        const tl18 = trafficLight(finish18, twilightMins);
+
+        let html = `
+        <div class="advisor-header">
+            <span><span class="sun-label">Sunset:</span> ${sunData.sunset}</span>
+            <span style="color:var(--text-muted);">&middot;</span>
+            <span><span class="sun-label">Civil Twilight Ends:</span> ${sunData.civil_twilight_end}</span>
+        </div>
+        <div class="advisor-recs">
+            <div class="advisor-rec">
+                <span class="rec-label">Last recommended 9-hole tee time</span>
+                <span class="rec-time">${minutesToTime12(last9)}</span>
+                <span>${tl9.icon}</span>
+                ${tl9.text ? `<span class="rec-warning">${tl9.text}</span>` : ""}
+            </div>
+            <div class="advisor-rec">
+                <span class="rec-label">Last recommended 18-hole tee time</span>
+                <span class="rec-time">${minutesToTime12(last18)}</span>
+                <span>${tl18.icon}</span>
+                ${tl18.text ? `<span class="rec-warning">${tl18.text}</span>` : ""}
+            </div>
+        </div>`;
+
+        // Pre-populate start time based on format
+        const startTimeEl = document.getElementById(`${prefix}-event-start_time`);
+        if (startTimeEl && !startTimeEl.dataset.userOverride) {
+            let recMins;
+            if (inputs.format === "18 Holes") recMins = last18;
+            else recMins = last9; // 9 Holes or 9/18 Combo → use 9-hole time (earliest)
+            startTimeEl.value = minutesToTime24(recMins);
+        }
+
+        // Tee time sheet or shotgun estimate
+        const currentStartTime = startTimeEl ? startTimeEl.value : "";
+        if (inputs.startType === "Shotgun" && currentStartTime) {
+            const startMins = timeToMinutes(currentStartTime);
+            if (inputs.format === "9/18 Combo") {
+                const finish9s = startMins + 150;
+                const finish18s = startMins + 300;
+                const si9 = statusIcon(finish9s, twilightMins);
+                const si18 = statusIcon(finish18s, twilightMins);
+                html += `<div class="shotgun-estimate">
+                    <div>9-hole groups est. finish: <strong>${minutesToTime12(finish9s)}</strong> ${si9}</div>
+                    <div>18-hole groups est. finish: <strong>${minutesToTime12(finish18s)}</strong> ${si18}</div>
+                </div>`;
+            } else {
+                const dur = getDuration(inputs.format);
+                const finishMins = startMins + dur;
+                const si = statusIcon(finishMins, twilightMins);
+                html += `<div class="shotgun-estimate">All groups estimated finish: <strong>${minutesToTime12(finishMins)}</strong> ${si}</div>`;
+            }
+        }
+
+        if (inputs.startType === "Tee Times" && inputs.teeCount > 0 && inputs.teeInterval > 0 && currentStartTime) {
+            const startMins = timeToMinutes(currentStartTime);
+
+            if (inputs.format === "9/18 Combo") {
+                // Side-by-side sheets
+                html += '<div class="tee-sheet-container">';
+                html += buildTeeSheet("9-Hole Players", startMins, inputs.teeCount, inputs.teeInterval, 150, twilightMins, sunData);
+                html += buildTeeSheet("18-Hole Players", startMins, inputs.teeCount, inputs.teeInterval, 300, twilightMins, sunData);
+                html += '</div>';
+            } else {
+                const dur = getDuration(inputs.format);
+                html += buildTeeSheet(null, startMins, inputs.teeCount, inputs.teeInterval, dur, twilightMins, sunData);
+            }
+        }
+
+        panel.innerHTML = html;
+    }
+
+    function buildTeeSheet(title, startMins, count, interval, duration, twilightMins, sunData) {
+        let html = '<div class="tee-sheet-section">';
+        if (title) html += `<h4>${title}</h4>`;
+        html += '<table class="tee-sheet-table"><thead><tr><th>Tee Time</th><th>Est. Finish</th><th>Status</th></tr></thead><tbody>';
+
+        let twilightRowInserted = false;
+        for (let i = 0; i < count; i++) {
+            const teeMins = startMins + (i * interval);
+            const finishMins = teeMins + duration;
+
+            // Insert twilight reference row if this finish passes twilight
+            if (!twilightRowInserted && finishMins >= twilightMins) {
+                html += `<tr class="twilight-row"><td colspan="3">\u2691 Civil Twilight: ${sunData.civil_twilight_end}</td></tr>`;
+                twilightRowInserted = true;
+            }
+
+            const si = statusIcon(finishMins, twilightMins);
+            html += `<tr><td>${minutesToTime12(teeMins)}</td><td>${minutesToTime12(finishMins)}</td><td>${si}</td></tr>`;
+        }
+
+        // If twilight wasn't inserted (all finish before it), add at end
+        if (!twilightRowInserted) {
+            html += `<tr class="twilight-row"><td colspan="3">\u2691 Civil Twilight: ${sunData.civil_twilight_end}</td></tr>`;
+        }
+
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    function updateTeeSheet(prefix) {
+        const inputs = getAdvisorInputs(prefix);
+        const panel = document.getElementById(`${prefix}-advisor-panel`);
+        if (panel.style.display === "none" || !inputs.date || !inputs.chapter) return;
+        const key = `${inputs.chapter}|${inputs.date}`;
+        const sunData = advisorCache[key];
+        if (!sunData) return;
+        renderAdvisor(prefix, sunData, inputs);
+    }
+
+    function setupAdvisorListeners(prefix) {
+        const dateId = `${prefix}-event-${prefix === "add" ? "date" : "event_date"}`;
+        const chapterId = `${prefix}-event-chapter`;
+        const startTimeId = `${prefix}-event-start_time`;
+        const teeCountId = `${prefix}-tee-count`;
+        const teeIntervalId = `${prefix}-tee-interval`;
+        const teePlanningId = `${prefix}-tee-planning`;
+
+        // Date or chapter change → fetch sun data
+        [dateId, chapterId].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener("change", () => triggerAdvisor(prefix));
+        });
+
+        // Start type change → show/hide tee planning fields + rebuild
+        document.querySelectorAll(`input[name="${prefix}-event-start_type"]`).forEach(r => {
+            r.addEventListener("change", () => {
+                const isTee = r.value === "Tee Times";
+                document.getElementById(teePlanningId).style.display = isTee ? "" : "none";
+                updateTeeSheet(prefix);
+            });
+        });
+
+        // Format change → update recommendation + rebuild
+        document.querySelectorAll(`input[name="${prefix}-event-format"]`).forEach(r => {
+            r.addEventListener("change", () => {
+                // Reset user override flag so advisor can re-populate start time
+                const st = document.getElementById(startTimeId);
+                if (st) delete st.dataset.userOverride;
+                updateTeeSheet(prefix);
+            });
+        });
+
+        // Start time manual edit → mark as user override + rebuild
+        const stEl = document.getElementById(startTimeId);
+        if (stEl) {
+            stEl.addEventListener("input", () => {
+                stEl.dataset.userOverride = "1";
+                updateTeeSheet(prefix);
+            });
+        }
+
+        // Tee count / interval change → rebuild sheet
+        [teeCountId, teeIntervalId].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener("input", () => updateTeeSheet(prefix));
+        });
     }
 
     document.addEventListener("DOMContentLoaded", async () => {
@@ -3863,6 +4268,10 @@
         document.getElementById("edit-event-overlay").addEventListener("click", (e) => {
             if (e.target === e.currentTarget) closeEditEvent();
         });
+
+        // Tee Time Advisor listeners
+        setupAdvisorListeners("add");
+        setupAdvisorListeners("edit");
 
         // Merge event modal
         document.getElementById("merge-event-submit").addEventListener("click", submitMerge);
