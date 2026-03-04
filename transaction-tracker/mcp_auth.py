@@ -29,6 +29,14 @@ from starlette.responses import JSONResponse, Response, RedirectResponse
 
 logger = logging.getLogger(__name__)
 
+# Startup diagnostic: confirm whether MCP env vars are visible to this process
+logger.info(
+    "mcp_auth module loaded — MCP_CLIENT_ID present in os.environ: %s, "
+    "MCP_CLIENT_SECRET present in os.environ: %s",
+    "MCP_CLIENT_ID" in os.environ,
+    "MCP_CLIENT_SECRET" in os.environ,
+)
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
