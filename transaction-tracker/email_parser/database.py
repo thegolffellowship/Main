@@ -384,6 +384,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 tee_time_count INTEGER,
                 tee_time_interval INTEGER,
                 start_time_18 TEXT,
+                start_type_18 TEXT,
                 tee_time_count_18 INTEGER,
                 created_at  TEXT DEFAULT (datetime('now'))
             )
@@ -400,7 +401,8 @@ def init_db(db_path: str | Path | None = None) -> None:
         # Migration: add new event planning columns
         for col, col_type in [("format", "TEXT"), ("start_type", "TEXT"), ("start_time", "TEXT"),
                                ("tee_time_count", "INTEGER"), ("tee_time_interval", "INTEGER"),
-                               ("start_time_18", "TEXT"), ("tee_time_count_18", "INTEGER")]:
+                               ("start_time_18", "TEXT"), ("start_type_18", "TEXT"),
+                               ("tee_time_count_18", "INTEGER")]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
                 logger.info("Added events.%s column", col)
@@ -1308,8 +1310,8 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
     Items are NEVER rewritten — they are linked via the alias table.
     """
     allowed = {"item_name", "event_date", "course", "chapter", "format", "start_type", "start_time",
-                "tee_time_count", "tee_time_interval", "start_time_18", "tee_time_count_18",
-                "event_type"}
+                "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
+                "tee_time_count_18", "event_type"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
@@ -2668,7 +2670,7 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
                  chapter: str = None, format: str = None, start_type: str = None,
                  start_time: str = None, tee_time_count: int = None,
                  tee_time_interval: int = None, start_time_18: str = None,
-                 tee_time_count_18: int = None,
+                 start_type_18: str = None, tee_time_count_18: int = None,
                  db_path: str | Path | None = None) -> dict | None:
     """Manually create a new event. Returns the event dict or None if duplicate (case-insensitive)."""
     with _connect(db_path) as conn:
@@ -2680,8 +2682,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
             return None
         try:
             cursor = conn.execute(
-                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, tee_time_count_18, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
-                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, tee_time_count_18),
+                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
+                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18),
             )
             conn.commit()
             new_id = cursor.lastrowid
