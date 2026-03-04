@@ -13,6 +13,11 @@ Gunicorn workers.
 Environment variables:
   MCP_CLIENT_ID      — OAuth client ID for the connector
   MCP_CLIENT_SECRET  — OAuth client secret for the connector
+                       IMPORTANT: Use alphanumeric characters only (no dashes,
+                       double-dashes, or special symbols). Railway's variable
+                       parser may strip or mishandle values containing -- or
+                       other special characters, preventing the secret from
+                       reaching the process environment.
 """
 
 import base64
