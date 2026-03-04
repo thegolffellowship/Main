@@ -2,7 +2,9 @@
 OAuth 2.0 support for the MCP endpoint.
 
 Implements:
+  - /.well-known/oauth-protected-resource  (RFC 9728 discovery)
   - /.well-known/oauth-authorization-server  (RFC 8414 metadata)
+  - /oauth/register  (RFC 7591 Dynamic Client Registration)
   - /oauth/authorize   (authorization endpoint — auto-approves for known clients)
   - /oauth/token       (token endpoint — client_credentials + authorization_code)
 
@@ -164,6 +166,24 @@ def _get_issuer(request: Request) -> str:
     return f"{scheme}://{host}"
 
 
+async def oauth_protected_resource(request: Request) -> JSONResponse:
+    """RFC 9728 — Protected Resource Metadata.
+
+    Claude.ai fetches this to discover which authorization server to use.
+    Path-aware: serves for any sub-path (e.g. /mcp/mcp).
+    """
+    issuer = _get_issuer(request)
+    logger.info("PRM requested from %s (path=%s)",
+                request.client.host if request.client else "unknown",
+                request.url.path)
+    return JSONResponse({
+        "resource": f"{issuer}/mcp/mcp",
+        "authorization_servers": [issuer],
+        "scopes_supported": ["mcp"],
+        "bearer_methods_supported": ["header"],
+    }, headers=_CORS_HEADERS)
+
+
 async def oauth_metadata(request: Request) -> JSONResponse:
     """RFC 8414 — OAuth 2.0 Authorization Server Metadata."""
     issuer = _get_issuer(request)
@@ -172,6 +192,7 @@ async def oauth_metadata(request: Request) -> JSONResponse:
         "issuer": issuer,
         "authorization_endpoint": f"{issuer}/oauth/authorize",
         "token_endpoint": f"{issuer}/oauth/token",
+        "registration_endpoint": f"{issuer}/oauth/register",
         "token_endpoint_auth_methods_supported": [
             "client_secret_post",
             "client_secret_basic",
@@ -234,6 +255,48 @@ async def oauth_authorize(request: Request) -> Response:
 
     logger.info("OAuth authorize: issuing code, redirecting to %s", redirect_uri)
     return RedirectResponse(url=location, status_code=302)
+
+
+async def oauth_register(request: Request) -> Response:
+    """RFC 7591 — Dynamic Client Registration.
+
+    Claude.ai calls this to self-register as an OAuth client.
+    Returns the configured MCP_CLIENT_ID so the rest of the flow
+    (authorize → token) works with the same credentials.
+    """
+    if request.method == "OPTIONS":
+        return Response(status_code=204, headers=_CORS_HEADERS)
+
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+
+    logger.info("OAuth register: client_name=%s redirect_uris=%s",
+                data.get("client_name"), data.get("redirect_uris"))
+
+    cid = _client_id()
+    if not cid:
+        logger.error("OAuth register: MCP_CLIENT_ID not configured")
+        return JSONResponse(
+            {"error": "server_error", "error_description": "MCP OAuth not configured"},
+            status_code=500,
+            headers=_CORS_HEADERS,
+        )
+
+    # Return the configured client_id.  For PKCE public clients the
+    # secret is not required — token_endpoint_auth_method=none.
+    response_data = {
+        "client_id": cid,
+        "client_name": data.get("client_name", "MCP Client"),
+        "redirect_uris": data.get("redirect_uris", []),
+        "token_endpoint_auth_method": "none",
+        "grant_types": ["authorization_code"],
+        "response_types": ["code"],
+        "scope": "mcp",
+    }
+    logger.info("OAuth register: registered client_id=%s", cid)
+    return JSONResponse(response_data, status_code=201, headers=_CORS_HEADERS)
 
 
 async def oauth_token(request: Request) -> Response:
@@ -412,10 +475,24 @@ class MCPAuthMiddleware:
         auth_value = headers.get(b"authorization", b"").decode()
 
         if not auth_value.lower().startswith("bearer "):
+            # Build the resource_metadata URL from request headers
+            host = None
+            scheme = b"https"
+            for h_name, h_value in scope.get("headers", []):
+                if h_name == b"host":
+                    host = h_value.decode()
+                elif h_name == b"x-forwarded-proto":
+                    scheme = h_value
+            if host:
+                prm_url = f"{scheme.decode() if isinstance(scheme, bytes) else scheme}://{host}/.well-known/oauth-protected-resource"
+            else:
+                prm_url = "/.well-known/oauth-protected-resource"
             response = JSONResponse(
                 {"error": "unauthorized", "error_description": "Bearer token required"},
                 status_code=401,
-                headers={"WWW-Authenticate": 'Bearer realm="mcp"'},
+                headers={
+                    "WWW-Authenticate": f'Bearer realm="mcp", resource_metadata="{prm_url}"',
+                },
             )
             await response(scope, receive, send)
             return
