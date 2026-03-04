@@ -1393,6 +1393,7 @@ def api_create_event():
         tee_time_count=data.get("tee_time_count"),
         tee_time_interval=data.get("tee_time_interval"),
         start_time_18=data.get("start_time_18"),
+        start_type_18=data.get("start_type_18"),
         tee_time_count_18=data.get("tee_time_count_18"),
     )
     if event:
