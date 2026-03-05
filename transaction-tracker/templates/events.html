@@ -927,6 +927,7 @@
     let allRsvpEmailOverrides = {};  // keyed by event_name → {email: status}
     let expandedEventId = null;
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
+    let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
     let eventSortField = "event_date";
     let eventSortDir = "asc";
     let eventSearchQuery = "";
@@ -1310,12 +1311,14 @@
                 // PLAYERS / GAMES toggle + filter badges
                 let badgesHtml = '<div class="event-game-stats" style="margin-bottom:0.5rem;">';
                 badgesHtml += '<span class="view-toggle-group">';
-                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+                const mobilePairingsView = pairingsOpenForEvent[ev.id];
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+                badgesHtml += `<span class="game-stat-badge ${mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
                 if (mobileHolesType) {
                     badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
                 }
                 badgesHtml += '</span>';
-                if (!mobileGamesView) {
+                if (!mobileGamesView && !mobilePairingsView) {
                     badgesHtml += '<span class="view-toggle-group">';
                     badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
                     badgesHtml += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
@@ -1324,7 +1327,9 @@
                 }
                 badgesHtml += '</div>';
 
-                if (mobileGamesView) {
+                if (mobilePairingsView) {
+                    detailHtml = badgesHtml + '<div style="padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:0.95rem;"><strong>Feature Coming Soon!</strong></div>';
+                } else if (mobileGamesView) {
                     detailHtml = badgesHtml + renderGamesPanel(ev);
                 } else {
                     let filteredRegs = registrants;
@@ -1881,17 +1886,19 @@
         const holesType = extractHolesType(ev.item_name, ev.format);
         const gamesView = holesType && gamesOpenForEvent[ev.id];
 
-        // View toggle: PLAYERS / GAMES (connected toggle group)
+        // View toggle: PLAYERS / PAIRINGS / GAMES (connected toggle group)
+        const pairingsView = pairingsOpenForEvent[ev.id];
         let html = '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
-        html += `<span class="game-stat-badge ${!gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${!gamesView && !pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
         if (holesType) {
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
         }
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
-        if (!gamesView) {
+        if (!gamesView && !pairingsView) {
             html += '<span class="view-toggle-group">';
             html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
             html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
@@ -1902,6 +1909,12 @@
             }
         }
         html += '</div>';
+
+        // ---- PAIRINGS VIEW ----
+        if (pairingsView) {
+            html += '<div style="padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:0.95rem;"><strong>Feature Coming Soon!</strong></div>';
+            return html;
+        }
 
         // ---- GAMES VIEW ----
         if (gamesView) {
@@ -2180,12 +2193,13 @@
     }
 
     function attachDetailHandlers(container, ev) {
-        // PLAYERS / GAMES view toggle
+        // PLAYERS / PAIRINGS / GAMES view toggle
         container.querySelectorAll("[data-toggle-games]").forEach(badge => {
             badge.addEventListener("click", (e) => {
                 e.stopPropagation();
-                const wantGames = badge.dataset.toggleGames === "1";
-                gamesOpenForEvent[ev.id] = wantGames;
+                const val = badge.dataset.toggleGames;
+                gamesOpenForEvent[ev.id] = val === "1";
+                pairingsOpenForEvent[ev.id] = val === "2";
                 rerenderDetail(container, ev);
             });
         });
