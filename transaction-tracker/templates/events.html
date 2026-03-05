@@ -1304,7 +1304,7 @@
             let detailHtml = '';
             if (isExpanded) {
                 const activeFilter = eventGameFilter[ev.id] || null;
-                const mobileHolesType = extractHolesType(ev.item_name);
+                const mobileHolesType = extractHolesType(ev.item_name, ev.format);
                 const mobileGamesView = mobileHolesType && gamesOpenForEvent[ev.id];
 
                 // PLAYERS / GAMES toggle + filter badges
@@ -1644,7 +1644,13 @@
         return rsvps.find(r => r.player_email && r.player_email.toLowerCase() === email.toLowerCase());
     }
 
-    function extractHolesType(eventName) {
+    function extractHolesType(eventName, format) {
+        // Prefer the explicit format field on the event
+        if (format) {
+            if (format === "9 Holes") return 9;
+            if (format === "18 Holes" || format === "9/18 Combo") return 18;
+        }
+        // Fallback: legacy naming convention e.g. "e18.EventName"
         const m = (eventName || "").match(/^[a-z](\d+)\./i);
         return m ? parseInt(m[1]) : null;
     }
@@ -1659,7 +1665,7 @@
     }
 
     function renderGamesPanel(ev) {
-        const holes = extractHolesType(ev.item_name);
+        const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
         const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
         const registrants = getRegistrants(ev.item_name);
@@ -1872,7 +1878,7 @@
         const allDetailRegs = [...registrants, ...ggRsvpRows];
         const stats = computeGameStats(allDetailRegs, ev.item_name);
 
-        const holesType = extractHolesType(ev.item_name);
+        const holesType = extractHolesType(ev.item_name, ev.format);
         const gamesView = holesType && gamesOpenForEvent[ev.id];
 
         // View toggle: PLAYERS / GAMES (connected toggle group)
@@ -3047,7 +3053,8 @@
     let wdEventName = null;
 
     function calculateWdComponents(item, eventName) {
-        const holes = extractHolesType(eventName);
+        const ev = allEvents.find(e => e.item_name === eventName);
+        const holes = extractHolesType(eventName, ev && ev.format);
         if (!holes) return null;
         const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
         if (!matrix) return null;
