@@ -3608,12 +3608,15 @@ def get_upcoming_events(db_path: str | Path | None = None) -> list[dict]:
             """
             SELECT e.*,
                    COUNT(DISTINCT i.id) as registrations,
+                   COUNT(DISTINCT CASE
+                       WHEN COALESCE(i.transaction_status, 'active') IN ('active', 'rsvp_only')
+                       THEN i.id END) as total_playing,
                    GROUP_CONCAT(DISTINCT ea.alias_name) as aliases
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             LEFT JOIN items i
                 ON (i.item_name = e.item_name OR i.item_name = ea.alias_name)
-                AND COALESCE(i.transaction_status, 'active') = 'active'
+                AND COALESCE(i.transaction_status, 'active') IN ('active', 'rsvp_only')
             WHERE e.event_date >= ?
             GROUP BY e.id
             ORDER BY e.event_date ASC
@@ -3624,6 +3627,18 @@ def get_upcoming_events(db_path: str | Path | None = None) -> list[dict]:
         for r in rows:
             d = dict(r)
             d["aliases"] = [a for a in (d.get("aliases") or "").split(",") if a]
+            # Count unmatched GG RSVPs (playing, matched to event but not to a
+            # specific item row) so the email can mirror the badge totals.
+            gg_count = conn.execute(
+                """
+                SELECT COUNT(*) as cnt FROM rsvps
+                WHERE response = 'PLAYING'
+                  AND matched_item_id IS NULL
+                  AND matched_event = ?
+                """,
+                (d["item_name"],),
+            ).fetchone()["cnt"]
+            d["gg_rsvp_count"] = gg_count
             results.append(d)
         return results
 

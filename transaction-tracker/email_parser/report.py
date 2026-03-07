@@ -182,14 +182,15 @@ def _build_upcoming_events_section(events: list[dict]) -> str:
 
     table_rows = ""
     for e in events:
-        regs = e.get("registrations", 0)
+        paid = e.get("registrations", 0)
+        total = e.get("total_playing", 0) + e.get("gg_rsvp_count", 0)
         course_city = e.get('course') or e.get('city') or '—'
         table_rows += f"""\
 <tr>
   <td style="{STYLES['td']} font-weight:600;">{e.get('item_name') or '—'}</td>
   <td style="{STYLES['td_nowrap']}">{e.get('event_date') or '—'}</td>
   <td style="{STYLES['td']}">{course_city}</td>
-  <td style="{STYLES['td']} text-align:center;"><span style="font-weight:700; color:#2563eb;">{regs}</span></td>
+  <td style="{STYLES['td']} text-align:center;"><span style="font-weight:700; color:#2563eb;">{total}</span><span style="color:#666;"> / </span><span style="font-weight:700; color:#16a34a;">{paid}</span></td>
 </tr>"""
 
     return f"""
@@ -200,7 +201,7 @@ def _build_upcoming_events_section(events: list[dict]) -> str:
     <th style="{STYLES['th']}">Event</th>
     <th style="{STYLES['th']}">Date</th>
     <th style="{STYLES['th']}">Course</th>
-    <th style="{STYLES['th']} text-align:center;">Regs</th>
+    <th style="{STYLES['th']} text-align:center;">Total / Paid</th>
   </tr></thead>
   <tbody>{table_rows}</tbody>
   </table>
