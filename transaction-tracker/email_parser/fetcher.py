@@ -284,10 +284,17 @@ def send_mail_graph(
     subject: str,
     html_body: str,
 ) -> bool:
-    """Send an email via Microsoft Graph API (requires Mail.Send permission)."""
+    """Send an email via Microsoft Graph API (requires Mail.Send permission).
+
+    ``to_address`` may be a single email or a comma-separated list of emails.
+    """
     token = _get_graph_token(tenant_id, client_id, client_secret)
     if not token:
         return False
+
+    # Support comma-separated recipient list
+    addresses = [a.strip() for a in to_address.split(",") if a.strip()]
+    to_recipients = [{"emailAddress": {"address": addr}} for addr in addresses]
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -301,9 +308,7 @@ def send_mail_graph(
                 "contentType": "HTML",
                 "content": html_body,
             },
-            "toRecipients": [
-                {"emailAddress": {"address": to_address}}
-            ],
+            "toRecipients": to_recipients,
         },
         "saveToSentItems": "false",
     }
