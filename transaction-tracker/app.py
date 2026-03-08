@@ -268,7 +268,20 @@ def _check_inbox_background():
         _inbox_check_status["error"] = None
     except Exception as e:
         logger.exception("Background inbox check failed")
-        _inbox_check_status["error"] = str(e)
+        msg = str(e)
+        # Provide user-friendly messages for known Anthropic API errors
+        if "credit balance is too low" in msg.lower():
+            _inbox_check_status["error"] = (
+                "Anthropic API credit balance is too low. "
+                "Please visit console.anthropic.com to add credits."
+            )
+        elif isinstance(e, _anthropic.AuthenticationError):
+            _inbox_check_status["error"] = (
+                "Anthropic API key is invalid or expired. "
+                "Please check your ANTHROPIC_API_KEY in the .env file."
+            )
+        else:
+            _inbox_check_status["error"] = msg
     finally:
         _inbox_check_status["running"] = False
 
