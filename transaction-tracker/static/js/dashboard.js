@@ -408,7 +408,24 @@ function statusTag(row) {
     return "";
 }
 
+function formatOrderDateTime(row) {
+    const date = row.order_date || "\u2014";
+    if (!row.order_time) return date;
+    // Convert HH:MM:SS or HH:MM to 12-hour format
+    const parts = row.order_time.split(":");
+    let h = parseInt(parts[0], 10);
+    const m = parts[1] || "00";
+    const ampm = h >= 12 ? "PM" : "AM";
+    if (h === 0) h = 12;
+    else if (h > 12) h -= 12;
+    return `${date} ${h}:${m} ${ampm}`;
+}
+
 function cellForColumn(key, row) {
+    if (key === "order_date") {
+        const display = formatOrderDateTime(row);
+        return `<span class="cell-value" data-field="order_date" data-id="${row.id}" data-original="${row.order_date || ""}">${display}</span>`;
+    }
     if (key === "customer") return linkedCell(row.customer, "customer", row.id);
     if (key === "item_name") return linkedCell(row.item_name, "item_name", row.id) + statusTag(row);
     if (key === "item_price") return cell(row.item_price, "item_price", row.id);
@@ -473,7 +490,7 @@ function renderMobileCards(items) {
 
         // Detail fields
         const fields = [
-            ["Order Date", row.order_date || "\u2014"],
+            ["Order Date", formatOrderDateTime(row)],
             ["Price", row.item_price || "\u2014"],
             ["Handicap", row.handicap || "\u2014"],
             ["Status", row.member_status || "\u2014"],
@@ -596,6 +613,15 @@ function sortItems(items, sortKey) {
         vb = String(vb).toLowerCase();
         if (va < vb) return asc ? -1 : 1;
         if (va > vb) return asc ? 1 : -1;
+
+        // Tiebreaker: when sorting by order_date, use order_time then id (newest first)
+        if (field === "order_date") {
+            const ta = a.order_time || "";
+            const tb = b.order_time || "";
+            if (ta !== tb) return asc ? ta.localeCompare(tb) : tb.localeCompare(ta);
+            // Final tiebreaker: higher id = more recent
+            return asc ? (a.id - b.id) : (b.id - a.id);
+        }
         return 0;
     });
 

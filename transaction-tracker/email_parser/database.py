@@ -231,7 +231,7 @@ ITEM_COLUMNS = [
     "email_uid", "item_index", "merchant", "customer",
     "first_name", "last_name", "middle_name", "suffix",
     "customer_email", "customer_phone",
-    "order_id", "order_date", "total_amount", "transaction_fees",
+    "order_id", "order_date", "order_time", "total_amount", "transaction_fees",
     "item_name", "event_date", "item_price", "quantity",
     "city", "chapter", "course", "handicap", "has_handicap",
     "side_games", "tee_choice",
@@ -289,6 +289,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 customer_phone   TEXT,
                 order_id         TEXT,
                 order_date       TEXT NOT NULL,
+                order_time       TEXT,
                 total_amount     TEXT,
                 item_name        TEXT NOT NULL,
                 event_date       TEXT,
@@ -342,6 +343,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("wd_note", "TEXT"),
             ("wd_credits", "TEXT"),
             ("credit_amount", "TEXT"),
+            ("order_time", "TEXT"),
             ("first_name", "TEXT"),
             ("last_name", "TEXT"),
             ("middle_name", "TEXT"),
@@ -753,7 +755,7 @@ def get_known_email_uids(db_path: str | Path | None = None) -> set[str]:
 def get_all_items(db_path: str | Path | None = None) -> list[dict]:
     """Return all item rows ordered by order_date descending."""
     with _connect(db_path) as conn:
-        rows = conn.execute("SELECT * FROM items ORDER BY order_date DESC, id ASC").fetchall()
+        rows = conn.execute("SELECT * FROM items ORDER BY order_date DESC, order_time DESC, id DESC").fetchall()
         return [dict(row) for row in rows]
 
 
@@ -802,7 +804,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
     and per-field value distributions for key columns.
     """
     with _connect(db_path) as conn:
-        rows = conn.execute("SELECT * FROM items ORDER BY order_date DESC, id ASC").fetchall()
+        rows = conn.execute("SELECT * FROM items ORDER BY order_date DESC, order_time DESC, id DESC").fetchall()
 
         if not rows:
             return {"total_items": 0, "message": "No items in database."}
