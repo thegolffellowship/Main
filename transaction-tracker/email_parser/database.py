@@ -2588,7 +2588,7 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
 
         # Fetch the target event for date/course/city
         target_event = conn.execute(
-            "SELECT * FROM events WHERE item_name = ?", (target_event_name,)
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (target_event_name,)
         ).fetchone()
         target_event = dict(target_event) if target_event else {}
 
@@ -2749,7 +2749,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
 
         # Look up the event for date/course/city
         event = conn.execute(
-            "SELECT * FROM events WHERE item_name = ?", (event_name,)
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
         ).fetchone()
         event = dict(event) if event else {}
 
