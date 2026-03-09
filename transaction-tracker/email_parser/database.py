@@ -1232,10 +1232,11 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
             "SELECT DISTINCT item_name, event_date, course, city FROM items"
         ).fetchall()
 
-        # Load existing aliases so we can skip aliased names
+        # Load existing aliases so we can skip aliased names (case-insensitive)
         alias_set = set(
-            r["alias_name"]
+            r["alias_name"].lower()
             for r in conn.execute("SELECT alias_name FROM event_aliases").fetchall()
+            if r["alias_name"]
         )
 
         inserted = 0
@@ -1247,7 +1248,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
                 skipped_non_event += 1
                 continue
             # Skip names that are aliases of another event
-            if name in alias_set:
+            if name.lower() in alias_set:
                 skipped_aliased += 1
                 continue
             # Case-insensitive duplicate check
@@ -1288,7 +1289,7 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             LEFT JOIN items i
-                ON (i.item_name = e.item_name OR i.item_name = ea.alias_name)
+                ON (i.item_name = e.item_name COLLATE NOCASE OR i.item_name = ea.alias_name COLLATE NOCASE)
                 AND COALESCE(i.transaction_status, 'active') = 'active'
             GROUP BY e.id
             ORDER BY e.event_date DESC, e.id DESC
@@ -1409,7 +1410,7 @@ def merge_events(source_id: int, target_id: int, db_path: str | Path | None = No
 
         # Count items that will now link via alias
         items_row = conn.execute(
-            "SELECT COUNT(*) as cnt FROM items WHERE item_name = ? AND COALESCE(transaction_status, 'active') = 'active'",
+            "SELECT COUNT(*) as cnt FROM items WHERE item_name = ? COLLATE NOCASE AND COALESCE(transaction_status, 'active') = 'active'",
             (src_name,),
         ).fetchone()
         items_linked = items_row["cnt"] if items_row else 0
@@ -1461,8 +1462,8 @@ def get_orphaned_items(db_path: str | Path | None = None) -> list[dict]:
                       MIN(i.city) as city,
                       GROUP_CONCAT(DISTINCT i.customer) as customers
                FROM items i
-               LEFT JOIN events e ON i.item_name = e.item_name
-               LEFT JOIN event_aliases ea ON i.item_name = ea.alias_name
+               LEFT JOIN events e ON i.item_name = e.item_name COLLATE NOCASE
+               LEFT JOIN event_aliases ea ON i.item_name = ea.alias_name COLLATE NOCASE
                WHERE e.id IS NULL
                  AND ea.id IS NULL
                  AND COALESCE(i.transaction_status, 'active') IN ('active', 'rsvp_only')
@@ -1509,7 +1510,7 @@ def resolve_orphaned_items(old_item_name: str, target_event_name: str,
 
         # Count how many items this links
         row = conn.execute(
-            "SELECT COUNT(*) as cnt FROM items WHERE item_name = ? AND COALESCE(transaction_status, 'active') IN ('active', 'rsvp_only')",
+            "SELECT COUNT(*) as cnt FROM items WHERE item_name = ? COLLATE NOCASE AND COALESCE(transaction_status, 'active') IN ('active', 'rsvp_only')",
             (old_item_name,),
         ).fetchone()
         items_linked = row["cnt"] if row else 0
@@ -3034,7 +3035,7 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
             row = conn.execute(
                 f"""SELECT id FROM items
                    WHERE LOWER(customer_email) = LOWER(?)
-                     AND item_name IN ({placeholders})
+                     AND item_name COLLATE NOCASE IN ({placeholders})
                      AND COALESCE(transaction_status, 'active') = 'active'""",
                 [player_email] + name_list,
             ).fetchone()
@@ -3046,7 +3047,7 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
             rows = conn.execute(
                 f"""SELECT id FROM items
                    WHERE customer LIKE ?
-                     AND item_name IN ({placeholders})
+                     AND item_name COLLATE NOCASE IN ({placeholders})
                      AND COALESCE(transaction_status, 'active') = 'active'""",
                 [f"{player_name}%"] + name_list,
             ).fetchall()
@@ -3617,7 +3618,7 @@ def get_upcoming_events(db_path: str | Path | None = None) -> list[dict]:
             FROM events e
             LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
             LEFT JOIN items i
-                ON (i.item_name = e.item_name OR i.item_name = ea.alias_name)
+                ON (i.item_name = e.item_name COLLATE NOCASE OR i.item_name = ea.alias_name COLLATE NOCASE)
                 AND COALESCE(i.transaction_status, 'active') IN ('active', 'rsvp_only')
             WHERE e.event_date >= ?
             GROUP BY e.id

@@ -1657,7 +1657,9 @@
         }
         // Fallback: legacy naming convention e.g. "e18.EventName"
         const m = (eventName || "").match(/^[a-z](\d+)\./i);
-        return m ? parseInt(m[1]) : null;
+        if (m) return parseInt(m[1]);
+        // Default to 18 holes — GAMES tab should always be available
+        return 18;
     }
 
     function fmt$(v) {
@@ -2973,6 +2975,8 @@
             } else {
                 resultsEl.style.background = "#f0fdf4";
                 resultsEl.innerHTML = `<strong style="color:#16a34a;">Success!</strong> ${data.sent} email${data.sent !== 1 ? "s" : ""} sent.`;
+                // Auto-close modal after successful send
+                setTimeout(() => { closeComposeModal(); }, 1800);
             }
             resultsEl.style.display = "block";
             document.getElementById("compose-progress-text").textContent = "Done!";
