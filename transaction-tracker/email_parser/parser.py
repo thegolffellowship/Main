@@ -137,6 +137,7 @@ Return this exact JSON structure:
   "customer_phone": "<buyer phone if present>",
   "order_id": "<order or confirmation number>",
   "order_date": "<YYYY-MM-DD>",
+  "order_time": "<HH:MM:SS in 24-hour format, from the order/transaction timestamp if present, else null>",
   "total_amount": "<total charged including fees, e.g. $222.53>",
   "transaction_fees": "<processing fee amount, e.g. $7.53>",
   "items": [
@@ -473,6 +474,7 @@ def parse_email(email_data: dict) -> list[dict]:
             "customer_phone": parsed.get("customer_phone"),
             "order_id": parsed.get("order_id"),
             "order_date": parsed.get("order_date") or "",
+            "order_time": parsed.get("order_time"),
             "total_amount": parsed.get("total_amount") or "",
             "transaction_fees": parsed.get("transaction_fees"),
             "item_name": _normalize_item_name(item.get("item_name")) or "",
