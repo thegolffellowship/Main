@@ -164,7 +164,7 @@ def get_event_registrations(event_name: str) -> str:
     conn = get_connection()
     rows = conn.execute(
         """SELECT * FROM items
-           WHERE item_name = ? AND COALESCE(transaction_status, 'active') = 'active'
+           WHERE item_name = ? COLLATE NOCASE AND COALESCE(transaction_status, 'active') = 'active'
            ORDER BY customer ASC""",
         (event_name,),
     ).fetchall()

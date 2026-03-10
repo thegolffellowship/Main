@@ -384,8 +384,87 @@ def start_scheduler():
         logger.info("Daily digest scheduled for %02d:00 %s → %s",
                      report_hour, report_tz, os.getenv("DAILY_REPORT_TO"))
 
+    # Auto payment reminders — every other day at 6:00 AM US/Central
+    reminder_tz = os.getenv("DAILY_REPORT_TZ", "US/Central")
+    scheduler.add_job(
+        send_auto_payment_reminders,
+        "cron",
+        day="*/2",
+        hour=6,
+        minute=0,
+        timezone=reminder_tz,
+        id="auto_payment_reminders",
+        replace_existing=True,
+    )
+    logger.info("Auto payment reminders scheduled every other day at 06:00 %s",
+                reminder_tz)
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
+
+
+def send_auto_payment_reminders():
+    """Send payment reminders to all RSVP-only/gg_rsvp players for upcoming events."""
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        logger.warning("Auto reminders: email credentials not configured, skipping")
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    events = get_all_events()
+    items = get_all_items()
+
+    total_sent = 0
+    total_failed = 0
+
+    for ev in events:
+        event_date = ev.get("event_date") or ""
+        # Skip past events
+        if event_date and event_date < today:
+            continue
+        event_name = ev.get("item_name") or ""
+        if not event_name:
+            continue
+
+        # Find RSVP-only / gg_rsvp players for this event (case-insensitive)
+        rsvp_players = [
+            i for i in items
+            if (i.get("item_name") or "").lower() == event_name.lower()
+            and (i.get("transaction_status") or "active") in ("rsvp_only", "gg_rsvp")
+            and i.get("customer_email")
+        ]
+        if not rsvp_players:
+            continue
+
+        for player in rsvp_players:
+            to_email = player["customer_email"].strip()
+            player_name = player.get("customer") or "Player"
+            subject = f"Payment Reminder — {event_name}"
+            html_body = (
+                f"<p>Hi {player_name},</p>"
+                f"<p>This is a friendly reminder that we have you down for "
+                f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+                f"<p>Please complete your registration at your earliest convenience.</p>"
+                f"<p>Thanks,<br>The Golf Fellowship</p>"
+            )
+            try:
+                ok = send_mail_graph(
+                    tenant_id=tenant_id, client_id=client_id,
+                    client_secret=client_secret, from_address=from_address,
+                    to_address=to_email, subject=subject, html_body=html_body,
+                )
+                if ok:
+                    total_sent += 1
+                else:
+                    total_failed += 1
+            except Exception:
+                logger.exception("Auto reminder failed for %s", to_email)
+                total_failed += 1
+
+    logger.info("Auto payment reminders: %d sent, %d failed", total_sent, total_failed)
 
 
 # ---------------------------------------------------------------------------
@@ -1408,6 +1487,8 @@ def api_create_event():
         start_time_18=data.get("start_time_18"),
         start_type_18=data.get("start_type_18"),
         tee_time_count_18=data.get("tee_time_count_18"),
+        tee_direction=data.get("tee_direction"),
+        tee_direction_18=data.get("tee_direction_18"),
     )
     if event:
         return jsonify({"status": "ok", "event": event}), 201
@@ -1670,11 +1751,11 @@ def api_send_reminder_all():
     if not all([tenant_id, client_id, client_secret, from_address]):
         return jsonify({"error": "Email credentials not configured"}), 500
 
-    # Find all RSVP-only players for this event with email addresses
+    # Find all RSVP-only players for this event with email addresses (case-insensitive)
     items = get_all_items()
     rsvp_players = [
         i for i in items
-        if i.get("item_name") == event_name
+        if (i.get("item_name") or "").lower() == event_name.lower()
         and (i.get("transaction_status") or "active") == "rsvp_only"
         and i.get("customer_email")
     ]
@@ -1796,7 +1877,7 @@ def api_send_messages():
 
     # Build event variables for template rendering
     all_events = get_all_events()
-    event_info = next((e for e in all_events if e["item_name"] == event_name), {})
+    event_info = next((e for e in all_events if (e["item_name"] or "").lower() == event_name.lower()), {})
     event_vars = {
         "event_name": event_name,
         "event_date": event_info.get("event_date") or "",
