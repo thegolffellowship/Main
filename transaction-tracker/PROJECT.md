@@ -25,6 +25,8 @@
 15. [PWA / Mobile](#pwa--mobile)
 16. [Version History](#version-history)
 17. [Backlog / Roadmap](#backlog--roadmap)
+18. [Tax Accounting](#tax-accounting)
+19. [Order Grouping](#order-grouping)
 
 ---
 
@@ -996,6 +998,71 @@ Features discussed or planned but not yet implemented:
 - **Dark mode** — System-preference or manual toggle
 - **Full-text search API** — Dedicated search endpoint with fuzzy matching
 - ~~**Database backup/export**~~ — **DONE** (v1.2.0). Admin endpoint at `/admin/backup` streams the SQLite database file.
+
+---
+
+## Tax Accounting
+
+TGF has two taxable situations that the transaction tracker must support:
+
+### Sales Tax
+
+Sales tax applies to all sales, but the **taxable amount varies by category**:
+
+| Category | Taxable Portion | Notes |
+|----------|----------------|-------|
+| **Memberships** | 100% of sale price | Entire membership fee is taxable |
+| **Event Sales** | TGF markup only | The markup portion TGF adds on top of course/vendor cost is taxable, not the pass-through amount |
+| **Season Contests** | Markup only | Same as events — only TGF's markup is taxable |
+| **Merchandise** | Markup only | Only the margin above cost-of-goods is taxable |
+
+**Important:** Even though only the markup is taxable for events, contests, and merchandise, **all sales must be accounted for** in full (total amount collected) for reporting purposes.
+
+### Income Tax
+
+All transactions flowing in and out of TGF need to be accounted for — every dollar received and every dollar spent, regardless of category or tax treatment.
+
+---
+
+## Order Grouping
+
+Items from the same purchase already share an `order_id` field in the database. Order Grouping adds a visual hierarchy to the Transactions view so multi-item orders are displayed as a single collapsible unit.
+
+### Display Rules
+
+| Scenario | Behavior |
+|----------|----------|
+| **Single-item order** | Displayed as a regular flat row — no collapsible wrapper |
+| **Multi-item order** (2+ items with same `order_id`) | Displayed as a collapsible group with a summary row + indented item rows |
+| **Default state** | Expanded (all items visible on page load) |
+
+### Summary Row (Collapsed View)
+
+When a multi-item order is collapsed, one summary row represents the entire order:
+
+| Field | Source |
+|-------|--------|
+| **Order date** | Shared `order_date` from the order |
+| **Customer name** | Shared `customer` from the order |
+| **Item count** | Number of items in the order (e.g., "3 items") |
+| **Total amount** | Sum of all item amounts in the order |
+| **Item names** | Abbreviated list of item names (e.g., "SA Kickoff, Net Side Game, Skins") |
+
+### Expanded View (Item Rows)
+
+Each line item within an expanded order shows the **full transaction columns** — the same fields as a standalone single-item row (item name, amount, payment status, event linkage, etc.). This keeps the view consistent regardless of whether an item is part of a group or standalone.
+
+### Visual Style
+
+- **Summary row:** Bold text with a slightly darker/colored background to distinguish it from item rows
+- **Item rows:** Indented slightly to the right to show hierarchy beneath the summary row
+- **Collapse/expand toggle:** Chevron or arrow icon on the summary row to toggle visibility of item rows
+
+### Interaction
+
+- Clicking the summary row (or its chevron) toggles between collapsed and expanded states
+- Search and filter still operate on individual items — if a filter matches one item in a group, the entire group is shown with the matching item highlighted
+- Sort order applies to the summary row's values (e.g., sorting by amount uses the order total)
 
 ---
 
