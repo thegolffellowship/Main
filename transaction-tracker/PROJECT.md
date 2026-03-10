@@ -25,6 +25,7 @@
 15. [PWA / Mobile](#pwa--mobile)
 16. [Version History](#version-history)
 17. [Backlog / Roadmap](#backlog--roadmap)
+18. [Tax Accounting](#tax-accounting)
 
 ---
 
@@ -996,6 +997,29 @@ Features discussed or planned but not yet implemented:
 - **Dark mode** — System-preference or manual toggle
 - **Full-text search API** — Dedicated search endpoint with fuzzy matching
 - ~~**Database backup/export**~~ — **DONE** (v1.2.0). Admin endpoint at `/admin/backup` streams the SQLite database file.
+
+---
+
+## Tax Accounting
+
+TGF has two taxable situations that the transaction tracker must support:
+
+### Sales Tax
+
+Sales tax applies to all sales, but the **taxable amount varies by category**:
+
+| Category | Taxable Portion | Notes |
+|----------|----------------|-------|
+| **Memberships** | 100% of sale price | Entire membership fee is taxable |
+| **Event Sales** | TGF markup only | The markup portion TGF adds on top of course/vendor cost is taxable, not the pass-through amount |
+| **Season Contests** | Markup only | Same as events — only TGF's markup is taxable |
+| **Merchandise** | Markup only | Only the margin above cost-of-goods is taxable |
+
+**Important:** Even though only the markup is taxable for events, contests, and merchandise, **all sales must be accounted for** in full (total amount collected) for reporting purposes.
+
+### Income Tax
+
+All transactions flowing in and out of TGF need to be accounted for — every dollar received and every dollar spent, regardless of category or tax treatment.
 
 ---
 
