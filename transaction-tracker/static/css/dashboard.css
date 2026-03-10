@@ -1029,6 +1029,82 @@ tr.row-wd { opacity: 0.55; background: #fef2f2; }
 tr.row-wd td { text-decoration: line-through; text-decoration-color: #dc2626; }
 tr.row-wd td:last-child { text-decoration: none; }
 
+/* ---- Order Grouping ---- */
+tr.order-summary {
+    background: #f1f5f9;
+    cursor: pointer;
+    user-select: none;
+}
+tr.order-summary:hover {
+    background: #e2e8f0;
+}
+tr.order-summary td {
+    font-weight: 600;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid #cbd5e1;
+}
+tr.order-summary .order-chevron {
+    display: inline-block;
+    transition: transform 0.15s;
+    margin-right: 0.3rem;
+    font-size: 0.7rem;
+}
+tr.order-summary.collapsed .order-chevron {
+    transform: rotate(-90deg);
+}
+tr.order-item td {
+    padding-left: 2rem;
+}
+tr.order-item td:first-child {
+    padding-left: 2.2rem;
+}
+tr.order-item.order-item-hidden {
+    display: none;
+}
+
+/* Mobile order grouping */
+.mobile-order-summary {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.25rem;
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+    font-size: 0.85rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.mobile-order-summary:hover { background: #e2e8f0; }
+.mobile-order-summary .order-chevron {
+    display: inline-block;
+    transition: transform 0.15s;
+    font-size: 0.7rem;
+    margin-right: 0.4rem;
+}
+.mobile-order-summary.collapsed .order-chevron {
+    transform: rotate(-90deg);
+}
+.mobile-order-summary .order-summary-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.mobile-order-summary .order-summary-right {
+    text-align: right;
+    white-space: nowrap;
+}
+.mobile-order-group .mobile-card {
+    margin-left: 1rem;
+    border-left: 3px solid #cbd5e1;
+}
+.mobile-order-group .mobile-card.order-item-hidden {
+    display: none;
+}
+
 /* ---- RSVP Circle (tap-to-toggle) ---- */
 .rsvp-circle {
     display: inline-block;
