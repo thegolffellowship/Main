@@ -337,6 +337,33 @@
                         </div>
                     </div>
                 </div>
+                <!-- Tee Direction (single — shown when Start Type = Tee Times) -->
+                <div id="edit-tee-direction-single" style="display:none; margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Start Time Is</label>
+                    <div class="segmented-control" id="edit-event-tee-direction-group">
+                        <label class="seg-option"><input type="radio" name="edit-event-tee_direction" value="First Tee" checked> First Tee</label>
+                        <label class="seg-option"><input type="radio" name="edit-event-tee_direction" value="Last Tee"> Last Tee</label>
+                    </div>
+                </div>
+                <!-- Tee Direction (combo — shown when either combo Start Type = Tee Times) -->
+                <div id="edit-tee-direction-combo" style="display:none; margin-top:0.75rem;">
+                    <div class="edit-grid">
+                        <div id="edit-tee-direction-9-wrap">
+                            <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">9-Hole Start Time Is</label>
+                            <div class="segmented-control">
+                                <label class="seg-option"><input type="radio" name="edit-event-tee_direction_9" value="First Tee" checked> First Tee</label>
+                                <label class="seg-option"><input type="radio" name="edit-event-tee_direction_9" value="Last Tee"> Last Tee</label>
+                            </div>
+                        </div>
+                        <div id="edit-tee-direction-18-wrap">
+                            <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">18-Hole Start Time Is</label>
+                            <div class="segmented-control">
+                                <label class="seg-option"><input type="radio" name="edit-event-tee_direction_18" value="First Tee" checked> First Tee</label>
+                                <label class="seg-option"><input type="radio" name="edit-event-tee_direction_18" value="Last Tee"> Last Tee</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <!-- Start Time (single — shown for 9 Holes, 18 Holes, or no format) -->
                 <div id="edit-start-time-single" style="margin-top:0.75rem;">
                     <label style="font-weight:600; font-size:0.82rem;">Start Time
@@ -667,6 +694,33 @@
                             <div class="segmented-control">
                                 <label class="seg-option"><input type="radio" name="add-event-start_type_18" value="Tee Times"> Tee Times</label>
                                 <label class="seg-option"><input type="radio" name="add-event-start_type_18" value="Shotgun"> Shotgun</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Tee Direction (single — shown when Start Type = Tee Times) -->
+                <div id="add-tee-direction-single" style="display:none; margin-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Start Time Is</label>
+                    <div class="segmented-control" id="add-event-tee-direction-group">
+                        <label class="seg-option"><input type="radio" name="add-event-tee_direction" value="First Tee" checked> First Tee</label>
+                        <label class="seg-option"><input type="radio" name="add-event-tee_direction" value="Last Tee"> Last Tee</label>
+                    </div>
+                </div>
+                <!-- Tee Direction (combo — shown when either combo Start Type = Tee Times) -->
+                <div id="add-tee-direction-combo" style="display:none; margin-top:0.75rem;">
+                    <div class="edit-grid">
+                        <div id="add-tee-direction-9-wrap">
+                            <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">9-Hole Start Time Is</label>
+                            <div class="segmented-control">
+                                <label class="seg-option"><input type="radio" name="add-event-tee_direction_9" value="First Tee" checked> First Tee</label>
+                                <label class="seg-option"><input type="radio" name="add-event-tee_direction_9" value="Last Tee"> Last Tee</label>
+                            </div>
+                        </div>
+                        <div id="add-tee-direction-18-wrap">
+                            <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">18-Hole Start Time Is</label>
+                            <div class="segmented-control">
+                                <label class="seg-option"><input type="radio" name="add-event-tee_direction_18" value="First Tee" checked> First Tee</label>
+                                <label class="seg-option"><input type="radio" name="add-event-tee_direction_18" value="Last Tee"> Last Tee</label>
                             </div>
                         </div>
                     </div>
@@ -3225,6 +3279,10 @@
         document.querySelectorAll('input[name="add-event-start_type"]').forEach(r => r.checked = false);
         document.querySelectorAll('input[name="add-event-start_type_9"]').forEach(r => r.checked = false);
         document.querySelectorAll('input[name="add-event-start_type_18"]').forEach(r => r.checked = false);
+        // Reset tee direction to First Tee (default)
+        document.querySelectorAll('input[name="add-event-tee_direction"]').forEach(r => r.checked = (r.value === "First Tee"));
+        document.querySelectorAll('input[name="add-event-tee_direction_9"]').forEach(r => r.checked = (r.value === "First Tee"));
+        document.querySelectorAll('input[name="add-event-tee_direction_18"]').forEach(r => r.checked = (r.value === "First Tee"));
         document.getElementById("add-start-type-single").style.display = "";
         document.getElementById("add-start-type-combo").style.display = "none";
         document.getElementById("add-tee-count").value = "";
@@ -3234,6 +3292,8 @@
         document.getElementById("add-tee-interval-combo").value = "";
         document.getElementById("add-tee-planning").style.display = "none";
         document.getElementById("add-tee-planning-combo").style.display = "none";
+        document.getElementById("add-tee-direction-single").style.display = "none";
+        document.getElementById("add-tee-direction-combo").style.display = "none";
         document.getElementById("add-start-time-single").style.display = "";
         document.getElementById("add-start-time-combo").style.display = "none";
         // Reset user override flags
@@ -3279,10 +3339,16 @@
                 payload.tee_time_count = parseInt(document.getElementById("add-tee-count-9").value) || null;
                 payload.tee_time_count_18 = parseInt(document.getElementById("add-tee-count-18").value) || null;
                 payload.tee_time_interval = parseInt(document.getElementById("add-tee-interval-combo").value) || null;
+                const td9El = document.querySelector('input[name="add-event-tee_direction_9"]:checked');
+                const td18El = document.querySelector('input[name="add-event-tee_direction_18"]:checked');
+                payload.tee_direction = td9El ? td9El.value : "First Tee";
+                payload.tee_direction_18 = td18El ? td18El.value : "First Tee";
             } else {
                 payload.start_time = document.getElementById("add-event-start_time").value || null;
                 payload.tee_time_count = parseInt(document.getElementById("add-tee-count").value) || null;
                 payload.tee_time_interval = parseInt(document.getElementById("add-tee-interval").value) || null;
+                const tdEl = document.querySelector('input[name="add-event-tee_direction"]:checked');
+                payload.tee_direction = tdEl ? tdEl.value : "First Tee";
             }
             const res = await fetch("/api/events", {
                 method: "POST",
@@ -3679,6 +3745,18 @@
         document.getElementById("edit-tee-count-18").value = ev.tee_time_count_18 || "";
         document.getElementById("edit-tee-interval-combo").value = ev.tee_time_interval || "";
 
+        // Tee direction: single mode
+        document.querySelectorAll('input[name="edit-event-tee_direction"]').forEach(r => {
+            r.checked = (r.value === (ev.tee_direction || "First Tee"));
+        });
+        // Tee direction: combo mode
+        document.querySelectorAll('input[name="edit-event-tee_direction_9"]').forEach(r => {
+            r.checked = (r.value === (ev.tee_direction || "First Tee"));
+        });
+        document.querySelectorAll('input[name="edit-event-tee_direction_18"]').forEach(r => {
+            r.checked = (r.value === (ev.tee_direction_18 || "First Tee"));
+        });
+
         // Toggle single/combo visibility
         updateComboVisibility("edit");
 
@@ -3742,6 +3820,13 @@
             if (tc9 !== (ev.tee_time_count || null)) changes.tee_time_count = tc9;
             if (tc18 !== (ev.tee_time_count_18 || null)) changes.tee_time_count_18 = tc18;
             if (ti !== (ev.tee_time_interval || null)) changes.tee_time_interval = ti;
+            // Tee direction (combo)
+            const td9El = document.querySelector('input[name="edit-event-tee_direction_9"]:checked');
+            const td18El = document.querySelector('input[name="edit-event-tee_direction_18"]:checked');
+            const td9Val = td9El ? td9El.value : "First Tee";
+            const td18Val = td18El ? td18El.value : "First Tee";
+            if (td9Val !== (ev.tee_direction || "First Tee")) changes.tee_direction = td9Val;
+            if (td18Val !== (ev.tee_direction_18 || "First Tee")) changes.tee_direction_18 = td18Val;
         } else {
             // Single mode
             const startTypeEl = document.querySelector('input[name="edit-event-start_type"]:checked');
@@ -3758,6 +3843,12 @@
             const teeInterval = parseInt(document.getElementById("edit-tee-interval").value) || null;
             if (teeCount !== (ev.tee_time_count || null)) changes.tee_time_count = teeCount;
             if (teeInterval !== (ev.tee_time_interval || null)) changes.tee_time_interval = teeInterval;
+            // Tee direction (single)
+            const tdEl = document.querySelector('input[name="edit-event-tee_direction"]:checked');
+            const tdVal = tdEl ? tdEl.value : "First Tee";
+            if (tdVal !== (ev.tee_direction || "First Tee")) changes.tee_direction = tdVal;
+            // Clear combo direction when not in combo mode
+            if (ev.tee_direction_18) changes.tee_direction_18 = null;
         }
 
         if (Object.keys(changes).length === 0) {
@@ -4054,6 +4145,21 @@
             teeCount18 = teeCount;
         }
 
+        // Tee direction: single for 9/18 Holes, dual for combo
+        let teeDirection, teeDirection9, teeDirection18;
+        if (isCombo) {
+            const td9El = document.querySelector(`input[name="${prefix}-event-tee_direction_9"]:checked`);
+            const td18El = document.querySelector(`input[name="${prefix}-event-tee_direction_18"]:checked`);
+            teeDirection9 = td9El ? td9El.value : "First Tee";
+            teeDirection18 = td18El ? td18El.value : "First Tee";
+            teeDirection = teeDirection9;
+        } else {
+            const tdEl = document.querySelector(`input[name="${prefix}-event-tee_direction"]:checked`);
+            teeDirection = tdEl ? tdEl.value : "First Tee";
+            teeDirection9 = teeDirection;
+            teeDirection18 = teeDirection;
+        }
+
         return {
             date: dateEl ? dateEl.value : "",
             chapter: chapterEl ? chapterEl.value : "",
@@ -4062,6 +4168,7 @@
             startType, startType9, startType18,
             startTime, startTime9, startTime18,
             teeCount, teeCount9, teeCount18, teeInterval,
+            teeDirection, teeDirection9, teeDirection18,
         };
     }
 
@@ -4136,11 +4243,22 @@
             // Show combo tee planning if either 9 or 18 is Tee Times
             document.getElementById(`${prefix}-tee-planning-combo`).style.display = (isTee9 || isTee18) ? "" : "none";
             document.getElementById(`${prefix}-tee-planning`).style.display = "none";
+            // Show combo tee direction if either is Tee Times
+            document.getElementById(`${prefix}-tee-direction-combo`).style.display = (isTee9 || isTee18) ? "" : "none";
+            document.getElementById(`${prefix}-tee-direction-single`).style.display = "none";
+            // Show/hide individual direction controls based on their start type
+            const wrap9 = document.getElementById(`${prefix}-tee-direction-9-wrap`);
+            const wrap18 = document.getElementById(`${prefix}-tee-direction-18-wrap`);
+            if (wrap9) wrap9.style.display = isTee9 ? "" : "none";
+            if (wrap18) wrap18.style.display = isTee18 ? "" : "none";
         } else {
             const startTypeEl = document.querySelector(`input[name="${prefix}-event-start_type"]:checked`);
             const isTee = startTypeEl && startTypeEl.value === "Tee Times";
             document.getElementById(`${prefix}-tee-planning`).style.display = isTee ? "" : "none";
             document.getElementById(`${prefix}-tee-planning-combo`).style.display = "none";
+            // Show single tee direction only when Tee Times selected
+            document.getElementById(`${prefix}-tee-direction-single`).style.display = isTee ? "" : "none";
+            document.getElementById(`${prefix}-tee-direction-combo`).style.display = "none";
         }
     }
 
@@ -4200,17 +4318,15 @@
             </div>
         </div>`;
 
-        // Pre-populate start times based on format
+        // Pre-populate start times based on format (only when direction is "Last Tee")
         if (inputs.isCombo) {
-            // Combo: separate 9-hole and 18-hole start times
             const st9El = document.getElementById(`${prefix}-event-start_time_9`);
             const st18El = document.getElementById(`${prefix}-event-start_time_18`);
-            if (st9El && !st9El.dataset.userOverride) st9El.value = minutesToTime24(last9);
-            if (st18El && !st18El.dataset.userOverride) st18El.value = minutesToTime24(last18);
+            if (st9El && !st9El.dataset.userOverride && inputs.teeDirection9 === "Last Tee") st9El.value = minutesToTime24(last9);
+            if (st18El && !st18El.dataset.userOverride && inputs.teeDirection18 === "Last Tee") st18El.value = minutesToTime24(last18);
         } else {
-            // Single start time
             const startTimeEl = document.getElementById(`${prefix}-event-start_time`);
-            if (startTimeEl && !startTimeEl.dataset.userOverride) {
+            if (startTimeEl && !startTimeEl.dataset.userOverride && inputs.teeDirection === "Last Tee") {
                 const recMins = inputs.format === "18 Holes" ? last18 : last9;
                 startTimeEl.value = minutesToTime24(recMins);
             }
@@ -4248,8 +4364,8 @@
                 const has18 = inputs.startType18 === "Tee Times" && cur18 && inputs.teeCount18 > 0;
                 if (has9 || has18) {
                     html += '<div class="tee-sheet-container">';
-                    if (has9) html += buildTeeSheet("9-Hole Players", timeToMinutes(cur9), inputs.teeCount9, inputs.teeInterval, 150, twilightMins, sunData);
-                    if (has18) html += buildTeeSheet("18-Hole Players", timeToMinutes(cur18), inputs.teeCount18, inputs.teeInterval, 300, twilightMins, sunData);
+                    if (has9) html += buildTeeSheet("9-Hole Players", timeToMinutes(cur9), inputs.teeCount9, inputs.teeInterval, 150, twilightMins, sunData, inputs.teeDirection9);
+                    if (has18) html += buildTeeSheet("18-Hole Players", timeToMinutes(cur18), inputs.teeCount18, inputs.teeInterval, 300, twilightMins, sunData, inputs.teeDirection18);
                     html += '</div>';
                 }
             }
@@ -4263,16 +4379,18 @@
             // Single format: tee sheet
             if (inputs.startType === "Tee Times" && inputs.teeInterval > 0 && cur9 && inputs.teeCount > 0) {
                 const dur = inputs.format === "18 Holes" ? 300 : 150;
-                html += buildTeeSheet(null, timeToMinutes(cur9), inputs.teeCount, inputs.teeInterval, dur, twilightMins, sunData);
+                html += buildTeeSheet(null, timeToMinutes(cur9), inputs.teeCount, inputs.teeInterval, dur, twilightMins, sunData, inputs.teeDirection);
             }
         }
 
         panel.innerHTML = html;
     }
 
-    function buildTeeSheet(title, lastTeeMins, count, interval, duration, twilightMins, sunData) {
-        // Calculate backwards: lastTeeMins is the LAST tee time, earlier ones go back
-        const firstTeeMins = lastTeeMins - ((count - 1) * interval);
+    function buildTeeSheet(title, startMins, count, interval, duration, twilightMins, sunData, direction) {
+        // direction: "First Tee" = startMins is the first tee time (calculate forward)
+        //            "Last Tee"  = startMins is the last tee time (calculate backward)
+        const isLastTee = direction === "Last Tee";
+        const firstTeeMins = isLastTee ? startMins - ((count - 1) * interval) : startMins;
 
         // Build rows in chronological order (earliest first)
         const rows = [];
@@ -4382,6 +4500,30 @@
         [`${prefix}-tee-count-9`, `${prefix}-tee-count-18`, `${prefix}-tee-interval-combo`].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener("input", () => updateTeeSheet(prefix));
+        });
+
+        // Tee direction change → reset user override + rebuild (single mode)
+        document.querySelectorAll(`input[name="${prefix}-event-tee_direction"]`).forEach(r => {
+            r.addEventListener("change", () => {
+                const stEl = document.getElementById(`${prefix}-event-start_time`);
+                if (stEl) delete stEl.dataset.userOverride;
+                updateTeeSheet(prefix);
+            });
+        });
+        // Tee direction change → reset user override + rebuild (combo mode)
+        document.querySelectorAll(`input[name="${prefix}-event-tee_direction_9"]`).forEach(r => {
+            r.addEventListener("change", () => {
+                const st9El = document.getElementById(`${prefix}-event-start_time_9`);
+                if (st9El) delete st9El.dataset.userOverride;
+                updateTeeSheet(prefix);
+            });
+        });
+        document.querySelectorAll(`input[name="${prefix}-event-tee_direction_18"]`).forEach(r => {
+            r.addEventListener("change", () => {
+                const st18El = document.getElementById(`${prefix}-event-start_time_18`);
+                if (st18El) delete st18El.dataset.userOverride;
+                updateTeeSheet(prefix);
+            });
         });
     }
 

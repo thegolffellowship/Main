@@ -1487,6 +1487,8 @@ def api_create_event():
         start_time_18=data.get("start_time_18"),
         start_type_18=data.get("start_type_18"),
         tee_time_count_18=data.get("tee_time_count_18"),
+        tee_direction=data.get("tee_direction"),
+        tee_direction_18=data.get("tee_direction_18"),
     )
     if event:
         return jsonify({"status": "ok", "event": event}), 201
