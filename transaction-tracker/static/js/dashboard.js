@@ -199,8 +199,8 @@ function applyColumnVisibility() {
         // Header
         const th = document.querySelector(`th[data-col="${col.key}"]`);
         if (th) th.style.display = visible ? "" : "none";
-        // All body cells in this column index
-        document.querySelectorAll(`#txn-body tr`).forEach(tr => {
+        // All body cells in this column index (skip summary rows which use colspan)
+        document.querySelectorAll(`#txn-body tr:not(.order-summary)`).forEach(tr => {
             const tds = tr.querySelectorAll("td");
             if (tds[idx]) tds[idx].style.display = visible ? "" : "none";
         });
@@ -465,6 +465,56 @@ function renderHeaderRow() {
     attachHeaderSort();
 }
 
+function renderMobileCard(row) {
+    const status = row.transaction_status || "active";
+    const statusClass = status !== "active" ? ` row-${status}` : (row.transferred_from_id ? ' row-from-transfer' : '');
+    const tag = statusTag(row);
+    const sideGameLabel = classifyGameType(row.side_games);
+    const tee = (row.tee_choice || "").trim();
+    const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
+
+    // Detail fields
+    const fields = [
+        ["Order Date", formatOrderDateTime(row)],
+        ["Price", row.item_price || "\u2014"],
+        ["Handicap", row.handicap || "\u2014"],
+        ["Status", row.member_status || "\u2014"],
+        ["Partner Request", row.partner_request || "\u2014"],
+        ["Fellowship After", row.fellowship_after || "\u2014"],
+        ["Notes", row.notes || "\u2014"],
+        ["Order ID", row.order_id || "\u2014"],
+    ];
+
+    // Action buttons
+    let actionHtml = `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
+    if (status === "active" && !row.transferred_from_id) {
+        actionHtml += ` <button class="btn btn-credit" data-action="credit" data-id="${row.id}">Credit</button>`;
+    } else if (status === "credited" || status === "transferred") {
+        actionHtml += ` <button class="btn btn-reverse" data-action="reverse" data-id="${row.id}">Reverse</button>`;
+    }
+    if (currentRole === "admin") {
+        actionHtml += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}">Delete</button>`;
+    }
+
+    return `
+    <div class="mobile-card${statusClass}" data-id="${row.id}">
+        <div class="mobile-card-top" data-action="toggle-expand">
+            <div class="mc-primary">
+                <span class="mc-customer">${escapeHtml(row.customer || "Unknown")}</span>
+                ${topTags} ${tag}
+                <br><span class="mc-event">${escapeHtml(row.item_name || "\u2014")}</span>
+            </div>
+            <span class="mc-chevron">&#9656;</span>
+        </div>
+        <div class="mobile-card-details">
+            <div class="mc-field-grid">
+                ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
+            </div>
+            <div class="mc-actions">${actionHtml}</div>
+        </div>
+    </div>`;
+}
+
 function renderMobileCards(items) {
     let container = document.getElementById("txn-mobile-cards");
     if (!container) {
@@ -480,55 +530,61 @@ function renderMobileCards(items) {
         return;
     }
 
-    container.innerHTML = items.map(row => {
-        const status = row.transaction_status || "active";
-        const statusClass = status !== "active" ? ` row-${status}` : (row.transferred_from_id ? ' row-from-transfer' : '');
-        const tag = statusTag(row);
-        const sideGameLabel = classifyGameType(row.side_games);
-        const tee = (row.tee_choice || "").trim();
-        const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
-
-        // Detail fields
-        const fields = [
-            ["Order Date", formatOrderDateTime(row)],
-            ["Price", row.item_price || "\u2014"],
-            ["Handicap", row.handicap || "\u2014"],
-            ["Status", row.member_status || "\u2014"],
-            ["Partner Request", row.partner_request || "\u2014"],
-            ["Fellowship After", row.fellowship_after || "\u2014"],
-            ["Notes", row.notes || "\u2014"],
-            ["Order ID", row.order_id || "\u2014"],
-        ];
-
-        // Action buttons
-        let actionHtml = `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
-        if (status === "active" && !row.transferred_from_id) {
-            actionHtml += ` <button class="btn btn-credit" data-action="credit" data-id="${row.id}">Credit</button>`;
-        } else if (status === "credited" || status === "transferred") {
-            actionHtml += ` <button class="btn btn-reverse" data-action="reverse" data-id="${row.id}">Reverse</button>`;
+    // Group items by order_id for order grouping (same logic as desktop)
+    const orderGroups = new Map();
+    items.forEach(row => {
+        const oid = row.order_id;
+        if (oid) {
+            if (!orderGroups.has(oid)) orderGroups.set(oid, []);
+            orderGroups.get(oid).push(row);
         }
-        if (currentRole === "admin") {
-            actionHtml += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}">Delete</button>`;
-        }
+    });
 
-        return `
-        <div class="mobile-card${statusClass}" data-id="${row.id}">
-            <div class="mobile-card-top" data-action="toggle-expand">
-                <div class="mc-primary">
-                    <span class="mc-customer">${escapeHtml(row.customer || "Unknown")}</span>
-                    ${topTags} ${tag}
-                    <br><span class="mc-event">${escapeHtml(row.item_name || "\u2014")}</span>
+    const seen = new Set();
+    let html = "";
+    items.forEach(row => {
+        const oid = row.order_id;
+        if (oid && orderGroups.has(oid) && orderGroups.get(oid).length > 1) {
+            if (seen.has(oid)) return;
+            seen.add(oid);
+            const group = orderGroups.get(oid);
+            const total = group.reduce((s, r) => s + parsePrice(r.item_price), 0);
+            const customer = group[0].customer || "Unknown";
+            const date = formatOrderDateTime(group[0]);
+            const names = group.map(r => r.item_name || "\u2014").join(", ");
+            const truncNames = names.length > 50 ? names.slice(0, 47) + "..." : names;
+
+            html += `<div class="mobile-order-group" data-order-id="${escapeHtml(oid)}">
+                <div class="mobile-order-summary" data-order-id="${escapeHtml(oid)}">
+                    <div class="order-summary-left">
+                        <span><span class="order-chevron">&#9662;</span> ${escapeHtml(customer)}</span>
+                        <span style="font-weight:400;font-size:0.78rem;color:var(--text-muted);">${escapeHtml(truncNames)}</span>
+                    </div>
+                    <div class="order-summary-right">
+                        <span>${group.length} items &mdash; $${total.toFixed(2)}</span><br>
+                        <span style="font-weight:400;font-size:0.75rem;color:var(--text-muted);">${escapeHtml(date)}</span>
+                    </div>
                 </div>
-                <span class="mc-chevron">&#9656;</span>
-            </div>
-            <div class="mobile-card-details">
-                <div class="mc-field-grid">
-                    ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
-                </div>
-                <div class="mc-actions">${actionHtml}</div>
-            </div>
-        </div>`;
-    }).join("");
+                ${group.map(r => renderMobileCard(r)).join("")}
+            </div>`;
+        } else {
+            html += renderMobileCard(row);
+        }
+    });
+
+    container.innerHTML = html;
+
+    // Attach collapse/expand to mobile order summaries
+    container.querySelectorAll(".mobile-order-summary").forEach(summary => {
+        summary.addEventListener("click", () => {
+            const oid = summary.dataset.orderId;
+            const collapsed = summary.classList.toggle("collapsed");
+            const group = summary.closest(".mobile-order-group");
+            group.querySelectorAll(".mobile-card").forEach(card => {
+                card.classList.toggle("order-item-hidden", collapsed);
+            });
+        });
+    });
 }
 
 function renderTable(items) {
@@ -544,18 +600,76 @@ function renderTable(items) {
     }
 
     const ordered = getOrderedColumns();
-    tbody.innerHTML = items
-        .map(
-            (row) => {
-                const status = row.transaction_status || "active";
-                const rowClass = status !== "active" ? ` class="row-${status}"` : (row.transferred_from_id ? ' class="row-from-transfer"' : '');
-                return `
-        <tr data-id="${row.id}"${rowClass}>
-            ${ordered.map(col => `<td${tdClass(col.key)}>${cellForColumn(col.key, row)}</td>`).join("")}
-        </tr>`;
-            }
-        )
-        .join("");
+
+    // Group items by order_id for order grouping
+    const orderGroups = new Map();
+    const ungrouped = [];
+    items.forEach(row => {
+        const oid = row.order_id;
+        if (oid) {
+            if (!orderGroups.has(oid)) orderGroups.set(oid, []);
+            orderGroups.get(oid).push(row);
+        } else {
+            ungrouped.push(row);
+        }
+    });
+
+    // Build rows in display order (preserving sort order of first item per group)
+    const seen = new Set();
+    let html = "";
+    items.forEach(row => {
+        const oid = row.order_id;
+        if (oid && orderGroups.has(oid) && orderGroups.get(oid).length > 1) {
+            // Multi-item order — render summary + item rows on first encounter
+            if (seen.has(oid)) return;
+            seen.add(oid);
+            const group = orderGroups.get(oid);
+            const total = group.reduce((s, r) => s + parsePrice(r.item_price), 0);
+            const names = group.map(r => r.item_name || "\u2014").join(", ");
+            const truncNames = names.length > 60 ? names.slice(0, 57) + "..." : names;
+            const customer = group[0].customer || "Unknown";
+            const date = formatOrderDateTime(group[0]);
+
+            // Summary row
+            html += `<tr class="order-summary" data-order-id="${escapeHtml(oid)}">
+                <td colspan="${visibleCount}">
+                    <span class="order-chevron">&#9662;</span>
+                    ${escapeHtml(date)} &mdash; <strong>${escapeHtml(customer)}</strong>
+                    &mdash; ${group.length} items &mdash; $${total.toFixed(2)}
+                    &mdash; <span style="color:var(--text-muted);font-weight:400;">${escapeHtml(truncNames)}</span>
+                </td>
+            </tr>`;
+
+            // Item rows (indented)
+            group.forEach(r => {
+                const status = r.transaction_status || "active";
+                const statusCls = status !== "active" ? ` row-${status}` : (r.transferred_from_id ? ' row-from-transfer' : '');
+                html += `<tr data-id="${r.id}" class="order-item${statusCls}" data-order-id="${escapeHtml(oid)}">
+                    ${ordered.map(col => `<td${tdClass(col.key)}>${cellForColumn(col.key, r)}</td>`).join("")}
+                </tr>`;
+            });
+        } else {
+            // Single-item order or no order_id — regular flat row
+            const status = row.transaction_status || "active";
+            const rowClass = status !== "active" ? ` class="row-${status}"` : (row.transferred_from_id ? ' class="row-from-transfer"' : '');
+            html += `<tr data-id="${row.id}"${rowClass}>
+                ${ordered.map(col => `<td${tdClass(col.key)}>${cellForColumn(col.key, row)}</td>`).join("")}
+            </tr>`;
+        }
+    });
+
+    tbody.innerHTML = html;
+
+    // Attach collapse/expand click handlers to summary rows
+    tbody.querySelectorAll("tr.order-summary").forEach(summaryRow => {
+        summaryRow.addEventListener("click", () => {
+            const oid = summaryRow.dataset.orderId;
+            const collapsed = summaryRow.classList.toggle("collapsed");
+            tbody.querySelectorAll(`tr.order-item[data-order-id="${oid}"]`).forEach(itemRow => {
+                itemRow.classList.toggle("order-item-hidden", collapsed);
+            });
+        });
+    });
 
     // Apply column visibility to newly rendered rows
     applyColumnVisibility();
