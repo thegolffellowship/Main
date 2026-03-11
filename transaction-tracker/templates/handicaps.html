@@ -321,15 +321,15 @@
     });
 
     // ── Auth hooks (called by auth.js after role is known) ──────────
-    window.onRoleKnown = function(role) {
-        if (role === 'admin' || role === 'manager') {
+    function onAuthReady() {
+        if (currentRole === 'admin' || currentRole === 'manager') {
             document.getElementById('btn-import').style.display = '';
         }
-        if (role === 'admin') {
+        if (currentRole === 'admin') {
             document.getElementById('btn-settings').style.display = '';
             document.getElementById('admin-col-header').style.display = '';
         }
-    };
+    }
 
     // ── Data loaders ────────────────────────────────────────────────
     async function loadSettings() {
