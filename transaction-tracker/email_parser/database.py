@@ -7,6 +7,7 @@ so they can be filtered and sorted directly from the dashboard.
 """
 
 import json
+import math
 import os
 import re
 import sqlite3
@@ -558,6 +559,42 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_message_log_sent_at ON message_log(sent_at DESC)"
+        )
+
+        # Handicap rounds — 9-hole round data for WHS handicap index calculation
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS handicap_rounds (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_name    TEXT NOT NULL,
+                round_date     TEXT NOT NULL,
+                round_id       TEXT,
+                course_name    TEXT,
+                tee_name       TEXT,
+                adjusted_score INTEGER NOT NULL,
+                rating         REAL NOT NULL,
+                slope          INTEGER NOT NULL,
+                differential   REAL,
+                created_at     TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_handicap_rounds_player ON handicap_rounds(player_name)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_handicap_rounds_date ON handicap_rounds(round_date DESC)"
+        )
+
+        # Handicap settings — configurable calculation parameters
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS handicap_settings (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+            """
         )
 
         # Seed built-in message templates on first run
@@ -3772,3 +3809,282 @@ def get_message_log(event_name: str | None = None, limit: int = 200,
                 (limit,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Handicap calculator
+# ---------------------------------------------------------------------------
+
+# USGA WHS lookup: number of rounds → number of lowest differentials to use
+_HANDICAP_DIFF_LOOKUP = {
+    3: 1, 4: 1, 5: 1,
+    6: 2, 7: 2, 8: 2,
+    9: 3, 10: 3,
+    11: 4, 12: 4,
+    13: 5, 14: 5,
+    15: 6, 16: 6,
+    17: 7, 18: 8, 19: 9, 20: 10,
+}
+
+_HANDICAP_SETTINGS_DEFAULTS = {
+    "lookback_months": "12",      # max age of rounds to count
+    "min_rounds": "3",            # minimum rounds before index is shown
+    "multiplier": "0.96",         # USGA 0.96 factor
+}
+
+
+def _normalize_player_name(raw: str) -> str:
+    """Convert 'LAST, First' or 'Last, First' to 'First Last' Title Case.
+
+    If no comma is present, applies Title Case as-is.
+    """
+    raw = (raw or "").strip()
+    if "," in raw:
+        parts = raw.split(",", 1)
+        last = parts[0].strip().title()
+        first = parts[1].strip().title()
+        return f"{first} {last}"
+    return raw.title()
+
+
+def get_handicap_settings(db_path: str | Path | None = None) -> dict:
+    """Return all handicap settings as a dict of {key: value} strings."""
+    with _connect(db_path) as conn:
+        rows = conn.execute("SELECT key, value FROM handicap_settings").fetchall()
+    result = dict(_HANDICAP_SETTINGS_DEFAULTS)
+    for row in rows:
+        result[row["key"]] = row["value"]
+    return result
+
+
+def update_handicap_settings(settings: dict,
+                               db_path: str | Path | None = None) -> None:
+    """Upsert one or more handicap settings keys."""
+    with _connect(db_path) as conn:
+        for key, value in settings.items():
+            conn.execute(
+                "INSERT INTO handicap_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+                "updated_at = datetime('now')",
+                (key, str(value)),
+            )
+        conn.commit()
+
+
+def compute_handicap_index(differentials: list[float],
+                            settings: dict | None = None) -> float | None:
+    """Compute 9-hole handicap index from a list of 9-hole differentials.
+
+    Uses up to 20 most-recent differentials, USGA WHS lookup table, and the
+    configurable multiplier (default 0.96).  Returns None if fewer than
+    min_rounds (default 3) rounds are provided.
+    Truncates (floors) to one decimal place.
+    """
+    cfg = settings or _HANDICAP_SETTINGS_DEFAULTS
+    min_rounds = int(cfg.get("min_rounds", 3))
+    multiplier = float(cfg.get("multiplier", 0.96))
+
+    n = min(len(differentials), 20)
+    if n < min_rounds:
+        return None
+    n = max(n, 3)  # lookup table starts at 3
+    count = _HANDICAP_DIFF_LOOKUP.get(n, 10)
+    best = sorted(differentials)[:count]
+    avg = sum(best) / count
+    index = avg * multiplier
+    return math.floor(index * 10) / 10
+
+
+def import_handicap_rounds(rounds: list[dict],
+                            db_path: str | Path | None = None) -> dict:
+    """Upsert handicap rounds from a Golf Genius / Handicap Server export.
+
+    Each dict should contain:
+      player_name (str), round_date (str YYYY-MM-DD), round_id (str|None),
+      course_name (str|None), tee_name (str|None),
+      adjusted_score (int|str), rating (float|str), slope (int|str),
+      differential (float|str|None) — used as-is when provided, else computed.
+
+    Names in 'Last, First' format are normalised to 'First Last' Title Case.
+    Dedup key: (player_name, round_date, round_id) when round_id present;
+               (player_name, round_date, course_name, tee_name) otherwise.
+
+    Returns {"inserted": N, "skipped": M, "errors": [...]}
+    """
+    inserted = 0
+    skipped = 0
+    errors = []
+
+    with _connect(db_path) as conn:
+        for i, r in enumerate(rounds):
+            try:
+                raw_name = (r.get("player_name") or "").strip()
+                if not raw_name:
+                    errors.append(f"Row {i+1}: missing player_name")
+                    continue
+                player_name = _normalize_player_name(raw_name)
+
+                round_date = (r.get("round_date") or "").strip()
+                if not round_date:
+                    errors.append(f"Row {i+1}: missing round_date")
+                    continue
+
+                round_id = (r.get("round_id") or "").strip() or None
+                course_name = (r.get("course_name") or "").strip() or None
+                tee_name = (r.get("tee_name") or "").strip() or None
+
+                adjusted_score = int(float(str(r["adjusted_score"]).strip()))
+                rating = float(str(r["rating"]).strip())
+                slope = int(float(str(r["slope"]).strip()))
+
+                # Use pre-calculated differential when available
+                raw_diff = r.get("differential")
+                if raw_diff is not None and str(raw_diff).strip() not in ("", "None"):
+                    differential = round(float(str(raw_diff).strip()), 2)
+                else:
+                    if slope == 0:
+                        errors.append(f"Row {i+1}: slope is 0 (invalid)")
+                        continue
+                    differential = round((adjusted_score - rating) * 113.0 / slope, 2)
+
+                # Dedup check
+                if round_id:
+                    existing = conn.execute(
+                        "SELECT id FROM handicap_rounds "
+                        "WHERE player_name = ? AND round_date = ? AND round_id = ?",
+                        (player_name, round_date, round_id),
+                    ).fetchone()
+                else:
+                    existing = conn.execute(
+                        "SELECT id FROM handicap_rounds "
+                        "WHERE player_name = ? AND round_date = ? "
+                        "AND COALESCE(course_name,'') = COALESCE(?,'') "
+                        "AND COALESCE(tee_name,'') = COALESCE(?,'')",
+                        (player_name, round_date, course_name, tee_name),
+                    ).fetchone()
+
+                if existing:
+                    skipped += 1
+                    continue
+
+                conn.execute(
+                    "INSERT INTO handicap_rounds "
+                    "(player_name, round_date, round_id, course_name, tee_name, "
+                    " adjusted_score, rating, slope, differential) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (player_name, round_date, round_id, course_name, tee_name,
+                     adjusted_score, rating, slope, differential),
+                )
+                inserted += 1
+            except (KeyError, ValueError, TypeError) as e:
+                errors.append(f"Row {i+1}: {e}")
+
+        conn.commit()
+
+    return {"inserted": inserted, "skipped": skipped, "errors": errors[:50]}
+
+
+def get_handicap_rounds(player_name: str | None = None,
+                         db_path: str | Path | None = None) -> list[dict]:
+    """Return handicap rounds, optionally filtered to one player, newest first."""
+    with _connect(db_path) as conn:
+        if player_name:
+            round_rows = conn.execute(
+                "SELECT * FROM handicap_rounds WHERE player_name = ? "
+                "ORDER BY round_date DESC, id DESC",
+                (player_name,),
+            ).fetchall()
+        else:
+            round_rows = conn.execute(
+                "SELECT * FROM handicap_rounds ORDER BY round_date DESC, id DESC"
+            ).fetchall()
+        return [dict(r) for r in round_rows]
+
+
+def delete_handicap_round(round_id: int,
+                           db_path: str | Path | None = None) -> bool:
+    """Delete a single handicap round row by primary key. Returns True if deleted."""
+    with _connect(db_path) as conn:
+        rows_affected = conn.execute(
+            "DELETE FROM handicap_rounds WHERE id = ?", (round_id,)
+        ).rowcount
+        conn.commit()
+        return rows_affected > 0
+
+
+def delete_all_handicap_rounds_for_player(player_name: str,
+                                           db_path: str | Path | None = None) -> int:
+    """Delete all handicap rounds for a player. Returns count deleted."""
+    with _connect(db_path) as conn:
+        rows_affected = conn.execute(
+            "DELETE FROM handicap_rounds WHERE player_name = ?", (player_name,)
+        ).rowcount
+        conn.commit()
+        return rows_affected
+
+
+def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
+    """Return one record per player with current handicap index and round stats.
+
+    Only rounds within the lookback_months window count toward the index.
+    """
+    cfg = get_handicap_settings(db_path)
+    lookback_months = int(cfg.get("lookback_months", 12))
+
+    # Cutoff date: today minus lookback_months
+    cutoff = datetime.now() - timedelta(days=lookback_months * 30.44)
+    cutoff_str = cutoff.strftime("%Y-%m-%d")
+
+    with _connect(db_path) as conn:
+        summary_rows = conn.execute(
+            """
+            SELECT player_name,
+                   COUNT(*) AS total_rounds,
+                   SUM(CASE WHEN round_date >= ? THEN 1 ELSE 0 END) AS active_rounds,
+                   MAX(round_date) AS latest_round_date,
+                   MIN(differential) AS best_differential,
+                   AVG(differential) AS avg_differential
+            FROM handicap_rounds
+            WHERE differential IS NOT NULL
+            GROUP BY player_name
+            ORDER BY player_name COLLATE NOCASE
+            """,
+            (cutoff_str,),
+        ).fetchall()
+
+        # Fetch last 20 differentials within the lookback window for each player
+        all_diffs = conn.execute(
+            """
+            SELECT player_name, differential,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY player_name
+                       ORDER BY round_date DESC, id DESC
+                   ) AS rn
+            FROM handicap_rounds
+            WHERE differential IS NOT NULL
+              AND round_date >= ?
+            """,
+            (cutoff_str,),
+        ).fetchall()
+
+    player_diffs: dict[str, list[float]] = {}
+    for d in all_diffs:
+        if d["rn"] <= 20:
+            player_diffs.setdefault(d["player_name"], []).append(d["differential"])
+
+    players = []
+    for row in summary_rows:
+        name = row["player_name"]
+        diffs = player_diffs.get(name, [])
+        index = compute_handicap_index(diffs, cfg)
+        players.append({
+            "player_name": name,
+            "handicap_index": index,
+            "total_rounds": row["total_rounds"],
+            "active_rounds": row["active_rounds"],
+            "latest_round_date": row["latest_round_date"],
+            "best_differential": round(row["best_differential"], 2) if row["best_differential"] is not None else None,
+            "avg_differential": round(row["avg_differential"], 2) if row["avg_differential"] is not None else None,
+        })
+
+    return players
