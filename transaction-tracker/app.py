@@ -91,6 +91,13 @@ from email_parser.database import (
     delete_message_template,
     log_message,
     get_message_log,
+    get_all_handicap_players,
+    get_handicap_rounds,
+    import_handicap_rounds,
+    delete_handicap_round,
+    delete_all_handicap_rounds_for_player,
+    get_handicap_settings,
+    update_handicap_settings,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -2501,6 +2508,264 @@ def api_test_digest():
     except Exception as e:
         logger.exception("Test digest failed")
         return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Routes — Handicap Calculator
+# ---------------------------------------------------------------------------
+@app.route("/handicaps")
+def page_handicaps():
+    return render_template("handicaps.html")
+
+
+@app.route("/api/handicaps/players")
+def api_handicap_players():
+    """Return all players with their current handicap index."""
+    players = get_all_handicap_players()
+    return jsonify(players)
+
+
+@app.route("/api/handicaps/rounds")
+def api_handicap_rounds():
+    """Return rounds for a single player (?player=Name) or all rounds."""
+    player_name = request.args.get("player")
+    rounds = get_handicap_rounds(player_name=player_name)
+    return jsonify(rounds)
+
+
+@app.route("/api/handicaps/rounds/<int:round_id>", methods=["DELETE"])
+@require_role("admin")
+def api_delete_handicap_round(round_id):
+    """Delete a single round by id. Admin only."""
+    if delete_handicap_round(round_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "not found"}), 404
+
+
+@app.route("/api/handicaps/players/<path:player_name>", methods=["DELETE"])
+@require_role("admin")
+def api_delete_handicap_player(player_name):
+    """Delete all rounds for a player. Admin only."""
+    count = delete_all_handicap_rounds_for_player(player_name)
+    return jsonify({"status": "ok", "deleted": count})
+
+
+@app.route("/api/handicaps/settings", methods=["GET"])
+def api_get_handicap_settings():
+    """Return current handicap calculation settings."""
+    return jsonify(get_handicap_settings())
+
+
+@app.route("/api/handicaps/settings", methods=["PATCH"])
+@require_role("admin")
+def api_update_handicap_settings():
+    """Update handicap calculation settings. Admin only."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON."}), 400
+    allowed = {"lookback_months", "min_rounds", "multiplier"}
+    filtered = {k: v for k, v in data.items() if k in allowed}
+    if not filtered:
+        return jsonify({"error": f"No valid settings keys. Allowed: {', '.join(allowed)}"}), 400
+    # Validate types
+    try:
+        if "lookback_months" in filtered:
+            v = int(filtered["lookback_months"])
+            if v < 1 or v > 120:
+                return jsonify({"error": "lookback_months must be 1–120"}), 400
+        if "min_rounds" in filtered:
+            v = int(filtered["min_rounds"])
+            if v < 1 or v > 20:
+                return jsonify({"error": "min_rounds must be 1–20"}), 400
+        if "multiplier" in filtered:
+            v = float(filtered["multiplier"])
+            if v <= 0 or v > 2:
+                return jsonify({"error": "multiplier must be between 0 and 2"}), 400
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid value: {e}"}), 400
+    update_handicap_settings(filtered)
+    return jsonify({"status": "ok", "settings": get_handicap_settings()})
+
+
+@app.route("/api/handicaps/import-preview", methods=["POST"])
+@require_role("manager")
+def api_handicap_import_preview():
+    """Parse uploaded Excel and return headers + first 10 data rows for mapping."""
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    import io
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(file.read()), read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+
+        # Read first few rows to detect header
+        candidate_rows = []
+        for raw_row in rows_iter:
+            candidate_rows.append(raw_row)
+            if len(candidate_rows) >= 5:
+                break
+        if not candidate_rows:
+            return jsonify({"error": "Empty spreadsheet"}), 400
+
+        # Find header row: first row where >40% of cells are non-empty
+        header_idx = 0
+        total_cols = len(candidate_rows[0])
+        for i, row in enumerate(candidate_rows):
+            non_empty = sum(1 for c in row if c is not None and str(c).strip())
+            if non_empty >= max(2, total_cols * 0.4):
+                header_idx = i
+                break
+
+        header_row = candidate_rows[header_idx]
+        headers = [str(h).strip() if h else f"Column {i+1}"
+                   for i, h in enumerate(header_row)]
+
+        # Collect preview rows (up to 10)
+        preview = []
+        for row in candidate_rows[header_idx + 1:]:
+            preview.append([str(c).strip() if c is not None else "" for c in row])
+        for row in rows_iter:
+            if len(preview) >= 10:
+                break
+            preview.append([str(c).strip() if c is not None else "" for c in row])
+
+        # Count total data rows (re-open for accurate count)
+        wb.close()
+
+        # Auto-detect column mapping from header names
+        def _find_col(candidates):
+            for cand in candidates:
+                for idx, h in enumerate(headers):
+                    if h.lower() == cand.lower():
+                        return idx
+            return None
+
+        auto_mapping = {
+            "player_name":     _find_col(["name", "player", "player_name"]),
+            "round_date":      _find_col(["play at", "date", "round_date", "played"]),
+            "round_id":        _find_col(["round id", "round_id", "roundid"]),
+            "course_name":     _find_col(["course", "course_name"]),
+            "tee_name":        _find_col(["tee", "tee_name", "tees"]),
+            "adjusted_score":  _find_col(["score", "adjusted_score", "adj score"]),
+            "rating":          _find_col(["rating", "course rating"]),
+            "slope":           _find_col(["slope", "slope rating"]),
+            "differential":    _find_col(["differential", "diff"]),
+        }
+
+        return jsonify({
+            "headers": headers,
+            "preview": preview,
+            "auto_mapping": auto_mapping,
+        })
+    except Exception as e:
+        logger.exception("Handicap import preview failed")
+        return jsonify({"error": f"Failed to parse file: {str(e)}"}), 400
+
+
+@app.route("/api/handicaps/import", methods=["POST"])
+@require_role("manager")
+def api_handicap_import():
+    """Import handicap rounds from uploaded Excel with column mapping.
+
+    Accepts multipart/form-data with:
+      - file: the Excel file
+      - mapping: JSON object {field_name: col_index, ...}
+    """
+    file = request.files.get("file")
+    mapping_json = request.form.get("mapping", "{}")
+    if not file or not file.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    try:
+        mapping = json.loads(mapping_json)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid mapping JSON"}), 400
+
+    required = {"player_name", "round_date", "adjusted_score", "rating", "slope"}
+    missing = required - set(k for k, v in mapping.items() if v is not None)
+    if missing:
+        return jsonify({"error": f"Required column mapping missing: {', '.join(missing)}"}), 400
+
+    import io
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(file.read()), read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+
+        # Skip to header row (same detection as preview)
+        candidate_rows = []
+        for raw_row in rows_iter:
+            candidate_rows.append(raw_row)
+            if len(candidate_rows) >= 5:
+                break
+        header_idx = 0
+        if candidate_rows:
+            total_cols = len(candidate_rows[0])
+            for i, row in enumerate(candidate_rows):
+                non_empty = sum(1 for c in row if c is not None and str(c).strip())
+                if non_empty >= max(2, total_cols * 0.4):
+                    header_idx = i
+                    break
+
+        # Build list of data rows
+        all_data_rows = list(candidate_rows[header_idx + 1:]) + list(rows_iter)
+        wb.close()
+
+        # Parse date helper — handles MM/DD/YYYY and YYYY-MM-DD
+        def _parse_date(val):
+            if val is None:
+                return ""
+            s = str(val).strip()
+            # openpyxl may return a datetime object
+            if hasattr(val, "strftime"):
+                return val.strftime("%Y-%m-%d")
+            # MM/DD/YYYY
+            if "/" in s:
+                parts = s.split("/")
+                if len(parts) == 3:
+                    m, d, y = parts
+                    return f"{y.zfill(4)}-{m.zfill(2)}-{d.zfill(2)}"
+            return s  # already YYYY-MM-DD or unknown
+
+        rounds = []
+        for row in all_data_rows:
+            def _get(field):
+                idx = mapping.get(field)
+                if idx is None or idx >= len(row):
+                    return None
+                val = row[idx]
+                return str(val).strip() if val is not None else None
+
+            player_name = _get("player_name")
+            if not player_name:
+                continue
+
+            rounds.append({
+                "player_name": player_name,
+                "round_date":  _parse_date(row[mapping["round_date"]] if mapping.get("round_date") is not None and mapping["round_date"] < len(row) else None),
+                "round_id":    _get("round_id"),
+                "course_name": _get("course_name"),
+                "tee_name":    _get("tee_name"),
+                "adjusted_score": _get("adjusted_score"),
+                "rating":      _get("rating"),
+                "slope":       _get("slope"),
+                "differential": _get("differential"),
+            })
+
+        if not rounds:
+            return jsonify({"error": "No data rows found in the file"}), 400
+
+        result = import_handicap_rounds(rounds)
+        return jsonify(result)
+
+    except Exception as e:
+        logger.exception("Handicap import failed")
+        return jsonify({"error": f"Import failed: {str(e)}"}), 500
 
 
 # ---------------------------------------------------------------------------

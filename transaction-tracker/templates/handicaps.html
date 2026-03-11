@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — Handicaps</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TGF Tracker">
+    <style>
+        /* ── Handicap-specific overrides ─────────────────────────── */
+        .hcp-index {
+            font-weight: 700;
+            font-size: 1.05em;
+            color: var(--primary, #1e40af);
+        }
+        .hcp-na {
+            color: #9ca3af;
+            font-style: italic;
+        }
+        .hcp-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-size: 0.78em;
+            font-weight: 600;
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        .hcp-tag.scratch { background: #dcfce7; color: #166534; }
+        .hcp-tag.plus    { background: #f0fdf4; color: #15803d; }
+        .hcp-tag.high    { background: #fef3c7; color: #92400e; }
+
+        .rounds-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+        .rounds-table th { background: #f1f5f9; padding: 6px 10px; text-align: left;
+                           font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
+        .rounds-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
+        .rounds-table tr:last-child td { border-bottom: none; }
+        .rounds-table .diff-col { text-align: right; font-variant-numeric: tabular-nums; }
+        .rounds-table .diff-good { color: #16a34a; font-weight: 600; }
+        .rounds-table .diff-bad  { color: #dc2626; }
+
+        .rounds-expand { background: #f8fafc; }
+        .rounds-expand td { padding: 0 !important; }
+        .rounds-inner  { padding: 12px 16px; }
+
+        .expand-btn {
+            background: none; border: none; cursor: pointer;
+            color: #64748b; font-size: 0.85em; padding: 0 4px;
+            transition: transform 0.15s;
+        }
+        .expand-btn.open { transform: rotate(90deg); }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 16px;
+            margin-top: 8px;
+        }
+        .settings-field label { display: block; font-size: 0.82em; font-weight: 600;
+                                color: #475569; margin-bottom: 4px; }
+        .settings-field input { width: 100%; box-sizing: border-box; }
+        .settings-desc { font-size: 0.78em; color: #94a3b8; margin-top: 3px; }
+
+        .import-step { display: none; }
+        .import-step.active { display: block; }
+
+        .col-map-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+        .col-map-table th { background: #f1f5f9; padding: 6px 10px; text-align: left;
+                            border-bottom: 1px solid #e2e8f0; }
+        .col-map-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
+        .col-map-table select { width: 100%; font-size: 0.9em; }
+
+        .preview-scroll { overflow-x: auto; max-height: 200px; overflow-y: auto; }
+        .preview-table  { border-collapse: collapse; font-size: 0.8em; white-space: nowrap; }
+        .preview-table th, .preview-table td { padding: 4px 8px;
+            border: 1px solid #e2e8f0; }
+        .preview-table th { background: #f1f5f9; }
+
+        .import-result { padding: 12px 16px; border-radius: 8px; margin-top: 12px; }
+        .import-result.success { background: #dcfce7; color: #166534; }
+        .import-result.error   { background: #fee2e2; color: #991b1b; }
+
+        .active-badge {
+            font-size: 0.75em; color: #6b7280; margin-left: 4px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Handicaps — 9-hole USGA WHS index calculator</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.2.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-import" class="btn btn-primary" style="display:none;">Import Rounds</button>
+            <button id="btn-settings" class="btn btn-secondary" style="display:none;">Settings</button>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/handicaps" class="active">Handicaps</a>
+        </nav>
+
+        <!-- Stats -->
+        <section class="stats-row" id="stats-row">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-players">—</div>
+                <div class="stat-label">Players Tracked</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-rounds">—</div>
+                <div class="stat-label">Total Rounds</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-avg-index">—</div>
+                <div class="stat-label">Avg Index</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-lookback">—</div>
+                <div class="stat-label">Lookback Window</div>
+            </div>
+        </section>
+
+        <!-- Controls -->
+        <section class="controls">
+            <input type="text" id="hcp-search" class="search-box"
+                   placeholder="Search players...">
+            <select id="sort-select" class="sort-select">
+                <option value="index-asc">Index (Low → High)</option>
+                <option value="index-desc">Index (High → Low)</option>
+                <option value="name-asc">Name (A → Z)</option>
+                <option value="name-desc">Name (Z → A)</option>
+                <option value="rounds-desc">Most Rounds</option>
+                <option value="latest-desc">Most Recent</option>
+            </select>
+        </section>
+
+        <!-- Player Table -->
+        <section class="table-section">
+            <div class="table-wrapper">
+                <table id="hcp-table" class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width:28px;"></th>
+                            <th>Player</th>
+                            <th>Handicap Index</th>
+                            <th>Active Rounds</th>
+                            <th>Total Rounds</th>
+                            <th>Latest Round</th>
+                            <th>Best Diff</th>
+                            <th>Avg Diff</th>
+                            <th id="admin-col-header" style="display:none;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hcp-tbody">
+                        <tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8;">
+                            Loading...
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- ── Settings Modal ──────────────────────────────────────── -->
+    <div id="modal-settings" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:520px;">
+            <div class="modal-header">
+                <h2>Handicap Calculator Settings</h2>
+                <button class="modal-close" onclick="closeSettingsModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:0.88em;color:#64748b;margin-bottom:16px;">
+                    Changes take effect immediately on next page load.
+                </p>
+                <div class="settings-grid">
+                    <div class="settings-field">
+                        <label for="set-lookback">Lookback Window (months)</label>
+                        <input type="number" id="set-lookback" min="1" max="120" step="1">
+                        <div class="settings-desc">
+                            Rounds older than this many months are excluded from the index calculation.
+                            Default: 12.
+                        </div>
+                    </div>
+                    <div class="settings-field">
+                        <label for="set-min-rounds">Minimum Rounds Required</label>
+                        <input type="number" id="set-min-rounds" min="1" max="20" step="1">
+                        <div class="settings-desc">
+                            Players with fewer active rounds show "N/A". Default: 3.
+                        </div>
+                    </div>
+                    <div class="settings-field">
+                        <label for="set-multiplier">Multiplier (USGA = 0.96)</label>
+                        <input type="number" id="set-multiplier" min="0.01" max="2" step="0.01">
+                        <div class="settings-desc">
+                            Applied to the average of best differentials. Default: 0.96.
+                        </div>
+                    </div>
+                </div>
+                <div id="settings-error" class="form-error" style="display:none;margin-top:10px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Import Modal ────────────────────────────────────────── -->
+    <div id="modal-import" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:700px;">
+            <div class="modal-header">
+                <h2>Import Handicap Rounds</h2>
+                <button class="modal-close" onclick="closeImportModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <!-- Step 1: File pick -->
+                <div id="import-step-1" class="import-step active">
+                    <p style="font-size:0.88em;color:#64748b;margin-bottom:16px;">
+                        Upload the <strong>Handicap Server</strong> Excel export (.xlsx).<br>
+                        Expected columns: Name, Play At, Round Id, Course, Tee, Score, Rating, Slope, Differential.
+                        Re-uploading the same file is safe — duplicates are skipped automatically.
+                    </p>
+                    <label class="file-label" id="import-file-label">
+                        <input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none;">
+                        <span id="import-file-name">Choose Excel file…</span>
+                    </label>
+                    <div id="import-preview-area" style="display:none;margin-top:16px;">
+                        <h4 style="margin:0 0 8px;">Column Mapping</h4>
+                        <p style="font-size:0.82em;color:#64748b;margin-bottom:10px;">
+                            Columns were auto-detected. Verify the mapping below before importing.
+                            <strong>*</strong> = required.
+                        </p>
+                        <table class="col-map-table" id="mapping-table">
+                            <thead><tr><th>Field</th><th>Excel Column</th></tr></thead>
+                            <tbody id="mapping-tbody"></tbody>
+                        </table>
+                        <h4 style="margin:16px 0 8px;">File Preview (first 10 rows)</h4>
+                        <div class="preview-scroll">
+                            <table class="preview-table" id="preview-table"></table>
+                        </div>
+                    </div>
+                    <div id="import-step1-error" class="form-error" style="display:none;margin-top:10px;"></div>
+                </div>
+
+                <!-- Step 2: Processing -->
+                <div id="import-step-2" class="import-step">
+                    <p style="text-align:center;padding:24px;color:#64748b;">
+                        Importing rounds… this may take a moment for large files.
+                    </p>
+                </div>
+
+                <!-- Step 3: Result -->
+                <div id="import-step-3" class="import-step">
+                    <div id="import-result-box"></div>
+                </div>
+            </div>
+            <div class="modal-footer" id="import-footer">
+                <button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+                <button class="btn btn-primary" id="btn-run-import" onclick="runImport()" disabled>
+                    Import
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+    // ── State ───────────────────────────────────────────────────────
+    let allPlayers = [];
+    let settings   = {};
+    let currentSort = 'index-asc';
+    let expandedRows = new Set();
+    let previewHeaders = [];
+    let previewRows    = [];
+    let columnMapping  = {};  // { field: colIndex }
+    let importFileObj  = null;
+
+    const FIELD_LABELS = {
+        player_name:    { label: "Player Name",    required: true },
+        round_date:     { label: "Round Date",      required: true },
+        round_id:       { label: "Round ID",        required: false },
+        course_name:    { label: "Course",          required: false },
+        tee_name:       { label: "Tee",             required: false },
+        adjusted_score: { label: "Score",           required: true },
+        rating:         { label: "Rating",          required: true },
+        slope:          { label: "Slope",           required: true },
+        differential:   { label: "Differential",   required: false },
+    };
+
+    // ── Init ────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSettings().then(() => loadPlayers());
+
+        document.getElementById('hcp-search').addEventListener('input', renderTable);
+        document.getElementById('sort-select').addEventListener('change', e => {
+            currentSort = e.target.value;
+            renderTable();
+        });
+
+        document.getElementById('import-file-input').addEventListener('change', onFileChosen);
+        document.getElementById('btn-import').addEventListener('click', openImportModal);
+        document.getElementById('btn-settings').addEventListener('click', openSettingsModal);
+    });
+
+    // ── Auth hooks (called by auth.js after role is known) ──────────
+    window.onRoleKnown = function(role) {
+        if (role === 'admin' || role === 'manager') {
+            document.getElementById('btn-import').style.display = '';
+        }
+        if (role === 'admin') {
+            document.getElementById('btn-settings').style.display = '';
+            document.getElementById('admin-col-header').style.display = '';
+        }
+    };
+
+    // ── Data loaders ────────────────────────────────────────────────
+    async function loadSettings() {
+        try {
+            const r = await fetch('/api/handicaps/settings');
+            settings = await r.json();
+            document.getElementById('stat-lookback').textContent =
+                settings.lookback_months + ' mo';
+        } catch(e) { console.error('Settings load failed', e); }
+    }
+
+    async function loadPlayers() {
+        try {
+            const r = await fetch('/api/handicaps/players');
+            allPlayers = await r.json();
+            updateStats();
+            renderTable();
+        } catch(e) {
+            document.getElementById('hcp-tbody').innerHTML =
+                '<tr><td colspan="9" style="text-align:center;color:#ef4444;padding:32px;">Failed to load data.</td></tr>';
+        }
+    }
+
+    function updateStats() {
+        document.getElementById('stat-players').textContent = allPlayers.length;
+        const totalRounds = allPlayers.reduce((s, p) => s + (p.total_rounds || 0), 0);
+        document.getElementById('stat-rounds').textContent = totalRounds.toLocaleString();
+
+        const indexed = allPlayers.filter(p => p.handicap_index !== null);
+        if (indexed.length) {
+            const avg = indexed.reduce((s, p) => s + p.handicap_index, 0) / indexed.length;
+            document.getElementById('stat-avg-index').textContent = avg.toFixed(1);
+        } else {
+            document.getElementById('stat-avg-index').textContent = '—';
+        }
+    }
+
+    // ── Table rendering ─────────────────────────────────────────────
+    function renderTable() {
+        const q = document.getElementById('hcp-search').value.trim().toLowerCase();
+        let players = allPlayers.filter(p =>
+            !q || p.player_name.toLowerCase().includes(q)
+        );
+
+        // Sort
+        players.sort((a, b) => {
+            switch (currentSort) {
+                case 'index-asc':
+                    if (a.handicap_index === null && b.handicap_index === null) return 0;
+                    if (a.handicap_index === null) return 1;
+                    if (b.handicap_index === null) return -1;
+                    return a.handicap_index - b.handicap_index;
+                case 'index-desc':
+                    if (a.handicap_index === null && b.handicap_index === null) return 0;
+                    if (a.handicap_index === null) return 1;
+                    if (b.handicap_index === null) return -1;
+                    return b.handicap_index - a.handicap_index;
+                case 'name-asc':  return a.player_name.localeCompare(b.player_name);
+                case 'name-desc': return b.player_name.localeCompare(a.player_name);
+                case 'rounds-desc': return (b.active_rounds||0) - (a.active_rounds||0);
+                case 'latest-desc': return (b.latest_round_date||'').localeCompare(a.latest_round_date||'');
+            }
+            return 0;
+        });
+
+        const role = window._userRole;
+        const isAdmin = role === 'admin';
+        const tbody = document.getElementById('hcp-tbody');
+        if (!players.length) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8;">' +
+                (allPlayers.length ? 'No players match your search.' : 'No handicap data yet. Use Import Rounds to upload your Handicap Server export.') +
+                '</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = '';
+        for (const p of players) {
+            const isExpanded = expandedRows.has(p.player_name);
+            const indexCell = p.handicap_index !== null
+                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span> ${indexTag(p.handicap_index)}`
+                : '<span class="hcp-na">N/A</span>';
+            const activeRounds = p.active_rounds ?? 0;
+            const totalRounds  = p.total_rounds ?? 0;
+            const activeLabel  = activeRounds < totalRounds
+                ? `${activeRounds} <span class="active-badge">(${totalRounds} total)</span>`
+                : `${activeRounds}`;
+
+            const adminCell = isAdmin
+                ? `<td><button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;"
+                       onclick="deletePlayer(${JSON.stringify(p.player_name)})">Delete All</button></td>`
+                : '';
+            const adminColspan = isAdmin ? '' : '';
+
+            const tr = document.createElement('tr');
+            tr.className = 'player-row';
+            tr.dataset.player = p.player_name;
+            tr.innerHTML = `
+                <td><button class="expand-btn ${isExpanded?'open':''}"
+                    onclick="toggleRounds(${JSON.stringify(p.player_name)}, this)">▶</button></td>
+                <td><strong>${esc(p.player_name)}</strong></td>
+                <td>${indexCell}</td>
+                <td>${activeLabel}</td>
+                <td>${totalRounds}</td>
+                <td>${p.latest_round_date || '—'}</td>
+                <td class="diff-col">${p.best_differential !== null ? p.best_differential.toFixed(2) : '—'}</td>
+                <td class="diff-col">${p.avg_differential !== null ? p.avg_differential.toFixed(2) : '—'}</td>
+                ${isAdmin ? `<td><button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;"
+                    onclick="deletePlayer(${JSON.stringify(p.player_name)})">Delete All</button></td>` : '<td style="display:none;"></td>'}
+            `;
+            tbody.appendChild(tr);
+
+            // Expanded row placeholder
+            const expandTr = document.createElement('tr');
+            expandTr.className = 'rounds-expand';
+            expandTr.id = `expand-${safeid(p.player_name)}`;
+            expandTr.style.display = isExpanded ? '' : 'none';
+            const colspan = isAdmin ? 9 : 8;
+            expandTr.innerHTML = `<td colspan="${colspan}"><div class="rounds-inner" id="rounds-inner-${safeid(p.player_name)}">
+                <em style="color:#94a3b8;">Loading rounds…</em>
+            </div></td>`;
+            tbody.appendChild(expandTr);
+
+            if (isExpanded) {
+                loadAndRenderRounds(p.player_name);
+            }
+        }
+    }
+
+    function indexTag(idx) {
+        if (idx <= 0)  return '<span class="hcp-tag plus">+</span>';
+        if (idx <= 5)  return '<span class="hcp-tag scratch">Scratch</span>';
+        if (idx >= 20) return '<span class="hcp-tag high">High</span>';
+        return '';
+    }
+
+    // ── Expand / collapse rounds ────────────────────────────────────
+    function toggleRounds(playerName, btn) {
+        const id = safeid(playerName);
+        const expandTr = document.getElementById(`expand-${id}`);
+        if (!expandTr) return;
+
+        if (expandedRows.has(playerName)) {
+            expandedRows.delete(playerName);
+            expandTr.style.display = 'none';
+            btn.classList.remove('open');
+        } else {
+            expandedRows.add(playerName);
+            expandTr.style.display = '';
+            btn.classList.add('open');
+            loadAndRenderRounds(playerName);
+        }
+    }
+
+    async function loadAndRenderRounds(playerName) {
+        const id = safeid(playerName);
+        const inner = document.getElementById(`rounds-inner-${id}`);
+        if (!inner) return;
+        try {
+            const r = await fetch(`/api/handicaps/rounds?player=${encodeURIComponent(playerName)}`);
+            const rounds = await r.json();
+            renderRoundsTable(inner, rounds);
+        } catch(e) {
+            inner.innerHTML = '<em style="color:#ef4444;">Failed to load rounds.</em>';
+        }
+    }
+
+    function renderRoundsTable(container, rounds) {
+        const role = window._userRole;
+        const isAdmin = role === 'admin';
+        if (!rounds.length) {
+            container.innerHTML = '<em style="color:#94a3b8;">No rounds found.</em>';
+            return;
+        }
+
+        const lookbackMonths = parseInt(settings.lookback_months || 12);
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - lookbackMonths);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+        let html = `<table class="rounds-table">
+            <thead><tr>
+                <th>Date</th>
+                <th>Course</th>
+                <th>Tee</th>
+                <th class="diff-col">Score</th>
+                <th class="diff-col">Rating</th>
+                <th class="diff-col">Slope</th>
+                <th class="diff-col">Differential</th>
+                <th>Status</th>
+                ${isAdmin ? '<th></th>' : ''}
+            </tr></thead><tbody>`;
+
+        for (const rnd of rounds) {
+            const active = rnd.round_date >= cutoffStr;
+            const diffClass = rnd.differential !== null
+                ? (rnd.differential < 0 ? 'diff-good' : rnd.differential > 15 ? 'diff-bad' : '')
+                : '';
+            const statusBadge = active
+                ? '<span style="color:#16a34a;font-size:0.8em;">● Active</span>'
+                : '<span style="color:#9ca3af;font-size:0.8em;">○ Excluded</span>';
+
+            html += `<tr style="${active ? '' : 'opacity:0.5;'}">
+                <td>${rnd.round_date}</td>
+                <td>${esc(rnd.course_name || '—')}</td>
+                <td>${esc(rnd.tee_name || '—')}</td>
+                <td class="diff-col">${rnd.adjusted_score}</td>
+                <td class="diff-col">${rnd.rating}</td>
+                <td class="diff-col">${rnd.slope}</td>
+                <td class="diff-col ${diffClass}">${rnd.differential !== null ? rnd.differential.toFixed(2) : '—'}</td>
+                <td>${statusBadge}</td>
+                ${isAdmin ? `<td><button class="btn btn-sm" style="color:#dc2626;font-size:0.75em;padding:2px 6px;"
+                    onclick="deleteRound(${rnd.id}, ${JSON.stringify(rnd.player_name)})">×</button></td>` : ''}
+            </tr>`;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    // ── Admin actions ───────────────────────────────────────────────
+    async function deleteRound(roundId, playerName) {
+        if (!confirm(`Delete this round for ${playerName}?`)) return;
+        const r = await fetch(`/api/handicaps/rounds/${roundId}`, { method: 'DELETE' });
+        if (r.ok) {
+            await loadPlayers();
+        } else {
+            alert('Delete failed');
+        }
+    }
+
+    async function deletePlayer(playerName) {
+        if (!confirm(`Delete ALL handicap rounds for "${playerName}"? This cannot be undone.`)) return;
+        const r = await fetch(`/api/handicaps/players/${encodeURIComponent(playerName)}`, { method: 'DELETE' });
+        if (r.ok) {
+            await loadPlayers();
+        } else {
+            alert('Delete failed');
+        }
+    }
+
+    // ── Settings Modal ──────────────────────────────────────────────
+    function openSettingsModal() {
+        document.getElementById('set-lookback').value   = settings.lookback_months || 12;
+        document.getElementById('set-min-rounds').value = settings.min_rounds       || 3;
+        document.getElementById('set-multiplier').value = settings.multiplier       || 0.96;
+        document.getElementById('settings-error').style.display = 'none';
+        document.getElementById('modal-settings').style.display = 'flex';
+    }
+
+    function closeSettingsModal() {
+        document.getElementById('modal-settings').style.display = 'none';
+    }
+
+    async function saveSettings() {
+        const errEl = document.getElementById('settings-error');
+        errEl.style.display = 'none';
+        const body = {
+            lookback_months: document.getElementById('set-lookback').value,
+            min_rounds:      document.getElementById('set-min-rounds').value,
+            multiplier:      document.getElementById('set-multiplier').value,
+        };
+        const r = await fetch('/api/handicaps/settings', {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+            errEl.textContent = data.error || 'Save failed.';
+            errEl.style.display = '';
+            return;
+        }
+        settings = data.settings;
+        document.getElementById('stat-lookback').textContent = settings.lookback_months + ' mo';
+        closeSettingsModal();
+        loadPlayers();
+    }
+
+    // ── Import Modal ────────────────────────────────────────────────
+    function openImportModal() {
+        resetImportModal();
+        document.getElementById('modal-import').style.display = 'flex';
+    }
+
+    function closeImportModal() {
+        document.getElementById('modal-import').style.display = 'none';
+        resetImportModal();
+    }
+
+    function resetImportModal() {
+        showImportStep(1);
+        document.getElementById('import-file-input').value = '';
+        document.getElementById('import-file-name').textContent = 'Choose Excel file…';
+        document.getElementById('import-preview-area').style.display = 'none';
+        document.getElementById('import-step1-error').style.display = 'none';
+        document.getElementById('btn-run-import').disabled = true;
+        document.getElementById('import-footer').style.display = '';
+        previewHeaders = [];
+        previewRows    = [];
+        columnMapping  = {};
+        importFileObj  = null;
+    }
+
+    function showImportStep(n) {
+        document.querySelectorAll('.import-step').forEach((el, i) => {
+            el.classList.toggle('active', i + 1 === n);
+        });
+    }
+
+    async function onFileChosen(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        importFileObj = file;
+        document.getElementById('import-file-name').textContent = file.name;
+        document.getElementById('import-step1-error').style.display = 'none';
+        document.getElementById('btn-run-import').disabled = true;
+        document.getElementById('import-preview-area').style.display = 'none';
+
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const r = await fetch('/api/handicaps/import-preview', { method: 'POST', body: fd });
+            const data = await r.json();
+            if (!r.ok) {
+                showStep1Error(data.error || 'Preview failed');
+                return;
+            }
+            previewHeaders = data.headers;
+            previewRows    = data.preview;
+            columnMapping  = data.auto_mapping || {};
+            renderMappingUI();
+            renderPreviewTable();
+            document.getElementById('import-preview-area').style.display = '';
+            document.getElementById('btn-run-import').disabled = false;
+        } catch(err) {
+            showStep1Error('Failed to read file: ' + err.message);
+        }
+    }
+
+    function renderMappingUI() {
+        const tbody = document.getElementById('mapping-tbody');
+        tbody.innerHTML = '';
+        for (const [field, info] of Object.entries(FIELD_LABELS)) {
+            const currentIdx = columnMapping[field];
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${info.label}${info.required ? ' <strong style="color:#dc2626;">*</strong>' : ''}</td>
+                <td><select data-field="${field}" onchange="updateMapping(this)">
+                    <option value="">— Not mapped —</option>
+                    ${previewHeaders.map((h, i) =>
+                        `<option value="${i}" ${currentIdx === i ? 'selected' : ''}>${h}</option>`
+                    ).join('')}
+                </select></td>`;
+            tbody.appendChild(tr);
+        }
+    }
+
+    function updateMapping(sel) {
+        const field = sel.dataset.field;
+        const val   = sel.value;
+        if (val === '') {
+            delete columnMapping[field];
+        } else {
+            columnMapping[field] = parseInt(val);
+        }
+    }
+
+    function renderPreviewTable() {
+        const tbl = document.getElementById('preview-table');
+        let html = '<thead><tr>' +
+            previewHeaders.map(h => `<th>${esc(h)}</th>`).join('') +
+            '</tr></thead><tbody>';
+        for (const row of previewRows.slice(0, 10)) {
+            html += '<tr>' + row.map(c => `<td>${esc(c)}</td>`).join('') + '</tr>';
+        }
+        html += '</tbody>';
+        tbl.innerHTML = html;
+    }
+
+    async function runImport() {
+        showImportStep(2);
+        document.getElementById('import-footer').style.display = 'none';
+
+        const fd = new FormData();
+        fd.append('file', importFileObj);
+        fd.append('mapping', JSON.stringify(columnMapping));
+
+        try {
+            const r = await fetch('/api/handicaps/import', { method: 'POST', body: fd });
+            const data = await r.json();
+            showImportStep(3);
+
+            const box = document.getElementById('import-result-box');
+            if (!r.ok) {
+                box.innerHTML = `<div class="import-result error"><strong>Import failed:</strong> ${esc(data.error || 'Unknown error')}</div>`;
+            } else {
+                let errHtml = '';
+                if (data.errors && data.errors.length) {
+                    errHtml = `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:0.85em;">
+                        ${data.errors.length} row error(s)</summary>
+                        <ul style="font-size:0.82em;margin:4px 0 0 16px;">
+                        ${data.errors.map(e => `<li>${esc(e)}</li>`).join('')}
+                        </ul></details>`;
+                }
+                box.innerHTML = `<div class="import-result success">
+                    <strong>✓ Import complete</strong><br>
+                    ${data.inserted.toLocaleString()} rounds inserted &nbsp;·&nbsp;
+                    ${data.skipped.toLocaleString()} skipped (duplicates)
+                    ${errHtml}
+                </div>`;
+                loadPlayers();
+            }
+
+            // Show a close button
+            document.getElementById('import-footer').innerHTML =
+                '<button class="btn btn-primary" onclick="closeImportModal()">Done</button>';
+            document.getElementById('import-footer').style.display = '';
+        } catch(err) {
+            showImportStep(3);
+            document.getElementById('import-result-box').innerHTML =
+                `<div class="import-result error"><strong>Network error:</strong> ${esc(err.message)}</div>`;
+            document.getElementById('import-footer').innerHTML =
+                '<button class="btn btn-secondary" onclick="closeImportModal()">Close</button>';
+            document.getElementById('import-footer').style.display = '';
+        }
+    }
+
+    function showStep1Error(msg) {
+        const el = document.getElementById('import-step1-error');
+        el.textContent = msg;
+        el.style.display = '';
+    }
+
+    // ── Utilities ───────────────────────────────────────────────────
+    function esc(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function safeid(s) {
+        return s.replace(/[^a-zA-Z0-9]/g, '_');
+    }
+    </script>
+</body>
+</html>
