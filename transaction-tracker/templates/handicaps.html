@@ -307,6 +307,7 @@
 
     // ── Init ────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
+        initAuth();
         loadSettings().then(() => loadPlayers());
 
         document.getElementById('hcp-search').addEventListener('input', renderTable);
