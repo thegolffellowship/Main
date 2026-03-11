@@ -100,6 +100,10 @@ transaction-tracker/
 | start_time_18 | TEXT | 18-hole start time (combo mode only) |
 | start_type_18 | TEXT | 18-hole start type (combo mode only) |
 | tee_time_count_18 | INTEGER | 18-hole tee time count (combo mode only) |
+| course_cost | REAL | Course/vendor cost per player |
+| tgf_markup | REAL | TGF markup per player |
+| side_game_fee | REAL | TGF side game admin fee per game |
+| transaction_fee_pct | REAL DEFAULT 3.5 | Transaction processing fee percentage |
 | event_type | TEXT DEFAULT 'event' | |
 | created_at | TEXT | |
 

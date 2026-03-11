@@ -1489,6 +1489,10 @@ def api_create_event():
         tee_time_count_18=data.get("tee_time_count_18"),
         tee_direction=data.get("tee_direction"),
         tee_direction_18=data.get("tee_direction_18"),
+        course_cost=data.get("course_cost"),
+        tgf_markup=data.get("tgf_markup"),
+        side_game_fee=data.get("side_game_fee"),
+        transaction_fee_pct=data.get("transaction_fee_pct"),
     )
     if event:
         return jsonify({"status": "ok", "event": event}), 201
