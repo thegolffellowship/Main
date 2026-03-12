@@ -2546,16 +2546,19 @@ def api_delete_handicap_round(round_id):
 @require_role("admin")
 def api_purge_invalid_rounds():
     """Delete all rounds with 18-hole ratings (rating > 50). Admin only."""
-    db = get_db()
-    rows = db.execute(
-        "SELECT id, player_name, round_date, course_name, rating "
-        "FROM handicap_rounds WHERE rating > 50"
-    ).fetchall()
-    for row in rows:
-        db.execute("DELETE FROM handicap_rounds WHERE id = ?", (row["id"],))
-    db.commit()
-    return jsonify({"status": "ok", "deleted": len(rows),
-                    "rounds": [dict(r) for r in rows]})
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id, player_name, round_date, course_name, rating "
+            "FROM handicap_rounds WHERE rating > 50"
+        ).fetchall()
+        for row in rows:
+            conn.execute("DELETE FROM handicap_rounds WHERE id = ?", (row["id"],))
+        conn.commit()
+        return jsonify({"status": "ok", "deleted": len(rows),
+                        "rounds": [dict(r) for r in rows]})
+    finally:
+        conn.close()
 
 
 @app.route("/api/handicaps/players/<path:player_name>", methods=["DELETE"])

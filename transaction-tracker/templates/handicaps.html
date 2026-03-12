@@ -176,7 +176,7 @@
                             <th>Latest Round</th>
                             <th>Best Diff</th>
                             <th>Avg Diff</th>
-                            <th id="admin-col-header" style="display:none;">Actions</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="hcp-tbody">
@@ -349,7 +349,6 @@
         if (currentRole === 'admin') {
             document.getElementById('btn-settings').style.display = '';
             document.getElementById('btn-purge').style.display = '';
-            document.getElementById('admin-col-header').style.display = '';
         }
     }
 
@@ -437,12 +436,6 @@
             const totalRounds  = p.total_rounds ?? 0;
             const activeLabel = `${activeRounds}`;
 
-            const adminCell = isAdmin
-                ? `<td><button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;"
-                       onclick="deletePlayer(${JSON.stringify(p.player_name)})">Delete All</button></td>`
-                : '';
-            const adminColspan = isAdmin ? '' : '';
-
             const tr = document.createElement('tr');
             tr.className = 'player-row';
             tr.dataset.player = p.player_name;
@@ -456,8 +449,7 @@
                 <td>${p.latest_round_date || '—'}</td>
                 <td class="diff-col">${p.best_differential !== null ? p.best_differential.toFixed(1) : '—'}</td>
                 <td class="diff-col">${p.avg_differential !== null ? p.avg_differential.toFixed(1) : '—'}</td>
-                ${isAdmin ? `<td><button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;"
-                    onclick="deletePlayer(${esc(JSON.stringify(p.player_name))})">Delete All</button></td>` : '<td style="display:none;"></td>'}
+                <td></td>
             `;
             tbody.appendChild(tr);
 
@@ -680,16 +672,6 @@
     async function deleteRound(roundId, playerName) {
         if (!confirm(`Delete this round for ${playerName}?`)) return;
         const r = await fetch(`/api/handicaps/rounds/${roundId}`, { method: 'DELETE' });
-        if (r.ok) {
-            await loadPlayers();
-        } else {
-            alert('Delete failed');
-        }
-    }
-
-    async function deletePlayer(playerName) {
-        if (!confirm(`Delete ALL handicap rounds for "${playerName}"? This cannot be undone.`)) return;
-        const r = await fetch(`/api/handicaps/players/${encodeURIComponent(playerName)}`, { method: 'DELETE' });
         if (r.ok) {
             await loadPlayers();
         } else {
