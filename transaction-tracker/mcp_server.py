@@ -304,6 +304,10 @@ def create_new_event(
     event_date: str = "",
     course: str = "",
     city: str = "",
+    course_cost: float = None,
+    tgf_markup: float = None,
+    side_game_fee: float = None,
+    transaction_fee_pct: float = None,
 ) -> str:
     """Create a new event.
 
@@ -312,8 +316,14 @@ def create_new_event(
         event_date: Event date in YYYY-MM-DD format
         course: Golf course name
         city: City where event is held
+        course_cost: Course/vendor cost per player
+        tgf_markup: TGF markup per player
+        side_game_fee: TGF side game admin fee per game
+        transaction_fee_pct: Transaction fee percentage (default 3.5)
     """
-    ev = create_event(event_name, event_date or None, course or None, city or None)
+    ev = create_event(event_name, event_date or None, course or None, city or None,
+                      course_cost=course_cost, tgf_markup=tgf_markup,
+                      side_game_fee=side_game_fee, transaction_fee_pct=transaction_fee_pct)
     if ev:
         return json.dumps({"status": "ok", "event": ev})
     return json.dumps({"error": f"Event '{event_name}' already exists"})
@@ -325,7 +335,7 @@ def update_existing_event(event_id: int, fields: dict) -> str:
 
     Args:
         event_id: The event ID to update
-        fields: Dict of fields to update. Allowed: item_name, event_date, course, city, event_type
+        fields: Dict of fields to update. Allowed: item_name, event_date, course, city, event_type, course_cost, tgf_markup, side_game_fee, transaction_fee_pct
     """
     ok = update_event(event_id, fields)
     if ok:

@@ -390,6 +390,10 @@ computes a current handicap index using the official USGA WHS lookup table.
 | start_time_18 | TEXT | 18-hole start time (combo mode only) |
 | start_type_18 | TEXT | 18-hole start type (combo mode only) |
 | tee_time_count_18 | INTEGER | 18-hole tee time count (combo mode only) |
+| course_cost | REAL | Course/vendor cost per player |
+| tgf_markup | REAL | TGF markup per player (default: $8 for 9 holes, $15 for 18 holes) |
+| side_game_fee | REAL | TGF side game admin fee per game (default: $3 for 9 holes, $4 for 18 holes) |
+| transaction_fee_pct | REAL | Transaction processing fee percentage (default: 3.5%) |
 | event_type | TEXT | Default 'event' |
 | created_at | TEXT | |
 
@@ -1101,6 +1105,46 @@ Sales tax applies to all sales, but the **taxable amount varies by category**:
 ### Income Tax
 
 All transactions flowing in and out of TGF need to be accounted for — every dollar received and every dollar spent, regardless of category or tax treatment.
+
+---
+
+## Event Pricing
+
+Each event can have per-event pricing configured in the Add/Edit Event modals. This replaces the previously hardcoded markup values and provides transparency into how player totals break down.
+
+### Pricing Components
+
+| Component | Field | Default | Description |
+|-----------|-------|---------|-------------|
+| **Course Cost** | `course_cost` | (calculated) | What the course/vendor charges TGF per player. Pass-through, not taxable. |
+| **TGF Markup** | `tgf_markup` | $8 (9 holes) / $15 (18 holes) | TGF's per-player admin fee. Taxable. |
+| **Side Game Fee** | `side_game_fee` | $3 (9 holes) / $4 (18 holes) | TGF markup on top of each side game pot entry. Taxable. |
+| **Transaction Fee** | `transaction_fee_pct` | 3.5% | Payment processor fee (MySimpleStore/Stripe). Applied to the subtotal. |
+
+### How Player Price Breaks Down
+
+```
+Player Total = Course Cost + TGF Markup + Side Game Fees + Transaction Fee
+
+Example (18-hole event, BOTH side games):
+  Course cost:      $65.00
+  TGF markup:       $15.00
+  NET game fee:      $4.00 (TGF markup) + $12.50 (pot contribution) = $16.50
+  GROSS game fee:    $4.00 (TGF markup) + $12.50 (pot contribution) = $16.50
+  Subtotal:        $113.00
+  Transaction fee:   $3.96 (3.5%)
+  Total:           $116.96
+```
+
+### Relationship to Overall Totals
+
+For any event transaction: **Total collected − TGF markups − Side game fees − Transaction fees ≈ Course cost**. This is the formula the WD (withdrawal) credit calculation uses — when per-event pricing is set, it uses the exact values; otherwise it reverse-calculates from the player's item price.
+
+### Where Pricing Appears
+
+- **Add/Edit Event modals** — Configure all four pricing fields with live preview
+- **Event detail view** — Pricing summary line below game stat badges
+- **WD modal** — Credit components use per-event pricing when available
 
 ---
 

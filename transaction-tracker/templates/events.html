@@ -398,6 +398,19 @@
                         <label>Tee Time Interval (min)<input type="number" id="edit-tee-interval-combo" class="modal-input" min="1" max="30" placeholder="e.g., 10"></label>
                     </div>
                 </div>
+                <!-- Event Pricing -->
+                <div style="margin-top:1rem; border-top:1px solid var(--border); padding-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Event Pricing</label>
+                    <div class="edit-grid" style="grid-template-columns: 1fr 1fr;">
+                        <label>Course Cost ($)<input type="number" id="edit-event-course_cost" class="modal-input" min="0" step="0.01" placeholder="e.g., 65.00"></label>
+                        <label>TGF Markup ($)<input type="number" id="edit-event-tgf_markup" class="modal-input" min="0" step="0.01" placeholder="e.g., 15.00"></label>
+                        <label>Side Game Fee ($)<input type="number" id="edit-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 4.00"></label>
+                        <label>Transaction Fee (%)<input type="number" id="edit-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
+                    </div>
+                    <div id="edit-pricing-preview" style="margin-top:0.5rem; font-size:0.8rem; color:var(--text-muted); display:none;">
+                        <span id="edit-pricing-summary"></span>
+                    </div>
+                </div>
                 <!-- Tee Time Advisor Panel -->
                 <div id="edit-advisor-panel" class="advisor-panel" style="display:none; margin-top:1rem;"></div>
                 <div class="modal-actions">
@@ -757,6 +770,19 @@
                         <label>9-Hole Tee Times<input type="number" id="add-tee-count-9" class="modal-input" min="1" max="60" placeholder="e.g., 8"></label>
                         <label>18-Hole Tee Times<input type="number" id="add-tee-count-18" class="modal-input" min="1" max="60" placeholder="e.g., 8"></label>
                         <label>Tee Time Interval (min)<input type="number" id="add-tee-interval-combo" class="modal-input" min="1" max="30" placeholder="e.g., 10"></label>
+                    </div>
+                </div>
+                <!-- Event Pricing -->
+                <div style="margin-top:1rem; border-top:1px solid var(--border); padding-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Event Pricing</label>
+                    <div class="edit-grid" style="grid-template-columns: 1fr 1fr;">
+                        <label>Course Cost ($)<input type="number" id="add-event-course_cost" class="modal-input" min="0" step="0.01" placeholder="e.g., 65.00"></label>
+                        <label>TGF Markup ($)<input type="number" id="add-event-tgf_markup" class="modal-input" min="0" step="0.01" placeholder="e.g., 15.00"></label>
+                        <label>Side Game Fee ($)<input type="number" id="add-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 4.00"></label>
+                        <label>Transaction Fee (%)<input type="number" id="add-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
+                    </div>
+                    <div id="add-pricing-preview" style="margin-top:0.5rem; font-size:0.8rem; color:var(--text-muted); display:none;">
+                        <span id="add-pricing-summary"></span>
                     </div>
                 </div>
                 <!-- Tee Time Advisor Panel -->
@@ -1967,6 +1993,24 @@
         }
         html += '</div>';
 
+        // Pricing summary (show when event has pricing configured)
+        if (ev.course_cost != null || ev.tgf_markup != null) {
+            const cc = ev.course_cost || 0;
+            const mu = ev.tgf_markup || 0;
+            const sg = ev.side_game_fee || 0;
+            const tf = ev.transaction_fee_pct || 0;
+            const subtotal = cc + mu + sg;
+            const fee = Math.round(subtotal * tf) / 100;
+            const total = subtotal + fee;
+            html += `<div style="font-size:0.75rem; color:var(--text-muted); padding:0.2rem 0.5rem; margin-top:0.15rem;">`;
+            html += `<strong>Pricing:</strong> $${cc.toFixed(2)} course`;
+            html += ` + $${mu.toFixed(2)} markup`;
+            if (sg > 0) html += ` + $${sg.toFixed(2)} games`;
+            if (fee > 0) html += ` + $${fee.toFixed(2)} fee (${tf}%)`;
+            html += ` = <strong>$${total.toFixed(2)}</strong>`;
+            html += `</div>`;
+        }
+
         // ---- PAIRINGS VIEW ----
         if (pairingsView) {
             html += '<div style="padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:0.95rem;"><strong>Feature Coming Soon!</strong></div>';
@@ -3121,6 +3165,35 @@
         } catch (err) { alert(err.message); }
     }
 
+    // ---- Event Pricing Preview ----
+    function updatePricingPreview(prefix) {
+        const cc = parseFloat(document.getElementById(prefix + "-event-course_cost").value) || 0;
+        const mu = parseFloat(document.getElementById(prefix + "-event-tgf_markup").value) || 0;
+        const sg = parseFloat(document.getElementById(prefix + "-event-side_game_fee").value) || 0;
+        const tf = parseFloat(document.getElementById(prefix + "-event-transaction_fee_pct").value) || 0;
+        const previewEl = document.getElementById(prefix + "-pricing-preview");
+        const summaryEl = document.getElementById(prefix + "-pricing-summary");
+        if (!previewEl || !summaryEl) return;
+
+        const subtotal = cc + mu + sg;
+        if (subtotal > 0) {
+            const fee = Math.round(subtotal * tf) / 100;
+            const total = subtotal + fee;
+            summaryEl.textContent = `Player total: $${cc.toFixed(2)} course + $${mu.toFixed(2)} markup + $${sg.toFixed(2)} games + $${fee.toFixed(2)} fee = $${total.toFixed(2)}`;
+            previewEl.style.display = "block";
+        } else {
+            previewEl.style.display = "none";
+        }
+    }
+
+    // Live preview on pricing input change
+    ["edit", "add"].forEach(prefix => {
+        ["course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct"].forEach(field => {
+            const el = document.getElementById(prefix + "-event-" + field);
+            if (el) el.addEventListener("input", () => updatePricingPreview(prefix));
+        });
+    });
+
     // ---- WD (Withdrawal) modal logic ----
     let wdItemId = null;
     let wdEventName = null;
@@ -3132,8 +3205,9 @@
         const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
         if (!matrix) return null;
 
-        const tgfEventMarkup = holes === 9 ? 8 : 15;
-        const tgfGamesMarkup = holes === 9 ? 3 : 4;
+        // Use per-event pricing if set, otherwise fall back to standard defaults
+        const tgfEventMarkup = (ev && ev.tgf_markup != null) ? ev.tgf_markup : (holes === 9 ? 8 : 15);
+        const tgfGamesMarkup = (ev && ev.side_game_fee != null) ? ev.side_game_fee : (holes === 9 ? 3 : 4);
 
         // Get current stats for the event (before WD)
         const registrants = getRegistrants(eventName);
@@ -3160,9 +3234,12 @@
         }
 
         const itemPrice = parseFloat((item.item_price || "0").replace(/[^0-9.]/g, ""));
-        const courseFee = Math.max(0, Math.round(
-            (itemPrice - includedGames - netGames - grossGames - tgfEventMarkup) * 100
-        ) / 100);
+        // Use per-event course_cost if set, otherwise reverse-calculate from item price
+        const courseFee = (ev && ev.course_cost != null)
+            ? ev.course_cost
+            : Math.max(0, Math.round(
+                (itemPrice - includedGames - netGames - grossGames - tgfEventMarkup) * 100
+            ) / 100);
 
         const components = [];
         components.push({ key: "course_fee", label: "Course Fee", amount: courseFee });
@@ -3351,6 +3428,15 @@
                 const tdEl = document.querySelector('input[name="add-event-tee_direction"]:checked');
                 payload.tee_direction = tdEl ? tdEl.value : "First Tee";
             }
+            // Pricing fields
+            const addCC = document.getElementById("add-event-course_cost").value;
+            const addMU = document.getElementById("add-event-tgf_markup").value;
+            const addSG = document.getElementById("add-event-side_game_fee").value;
+            const addTF = document.getElementById("add-event-transaction_fee_pct").value;
+            if (addCC) payload.course_cost = parseFloat(addCC);
+            if (addMU) payload.tgf_markup = parseFloat(addMU);
+            if (addSG) payload.side_game_fee = parseFloat(addSG);
+            if (addTF) payload.transaction_fee_pct = parseFloat(addTF);
             const res = await fetch("/api/events", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -3758,6 +3844,13 @@
             r.checked = (r.value === (ev.tee_direction_18 || "First Tee"));
         });
 
+        // Pricing fields
+        document.getElementById("edit-event-course_cost").value = ev.course_cost != null ? ev.course_cost : "";
+        document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
+        document.getElementById("edit-event-side_game_fee").value = ev.side_game_fee != null ? ev.side_game_fee : "";
+        document.getElementById("edit-event-transaction_fee_pct").value = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : "";
+        updatePricingPreview("edit");
+
         // Toggle single/combo visibility
         updateComboVisibility("edit");
 
@@ -3851,6 +3944,15 @@
             // Clear combo direction when not in combo mode
             if (ev.tee_direction_18) changes.tee_direction_18 = null;
         }
+
+        // Pricing fields
+        ["course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct"].forEach(field => {
+            const input = document.getElementById("edit-event-" + field);
+            if (!input) return;
+            const newVal = input.value ? parseFloat(input.value) : null;
+            const oldVal = ev[field] != null ? ev[field] : null;
+            if (newVal !== oldVal) changes[field] = newVal;
+        });
 
         if (Object.keys(changes).length === 0) {
             closeEditEvent();

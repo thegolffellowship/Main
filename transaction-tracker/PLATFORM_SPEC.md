@@ -13,6 +13,9 @@ A Flask + SQLite web application that scans email inboxes (via Microsoft Graph A
 ```
 transaction-tracker/
 ├── app.py                        # Flask app, all routes, scheduler, webhook
+├── asgi_app.py                   # ASGI wrapper for Railway deployment
+├── mcp_server.py                 # MCP server (21 tools for Claude integration)
+├── mcp_auth.py                   # MCP OAuth 2.0 authentication
 ├── requirements.txt
 ├── .env / .env.example
 ├── transactions.db               # SQLite database
@@ -21,16 +24,21 @@ transaction-tracker/
 │   ├── parser.py                 # Claude AI email extraction
 │   ├── fetcher.py                # Microsoft Graph email fetching
 │   ├── database.py               # SQLite storage & queries
-│   └── report.py                 # Daily email report sender
+│   ├── report.py                 # Daily digest email sender
+│   └── rsvp_parser.py            # Golf Genius RSVP email parsing
 ├── templates/
 │   ├── index.html                # Main transactions dashboard
 │   ├── events.html               # Events management + Tee Time Advisor
-│   ├── customers.html            # Customer directory + history
-│   └── audit.html                # Email audit/QA page (admin)
+│   ├── customers.html            # Customer directory + roster import
+│   ├── audit.html                # Email audit/QA page (admin)
+│   ├── rsvps.html                # RSVP management
+│   ├── matrix.html               # Side games prize matrix
+│   └── changelog.html            # Version changelog
 └── static/
     ├── js/
     │   ├── auth.js               # PIN-based authentication
-    │   └── dashboard.js          # Main dashboard interactivity
+    │   ├── dashboard.js          # Main dashboard interactivity
+    │   └── version.js            # Version number & update detection
     └── css/
         └── dashboard.css         # All styling (single file)
 ```
@@ -48,24 +56,34 @@ transaction-tracker/
 | item_index | INTEGER DEFAULT 0 | Position in multi-item order |
 | merchant | TEXT NOT NULL | e.g. "The Golf Fellowship" |
 | customer | TEXT | Buyer name (Title Case) |
+| first_name | TEXT | Parsed first name (AI-extracted) |
+| last_name | TEXT | Parsed last name |
+| middle_name | TEXT | Parsed middle name/initial |
+| suffix | TEXT | e.g. Jr., III |
 | customer_email | TEXT | |
 | customer_phone | TEXT | |
 | order_id | TEXT | Confirmation number |
 | order_date | TEXT NOT NULL | ISO date |
+| order_time | TEXT | Time of order (HH:MM) |
 | total_amount | TEXT | Full order value |
+| transaction_fees | TEXT | Processing fees |
 | item_name | TEXT NOT NULL | Event/product name |
 | event_date | TEXT | Date of golf event |
 | item_price | TEXT | e.g. "$158.00" |
 | quantity | INTEGER DEFAULT 1 | |
 | city | TEXT | Event city |
+| chapter | TEXT | Chapter (San Antonio / Austin) |
 | course | TEXT | Golf course (canonical name) |
 | handicap | TEXT | |
+| has_handicap | TEXT | YES/NO flag |
 | side_games | TEXT | NET/GROSS/BOTH/NONE |
 | tee_choice | TEXT | <50/50-64/65+/Forward |
 | member_status | TEXT | MEMBER/NON-MEMBER |
-| golf_or_compete | TEXT | GOLF/COMPETE |
 | post_game | TEXT | Post-game fellowship |
 | returning_or_new | TEXT | |
+| partner_request | TEXT | Preferred playing partner |
+| fellowship_after | TEXT | Post-game fellowship selection |
+| notes | TEXT | General notes from registration |
 | shirt_size | TEXT | |
 | guest_name | TEXT | |
 | date_of_birth | TEXT | |
@@ -74,14 +92,18 @@ transaction-tracker/
 | city_match_play | TEXT | |
 | subject | TEXT | Original email subject |
 | from_addr | TEXT | Original sender |
-| transaction_status | TEXT DEFAULT 'active' | active/credited/transferred |
+| transaction_status | TEXT DEFAULT 'active' | active/credited/transferred/wd |
 | credit_note | TEXT | Reason for credit/transfer |
 | transferred_from_id | INTEGER | FK to originating item |
 | transferred_to_id | INTEGER | FK to destination item |
+| wd_reason | TEXT | Withdrawal reason |
+| wd_note | TEXT | Withdrawal note |
+| wd_credits | TEXT | Credit policy applied |
+| credit_amount | TEXT | Dollar amount credited on WD |
 | created_at | TEXT DEFAULT datetime('now') | |
 
 **Constraint:** UNIQUE(email_uid, item_index)
-**Indexes:** order_date DESC, item_name, customer
+**Indexes:** order_date DESC, item_name, customer, transaction_status
 
 ### `events` table
 
@@ -100,7 +122,122 @@ transaction-tracker/
 | start_time_18 | TEXT | 18-hole start time (combo mode only) |
 | start_type_18 | TEXT | 18-hole start type (combo mode only) |
 | tee_time_count_18 | INTEGER | 18-hole tee time count (combo mode only) |
+| tee_direction | TEXT DEFAULT 'First Tee' | Tee time direction: First Tee / Last Tee |
+| tee_direction_18 | TEXT DEFAULT 'First Tee' | 18-hole tee direction (combo mode) |
+| course_cost | REAL | Course/vendor cost per player |
+| tgf_markup | REAL | TGF markup per player |
+| side_game_fee | REAL | TGF side game admin fee per game |
+| transaction_fee_pct | REAL DEFAULT 3.5 | Transaction processing fee percentage |
 | event_type | TEXT DEFAULT 'event' | |
+| created_at | TEXT | |
+
+### `rsvps` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| email_uid | TEXT NOT NULL UNIQUE | Golf Genius confirmation email ID |
+| player_name | TEXT | Player name from RSVP |
+| player_email | TEXT | Player email |
+| gg_event_name | TEXT | Golf Genius event name |
+| event_identifier | TEXT | Normalized event identifier |
+| event_date | TEXT | |
+| response | TEXT NOT NULL | YES/NO |
+| received_at | TEXT | Email timestamp |
+| matched_event | TEXT | Matched TGF event name |
+| matched_item_id | INTEGER | FK to items.id if linked |
+| created_at | TEXT | |
+
+**Indexes:** matched_event, player_email
+
+### `rsvp_overrides` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| item_id | INTEGER NOT NULL | FK to items.id |
+| event_name | TEXT NOT NULL | |
+| status | TEXT DEFAULT 'none' | Override status |
+| updated_at | TEXT | |
+
+**Constraint:** UNIQUE(item_id, event_name)
+
+### `rsvp_email_overrides` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| player_email | TEXT NOT NULL | For GG RSVP players without item row |
+| event_name | TEXT NOT NULL | |
+| status | TEXT DEFAULT 'none' | |
+| updated_at | TEXT | |
+
+**Constraint:** UNIQUE(player_email, event_name)
+
+### `customer_aliases` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| customer_name | TEXT NOT NULL | Canonical customer name |
+| alias_type | TEXT NOT NULL | 'name' or 'email' |
+| alias_value | TEXT NOT NULL | Alternative name or email |
+| created_at | TEXT | |
+
+### `event_aliases` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| alias_name | TEXT NOT NULL UNIQUE | Old/variant event name |
+| canonical_event_name | TEXT NOT NULL | Current canonical name |
+| created_at | TEXT | |
+
+**Index:** canonical_event_name
+
+### `message_templates` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| name | TEXT NOT NULL | Template name |
+| channel | TEXT DEFAULT 'email' | email/sms/both |
+| subject | TEXT | Email subject line |
+| html_body | TEXT | HTML email body |
+| sms_body | TEXT | SMS message text |
+| is_system | INTEGER DEFAULT 0 | 1 = built-in template |
+| created_at | TEXT | |
+| updated_at | TEXT | |
+
+### `message_log` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| event_name | TEXT | Event context |
+| template_id | INTEGER | FK to message_templates.id |
+| channel | TEXT NOT NULL | email/sms |
+| recipient_name | TEXT | |
+| recipient_address | TEXT NOT NULL | Email or phone |
+| subject | TEXT | |
+| body_preview | TEXT | Truncated body |
+| status | TEXT DEFAULT 'sent' | sent/failed |
+| error_message | TEXT | Error details if failed |
+| sent_by | TEXT | admin/manager role |
+| sent_at | TEXT | |
+
+**Indexes:** event_name, sent_at DESC
+
+### `feedback` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| type | TEXT NOT NULL | 'bug' or 'feature' |
+| message | TEXT NOT NULL | |
+| page | TEXT | Page submitted from |
+| role | TEXT | admin/manager |
+| status | TEXT DEFAULT 'open' | open/resolved/dismissed |
 | created_at | TEXT | |
 
 ---
@@ -112,9 +249,12 @@ transaction-tracker/
 | Route | Method | Description |
 |-------|--------|-------------|
 | `/` | GET | Transactions dashboard |
-| `/events` | GET | Events page |
-| `/customers` | GET | Customers page |
-| `/audit` | GET | Email audit page (admin) |
+| `/events` | GET | Events management + Tee Time Advisor |
+| `/customers` | GET | Customer directory + history |
+| `/audit` | GET | Email audit/QA page (admin) |
+| `/rsvps` | GET | RSVP management page |
+| `/matrix` | GET | Side games prize matrix |
+| `/changelog` | GET | Version changelog |
 
 ### Items / Transactions
 
@@ -126,13 +266,14 @@ transaction-tracker/
 | `/api/stats` | GET | — | — | `{total_items, total_orders, total_spent, ...}` |
 | `/api/audit` | GET | — | — | `{fill_rates, problems, distributions}` |
 
-### Credit / Transfer
+### Credit / Transfer / Withdrawal
 
 | Endpoint | Method | Body | Effect |
 |----------|--------|------|--------|
 | `/api/items/<id>/credit` | POST | `{note}` | Sets transaction_status='credited' |
 | `/api/items/<id>/transfer` | POST | `{target_event, note}` | Marks original as 'transferred', creates new $0 item on target event |
 | `/api/items/<id>/reverse-credit` | POST | — | Reverts credit/transfer back to 'active' |
+| `/api/items/<id>/wd` | POST | `{reason, note, credits, credit_amount}` | Marks as withdrawn with optional partial credit |
 
 ### Events
 
@@ -144,6 +285,66 @@ transaction-tracker/
 | `/api/events/<id>` | DELETE | admin | — | `{status: "ok"}` |
 | `/api/events/sync` | POST | — | — | Auto-creates events from item_name patterns |
 | `/api/events/add-player` | POST | — | `{event_name, customer, ...}` | Creates manual registration item |
+| `/api/events/delete-manual-player/<id>` | DELETE | admin | — | Remove manually-added player |
+| `/api/events/merge` | POST | — | `{source_id, target_id}` | Merge two events (creates alias) |
+| `/api/events/orphaned-items` | GET | — | — | Items not linked to any event |
+| `/api/events/resolve-orphan` | POST | — | `{item_id, event_name}` | Link orphaned item to event |
+| `/api/events/upgrade-rsvp` | POST | — | `{item_id, event_name}` | Convert RSVP placeholder to paid |
+| `/api/events/send-reminder` | POST | — | `{player_name, player_email, event_name}` | Email payment reminder |
+| `/api/events/send-reminder-all` | POST | — | `{event_name}` | Bulk-send reminders to all RSVP-only |
+| `/api/events/seed` | POST | — | `[{item_name, event_date, ...}]` | Batch-create events from JSON |
+
+### Customers
+
+| Endpoint | Method | Auth | Body | Response |
+|----------|--------|------|------|----------|
+| `/api/customers` | GET | — | — | Derived customer list with status, chapter, history |
+| `/api/customers/create` | POST | — | `{name, email, phone, ...}` | Create new customer |
+| `/api/customers/update` | POST | — | `{name, fields...}` | Update customer fields |
+| `/api/customers/merge` | POST | — | `{source, target}` | Merge two customer records |
+| `/api/customers/aliases` | GET/POST | — | `{customer_name, alias_type, alias_value}` | Get/add customer aliases |
+| `/api/customers/aliases/<id>` | DELETE | — | — | Delete alias |
+| `/api/customers/from-rsvp` | POST | — | `{player_name, player_email, event_name}` | Create customer from RSVP data |
+| `/api/customers/link-rsvp` | POST | — | `{rsvp_id, customer_name}` | Link RSVP to existing customer |
+| `/api/customers/parse-roster` | POST | — | Excel file upload | Parse Excel roster columns |
+| `/api/customers/preview-roster` | POST | — | `{rows, column_map}` | Preview import with AI name parsing |
+| `/api/customers/import-roster` | POST | — | `{rows, column_map, options}` | Bulk import roster data |
+
+### Messaging
+
+| Endpoint | Method | Auth | Body | Response |
+|----------|--------|------|------|----------|
+| `/api/messages/templates` | GET | — | — | All message templates |
+| `/api/messages/templates` | POST | — | `{name, channel, subject, html_body, sms_body}` | Create template |
+| `/api/messages/templates` | PATCH | — | `{id, fields...}` | Update template |
+| `/api/messages/templates` | DELETE | admin | `{id}` | Delete template |
+| `/api/messages/send` | POST | — | `{event_name, template_id, recipients, ...}` | Send bulk messages |
+| `/api/messages/preview` | POST | — | `{template_id, player_name, event_name}` | Preview rendered message |
+| `/api/messages/log` | GET | — | — | All sent messages |
+| `/api/messages/log/<event_name>` | GET | — | — | Messages for specific event |
+
+### RSVPs
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/rsvps` | GET | All RSVPs with filters |
+| `/api/rsvps/event/<name>` | GET | RSVPs for specific event |
+| `/api/rsvps/bulk` | GET | Bulk fetch RSVPs for multiple events |
+| `/api/rsvps/stats` | GET | RSVP summary statistics |
+| `/api/rsvps/check-now` | POST | Manual RSVP inbox check |
+| `/api/rsvps/rematch` | POST | Re-run matching on unmatched RSVPs |
+| `/api/rsvps/<id>/match` | POST | Manually match RSVP to event |
+| `/api/rsvps/<id>/unmatch` | POST | Unmatch RSVP |
+| `/api/rsvps/overrides` | GET/POST | Get/set RSVP overrides |
+| `/api/rsvps/config-status` | GET | Check RSVP credentials |
+
+### Support & Feedback
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/support/chat` | POST | Support chat endpoint |
+| `/api/support/feedback` | GET/POST | Get all or submit feedback |
+| `/api/support/feedback` | PATCH | Update feedback status |
 
 ### Inbox & Parsing
 
@@ -262,7 +463,21 @@ CONNECTOR_API_KEY=...
 
 # Daily Report (optional)
 DAILY_REPORT_TO=report@yourdomain.com
-DAILY_REPORT_HOUR=7
+DAILY_REPORT_HOUR=6
+DAILY_REPORT_TZ=US/Central
+
+# Feedback Notifications (optional)
+FEEDBACK_NOTIFY_TO=admin@yourdomain.com    # Falls back to DAILY_REPORT_TO
+
+# RSVP / Golf Genius (optional)
+RSVP_EMAIL_ADDRESS=rsvp@yourdomain.com     # Mailbox for GG RSVP confirmations
+RSVP_AZURE_TENANT_ID=...                   # Optional: separate Azure creds for RSVP mailbox
+RSVP_AZURE_CLIENT_ID=...
+RSVP_AZURE_CLIENT_SECRET=...
+
+# MCP OAuth (optional, for Claude.ai connector)
+MCP_CLIENT_ID=tgf-mcp-client
+MCP_CLIENT_SECRET=your-alphanumeric-secret  # Alphanumeric only, no dashes
 
 # App Settings
 CHECK_INTERVAL_MINUTES=15

@@ -391,6 +391,10 @@ def init_db(db_path: str | Path | None = None) -> None:
                 tee_time_count_18 INTEGER,
                 tee_direction TEXT DEFAULT 'First Tee',
                 tee_direction_18 TEXT DEFAULT 'First Tee',
+                course_cost REAL,
+                tgf_markup REAL,
+                side_game_fee REAL,
+                transaction_fee_pct REAL DEFAULT 3.5,
                 created_at  TEXT DEFAULT (datetime('now'))
             )
             """
@@ -410,6 +414,17 @@ def init_db(db_path: str | Path | None = None) -> None:
                                ("tee_time_count_18", "INTEGER"),
                                ("tee_direction", "TEXT DEFAULT 'First Tee'"),
                                ("tee_direction_18", "TEXT DEFAULT 'First Tee'")]:
+            try:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
+                logger.info("Added events.%s column", col)
+            except sqlite3.OperationalError:
+                pass  # already exists
+
+        # Migration: add event pricing columns
+        for col, col_type in [("course_cost", "REAL"),
+                               ("tgf_markup", "REAL"),
+                               ("side_game_fee", "REAL"),
+                               ("transaction_fee_pct", "REAL DEFAULT 3.5")]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
                 logger.info("Added events.%s column", col)
@@ -1366,7 +1381,8 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
     """
     allowed = {"item_name", "event_date", "course", "chapter", "format", "start_type", "start_time",
                 "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
-                "tee_time_count_18", "event_type", "tee_direction", "tee_direction_18"}
+                "tee_time_count_18", "event_type", "tee_direction", "tee_direction_18",
+                "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
@@ -2727,6 +2743,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
                  tee_time_interval: int = None, start_time_18: str = None,
                  start_type_18: str = None, tee_time_count_18: int = None,
                  tee_direction: str = None, tee_direction_18: str = None,
+                 course_cost: float = None, tgf_markup: float = None,
+                 side_game_fee: float = None, transaction_fee_pct: float = None,
                  db_path: str | Path | None = None) -> dict | None:
     """Manually create a new event. Returns the event dict or None if duplicate (case-insensitive)."""
     with _connect(db_path) as conn:
@@ -2738,8 +2756,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
             return None
         try:
             cursor = conn.execute(
-                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
-                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18),
+                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
+                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct),
             )
             conn.commit()
             new_id = cursor.lastrowid
