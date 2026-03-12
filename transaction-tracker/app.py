@@ -2716,12 +2716,13 @@ def api_handicap_import():
         all_data_rows = list(candidate_rows[header_idx + 1:]) + list(rows_iter)
         wb.close()
 
-        # Parse date helper — handles MM/DD/YYYY and YYYY-MM-DD
+        # Parse date helper — handles datetime objects, MM/DD/YYYY, YYYY-MM-DD,
+        # and sparse "D-Mon" / "D-Mon-YY" strings (e.g. "7-Feb", "7-Feb-25")
         def _parse_date(val):
             if val is None:
                 return ""
             s = str(val).strip()
-            # openpyxl may return a datetime object
+            # openpyxl may return a datetime object directly
             if hasattr(val, "strftime"):
                 return val.strftime("%Y-%m-%d")
             # MM/DD/YYYY
@@ -2730,9 +2731,22 @@ def api_handicap_import():
                 if len(parts) == 3:
                     m, d, y = parts
                     return f"{y.zfill(4)}-{m.zfill(2)}-{d.zfill(2)}"
-            return s  # already YYYY-MM-DD or unknown
+            # D-Mon-YY or D-Mon (e.g. "7-Feb-25" or "7-Feb")
+            if "-" in s:
+                from datetime import datetime as _dt
+                for fmt in ("%d-%b-%y", "%d-%b-%Y", "%d-%b"):
+                    try:
+                        parsed = _dt.strptime(s, fmt)
+                        if fmt == "%d-%b":
+                            # No year supplied — use current year
+                            parsed = parsed.replace(year=_dt.now().year)
+                        return parsed.strftime("%Y-%m-%d")
+                    except ValueError:
+                        continue
+            return s  # already YYYY-MM-DD or unknown format
 
         rounds = []
+        last_player_name = None  # support fill-down name format
         for row in all_data_rows:
             def _get(field):
                 idx = mapping.get(field)
@@ -2742,6 +2756,11 @@ def api_handicap_import():
                 return str(val).strip() if val is not None else None
 
             player_name = _get("player_name")
+            if player_name:
+                last_player_name = player_name
+            elif last_player_name:
+                player_name = last_player_name
+
             if not player_name:
                 continue
 
