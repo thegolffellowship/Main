@@ -3826,8 +3826,7 @@ def get_message_log(event_name: str | None = None, limit: int = 200,
 # Handicap calculator
 # ---------------------------------------------------------------------------
 
-# TGF Handicap Differential Table (9-hole specific).
-# Source: TGF Handicap Differential Table published by The Golf Fellowship.
+# WHS Rule 5.2a differential lookup: number of differentials to use.
 _HANDICAP_DIFF_LOOKUP = {
     3: 1,  4: 1,  5: 1,
     6: 2,  7: 2,  8: 2,
@@ -3838,6 +3837,10 @@ _HANDICAP_DIFF_LOOKUP = {
     19: 7,
     20: 8,
 }
+
+# WHS Rule 5.2a adjustments (added after avg × 0.96).
+# Applied when fewer rounds yield an index that could be too favourable.
+_HANDICAP_ADJUSTMENT = {3: -2.0, 4: -1.0, 6: -1.0}
 
 _HANDICAP_SETTINGS_DEFAULTS = {
     "lookback_months": "12",      # max age of rounds to count
@@ -3904,10 +3907,9 @@ def compute_handicap_index(differentials: list[float],
     count = _HANDICAP_DIFF_LOOKUP.get(n, 10)
     best = sorted(differentials)[:count]
     avg = sum(best) / count
-    index = avg * multiplier
-    # WHS Rule 5.2: round to nearest tenth (standard rounding, .5 rounds toward +infinity).
-    # math.trunc was the pre-2020 USGA rule; WHS (2020-present) uses round().
-    # For plus-handicappers (negative index): round(-0.228*10)/10 = round(-2.28)/10 = -2/10 = -0.2 ✓
+    adjustment = _HANDICAP_ADJUSTMENT.get(n, 0.0)
+    index = avg * multiplier + adjustment
+    # WHS Rule 5.2: round to nearest tenth (.5 rounds toward +infinity / toward zero for negatives).
     return round(index * 10) / 10
 
 
