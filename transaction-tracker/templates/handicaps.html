@@ -625,9 +625,7 @@
         function roundRow(rnd, isOlder) {
             const active = rnd.round_date >= cutoffStr;
             const isUsed = usedIds.has(rnd.id);
-            const diffClass = rnd.differential !== null
-                ? (rnd.differential < 0 ? 'diff-good' : rnd.differential > 15 ? 'diff-bad' : '')
-                : '';
+            const diffClass = rnd.differential !== null && rnd.differential < 0 ? 'diff-good' : '';
             const statusBadge = !active
                 ? '<span class="status-excluded">○ Excluded</span>'
                 : isUsed
