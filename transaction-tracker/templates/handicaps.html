@@ -36,12 +36,13 @@
         .hcp-tag.plus    { background: #f0fdf4; color: #15803d; }
         .hcp-tag.high    { background: #fef3c7; color: #92400e; }
 
-        .rounds-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+        .rounds-table { width: auto; border-collapse: collapse; font-size: 0.85em; }
         .rounds-table th { background: #f1f5f9; padding: 6px 10px; text-align: left;
                            font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
         .rounds-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
         .rounds-table tr:last-child td { border-bottom: none; }
         .rounds-table .diff-col { text-align: right; font-variant-numeric: tabular-nums; }
+        .rounds-table th.diff-col { text-align: right; }
         .rounds-table .diff-good { color: #16a34a; font-weight: 600; }
         .rounds-table .diff-bad  { color: #dc2626; }
 
@@ -89,7 +90,7 @@
         .active-badge {
             font-size: 0.75em; color: #6b7280; margin-left: 4px;
         }
-        .round-used { background: #fefce8; }
+        .round-used { background: #fef08a; }
         .status-used     { color: #b45309; font-weight: 600; font-size: 0.8em; }
         .status-active   { color: #16a34a; font-size: 0.8em; }
         .status-excluded { color: #9ca3af; font-size: 0.8em; }
@@ -466,7 +467,6 @@
 
     function indexTag(idx) {
         if (idx <= 0)  return '<span class="hcp-tag plus">+</span>';
-        if (idx <= 5)  return '<span class="hcp-tag scratch">Scratch</span>';
         if (idx >= 20) return '<span class="hcp-tag high">High</span>';
         return '';
     }
@@ -533,7 +533,8 @@
             byDiff.slice(0, numUsed).forEach(r => usedIds.add(r.id));
         }
 
-        let html = `<table class="rounds-table">
+        let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
+        <table class="rounds-table">
             <thead><tr>
                 <th>Date</th>
                 <th>Course</th>
@@ -544,9 +545,9 @@
                 <th class="diff-col">Differential</th>
                 <th>Status</th>
                 ${isAdmin ? '<th></th>' : ''}
-            </tr></thead><tbody>`;
+            </tr></thead><tbody id="rounds-tbody-${safeid(rounds[0].player_name)}">`;
 
-        for (const rnd of rounds) {
+        function roundRow(rnd) {
             const active = rnd.round_date >= cutoffStr;
             const isUsed = usedIds.has(rnd.id);
             const diffClass = rnd.differential !== null
@@ -557,8 +558,7 @@
                 : isUsed
                     ? '<span class="status-used">★ Used</span>'
                     : '<span class="status-active">● Active</span>';
-
-            html += `<tr class="${isUsed ? 'round-used' : ''}" style="${active ? '' : 'opacity:0.5;'}">
+            return `<tr class="${isUsed ? 'round-used' : ''}" style="${active ? '' : 'opacity:0.5;'}">
                 <td>${rnd.round_date}</td>
                 <td>${esc(rnd.course_name || '—')}</td>
                 <td>${esc(rnd.tee_name || '—')}</td>
@@ -572,8 +572,39 @@
             </tr>`;
         }
 
-        html += '</tbody></table>';
+        const visible = rounds.slice(0, 20);
+        const hidden  = rounds.slice(20);
+        const colspan = isAdmin ? 9 : 8;
+        const pid = safeid(rounds[0].player_name);
+
+        for (const rnd of visible) html += roundRow(rnd);
+
+        if (hidden.length > 0) {
+            html += `</tbody></table></div>
+            <div id="older-rounds-${pid}" style="display:none; overflow-x:auto; margin-top:4px;">
+              <table class="rounds-table">
+                <tbody>`;
+            for (const rnd of hidden) html += roundRow(rnd);
+            html += `</tbody></table></div>
+            <button class="btn btn-secondary" style="margin-top:8px;font-size:0.8em;"
+                onclick="toggleOlderRounds('${pid}', this)">Show ${hidden.length} older round${hidden.length !== 1 ? 's' : ''}</button>`;
+        } else {
+            html += '</tbody></table></div>';
+        }
+
         container.innerHTML = html;
+    }
+
+    function toggleOlderRounds(pid, btn) {
+        const el = document.getElementById(`older-rounds-${pid}`);
+        if (el.style.display === 'none') {
+            el.style.display = '';
+            btn.textContent = 'Hide older rounds';
+        } else {
+            el.style.display = 'none';
+            const n = el.querySelectorAll('tbody tr').length;
+            btn.textContent = `Show ${n} older round${n !== 1 ? 's' : ''}`;
+        }
     }
 
     // ── Admin actions ───────────────────────────────────────────────
