@@ -93,6 +93,40 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 `delete_existing_event`, `add_player`, `delete_transaction`,
 `sync_events`, `run_autofix`
 
+## Handicap System — TGF Rules (IMPORTANT)
+
+All handicap calculations are for **9-hole rounds only**. The system uses a
+custom TGF differential table — do NOT use or derive a USGA 18-hole table.
+
+### TGF Handicap Differential Table
+
+| 9-Hole Rounds in Record | Differentials Used |
+|------------------------|--------------------|
+| 1–2 | None (no handicap) |
+| 3–5 | Lowest 1 |
+| 6–8 | Avg Low 2 |
+| 9–11 | Avg Low 3 |
+| 12–14 | Avg Low 4 |
+| 15–16 | Avg Low 5 |
+| 17–18 | Avg Low 6 |
+| 19 | Avg Low 7 |
+| 20 | Avg Low 8 (fully established) |
+
+### Calculation rules
+- **Lookback window:** 12 months (configurable)
+- **Pool:** most recent 20 rounds within the window
+- **Multiplier:** avg of lowest N × 0.96
+- **Truncation:** `math.trunc` (toward zero), NOT `math.floor` — critical for
+  plus-handicappers (negative index): e.g. −0.228 → −0.2N displayed as **+0.2N**
+- **18-hole scores are rejected** at import time (course rating > 50 = error)
+- **Handicap index suffix:** "N" indicates a 9-hole index
+- **Plus handicap display:** negative computed value → shown with "+" prefix
+
+### Key files
+- `email_parser/database.py` — `_HANDICAP_DIFF_LOOKUP` (server-side table)
+- `templates/handicaps.html` — `DIFF_LOOKUP` (client-side JS table, must match)
+- Both tables must always be kept in sync.
+
 ## Architecture
 
 - **Flask app** in `transaction-tracker/app.py`
