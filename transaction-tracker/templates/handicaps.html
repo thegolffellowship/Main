@@ -41,8 +41,12 @@
                            font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
         .rounds-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
         .rounds-table tr:last-child td { border-bottom: none; }
-        .rounds-table .diff-col { text-align: right; font-variant-numeric: tabular-nums; }
-        .rounds-table th.diff-col { text-align: right; }
+        .rounds-table .date-col   { padding-right: 24px; white-space: nowrap; }
+        .rounds-table .course-col { padding-right: 24px; }
+        .rounds-table .narrow-col { text-align: center; width: 72px; }
+        .rounds-table th.narrow-col { text-align: center; }
+        .rounds-table .diff-col { text-align: center; width: 72px; font-variant-numeric: tabular-nums; }
+        .rounds-table th.diff-col { text-align: center; }
         .rounds-table .diff-good { color: #16a34a; font-weight: 600; }
         .rounds-table .diff-bad  { color: #dc2626; }
 
@@ -559,15 +563,15 @@
         let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
         <table class="rounds-table">
             <thead><tr>
-                <th>Date</th>
-                <th>Course</th>
-                <th>Tee</th>
+                <th class="date-col">Date</th>
+                <th class="course-col">Course</th>
+                <th class="narrow-col">Tee</th>
                 <th class="diff-col">Score</th>
                 <th class="diff-col">Rating</th>
                 <th class="diff-col">Slope</th>
-                <th class="diff-col">Differential</th>
+                <th class="diff-col">Diff</th>
                 <th class="diff-col">Index</th>
-                <th>Status</th>
+                <th class="narrow-col">Status</th>
                 ${isAdmin ? '<th></th>' : ''}
             </tr></thead><tbody id="rounds-tbody-${safeid(rounds[0].player_name)}">`;
 
@@ -587,15 +591,15 @@
                 ? `<span style="font-weight:600;color:${hcp <= 0 ? '#15803d' : '#1e40af'}">${hcp.toFixed(1)}</span>`
                 : '<span style="color:#94a3b8">—</span>';
             return `<tr class="${isUsed ? 'round-used' : ''}" style="${active ? '' : 'opacity:0.5;'}">
-                <td>${rnd.round_date}</td>
-                <td>${esc(rnd.course_name || '—')}</td>
-                <td>${esc(rnd.tee_name || '—')}</td>
+                <td class="date-col">${rnd.round_date}</td>
+                <td class="course-col">${esc(rnd.course_name || '—')}</td>
+                <td class="narrow-col">${esc(rnd.tee_name || '—')}</td>
                 <td class="diff-col">${rnd.adjusted_score}</td>
                 <td class="diff-col">${rnd.rating}</td>
                 <td class="diff-col">${rnd.slope}</td>
                 <td class="diff-col ${diffClass}">${rnd.differential !== null ? rnd.differential.toFixed(1) : '—'}</td>
                 <td class="diff-col">${hcpCell}</td>
-                <td>${statusBadge}</td>
+                <td class="narrow-col">${statusBadge}</td>
                 ${isAdmin ? `<td><button class="btn btn-sm" style="color:#dc2626;font-size:0.75em;padding:2px 6px;"
                     onclick="deleteRound(${rnd.id}, ${esc(JSON.stringify(rnd.player_name))})">×</button></td>` : ''}
             </tr>`;
