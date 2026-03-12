@@ -3826,16 +3826,17 @@ def get_message_log(event_name: str | None = None, limit: int = 200,
 # Handicap calculator
 # ---------------------------------------------------------------------------
 
-# 9-hole WHS lookup: number of rounds → number of lowest differentials to use.
-# This is the 9-hole specific table (≈80% of the 18-hole count, min 1).
-# Confirmed against Handicap Server: 20 rounds → use best 8 differentials.
+# TGF Handicap Differential Table (9-hole specific).
+# Source: TGF Handicap Differential Table published by The Golf Fellowship.
 _HANDICAP_DIFF_LOOKUP = {
-    3: 1, 4: 1, 5: 1,
-    6: 1, 7: 1, 8: 1,
-    9: 2, 10: 2, 11: 2,
-    12: 3, 13: 3, 14: 3,
-    15: 4, 16: 4,
-    17: 5, 18: 6, 19: 7, 20: 8,
+    3: 1,  4: 1,  5: 1,
+    6: 2,  7: 2,  8: 2,
+    9: 3, 10: 3, 11: 3,
+    12: 4, 13: 4, 14: 4,
+    15: 5, 16: 5,
+    17: 6, 18: 6,
+    19: 7,
+    20: 8,
 }
 
 _HANDICAP_SETTINGS_DEFAULTS = {
