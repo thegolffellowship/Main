@@ -242,10 +242,13 @@
                         Expected columns: Name, Play At, Round Id, Course, Tee, Score, Rating, Slope, Differential.
                         Re-uploading the same file is safe — duplicates are skipped automatically.
                     </p>
-                    <label class="file-label" id="import-file-label">
-                        <input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none;">
-                        <span id="import-file-name">Choose Excel file…</span>
-                    </label>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <label class="btn btn-secondary" id="import-file-label" style="cursor:pointer;margin:0;">
+                            <input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none;">
+                            Choose Excel file…
+                        </label>
+                        <span id="import-file-name" style="font-size:0.9em;color:#475569;font-style:italic;"></span>
+                    </div>
                     <div id="import-preview-area" style="display:none;margin-top:16px;">
                         <h4 style="margin:0 0 8px;">Column Mapping</h4>
                         <p style="font-size:0.82em;color:#64748b;margin-bottom:10px;">
@@ -651,7 +654,7 @@
         document.getElementById('import-footer').style.display = '';
         showImportStep(1);
         document.getElementById('import-file-input').value = '';
-        document.getElementById('import-file-name').textContent = 'Choose Excel file…';
+        document.getElementById('import-file-name').textContent = '';
         document.getElementById('import-preview-area').style.display = 'none';
         document.getElementById('import-step1-error').style.display = 'none';
         previewHeaders = [];
