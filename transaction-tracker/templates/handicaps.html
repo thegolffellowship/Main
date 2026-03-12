@@ -578,18 +578,16 @@
             byDiff.slice(0, numUsed).forEach(r => usedIds.add(r.id));
         }
 
-        // Compute running handicap index for each round (as of that round's date)
+        // Compute running handicap index for each round (after that round was entered),
+        // using today's fixed lookback cutoff so the most recent round always matches
+        // the displayed handicap index.
         const minRounds  = parseInt(settings.min_rounds || 3);
         const multiplier = parseFloat(settings.multiplier || 0.96);
         const chronological = [...rounds].sort((a, b) => a.round_date.localeCompare(b.round_date));
         const runningHcp = new Map();
         for (let i = 0; i < chronological.length; i++) {
-            const thisDate = chronological[i].round_date;
-            const d = new Date(thisDate);
-            d.setMonth(d.getMonth() - lookbackMonths);
-            const thisCutoff = d.toISOString().slice(0, 10);
-            // Rounds up to and including this round, within lookback window (pool sorted oldest-first)
-            const pool   = chronological.slice(0, i + 1).filter(r => r.round_date >= thisCutoff);
+            // Rounds up to and including this round, within today's lookback window (oldest-first)
+            const pool   = chronological.slice(0, i + 1).filter(r => r.round_date >= cutoffStr);
             const recent = pool.slice(-20);
             const n = recent.length;
             if (n < minRounds) { runningHcp.set(chronological[i].id, null); continue; }

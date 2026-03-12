@@ -116,11 +116,19 @@ custom TGF differential table — do NOT use or derive a USGA 18-hole table.
 - **Lookback window:** 12 months (configurable)
 - **Pool:** most recent 20 rounds within the window
 - **Multiplier:** avg of lowest N × 0.96
-- **Truncation:** `math.trunc` (toward zero), NOT `math.floor` — critical for
-  plus-handicappers (negative index): e.g. −0.228 → −0.2N displayed as **+0.2N**
+- **Truncation:** `math.trunc` (toward zero), NOT `math.floor`, and NOT standard rounding —
+  per USGA WHS Section 5.2: *"Delete all numbers after the tenths' digit. Do not round to
+  the nearest tenth."* e.g. 6.282 → 6.2 (not 6.3); −0.228 → −0.2N (plus-handicapper)
 - **18-hole scores are rejected** at import time (course rating > 50 = error)
 - **Handicap index suffix:** "N" indicates a 9-hole index
 - **Plus handicap display:** negative computed value → shown with "+" prefix
+
+### Expanded rounds view — INDEX column
+The INDEX column shows the running handicap after each round was entered, computed using
+**today's fixed lookback cutoff** (not a rolling per-round cutoff). This ensures the most
+recent round's INDEX always matches the player's current displayed handicap. Older rounds
+show what the handicap would have been including all rounds up to that point, with today's
+12-month window applied.
 
 ### Expanded rounds view — cutoff lines
 Two visual separator rows appear in the expanded rounds table:
