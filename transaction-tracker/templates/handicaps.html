@@ -89,6 +89,10 @@
         .active-badge {
             font-size: 0.75em; color: #6b7280; margin-left: 4px;
         }
+        .round-used { background: #fefce8; }
+        .status-used     { color: #b45309; font-weight: 600; font-size: 0.8em; }
+        .status-active   { color: #16a34a; font-size: 0.8em; }
+        .status-excluded { color: #9ca3af; font-size: 0.8em; }
     </style>
 </head>
 <body>
@@ -414,9 +418,7 @@
                 : '<span class="hcp-na">N/A</span>';
             const activeRounds = p.active_rounds ?? 0;
             const totalRounds  = p.total_rounds ?? 0;
-            const activeLabel  = activeRounds < totalRounds
-                ? `${activeRounds} <span class="active-badge">(${totalRounds} total)</span>`
-                : `${activeRounds}`;
+            const activeLabel = `${activeRounds}`;
 
             const adminCell = isAdmin
                 ? `<td><button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;"
@@ -429,16 +431,16 @@
             tr.dataset.player = p.player_name;
             tr.innerHTML = `
                 <td><button class="expand-btn ${isExpanded?'open':''}"
-                    onclick="toggleRounds(${JSON.stringify(p.player_name)}, this)">▶</button></td>
+                    onclick="toggleRounds(${esc(JSON.stringify(p.player_name))}, this)">▶</button></td>
                 <td><strong>${esc(p.player_name)}</strong></td>
                 <td>${indexCell}</td>
                 <td>${activeLabel}</td>
                 <td>${totalRounds}</td>
                 <td>${p.latest_round_date || '—'}</td>
-                <td class="diff-col">${p.best_differential !== null ? p.best_differential.toFixed(2) : '—'}</td>
-                <td class="diff-col">${p.avg_differential !== null ? p.avg_differential.toFixed(2) : '—'}</td>
+                <td class="diff-col">${p.best_differential !== null ? p.best_differential.toFixed(1) : '—'}</td>
+                <td class="diff-col">${p.avg_differential !== null ? p.avg_differential.toFixed(1) : '—'}</td>
                 ${isAdmin ? `<td><button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;"
-                    onclick="deletePlayer(${JSON.stringify(p.player_name)})">Delete All</button></td>` : '<td style="display:none;"></td>'}
+                    onclick="deletePlayer(${esc(JSON.stringify(p.player_name))})">Delete All</button></td>` : '<td style="display:none;"></td>'}
             `;
             tbody.appendChild(tr);
 
@@ -497,6 +499,9 @@
         }
     }
 
+    // USGA WHS lookup: number of active rounds → number of lowest differentials to use
+    const DIFF_LOOKUP = {3:1,4:1,5:1,6:2,7:2,8:2,9:3,10:3,11:3,12:4,13:4,14:4,15:5,16:6,17:7,18:8,19:9,20:10};
+
     function renderRoundsTable(container, rounds) {
         const role = window._userRole;
         const isAdmin = role === 'admin';
@@ -509,6 +514,21 @@
         const cutoff = new Date();
         cutoff.setMonth(cutoff.getMonth() - lookbackMonths);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+        // Sort all rounds most-recent first
+        rounds = [...rounds].sort((a, b) => b.round_date.localeCompare(a.round_date));
+
+        // Determine which round IDs count toward the handicap index
+        const activeRounds = rounds.filter(r => r.round_date >= cutoffStr);
+        const recent20 = activeRounds.slice(0, 20);  // already sorted desc, so first 20 = most recent
+        const numUsed = DIFF_LOOKUP[recent20.length] || 0;
+        const usedIds = new Set();
+        if (numUsed > 0) {
+            const byDiff = [...recent20]
+                .filter(r => r.differential !== null)
+                .sort((a, b) => a.differential - b.differential);
+            byDiff.slice(0, numUsed).forEach(r => usedIds.add(r.id));
+        }
 
         let html = `<table class="rounds-table">
             <thead><tr>
@@ -525,24 +545,27 @@
 
         for (const rnd of rounds) {
             const active = rnd.round_date >= cutoffStr;
+            const isUsed = usedIds.has(rnd.id);
             const diffClass = rnd.differential !== null
                 ? (rnd.differential < 0 ? 'diff-good' : rnd.differential > 15 ? 'diff-bad' : '')
                 : '';
-            const statusBadge = active
-                ? '<span style="color:#16a34a;font-size:0.8em;">● Active</span>'
-                : '<span style="color:#9ca3af;font-size:0.8em;">○ Excluded</span>';
+            const statusBadge = !active
+                ? '<span class="status-excluded">○ Excluded</span>'
+                : isUsed
+                    ? '<span class="status-used">★ Used</span>'
+                    : '<span class="status-active">● Active</span>';
 
-            html += `<tr style="${active ? '' : 'opacity:0.5;'}">
+            html += `<tr class="${isUsed ? 'round-used' : ''}" style="${active ? '' : 'opacity:0.5;'}">
                 <td>${rnd.round_date}</td>
                 <td>${esc(rnd.course_name || '—')}</td>
                 <td>${esc(rnd.tee_name || '—')}</td>
                 <td class="diff-col">${rnd.adjusted_score}</td>
                 <td class="diff-col">${rnd.rating}</td>
                 <td class="diff-col">${rnd.slope}</td>
-                <td class="diff-col ${diffClass}">${rnd.differential !== null ? rnd.differential.toFixed(2) : '—'}</td>
+                <td class="diff-col ${diffClass}">${rnd.differential !== null ? rnd.differential.toFixed(1) : '—'}</td>
                 <td>${statusBadge}</td>
                 ${isAdmin ? `<td><button class="btn btn-sm" style="color:#dc2626;font-size:0.75em;padding:2px 6px;"
-                    onclick="deleteRound(${rnd.id}, ${JSON.stringify(rnd.player_name)})">×</button></td>` : ''}
+                    onclick="deleteRound(${rnd.id}, ${esc(JSON.stringify(rnd.player_name))})">×</button></td>` : ''}
             </tr>`;
         }
 
@@ -621,13 +644,16 @@
     }
 
     function resetImportModal() {
+        // Restore footer buttons first — runImport() replaces them with a Done button
+        document.getElementById('import-footer').innerHTML =
+            '<button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>' +
+            '<button class="btn btn-primary" id="btn-run-import" onclick="runImport()" disabled>Import</button>';
+        document.getElementById('import-footer').style.display = '';
         showImportStep(1);
         document.getElementById('import-file-input').value = '';
         document.getElementById('import-file-name').textContent = 'Choose Excel file…';
         document.getElementById('import-preview-area').style.display = 'none';
         document.getElementById('import-step1-error').style.display = 'none';
-        document.getElementById('btn-run-import').disabled = true;
-        document.getElementById('import-footer').style.display = '';
         previewHeaders = [];
         previewRows    = [];
         columnMapping  = {};

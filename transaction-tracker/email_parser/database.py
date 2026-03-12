@@ -586,6 +586,17 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_handicap_rounds_date ON handicap_rounds(round_date DESC)"
         )
 
+        # Handicap player → customer links
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS handicap_player_links (
+                player_name   TEXT PRIMARY KEY,
+                customer_name TEXT,
+                linked_at     TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
         # Handicap settings — configurable calculation parameters
         conn.execute(
             """
@@ -3895,6 +3906,41 @@ def compute_handicap_index(differentials: list[float],
     return math.floor(index * 10) / 10
 
 
+def _match_customer_name(conn: sqlite3.Connection, player_name: str) -> str | None:
+    """Try to find a matching customer name in the items table.
+
+    Tries in order:
+    1. Exact case-insensitive match on the customer field.
+    2. Match on first_name + last_name parts (handles 'John Smith' vs stored parts).
+    Returns the canonical customer name as stored in items, or None if no match.
+    """
+    # 1. Exact name match
+    row = conn.execute(
+        "SELECT DISTINCT customer FROM items WHERE customer = ? COLLATE NOCASE "
+        "AND customer IS NOT NULL AND customer != '' LIMIT 1",
+        (player_name,),
+    ).fetchone()
+    if row:
+        return row["customer"]
+
+    # 2. First + last name match using parsed parts
+    parts = player_name.strip().split()
+    if len(parts) >= 2:
+        first = parts[0].lower()
+        last = parts[-1].lower()
+        row = conn.execute(
+            """SELECT DISTINCT customer FROM items
+               WHERE LOWER(first_name) = ? AND LOWER(last_name) = ?
+               AND customer IS NOT NULL AND customer != ''
+               LIMIT 1""",
+            (first, last),
+        ).fetchone()
+        if row:
+            return row["customer"]
+
+    return None
+
+
 def import_handicap_rounds(rounds: list[dict],
                             db_path: str | Path | None = None) -> dict:
     """Upsert handicap rounds from a Golf Genius / Handicap Server export.
@@ -3909,11 +3955,15 @@ def import_handicap_rounds(rounds: list[dict],
     Dedup key: (player_name, round_date, round_id) when round_id present;
                (player_name, round_date, course_name, tee_name) otherwise.
 
-    Returns {"inserted": N, "skipped": M, "errors": [...]}
+    Returns {"inserted": N, "skipped": M, "matched": N, "errors": [...]}
+    where "matched" is the number of players linked to an existing customer.
     """
     inserted = 0
     skipped = 0
     errors = []
+    matched = 0
+    # Track which player_names we've already attempted to link this import
+    _linked: set[str] = set()
 
     with _connect(db_path) as conn:
         for i, r in enumerate(rounds):
@@ -3923,6 +3973,24 @@ def import_handicap_rounds(rounds: list[dict],
                     errors.append(f"Row {i+1}: missing player_name")
                     continue
                 player_name = _normalize_player_name(raw_name)
+
+                # Try to link to a customer (once per unique player_name per import)
+                if player_name not in _linked:
+                    _linked.add(player_name)
+                    already_linked = conn.execute(
+                        "SELECT customer_name FROM handicap_player_links WHERE player_name = ?",
+                        (player_name,),
+                    ).fetchone()
+                    if not already_linked:
+                        customer_name = _match_customer_name(conn, player_name)
+                        conn.execute(
+                            """INSERT INTO handicap_player_links (player_name, customer_name)
+                               VALUES (?, ?)
+                               ON CONFLICT(player_name) DO NOTHING""",
+                            (player_name, customer_name),
+                        )
+                        if customer_name:
+                            matched += 1
 
                 round_date = (r.get("round_date") or "").strip()
                 if not round_date:
@@ -3981,7 +4049,7 @@ def import_handicap_rounds(rounds: list[dict],
 
         conn.commit()
 
-    return {"inserted": inserted, "skipped": skipped, "errors": errors[:50]}
+    return {"inserted": inserted, "skipped": skipped, "matched": matched, "errors": errors[:50]}
 
 
 def get_handicap_rounds(player_name: str | None = None,
@@ -4038,16 +4106,18 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
     with _connect(db_path) as conn:
         summary_rows = conn.execute(
             """
-            SELECT player_name,
+            SELECT r.player_name,
                    COUNT(*) AS total_rounds,
-                   SUM(CASE WHEN round_date >= ? THEN 1 ELSE 0 END) AS active_rounds,
-                   MAX(round_date) AS latest_round_date,
-                   MIN(differential) AS best_differential,
-                   AVG(differential) AS avg_differential
-            FROM handicap_rounds
-            WHERE differential IS NOT NULL
-            GROUP BY player_name
-            ORDER BY player_name COLLATE NOCASE
+                   SUM(CASE WHEN r.round_date >= ? THEN 1 ELSE 0 END) AS active_rounds,
+                   MAX(r.round_date) AS latest_round_date,
+                   MIN(r.differential) AS best_differential,
+                   AVG(r.differential) AS avg_differential,
+                   l.customer_name
+            FROM handicap_rounds r
+            LEFT JOIN handicap_player_links l ON l.player_name = r.player_name
+            WHERE r.differential IS NOT NULL
+            GROUP BY r.player_name
+            ORDER BY r.player_name COLLATE NOCASE
             """,
             (cutoff_str,),
         ).fetchall()
@@ -4079,6 +4149,7 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
         index = compute_handicap_index(diffs, cfg)
         players.append({
             "player_name": name,
+            "customer_name": row["customer_name"],
             "handicap_index": index,
             "total_rounds": row["total_rounds"],
             "active_rounds": row["active_rounds"],
