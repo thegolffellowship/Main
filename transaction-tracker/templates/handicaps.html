@@ -54,6 +54,43 @@
         .rounds-expand td { padding: 0 !important; }
         .rounds-inner  { padding: 12px 16px; }
 
+        .hcp-info-btn {
+            background: none; border: 1.5px solid #94a3b8; border-radius: 50%;
+            color: #64748b; font-size: 0.68em; font-weight: 700;
+            width: 15px; height: 15px; line-height: 13px;
+            text-align: center; cursor: pointer; padding: 0;
+            margin-left: 5px; vertical-align: middle; display: inline-block;
+        }
+        .hcp-info-btn:hover { background: #e2e8f0; border-color: #475569; color: #1e293b; }
+
+        #calc-modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.35); z-index: 2000;
+            align-items: center; justify-content: center;
+        }
+        #calc-modal-overlay.open { display: flex; }
+        #calc-modal {
+            background: #fff; border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+            padding: 28px 32px; max-width: 560px; width: 90%;
+            position: relative; font-size: 0.92em; line-height: 1.65;
+        }
+        #calc-modal h3 {
+            margin: 0 0 16px; font-size: 1.15em; color: #0f172a;
+            border-bottom: 2px solid #16a34a; padding-bottom: 8px;
+        }
+        #calc-modal .calc-diffs { font-weight: 700; color: #1e293b; }
+        #calc-modal .calc-result-line {
+            margin-top: 14px; padding-top: 12px; border-top: 1px solid #e2e8f0;
+            font-weight: 600;
+        }
+        #calc-modal-close {
+            position: absolute; top: 12px; right: 16px;
+            background: none; border: none; font-size: 1.3em;
+            cursor: pointer; color: #94a3b8; line-height: 1;
+        }
+        #calc-modal-close:hover { color: #1e293b; }
+
         .expand-btn {
             background: none; border: none; cursor: pointer;
             color: #64748b; font-size: 0.85em; padding: 0 4px;
@@ -430,7 +467,7 @@
         for (const p of players) {
             const isExpanded = expandedRows.has(p.player_name);
             const indexCell = p.handicap_index !== null
-                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span> ${indexTag(p.handicap_index)}`
+                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span> ${indexTag(p.handicap_index)}<button class="hcp-info-btn" onclick="showCalcModal(event,${esc(JSON.stringify(p.player_name))})" title="Show calculation">i</button>`
                 : '<span class="hcp-na">N/A</span>';
             const activeRounds = p.active_rounds ?? 0;
             const totalRounds  = p.total_rounds ?? 0;
@@ -679,6 +716,91 @@
         }
     }
 
+    // ── Handicap Calculation Modal ───────────────────────────────────
+    const _calcCache = new Map();
+
+    async function showCalcModal(evt, playerName) {
+        evt.stopPropagation();
+        document.getElementById('calc-modal-body').innerHTML =
+            '<em style="color:#94a3b8;">Loading…</em>';
+        document.getElementById('calc-modal-overlay').classList.add('open');
+
+        if (!_calcCache.has(playerName)) {
+            const r = await fetch(`/api/handicaps/rounds?player=${encodeURIComponent(playerName)}`);
+            _calcCache.set(playerName, await r.json());
+        }
+        document.getElementById('calc-modal-body').innerHTML =
+            buildCalcHTML(playerName, _calcCache.get(playerName));
+    }
+
+    function closeCalcModal() {
+        document.getElementById('calc-modal-overlay').classList.remove('open');
+    }
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCalcModal(); });
+    document.getElementById('calc-modal-overlay').addEventListener('click', function(e) {
+        if (e.target === this) closeCalcModal();
+    });
+
+    function buildCalcHTML(playerName, rounds) {
+        const lookbackMonths = parseInt(settings.lookback_months || 12);
+        const multiplier     = parseFloat(settings.multiplier || 0.96);
+        const minRounds      = parseInt(settings.min_rounds || 3);
+
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - lookbackMonths);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+        const sorted = [...rounds].sort((a, b) => b.round_date.localeCompare(a.round_date));
+        const active = sorted.filter(r => r.round_date >= cutoffStr);
+        const pool   = active.slice(0, 20);
+        const n      = pool.length;
+
+        if (n < minRounds) {
+            return `<p>Not enough rounds to calculate a handicap index.
+                <strong>${n}</strong> active round${n !== 1 ? 's' : ''} recorded
+                (minimum ${minRounds} required).</p>`;
+        }
+
+        const numUsed  = DIFF_LOOKUP[n] || 0;
+        const byDiff   = [...pool].filter(r => r.differential !== null)
+                                  .sort((a, b) => a.differential - b.differential);
+        const usedRnds = byDiff.slice(0, numUsed);
+        const usedDiffs = usedRnds.map(r => r.differential);
+        const avg       = usedDiffs.reduce((s, d) => s + d, 0) / usedDiffs.length;
+        const rawIndex  = avg * multiplier;
+        const index     = Math.trunc(rawIndex * 10) / 10;
+        const absIdx    = Math.abs(index).toFixed(1);
+        const sign      = index < 0 ? '+' : '';
+        const displayIndex = `${sign}${absIdx}N`;
+        const multPct   = Math.round(multiplier * 100);
+
+        // Latest round narrative
+        const latest    = sorted[0];
+        const diffFormula = latest
+            ? `(${latest.adjusted_score} − ${latest.rating}) × 113.0 / ${latest.slope} = <strong>${latest.differential !== null ? latest.differential.toFixed(1) : '?'}</strong>`
+            : '';
+        const latestPara = latest ? `<p>The most recent score is <strong>${latest.adjusted_score}</strong>, played on the
+            <strong>${esc(latest.tee_name || '—')}</strong> tee at <strong>${esc(latest.course_name || '—')}</strong>.
+            The rating is <strong>${latest.rating}</strong> and the slope is <strong>${latest.slope}</strong>,
+            therefore the differential is (score − rating) × 113.0 / slope = ${diffFormula}.</p>` : '';
+
+        const diffList  = usedDiffs.map(d => `<span class="calc-diffs">${d.toFixed(1)}</span>`).join(', ');
+        const poolDesc  = pool.length === 20
+            ? `the most recent <strong>20</strong> scores`
+            : `all <strong>${n}</strong> active scores`;
+
+        return `${latestPara}
+            <p>To determine the golf handicap, we look at the best <strong>${numUsed}</strong>
+            differential${numUsed !== 1 ? 's' : ''} out of ${poolDesc}.
+            The differentials are: ${diffList}.
+            Their average is <strong>${avg.toFixed(2)}</strong>.
+            The average is multiplied by <strong>${multiplier}</strong>, resulting in
+            <strong>${rawIndex.toFixed(3)}</strong>, which truncates to a final golf handicap
+            of <span class="calc-result-line" style="color:${index <= 0 ? '#15803d':'#1e40af'};">
+            ${displayIndex}</span>.</p>`;
+    }
+
     // ── Settings Modal ──────────────────────────────────────────────
     function openSettingsModal() {
         document.getElementById('set-lookback').value   = settings.lookback_months || 12;
@@ -882,5 +1004,17 @@
         return s.replace(/[^a-zA-Z0-9]/g, '_');
     }
     </script>
+
+    <!-- Handicap Calculation Modal -->
+    <div id="calc-modal-overlay">
+        <div id="calc-modal">
+            <button id="calc-modal-close" onclick="closeCalcModal()">×</button>
+            <h3>Golf Handicap Analysis</h3>
+            <div id="calc-modal-body"></div>
+            <div style="margin-top:20px;text-align:center;">
+                <button class="btn btn-secondary" onclick="closeCalcModal()">Close</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
