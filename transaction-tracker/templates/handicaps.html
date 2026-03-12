@@ -41,8 +41,12 @@
                            font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
         .rounds-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
         .rounds-table tr:last-child td { border-bottom: none; }
-        .rounds-table .diff-col { text-align: right; font-variant-numeric: tabular-nums; }
-        .rounds-table th.diff-col { text-align: right; }
+        .rounds-table .date-col   { padding-right: 24px; white-space: nowrap; }
+        .rounds-table .course-col { padding-right: 24px; }
+        .rounds-table .narrow-col { text-align: center; width: 72px; }
+        .rounds-table th.narrow-col { text-align: center; }
+        .rounds-table .diff-col { text-align: center; width: 72px; font-variant-numeric: tabular-nums; }
+        .rounds-table th.diff-col { text-align: center; }
         .rounds-table .diff-good { color: #16a34a; font-weight: 600; }
         .rounds-table .diff-bad  { color: #dc2626; }
 
@@ -418,7 +422,7 @@
         for (const p of players) {
             const isExpanded = expandedRows.has(p.player_name);
             const indexCell = p.handicap_index !== null
-                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span> ${indexTag(p.handicap_index)}`
+                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span> ${indexTag(p.handicap_index)}`
                 : '<span class="hcp-na">N/A</span>';
             const activeRounds = p.active_rounds ?? 0;
             const totalRounds  = p.total_rounds ?? 0;
@@ -453,6 +457,7 @@
             expandTr.className = 'rounds-expand';
             expandTr.id = `expand-${safeid(p.player_name)}`;
             expandTr.style.display = isExpanded ? '' : 'none';
+            const canDelete = role === 'admin' || role === 'manager';
             const colspan = isAdmin ? 9 : 8;
             expandTr.innerHTML = `<td colspan="${colspan}"><div class="rounds-inner" id="rounds-inner-${safeid(p.player_name)}">
                 <em style="color:#94a3b8;">Loading rounds…</em>
@@ -502,12 +507,14 @@
         }
     }
 
-    // USGA WHS lookup: number of active rounds → number of lowest differentials to use
-    const DIFF_LOOKUP = {3:1,4:1,5:1,6:2,7:2,8:2,9:3,10:3,11:3,12:4,13:4,14:4,15:5,16:6,17:7,18:8,19:9,20:10};
+    // TGF Handicap Differential Table (9-hole).
+    // Source: TGF Handicap Differential Table published by The Golf Fellowship.
+    const DIFF_LOOKUP = {3:1,4:1,5:1,6:2,7:2,8:2,9:3,10:3,11:3,12:4,13:4,14:4,15:5,16:5,17:6,18:6,19:7,20:8};
 
     function renderRoundsTable(container, rounds) {
         const role = window._userRole;
         const isAdmin = role === 'admin';
+        const canDelete = role === 'admin' || role === 'manager';
         if (!rounds.length) {
             container.innerHTML = '<em style="color:#94a3b8;">No rounds found.</em>';
             return;
@@ -553,25 +560,31 @@
                                  .sort((a, b) => a.differential - b.differential);
             if (byDiff.length < count) { runningHcp.set(chronological[i].id, null); continue; }
             const avg = byDiff.slice(0, count).reduce((s, r) => s + r.differential, 0) / count;
-            runningHcp.set(chronological[i].id, Math.floor(avg * multiplier * 10) / 10);
+            // Use trunc (toward zero) so plus-handicappers display correctly:
+            // e.g. avg×0.96 = -0.228 → trunc = -0.2N (not floor → -0.3N)
+            runningHcp.set(chronological[i].id, Math.trunc(avg * multiplier * 10) / 10);
         }
 
         let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
         <table class="rounds-table">
             <thead><tr>
-                <th>Date</th>
-                <th>Course</th>
-                <th>Tee</th>
+                <th class="date-col">Date</th>
+                <th class="course-col">Course</th>
+                <th class="narrow-col">Tee</th>
                 <th class="diff-col">Score</th>
                 <th class="diff-col">Rating</th>
                 <th class="diff-col">Slope</th>
-                <th class="diff-col">Differential</th>
+                <th class="diff-col">Diff</th>
                 <th class="diff-col">Index</th>
-                <th>Status</th>
-                ${isAdmin ? '<th></th>' : ''}
+                <th class="narrow-col">Status</th>
+                ${canDelete ? '<th></th>' : ''}
             </tr></thead><tbody id="rounds-tbody-${safeid(rounds[0].player_name)}">`;
 
-        function roundRow(rnd) {
+        const colspan = canDelete ? 10 : 9;
+        const pid = safeid(rounds[0].player_name);
+        const olderCount = rounds.length > 20 ? rounds.length - 20 : 0;
+
+        function roundRow(rnd, isOlder) {
             const active = rnd.round_date >= cutoffStr;
             const isUsed = usedIds.has(rnd.id);
             const diffClass = rnd.differential !== null
@@ -586,54 +599,56 @@
             const hcpCell = hcp !== null
                 ? `<span style="font-weight:600;color:${hcp <= 0 ? '#15803d' : '#1e40af'}">${hcp.toFixed(1)}</span>`
                 : '<span style="color:#94a3b8">—</span>';
-            return `<tr class="${isUsed ? 'round-used' : ''}" style="${active ? '' : 'opacity:0.5;'}">
-                <td>${rnd.round_date}</td>
-                <td>${esc(rnd.course_name || '—')}</td>
-                <td>${esc(rnd.tee_name || '—')}</td>
+            const rowStyle = [isOlder ? 'display:none' : '', !active ? 'opacity:0.5' : ''].filter(Boolean).join(';');
+            const rowClass = [isUsed ? 'round-used' : '', isOlder ? 'older-round' : ''].filter(Boolean).join(' ');
+            return `<tr class="${rowClass}" ${rowStyle ? `style="${rowStyle}"` : ''}>
+                <td class="date-col">${rnd.round_date}</td>
+                <td class="course-col">${esc(rnd.course_name || '—')}</td>
+                <td class="narrow-col">${esc(rnd.tee_name || '—')}</td>
                 <td class="diff-col">${rnd.adjusted_score}</td>
                 <td class="diff-col">${rnd.rating}</td>
                 <td class="diff-col">${rnd.slope}</td>
                 <td class="diff-col ${diffClass}">${rnd.differential !== null ? rnd.differential.toFixed(1) : '—'}</td>
                 <td class="diff-col">${hcpCell}</td>
-                <td>${statusBadge}</td>
-                ${isAdmin ? `<td><button class="btn btn-sm" style="color:#dc2626;font-size:0.75em;padding:2px 6px;"
+                <td class="narrow-col">${statusBadge}</td>
+                ${canDelete ? `<td><button class="btn btn-sm" style="color:#dc2626;font-size:0.75em;padding:2px 6px;"
                     onclick="deleteRound(${rnd.id}, ${esc(JSON.stringify(rnd.player_name))})">×</button></td>` : ''}
             </tr>`;
         }
 
-        const visible = rounds.slice(0, 20);
-        const hidden  = rounds.slice(20);
-        const colspan = isAdmin ? 9 : 8;
-        const pid = safeid(rounds[0].player_name);
+        // Render all rows in one table; insert red cutoff separator at the 12-month boundary
+        let cutoffInserted = false;
+        for (let i = 0; i < rounds.length; i++) {
+            const rnd = rounds[i];
+            const isOlder = i >= 20;
+            if (!cutoffInserted && rnd.round_date < cutoffStr) {
+                cutoffInserted = true;
+                html += `<tr class="${isOlder ? 'older-round' : ''}" ${isOlder ? 'style="display:none"' : ''}>
+                    <td colspan="${colspan}" style="padding:3px 10px;background:#fee2e2;color:#991b1b;
+                        font-size:0.78em;font-weight:600;text-align:center;letter-spacing:0.04em;
+                        border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">
+                        ── ${lookbackMonths}-month lookback cutoff (${cutoffStr}) ──
+                    </td></tr>`;
+            }
+            html += roundRow(rnd, isOlder);
+        }
 
-        for (const rnd of visible) html += roundRow(rnd);
-
-        if (hidden.length > 0) {
-            html += `</tbody></table></div>
-            <div id="older-rounds-${pid}" style="display:none; overflow-x:auto; margin-top:4px;">
-              <table class="rounds-table">
-                <tbody>`;
-            for (const rnd of hidden) html += roundRow(rnd);
-            html += `</tbody></table></div>
-            <button class="btn btn-secondary" style="margin-top:8px;font-size:0.8em;"
-                onclick="toggleOlderRounds('${pid}', this)">Show ${hidden.length} older round${hidden.length !== 1 ? 's' : ''}</button>`;
-        } else {
-            html += '</tbody></table></div>';
+        html += `</tbody></table></div>`;
+        if (olderCount > 0) {
+            html += `<button class="btn btn-secondary" style="margin-top:8px;font-size:0.8em;"
+                onclick="toggleOlderRounds('${pid}', this)" data-count="${olderCount}">Show ${olderCount} older round${olderCount !== 1 ? 's' : ''}</button>`;
         }
 
         container.innerHTML = html;
     }
 
     function toggleOlderRounds(pid, btn) {
-        const el = document.getElementById(`older-rounds-${pid}`);
-        if (el.style.display === 'none') {
-            el.style.display = '';
-            btn.textContent = 'Hide older rounds';
-        } else {
-            el.style.display = 'none';
-            const n = el.querySelectorAll('tbody tr').length;
-            btn.textContent = `Show ${n} older round${n !== 1 ? 's' : ''}`;
-        }
+        const tbody = document.getElementById(`rounds-tbody-${pid}`);
+        const rows = tbody.querySelectorAll('.older-round');
+        const isHidden = rows.length > 0 && rows[0].style.display === 'none';
+        rows.forEach(r => r.style.display = isHidden ? '' : 'none');
+        const n = parseInt(btn.dataset.count) || rows.length;
+        btn.textContent = isHidden ? 'Hide older rounds' : `Show ${n} older round${n !== 1 ? 's' : ''}`;
     }
 
     // ── Admin actions ───────────────────────────────────────────────

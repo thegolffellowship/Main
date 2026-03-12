@@ -2534,9 +2534,9 @@ def api_handicap_rounds():
 
 
 @app.route("/api/handicaps/rounds/<int:round_id>", methods=["DELETE"])
-@require_role("admin")
+@require_role("manager")
 def api_delete_handicap_round(round_id):
-    """Delete a single round by id. Admin only."""
+    """Delete a single round by id. Manager or admin."""
     if delete_handicap_round(round_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "not found"}), 404

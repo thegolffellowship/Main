@@ -3826,15 +3826,17 @@ def get_message_log(event_name: str | None = None, limit: int = 200,
 # Handicap calculator
 # ---------------------------------------------------------------------------
 
-# USGA WHS lookup: number of rounds → number of lowest differentials to use
+# TGF Handicap Differential Table (9-hole specific).
+# Source: TGF Handicap Differential Table published by The Golf Fellowship.
 _HANDICAP_DIFF_LOOKUP = {
-    3: 1, 4: 1, 5: 1,
-    6: 2, 7: 2, 8: 2,
-    9: 3, 10: 3,
-    11: 4, 12: 4,
-    13: 5, 14: 5,
-    15: 6, 16: 6,
-    17: 7, 18: 8, 19: 9, 20: 10,
+    3: 1,  4: 1,  5: 1,
+    6: 2,  7: 2,  8: 2,
+    9: 3, 10: 3, 11: 3,
+    12: 4, 13: 4, 14: 4,
+    15: 5, 16: 5,
+    17: 6, 18: 6,
+    19: 7,
+    20: 8,
 }
 
 _HANDICAP_SETTINGS_DEFAULTS = {
@@ -3903,7 +3905,9 @@ def compute_handicap_index(differentials: list[float],
     best = sorted(differentials)[:count]
     avg = sum(best) / count
     index = avg * multiplier
-    return math.floor(index * 10) / 10
+    # Use trunc (truncate toward zero) so plus-handicappers (negative index)
+    # are truncated correctly: e.g. -0.228 → -0.2N not -0.3N.
+    return math.trunc(index * 10) / 10
 
 
 def _match_customer_name(conn: sqlite3.Connection, player_name: str) -> str | None:
@@ -4004,6 +4008,16 @@ def import_handicap_rounds(rounds: list[dict],
                 adjusted_score = int(float(str(r["adjusted_score"]).strip()))
                 rating = float(str(r["rating"]).strip())
                 slope = int(float(str(r["slope"]).strip()))
+
+                # Reject 18-hole rounds (9-hole course ratings are ~30–42;
+                # 18-hole ratings are ~60–80).
+                if rating > 50:
+                    errors.append(
+                        f"Row {i+1}: course rating {rating} looks like an 18-hole "
+                        f"rating (9-hole ratings are typically 30–42). Only 9-hole "
+                        f"rounds are supported — please split into two 9-hole scores."
+                    )
+                    continue
 
                 # Use pre-calculated differential when available
                 raw_diff = r.get("differential")
