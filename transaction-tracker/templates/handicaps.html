@@ -63,6 +63,31 @@
         }
         .hcp-info-btn:hover { background: #e2e8f0; border-color: #475569; color: #1e293b; }
 
+        /* ── Mobile handicap card list ─────────────────────────────── */
+        .hcp-mobile-list { display: none; }
+        @media (max-width: 768px) { .hcp-mobile-list { display: block; } }
+        .hcp-mobile-card {
+            background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+            margin-bottom: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+        }
+        .hcp-mc-top {
+            display: flex; align-items: center; padding: 12px 14px; gap: 10px;
+            cursor: pointer; -webkit-tap-highlight-color: transparent;
+        }
+        .hcp-mc-top:active { background: #f8fafc; }
+        .hcp-mc-info { flex: 1; min-width: 0; }
+        .hcp-mc-name { font-weight: 700; font-size: 0.95rem; color: #0f172a;
+                       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .hcp-mc-sub  { font-size: 0.77rem; color: #64748b; margin-top: 2px; }
+        .hcp-mc-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .hcp-mc-idx { font-weight: 800; font-size: 1.45rem; color: #1e40af; line-height: 1; }
+        .hcp-mc-idx.na { font-size: 1rem; color: #9ca3af; font-style: italic; }
+        .hcp-mc-n   { font-size: 0.7rem; color: #94a3b8; font-weight: 500; align-self: flex-end; margin-bottom: 2px; }
+        .hcp-mc-chev { color: #94a3b8; font-size: 0.7rem;
+                       transition: transform 0.15s; margin-left: 4px; }
+        .hcp-mc-top.open .hcp-mc-chev { transform: rotate(90deg); }
+        .hcp-mc-rounds { border-top: 1px solid #e2e8f0; overflow-x: auto; }
+
         #calc-modal-overlay {
             display: none; position: fixed; inset: 0;
             background: rgba(0,0,0,0.35); z-index: 2000;
@@ -201,6 +226,7 @@
 
         <!-- Player Table -->
         <section class="table-section">
+            <div class="hcp-mobile-list" id="hcp-mobile-list"></div>
             <div class="table-wrapper">
                 <table id="hcp-table" class="data-table">
                     <thead>
@@ -506,6 +532,47 @@
                 loadAndRenderRounds(p.player_name);
             }
         }
+
+        // Mobile card list
+        const mobileList = document.getElementById('hcp-mobile-list');
+        if (mobileList) {
+            mobileList.innerHTML = '';
+            if (!players.length) {
+                mobileList.innerHTML = '<p style="text-align:center;color:#94a3b8;padding:32px 0;">' +
+                    (allPlayers.length ? 'No players match your search.' : 'No handicap data yet.') + '</p>';
+            } else {
+                players.forEach(p => {
+                    const id = safeid(p.player_name);
+                    const idxHtml = p.handicap_index !== null
+                        ? `<span class="hcp-mc-idx">${p.handicap_index.toFixed(1)}</span><span class="hcp-mc-n">N</span>`
+                        : `<span class="hcp-mc-idx na">N/A</span>`;
+                    const sub = [
+                        (p.active_rounds ?? 0) + ' active',
+                        p.latest_round_date ? 'Last: ' + p.latest_round_date : null
+                    ].filter(Boolean).join(' · ');
+                    const card = document.createElement('div');
+                    card.className = 'hcp-mobile-card';
+                    card.innerHTML = `
+                        <div class="hcp-mc-top" id="m-top-${id}"
+                             onclick="toggleMobileCard(${esc(JSON.stringify(p.player_name))}, this)">
+                            <div class="hcp-mc-info">
+                                <div class="hcp-mc-name">${esc(p.player_name)}</div>
+                                <div class="hcp-mc-sub">${esc(sub)}</div>
+                            </div>
+                            <div class="hcp-mc-right">
+                                ${idxHtml}
+                                <span class="hcp-mc-chev">▶</span>
+                            </div>
+                        </div>
+                        <div class="hcp-mc-rounds" id="m-rounds-${id}" style="display:none">
+                            <div class="rounds-inner" id="rounds-inner-m-${id}">
+                                <em style="color:#94a3b8;">Loading rounds…</em>
+                            </div>
+                        </div>`;
+                    mobileList.appendChild(card);
+                });
+            }
+        }
     }
 
     function indexTag(idx) {
@@ -542,6 +609,25 @@
             renderRoundsTable(inner, rounds);
         } catch(e) {
             inner.innerHTML = '<em style="color:#ef4444;">Failed to load rounds.</em>';
+        }
+    }
+
+    function toggleMobileCard(playerName, topEl) {
+        const id = safeid(playerName);
+        const panel = document.getElementById(`m-rounds-${id}`);
+        if (!panel) return;
+        const open = panel.style.display !== 'none';
+        panel.style.display = open ? 'none' : '';
+        topEl.classList.toggle('open', !open);
+        if (!open) {
+            const inner = document.getElementById(`rounds-inner-m-${id}`);
+            if (inner) {
+                inner.innerHTML = '<em style="color:#94a3b8;">Loading rounds…</em>';
+                fetch(`/api/handicaps/rounds?player=${encodeURIComponent(playerName)}`)
+                    .then(r => r.json())
+                    .then(rounds => renderRoundsTable(inner, rounds))
+                    .catch(() => { inner.innerHTML = '<em style="color:#ef4444;">Failed to load rounds.</em>'; });
+            }
         }
     }
 
