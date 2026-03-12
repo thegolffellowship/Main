@@ -41,8 +41,8 @@
                            font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
         .rounds-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
         .rounds-table tr:last-child td { border-bottom: none; }
-        .rounds-table .date-col   { padding-right: 24px; white-space: nowrap; }
-        .rounds-table .course-col { padding-right: 24px; }
+        .rounds-table .date-col   { padding-right: 20px; white-space: nowrap; min-width: 100px; }
+        .rounds-table .course-col { padding-right: 20px; min-width: 200px; }
         .rounds-table .narrow-col { text-align: center; width: 72px; }
         .rounds-table th.narrow-col { text-align: center; }
         .rounds-table .diff-col { text-align: center; width: 72px; font-variant-numeric: tabular-nums; }
@@ -110,6 +110,7 @@
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
             <button id="btn-import" class="btn btn-primary" style="display:none;">Import Rounds</button>
+            <button id="btn-purge" class="btn btn-secondary" style="display:none;color:#dc2626;border-color:#dc2626;" title="Delete all rounds with 18-hole course ratings (rating > 50)">Purge 18-hole Scores</button>
             <button id="btn-settings" class="btn btn-secondary" style="display:none;">Settings</button>
             <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
         </div>
@@ -331,6 +332,13 @@
         document.getElementById('import-file-input').addEventListener('change', onFileChosen);
         document.getElementById('btn-import').addEventListener('click', openImportModal);
         document.getElementById('btn-settings').addEventListener('click', openSettingsModal);
+        document.getElementById('btn-purge').addEventListener('click', async () => {
+            if (!confirm('Delete ALL rounds with 18-hole course ratings (rating > 50)? This cannot be undone.')) return;
+            const r = await fetch('/api/handicaps/purge-invalid', { method: 'POST' });
+            const d = await r.json();
+            alert(`Deleted ${d.deleted} invalid round(s).`);
+            if (d.deleted > 0) loadPlayers();
+        });
     });
 
     // ── Auth hooks (called by auth.js after role is known) ──────────
@@ -340,6 +348,7 @@
         }
         if (currentRole === 'admin') {
             document.getElementById('btn-settings').style.display = '';
+            document.getElementById('btn-purge').style.display = '';
             document.getElementById('admin-col-header').style.display = '';
         }
     }
@@ -408,7 +417,7 @@
             return 0;
         });
 
-        const role = window._userRole;
+        const role = currentRole;
         const isAdmin = role === 'admin';
         const tbody = document.getElementById('hcp-tbody');
         if (!players.length) {
@@ -512,7 +521,7 @@
     const DIFF_LOOKUP = {3:1,4:1,5:1,6:2,7:2,8:2,9:3,10:3,11:3,12:4,13:4,14:4,15:5,16:5,17:6,18:6,19:7,20:8};
 
     function renderRoundsTable(container, rounds) {
-        const role = window._userRole;
+        const role = currentRole;
         const isAdmin = role === 'admin';
         const canDelete = role === 'admin' || role === 'manager';
         if (!rounds.length) {
@@ -616,11 +625,27 @@
             </tr>`;
         }
 
-        // Render all rows in one table; insert red cutoff separator at the 12-month boundary
+        // Render all rows in one table; insert separators at key boundaries
         let cutoffInserted = false;
+        let poolLimitInserted = false;
+        // Green line: after the 20th active round if there are >20 active rounds
+        const showPoolLimit = activeRounds.length > 20;
         for (let i = 0; i < rounds.length; i++) {
             const rnd = rounds[i];
             const isOlder = i >= 20;
+
+            // Green separator: after position 20 if that round is still active (within 12 months)
+            if (!poolLimitInserted && showPoolLimit && i === 20 && rnd.round_date >= cutoffStr) {
+                poolLimitInserted = true;
+                html += `<tr class="older-round" style="display:none">
+                    <td colspan="${colspan}" style="padding:3px 10px;background:#f0fdf4;color:#166534;
+                        font-size:0.78em;font-weight:600;text-align:center;letter-spacing:0.04em;
+                        border-top:2px solid #16a34a;border-bottom:2px solid #16a34a;">
+                        ── Beyond 20-round pool — active but not counted in handicap ──
+                    </td></tr>`;
+            }
+
+            // Red separator: at the 12-month lookback boundary
             if (!cutoffInserted && rnd.round_date < cutoffStr) {
                 cutoffInserted = true;
                 html += `<tr class="${isOlder ? 'older-round' : ''}" ${isOlder ? 'style="display:none"' : ''}>
