@@ -281,6 +281,38 @@ Version history and release notes page. Data comes from `version.js`.
 
 ---
 
+### 8. Handicaps (`/handicaps`) — Manager Only
+
+9-hole WHS handicap index calculator. Stores a per-player round history and
+computes a current handicap index using the official USGA WHS lookup table.
+
+**Key features:**
+
+- **Player list** — All tracked players with their current handicap index,
+  number of rounds, and most-recent round date. Linked to customers where
+  a matching name is found in the transaction database.
+- **Score history** — Expandable per-player table of every round:
+  date, round ID, course, tee, adjusted score, course rating, slope,
+  and computed differential.
+- **WHS calculation** — Uses up to 20 most-recent differentials. The lookup
+  table selects the best N (per USGA rules), multiplies by 0.96, and floors
+  to one decimal. Requires a minimum of 3 rounds (configurable).
+- **Import** — Upload an Excel file (Handicap Server / Golf Genius export),
+  map columns to fields, and import in bulk.
+  - Supports fill-down name format: player name only on first row, blank on
+    subsequent rows for the same player.
+  - Accepts date formats: `datetime`, `MM/DD/YYYY`, `YYYY-MM-DD`, `D-Mon`,
+    `D-Mon-YY`.
+  - Names in `LAST, FIRST` format are normalized to `First Last` title case.
+  - Duplicate rounds are skipped (dedup on player + date + round ID, or
+    player + date + course + tee when no round ID is present).
+  - Players are auto-linked to matching customers on import.
+- **Settings** — Configurable `min_rounds` (default 3) and `multiplier`
+  (default 0.96).
+- **Delete** — Remove individual rounds or all rounds for a player.
+
+---
+
 ## Database Schema
 
 ### `items` table (main transaction data)
@@ -464,6 +496,40 @@ Version history and release notes page. Data comes from `version.js`.
 
 ---
 
+### `handicap_rounds` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| player_name | TEXT NOT NULL | Normalised `First Last` title case |
+| round_date | TEXT NOT NULL | `YYYY-MM-DD` |
+| round_id | TEXT | Golf Genius / Handicap Server round identifier (nullable) |
+| course_name | TEXT | |
+| tee_name | TEXT | e.g. `1 - White`, `2 - Gold` |
+| adjusted_score | INTEGER NOT NULL | |
+| rating | REAL NOT NULL | Course rating |
+| slope | INTEGER NOT NULL | Slope rating |
+| differential | REAL | `(score − rating) × 113 / slope`, computed on import if not provided |
+| created_at | TEXT | |
+
+### `handicap_player_links` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| player_name | TEXT PK | Normalised player name |
+| customer_name | TEXT | Matched customer from `items` table (nullable) |
+| linked_at | TEXT | |
+
+### `handicap_settings` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| key | TEXT PK | `min_rounds` or `multiplier` |
+| value | TEXT NOT NULL | Stored as text |
+| updated_at | TEXT | |
+
+---
+
 ## API Endpoints
 
 ### Pages
@@ -477,6 +543,7 @@ Version history and release notes page. Data comes from `version.js`.
 | `/matrix` | Admin | Side Games prize matrix |
 | `/audit` | Admin | Email audit/QA |
 | `/changelog` | Admin | Version history |
+| `/handicaps` | Manager | 9-hole WHS handicap index calculator |
 
 ### Items / Transactions
 
@@ -599,6 +666,19 @@ Version history and release notes page. Data comes from `version.js`.
 | `/api/support/feedback` | GET | List all feedback (admin) |
 | `/api/support/feedback/<id>` | PATCH | Update feedback status |
 | `/api/support/test-digest` | POST | Send test daily digest email |
+
+### Handicaps (Manager)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/handicaps/players` | GET | All players with current handicap index and round count |
+| `/api/handicaps/rounds` | GET | All rounds; optional `?player=` filter |
+| `/api/handicaps/rounds/<id>` | DELETE | Delete a single round |
+| `/api/handicaps/players/<name>` | DELETE | Delete all rounds for a player |
+| `/api/handicaps/settings` | GET | Get current calculation settings |
+| `/api/handicaps/settings` | PATCH | Update `min_rounds` and/or `multiplier` |
+| `/api/handicaps/import-preview` | POST | Parse uploaded Excel, return headers + 10 preview rows + auto-mapping |
+| `/api/handicaps/import` | POST | Import rounds from Excel with column mapping |
 
 ### Matrix (Admin)
 

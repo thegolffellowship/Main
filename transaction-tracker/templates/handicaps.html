@@ -36,12 +36,13 @@
         .hcp-tag.plus    { background: #f0fdf4; color: #15803d; }
         .hcp-tag.high    { background: #fef3c7; color: #92400e; }
 
-        .rounds-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+        .rounds-table { width: auto; border-collapse: collapse; font-size: 0.85em; }
         .rounds-table th { background: #f1f5f9; padding: 6px 10px; text-align: left;
                            font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
         .rounds-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
         .rounds-table tr:last-child td { border-bottom: none; }
         .rounds-table .diff-col { text-align: right; font-variant-numeric: tabular-nums; }
+        .rounds-table th.diff-col { text-align: right; }
         .rounds-table .diff-good { color: #16a34a; font-weight: 600; }
         .rounds-table .diff-bad  { color: #dc2626; }
 
@@ -89,7 +90,7 @@
         .active-badge {
             font-size: 0.75em; color: #6b7280; margin-left: 4px;
         }
-        .round-used { background: #fefce8; }
+        .round-used { background: #fef08a; }
         .status-used     { color: #b45309; font-weight: 600; font-size: 0.8em; }
         .status-active   { color: #16a34a; font-size: 0.8em; }
         .status-excluded { color: #9ca3af; font-size: 0.8em; }
@@ -242,10 +243,13 @@
                         Expected columns: Name, Play At, Round Id, Course, Tee, Score, Rating, Slope, Differential.
                         Re-uploading the same file is safe — duplicates are skipped automatically.
                     </p>
-                    <label class="file-label" id="import-file-label">
-                        <input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none;">
-                        <span id="import-file-name">Choose Excel file…</span>
-                    </label>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <label class="btn btn-secondary" id="import-file-label" style="cursor:pointer;margin:0;">
+                            <input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none;">
+                            Choose Excel file…
+                        </label>
+                        <span id="import-file-name" style="font-size:0.9em;color:#475569;font-style:italic;"></span>
+                    </div>
                     <div id="import-preview-area" style="display:none;margin-top:16px;">
                         <h4 style="margin:0 0 8px;">Column Mapping</h4>
                         <p style="font-size:0.82em;color:#64748b;margin-bottom:10px;">
@@ -463,7 +467,6 @@
 
     function indexTag(idx) {
         if (idx <= 0)  return '<span class="hcp-tag plus">+</span>';
-        if (idx <= 5)  return '<span class="hcp-tag scratch">Scratch</span>';
         if (idx >= 20) return '<span class="hcp-tag high">High</span>';
         return '';
     }
@@ -515,12 +518,12 @@
         cutoff.setMonth(cutoff.getMonth() - lookbackMonths);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
 
-        // Sort all rounds most-recent first
+        // Sort all rounds most-recent first (display order)
         rounds = [...rounds].sort((a, b) => b.round_date.localeCompare(a.round_date));
 
-        // Determine which round IDs count toward the handicap index
+        // Determine which round IDs count toward the current handicap index
         const activeRounds = rounds.filter(r => r.round_date >= cutoffStr);
-        const recent20 = activeRounds.slice(0, 20);  // already sorted desc, so first 20 = most recent
+        const recent20 = activeRounds.slice(0, 20);
         const numUsed = DIFF_LOOKUP[recent20.length] || 0;
         const usedIds = new Set();
         if (numUsed > 0) {
@@ -530,7 +533,31 @@
             byDiff.slice(0, numUsed).forEach(r => usedIds.add(r.id));
         }
 
-        let html = `<table class="rounds-table">
+        // Compute running handicap index for each round (as of that round's date)
+        const minRounds  = parseInt(settings.min_rounds || 3);
+        const multiplier = parseFloat(settings.multiplier || 0.96);
+        const chronological = [...rounds].sort((a, b) => a.round_date.localeCompare(b.round_date));
+        const runningHcp = new Map();
+        for (let i = 0; i < chronological.length; i++) {
+            const thisDate = chronological[i].round_date;
+            const d = new Date(thisDate);
+            d.setMonth(d.getMonth() - lookbackMonths);
+            const thisCutoff = d.toISOString().slice(0, 10);
+            // Rounds up to and including this round, within lookback window (pool sorted oldest-first)
+            const pool   = chronological.slice(0, i + 1).filter(r => r.round_date >= thisCutoff);
+            const recent = pool.slice(-20);
+            const n = recent.length;
+            if (n < minRounds) { runningHcp.set(chronological[i].id, null); continue; }
+            const count  = DIFF_LOOKUP[n] || 0;
+            const byDiff = recent.filter(r => r.differential !== null)
+                                 .sort((a, b) => a.differential - b.differential);
+            if (byDiff.length < count) { runningHcp.set(chronological[i].id, null); continue; }
+            const avg = byDiff.slice(0, count).reduce((s, r) => s + r.differential, 0) / count;
+            runningHcp.set(chronological[i].id, Math.floor(avg * multiplier * 10) / 10);
+        }
+
+        let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
+        <table class="rounds-table">
             <thead><tr>
                 <th>Date</th>
                 <th>Course</th>
@@ -539,11 +566,12 @@
                 <th class="diff-col">Rating</th>
                 <th class="diff-col">Slope</th>
                 <th class="diff-col">Differential</th>
+                <th class="diff-col">Index</th>
                 <th>Status</th>
                 ${isAdmin ? '<th></th>' : ''}
-            </tr></thead><tbody>`;
+            </tr></thead><tbody id="rounds-tbody-${safeid(rounds[0].player_name)}">`;
 
-        for (const rnd of rounds) {
+        function roundRow(rnd) {
             const active = rnd.round_date >= cutoffStr;
             const isUsed = usedIds.has(rnd.id);
             const diffClass = rnd.differential !== null
@@ -554,8 +582,11 @@
                 : isUsed
                     ? '<span class="status-used">★ Used</span>'
                     : '<span class="status-active">● Active</span>';
-
-            html += `<tr class="${isUsed ? 'round-used' : ''}" style="${active ? '' : 'opacity:0.5;'}">
+            const hcp = runningHcp.get(rnd.id);
+            const hcpCell = hcp !== null
+                ? `<span style="font-weight:600;color:${hcp <= 0 ? '#15803d' : '#1e40af'}">${hcp.toFixed(1)}</span>`
+                : '<span style="color:#94a3b8">—</span>';
+            return `<tr class="${isUsed ? 'round-used' : ''}" style="${active ? '' : 'opacity:0.5;'}">
                 <td>${rnd.round_date}</td>
                 <td>${esc(rnd.course_name || '—')}</td>
                 <td>${esc(rnd.tee_name || '—')}</td>
@@ -563,14 +594,46 @@
                 <td class="diff-col">${rnd.rating}</td>
                 <td class="diff-col">${rnd.slope}</td>
                 <td class="diff-col ${diffClass}">${rnd.differential !== null ? rnd.differential.toFixed(1) : '—'}</td>
+                <td class="diff-col">${hcpCell}</td>
                 <td>${statusBadge}</td>
                 ${isAdmin ? `<td><button class="btn btn-sm" style="color:#dc2626;font-size:0.75em;padding:2px 6px;"
                     onclick="deleteRound(${rnd.id}, ${esc(JSON.stringify(rnd.player_name))})">×</button></td>` : ''}
             </tr>`;
         }
 
-        html += '</tbody></table>';
+        const visible = rounds.slice(0, 20);
+        const hidden  = rounds.slice(20);
+        const colspan = isAdmin ? 9 : 8;
+        const pid = safeid(rounds[0].player_name);
+
+        for (const rnd of visible) html += roundRow(rnd);
+
+        if (hidden.length > 0) {
+            html += `</tbody></table></div>
+            <div id="older-rounds-${pid}" style="display:none; overflow-x:auto; margin-top:4px;">
+              <table class="rounds-table">
+                <tbody>`;
+            for (const rnd of hidden) html += roundRow(rnd);
+            html += `</tbody></table></div>
+            <button class="btn btn-secondary" style="margin-top:8px;font-size:0.8em;"
+                onclick="toggleOlderRounds('${pid}', this)">Show ${hidden.length} older round${hidden.length !== 1 ? 's' : ''}</button>`;
+        } else {
+            html += '</tbody></table></div>';
+        }
+
         container.innerHTML = html;
+    }
+
+    function toggleOlderRounds(pid, btn) {
+        const el = document.getElementById(`older-rounds-${pid}`);
+        if (el.style.display === 'none') {
+            el.style.display = '';
+            btn.textContent = 'Hide older rounds';
+        } else {
+            el.style.display = 'none';
+            const n = el.querySelectorAll('tbody tr').length;
+            btn.textContent = `Show ${n} older round${n !== 1 ? 's' : ''}`;
+        }
     }
 
     // ── Admin actions ───────────────────────────────────────────────
@@ -651,7 +714,7 @@
         document.getElementById('import-footer').style.display = '';
         showImportStep(1);
         document.getElementById('import-file-input').value = '';
-        document.getElementById('import-file-name').textContent = 'Choose Excel file…';
+        document.getElementById('import-file-name').textContent = '';
         document.getElementById('import-preview-area').style.display = 'none';
         document.getElementById('import-step1-error').style.display = 'none';
         previewHeaders = [];

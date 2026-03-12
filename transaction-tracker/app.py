@@ -2645,12 +2645,12 @@ def api_handicap_import_preview():
             return None
 
         auto_mapping = {
-            "player_name":     _find_col(["name", "player", "player_name"]),
+            "player_name":     _find_col(["name", "player", "player_name", "player name"]),
             "round_date":      _find_col(["play at", "date", "round_date", "played"]),
             "round_id":        _find_col(["round id", "round_id", "roundid"]),
-            "course_name":     _find_col(["course", "course_name"]),
-            "tee_name":        _find_col(["tee", "tee_name", "tees"]),
-            "adjusted_score":  _find_col(["score", "adjusted_score", "adj score"]),
+            "course_name":     _find_col(["course name", "course", "course_name"]),
+            "tee_name":        _find_col(["tee name", "tee", "tee_name", "tees"]),
+            "adjusted_score":  _find_col(["adjusted score", "adj score", "score", "adjusted_score"]),
             "rating":          _find_col(["rating", "course rating"]),
             "slope":           _find_col(["slope", "slope rating"]),
             "differential":    _find_col(["differential", "diff"]),
