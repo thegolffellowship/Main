@@ -600,6 +600,27 @@
             runningHcp.set(chronological[i].id, Math.round((avg * multiplier + adj) * 10) / 10);
         }
 
+        // Ensure rounds on the most recent date always show the current handicap index.
+        // The sequential loop can diverge from the server value due to pool ordering at
+        // the tail of the chronological sequence; this override uses the same calculation
+        // as buildCalcHTML and the server, guaranteeing they agree.
+        {
+            const cn = recent20.length;
+            const cc = DIFF_LOOKUP[cn] || 0;
+            if (cn >= minRounds && cc > 0) {
+                const cbd = [...recent20].filter(r => r.differential !== null)
+                                        .sort((a, b) => a.differential - b.differential);
+                if (cbd.length >= cc) {
+                    const cavg = cbd.slice(0, cc).reduce((s, r) => s + r.differential, 0) / cc;
+                    const cadj = ADJ_LOOKUP[cn] || 0;
+                    const currentIdx = Math.round((cavg * multiplier + cadj) * 10) / 10;
+                    const latestDate = rounds[0].round_date; // rounds is already sorted DESC
+                    rounds.filter(r => r.round_date === latestDate)
+                          .forEach(r => runningHcp.set(r.id, currentIdx));
+                }
+            }
+        }
+
         let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
         <table class="rounds-table">
             <thead><tr>
