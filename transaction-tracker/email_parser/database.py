@@ -3905,9 +3905,10 @@ def compute_handicap_index(differentials: list[float],
     best = sorted(differentials)[:count]
     avg = sum(best) / count
     index = avg * multiplier
-    # Use trunc (truncate toward zero) so plus-handicappers (negative index)
-    # are truncated correctly: e.g. -0.228 → -0.2N not -0.3N.
-    return math.trunc(index * 10) / 10
+    # WHS Rule 5.2: round to nearest tenth (standard rounding, .5 rounds toward +infinity).
+    # math.trunc was the pre-2020 USGA rule; WHS (2020-present) uses round().
+    # For plus-handicappers (negative index): round(-0.228*10)/10 = round(-2.28)/10 = -2/10 = -0.2 ✓
+    return round(index * 10) / 10
 
 
 def _match_customer_name(conn: sqlite3.Connection, player_name: str) -> str | None:

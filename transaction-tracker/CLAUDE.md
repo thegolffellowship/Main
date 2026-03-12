@@ -116,9 +116,10 @@ custom TGF differential table — do NOT use or derive a USGA 18-hole table.
 - **Lookback window:** 12 months (configurable)
 - **Pool:** most recent 20 rounds within the window
 - **Multiplier:** avg of lowest N × 0.96
-- **Truncation:** `math.trunc` (toward zero), NOT `math.floor`, and NOT standard rounding —
-  per USGA WHS Section 5.2: *"Delete all numbers after the tenths' digit. Do not round to
-  the nearest tenth."* e.g. 6.282 → 6.2 (not 6.3); −0.228 → −0.2N (plus-handicapper)
+- **Rounding:** standard round-to-nearest-tenth per **WHS Rule 5.2** (2020-present):
+  *"The result of the calculation is rounded to the nearest tenth."* (.5 rounds up)
+  e.g. 6.282 → 6.3; 6.24 → 6.2; −0.228 → −0.2N (plus-handicapper, rounds toward +∞)
+  NOTE: the pre-2020 USGA system used truncation — that rule no longer applies.
 - **18-hole scores are rejected** at import time (course rating > 50 = error)
 - **Handicap index suffix:** "N" indicates a 9-hole index
 - **Plus handicap display:** negative computed value → shown with "+" prefix

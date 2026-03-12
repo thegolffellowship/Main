@@ -596,9 +596,9 @@
                                  .sort((a, b) => a.differential - b.differential);
             if (byDiff.length < count) { runningHcp.set(chronological[i].id, null); continue; }
             const avg = byDiff.slice(0, count).reduce((s, r) => s + r.differential, 0) / count;
-            // Use trunc (toward zero) so plus-handicappers display correctly:
-            // e.g. avg×0.96 = -0.228 → trunc = -0.2N (not floor → -0.3N)
-            runningHcp.set(chronological[i].id, Math.trunc(avg * multiplier * 10) / 10);
+            // WHS Rule 5.2: round to nearest tenth (.5 rounds toward +infinity).
+            // Math.round(-2.28) = -2, so plus-handicappers still work: -0.228 → -0.2N ✓
+            runningHcp.set(chronological[i].id, Math.round(avg * multiplier * 10) / 10);
         }
 
         let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
@@ -765,7 +765,7 @@
         const usedDiffs = usedRnds.map(r => r.differential);
         const avg       = usedDiffs.reduce((s, d) => s + d, 0) / usedDiffs.length;
         const rawIndex  = avg * multiplier;
-        const index     = Math.trunc(rawIndex * 10) / 10;
+        const index     = Math.round(rawIndex * 10) / 10;
         const absIdx    = Math.abs(index).toFixed(1);
         const sign      = index < 0 ? '+' : '';
         const displayIndex = `${sign}${absIdx}N`;
