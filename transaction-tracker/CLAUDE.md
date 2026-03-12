@@ -95,32 +95,46 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 
 ## Handicap System — TGF Rules (IMPORTANT)
 
-All handicap calculations are for **9-hole rounds only**. The system uses a
-custom TGF differential table — do NOT use or derive a USGA 18-hole table.
+All handicap calculations are for **9-hole rounds only**. The differential
+lookup counts match WHS Rule 5.2a. Adjustments per that rule are also applied.
 
-### TGF Handicap Differential Table
+### Handicap Differential Table (WHS Rule 5.2a)
 
-| 9-Hole Rounds in Record | Differentials Used |
-|------------------------|--------------------|
-| 1–2 | None (no handicap) |
-| 3–5 | Lowest 1 |
-| 6–8 | Avg Low 2 |
-| 9–11 | Avg Low 3 |
-| 12–14 | Avg Low 4 |
-| 15–16 | Avg Low 5 |
-| 17–18 | Avg Low 6 |
-| 19 | Avg Low 7 |
-| 20 | Avg Low 8 (fully established) |
+| 9-Hole Rounds in Record | Differentials Used | Adjustment |
+|------------------------|--------------------|-----------:|
+| 1–2 | None (no handicap) | — |
+| 3 | Lowest 1 | −2.0 |
+| 4 | Lowest 1 | −1.0 |
+| 5 | Lowest 1 | 0 |
+| 6 | Avg Low 2 | −1.0 |
+| 7–8 | Avg Low 2 | 0 |
+| 9–11 | Avg Low 3 | 0 |
+| 12–14 | Avg Low 4 | 0 |
+| 15–16 | Avg Low 5 | 0 |
+| 17–18 | Avg Low 6 | 0 |
+| 19 | Avg Low 7 | 0 |
+| 20 | Avg Low 8 (fully established) | 0 |
+
+Formula: `round((avg_of_lowest_N × 0.96) + adjustment, 1)`
 
 ### Calculation rules
 - **Lookback window:** 12 months (configurable)
 - **Pool:** most recent 20 rounds within the window
 - **Multiplier:** avg of lowest N × 0.96
-- **Truncation:** `math.trunc` (toward zero), NOT `math.floor` — critical for
-  plus-handicappers (negative index): e.g. −0.228 → −0.2N displayed as **+0.2N**
+- **Rounding:** standard round-to-nearest-tenth per **WHS Rule 5.2** (2020-present):
+  *"The result of the calculation is rounded to the nearest tenth."* (.5 rounds up)
+  e.g. 6.282 → 6.3; 6.24 → 6.2; −0.228 → −0.2N (plus-handicapper, rounds toward +∞)
+  NOTE: the pre-2020 USGA system used truncation — that rule no longer applies.
 - **18-hole scores are rejected** at import time (course rating > 50 = error)
 - **Handicap index suffix:** "N" indicates a 9-hole index
 - **Plus handicap display:** negative computed value → shown with "+" prefix
+
+### Expanded rounds view — INDEX column
+The INDEX column shows the running handicap after each round was entered, computed using
+**today's fixed lookback cutoff** (not a rolling per-round cutoff). This ensures the most
+recent round's INDEX always matches the player's current displayed handicap. Older rounds
+show what the handicap would have been including all rounds up to that point, with today's
+12-month window applied.
 
 ### Expanded rounds view — cutoff lines
 Two visual separator rows appear in the expanded rounds table:

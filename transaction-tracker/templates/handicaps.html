@@ -545,9 +545,9 @@
         }
     }
 
-    // TGF Handicap Differential Table (9-hole).
-    // Source: TGF Handicap Differential Table published by The Golf Fellowship.
+    // WHS Rule 5.2a: differentials to use and adjustments.
     const DIFF_LOOKUP = {3:1,4:1,5:1,6:2,7:2,8:2,9:3,10:3,11:3,12:4,13:4,14:4,15:5,16:5,17:6,18:6,19:7,20:8};
+    const ADJ_LOOKUP  = {3:-2.0, 4:-1.0, 6:-1.0};  // added after avg × 0.96; all others 0
 
     function renderRoundsTable(container, rounds) {
         const role = currentRole;
@@ -578,18 +578,16 @@
             byDiff.slice(0, numUsed).forEach(r => usedIds.add(r.id));
         }
 
-        // Compute running handicap index for each round (as of that round's date)
+        // Compute running handicap index for each round (after that round was entered),
+        // using today's fixed lookback cutoff so the most recent round always matches
+        // the displayed handicap index.
         const minRounds  = parseInt(settings.min_rounds || 3);
         const multiplier = parseFloat(settings.multiplier || 0.96);
         const chronological = [...rounds].sort((a, b) => a.round_date.localeCompare(b.round_date));
         const runningHcp = new Map();
         for (let i = 0; i < chronological.length; i++) {
-            const thisDate = chronological[i].round_date;
-            const d = new Date(thisDate);
-            d.setMonth(d.getMonth() - lookbackMonths);
-            const thisCutoff = d.toISOString().slice(0, 10);
-            // Rounds up to and including this round, within lookback window (pool sorted oldest-first)
-            const pool   = chronological.slice(0, i + 1).filter(r => r.round_date >= thisCutoff);
+            // Rounds up to and including this round, within today's lookback window (oldest-first)
+            const pool   = chronological.slice(0, i + 1).filter(r => r.round_date >= cutoffStr);
             const recent = pool.slice(-20);
             const n = recent.length;
             if (n < minRounds) { runningHcp.set(chronological[i].id, null); continue; }
@@ -598,9 +596,8 @@
                                  .sort((a, b) => a.differential - b.differential);
             if (byDiff.length < count) { runningHcp.set(chronological[i].id, null); continue; }
             const avg = byDiff.slice(0, count).reduce((s, r) => s + r.differential, 0) / count;
-            // Use trunc (toward zero) so plus-handicappers display correctly:
-            // e.g. avg×0.96 = -0.228 → trunc = -0.2N (not floor → -0.3N)
-            runningHcp.set(chronological[i].id, Math.trunc(avg * multiplier * 10) / 10);
+            const adj = ADJ_LOOKUP[n] || 0;
+            runningHcp.set(chronological[i].id, Math.round((avg * multiplier + adj) * 10) / 10);
         }
 
         let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
@@ -625,9 +622,7 @@
         function roundRow(rnd, isOlder) {
             const active = rnd.round_date >= cutoffStr;
             const isUsed = usedIds.has(rnd.id);
-            const diffClass = rnd.differential !== null
-                ? (rnd.differential < 0 ? 'diff-good' : rnd.differential > 15 ? 'diff-bad' : '')
-                : '';
+            const diffClass = rnd.differential !== null && rnd.differential < 0 ? 'diff-good' : '';
             const statusBadge = !active
                 ? '<span class="status-excluded">○ Excluded</span>'
                 : isUsed
@@ -768,8 +763,9 @@
         const usedRnds = byDiff.slice(0, numUsed);
         const usedDiffs = usedRnds.map(r => r.differential);
         const avg       = usedDiffs.reduce((s, d) => s + d, 0) / usedDiffs.length;
-        const rawIndex  = avg * multiplier;
-        const index     = Math.trunc(rawIndex * 10) / 10;
+        const adj       = ADJ_LOOKUP[n] || 0;
+        const rawIndex  = avg * multiplier + adj;
+        const index     = Math.round(rawIndex * 10) / 10;
         const absIdx    = Math.abs(index).toFixed(1);
         const sign      = index < 0 ? '+' : '';
         const displayIndex = `${sign}${absIdx}N`;
@@ -790,14 +786,17 @@
             ? `the most recent <strong>20</strong> scores`
             : `all <strong>${n}</strong> active scores`;
 
+        const adjNote = adj !== 0
+            ? ` An adjustment of <strong>${adj > 0 ? '+' : ''}${adj.toFixed(1)}</strong> is applied (WHS Rule 5.2a, fewer than 20 scores).`
+            : '';
         return `${latestPara}
             <p>To determine the golf handicap, we look at the best <strong>${numUsed}</strong>
             differential${numUsed !== 1 ? 's' : ''} out of ${poolDesc}.
             The differentials are: ${diffList}.
             Their average is <strong>${avg.toFixed(2)}</strong>.
             The average is multiplied by <strong>${multiplier}</strong>, resulting in
-            <strong>${rawIndex.toFixed(3)}</strong>, which truncates to a final golf handicap
-            of <span class="calc-result-line" style="color:${index <= 0 ? '#15803d':'#1e40af'};">
+            <strong>${(avg * multiplier).toFixed(3)}</strong>.${adjNote}
+            Rounded to the nearest tenth: <span class="calc-result-line" style="color:${index <= 0 ? '#15803d':'#1e40af'};">
             ${displayIndex}</span>.</p>`;
     }
 
