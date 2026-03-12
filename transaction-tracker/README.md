@@ -18,7 +18,7 @@ Scans your email inbox for Golf Fellowship order emails, uses **Claude AI** to p
 ### Prerequisites
 
 - **Python 3.10+** — check with `python3 --version`
-- **An email account** with IMAP access (Microsoft 365, Gmail, etc.)
+- **An Azure AD app registration** with Microsoft Graph API permissions (Mail.Read, optionally Mail.Send)
 - **An Anthropic API key** — get one at https://console.anthropic.com/settings/keys
 
 ---
@@ -39,7 +39,7 @@ source venv/bin/activate        # Mac/Linux
 pip install -r requirements.txt
 ```
 
-This installs Flask, the Anthropic SDK, imap-tools, APScheduler, and gunicorn.
+This installs Flask, the Anthropic SDK, MSAL (Microsoft Graph), APScheduler, and gunicorn.
 
 ---
 
@@ -51,31 +51,23 @@ cp .env.example .env
 
 Open `.env` in any text editor and fill in every section:
 
-#### Email (required)
+#### Azure AD / Microsoft Graph (required)
 
 ```
-EMAIL_HOST=outlook.office365.com
-EMAIL_PORT=993
+AZURE_TENANT_ID=your-directory-tenant-id
+AZURE_CLIENT_ID=your-application-client-id
+AZURE_CLIENT_SECRET=your-client-secret-value
 EMAIL_ADDRESS=yourname@thegolffellowship.com
-EMAIL_PASSWORD=your-app-password
 ```
 
-**You need an App Password, not your regular password.**
-
-For **Microsoft 365 / Outlook**:
-1. Sign in at https://myaccount.microsoft.com/
-2. Go to **Security info** (or https://aka.ms/mysecurityinfo)
-3. Click **+ Add sign-in method** and choose **App password**
-4. Name it "Transaction Tracker" and copy the generated password
-5. Paste it as `EMAIL_PASSWORD`
-6. Make sure your admin has **IMAP enabled** in the Exchange admin center
-
-For **Gmail**:
-1. Enable 2-Factor Authentication on your Google account
-2. Go to https://myaccount.google.com/apppasswords
-3. Generate an App Password for "Mail"
-4. Paste it as `EMAIL_PASSWORD`
-5. Set `EMAIL_HOST=imap.gmail.com`
+**Setup steps:**
+1. Go to https://portal.azure.com → **App registrations** → **New registration**
+2. Under **API permissions**, add **Microsoft Graph** → **Application permissions**:
+   - `Mail.Read` (required — reads transaction emails)
+   - `Mail.Send` (optional — for daily digest and messaging)
+3. Click **Grant admin consent**
+4. Under **Certificates & secrets**, create a new client secret
+5. Copy the Tenant ID, Application (client) ID, and secret value into `.env`
 
 #### Anthropic API Key (required)
 
@@ -105,13 +97,7 @@ DAILY_REPORT_TO=yourname@thegolffellowship.com
 DAILY_REPORT_HOUR=7
 ```
 
-This sends a styled HTML report of the last 24 hours of transactions at the specified hour (0-23, server time). Uses the same email credentials for SMTP sending. The SMTP host is auto-derived from your IMAP host (e.g., outlook.office365.com becomes smtp.office365.com).
-
-To override SMTP settings:
-```
-SMTP_HOST=smtp.office365.com
-SMTP_PORT=587
-```
+This sends a styled HTML digest of the last 24 hours of transactions at the specified hour. Uses Microsoft Graph API (Mail.Send permission) to send. Set timezone with `DAILY_REPORT_TZ=US/Central`.
 
 #### App Settings
 
@@ -398,15 +384,19 @@ transaction-tracker/
 ├── test_parser.py            # Parser tests (uses mocked AI responses)
 ├── email_parser/
 │   ├── __init__.py
-│   ├── fetcher.py            # IMAP email fetching
+│   ├── fetcher.py            # Microsoft Graph email fetching
 │   ├── parser.py             # Claude AI email parsing
 │   ├── database.py           # SQLite storage layer
-│   └── report.py             # Daily email report (SMTP)
+│   ├── report.py             # Daily digest email (Graph API)
+│   └── rsvp_parser.py        # Golf Genius RSVP parsing
 ├── templates/
 │   ├── index.html            # Transactions dashboard
 │   ├── events.html           # Events management + Tee Time Advisor
-│   ├── customers.html        # Customer directory
-│   └── audit.html            # Email audit/QA (admin)
+│   ├── customers.html        # Customer directory + roster import
+│   ├── audit.html            # Email audit/QA (admin)
+│   ├── rsvps.html            # RSVP management
+│   ├── matrix.html           # Side games prize matrix
+│   └── changelog.html        # Version changelog
 └── static/
     ├── css/
     │   └── dashboard.css     # Dashboard styles
@@ -422,11 +412,11 @@ transaction-tracker/
 |---------|----------|
 | `ModuleNotFoundError: No module named 'flask'` | Activate the venv: `source venv/bin/activate` |
 | `ANTHROPIC_API_KEY not configured` | Add your key to `.env`. Get one at https://console.anthropic.com/settings/keys |
-| `Login failed` / `Authentication failed` | Double-check email address and **App Password** (not regular password) in `.env` |
-| `IMAP connection error` | Ask your admin to enable IMAP in Exchange admin center |
+| `Login failed` / `Authentication failed` | Double-check Azure AD credentials (tenant ID, client ID, secret) in `.env` |
+| `Graph API error` | Verify Mail.Read permission is granted and admin-consented in Azure portal |
 | App finds no emails | Click **Check Now**. Verify your App Password works. Check that transaction emails exist in the last 90 days. |
 | AI returns no items | Check the Anthropic API key is valid and has credits. View logs for error details. |
-| Daily report not sending | Verify `DAILY_REPORT_TO` is set in `.env` and email credentials work. Check logs for SMTP errors. |
+| Daily report not sending | Verify `DAILY_REPORT_TO` is set in `.env` and Mail.Send permission is granted. Check logs for Graph API errors. |
 | `Address already in use` | Another instance is running. Stop it first, or change the port. |
 | Connector returns 401 | Verify the `X-API-Key` header matches your `CONNECTOR_API_KEY` in `.env` exactly. |
 
@@ -436,4 +426,4 @@ transaction-tracker/
 
 - **Anthropic API**: ~$0.01-0.03 per email parsed (Claude Sonnet). At 50 orders/month, that's roughly $0.50-1.50/month.
 - **Hosting**: Free on Railway/Render free tier. $5-6/mo for a VPS.
-- **Everything else**: Free (SQLite, Flask, email via IMAP).
+- **Everything else**: Free (SQLite, Flask, email via Microsoft Graph API).
