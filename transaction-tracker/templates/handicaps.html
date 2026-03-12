@@ -518,12 +518,12 @@
         cutoff.setMonth(cutoff.getMonth() - lookbackMonths);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
 
-        // Sort all rounds most-recent first
+        // Sort all rounds most-recent first (display order)
         rounds = [...rounds].sort((a, b) => b.round_date.localeCompare(a.round_date));
 
-        // Determine which round IDs count toward the handicap index
+        // Determine which round IDs count toward the current handicap index
         const activeRounds = rounds.filter(r => r.round_date >= cutoffStr);
-        const recent20 = activeRounds.slice(0, 20);  // already sorted desc, so first 20 = most recent
+        const recent20 = activeRounds.slice(0, 20);
         const numUsed = DIFF_LOOKUP[recent20.length] || 0;
         const usedIds = new Set();
         if (numUsed > 0) {
@@ -531,6 +531,29 @@
                 .filter(r => r.differential !== null)
                 .sort((a, b) => a.differential - b.differential);
             byDiff.slice(0, numUsed).forEach(r => usedIds.add(r.id));
+        }
+
+        // Compute running handicap index for each round (as of that round's date)
+        const minRounds  = parseInt(settings.min_rounds || 3);
+        const multiplier = parseFloat(settings.multiplier || 0.96);
+        const chronological = [...rounds].sort((a, b) => a.round_date.localeCompare(b.round_date));
+        const runningHcp = new Map();
+        for (let i = 0; i < chronological.length; i++) {
+            const thisDate = chronological[i].round_date;
+            const d = new Date(thisDate);
+            d.setMonth(d.getMonth() - lookbackMonths);
+            const thisCutoff = d.toISOString().slice(0, 10);
+            // Rounds up to and including this round, within lookback window (pool sorted oldest-first)
+            const pool   = chronological.slice(0, i + 1).filter(r => r.round_date >= thisCutoff);
+            const recent = pool.slice(-20);
+            const n = recent.length;
+            if (n < minRounds) { runningHcp.set(chronological[i].id, null); continue; }
+            const count  = DIFF_LOOKUP[n] || 0;
+            const byDiff = recent.filter(r => r.differential !== null)
+                                 .sort((a, b) => a.differential - b.differential);
+            if (byDiff.length < count) { runningHcp.set(chronological[i].id, null); continue; }
+            const avg = byDiff.slice(0, count).reduce((s, r) => s + r.differential, 0) / count;
+            runningHcp.set(chronological[i].id, Math.floor(avg * multiplier * 10) / 10);
         }
 
         let html = `<div id="rounds-scroll-${safeid(rounds[0].player_name)}" style="overflow-x:auto;">
@@ -543,6 +566,7 @@
                 <th class="diff-col">Rating</th>
                 <th class="diff-col">Slope</th>
                 <th class="diff-col">Differential</th>
+                <th class="diff-col">Index</th>
                 <th>Status</th>
                 ${isAdmin ? '<th></th>' : ''}
             </tr></thead><tbody id="rounds-tbody-${safeid(rounds[0].player_name)}">`;
@@ -558,6 +582,10 @@
                 : isUsed
                     ? '<span class="status-used">★ Used</span>'
                     : '<span class="status-active">● Active</span>';
+            const hcp = runningHcp.get(rnd.id);
+            const hcpCell = hcp !== null
+                ? `<span style="font-weight:600;color:${hcp <= 0 ? '#15803d' : '#1e40af'}">${hcp.toFixed(1)}</span>`
+                : '<span style="color:#94a3b8">—</span>';
             return `<tr class="${isUsed ? 'round-used' : ''}" style="${active ? '' : 'opacity:0.5;'}">
                 <td>${rnd.round_date}</td>
                 <td>${esc(rnd.course_name || '—')}</td>
@@ -566,6 +594,7 @@
                 <td class="diff-col">${rnd.rating}</td>
                 <td class="diff-col">${rnd.slope}</td>
                 <td class="diff-col ${diffClass}">${rnd.differential !== null ? rnd.differential.toFixed(1) : '—'}</td>
+                <td class="diff-col">${hcpCell}</td>
                 <td>${statusBadge}</td>
                 ${isAdmin ? `<td><button class="btn btn-sm" style="color:#dc2626;font-size:0.75em;padding:2px 6px;"
                     onclick="deleteRound(${rnd.id}, ${esc(JSON.stringify(rnd.player_name))})">×</button></td>` : ''}
