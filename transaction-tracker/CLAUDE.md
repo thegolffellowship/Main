@@ -122,6 +122,25 @@ custom TGF differential table — do NOT use or derive a USGA 18-hole table.
 - **Handicap index suffix:** "N" indicates a 9-hole index
 - **Plus handicap display:** negative computed value → shown with "+" prefix
 
+### Expanded rounds view — cutoff lines
+Two visual separator rows appear in the expanded rounds table:
+- **Red line** — 12-month lookback boundary; rounds below are excluded from the pool
+- **Green line** — 20-round pool boundary; rounds below are still active (within 12 months)
+  but beyond the 20 most-recent that count toward the index. Only shown when a player
+  has more than 20 active rounds.
+
+### Admin controls
+- **Import Rounds** button — visible to managers and admins
+- **Purge 18-hole Scores** button — admin only; calls `POST /api/handicaps/purge-invalid`
+  which deletes all rounds where `rating > 50` (catches any 18-hole scores that slipped in)
+- **Settings** button — admin only; configure lookback window and minimum rounds
+- Individual round **× delete** buttons — visible to managers and admins in the expanded view;
+  there is no bulk "Delete All" for a player
+
+### Auth notes
+- Role is stored in the global `currentRole` variable (set by `auth.js`)
+- Do **not** use `window._userRole` — that variable is never set
+
 ### Key files
 - `email_parser/database.py` — `_HANDICAP_DIFF_LOOKUP` (server-side table)
 - `templates/handicaps.html` — `DIFF_LOOKUP` (client-side JS table, must match)
