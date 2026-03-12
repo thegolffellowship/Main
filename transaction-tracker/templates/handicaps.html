@@ -422,7 +422,7 @@
         for (const p of players) {
             const isExpanded = expandedRows.has(p.player_name);
             const indexCell = p.handicap_index !== null
-                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span> ${indexTag(p.handicap_index)}`
+                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span> ${indexTag(p.handicap_index)}`
                 : '<span class="hcp-na">N/A</span>';
             const activeRounds = p.active_rounds ?? 0;
             const totalRounds  = p.total_rounds ?? 0;
