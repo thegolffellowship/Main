@@ -99,6 +99,7 @@ from email_parser.database import (
     get_handicap_settings,
     update_handicap_settings,
     get_handicap_export_data,
+    relink_all_unlinked_players,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -2835,6 +2836,14 @@ def api_handicap_import():
 # ---------------------------------------------------------------------------
 # Routes — Golf Genius Sync
 # ---------------------------------------------------------------------------
+
+@app.route("/api/handicaps/auto-link", methods=["POST"])
+@require_role("admin")
+def api_handicap_auto_link():
+    """Re-attempt matching all unlinked handicap players to customer records."""
+    result = relink_all_unlinked_players()
+    return jsonify(result)
+
 
 @app.route("/api/handicaps/export-csv")
 @require_role("manager")

@@ -181,6 +181,7 @@
                 <button id="btn-sync-austin" class="btn btn-secondary" title="Auto-post Austin handicaps to Golf Genius" style="display:none;">⟳ Sync Austin</button>
                 <span id="gg-sync-status" style="font-size:0.78em;color:#64748b;display:none;"></span>
             </div>
+            <button id="btn-auto-link" class="btn btn-secondary" style="display:none;" title="Try to match unlinked handicap players to customer records (needed for Golf Genius CSV/Sync)">Auto-link Players</button>
             <button id="btn-purge" class="btn btn-secondary" style="display:none;color:#dc2626;border-color:#dc2626;" title="Delete all rounds with 18-hole course ratings (rating > 50)">Purge 18-hole Scores</button>
             <button id="btn-settings" class="btn btn-secondary" style="display:none;">Settings</button>
             <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
@@ -412,6 +413,23 @@
             if (d.deleted > 0) loadPlayers();
         });
 
+        document.getElementById('btn-auto-link').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-auto-link');
+            btn.disabled = true;
+            btn.textContent = 'Linking…';
+            try {
+                const r = await fetch('/api/handicaps/auto-link', { method: 'POST' });
+                const d = await r.json();
+                alert(`Auto-link complete:\n• Newly linked: ${d.linked}\n• Still unlinked: ${d.still_unlinked}\n• Total players: ${d.total}\n\nUnlinked players have no matching customer record (name mismatch). You can link them manually via the Customers page.`);
+                if (d.linked > 0) loadPlayers();
+            } catch (e) {
+                alert('Auto-link failed: ' + e);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Auto-link Players';
+            }
+        });
+
         document.getElementById('btn-dl-sa').addEventListener('click', () => {
             window.location = '/api/handicaps/export-csv?chapter=San+Antonio';
         });
@@ -432,6 +450,7 @@
         if (currentRole === 'admin') {
             document.getElementById('btn-settings').style.display = '';
             document.getElementById('btn-purge').style.display = '';
+            document.getElementById('btn-auto-link').style.display = '';
             document.getElementById('gg-test-email').style.display = '';
             document.getElementById('btn-sync-sa').style.display = '';
             document.getElementById('btn-sync-austin').style.display = '';
