@@ -4209,6 +4209,10 @@ def get_handicap_export_data(chapter: str | None = None,
                          WHERE LOWER(i1.customer) = LOWER(l.customer_name)
                            AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
                          ORDER BY i1.id DESC LIMIT 1),
+                        (SELECT LOWER(TRIM(ca.alias_value)) FROM customer_aliases ca
+                         WHERE LOWER(ca.customer_name) = LOWER(l.customer_name)
+                           AND ca.alias_type = 'email'
+                         LIMIT 1),
                         ''
                       ) AS customer_email,
                       COALESCE(
@@ -4288,6 +4292,17 @@ def get_handicap_export_data(chapter: str | None = None,
         "no_email": sorted(no_email),
         "no_index": sorted(no_index),
         "chapter": chapter or "All",
+        "_debug": {
+            "total_players": len(player_map),
+            "total_linked": len(link_map),
+            "has_chapter_data": has_chapter_data,
+            "chapter_filter": chapter,
+            "link_sample": [
+                {"player": k, "email": v["email"][:3] + "..." if v["email"] else None,
+                 "chapter": v["chapter"]}
+                for k, v in list(link_map.items())[:10]
+            ],
+        },
     }
 
 

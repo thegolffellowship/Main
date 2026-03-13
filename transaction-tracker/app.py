@@ -2896,43 +2896,79 @@ def api_handicap_auto_link():
 @app.route("/api/handicaps/link-debug")
 @require_role("admin")
 def api_handicap_link_debug():
-    """Diagnose linking: show player names, email aliases, chapter values, and items.customer_email."""
-    from email_parser.database import _connect
+    """Full export diagnostic: show every handicap player's link status, email, chapter, and index."""
+    from email_parser.database import _connect, get_all_handicap_players
+    all_players = get_all_handicap_players()
+    player_map = {p["player_name"]: p for p in all_players}
+
     with _connect() as conn:
-        players = conn.execute(
-            "SELECT player_name, customer_name FROM handicap_player_links ORDER BY player_name LIMIT 30"
+        links = conn.execute(
+            "SELECT player_name, customer_name FROM handicap_player_links ORDER BY player_name"
         ).fetchall()
-        # For the first few linked players, show what we can find
-        linked = [r for r in players if r["customer_name"]][:10]
+        link_map = {r["player_name"]: r["customer_name"] for r in links}
+
         details = []
-        for p in linked:
-            cname = p["customer_name"]
-            email_alias = conn.execute(
-                "SELECT alias_value FROM customer_aliases WHERE LOWER(customer_name)=LOWER(?) AND alias_type='email' LIMIT 1",
-                (cname,)
-            ).fetchone()
-            item_email = conn.execute(
-                "SELECT customer_email, chapter FROM items WHERE LOWER(customer)=LOWER(?) AND customer_email IS NOT NULL AND customer_email != '' ORDER BY id DESC LIMIT 1",
-                (cname,)
-            ).fetchone()
-            chapter_item = conn.execute(
-                "SELECT chapter FROM items WHERE LOWER(customer)=LOWER(?) AND chapter IS NOT NULL AND chapter != '' ORDER BY id DESC LIMIT 1",
-                (cname,)
-            ).fetchone()
+        for pname in sorted(player_map.keys(), key=str.lower):
+            p = player_map[pname]
+            cname = link_map.get(pname)
+            email_items = None
+            email_alias = None
+            chapter = None
+            if cname:
+                row = conn.execute(
+                    "SELECT customer_email FROM items WHERE LOWER(customer)=LOWER(?) "
+                    "AND customer_email IS NOT NULL AND TRIM(customer_email) != '' "
+                    "ORDER BY id DESC LIMIT 1", (cname,)
+                ).fetchone()
+                email_items = row["customer_email"].strip().lower() if row else None
+                row2 = conn.execute(
+                    "SELECT alias_value FROM customer_aliases "
+                    "WHERE LOWER(customer_name)=LOWER(?) AND alias_type='email' LIMIT 1",
+                    (cname,)
+                ).fetchone()
+                email_alias = row2["alias_value"].strip().lower() if row2 else None
+                row3 = conn.execute(
+                    "SELECT chapter FROM items WHERE LOWER(customer)=LOWER(?) "
+                    "AND chapter IS NOT NULL AND TRIM(chapter) != '' "
+                    "ORDER BY id DESC LIMIT 1", (cname,)
+                ).fetchone()
+                chapter = row3["chapter"] if row3 else None
+
+            email = email_items or email_alias or None
+            idx = p["handicap_index"]
+            would_export = bool(cname and email and idx is not None)
+
             details.append({
-                "player_name": p["player_name"],
+                "player_name": pname,
                 "customer_name": cname,
-                "email_in_aliases": email_alias["alias_value"] if email_alias else None,
-                "email_in_items": item_email["customer_email"] if item_email else None,
-                "chapter_in_items": chapter_item["chapter"] if chapter_item else None,
+                "linked": bool(cname),
+                "email_from_items": email_items,
+                "email_from_aliases": email_alias,
+                "email": email,
+                "chapter": chapter,
+                "handicap_index_9": idx,
+                "handicap_index_18": round(idx * 2, 1) if idx is not None else None,
+                "would_export": would_export,
+                "missing": (
+                    "not linked" if not cname else
+                    "no email" if not email else
+                    "no index" if idx is None else
+                    None
+                ),
             })
-        alias_count = conn.execute("SELECT COUNT(*) FROM customer_aliases WHERE alias_type='email'").fetchone()[0]
-        items_with_email = conn.execute("SELECT COUNT(*) FROM items WHERE customer_email IS NOT NULL AND customer_email != ''").fetchone()[0]
-    return jsonify({
-        "alias_email_count": alias_count,
-        "items_with_email_count": items_with_email,
-        "linked_player_details": details,
-    })
+
+        summary = {
+            "total_players": len(details),
+            "linked": sum(1 for d in details if d["linked"]),
+            "unlinked": sum(1 for d in details if not d["linked"]),
+            "have_email": sum(1 for d in details if d["email"]),
+            "have_index": sum(1 for d in details if d["handicap_index_9"] is not None),
+            "would_export": sum(1 for d in details if d["would_export"]),
+            "missing_email": [d["player_name"] for d in details if d["linked"] and not d["email"]],
+            "missing_index": [d["player_name"] for d in details if d["linked"] and d["email"] and d["handicap_index_9"] is None],
+        }
+
+    return jsonify({"summary": summary, "players": details})
 
 
 @app.route("/api/handicaps/unlinked-players")
@@ -3018,6 +3054,15 @@ def api_create_customers_for_unlinked():
             created += 1
 
     return jsonify({"created": created, "linked": linked, "total": len(unlinked)})
+
+
+@app.route("/api/handicaps/export-preview")
+@require_role("manager")
+def api_handicap_export_preview():
+    """JSON preview of what the CSV export would contain, with diagnostics."""
+    chapter = request.args.get("chapter", "").strip()
+    data = get_handicap_export_data(chapter=chapter if chapter else None)
+    return jsonify(data)
 
 
 @app.route("/api/handicaps/export-csv")
