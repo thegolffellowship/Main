@@ -3966,6 +3966,41 @@ def _match_customer_name(conn: sqlite3.Connection, player_name: str) -> str | No
     return None
 
 
+def relink_all_unlinked_players(db_path: str | Path | None = None) -> dict:
+    """Try to match every unlinked handicap player to a customer record.
+
+    Runs _match_customer_name for all players in handicap_player_links where
+    customer_name IS NULL. Useful after adding new customers or after the initial
+    import when auto-linking may have failed.
+
+    Returns {"linked": N, "still_unlinked": M, "total": T}
+    """
+    with _connect(db_path) as conn:
+        unlinked = conn.execute(
+            "SELECT player_name FROM handicap_player_links WHERE customer_name IS NULL"
+        ).fetchall()
+
+        linked = 0
+        for row in unlinked:
+            pname = row["player_name"]
+            customer_name = _match_customer_name(conn, pname)
+            if customer_name:
+                conn.execute(
+                    "UPDATE handicap_player_links SET customer_name = ? WHERE player_name = ?",
+                    (customer_name, pname),
+                )
+                linked += 1
+
+        still_unlinked = conn.execute(
+            "SELECT COUNT(*) FROM handicap_player_links WHERE customer_name IS NULL"
+        ).fetchone()[0]
+        total = conn.execute(
+            "SELECT COUNT(*) FROM handicap_player_links"
+        ).fetchone()[0]
+
+    return {"linked": linked, "still_unlinked": still_unlinked, "total": total}
+
+
 def import_handicap_rounds(rounds: list[dict],
                             db_path: str | Path | None = None) -> dict:
     """Upsert handicap rounds from a Golf Genius / Handicap Server export.
@@ -4002,11 +4037,12 @@ def import_handicap_rounds(rounds: list[dict],
                 # Try to link to a customer (once per unique player_name per import)
                 if player_name not in _linked:
                     _linked.add(player_name)
-                    already_linked = conn.execute(
+                    existing = conn.execute(
                         "SELECT customer_name FROM handicap_player_links WHERE player_name = ?",
                         (player_name,),
                     ).fetchone()
-                    if not already_linked:
+                    # Re-attempt linking if player exists but has no customer_name yet
+                    if existing is None:
                         customer_name = _match_customer_name(conn, player_name)
                         conn.execute(
                             """INSERT INTO handicap_player_links (player_name, customer_name)
@@ -4015,6 +4051,14 @@ def import_handicap_rounds(rounds: list[dict],
                             (player_name, customer_name),
                         )
                         if customer_name:
+                            matched += 1
+                    elif not existing["customer_name"]:
+                        customer_name = _match_customer_name(conn, player_name)
+                        if customer_name:
+                            conn.execute(
+                                "UPDATE handicap_player_links SET customer_name = ? WHERE player_name = ?",
+                                (customer_name, player_name),
+                            )
                             matched += 1
 
                 round_date = (r.get("round_date") or "").strip()
@@ -4159,7 +4203,14 @@ def get_handicap_export_data(chapter: str | None = None,
     with _connect(db_path) as conn:
         links = conn.execute(
             """SELECT l.player_name, l.customer_name,
-                      i.customer_email, i.chapter
+                      i.customer_email,
+                      COALESCE(
+                        (SELECT i2.chapter FROM items i2
+                         WHERE LOWER(i2.customer) = LOWER(l.customer_name)
+                           AND i2.chapter IS NOT NULL AND TRIM(i2.chapter) != ''
+                         ORDER BY i2.id DESC LIMIT 1),
+                        ''
+                      ) AS chapter
                FROM handicap_player_links l
                JOIN items i ON LOWER(i.customer) = LOWER(l.customer_name)
                WHERE l.customer_name IS NOT NULL
