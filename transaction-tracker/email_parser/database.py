@@ -4209,6 +4209,10 @@ def get_handicap_export_data(chapter: str | None = None,
                          WHERE LOWER(i1.customer) = LOWER(l.customer_name)
                            AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
                          ORDER BY i1.id DESC LIMIT 1),
+                        (SELECT LOWER(TRIM(ca.alias_value)) FROM customer_aliases ca
+                         WHERE LOWER(ca.customer_name) = LOWER(l.customer_name)
+                           AND ca.alias_type = 'email'
+                         LIMIT 1),
                         ''
                       ) AS customer_email,
                       COALESCE(
