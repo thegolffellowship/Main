@@ -1158,7 +1158,8 @@ def api_update_customer():
     # Only allow personal-info columns, not transaction data
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
-               "first_name", "last_name", "middle_name", "suffix"}
+               "first_name", "last_name", "middle_name", "suffix",
+               "archived"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return jsonify({"error": "No valid fields to update"}), 400
@@ -2560,6 +2561,53 @@ def api_handicap_rounds():
     return jsonify(rounds)
 
 
+@app.route("/api/handicaps/for-customer")
+def api_handicap_for_customer():
+    """Return handicap data for a customer by looking up their linked player name.
+
+    Query: ?customer_name=John+Smith
+    Returns: {player_name, handicap_index, rounds: [...], settings: {...}}
+    or {error: "not linked"} if no handicap player is linked to this customer.
+    """
+    customer_name = request.args.get("customer_name", "").strip()
+    if not customer_name:
+        return jsonify({"error": "customer_name required"}), 400
+
+    conn = get_connection()
+    try:
+        # Find linked player name for this customer
+        link = conn.execute(
+            "SELECT player_name FROM handicap_player_links "
+            "WHERE LOWER(customer_name) = LOWER(?)",
+            (customer_name,),
+        ).fetchone()
+        if not link:
+            return jsonify({"error": "not linked", "customer_name": customer_name})
+
+        player_name = link["player_name"]
+    finally:
+        conn.close()
+
+    # Get their handicap index from the players list
+    all_players = get_all_handicap_players()
+    player_info = next((p for p in all_players if p["player_name"] == player_name), None)
+
+    # Get their rounds
+    rounds = get_handicap_rounds(player_name=player_name)
+
+    # Get settings for the frontend calc
+    cfg = get_handicap_settings()
+
+    return jsonify({
+        "player_name": player_name,
+        "handicap_index": player_info["handicap_index"] if player_info else None,
+        "active_rounds": player_info["active_rounds"] if player_info else 0,
+        "total_rounds": player_info["total_rounds"] if player_info else 0,
+        "rounds": rounds,
+        "settings": cfg,
+    })
+
+
 @app.route("/api/handicaps/rounds/<int:round_id>", methods=["DELETE"])
 @require_role("manager")
 def api_delete_handicap_round(round_id):
@@ -2885,6 +2933,91 @@ def api_handicap_link_debug():
         "items_with_email_count": items_with_email,
         "linked_player_details": details,
     })
+
+
+@app.route("/api/handicaps/unlinked-players")
+@require_role("admin")
+def api_handicap_unlinked_players():
+    """Return handicap players with no linked customer record."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """SELECT l.player_name, l.customer_name
+               FROM handicap_player_links l
+               WHERE l.customer_name IS NULL"""
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify([{"player_name": r["player_name"]} for r in rows])
+
+
+@app.route("/api/handicaps/create-customers-for-unlinked", methods=["POST"])
+@require_role("admin")
+def api_create_customers_for_unlinked():
+    """Auto-create archived customer records for all unlinked handicap players."""
+    conn = get_connection()
+    try:
+        unlinked = conn.execute(
+            "SELECT player_name FROM handicap_player_links WHERE customer_name IS NULL"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    created = 0
+    linked = 0
+    skipped = 0
+    for row in unlinked:
+        player_name = row["player_name"]
+        # Try to find an existing customer with this name
+        conn2 = get_connection()
+        try:
+            existing = conn2.execute(
+                "SELECT customer FROM items WHERE customer = ? COLLATE NOCASE LIMIT 1",
+                (player_name,)
+            ).fetchone()
+        finally:
+            conn2.close()
+
+        if existing:
+            # Link to existing customer, update link
+            conn3 = get_connection()
+            try:
+                conn3.execute(
+                    "UPDATE handicap_player_links SET customer_name = ? WHERE player_name = ?",
+                    (existing["customer"], player_name)
+                )
+                conn3.commit()
+            finally:
+                conn3.close()
+            linked += 1
+        else:
+            # Create a new archived customer record
+            parts = player_name.split(None, 1)
+            first_name = parts[0] if parts else player_name
+            last_name = parts[1] if len(parts) > 1 else ""
+            from datetime import datetime
+            today = datetime.now().strftime("%Y-%m-%d")
+
+            conn3 = get_connection()
+            try:
+                conn3.execute(
+                    """INSERT INTO items (email_uid, item_index, merchant, customer, first_name,
+                       last_name, order_date, item_name, archived)
+                       VALUES (?, 0, 'Handicap Import', ?, ?, ?, ?, 'Handicap Import', 1)""",
+                    (f"handicap_import_{player_name}_{today}", player_name,
+                     first_name, last_name, today)
+                )
+                # Now link them
+                conn3.execute(
+                    "UPDATE handicap_player_links SET customer_name = ? WHERE player_name = ?",
+                    (player_name, player_name)
+                )
+                conn3.commit()
+            finally:
+                conn3.close()
+            created += 1
+
+    return jsonify({"created": created, "linked": linked, "total": len(unlinked)})
 
 
 @app.route("/api/handicaps/export-csv")

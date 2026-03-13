@@ -73,6 +73,11 @@
             <select id="filter-chapter" class="filter-select">
                 <option value="">All Chapters</option>
             </select>
+            <select id="filter-archived" class="filter-select">
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
+                <option value="all">All</option>
+            </select>
             <select id="sort-select" class="sort-select">
                 <option value="name-asc">Name (A-Z)</option>
                 <option value="name-desc">Name (Z-A)</option>
@@ -107,6 +112,7 @@
                         <th data-sort="spent" data-col="spent">Total Spent <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-col="email">Email</th>
                         <th data-col="phone">Phone</th>
+                        <th data-sort="handicap" data-col="handicap">HCP <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="latest" data-col="latest">Last Activity <span class="sort-arrow">&#9650;&#9660;</span></th>
                     </tr>
                 </thead>
@@ -445,6 +451,8 @@
                     creditTotal: 0,
                     latestDate: "",
                     aliases: [],
+                    archived: false,
+                    handicapIndex: null,
                 };
             }
             map[name].items.push(item);
@@ -459,6 +467,7 @@
             }
             if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
             if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
+            if (item.archived === 1 || item.archived === "1") map[name].archived = true;
             if (!map[name].first_name && item.first_name) map[name].first_name = item.first_name;
             if (!map[name].last_name && item.last_name) map[name].last_name = item.last_name;
             if (!map[name].middle_name && item.middle_name) map[name].middle_name = item.middle_name;
@@ -494,7 +503,15 @@
         const query = document.getElementById("customer-search").value.toLowerCase().trim();
         const statusFilter = document.getElementById("filter-status").value;
         const chapterFilter = document.getElementById("filter-chapter").value;
+        const archivedFilter = document.getElementById("filter-archived").value;
         let filtered = allCustomers;
+
+        // Archive filter (default: show active only)
+        if (archivedFilter === "active") {
+            filtered = filtered.filter(c => !c.archived);
+        } else if (archivedFilter === "archived") {
+            filtered = filtered.filter(c => c.archived);
+        }
 
         if (query) {
             filtered = filtered.filter(c =>
@@ -523,6 +540,11 @@
             if (currentSortField === "chapter") return asc ? a.chapter.localeCompare(b.chapter) : b.chapter.localeCompare(a.chapter);
             if (currentSortField === "purchases") return asc ? a.items.length - b.items.length : b.items.length - a.items.length;
             if (currentSortField === "spent") return asc ? a.totalSpent - b.totalSpent : b.totalSpent - a.totalSpent;
+            if (currentSortField === "handicap") {
+                const ha = a.handicapIndex !== null ? a.handicapIndex : 999;
+                const hb = b.handicapIndex !== null ? b.handicapIndex : 999;
+                return asc ? ha - hb : hb - ha;
+            }
             if (currentSortField === "latest") return b.latestDate.localeCompare(a.latestDate);
             return 0;
         });
@@ -550,7 +572,8 @@
         const query = document.getElementById("customer-search").value.trim();
         const statusFilter = document.getElementById("filter-status").value;
         const chapterFilter = document.getElementById("filter-chapter").value;
-        const hasFilters = query || statusFilter || chapterFilter;
+        const archivedFilter = document.getElementById("filter-archived").value;
+        const hasFilters = query || statusFilter || chapterFilter || archivedFilter !== "active";
         document.getElementById("btn-clear-filters").classList.toggle("visible", !!hasFilters);
     }
 
@@ -558,6 +581,7 @@
         document.getElementById("customer-search").value = "";
         document.getElementById("filter-status").value = "";
         document.getElementById("filter-chapter").value = "";
+        document.getElementById("filter-archived").value = "active";
         currentSortField = "name";
         currentSortDir = "asc";
         document.getElementById("sort-select").value = "name-asc";
@@ -677,6 +701,10 @@
             if (c.chapter) meta.push(escapeHtml(c.chapter));
             meta.push(c.items.length + " purchase" + (c.items.length !== 1 ? "s" : ""));
             meta.push("$" + c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0}));
+            if (c.handicapIndex !== null) {
+                const hcpStr = c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1);
+                meta.push('HCP: ' + hcpStr + ' N');
+            }
 
             return `
             <div class="mobile-card ${isExpanded ? 'expanded' : ''}" data-cust-name="${escapeHtml(c.name)}" ${isExpanded ? 'style="border-color:var(--primary);"' : ''}>
@@ -795,7 +823,7 @@
         const tbody = document.getElementById("customer-list-body");
 
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text-muted); font-style:italic;">No customers found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text-muted); font-style:italic;">No customers found.</td></tr>';
             return;
         }
 
@@ -811,10 +839,11 @@
                 <td style="font-weight:600; font-variant-numeric:tabular-nums;">$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${c.email ? `<a href="mailto:${encodeURIComponent(c.email)}" class="cell-link" onclick="event.stopPropagation()">${escapeHtml(c.email)}</a>` : '\u2014'}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.phone || "\u2014")}</td>
+                <td style="font-size:0.78rem; font-weight:600; color:${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '#16a34a' : '#2563eb') : 'var(--text-muted)'};">${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1)) + ' N' : '\u2014'}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
             </tr>
             <tr class="cust-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${escapeHtml(c.name)}">
-                <td colspan="8">
+                <td colspan="9">
                     <div class="cust-detail-content" data-detail-name="${escapeHtml(c.name)}">
                         ${isExpanded ? renderCustDetailContent(c) : ''}
                     </div>
@@ -865,6 +894,7 @@
                     ${c.chapter ? `<span>${escapeHtml(c.chapter)}</span>` : ''}
                     <span>${c.items.length} purchase${c.items.length !== 1 ? 's' : ''}</span>
                     <span>$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                    ${c.handicapIndex !== null ? `<span style="font-weight:600; color:${c.handicapIndex < 0 ? '#16a34a' : '#2563eb'};">HCP: ${c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1)} N</span>` : ''}
                     ${c.email ? `<span><a href="mailto:${encodeURIComponent(c.email)}" class="cell-link">${escapeHtml(c.email)}</a></span>` : ''}
                 </div>
             </div>`;
@@ -1026,9 +1056,18 @@
             html += `<div style="margin-bottom:0.5rem; display:flex; gap:0.3rem; flex-wrap:wrap;">${badges.join("")}</div>`;
         }
 
+        // Archive toggle button
+        const archiveLabel = customer.archived ? 'Unarchive' : 'Archive';
+        const archiveBtnClass = customer.archived ? 'btn-primary' : 'btn-secondary';
+        html += `<div style="margin-bottom:0.5rem;">
+            <button type="button" class="btn ${archiveBtnClass} cust-archive-toggle" data-customer-name="${escapeHtml(customer.name)}" data-archived="${customer.archived ? '1' : '0'}" style="font-size:0.72rem; padding:0.2rem 0.6rem;">${archiveLabel}</button>
+            ${customer.archived ? '<span style="font-size:0.72rem; color:#b45309; margin-left:0.3rem; font-weight:600;">ARCHIVED</span>' : ''}
+        </div>`;
+
         // Tab bar
         html += `<div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.75rem; border-bottom:2px solid var(--border);">
             <button type="button" class="cust-tab active" data-tab="transactions" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
+            <button type="button" class="cust-tab" data-tab="scores" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Scores</button>
             <button type="button" class="cust-tab" data-tab="info" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
         </div>`;
 
@@ -1066,10 +1105,83 @@
 
         html += '</tbody></table></div>';
 
+        // Scores tab content (loaded async)
+        html += `<div class="cust-tab-content cust-tab-scores" style="display:none;">
+            <div class="cust-scores-container" data-customer-name="${escapeHtml(customer.name)}">
+                ${customer.handicapIndex !== null
+                    ? `<div style="margin-bottom:0.75rem; display:flex; align-items:baseline; gap:0.5rem;">
+                        <span style="font-size:1.5rem; font-weight:700; color:${customer.handicapIndex < 0 ? '#16a34a' : '#2563eb'};">${customer.handicapIndex < 0 ? '+' + Math.abs(customer.handicapIndex).toFixed(1) : customer.handicapIndex.toFixed(1)}</span>
+                        <span style="font-size:0.82rem; color:var(--text-muted);">N (9-hole index)</span>
+                      </div>`
+                    : '<div style="margin-bottom:0.75rem; font-size:0.82rem; color:var(--text-muted);">No handicap data linked</div>'}
+                <div class="cust-scores-table-wrapper" style="font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Loading scores...</span>
+                </div>
+            </div>
+        </div>`;
+
         // Info tab content
         html += `<div class="cust-tab-content cust-tab-info" style="display:none;">${renderCustInfoPanel(customer)}</div>`;
 
         return html;
+    }
+
+    async function loadCustomerScores(customerName, wrapper) {
+        try {
+            const res = await fetch(`/api/handicaps/for-customer?customer_name=${encodeURIComponent(customerName)}`);
+            const data = await res.json();
+            if (data.error === "not linked") {
+                wrapper.innerHTML = '<span style="color:var(--text-muted);">No handicap player linked to this customer.</span>';
+                return;
+            }
+            if (!data.rounds || data.rounds.length === 0) {
+                wrapper.innerHTML = '<span style="color:var(--text-muted);">No scoring records found.</span>';
+                return;
+            }
+
+            // Compute which rounds are "used" in the handicap calc
+            const cfg = data.settings || {};
+            const lookbackMonths = parseInt(cfg.lookback_months || 12);
+            const cutoff = new Date();
+            cutoff.setMonth(cutoff.getMonth() - lookbackMonths);
+            const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+            const DIFF_LOOKUP = {1:0,2:0,3:1,4:1,5:1,6:2,7:2,8:2,9:3,10:3,11:3,12:4,13:4,14:4,15:5,16:5,17:6,18:6,19:7,20:8};
+
+            const activeRounds = data.rounds.filter(r => r.round_date >= cutoffStr);
+            const recent20 = activeRounds.slice(0, 20);
+            const n = DIFF_LOOKUP[Math.min(recent20.length, 20)] || 0;
+            const sorted = [...recent20].sort((a, b) => a.differential - b.differential);
+            const usedIds = new Set(sorted.slice(0, n).map(r => r.id));
+
+            let html = '<table style="width:auto; border-collapse:collapse; font-size:0.78rem;">';
+            html += '<thead><tr style="border-bottom:1px solid var(--border);">';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:left;">Date</th>';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:left;">Course</th>';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:left;">Tee</th>';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:right;">Score</th>';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:right;">Diff</th>';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:center;">Used</th>';
+            html += '</tr></thead><tbody>';
+
+            data.rounds.forEach(r => {
+                const isActive = r.round_date >= cutoffStr;
+                const isUsed = usedIds.has(r.id);
+                const rowBg = isUsed ? 'background:#fef08a;' : (!isActive ? 'opacity:0.4;' : '');
+                html += `<tr style="${rowBg} border-bottom:1px solid var(--border);">`;
+                html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(r.round_date || '')}</td>`;
+                html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(r.course_name || '')}</td>`;
+                html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(r.tee_name || '')}</td>`;
+                html += `<td style="padding:0.3rem 0.6rem; text-align:right;">${r.score != null ? r.score : ''}</td>`;
+                html += `<td style="padding:0.3rem 0.6rem; text-align:right;">${r.differential != null ? r.differential.toFixed(1) : ''}</td>`;
+                html += `<td style="padding:0.3rem 0.6rem; text-align:center;">${isUsed ? '★' : ''}</td>`;
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            wrapper.innerHTML = html;
+        } catch (err) {
+            wrapper.innerHTML = '<span style="color:#dc2626;">Failed to load scores.</span>';
+        }
     }
 
     function attachCustDetailHandlers(container) {
@@ -1097,7 +1209,7 @@
             a.addEventListener("click", (e) => e.stopPropagation());
         });
 
-        // Tab switching (Transactions / Info)
+        // Tab switching (Transactions / Scores / Info)
         container.querySelectorAll(".cust-tab").forEach(tab => {
             tab.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -1109,7 +1221,44 @@
                     t.style.color = isActive ? "#2563eb" : "var(--text-muted)";
                 });
                 container.querySelector(".cust-tab-transactions").style.display = target === "transactions" ? "" : "none";
+                const scoresTab = container.querySelector(".cust-tab-scores");
+                if (scoresTab) {
+                    scoresTab.style.display = target === "scores" ? "" : "none";
+                    // Load scores on first tab click
+                    if (target === "scores") {
+                        const wrapper = scoresTab.querySelector(".cust-scores-table-wrapper");
+                        if (wrapper && wrapper.textContent.includes("Loading")) {
+                            const custName = scoresTab.querySelector(".cust-scores-container")?.dataset?.customerName;
+                            if (custName) loadCustomerScores(custName, wrapper);
+                        }
+                    }
+                }
                 container.querySelector(".cust-tab-info").style.display = target === "info" ? "" : "none";
+            });
+        });
+
+        // Archive toggle
+        container.querySelectorAll(".cust-archive-toggle").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const custName = btn.dataset.customerName;
+                const isArchived = btn.dataset.archived === "1";
+                const newVal = isArchived ? 0 : 1;
+                btn.disabled = true;
+                btn.textContent = "Saving...";
+                try {
+                    const resp = await fetch("/api/customers/update", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ customer_name: custName, fields: { archived: newVal } }),
+                    });
+                    if (!resp.ok) throw new Error("Failed");
+                    setTimeout(() => init(), 300);
+                } catch (err) {
+                    alert("Failed to update archive status");
+                    btn.disabled = false;
+                    btn.textContent = isArchived ? "Unarchive" : "Archive";
+                }
             });
         });
 
@@ -1993,6 +2142,20 @@
             allCustomers = buildCustomers(allItems);
             populateChapterFilter();
 
+            // Fetch handicap indexes for all players and merge into customer objects
+            try {
+                const hcpRes = await fetch("/api/handicaps/players");
+                const hcpPlayers = await hcpRes.json();
+                const hcpMap = {};
+                hcpPlayers.forEach(p => {
+                    if (p.customer_name) hcpMap[p.customer_name.toLowerCase()] = p.handicap_index;
+                });
+                allCustomers.forEach(c => {
+                    const idx = hcpMap[c.name.toLowerCase()];
+                    if (idx !== undefined) c.handicapIndex = idx;
+                });
+            } catch (e) { /* handicap data optional */ }
+
             // Update selectedCustomer with fresh data before rendering
             if (selectedCustomer) {
                 const freshCust = allCustomers.find(c => c.name === selectedCustomer.name);
@@ -2110,6 +2273,7 @@
         document.getElementById("customer-search").addEventListener("input", renderCustomers);
         document.getElementById("filter-status").addEventListener("change", renderCustomers);
         document.getElementById("filter-chapter").addEventListener("change", renderCustomers);
+        document.getElementById("filter-archived").addEventListener("change", renderCustomers);
         document.getElementById("sort-select").addEventListener("change", () => {
             const val = document.getElementById("sort-select").value;
             if (val) {

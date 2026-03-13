@@ -349,6 +349,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("last_name", "TEXT"),
             ("middle_name", "TEXT"),
             ("suffix", "TEXT"),
+            ("archived", "INTEGER DEFAULT 0"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
