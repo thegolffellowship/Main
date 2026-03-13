@@ -58,7 +58,8 @@ FIELD-SPECIFIC GUIDANCE:
 - "item_name": Use the event/product name exactly as shown (e.g. "Feb 22 - LaCANTERA"). \
   Exception: for membership items, normalise the item name to just "TGF MEMBERSHIP" \
   regardless of any city or tier suffix in the original (e.g. "TGF MEMBERSHIP CITY: \
-  AUS | New Member..." → "TGF MEMBERSHIP").
+  AUS | New Member..." → "TGF MEMBERSHIP"). \
+  For standalone season contest purchases, use "SEASON CONTESTS" as the item name.
 - "event_date": The date of the golf event, NOT the order date. Parse it from \
   the item name when present (e.g. "Feb 22 - LaCANTERA" → "2026-02-22"). Use \
   the current year (2026) if only month and day are given.
@@ -79,54 +80,66 @@ FIELD-SPECIFIC GUIDANCE:
   "La Cantera", "TPC San Antonio", "The Quarry", "Cowboys Golf Club", \
   "TPC Craig Ranch", "Wolfdancer", "Falconhead", "Moody Gardens", \
   "Morris Williams", "Cedar Creek", "Kissing Tree", "Plum Creek", \
-  "Landa Park", "Vaaler Creek", "Hancock Park". \
+  "Landa Park", "Vaaler Creek", "Hancock Park", "ShadowGlen", "Star Ranch". \
   Always use these exact spellings regardless of how the email formats them \
   (e.g. "LaCANTERA" or "LaCantera" → "La Cantera", \
-  "MORRIS WILLIAMS" → "Morris Williams", "CEDAR CREEK" → "Cedar Creek").
+  "MORRIS WILLIAMS" → "Morris Williams", "CEDAR CREEK" → "Cedar Creek", \
+  "SHADOWGLEN" → "ShadowGlen", "STAR RANCH" → "Star Ranch").
 - "customer_email": The buyer's email address if present in the order.
 - "customer_phone": The buyer's phone number if present in the order.
-- "member_status": Extract only the status label (e.g. "MEMBER" or "NON-MEMBER"), \
-  not the price.
-- "side_games": CRITICAL — The email field labelled "GOLF or COMPETE?" often \
-  contains BOTH the event type AND the side-games selection in one string. \
-  You MUST split them apart. Examples of what the raw email may show:
-    "EVENT + NET Games Only | Add $30"  → golf_or_compete="GOLF", side_games="NET"
-    "EVENT + GROSS Games Only | Add $30" → golf_or_compete="GOLF", side_games="GROSS"
-    "EVENT + BOTH NET & GROSS Games"     → golf_or_compete="GOLF", side_games="BOTH"
-    "EVENT Only - No Additional Games"   → golf_or_compete="GOLF", side_games="NONE"
-    "COMPETE + NET Games Only | Add $30" → golf_or_compete="COMPETE", side_games="NET"
+- "user_status": The player's status. Extract the label from "MEMBER STATUS:" \
+  field. Common values: "MEMBER", "1st TIMER", "GUEST", "MANAGER". \
+  Preserve as shown (e.g. "1st TIMER", "MEMBER"). Do NOT include the price.
+- "side_games": CRITICAL — The email field labelled "GOLF or COMPETE?" contains \
+  side-games information. Extract ONLY the side-games portion. Examples:
+    "EVENT + NET Games Only | Add $30"   → side_games="NET"
+    "EVENT + GROSS Games Only | Add $30" → side_games="GROSS"
+    "EVENT + BOTH NET & GROSS Games"     → side_games="BOTH"
+    "EVENT Only - No Additional Games"   → side_games="NONE"
+    "EVENT Only (Inc. Team Game)"        → side_games="NONE"
+    "1st TIMER - EVENT + GROSS Games"    → side_games="GROSS"
+    "1st TIMER - EVENT + NET Games"      → side_games="NET"
   The side_games value must be normalised to exactly one of: "NET", "GROSS", \
   "BOTH", or "NONE". If the text says "No Additional Games" that is "NONE". \
-  If the text contains "BOTH NET & GROSS" that is "BOTH". \
-  Do NOT put the full "EVENT + NET Games Only | Add $30" string into \
-  golf_or_compete — that string contains side-games data.
-- "golf_or_compete": Should contain ONLY the event-type portion: "GOLF" or \
-  "COMPETE". If the raw value starts with "EVENT" treat that as "GOLF". \
-  Never put side-games text here.
+  If the text says "EVENT Only" that is "NONE". \
+  If the text contains "BOTH NET & GROSS" that is "BOTH".
 - "handicap": The numeric handicap value only (for event registrations).
 - "has_handicap": For MEMBERSHIP items only — "YES" or "NO" from the \
   "Do you have a Current Handicap?" field. For events, set to null.
 - "returning_or_new": For MEMBERSHIP items — "New" or "Returning" from \
   the "RETURNING or NEW?" field. Extract just the keyword.
-- "net_points_race": For MEMBERSHIP items — "YES" or "NO" from \
-  "Add NET Points Race?" field. Normalise to uppercase YES/NO.
-- "gross_points_race": For MEMBERSHIP items — "YES" or "NO" from \
-  "Add GROSS Points Race?" field. Normalise to uppercase YES/NO.
-- "city_match_play": For MEMBERSHIP items — "YES" or "NO" from \
-  "Add City MATCH PLAY?" field. Normalise to uppercase YES/NO.
+- "net_points_race": "YES" or "NO" from "Add NET Points Race?" field. \
+  Can appear on MEMBERSHIP items or SEASON CONTESTS items. Normalise to YES/NO.
+- "gross_points_race": "YES" or "NO" from "Add GROSS Points Race?" field. \
+  Can appear on MEMBERSHIP items or SEASON CONTESTS items. Normalise to YES/NO.
+- "city_match_play": "YES" or "NO" from "Add City MATCH PLAY?" field. \
+  Can appear on MEMBERSHIP items or SEASON CONTESTS items. Normalise to YES/NO.
 - "partner_request": If the player requested a specific playing partner, \
   extract the partner's name. Look for fields like "Playing Partner Request", \
   "Partner Request", "Who would you like to play with?", etc.
-- "fellowship_after": Whether the player plans to attend the post-game \
-  fellowship / gathering. Look for "Fellowship After?", "Post-Game Fellowship", \
-  "Staying for fellowship?", etc. Normalise to "YES" or "NO".
-- "notes": Any freeform notes, comments, or special requests from the player. \
-  Look for "Notes", "Comments", "Special Requests", "Additional Info", etc. \
-  Preserve the text as-is.
+- "fellowship": Whether the player plans to attend the post-game \
+  fellowship / gathering. Look for any field containing the word "Fellowship" \
+  (e.g. "Fellowship After?", "Post-Game Fellowship", "POST-GAME FELLOWSHIP at \
+  Course?", "Staying for fellowship?"). Normalise to "YES" or "NO".
+- "notes": Any freeform notes, comments, special requests, or special \
+  instructions from the player. Look for "Notes", "Comments", \
+  "Special Requests", "Special Instructions", "Additional Info", etc. \
+  If BOTH "Notes" and "Special Instructions" fields exist, combine them \
+  with " - " between them. Preserve the text as-is.
 - "date_of_birth": YYYY-MM-DD format. Often appears on membership orders.
 - "transaction_fees": The processing/transaction fee amount charged on the \
   order (e.g. "$7.53"). This is an ORDER-level field, not per-item. \
   Look for "Transaction Fee", "Processing Fee", "Service Fee", etc.
+- "tee_choice": The tee selection. Normalise to one of: "<50", "50-64", \
+  "65+", or "Forward". If the email says "Front" tees, normalise to "Forward". \
+  Discard any yardage information (e.g. "6300-6800y").
+- "holes": For events that offer 9 or 18 holes, extract just the number: \
+  "9" or "18". Look for "9 or 18 HOLES?" field. If not present, use null.
+- "shipping_address": The street address from the Shipping Address section.
+- "shipping_address2": Second address line (apt, suite, etc.) if present.
+- "shipping_city": City from the Shipping Address.
+- "shipping_state": State abbreviation from the Shipping Address (e.g. "TX").
+- "shipping_zip": ZIP code from the Shipping Address.
 
 Return this exact JSON structure:
 
@@ -140,6 +153,11 @@ Return this exact JSON structure:
   "order_time": "<HH:MM:SS in 24-hour format, from the order/transaction timestamp if present, else null>",
   "total_amount": "<total charged including fees, e.g. $222.53>",
   "transaction_fees": "<processing fee amount, e.g. $7.53>",
+  "shipping_address": "<street address>",
+  "shipping_address2": "<apt/suite/unit if present>",
+  "shipping_city": "<city>",
+  "shipping_state": "<state abbreviation>",
+  "shipping_zip": "<zip code>",
   "items": [
     {
       "item_name": "<product or event name>",
@@ -152,20 +170,20 @@ Return this exact JSON structure:
       "handicap": "<numeric handicap value if mentioned>",
       "has_handicap": "<YES or NO — membership only, null for events>",
       "side_games": "<NET, GROSS, BOTH, or NONE — see rules above>",
-      "tee_choice": "<tee choice if mentioned>",
-      "member_status": "<MEMBER or NON-MEMBER>",
-      "golf_or_compete": "<GOLF or COMPETE only — see rules above>",
+      "tee_choice": "<<50, 50-64, 65+, or Forward>",
+      "user_status": "<MEMBER, 1st TIMER, GUEST, MANAGER, etc.>",
       "post_game": "<post-game fellowship selection if mentioned>",
       "partner_request": "<requested playing partner name if mentioned>",
-      "fellowship_after": "<YES or NO — attending post-game fellowship>",
-      "notes": "<freeform notes, comments, or special requests>",
+      "fellowship": "<YES or NO — attending post-game fellowship>",
+      "notes": "<freeform notes, comments, special requests, or special instructions>",
       "returning_or_new": "<New or Returning — membership only>",
       "shirt_size": "<shirt size if mentioned>",
       "guest_name": "<guest name if mentioned>",
       "date_of_birth": "<YYYY-MM-DD date of birth if mentioned>",
-      "net_points_race": "<YES or NO — membership only>",
-      "gross_points_race": "<YES or NO — membership only>",
-      "city_match_play": "<YES or NO — membership only>"
+      "net_points_race": "<YES or NO — membership or season contests>",
+      "gross_points_race": "<YES or NO — membership or season contests>",
+      "city_match_play": "<YES or NO — membership or season contests>",
+      "holes": "<9 or 18 if applicable, else null>"
     }
   ]
 }
@@ -314,6 +332,9 @@ _COURSE_CANONICAL = {
     "landa park": "Landa Park",
     "vaaler creek": "Vaaler Creek",
     "hancock park": "Hancock Park",
+    "shadowglen": "ShadowGlen",
+    "shadow glen": "ShadowGlen",
+    "star ranch": "Star Ranch",
 }
 
 
@@ -488,12 +509,17 @@ def parse_email(email_data: dict) -> list[dict]:
             "has_handicap": item.get("has_handicap"),
             "side_games": item.get("side_games"),
             "tee_choice": _normalize_tee_choice(item.get("tee_choice")),
-            "member_status": item.get("member_status"),
-            "golf_or_compete": item.get("golf_or_compete"),
+            "user_status": item.get("user_status"),
             "post_game": item.get("post_game"),
             "partner_request": item.get("partner_request"),
-            "fellowship_after": item.get("fellowship_after"),
+            "fellowship": item.get("fellowship"),
             "notes": item.get("notes"),
+            "holes": item.get("holes"),
+            "shipping_address": parsed.get("shipping_address"),
+            "shipping_address2": parsed.get("shipping_address2"),
+            "shipping_city": parsed.get("shipping_city"),
+            "shipping_state": parsed.get("shipping_state"),
+            "shipping_zip": parsed.get("shipping_zip"),
             "returning_or_new": item.get("returning_or_new"),
             "shirt_size": item.get("shirt_size"),
             "guest_name": item.get("guest_name"),

@@ -245,10 +245,11 @@ def update_transaction(transaction_id: int, fields: dict) -> str:
         fields: Dict of field names to new values. Allowed fields:
                 customer, customer_email, customer_phone, order_id,
                 item_name, event_date, item_price, quantity, city, course,
-                handicap, side_games, tee_choice, member_status,
+                handicap, side_games, tee_choice, user_status,
                 post_game, returning_or_new, shirt_size,
                 guest_name, date_of_birth, net_points_race,
-                gross_points_race, city_match_play
+                gross_points_race, city_match_play, fellowship,
+                notes, holes
     """
     ok = update_item(transaction_id, fields)
     if ok:
@@ -363,7 +364,7 @@ def add_player(
     side_games: str = "",
     tee_choice: str = "",
     handicap: str = "",
-    member_status: str = "",
+    user_status: str = "",
 ) -> str:
     """Add a comp'd player to an event (creates a $0 transaction).
 
@@ -373,11 +374,11 @@ def add_player(
         side_games: NET, GROSS, BOTH, or NONE
         tee_choice: <50, 50-64, 65+, or Forward
         handicap: Numeric handicap value
-        member_status: MEMBER or NON-MEMBER
+        user_status: MEMBER, 1st TIMER, GUEST, MANAGER, etc.
     """
     item = add_player_to_event(
         event_name, customer, side_games=side_games, tee_choice=tee_choice,
-        handicap=handicap, member_status=member_status,
+        handicap=handicap, user_status=user_status,
     )
     if item:
         return json.dumps({"status": "ok", "item": item})

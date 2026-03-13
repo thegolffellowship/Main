@@ -22,7 +22,7 @@ let currentSortDir = "desc";
 const SEARCHABLE_FIELDS = [
     "customer", "customer_email", "customer_phone",
     "item_name", "item_price", "city", "course", "handicap",
-    "side_games", "tee_choice", "member_status",
+    "side_games", "tee_choice", "user_status",
     "post_game", "order_id", "order_date", "event_date", "merchant",
 ];
 
@@ -35,9 +35,9 @@ const TABLE_COLUMNS = [
     { key: "handicap", label: "Handicap", default: true },
     { key: "side_games", label: "Side Games", default: true },
     { key: "tee_choice", label: "Tee", default: true },
-    { key: "member_status", label: "Status", default: true },
+    { key: "user_status", label: "Status", default: true },
     { key: "partner_request", label: "Partner Request", default: false },
-    { key: "fellowship_after", label: "Fellowship After", default: false },
+    { key: "fellowship", label: "Fellowship", default: false },
     { key: "notes", label: "Notes", default: false },
     { key: "order_id", label: "Order ID", default: true },
     { key: "actions", label: "Actions", default: true },
@@ -477,10 +477,13 @@ function renderMobileCard(row) {
     const fields = [
         ["Order Date", formatOrderDateTime(row)],
         ["Price", row.item_price || "\u2014"],
+        ["Total Amount", row.total_amount || "\u2014"],
+        ["Transaction Fees", row.transaction_fees || "\u2014"],
         ["Handicap", row.handicap || "\u2014"],
-        ["Status", row.member_status || "\u2014"],
+        ["Status", row.user_status || "\u2014"],
+        ["Holes", row.holes || "\u2014"],
         ["Partner Request", row.partner_request || "\u2014"],
-        ["Fellowship After", row.fellowship_after || "\u2014"],
+        ["Fellowship", row.fellowship || "\u2014"],
         ["Notes", row.notes || "\u2014"],
         ["Order ID", row.order_id || "\u2014"],
     ];
@@ -928,7 +931,7 @@ function exportCSV() {
         "event_date", "order_date", "customer", "customer_email", "customer_phone",
         "item_name", "item_price", "transaction_fees", "city", "chapter", "course",
         "handicap", "has_handicap",
-        "side_games", "tee_choice", "member_status",
+        "side_games", "tee_choice", "user_status",
         "post_game", "returning_or_new", "shirt_size",
         "guest_name", "date_of_birth",
         "net_points_race", "gross_points_race", "city_match_play",
@@ -1037,8 +1040,8 @@ function onAuthReady() {
 const EDIT_FIELDS = [
     "customer", "item_name", "item_price", "transaction_fees", "event_date",
     "city", "chapter", "course", "handicap", "has_handicap", "side_games",
-    "tee_choice", "member_status",
-    "partner_request", "fellowship_after", "notes",
+    "tee_choice", "user_status",
+    "partner_request", "fellowship", "notes",
     "returning_or_new", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
 ];

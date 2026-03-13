@@ -1257,7 +1257,7 @@
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${r.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>` : ''}`;
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
-            if (isComp || (r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
+            if (isComp || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
             else if (isManual && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             const manualOverride = isSynthetic
@@ -1313,9 +1313,9 @@
                 ["Order Date", r.order_date || "\u2014"],
                 ["Price", r.item_price || "\u2014"],
                 ["Handicap", r.handicap || "\u2014"],
-                ["Status", r.member_status || "\u2014"],
+                ["Status", r.user_status || "\u2014"],
                 ["Partner Request", r.partner_request || "\u2014"],
-                ["Fellowship After", r.fellowship_after || "\u2014"],
+                ["Fellowship", r.fellowship || "\u2014"],
                 ["Notes", r.notes || "\u2014"],
             ];
 
@@ -1375,7 +1375,7 @@
                 id: `gg-rsvp-${i}`, customer: r.resolved_name || r.player_name || 'Unknown',
                 customer_email: r.player_email || '', item_name: ev.item_name,
                 item_price: '', side_games: '', tee_choice: '', handicap: '',
-                member_status: '', order_date: '',
+                user_status: '', order_date: '',
                 transaction_status: 'gg_rsvp', email_uid: 'gg-rsvp', transferred_from_id: null,
                 has_player_card: r.has_player_card !== false
             }));
@@ -1588,9 +1588,9 @@
         { key: "handicap", label: "Handicap", default: true },
         { key: "side_games", label: "Side Games", default: true },
         { key: "tee_choice", label: "Tee", default: true },
-        { key: "member_status", label: "Status", default: true },
+        { key: "user_status", label: "Status", default: true },
         { key: "partner_request", label: "Partner", default: false },
-        { key: "fellowship_after", label: "Fellowship", default: false },
+        { key: "fellowship", label: "Fellowship", default: false },
         { key: "notes", label: "Notes", default: false },
         { key: "actions", label: "Actions", default: true },
     ];
@@ -1956,7 +1956,7 @@
             customer_email: r.player_email || '',
             item_name: ev.item_name,
             item_price: '', side_games: '', tee_choice: '', handicap: '',
-            member_status: '', order_date: '',
+            user_status: '', order_date: '',
             transaction_status: 'gg_rsvp',
             email_uid: 'gg-rsvp',
             transferred_from_id: null,
@@ -2141,7 +2141,7 @@
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${r.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>` : ''}`;
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
-                    if (isCompRow || (r.member_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
+                    if (isCompRow || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
                     else if (isManualRow && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}</td>`;
                 } else if (c.key === "item_price") {
@@ -3580,7 +3580,7 @@
             if (!payload.side_games) missing.push("Side Games");
             payload.tee_choice = document.getElementById("add-player-tee").value;
             payload.handicap = document.getElementById("add-player-handicap").value;
-            payload.member_status = document.getElementById("add-player-status").value;
+            payload.user_status = document.getElementById("add-player-status").value;
         }
 
         if (mode === "paid_separately") {
@@ -3730,7 +3730,7 @@
                     side_games: sideGames,
                     tee_choice: document.getElementById("upgrade-rsvp-tee").value,
                     handicap: document.getElementById("upgrade-rsvp-handicap").value,
-                    member_status: document.getElementById("upgrade-rsvp-status").value,
+                    user_status: document.getElementById("upgrade-rsvp-status").value,
                 }),
             });
             if (!res.ok) {
@@ -4698,7 +4698,7 @@
             // Auto-fill status from existing customer data
             if (isKnown) {
                 const customerItems = allItems.filter(i => (i.customer || "").toLowerCase() === name.toLowerCase());
-                const statuses = customerItems.map(i => (i.member_status || "").toUpperCase()).filter(Boolean);
+                const statuses = customerItems.map(i => (i.user_status || "").toUpperCase()).filter(Boolean);
                 const statusSelect = document.getElementById("add-player-status");
                 if (!statusSelect.disabled) {
                     if (statuses.includes("MEMBER")) statusSelect.value = "MEMBER";
