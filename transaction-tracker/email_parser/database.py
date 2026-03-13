@@ -4203,10 +4203,13 @@ def get_handicap_export_data(chapter: str | None = None,
     with _connect(db_path) as conn:
         links = conn.execute(
             """SELECT l.player_name, l.customer_name,
-                      (SELECT ca.alias_value FROM customer_aliases ca
-                       WHERE LOWER(ca.customer_name) = LOWER(l.customer_name)
-                         AND ca.alias_type = 'email'
-                       LIMIT 1) AS customer_email,
+                      COALESCE(
+                        (SELECT LOWER(TRIM(i1.customer_email)) FROM items i1
+                         WHERE LOWER(i1.customer) = LOWER(l.customer_name)
+                           AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
+                         ORDER BY i1.id DESC LIMIT 1),
+                        ''
+                      ) AS customer_email,
                       COALESCE(
                         (SELECT i2.chapter FROM items i2
                          WHERE LOWER(i2.customer) = LOWER(l.customer_name)
@@ -4228,6 +4231,9 @@ def get_handicap_export_data(chapter: str | None = None,
                 "chapter": lnk["chapter"] or "",
             }
 
+    # Check if ANY linked player has chapter data; if not, skip chapter filtering
+    has_chapter_data = any(v["chapter"] for v in link_map.values())
+
     rows = []
     no_email = []
     no_index = []
@@ -4241,8 +4247,8 @@ def get_handicap_export_data(chapter: str | None = None,
                 no_email.append(pname)
             continue
 
-        # Chapter filter
-        if chapter and info["chapter"].lower() != chapter.lower():
+        # Chapter filter — only apply if chapter data actually exists in the DB
+        if chapter and has_chapter_data and info["chapter"].lower() != chapter.lower():
             continue
 
         if p["handicap_index"] is None:
