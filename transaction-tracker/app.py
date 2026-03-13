@@ -1040,8 +1040,8 @@ def api_re_extract_fields():
     """Re-parse existing transaction emails to backfill new fields.
 
     Fetches original emails from Graph API, re-runs AI extraction,
-    and updates only the specified fields (partner_request, fellowship_after,
-    notes) on existing items without overwriting other data.
+    and updates only the specified fields (partner_request, fellowship,
+    notes, holes, shipping address) on existing items without overwriting other data.
     """
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
@@ -1051,7 +1051,8 @@ def api_re_extract_fields():
     if not all([tenant_id, client_id, client_secret, email_address]):
         return jsonify({"error": "Azure AD credentials not configured"}), 400
 
-    BACKFILL_FIELDS = ["partner_request", "fellowship_after", "notes"]
+    BACKFILL_FIELDS = ["partner_request", "fellowship", "notes", "holes",
+                       "shipping_address", "shipping_city", "shipping_state", "shipping_zip"]
 
     items = get_all_items()
     # Find items missing any of the new fields
@@ -1696,7 +1697,7 @@ def api_add_player():
             side_games=data.get("side_games", ""),
             tee_choice=data.get("tee_choice", ""),
             handicap=data.get("handicap", ""),
-            member_status=data.get("member_status", ""),
+            user_status=data.get("user_status", data.get("member_status", "")),
             payment_amount=data.get("payment_amount", ""),
             payment_source=data.get("payment_source", ""),
             customer_email=data.get("customer_email", ""),
@@ -1723,7 +1724,7 @@ def api_upgrade_rsvp():
         side_games=data.get("side_games", ""),
         tee_choice=data.get("tee_choice", ""),
         handicap=data.get("handicap", ""),
-        member_status=data.get("member_status", ""),
+        user_status=data.get("user_status", data.get("member_status", "")),
     )
     if item:
         return jsonify({"status": "ok", "item": item})
@@ -3208,6 +3209,40 @@ def api_handicap_sync_status():
 
     merged = {**persisted, **_gg_sync_jobs}
     return jsonify(merged)
+
+
+# ---------------------------------------------------------------------------
+# Routes — Season Contests
+# ---------------------------------------------------------------------------
+
+@app.route("/api/season-contests")
+@require_role("manager")
+def api_season_contests():
+    """List season contest enrollments with optional filters."""
+    from email_parser.database import get_season_contest_enrollments
+    contest_type = request.args.get("contest_type")
+    chapter = request.args.get("chapter")
+    season = request.args.get("season")
+    enrollments = get_season_contest_enrollments(contest_type, chapter, season)
+    return jsonify(enrollments)
+
+
+@app.route("/api/season-contests/sync", methods=["POST"])
+@require_role("manager")
+def api_sync_season_contests():
+    """Scan all items and enroll customers in season contests."""
+    from email_parser.database import sync_season_contests_from_items
+    result = sync_season_contests_from_items()
+    return jsonify(result)
+
+
+@app.route("/api/season-contests/customer/<path:customer_name>")
+@require_role("manager")
+def api_customer_season_contests(customer_name):
+    """Get season contest enrollments for a specific customer."""
+    from email_parser.database import get_customer_season_contests
+    enrollments = get_customer_season_contests(customer_name)
+    return jsonify(enrollments)
 
 
 # ---------------------------------------------------------------------------

@@ -319,7 +319,7 @@ def add_player(
     side_games: str = "",
     tee_choice: str = "",
     handicap: str = "",
-    member_status: str = "",
+    user_status: str = "",
 ) -> str:
     """Add a comp'd player to an event ($0 registration).
 
@@ -329,7 +329,7 @@ def add_player(
         side_games: NET, GROSS, BOTH, or NONE
         tee_choice: <50, 50-64, 65+, or Forward
         handicap: Numeric handicap
-        member_status: MEMBER or NON-MEMBER
+        user_status: MEMBER, 1st TIMER, GUEST, MANAGER, etc.
     """
     return json.dumps(
         _post("/api/events/add-player", {
@@ -338,7 +338,7 @@ def add_player(
             "side_games": side_games,
             "tee_choice": tee_choice,
             "handicap": handicap,
-            "member_status": member_status,
+            "user_status": user_status,
         }),
         indent=2,
     )

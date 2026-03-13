@@ -380,8 +380,8 @@
         });
         if (hasMembership) return "MEMBER";
 
-        // Check member_status field across transactions
-        const memberStatuses = items.map(i => (i.member_status || "").toUpperCase()).filter(Boolean);
+        // Check user_status field across transactions
+        const memberStatuses = items.map(i => (i.user_status || "").toUpperCase()).filter(Boolean);
         if (memberStatuses.includes("MEMBER")) return "MEMBER";
 
         // Check returning_or_new
@@ -612,6 +612,11 @@
             { key: "handicap", label: "Handicap", value: (customer.items[0] || {}).handicap || "" },
             { key: "date_of_birth", label: "Date of Birth", value: (customer.items[0] || {}).date_of_birth || "" },
             { key: "shirt_size", label: "Shirt Size", value: (customer.items[0] || {}).shirt_size || "" },
+            { key: "shipping_address", label: "Address", value: customer.items.map(i => i.shipping_address).find(Boolean) || "" },
+            { key: "shipping_address2", label: "Address 2", value: customer.items.map(i => i.shipping_address2).find(Boolean) || "" },
+            { key: "shipping_city", label: "City", value: customer.items.map(i => i.shipping_city).find(Boolean) || "" },
+            { key: "shipping_state", label: "State", value: customer.items.map(i => i.shipping_state).find(Boolean) || "" },
+            { key: "shipping_zip", label: "ZIP", value: customer.items.map(i => i.shipping_zip).find(Boolean) || "" },
         ];
         const infoHtml = infoFields.map(f =>
             `<div class="mc-field">` +
@@ -909,6 +914,18 @@
         });
     }
 
+    function formatShippingAddress(customer) {
+        const addr = customer.items.map(i => i.shipping_address).find(Boolean) || "";
+        const addr2 = customer.items.map(i => i.shipping_address2).find(Boolean) || "";
+        const city = customer.items.map(i => i.shipping_city).find(Boolean) || "";
+        const state = customer.items.map(i => i.shipping_state).find(Boolean) || "";
+        const zip = customer.items.map(i => i.shipping_zip).find(Boolean) || "";
+        if (!addr && !city && !state && !zip) return "";
+        const line1 = [addr, addr2].filter(Boolean).join(", ");
+        const line2 = [city, [state, zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+        return [line1, line2].filter(Boolean).join(", ");
+    }
+
     function renderCustInfoPanel(customer) {
         const infoFields = [
             { key: "first_name", label: "First Name", value: customer.first_name || "" },
@@ -923,6 +940,14 @@
             { key: "shirt_size", label: "Shirt Size", value: customer.items.map(i => i.shirt_size).find(Boolean) || "" },
         ];
 
+        const addressFields = [
+            { key: "shipping_address", label: "Address", value: customer.items.map(i => i.shipping_address).find(Boolean) || "" },
+            { key: "shipping_address2", label: "Address 2", value: customer.items.map(i => i.shipping_address2).find(Boolean) || "" },
+            { key: "shipping_city", label: "City", value: customer.items.map(i => i.shipping_city).find(Boolean) || "" },
+            { key: "shipping_state", label: "State", value: customer.items.map(i => i.shipping_state).find(Boolean) || "" },
+            { key: "shipping_zip", label: "ZIP", value: customer.items.map(i => i.shipping_zip).find(Boolean) || "" },
+        ];
+
         // Read-only view
         let html = '<div class="cust-info-view">';
         html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; max-width:500px; font-size:0.82rem;">';
@@ -933,6 +958,13 @@
             `</div>`
         ).join("");
         html += '</div>';
+
+        // Address section (read-only)
+        const formattedAddr = formatShippingAddress(customer);
+        html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
+            <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.2rem;">Address</div>
+            <div style="font-size:0.82rem; min-height:1.2em;">${formattedAddr ? escapeHtml(formattedAddr) : '<span style="color:var(--text-muted);">\u2014</span>'}</div>
+        </div>`;
 
         // Aliases section (read-only)
         html += `<div class="cust-aliases-section" style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border);">
@@ -956,6 +988,18 @@
             `</label>`
         ).join("");
         html += '</div>';
+
+        // Address fields (editable)
+        html += '<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">';
+        html += '<div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Address</div>';
+        html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; font-size:0.82rem;">';
+        html += addressFields.map(f =>
+            `<label style="display:flex; flex-direction:column;">` +
+            `<span style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">${f.label}</span>` +
+            `<input type="text" class="cust-edit-input modal-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="margin-top:0.2rem; padding:0.3rem 0.5rem; font-size:0.82rem;">` +
+            `</label>`
+        ).join("");
+        html += '</div></div>';
 
         // Aliases editor
         html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border);">
@@ -1041,6 +1085,8 @@
         if (customer.email) meta.push(`<a href="mailto:${encodeURIComponent(customer.email)}" class="cell-link">${escapeHtml(customer.email)}</a>`);
         if (customer.phone) meta.push(customer.phone);
         if (dob) meta.push("DOB: " + dob);
+        const addr = formatShippingAddress(customer);
+        if (addr) meta.push("Address: " + escapeHtml(addr));
         meta.push(`${customer.items.length} purchase(s)`);
         meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} total`);
 
@@ -1405,6 +1451,8 @@
         if (customer.chapter) meta.push("Chapter: " + escapeHtml(customer.chapter));
         if (customer.email) meta.push(`<a href="mailto:${encodeURIComponent(customer.email)}" class="cell-link">${escapeHtml(customer.email)}</a>`);
         if (customer.phone) meta.push(escapeHtml(customer.phone));
+        const selectAddr = formatShippingAddress(customer);
+        if (selectAddr) meta.push("Address: " + escapeHtml(selectAddr));
         meta.push(`${customer.items.length} purchase(s)`);
         meta.push(`$${customer.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} total`);
         document.getElementById("detail-meta").innerHTML = meta.join(" | ");

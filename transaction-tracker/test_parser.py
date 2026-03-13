@@ -80,8 +80,8 @@ MOCK_AI_RESPONSE = {
             "handicap": None,
             "side_games": None,
             "tee_choice": "<50 | 6300-6800y",
-            "member_status": "MEMBER = $158",
-            "golf_or_compete": "EVENT Only - No Additional Games",
+            "user_status": "MEMBER = $158",
+            "side_games_raw": "EVENT Only - No Additional Games",
             "post_game": "YES",
             "returning_or_new": None,
             "shirt_size": None,
@@ -120,8 +120,8 @@ MOCK_MULTI_ITEM_RESPONSE = {
             "handicap": "12",
             "side_games": "NET Points Race, City Match Play",
             "tee_choice": "<50 | 6300-6800y",
-            "member_status": "MEMBER = $175",
-            "golf_or_compete": "COMPETE",
+            "user_status": "MEMBER = $175",
+            "side_games_raw": "COMPETE",
             "post_game": "YES",
             "returning_or_new": "Returning",
             "shirt_size": None,
@@ -140,8 +140,8 @@ MOCK_MULTI_ITEM_RESPONSE = {
             "handicap": None,
             "side_games": None,
             "tee_choice": None,
-            "member_status": None,
-            "golf_or_compete": None,
+            "user_status": None,
+            "side_games_raw": None,
             "post_game": None,
             "returning_or_new": None,
             "shirt_size": "XL",
@@ -191,8 +191,8 @@ def test_single_item():
             "total_amount": "$163.53",
             "item_name": "Feb 22 - LaCANTERA",
             "item_price": "$158.00",
-            "golf_or_compete": "EVENT Only - No Additional Games",
-            "member_status": "MEMBER = $158",
+            "side_games_raw": "EVENT Only - No Additional Games",
+            "user_status": "MEMBER = $158",
             "post_game": "YES",
             "tee_choice": "<50 | 6300-6800y",
             "email_uid": "test-001",
@@ -207,7 +207,7 @@ def test_single_item():
         print(f"  Customer:   {row['customer']}")
         print(f"  Item:       {row['item_name']}")
         print(f"  Price:      {row['item_price']}")
-        print(f"  Type:       {row['golf_or_compete']}")
+        print(f"  Status:     {row.get('user_status', '')}")
         print(f"  Tee:        {row['tee_choice']}")
         print(f"  Order ID:   {row['order_id']}")
 

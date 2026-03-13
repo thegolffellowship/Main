@@ -236,8 +236,10 @@ ITEM_COLUMNS = [
     "item_name", "event_date", "item_price", "quantity",
     "city", "chapter", "course", "handicap", "has_handicap",
     "side_games", "tee_choice",
-    "member_status", "post_game", "returning_or_new",
-    "partner_request", "fellowship_after", "notes",
+    "user_status", "post_game", "returning_or_new",
+    "partner_request", "fellowship", "notes",
+    "holes",
+    "shipping_address", "shipping_address2", "shipping_city", "shipping_state", "shipping_zip",
     "shirt_size", "guest_name", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
     "subject", "from_addr",
@@ -301,12 +303,18 @@ def init_db(db_path: str | Path | None = None) -> None:
                 handicap         TEXT,
                 side_games       TEXT,
                 tee_choice       TEXT,
-                member_status    TEXT,
+                user_status      TEXT,
                 post_game        TEXT,
                 returning_or_new TEXT,
                 partner_request  TEXT,
-                fellowship_after TEXT,
+                fellowship       TEXT,
                 notes            TEXT,
+                holes            TEXT,
+                shipping_address TEXT,
+                shipping_address2 TEXT,
+                shipping_city    TEXT,
+                shipping_state   TEXT,
+                shipping_zip     TEXT,
                 shirt_size       TEXT,
                 guest_name       TEXT,
                 date_of_birth    TEXT,
@@ -350,12 +358,32 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("middle_name", "TEXT"),
             ("suffix", "TEXT"),
             ("archived", "INTEGER DEFAULT 0"),
+            ("holes", "TEXT"),
+            ("shipping_address", "TEXT"),
+            ("shipping_address2", "TEXT"),
+            ("shipping_city", "TEXT"),
+            ("shipping_state", "TEXT"),
+            ("shipping_zip", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
                 logger.info("Added new column: %s", col)
             except sqlite3.OperationalError:
                 pass  # column already exists
+
+        # Migration: rename member_status → user_status
+        try:
+            conn.execute("ALTER TABLE items RENAME COLUMN member_status TO user_status")
+            logger.info("Migrated items.member_status → items.user_status")
+        except sqlite3.OperationalError:
+            pass  # already renamed or doesn't exist
+
+        # Migration: rename fellowship_after → fellowship
+        try:
+            conn.execute("ALTER TABLE items RENAME COLUMN fellowship_after TO fellowship")
+            logger.info("Migrated items.fellowship_after → items.fellowship")
+        except sqlite3.OperationalError:
+            pass  # already renamed or doesn't exist
 
         # Processed emails table — tracks ALL email UIDs we've already sent to
         # the AI, even if no items were extracted.  Prevents re-parsing the same
@@ -643,6 +671,29 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # Season contest enrollments — tracks who's in NET Points Race,
+        # GROSS Points Race, City Match Play, etc.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS season_contests (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_name   TEXT NOT NULL,
+                contest_type    TEXT NOT NULL,
+                chapter         TEXT,
+                season          TEXT,
+                source_item_id  INTEGER,
+                enrolled_at     TEXT DEFAULT (datetime('now')),
+                UNIQUE(customer_name, contest_type, chapter, season)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_season_contests_customer ON season_contests(customer_name)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_season_contests_type ON season_contests(contest_type)"
+        )
+
         # Seed built-in message templates on first run
         existing = conn.execute("SELECT COUNT(*) as cnt FROM message_templates WHERE is_system = 1").fetchone()
         if existing["cnt"] == 0:
@@ -924,7 +975,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
             "item_name", "item_price", "event_date", "city", "course",
         ]
         golf_fields = [
-            "handicap", "side_games", "tee_choice", "member_status",
+            "handicap", "side_games", "tee_choice", "user_status",
             "post_game", "returning_or_new",
             "shirt_size", "guest_name",
         ]
@@ -954,7 +1005,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
 
         # --- Value distributions for key columns ---------------------------------
         distributions = {}
-        for field in ["city", "course", "member_status", "tee_choice"]:
+        for field in ["city", "course", "user_status", "tee_choice"]:
             counts: dict[str, int] = {}
             for it in items:
                 val = it.get(field) or "(empty)"
@@ -1651,7 +1702,9 @@ def update_customer_info(customer_name: str, fields: dict,
     """
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
-               "first_name", "last_name", "middle_name", "suffix"}
+               "first_name", "last_name", "middle_name", "suffix",
+               "shipping_address", "shipping_address2", "shipping_city",
+               "shipping_state", "shipping_zip"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return 0
@@ -2844,7 +2897,7 @@ def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
 
 def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                         side_games: str = "", tee_choice: str = "",
-                        handicap: str = "", member_status: str = "",
+                        handicap: str = "", user_status: str = "",
                         payment_amount: str = "", payment_source: str = "",
                         customer_email: str = "", customer_phone: str = "",
                         db_path: str | Path | None = None) -> dict | None:
@@ -2889,7 +2942,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
             new_values["side_games"] = side_games or None
             new_values["tee_choice"] = tee_choice or None
             new_values["handicap"] = handicap or None
-            new_values["member_status"] = member_status or None
+            new_values["user_status"] = user_status or None
         elif mode == "rsvp":
             new_values["merchant"] = "RSVP Only"
             new_values["item_price"] = None
@@ -2901,7 +2954,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
             new_values["side_games"] = side_games or None
             new_values["tee_choice"] = tee_choice or None
             new_values["handicap"] = handicap or None
-            new_values["member_status"] = member_status or None
+            new_values["user_status"] = user_status or None
         else:
             new_values["merchant"] = "Manual Entry"
             new_values["item_price"] = "$0.00"
@@ -2924,7 +2977,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
 def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
                          payment_source: str = "", side_games: str = "",
                          tee_choice: str = "", handicap: str = "",
-                         member_status: str = "",
+                         user_status: str = "",
                          db_path: str | Path | None = None) -> dict | None:
     """
     Upgrade an RSVP-only placeholder to a full paid registration.
@@ -2952,7 +3005,7 @@ def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
                 side_games = ?,
                 tee_choice = ?,
                 handicap = ?,
-                member_status = ?,
+                user_status = ?,
                 transaction_status = 'active'
             WHERE id = ?""",
             (
@@ -2961,7 +3014,7 @@ def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
                 side_games or None,
                 tee_choice or None,
                 handicap or None,
-                member_status or None,
+                user_status or None,
                 item_id,
             ),
         )
@@ -4469,3 +4522,173 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
         })
 
     return players
+
+
+# ---------------------------------------------------------------------------
+# Season Contest Enrollment
+# ---------------------------------------------------------------------------
+
+def enroll_season_contest(customer_name: str, contest_type: str,
+                          chapter: str = "", season: str = "",
+                          source_item_id: int | None = None,
+                          db_path: str | Path | None = None) -> dict:
+    """Enroll a customer in a season contest (NET Points Race, GROSS Points Race, City Match Play).
+
+    Returns the enrollment dict. Idempotent — re-enrolling is a no-op.
+    """
+    with _connect(db_path) as conn:
+        try:
+            conn.execute(
+                """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (customer_name, contest_type, chapter or "", season or "", source_item_id),
+            )
+            conn.commit()
+            logger.info("Enrolled %s in %s (%s/%s)", customer_name, contest_type, chapter, season)
+        except sqlite3.IntegrityError:
+            pass  # already enrolled
+        row = conn.execute(
+            "SELECT * FROM season_contests WHERE customer_name = ? AND contest_type = ? AND chapter = ? AND season = ?",
+            (customer_name, contest_type, chapter or "", season or ""),
+        ).fetchone()
+        return dict(row) if row else {}
+
+
+def get_season_contest_enrollments(contest_type: str | None = None,
+                                    chapter: str | None = None,
+                                    season: str | None = None,
+                                    db_path: str | Path | None = None) -> list[dict]:
+    """List season contest enrollments, optionally filtered."""
+    clauses = []
+    params = []
+    if contest_type:
+        clauses.append("contest_type = ?")
+        params.append(contest_type)
+    if chapter:
+        clauses.append("chapter = ?")
+        params.append(chapter)
+    if season:
+        clauses.append("season = ?")
+        params.append(season)
+    where = " AND ".join(clauses) if clauses else "1=1"
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM season_contests WHERE {where} ORDER BY enrolled_at DESC", params
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_customer_season_contests(customer_name: str,
+                                  db_path: str | Path | None = None) -> list[dict]:
+    """Get all season contest enrollments for a specific customer."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM season_contests WHERE customer_name = ? COLLATE NOCASE ORDER BY season, contest_type",
+            (customer_name,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
+    """Scan all items and enroll customers in season contests based on their
+    net_points_race, gross_points_race, city_match_play fields.
+
+    Also handles standalone SEASON CONTESTS items.
+    Returns summary of enrollments made.
+    """
+    enrolled = 0
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT id, customer, chapter, net_points_race, gross_points_race, city_match_play,
+                      item_name, order_date
+               FROM items
+               WHERE transaction_status IN ('active', NULL)
+                 AND (net_points_race = 'YES' OR gross_points_race = 'YES' OR city_match_play = 'YES'
+                      OR UPPER(item_name) LIKE '%SEASON CONTEST%')"""
+        ).fetchall()
+
+        for row in rows:
+            row = dict(row)
+            customer = row.get("customer") or ""
+            chapter = row.get("chapter") or ""
+            # Derive season from order_date (e.g. "2026" from "2026-03-10")
+            order_date = row.get("order_date") or ""
+            season = order_date[:4] if len(order_date) >= 4 else ""
+            item_id = row["id"]
+
+            if (row.get("net_points_race") or "").upper() == "YES":
+                try:
+                    conn.execute(
+                        """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (customer, "NET Points Race", chapter, season, item_id),
+                    )
+                    enrolled += 1
+                except sqlite3.IntegrityError:
+                    pass
+
+            if (row.get("gross_points_race") or "").upper() == "YES":
+                try:
+                    conn.execute(
+                        """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (customer, "GROSS Points Race", chapter, season, item_id),
+                    )
+                    enrolled += 1
+                except sqlite3.IntegrityError:
+                    pass
+
+            if (row.get("city_match_play") or "").upper() == "YES":
+                try:
+                    conn.execute(
+                        """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (customer, "City Match Play", chapter, season, item_id),
+                    )
+                    enrolled += 1
+                except sqlite3.IntegrityError:
+                    pass
+
+        # Handle standalone "SEASON CONTESTS" items with bundle info in notes
+        bundle_rows = conn.execute(
+            """SELECT id, customer, chapter, item_name, notes, order_date
+               FROM items
+               WHERE UPPER(item_name) LIKE '%SEASON CONTEST%'
+                 AND transaction_status IN ('active', NULL)"""
+        ).fetchall()
+        for row in bundle_rows:
+            row = dict(row)
+            customer = row.get("customer") or ""
+            chapter = row.get("chapter") or ""
+            order_date = row.get("order_date") or ""
+            season = order_date[:4] if len(order_date) >= 4 else ""
+            item_name = (row.get("item_name") or "").upper()
+            item_id = row["id"]
+
+            # "Points NET Bundle" or similar → enroll in both NET Points Race and City Match Play
+            if "NET" in item_name or "NET" in (row.get("notes") or "").upper():
+                for ct in ["NET Points Race", "City Match Play"]:
+                    try:
+                        conn.execute(
+                            """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
+                               VALUES (?, ?, ?, ?, ?)""",
+                            (customer, ct, chapter, season, item_id),
+                        )
+                        enrolled += 1
+                    except sqlite3.IntegrityError:
+                        pass
+            if "GROSS" in item_name or "GROSS" in (row.get("notes") or "").upper():
+                for ct in ["GROSS Points Race", "City Match Play"]:
+                    try:
+                        conn.execute(
+                            """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
+                               VALUES (?, ?, ?, ?, ?)""",
+                            (customer, ct, chapter, season, item_id),
+                        )
+                        enrolled += 1
+                    except sqlite3.IntegrityError:
+                        pass
+
+        conn.commit()
+    logger.info("Season contest sync: %d new enrollments", enrolled)
+    return {"enrolled": enrolled}
