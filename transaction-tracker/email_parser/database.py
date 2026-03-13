@@ -4292,6 +4292,17 @@ def get_handicap_export_data(chapter: str | None = None,
         "no_email": sorted(no_email),
         "no_index": sorted(no_index),
         "chapter": chapter or "All",
+        "_debug": {
+            "total_players": len(player_map),
+            "total_linked": len(link_map),
+            "has_chapter_data": has_chapter_data,
+            "chapter_filter": chapter,
+            "link_sample": [
+                {"player": k, "email": v["email"][:3] + "..." if v["email"] else None,
+                 "chapter": v["chapter"]}
+                for k, v in list(link_map.items())[:10]
+            ],
+        },
     }
 
 

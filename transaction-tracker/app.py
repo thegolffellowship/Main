@@ -3056,6 +3056,15 @@ def api_create_customers_for_unlinked():
     return jsonify({"created": created, "linked": linked, "total": len(unlinked)})
 
 
+@app.route("/api/handicaps/export-preview")
+@require_role("manager")
+def api_handicap_export_preview():
+    """JSON preview of what the CSV export would contain, with diagnostics."""
+    chapter = request.args.get("chapter", "").strip()
+    data = get_handicap_export_data(chapter=chapter if chapter else None)
+    return jsonify(data)
+
+
 @app.route("/api/handicaps/export-csv")
 @require_role("manager")
 def api_handicap_export_csv():
