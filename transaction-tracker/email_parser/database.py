@@ -4203,7 +4203,10 @@ def get_handicap_export_data(chapter: str | None = None,
     with _connect(db_path) as conn:
         links = conn.execute(
             """SELECT l.player_name, l.customer_name,
-                      i.customer_email,
+                      (SELECT ca.alias_value FROM customer_aliases ca
+                       WHERE LOWER(ca.customer_name) = LOWER(l.customer_name)
+                         AND ca.alias_type = 'email'
+                       LIMIT 1) AS customer_email,
                       COALESCE(
                         (SELECT i2.chapter FROM items i2
                          WHERE LOWER(i2.customer) = LOWER(l.customer_name)
@@ -4212,12 +4215,7 @@ def get_handicap_export_data(chapter: str | None = None,
                         ''
                       ) AS chapter
                FROM handicap_player_links l
-               JOIN items i ON LOWER(i.customer) = LOWER(l.customer_name)
-               WHERE l.customer_name IS NOT NULL
-                 AND i.customer_email IS NOT NULL
-                 AND TRIM(i.customer_email) != ''
-               GROUP BY l.player_name
-               HAVING MAX(i.id)""",
+               WHERE l.customer_name IS NOT NULL""",
         ).fetchall()
 
     # Build a map: player_name → (email, chapter) from best linked record
