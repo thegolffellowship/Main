@@ -357,6 +357,25 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.OperationalError:
                 pass  # column already exists
 
+        # Processed emails table — tracks ALL email UIDs we've already sent to
+        # the AI, even if no items were extracted.  Prevents re-parsing the same
+        # email every 15 minutes and burning API credits.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS processed_emails (
+                email_uid   TEXT PRIMARY KEY,
+                processed_at TEXT DEFAULT (datetime('now')),
+                items_found  INTEGER DEFAULT 0
+            )
+        """)
+
+        # Backfill processed_emails from existing items table
+        conn.execute("""
+            INSERT OR IGNORE INTO processed_emails (email_uid, items_found)
+            SELECT DISTINCT email_uid, COUNT(*) FROM items
+            WHERE email_uid IS NOT NULL AND email_uid != ''
+            GROUP BY email_uid
+        """)
+
         # Customer aliases table — supports multiple alias names/emails per customer
         conn.execute("""
             CREATE TABLE IF NOT EXISTS customer_aliases (
@@ -814,10 +833,29 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
 
 
 def get_known_email_uids(db_path: str | Path | None = None) -> set[str]:
-    """Return the set of email_uid values already stored in the database."""
+    """Return the set of email_uid values already processed (with or without items)."""
     with _connect(db_path) as conn:
-        rows = conn.execute("SELECT DISTINCT email_uid FROM items").fetchall()
-        return {r["email_uid"] for r in rows}
+        # Check both tables: items (legacy) and processed_emails (new)
+        uids = set()
+        for row in conn.execute("SELECT DISTINCT email_uid FROM items").fetchall():
+            uids.add(row["email_uid"])
+        try:
+            for row in conn.execute("SELECT email_uid FROM processed_emails").fetchall():
+                uids.add(row["email_uid"])
+        except sqlite3.OperationalError:
+            pass  # table doesn't exist yet (pre-migration)
+        return uids
+
+
+def mark_email_processed(email_uid: str, items_found: int = 0,
+                         db_path: str | Path | None = None) -> None:
+    """Record that an email has been processed, even if no items were extracted."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO processed_emails (email_uid, items_found) VALUES (?, ?)",
+            (email_uid, items_found),
+        )
+        conn.commit()
 
 
 def get_all_items(db_path: str | Path | None = None) -> list[dict]:

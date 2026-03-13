@@ -100,6 +100,7 @@ from email_parser.database import (
     update_handicap_settings,
     get_handicap_export_data,
     relink_all_unlinked_players,
+    mark_email_processed,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -204,6 +205,8 @@ def check_inbox():
                 logger.info("Email %d/%d: saved %d items", i, len(new_emails), count)
             else:
                 logger.info("Email %d/%d: no items extracted", i, len(new_emails))
+            # Always mark as processed so we don't re-parse next cycle
+            mark_email_processed(email_data.get("uid", ""), len(rows))
         except (_anthropic.BadRequestError, _anthropic.AuthenticationError) as e:
             logger.error(
                 "Stopping at email %d/%d — Anthropic API fatal error: %s",
