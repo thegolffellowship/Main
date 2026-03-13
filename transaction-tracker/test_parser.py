@@ -75,7 +75,7 @@ MOCK_AI_RESPONSE = {
             "item_name": "Feb 22 - LaCANTERA",
             "item_price": "$158.00",
             "quantity": 1,
-            "city": None,
+            "chapter": None,
             "course": "LaCANTERA",
             "handicap": None,
             "side_games": None,
@@ -115,7 +115,7 @@ MOCK_MULTI_ITEM_RESPONSE = {
             "item_name": "Mar 15 - TPC San Antonio",
             "item_price": "$175.00",
             "quantity": 1,
-            "city": "San Antonio",
+            "chapter": "San Antonio",
             "course": "TPC San Antonio",
             "handicap": "12",
             "side_games": "NET Points Race, City Match Play",
@@ -135,7 +135,7 @@ MOCK_MULTI_ITEM_RESPONSE = {
             "item_name": "TGF Membership 2026",
             "item_price": "$175.00",
             "quantity": 1,
-            "city": None,
+            "chapter": None,
             "course": None,
             "handicap": None,
             "side_games": None,
@@ -244,8 +244,8 @@ def test_multi_item():
             errors.append(f"item[0].item_name: expected 'Mar 15 - TPC San Antonio', got '{r0['item_name']}'")
         if r0["side_games"] != "NET Points Race, City Match Play":
             errors.append(f"item[0].side_games: expected 'NET Points Race, City Match Play', got '{r0['side_games']}'")
-        if r0["city"] != "San Antonio":
-            errors.append(f"item[0].city: expected 'San Antonio', got '{r0['city']}'")
+        if r0["chapter"] != "San Antonio":
+            errors.append(f"item[0].chapter: expected 'San Antonio', got '{r0['chapter']}'")
         if r0["item_index"] != 0:
             errors.append(f"item[0].item_index: expected 0, got {r0['item_index']}")
 

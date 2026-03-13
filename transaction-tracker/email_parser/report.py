@@ -184,7 +184,7 @@ def _build_upcoming_events_section(events: list[dict]) -> str:
     for e in events:
         paid = e.get("registrations", 0)
         total = e.get("total_playing", 0) + e.get("gg_rsvp_count", 0)
-        course_city = e.get('course') or e.get('city') or '—'
+        course_city = e.get('course') or e.get('chapter') or '—'
         table_rows += f"""\
 <tr>
   <td style="{STYLES['td']} font-weight:600;">{e.get('item_name') or '—'}</td>

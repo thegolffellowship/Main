@@ -398,19 +398,19 @@
     }
 
     // Derive chapter — prefer actual chapter column from membership rows,
-    // fall back to most frequent city in transactions
+    // fall back to most frequent chapter in transactions
     function deriveChapter(items) {
         // First check for an explicit chapter value (from membership orders)
         for (const item of items) {
             const ch = (item.chapter || "").trim();
             if (ch) return ch;
         }
-        // Fallback: most frequent city
+        // Fallback: most frequent chapter from transactions
         const cityCounts = {};
         items.forEach(item => {
-            const city = (item.city || "").trim();
-            if (city) {
-                cityCounts[city] = (cityCounts[city] || 0) + 1;
+            const ch = (item.chapter || "").trim();
+            if (ch) {
+                cityCounts[ch] = (cityCounts[ch] || 0) + 1;
             }
         });
         if (!Object.keys(cityCounts).length) return "";
@@ -612,11 +612,11 @@
             { key: "handicap", label: "Handicap", value: (customer.items[0] || {}).handicap || "" },
             { key: "date_of_birth", label: "Date of Birth", value: (customer.items[0] || {}).date_of_birth || "" },
             { key: "shirt_size", label: "Shirt Size", value: (customer.items[0] || {}).shirt_size || "" },
-            { key: "shipping_address", label: "Address", value: customer.items.map(i => i.shipping_address).find(Boolean) || "" },
-            { key: "shipping_address2", label: "Address 2", value: customer.items.map(i => i.shipping_address2).find(Boolean) || "" },
-            { key: "shipping_city", label: "City", value: customer.items.map(i => i.shipping_city).find(Boolean) || "" },
-            { key: "shipping_state", label: "State", value: customer.items.map(i => i.shipping_state).find(Boolean) || "" },
-            { key: "shipping_zip", label: "ZIP", value: customer.items.map(i => i.shipping_zip).find(Boolean) || "" },
+            { key: "address", label: "Address", value: customer.items.map(i => i.address).find(Boolean) || "" },
+            { key: "address2", label: "Address 2", value: customer.items.map(i => i.address2).find(Boolean) || "" },
+            { key: "city", label: "City", value: customer.items.map(i => i.city).find(Boolean) || "" },
+            { key: "state", label: "State", value: customer.items.map(i => i.state).find(Boolean) || "" },
+            { key: "zip", label: "ZIP", value: customer.items.map(i => i.zip).find(Boolean) || "" },
         ];
         const infoHtml = infoFields.map(f =>
             `<div class="mc-field">` +
@@ -915,11 +915,11 @@
     }
 
     function formatShippingAddress(customer) {
-        const addr = customer.items.map(i => i.shipping_address).find(Boolean) || "";
-        const addr2 = customer.items.map(i => i.shipping_address2).find(Boolean) || "";
-        const city = customer.items.map(i => i.shipping_city).find(Boolean) || "";
-        const state = customer.items.map(i => i.shipping_state).find(Boolean) || "";
-        const zip = customer.items.map(i => i.shipping_zip).find(Boolean) || "";
+        const addr = customer.items.map(i => i.address).find(Boolean) || "";
+        const addr2 = customer.items.map(i => i.address2).find(Boolean) || "";
+        const city = customer.items.map(i => i.city).find(Boolean) || "";
+        const state = customer.items.map(i => i.state).find(Boolean) || "";
+        const zip = customer.items.map(i => i.zip).find(Boolean) || "";
         if (!addr && !city && !state && !zip) return "";
         const line1 = [addr, addr2].filter(Boolean).join(", ");
         const line2 = [city, [state, zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
@@ -941,11 +941,11 @@
         ];
 
         const addressFields = [
-            { key: "shipping_address", label: "Address", value: customer.items.map(i => i.shipping_address).find(Boolean) || "" },
-            { key: "shipping_address2", label: "Address 2", value: customer.items.map(i => i.shipping_address2).find(Boolean) || "" },
-            { key: "shipping_city", label: "City", value: customer.items.map(i => i.shipping_city).find(Boolean) || "" },
-            { key: "shipping_state", label: "State", value: customer.items.map(i => i.shipping_state).find(Boolean) || "" },
-            { key: "shipping_zip", label: "ZIP", value: customer.items.map(i => i.shipping_zip).find(Boolean) || "" },
+            { key: "address", label: "Address", value: customer.items.map(i => i.address).find(Boolean) || "" },
+            { key: "address2", label: "Address 2", value: customer.items.map(i => i.address2).find(Boolean) || "" },
+            { key: "city", label: "City", value: customer.items.map(i => i.city).find(Boolean) || "" },
+            { key: "state", label: "State", value: customer.items.map(i => i.state).find(Boolean) || "" },
+            { key: "zip", label: "ZIP", value: customer.items.map(i => i.zip).find(Boolean) || "" },
         ];
 
         // Read-only view

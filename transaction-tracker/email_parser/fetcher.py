@@ -351,7 +351,7 @@ def send_bulk_emails(
     """Send emails to a list of recipients with template variable substitution.
 
     Each recipient dict must have: player_name, email
-    event_vars provides: event_name, event_date, course, city
+    event_vars provides: event_name, event_date, course, chapter
 
     Returns: {"sent": N, "failed": N, "errors": [...]}
     """

@@ -3,7 +3,7 @@ Transaction email parser — uses Claude AI to extract structured purchase data
 from email text/HTML.
 
 Returns one row per line item so that multi-item orders become multiple records,
-each with dedicated columns for filtering and sorting (item_name, city,
+each with dedicated columns for filtering and sorting (item_name, chapter,
 handicap, side_games, etc.).
 """
 
@@ -63,19 +63,13 @@ FIELD-SPECIFIC GUIDANCE:
 - "event_date": The date of the golf event, NOT the order date. Parse it from \
   the item name when present (e.g. "Feb 22 - LaCANTERA" → "2026-02-22"). Use \
   the current year (2026) if only month and day are given.
-- "city": The city where the EVENT takes place. Infer it from the course name \
-  or event context if not explicitly stated. For MEMBERSHIP items, leave city \
-  null — the membership city/chapter goes in the "chapter" field instead. \
-  Common Texas courses: \
-  La Cantera/TPC San Antonio/The Quarry = San Antonio, \
-  Cowboys Golf Club/TPC Craig Ranch = Dallas, \
-  Wolfdancer/Falconhead = Austin, \
-  Moody Gardens = Galveston, etc.
-- "chapter": The TGF chapter the member is signing up for. Only applies to \
-  MEMBERSHIP items. Extract from "CITY: AUS" or "CITY: SA" or "CITY: DAL" etc. \
+- "chapter": The city/chapter for the item. For EVENT items, infer it from \
+  the course name or event context (e.g. La Cantera/TPC San Antonio/The Quarry \
+  = "San Antonio", Cowboys Golf Club/TPC Craig Ranch = "Dallas", \
+  Wolfdancer/Falconhead = "Austin", Moody Gardens = "Galveston"). \
+  For MEMBERSHIP items, extract from "CITY: AUS" or "CITY: SA" etc. \
   Normalise to full city names: AUS/ATX → "Austin", SA/SAT → "San Antonio", \
-  DAL/DFW → "Dallas", HOU → "Houston", GAL → "Galveston". \
-  For event items, set chapter to null.
+  DAL/DFW → "Dallas", HOU → "Houston", GAL → "Galveston".
 - "course": Use consistent canonical course names. Standard spellings: \
   "La Cantera", "TPC San Antonio", "The Quarry", "Cowboys Golf Club", \
   "TPC Craig Ranch", "Wolfdancer", "Falconhead", "Moody Gardens", \
@@ -135,11 +129,11 @@ FIELD-SPECIFIC GUIDANCE:
   Discard any yardage information (e.g. "6300-6800y").
 - "holes": For events that offer 9 or 18 holes, extract just the number: \
   "9" or "18". Look for "9 or 18 HOLES?" field. If not present, use null.
-- "shipping_address": The street address from the Shipping Address section.
-- "shipping_address2": Second address line (apt, suite, etc.) if present.
-- "shipping_city": City from the Shipping Address.
-- "shipping_state": State abbreviation from the Shipping Address (e.g. "TX").
-- "shipping_zip": ZIP code from the Shipping Address.
+- "address": The street address from the Shipping/Mailing Address section.
+- "address2": Second address line (apt, suite, etc.) if present.
+- "address_city": City from the Shipping/Mailing Address.
+- "address_state": State abbreviation from the Shipping/Mailing Address (e.g. "TX").
+- "address_zip": ZIP code from the Shipping/Mailing Address.
 
 Return this exact JSON structure:
 
@@ -153,19 +147,18 @@ Return this exact JSON structure:
   "order_time": "<HH:MM:SS in 24-hour format, from the order/transaction timestamp if present, else null>",
   "total_amount": "<total charged including fees, e.g. $222.53>",
   "transaction_fees": "<processing fee amount, e.g. $7.53>",
-  "shipping_address": "<street address>",
-  "shipping_address2": "<apt/suite/unit if present>",
-  "shipping_city": "<city>",
-  "shipping_state": "<state abbreviation>",
-  "shipping_zip": "<zip code>",
+  "address": "<street address>",
+  "address2": "<apt/suite/unit if present>",
+  "address_city": "<city>",
+  "address_state": "<state abbreviation>",
+  "address_zip": "<zip code>",
   "items": [
     {
       "item_name": "<product or event name>",
       "event_date": "<YYYY-MM-DD date of the event, parsed from item name>",
       "item_price": "<price for this item, e.g. $158.00>",
       "quantity": <integer, default 1>,
-      "city": "<city where event takes place — null for memberships>",
-      "chapter": "<TGF chapter — Austin, San Antonio, Dallas, etc. — null for events>",
+      "chapter": "<city/chapter — Austin, San Antonio, Dallas, etc.>",
       "course": "<golf course name if mentioned>",
       "handicap": "<numeric handicap value if mentioned>",
       "has_handicap": "<YES or NO — membership only, null for events>",
@@ -502,7 +495,6 @@ def parse_email(email_data: dict) -> list[dict]:
             "event_date": item.get("event_date"),
             "item_price": item.get("item_price") or "",
             "quantity": item.get("quantity") or 1,
-            "city": item.get("city"),
             "chapter": _normalize_chapter(item.get("chapter")),
             "course": _normalize_course_name(item.get("course")),
             "handicap": item.get("handicap"),
@@ -515,11 +507,11 @@ def parse_email(email_data: dict) -> list[dict]:
             "fellowship": item.get("fellowship"),
             "notes": item.get("notes"),
             "holes": item.get("holes"),
-            "shipping_address": parsed.get("shipping_address"),
-            "shipping_address2": parsed.get("shipping_address2"),
-            "shipping_city": parsed.get("shipping_city"),
-            "shipping_state": parsed.get("shipping_state"),
-            "shipping_zip": parsed.get("shipping_zip"),
+            "address": parsed.get("address"),
+            "address2": parsed.get("address2"),
+            "city": parsed.get("address_city"),
+            "state": parsed.get("address_state"),
+            "zip": parsed.get("address_zip"),
             "returning_or_new": item.get("returning_or_new"),
             "shirt_size": item.get("shirt_size"),
             "guest_name": item.get("guest_name"),
