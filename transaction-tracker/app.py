@@ -98,6 +98,7 @@ from email_parser.database import (
     delete_all_handicap_rounds_for_player,
     get_handicap_settings,
     update_handicap_settings,
+    get_handicap_export_data,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -405,6 +406,27 @@ def start_scheduler():
     )
     logger.info("Auto payment reminders scheduled every other day at 06:00 %s",
                 reminder_tz)
+
+    # Golf Genius handicap sync — daily at configurable hour (default 2 AM Central)
+    gg_sync_hour = int(os.getenv("GOLF_GENIUS_SYNC_HOUR", "2"))
+    gg_sync_tz = os.getenv("DAILY_REPORT_TZ", "US/Central")
+    if os.getenv("GOLF_GENIUS_EMAIL") and os.getenv("GOLF_GENIUS_PASSWORD"):
+        from golf_genius_sync import run_scheduled_sync
+        scheduler.add_job(
+            run_scheduled_sync,
+            "cron",
+            hour=gg_sync_hour,
+            minute=0,
+            timezone=gg_sync_tz,
+            id="gg_handicap_sync",
+            replace_existing=True,
+        )
+        logger.info(
+            "Golf Genius handicap sync scheduled daily at %02d:00 %s",
+            gg_sync_hour, gg_sync_tz,
+        )
+    else:
+        logger.info("Golf Genius sync not scheduled — GOLF_GENIUS_EMAIL/PASSWORD not set")
 
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
@@ -2808,6 +2830,142 @@ def api_handicap_import():
     except Exception as e:
         logger.exception("Handicap import failed")
         return jsonify({"error": f"Import failed: {str(e)}"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Routes — Golf Genius Sync
+# ---------------------------------------------------------------------------
+
+@app.route("/api/handicaps/export-csv")
+@require_role("manager")
+def api_handicap_export_csv():
+    """Download a Golf Genius-ready CSV for the given chapter.
+
+    Query params:
+        chapter: "San Antonio" | "Austin" | (omit for all)
+    """
+    chapter = request.args.get("chapter", "").strip()
+    data = get_handicap_export_data(chapter=chapter if chapter else None)
+
+    import io as _io, csv as _csv
+    buf = _io.StringIO()
+    writer = _csv.writer(buf)
+    writer.writerow(["Email", "Handicap Index", "Player Name"])
+    for row in data["rows"]:
+        writer.writerow([row["email"], row["handicap_index"], row["player_name"]])
+
+    chapter_slug = chapter.lower().replace(" ", "_") if chapter else "all"
+    filename = f"tgf_handicaps_{chapter_slug}_{datetime.now().strftime('%Y%m%d')}.csv"
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# Track running sync jobs (chapter key → {"status", "message", "timestamp"})
+_gg_sync_jobs: dict[str, dict] = {}
+
+
+@app.route("/api/handicaps/sync-golf-genius", methods=["POST"])
+@require_role("admin")
+def api_sync_golf_genius():
+    """Trigger an on-demand Golf Genius handicap sync for a chapter.
+
+    Body JSON:
+        {"chapter": "San Antonio" | "Austin" | "all"}
+    """
+    from golf_genius_sync import sync_handicaps_to_league
+    import threading
+
+    body = request.get_json(silent=True) or {}
+    chapter = body.get("chapter", "").strip()
+
+    gg_email = os.getenv("GOLF_GENIUS_EMAIL", "").strip()
+    gg_password = os.getenv("GOLF_GENIUS_PASSWORD", "").strip()
+    sa_league_id = os.getenv("GOLF_GENIUS_SA_LEAGUE_ID", "514047").strip()
+    austin_league_id = os.getenv("GOLF_GENIUS_AUSTIN_LEAGUE_ID", "514705").strip()
+
+    if not gg_email or not gg_password:
+        return jsonify({
+            "status": "error",
+            "message": "GOLF_GENIUS_EMAIL and GOLF_GENIUS_PASSWORD environment variables are not set",
+        }), 400
+
+    chapters_to_sync = []
+    if chapter.lower() in ("san antonio", "sa", ""):
+        chapters_to_sync.append(("San Antonio", sa_league_id, "san_antonio"))
+    if chapter.lower() in ("austin", "atx", ""):
+        chapters_to_sync.append(("Austin", austin_league_id, "austin"))
+
+    if not chapters_to_sync:
+        return jsonify({"status": "error", "message": f"Unknown chapter: {chapter}"}), 400
+
+    # Mark jobs as running
+    for _, _, key in chapters_to_sync:
+        _gg_sync_jobs[key] = {
+            "status": "running",
+            "message": "Sync in progress…",
+            "timestamp": datetime.utcnow().isoformat(),
+            "rows_submitted": 0,
+        }
+
+    def _run_sync():
+        for chap, league_id, key in chapters_to_sync:
+            try:
+                export = get_handicap_export_data(chapter=chap)
+                rows = export["rows"]
+                if not rows:
+                    _gg_sync_jobs[key] = {
+                        "status": "skipped",
+                        "message": f"No players with email + handicap index for {chap}",
+                        "rows_submitted": 0,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                    continue
+
+                result = sync_handicaps_to_league(
+                    rows=rows,
+                    league_id=league_id,
+                    email=gg_email,
+                    password=gg_password,
+                )
+                _gg_sync_jobs[key] = result
+            except Exception as exc:
+                logger.exception("GG sync error for %s", chap)
+                _gg_sync_jobs[key] = {
+                    "status": "error",
+                    "message": str(exc),
+                    "rows_submitted": 0,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+        # Persist results
+        try:
+            update_handicap_settings({"last_gg_sync": json.dumps(_gg_sync_jobs)})
+        except Exception:
+            pass
+
+    threading.Thread(target=_run_sync, daemon=True).start()
+    return jsonify({"status": "started", "chapters": [c[0] for c in chapters_to_sync]})
+
+
+@app.route("/api/handicaps/sync-status")
+@require_role("manager")
+def api_handicap_sync_status():
+    """Return the current/last Golf Genius sync status."""
+    # Merge in-memory jobs with persisted last result
+    persisted = {}
+    try:
+        settings = get_handicap_settings()
+        raw = settings.get("last_gg_sync")
+        if raw:
+            persisted = json.loads(raw)
+    except Exception:
+        pass
+
+    merged = {**persisted, **_gg_sync_jobs}
+    return jsonify(merged)
 
 
 # ---------------------------------------------------------------------------
