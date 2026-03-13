@@ -2845,6 +2845,25 @@ def api_handicap_auto_link():
     return jsonify(result)
 
 
+@app.route("/api/handicaps/link-debug")
+@require_role("admin")
+def api_handicap_link_debug():
+    """Return sample player names and customer names to diagnose linking failures."""
+    from email_parser.database import _connect
+    with _connect() as conn:
+        players = conn.execute(
+            "SELECT player_name, customer_name FROM handicap_player_links ORDER BY player_name LIMIT 30"
+        ).fetchall()
+        customers = conn.execute(
+            "SELECT DISTINCT customer, first_name, last_name FROM items "
+            "WHERE customer IS NOT NULL AND customer != '' ORDER BY customer LIMIT 50"
+        ).fetchall()
+    return jsonify({
+        "players": [{"player_name": r["player_name"], "customer_name": r["customer_name"]} for r in players],
+        "customers": [{"customer": r["customer"], "first_name": r["first_name"], "last_name": r["last_name"]} for r in customers],
+    })
+
+
 @app.route("/api/handicaps/export-csv")
 @require_role("manager")
 def api_handicap_export_csv():
