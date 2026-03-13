@@ -1654,6 +1654,11 @@ def update_customer_info(customer_name: str, fields: dict,
                 "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
                 (safe["customer"], customer_name),
             )
+            # Also update handicap_player_links so handicap stays connected
+            conn.execute(
+                "UPDATE handicap_player_links SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+                (safe["customer"], customer_name),
+            )
         conn.commit()
         return cursor.rowcount
 
@@ -3938,6 +3943,9 @@ def _match_customer_name(conn: sqlite3.Connection, player_name: str) -> str | No
     Tries in order:
     1. Exact case-insensitive match on the customer field.
     2. Match on first_name + last_name parts (handles 'John Smith' vs stored parts).
+    3. LIKE match: customer field contains the player name or vice versa.
+    4. Name alias match: check customer_aliases for a matching name alias.
+    5. Reversed name match: 'Last First' when player is 'First Last'.
     Returns the canonical customer name as stored in items, or None if no match.
     """
     # 1. Exact name match
@@ -3949,8 +3957,9 @@ def _match_customer_name(conn: sqlite3.Connection, player_name: str) -> str | No
     if row:
         return row["customer"]
 
-    # 2. First + last name match using parsed parts
     parts = player_name.strip().split()
+
+    # 2. First + last name match using parsed name parts
     if len(parts) >= 2:
         first = parts[0].lower()
         last = parts[-1].lower()
@@ -3960,6 +3969,54 @@ def _match_customer_name(conn: sqlite3.Connection, player_name: str) -> str | No
                AND customer IS NOT NULL AND customer != ''
                LIMIT 1""",
             (first, last),
+        ).fetchone()
+        if row:
+            return row["customer"]
+
+    # 3. LIKE match — player name contains within customer field or vice versa
+    #    Handles suffixes like "Jr", "III", middle names, etc.
+    if len(parts) >= 2:
+        first = parts[0]
+        last = parts[-1]
+        # Customer might be "First Last Jr" while player is "First Last"
+        row = conn.execute(
+            """SELECT DISTINCT customer FROM items
+               WHERE customer LIKE ? COLLATE NOCASE
+               AND customer IS NOT NULL AND customer != ''
+               LIMIT 1""",
+            (f"{first}%{last}%",),
+        ).fetchone()
+        if row:
+            return row["customer"]
+
+        # Also try: customer is "First Last" but player is "First Middle Last"
+        row = conn.execute(
+            """SELECT DISTINCT customer FROM items
+               WHERE customer LIKE ? COLLATE NOCASE
+               AND customer IS NOT NULL AND customer != ''
+               LIMIT 1""",
+            (f"{first}%{last}",),
+        ).fetchone()
+        if row:
+            return row["customer"]
+
+    # 4. Name alias match
+    row = conn.execute(
+        """SELECT ca.customer_name FROM customer_aliases ca
+           WHERE ca.alias_type = 'name' AND ca.alias_value = ? COLLATE NOCASE
+           LIMIT 1""",
+        (player_name,),
+    ).fetchone()
+    if row:
+        return row["customer_name"]
+
+    # 5. Reversed name: try "Last First" if player is "First Last"
+    if len(parts) == 2:
+        reversed_name = f"{parts[1]} {parts[0]}"
+        row = conn.execute(
+            "SELECT DISTINCT customer FROM items WHERE customer = ? COLLATE NOCASE "
+            "AND customer IS NOT NULL AND customer != '' LIMIT 1",
+            (reversed_name,),
         ).fetchone()
         if row:
             return row["customer"]
