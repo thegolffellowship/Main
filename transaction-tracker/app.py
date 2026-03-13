@@ -2848,19 +2848,42 @@ def api_handicap_auto_link():
 @app.route("/api/handicaps/link-debug")
 @require_role("admin")
 def api_handicap_link_debug():
-    """Return sample player names and customer names to diagnose linking failures."""
+    """Diagnose linking: show player names, email aliases, chapter values, and items.customer_email."""
     from email_parser.database import _connect
     with _connect() as conn:
         players = conn.execute(
             "SELECT player_name, customer_name FROM handicap_player_links ORDER BY player_name LIMIT 30"
         ).fetchall()
-        customers = conn.execute(
-            "SELECT DISTINCT customer, first_name, last_name FROM items "
-            "WHERE customer IS NOT NULL AND customer != '' ORDER BY customer LIMIT 50"
-        ).fetchall()
+        # For the first few linked players, show what we can find
+        linked = [r for r in players if r["customer_name"]][:10]
+        details = []
+        for p in linked:
+            cname = p["customer_name"]
+            email_alias = conn.execute(
+                "SELECT alias_value FROM customer_aliases WHERE LOWER(customer_name)=LOWER(?) AND alias_type='email' LIMIT 1",
+                (cname,)
+            ).fetchone()
+            item_email = conn.execute(
+                "SELECT customer_email, chapter FROM items WHERE LOWER(customer)=LOWER(?) AND customer_email IS NOT NULL AND customer_email != '' ORDER BY id DESC LIMIT 1",
+                (cname,)
+            ).fetchone()
+            chapter_item = conn.execute(
+                "SELECT chapter FROM items WHERE LOWER(customer)=LOWER(?) AND chapter IS NOT NULL AND chapter != '' ORDER BY id DESC LIMIT 1",
+                (cname,)
+            ).fetchone()
+            details.append({
+                "player_name": p["player_name"],
+                "customer_name": cname,
+                "email_in_aliases": email_alias["alias_value"] if email_alias else None,
+                "email_in_items": item_email["customer_email"] if item_email else None,
+                "chapter_in_items": chapter_item["chapter"] if chapter_item else None,
+            })
+        alias_count = conn.execute("SELECT COUNT(*) FROM customer_aliases WHERE alias_type='email'").fetchone()[0]
+        items_with_email = conn.execute("SELECT COUNT(*) FROM items WHERE customer_email IS NOT NULL AND customer_email != ''").fetchone()[0]
     return jsonify({
-        "players": [{"player_name": r["player_name"], "customer_name": r["customer_name"]} for r in players],
-        "customers": [{"customer": r["customer"], "first_name": r["first_name"], "last_name": r["last_name"]} for r in customers],
+        "alias_email_count": alias_count,
+        "items_with_email_count": items_with_email,
+        "linked_player_details": details,
     })
 
 
