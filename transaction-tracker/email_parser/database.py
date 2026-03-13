@@ -4126,6 +4126,96 @@ def delete_all_handicap_rounds_for_player(player_name: str,
         return rows_affected
 
 
+def get_handicap_export_data(chapter: str | None = None,
+                             db_path: str | Path | None = None) -> dict:
+    """Return handicap data formatted for Golf Genius CSV export.
+
+    Joins handicap players → handicap_player_links → items to get
+    email address and chapter for each linked player.
+
+    Args:
+        chapter: If given (e.g. "San Antonio" or "Austin"), filters to that chapter only.
+
+    Returns:
+        {
+          "rows": [{"email": ..., "player_name": ..., "handicap_index": ..., "chapter": ...}],
+          "no_email": [player_name, ...],   # have an index but no linked email
+          "no_index": [player_name, ...],   # linked but N/A index
+          "chapter": chapter or "All",
+        }
+    """
+    players = get_all_handicap_players(db_path)
+    player_map = {p["player_name"]: p for p in players}
+
+    with _connect(db_path) as conn:
+        links = conn.execute(
+            """SELECT l.player_name, l.customer_name,
+                      i.customer_email, i.chapter
+               FROM handicap_player_links l
+               JOIN items i ON LOWER(i.customer) = LOWER(l.customer_name)
+               WHERE l.customer_name IS NOT NULL
+                 AND i.customer_email IS NOT NULL
+                 AND TRIM(i.customer_email) != ''
+               GROUP BY l.player_name
+               HAVING MAX(i.id)""",
+        ).fetchall()
+
+    # Build a map: player_name → (email, chapter) from best linked record
+    link_map: dict[str, dict] = {}
+    for lnk in links:
+        pname = lnk["player_name"]
+        if pname not in link_map:
+            link_map[pname] = {
+                "email": (lnk["customer_email"] or "").strip().lower(),
+                "chapter": lnk["chapter"] or "",
+            }
+
+    rows = []
+    no_email = []
+    no_index = []
+    seen_emails: set[str] = set()
+
+    for pname, p in player_map.items():
+        info = link_map.get(pname)
+        if info is None:
+            # No linked customer with email
+            if p["handicap_index"] is not None:
+                no_email.append(pname)
+            continue
+
+        # Chapter filter
+        if chapter and info["chapter"].lower() != chapter.lower():
+            continue
+
+        if p["handicap_index"] is None:
+            no_index.append(pname)
+            continue
+
+        email = info["email"]
+        if not email or email in seen_emails:
+            if not email and p["handicap_index"] is not None:
+                no_email.append(pname)
+            continue
+        seen_emails.add(email)
+
+        rows.append({
+            "email": email,
+            "player_name": pname,
+            "handicap_index": p["handicap_index"],
+            "chapter": info["chapter"],
+        })
+
+    # Sort by player name
+    rows.sort(key=lambda r: r["player_name"].lower())
+
+    return {
+        "rows": rows,
+        "no_email": sorted(no_email),
+        "no_index": sorted(no_index),
+        "chapter": chapter or "All",
+    }
+
+
 def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
     """Return one record per player with current handicap index and round stats.
 

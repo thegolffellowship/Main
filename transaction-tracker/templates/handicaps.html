@@ -172,6 +172,14 @@
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
             <button id="btn-import" class="btn btn-primary" style="display:none;">Import Rounds</button>
+            <!-- Golf Genius sync group — admin only -->
+            <div id="gg-sync-group" style="display:none;display:inline-flex;gap:6px;align-items:center;">
+                <button id="btn-dl-sa"    class="btn btn-secondary" title="Download San Antonio handicap CSV for manual Golf Genius upload" style="display:none;">⬇ SA CSV</button>
+                <button id="btn-dl-austin" class="btn btn-secondary" title="Download Austin handicap CSV for manual Golf Genius upload" style="display:none;">⬇ Austin CSV</button>
+                <button id="btn-sync-sa"   class="btn btn-secondary" title="Auto-post SA handicaps to Golf Genius" style="display:none;">⟳ Sync SA</button>
+                <button id="btn-sync-austin" class="btn btn-secondary" title="Auto-post Austin handicaps to Golf Genius" style="display:none;">⟳ Sync Austin</button>
+                <span id="gg-sync-status" style="font-size:0.78em;color:#64748b;display:none;"></span>
+            </div>
             <button id="btn-purge" class="btn btn-secondary" style="display:none;color:#dc2626;border-color:#dc2626;" title="Delete all rounds with 18-hole course ratings (rating > 50)">Purge 18-hole Scores</button>
             <button id="btn-settings" class="btn btn-secondary" style="display:none;">Settings</button>
             <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
@@ -402,16 +410,31 @@
             alert(`Deleted ${d.deleted} invalid round(s).`);
             if (d.deleted > 0) loadPlayers();
         });
+
+        document.getElementById('btn-dl-sa').addEventListener('click', () => {
+            window.location = '/api/handicaps/export-csv?chapter=San+Antonio';
+        });
+        document.getElementById('btn-dl-austin').addEventListener('click', () => {
+            window.location = '/api/handicaps/export-csv?chapter=Austin';
+        });
+        document.getElementById('btn-sync-sa').addEventListener('click', () => triggerGGSync('San Antonio'));
+        document.getElementById('btn-sync-austin').addEventListener('click', () => triggerGGSync('Austin'));
     });
 
     // ── Auth hooks (called by auth.js after role is known) ──────────
     function onAuthReady() {
         if (currentRole === 'admin' || currentRole === 'manager') {
             document.getElementById('btn-import').style.display = '';
+            document.getElementById('btn-dl-sa').style.display = '';
+            document.getElementById('btn-dl-austin').style.display = '';
         }
         if (currentRole === 'admin') {
             document.getElementById('btn-settings').style.display = '';
             document.getElementById('btn-purge').style.display = '';
+            document.getElementById('btn-sync-sa').style.display = '';
+            document.getElementById('btn-sync-austin').style.display = '';
+            document.getElementById('gg-sync-status').style.display = '';
+            loadGGSyncStatus();
         }
     }
 
@@ -905,6 +928,73 @@
             <strong>${(avg * multiplier).toFixed(3)}</strong>.${adjNote}
             Rounded to the nearest tenth: <span class="calc-result-line" style="color:${index <= 0 ? '#15803d':'#1e40af'};">
             ${displayIndex}</span>.</p>`;
+    }
+
+    // ── Golf Genius Sync ─────────────────────────────────────────────
+    let _ggSyncPoll = null;
+
+    async function loadGGSyncStatus() {
+        try {
+            const r = await fetch('/api/handicaps/sync-status');
+            if (!r.ok) return;
+            const d = await r.json();
+            updateGGStatusUI(d);
+        } catch(e) { /* silent */ }
+    }
+
+    function updateGGStatusUI(d) {
+        const el = document.getElementById('gg-sync-status');
+        if (!el) return;
+        const parts = [];
+        const statusIcon = s => s === 'ok' ? '✓' : s === 'running' ? '⟳' : s === 'error' ? '✗' : '—';
+        for (const [key, val] of Object.entries(d)) {
+            if (!val) continue;
+            const label = key === 'san_antonio' ? 'SA' : key === 'austin' ? 'Austin' : key;
+            const ts = val.timestamp ? new Date(val.timestamp + 'Z').toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+            parts.push(`${statusIcon(val.status)} ${label}: ${val.rows_submitted ?? 0} players${ts ? ' · ' + ts : ''}`);
+        }
+        el.textContent = parts.join(' | ');
+
+        // Stop polling if no running jobs
+        const anyRunning = Object.values(d).some(v => v && v.status === 'running');
+        if (!anyRunning && _ggSyncPoll) {
+            clearInterval(_ggSyncPoll);
+            _ggSyncPoll = null;
+            // Re-enable buttons
+            document.getElementById('btn-sync-sa').disabled = false;
+            document.getElementById('btn-sync-austin').disabled = false;
+        }
+    }
+
+    async function triggerGGSync(chapter) {
+        if (!confirm(`Post updated handicap indexes for ${chapter} to Golf Genius now?`)) return;
+        const saBtn = document.getElementById('btn-sync-sa');
+        const ausBtn = document.getElementById('btn-sync-austin');
+        saBtn.disabled = true;
+        ausBtn.disabled = true;
+        document.getElementById('gg-sync-status').textContent = `⟳ Syncing ${chapter}…`;
+
+        try {
+            const r = await fetch('/api/handicaps/sync-golf-genius', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({chapter}),
+            });
+            const d = await r.json();
+            if (d.status === 'started') {
+                // Poll every 5 s until complete
+                if (_ggSyncPoll) clearInterval(_ggSyncPoll);
+                _ggSyncPoll = setInterval(loadGGSyncStatus, 5000);
+            } else {
+                document.getElementById('gg-sync-status').textContent = d.message || 'Error';
+                saBtn.disabled = false;
+                ausBtn.disabled = false;
+            }
+        } catch(e) {
+            document.getElementById('gg-sync-status').textContent = 'Request failed';
+            saBtn.disabled = false;
+            ausBtn.disabled = false;
+        }
     }
 
     // ── Settings Modal ──────────────────────────────────────────────
