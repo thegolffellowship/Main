@@ -30,7 +30,14 @@ GG_LOGIN_URL = f"{GG_BASE_URL}/users/sign_in"
 
 
 def _build_csv(rows: list[dict]) -> str:
-    """Build a CSV string from export rows."""
+    """Build a CSV string from export rows.
+
+    Column names are chosen to match Golf Genius's expected field labels
+    so GG can auto-detect the mapping where possible.
+      Email          — unique identifier GG matches against
+      Handicap Index — the 18-hole index value (9-hole × 2)
+      Player Name    — informational only, not used by GG import
+    """
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Email", "Handicap Index", "Player Name"])
@@ -45,6 +52,7 @@ def sync_handicaps_to_league(
     email: str,
     password: str,
     screenshot_dir: str | None = None,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     """Upload handicap indexes to a Golf Genius league via browser automation.
 
@@ -65,6 +73,16 @@ def sync_handicaps_to_league(
         return {
             "status": "error",
             "message": "Playwright not installed. Run: pip install playwright && playwright install chromium",
+            "rows_submitted": 0,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    if dry_run:
+        return {
+            "status": "dry_run",
+            "message": f"Dry run — would submit {len(rows)} player(s): "
+                       + ", ".join(r["player_name"] for r in rows[:5])
+                       + ("…" if len(rows) > 5 else ""),
             "rows_submitted": 0,
             "timestamp": datetime.utcnow().isoformat(),
         }
@@ -184,34 +202,67 @@ def sync_handicaps_to_league(
             _screenshot(page, "04_after_upload")
 
             # ── Step 4: Map columns ──────────────────────────────────────────
-            # Golf Genius shows dropdowns to pick which column is the unique ID
-            # and which column is the Handicap Index.
-            # Column headers in our CSV: "Email" (col 0), "Handicap Index" (col 1), "Player Name" (col 2)
+            # After upload, Golf Genius shows a mapping form with two dropdowns:
+            #   - Unique identifier → select "Email"
+            #   - Handicap Index    → select "Handicap Index"
+            # Our CSV headers are "Email", "Handicap Index", "Player Name"
+            # GG may auto-match on exact header names; we also set them explicitly.
             logger.info("GG sync: mapping columns")
             try:
-                # Find all <select> elements on the page
+                # GG typically renders the mapping form with labeled <select> elements.
+                # Strategy: find each <select>, inspect its associated <label> text,
+                # then choose the right CSV column from its options.
                 selects = page.locator("select").all()
+                logger.info("GG sync: found %d select elements for mapping", len(selects))
+
                 for sel in selects:
-                    options = sel.locator("option").all()
-                    option_texts = [o.inner_text().strip() for o in options]
-                    logger.debug("Select options: %s", option_texts)
+                    # Get the label text for this select
+                    sel_id = sel.get_attribute("id") or ""
+                    sel_name = sel.get_attribute("name") or ""
+                    label_text = ""
+                    if sel_id:
+                        lbl = page.locator(f'label[for="{sel_id}"]')
+                        if lbl.count():
+                            label_text = lbl.first.inner_text().strip().lower()
+                    if not label_text:
+                        label_text = (sel_name or "").lower()
 
-                    # Pick "Email" as the unique identifier
-                    if any("email" in t.lower() for t in option_texts):
-                        # Check if this is the "unique identifier" select
-                        label_text = ""
-                        try:
-                            sel_id = sel.get_attribute("id") or ""
-                            label = page.locator(f'label[for="{sel_id}"]')
-                            label_text = label.inner_text().strip().lower() if label.count() else ""
-                        except Exception:
-                            pass
-                        if "unique" in label_text or "identifier" in label_text or not label_text:
-                            sel.select_option(label="Email")
+                    logger.debug("GG sync: select id=%s name=%s label=%r", sel_id, sel_name, label_text)
 
-                    # Pick "Handicap Index" column
-                    if any("handicap" in t.lower() for t in option_texts):
-                        sel.select_option(label="Handicap Index")
+                    # Get available options for this dropdown
+                    option_values = [o.get_attribute("value") or "" for o in sel.locator("option").all()]
+                    option_texts  = [o.inner_text().strip() for o in sel.locator("option").all()]
+                    logger.debug("GG sync: options %s", option_texts)
+
+                    def _pick(sel, choices: list[str]) -> bool:
+                        """Try each choice in order; return True if one matched."""
+                        for choice in choices:
+                            for val, txt in zip(option_values, option_texts):
+                                if choice.lower() in txt.lower() or choice.lower() in val.lower():
+                                    try:
+                                        sel.select_option(value=val)
+                                        logger.info("GG sync: mapped select '%s' → '%s'", label_text, txt)
+                                        return True
+                                    except Exception:
+                                        pass
+                        return False
+
+                    # Map the unique-identifier dropdown to Email
+                    if any(kw in label_text for kw in ("unique", "identifier", "match", "player id")):
+                        _pick(sel, ["Email", "email"])
+
+                    # Map the handicap-index dropdown to our "Handicap Index" column
+                    elif any(kw in label_text for kw in ("handicap", "index", "hcp")):
+                        _pick(sel, ["Handicap Index", "handicap index", "index"])
+
+                    # Fallback: if a select has "Email" as an option but no clear label,
+                    # assume it's the unique-ID field
+                    elif any("email" in t.lower() for t in option_texts):
+                        _pick(sel, ["Email", "email"])
+
+                    # Fallback: if a select has "Handicap Index" as an option
+                    elif any("handicap" in t.lower() for t in option_texts):
+                        _pick(sel, ["Handicap Index", "handicap index", "index"])
 
             except Exception as exc:
                 logger.warning("GG sync: column mapping issue: %s", exc)
