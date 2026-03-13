@@ -176,6 +176,7 @@
             <div id="gg-sync-group" style="display:none;display:inline-flex;gap:6px;align-items:center;">
                 <button id="btn-dl-sa"    class="btn btn-secondary" title="Download San Antonio handicap CSV for manual Golf Genius upload" style="display:none;">⬇ SA CSV</button>
                 <button id="btn-dl-austin" class="btn btn-secondary" title="Download Austin handicap CSV for manual Golf Genius upload" style="display:none;">⬇ Austin CSV</button>
+                <input id="gg-test-email" type="email" placeholder="Test email (1 player)" title="Enter one player's email to test before syncing the full league" style="display:none;font-size:0.8em;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;width:190px;">
                 <button id="btn-sync-sa"   class="btn btn-secondary" title="Auto-post SA handicaps to Golf Genius" style="display:none;">⟳ Sync SA</button>
                 <button id="btn-sync-austin" class="btn btn-secondary" title="Auto-post Austin handicaps to Golf Genius" style="display:none;">⟳ Sync Austin</button>
                 <span id="gg-sync-status" style="font-size:0.78em;color:#64748b;display:none;"></span>
@@ -431,6 +432,7 @@
         if (currentRole === 'admin') {
             document.getElementById('btn-settings').style.display = '';
             document.getElementById('btn-purge').style.display = '';
+            document.getElementById('gg-test-email').style.display = '';
             document.getElementById('btn-sync-sa').style.display = '';
             document.getElementById('btn-sync-austin').style.display = '';
             document.getElementById('gg-sync-status').style.display = '';
@@ -967,18 +969,29 @@
     }
 
     async function triggerGGSync(chapter) {
-        if (!confirm(`Post updated handicap indexes for ${chapter} to Golf Genius now?`)) return;
+        const testEmail = (document.getElementById('gg-test-email').value || '').trim();
+        const isTest = !!testEmail;
+        const confirmMsg = isTest
+            ? `Test sync for ${chapter}: only update player with email "${testEmail}". Continue?`
+            : `Post updated handicap indexes for ALL ${chapter} players to Golf Genius now?`;
+        if (!confirm(confirmMsg)) return;
+
         const saBtn = document.getElementById('btn-sync-sa');
         const ausBtn = document.getElementById('btn-sync-austin');
         saBtn.disabled = true;
         ausBtn.disabled = true;
-        document.getElementById('gg-sync-status').textContent = `⟳ Syncing ${chapter}…`;
+        document.getElementById('gg-sync-status').textContent = isTest
+            ? `⟳ Testing sync for ${testEmail}…`
+            : `⟳ Syncing ${chapter}…`;
+
+        const body = {chapter};
+        if (isTest) body.test_player_email = testEmail;
 
         try {
             const r = await fetch('/api/handicaps/sync-golf-genius', {
                 method: 'POST',
                 headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({chapter}),
+                body: JSON.stringify(body),
             });
             const d = await r.json();
             if (d.status === 'started') {

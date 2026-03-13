@@ -4127,18 +4127,27 @@ def delete_all_handicap_rounds_for_player(player_name: str,
 
 
 def get_handicap_export_data(chapter: str | None = None,
+                             test_player_email: str | None = None,
                              db_path: str | Path | None = None) -> dict:
     """Return handicap data formatted for Golf Genius CSV export.
 
     Joins handicap players → handicap_player_links → items to get
     email address and chapter for each linked player.
 
+    The 9-hole TGF handicap index is multiplied by 2 to produce the
+    18-hole equivalent that Golf Genius stores and displays.
+
     Args:
         chapter: If given (e.g. "San Antonio" or "Austin"), filters to that chapter only.
+        test_player_email: If given, returns only the single matching player — for
+                           test runs before committing to a full league sync.
 
     Returns:
         {
-          "rows": [{"email": ..., "player_name": ..., "handicap_index": ..., "chapter": ...}],
+          "rows": [{"email": ..., "player_name": ...,
+                    "handicap_index_9": float,   # raw 9-hole index
+                    "handicap_index": float,      # ×2 for GG (18-hole)
+                    "chapter": ...}],
           "no_email": [player_name, ...],   # have an index but no linked email
           "no_index": [player_name, ...],   # linked but N/A index
           "chapter": chapter or "All",
@@ -4196,12 +4205,22 @@ def get_handicap_export_data(chapter: str | None = None,
             if not email and p["handicap_index"] is not None:
                 no_email.append(pname)
             continue
+
+        # Test mode: only include this one player
+        if test_player_email and email != test_player_email.strip().lower():
+            continue
+
         seen_emails.add(email)
+
+        # GG stores 18-hole indexes; our index is 9-hole → multiply by 2
+        idx_9 = p["handicap_index"]
+        idx_18 = round(idx_9 * 2, 1)
 
         rows.append({
             "email": email,
             "player_name": pname,
-            "handicap_index": p["handicap_index"],
+            "handicap_index_9": idx_9,   # kept for reference / display
+            "handicap_index": idx_18,    # value written to CSV / sent to GG
             "chapter": info["chapter"],
         })
 

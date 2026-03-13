@@ -2873,13 +2873,15 @@ def api_sync_golf_genius():
     """Trigger an on-demand Golf Genius handicap sync for a chapter.
 
     Body JSON:
-        {"chapter": "San Antonio" | "Austin" | "all"}
+        {"chapter": "San Antonio" | "Austin" | "all",
+         "test_player_email": "email@example.com"}   # optional: limit to 1 player for testing
     """
     from golf_genius_sync import sync_handicaps_to_league
     import threading
 
     body = request.get_json(silent=True) or {}
     chapter = body.get("chapter", "").strip()
+    test_player_email = (body.get("test_player_email") or "").strip().lower() or None
 
     gg_email = os.getenv("GOLF_GENIUS_EMAIL", "").strip()
     gg_password = os.getenv("GOLF_GENIUS_PASSWORD", "").strip()
@@ -2913,12 +2915,20 @@ def api_sync_golf_genius():
     def _run_sync():
         for chap, league_id, key in chapters_to_sync:
             try:
-                export = get_handicap_export_data(chapter=chap)
+                export = get_handicap_export_data(
+                    chapter=chap,
+                    test_player_email=test_player_email,
+                )
                 rows = export["rows"]
                 if not rows:
+                    msg = (
+                        f"No player found with email '{test_player_email}' in {chap}"
+                        if test_player_email
+                        else f"No players with email + handicap index for {chap}"
+                    )
                     _gg_sync_jobs[key] = {
                         "status": "skipped",
-                        "message": f"No players with email + handicap index for {chap}",
+                        "message": msg,
                         "rows_submitted": 0,
                         "timestamp": datetime.utcnow().isoformat(),
                     }
