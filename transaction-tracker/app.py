@@ -1041,7 +1041,7 @@ def api_re_extract_fields():
 
     Fetches original emails from Graph API, re-runs AI extraction,
     and updates only the specified fields (partner_request, fellowship,
-    notes, holes, shipping address) on existing items without overwriting other data.
+    notes, holes, address) on existing items without overwriting other data.
     """
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
@@ -1052,7 +1052,7 @@ def api_re_extract_fields():
         return jsonify({"error": "Azure AD credentials not configured"}), 400
 
     BACKFILL_FIELDS = ["partner_request", "fellowship", "notes", "holes",
-                       "address", "city", "state", "zip"]
+                       "address", "address2", "city", "state", "zip"]
 
     items = get_all_items()
     # Find items missing any of the new fields
