@@ -2767,6 +2767,22 @@ def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None)
         return cursor.rowcount > 0
 
 
+def refund_item(item_id: int, method: str = "", note: str = "",
+                db_path: str | Path | None = None) -> bool:
+    """Mark an item as refunded via GoDaddy or Venmo."""
+    refund_note = f"Refunded via {method}" if method else "Refunded"
+    if note:
+        refund_note += f" — {note}"
+    with _connect(db_path) as conn:
+        cursor = conn.execute(
+            "UPDATE items SET transaction_status = 'refunded', credit_note = ? "
+            "WHERE id = ? AND COALESCE(transaction_status, 'active') = 'active'",
+            (refund_note, item_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 def wd_item(
     item_id: int,
     note: str = "",
@@ -2880,7 +2896,7 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
         item = dict(item)
 
         status = item.get("transaction_status")
-        if status not in ("credited", "transferred", "wd"):
+        if status not in ("credited", "transferred", "wd", "refunded"):
             return False
 
         if status == "transferred" and item.get("transferred_to_id"):

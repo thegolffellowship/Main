@@ -404,6 +404,7 @@ function statusTag(row) {
     const s = row.transaction_status || "active";
     if (s === "credited") return '<span class="status-tag status-tag-credited">Credit</span>';
     if (s === "transferred") return '<span class="status-tag status-tag-transferred">Transferred</span>';
+    if (s === "refunded") return '<span class="status-tag status-tag-refunded">Refunded</span>';
     if (row.transferred_from_id) return '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
     return "";
 }
@@ -435,7 +436,7 @@ function cellForColumn(key, row) {
         let btns = `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
         if (status === "active" && !row.transferred_from_id) {
             btns += ` <button class="btn btn-credit" data-action="credit" data-id="${row.id}">Credit</button>`;
-        } else if (status === "credited" || status === "transferred") {
+        } else if (status === "credited" || status === "transferred" || status === "refunded") {
             btns += ` <button class="btn btn-reverse" data-action="reverse" data-id="${row.id}">Reverse</button>`;
         }
         if (currentRole === "admin") {
@@ -492,7 +493,7 @@ function renderMobileCard(row) {
     let actionHtml = `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
     if (status === "active" && !row.transferred_from_id) {
         actionHtml += ` <button class="btn btn-credit" data-action="credit" data-id="${row.id}">Credit</button>`;
-    } else if (status === "credited" || status === "transferred") {
+    } else if (status === "credited" || status === "transferred" || status === "refunded") {
         actionHtml += ` <button class="btn btn-reverse" data-action="reverse" data-id="${row.id}">Reverse</button>`;
     }
     if (currentRole === "admin") {
@@ -1108,7 +1109,7 @@ async function handleEditSubmit(e) {
 // Credit / Transfer Modal
 // ---------------------------------------------------------------------------
 let creditItemId = null;
-let creditType = "credit";  // "credit" or "transfer"
+let creditType = "credit";  // "credit", "transfer", or "refund"
 let cachedEvents = null;
 
 function buildEventPickerOptions(events) {
@@ -1146,6 +1147,8 @@ async function openCreditModal(itemId) {
     // Reset UI
     document.querySelectorAll(".credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "credit"));
     document.getElementById("credit-transfer-fields").style.display = "none";
+    document.getElementById("credit-refund-fields").style.display = "none";
+    document.getElementById("credit-refund-method").value = "";
     document.getElementById("credit-note").value = "";
     document.getElementById("credit-submit").textContent = "Apply Credit";
 
@@ -1174,6 +1177,15 @@ async function submitCredit() {
                 body: JSON.stringify({ note }),
             });
             if (!res.ok) throw new Error((await res.json()).error || "Credit failed");
+        } else if (creditType === "refund") {
+            const method = document.getElementById("credit-refund-method").value;
+            if (!method) { alert("Please select a refund method."); return; }
+            const res = await fetch(`/api/items/${creditItemId}/refund`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ method, note }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error || "Refund failed");
         } else {
             const target = document.getElementById("credit-target-event").value;
             if (!target) { alert("Please select a target event."); return; }
@@ -1298,7 +1310,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             creditType = btn.dataset.type;
             document.querySelectorAll(".credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === creditType));
             document.getElementById("credit-transfer-fields").style.display = creditType === "transfer" ? "block" : "none";
-            document.getElementById("credit-submit").textContent = creditType === "transfer" ? "Transfer" : "Apply Credit";
+            document.getElementById("credit-refund-fields").style.display = creditType === "refund" ? "block" : "none";
+            const labels = { credit: "Apply Credit", transfer: "Transfer", refund: "Refund" };
+            document.getElementById("credit-submit").textContent = labels[creditType] || "Apply Credit";
         });
     });
 

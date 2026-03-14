@@ -1020,11 +1020,13 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 }
 .status-tag-credited { background: #fef3c7; color: #92400e; }
 .status-tag-transferred { background: #dbeafe; color: #1e40af; }
+.status-tag-refunded { background: #fce7f3; color: #9d174d; }
 .status-tag-from-transfer { background: #ecfdf5; color: #065f46; }
 .status-tag-wd { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
 
 tr.row-credited { opacity: 0.6; }
 tr.row-transferred { opacity: 0.6; }
+tr.row-refunded { opacity: 0.6; }
 tr.row-wd { opacity: 0.55; background: #fef2f2; }
 tr.row-wd td { text-decoration: line-through; text-decoration-color: #dc2626; }
 tr.row-wd td:last-child { text-decoration: none; }
@@ -1373,6 +1375,9 @@ tr.order-item.order-item-hidden {
     opacity: 0.6;
 }
 .mobile-card.row-transferred {
+    opacity: 0.6;
+}
+.mobile-card.row-refunded {
     opacity: 0.6;
 }
 .mobile-card.row-wd {
