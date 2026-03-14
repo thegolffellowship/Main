@@ -214,81 +214,25 @@ def sync_handicaps_to_league(
             members_resp.url, len(page_html),
         )
 
-        # ── Step 3: Find the upload endpoint ───────────────────────────
-        # The upload form on this page is JavaScript-rendered (not in the
-        # server-side HTML), so we can't parse it. Instead, we:
-        # 1. Extract the CSRF token from the page
-        # 2. Find upload-related URLs referenced in the HTML/JS
-        # 3. POST the CSV directly to known GG endpoint patterns
+        # ── Step 3: Upload CSV to the spreadsheetfiles endpoint ───────
+        # Confirmed endpoint: POST /leagues/{id}/spreadsheetfiles
+        # This creates a spreadsheet file record, then redirects to
+        # /leagues/{id}/spreadsheetfiles/{file_id}/post_prepare
         csrf = _extract_csrf_token(page_html)
 
-        # Log all forms and links for debugging
-        all_form_actions = re.findall(
-            r'<form[^>]*action="([^"]*)"[^>]*>', page_html, re.IGNORECASE
-        )
-        logger.info("GG sync: form actions on page: %s", all_form_actions)
-
-        # Find all URLs containing spreadsheet/upload/roster/import in the HTML
-        all_relevant_urls = re.findall(
-            r'["\']([^"\']*(?:spreadsheet|upload_roster|import_golfer)[^"\']*)["\']',
-            page_html, re.IGNORECASE,
-        )
-        logger.info("GG sync: relevant URLs found in page: %s", all_relevant_urls)
-
-        # Log any data attributes that might contain upload config
-        data_attrs = re.findall(
-            r'(data-[a-z_-]+)=["\']([^"\']+)["\']', page_html, re.IGNORECASE
-        )
-        upload_data_attrs = [(k, v) for k, v in data_attrs
-                             if any(w in k.lower() or w in v.lower()
-                                    for w in ("upload", "spreadsheet", "file", "url"))]
-        logger.info("GG sync: upload-related data attributes: %s", upload_data_attrs[:20])
-
-        # Log a snippet around "spreadsheet" in the HTML for debugging
-        for keyword in ["spreadsheet", "upload_roster", "Choose File", "file_field"]:
-            idx = page_html.lower().find(keyword.lower())
-            if idx >= 0:
-                snippet = page_html[max(0, idx - 300):idx + 400]
-                logger.info("GG sync: HTML near '%s': ...%s...", keyword, snippet)
-
-        # Build candidate upload URLs from what we found on the page
-        # and from known GG URL patterns
-        candidate_urls = []
-
-        # Add URLs found on the page (prioritize these)
-        for url in all_relevant_urls:
-            if url.startswith("/") and "photo" not in url.lower():
-                full_url = GG_BASE_URL + url
-                if full_url not in candidate_urls:
-                    candidate_urls.append(full_url)
-
-        # Add known GG patterns
-        for path in [
-            f"/leagues/{league_id}/spreadsheetfiles",
-            f"/leagues/{league_id}/spreadsheet_files",
-            f"/leagues/{league_id}/members/spreadsheetfiles",
-            f"/leagues/{league_id}/members/spreadsheet_files",
-            f"/leagues/{league_id}/members/upload_roster",
-            f"/leagues/{league_id}/members/import",
-            f"/leagues/{league_id}/golfers/spreadsheetfiles",
-            f"/leagues/{league_id}/golfers/spreadsheet_files",
-        ]:
-            full_url = GG_BASE_URL + path
-            if full_url not in candidate_urls:
-                candidate_urls.append(full_url)
-
-        logger.info("GG sync: will try these upload endpoints: %s", candidate_urls)
-
-        # ── Step 4: Try uploading CSV to each candidate endpoint ─────
+        upload_url = f"{GG_BASE_URL}/leagues/{league_id}/spreadsheetfiles"
         csv_bytes = csv_content.encode("utf-8")
 
-        # Try different file field names that GG might use
+        upload_data = {}
+        if csrf:
+            upload_data["authenticity_token"] = csrf
+
+        # Try several possible file field names
         possible_field_names = [
             "spreadsheet_file[file]",
             "file",
             "spreadsheet_file",
-            "spreadsheet[file]",
-            "upload[file]",
+            "spreadsheetfile[file]",
         ]
 
         # Check if there's a file input on the page to determine field name
@@ -298,91 +242,114 @@ def sync_handicaps_to_league(
         for fi in file_inputs:
             name_m = re.search(r'name=["\']([^"\']+)["\']', fi)
             if name_m and "photo" not in fi.lower():
-                field_name = name_m.group(1)
-                if field_name not in possible_field_names:
-                    possible_field_names.insert(0, field_name)
-                logger.info("GG sync: found file input name on page: %s", field_name)
-
-        upload_data = {}
-        if csrf:
-            upload_data["authenticity_token"] = csrf
+                found_name = name_m.group(1)
+                if found_name not in possible_field_names:
+                    possible_field_names.insert(0, found_name)
+                logger.info("GG sync: file input name from page: %s", found_name)
 
         upload_resp = None
-        used_url = None
-
-        for candidate_url in candidate_urls:
-            field_name = possible_field_names[0]  # use best guess
+        for field_name in possible_field_names:
             files = {
                 field_name: ("handicaps.csv", csv_bytes, "text/csv"),
             }
             logger.info(
-                "GG sync: trying POST to %s (field=%s, %d rows)",
-                candidate_url, field_name, len(rows),
+                "GG sync: POST %s (field=%s, %d rows)",
+                upload_url, field_name, len(rows),
             )
-            try:
-                resp = sess.post(
-                    candidate_url,
-                    data=upload_data,
-                    files=files,
-                    timeout=60,
-                    allow_redirects=True,
-                )
+            resp = sess.post(
+                upload_url,
+                data=upload_data,
+                files=files,
+                timeout=60,
+                allow_redirects=True,
+            )
+            logger.info(
+                "GG sync: POST → status %d, final url: %s",
+                resp.status_code, resp.url,
+            )
+            # Success: 200 or redirect followed to post_prepare page
+            if resp.status_code in (200, 201):
+                upload_resp = resp
+                logger.info("GG sync: upload succeeded with field=%s", field_name)
+                break
+            elif resp.status_code == 422:
+                logger.info("GG sync: 422 with field=%s, trying next", field_name)
+                continue
+            else:
                 logger.info(
-                    "GG sync: POST %s → status %d, final url %s",
-                    candidate_url, resp.status_code, resp.url,
+                    "GG sync: status %d with field=%s, response: %s",
+                    resp.status_code, field_name, resp.text[:500],
                 )
-                if resp.status_code in (200, 201, 302):
-                    upload_resp = resp
-                    used_url = candidate_url
-                    break
-                elif resp.status_code == 422:
-                    # Unprocessable Entity — endpoint exists but wrong params
-                    logger.info(
-                        "GG sync: 422 from %s — endpoint exists, trying different field name",
-                        candidate_url,
-                    )
-                    # Try other field names
-                    for alt_name in possible_field_names[1:]:
-                        files2 = {
-                            alt_name: ("handicaps.csv", csv_bytes, "text/csv"),
-                        }
-                        resp2 = sess.post(
-                            candidate_url,
-                            data=upload_data,
-                            files=files2,
-                            timeout=60,
-                            allow_redirects=True,
-                        )
-                        logger.info(
-                            "GG sync: retry POST %s field=%s → status %d",
-                            candidate_url, alt_name, resp2.status_code,
-                        )
-                        if resp2.status_code in (200, 201, 302):
-                            upload_resp = resp2
-                            used_url = candidate_url
-                            break
-                    if upload_resp:
-                        break
-            except requests.RequestException as e:
-                logger.warning("GG sync: POST to %s failed: %s", candidate_url, e)
+                # If we got a non-404 error, the endpoint exists
+                if resp.status_code != 404:
+                    continue
+                # 404 means wrong endpoint entirely, stop trying field names
+                break
 
         if not upload_resp:
             return {
                 "status": "error",
                 "message": (
-                    f"Could not upload to any GG endpoint. "
-                    f"Tried: {candidate_urls}. "
-                    f"URLs found on page: {all_relevant_urls}."
+                    f"CSV upload failed to {upload_url}. "
+                    f"Tried field names: {possible_field_names}."
                 ),
                 "rows_submitted": 0,
                 "timestamp": timestamp,
             }
 
-        logger.info(
-            "GG sync: upload succeeded via %s (status %d, final url %s)",
-            used_url, upload_resp.status_code, upload_resp.url,
-        )
         page_html = upload_resp.text
+
+        # ── Step 4: Handle post_prepare page ─────────────────────────
+        # After upload, GG shows a post_prepare page. For active leagues,
+        # it shows a warning: "This league has started and we cannot replace
+        # the player roster" with options: "Cancel" or "Add New Golfers".
+        # We need to click "Add New Golfers" to proceed.
+
+        if "post_prepare" in upload_resp.url or "post_prepare" in page_html:
+            logger.info("GG sync: on post_prepare page: %s", upload_resp.url)
+
+            # Check for the "Add New Golfers" button/link
+            add_new_match = re.search(
+                r'href="([^"]*)"[^>]*>(?:[^<]*Add New Golfers[^<]*)</a>',
+                page_html, re.IGNORECASE,
+            )
+            if not add_new_match:
+                # Try as a form button
+                add_new_match = re.search(
+                    r'<(?:a|button)[^>]*(?:href|formaction)="([^"]*)"[^>]*>[^<]*Add New[^<]*',
+                    page_html, re.IGNORECASE,
+                )
+
+            if add_new_match:
+                add_url = add_new_match.group(1)
+                if add_url.startswith("/"):
+                    add_url = GG_BASE_URL + add_url
+                logger.info("GG sync: clicking 'Add New Golfers': %s", add_url)
+
+                new_csrf = _extract_csrf_token(page_html) or csrf
+                add_data = _extract_all_hidden_fields(page_html)
+                if new_csrf:
+                    add_data["authenticity_token"] = new_csrf
+
+                add_resp = sess.get(add_url, timeout=30)
+                logger.info(
+                    "GG sync: 'Add New Golfers' → status %d, url: %s",
+                    add_resp.status_code, add_resp.url,
+                )
+                if add_resp.status_code == 200:
+                    page_html = add_resp.text
+                else:
+                    add_resp.raise_for_status()
+            else:
+                # No "Add New Golfers" — might be a new league where replace is OK
+                # Look for any continue/submit button
+                logger.info("GG sync: no 'Add New Golfers' found, checking for other options")
+
+                # Log the page content for debugging
+                logger.info(
+                    "GG sync: post_prepare page (first 1000 chars): %s",
+                    page_html[:1000],
+                )
 
         # ── Step 5: Handle column mapping page ────────────────────────
         # After upload, GG may show a column mapping page with dropdowns
