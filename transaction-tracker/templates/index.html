@@ -254,17 +254,18 @@
         </div>
     </div>
 
-    <!-- Credit / Transfer Modal -->
-    <div id="credit-overlay" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Credit or Transfer">
+    <!-- Credit / Transfer / Refund Modal -->
+    <div id="credit-overlay" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Credit, Transfer, or Refund">
         <div class="modal credit-modal">
             <div class="modal-header">
-                <h2 id="credit-title">Credit / Transfer</h2>
+                <h2 id="credit-title">Credit / Transfer / Refund</h2>
                 <button id="credit-close" class="modal-close">&times;</button>
             </div>
             <div id="credit-info" class="credit-info"></div>
             <div class="credit-type-toggle">
                 <button class="credit-type-btn active" data-type="credit">Credit</button>
                 <button class="credit-type-btn" data-type="transfer">Transfer</button>
+                <button class="credit-type-btn" data-type="refund">Refund</button>
             </div>
             <div class="credit-fields">
                 <div id="credit-transfer-fields" style="display:none;">
@@ -274,8 +275,17 @@
                         </select>
                     </label>
                 </div>
+                <div id="credit-refund-fields" style="display:none;">
+                    <label>Refund Method
+                        <select id="credit-refund-method" class="modal-input">
+                            <option value="">Select method...</option>
+                            <option value="GoDaddy">GoDaddy</option>
+                            <option value="Venmo">Venmo</option>
+                        </select>
+                    </label>
+                </div>
                 <label>Note (optional)
-                    <input type="text" id="credit-note" class="modal-input" placeholder="Reason for credit/transfer...">
+                    <input type="text" id="credit-note" class="modal-input" placeholder="Reason for credit/transfer/refund...">
                 </label>
             </div>
             <div class="modal-actions">

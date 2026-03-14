@@ -102,6 +102,7 @@ from email_parser.database import (
     relink_all_unlinked_players,
     mark_email_processed,
     clear_failed_processed,
+    refund_item,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -1683,6 +1684,18 @@ def api_wd_item(item_id):
     if wd_item(item_id, note=note, credits=credits, credit_amount=credit_amount):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or already credited/transferred/WD."}), 400
+
+
+@app.route("/api/items/<int:item_id>/refund", methods=["POST"])
+def api_refund_item(item_id):
+    """Mark an item as refunded via GoDaddy or Venmo."""
+    data = request.get_json(silent=True) or {}
+    method = data.get("method", "")
+    if method and method not in ("GoDaddy", "Venmo"):
+        return jsonify({"error": "Invalid refund method. Must be GoDaddy or Venmo."}), 400
+    if refund_item(item_id, method=method, note=data.get("note", "")):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Item not found or already credited/transferred."}), 400
 
 
 @app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
