@@ -215,6 +215,9 @@ def sync_handicaps_to_league(
         )
 
         # ── Step 3: Find the upload form and endpoint ─────────────────
+        # The upload form is in a sidebar panel on the members page itself
+        # (opened by ?open_option=upload_roster_options). We need to find
+        # the <form> with a file input that is NOT the photo upload form.
         csrf = _extract_csrf_token(page_html)
 
         # Log all forms on the page for debugging
@@ -223,108 +226,124 @@ def sync_handicaps_to_league(
         )
         logger.info("GG sync: all form actions on page: %s", all_form_actions)
 
-        # Log all links with "upload", "import", "roster", "spreadsheet"
-        relevant_links = re.findall(
-            r'href="([^"]*(?:upload|import|roster|spreadsheet)[^"]*)"',
-            page_html, re.IGNORECASE,
+        # Find ALL forms with their full tag + body up to next </form>
+        form_blocks = re.findall(
+            r'(<form[^>]*>)(.*?)</form>', page_html, re.DOTALL | re.IGNORECASE
         )
-        logger.info("GG sync: relevant links on page: %s", relevant_links)
-
-        # Log JS URLs that might be upload endpoints
-        js_urls = re.findall(
-            r'["\'](/[^"\']*(?:upload|import|roster|spreadsheet)[^"\']*)["\']',
-            page_html, re.IGNORECASE,
-        )
-        logger.info("GG sync: JS URLs with upload/import/roster: %s", js_urls)
+        logger.info("GG sync: found %d form blocks total", len(form_blocks))
 
         form_action = None
+        file_input_name = "file"
 
-        # Strategy 1: Find multipart forms, EXCLUDING photo uploads
-        form_tags = re.findall(
-            r'<form[^>]*action="([^"]*)"[^>]*enctype="multipart/form-data"[^>]*>',
-            page_html, re.IGNORECASE,
-        )
-        form_tags += re.findall(
-            r'<form[^>]*enctype="multipart/form-data"[^>]*action="([^"]*)"[^>]*>',
-            page_html, re.IGNORECASE,
-        )
-        for action in form_tags:
-            if "photo" not in action.lower() and "avatar" not in action.lower():
-                form_action = action
-                logger.info("GG sync: found non-photo multipart form: %s", action)
-                break
+        # Strategy 1: Find form blocks that contain a file input
+        # but are NOT the photo upload form
+        for form_tag, form_body in form_blocks:
+            # Check if this form has a file input
+            has_file = bool(re.search(
+                r'<input[^>]*type=["\']file["\']', form_body, re.IGNORECASE
+            ))
+            if not has_file:
+                continue
 
-        # Strategy 2: Find form actions with roster/spreadsheet keywords
+            # Extract action
+            action_m = re.search(r'action="([^"]*)"', form_tag, re.IGNORECASE)
+            action = action_m.group(1) if action_m else ""
+
+            # Skip photo/avatar upload forms
+            combined = (action + form_body[:500]).lower()
+            if "photo" in combined or "avatar" in combined:
+                logger.info("GG sync: skipping photo form: %s", action)
+                continue
+
+            form_action = action
+            logger.info("GG sync: found file upload form: action=%s", action)
+
+            # Extract file input name
+            fi_m = re.search(
+                r'<input[^>]*type=["\']file["\'][^>]*name=["\']([^"\']+)["\']',
+                form_body, re.IGNORECASE,
+            )
+            if not fi_m:
+                fi_m = re.search(
+                    r'<input[^>]*name=["\']([^"\']+)["\'][^>]*type=["\']file["\']',
+                    form_body, re.IGNORECASE,
+                )
+            if fi_m:
+                file_input_name = fi_m.group(1)
+                logger.info("GG sync: file input name: %s", file_input_name)
+
+            # Log the form body snippet for debugging
+            logger.info(
+                "GG sync: form body (first 600 chars): %s",
+                form_body[:600],
+            )
+            break
+
+        # Strategy 2: If no form with file input found, look for
+        # JavaScript upload endpoints or data attributes
         if not form_action:
-            for action in all_form_actions:
-                a_lower = action.lower()
-                if any(kw in a_lower for kw in (
-                    "roster", "spreadsheet", "upload_roster",
-                    "import_golfer", "import_member",
-                )) and "photo" not in a_lower:
-                    form_action = action
-                    logger.info("GG sync: found roster form action: %s", action)
-                    break
+            # Look for data-url or data-upload-url attributes
+            data_urls = re.findall(
+                r'data-(?:url|upload[_-]?url|action)=["\']([^"\']+)["\']',
+                page_html, re.IGNORECASE,
+            )
+            logger.info("GG sync: data-url attributes: %s", data_urls)
 
-        # Strategy 3: Find links that look like roster upload actions
-        if not form_action:
-            for link in relevant_links:
-                ll = link.lower()
-                if ("roster" in ll or "spreadsheet" in ll) and "photo" not in ll:
-                    form_action = link
-                    logger.info("GG sync: found roster link: %s", link)
-                    break
-
-        # Strategy 4: Check JS URLs for upload endpoints
-        if not form_action:
+            # Look for JS URLs referencing upload/spreadsheet
+            js_urls = re.findall(
+                r'["\'](/[^"\']*(?:spreadsheet_file|spreadsheetfile|upload_roster|import_roster)[^"\']*)["\']',
+                page_html, re.IGNORECASE,
+            )
+            logger.info("GG sync: JS upload URLs: %s", js_urls)
             for url in js_urls:
-                ul = url.lower()
-                if ("roster" in ul or "spreadsheet" in ul) and "photo" not in ul:
+                if "photo" not in url.lower():
                     form_action = url
-                    logger.info("GG sync: found JS roster URL: %s", url)
+                    logger.info("GG sync: using JS upload URL: %s", url)
                     break
 
-        # Strategy 5: Try known GG endpoint patterns via HTTP probing
+        # Strategy 3: Try known GG endpoint patterns
         if not form_action:
-            candidate_actions = [
+            candidate_paths = [
+                f"/leagues/{league_id}/spreadsheet_files",
+                f"/leagues/{league_id}/members/spreadsheet_files",
                 f"/leagues/{league_id}/members/upload_roster",
                 f"/leagues/{league_id}/members/import_from_spreadsheet",
                 f"/leagues/{league_id}/members/upload_spreadsheet",
                 f"/leagues/{league_id}/members/import",
-                f"/leagues/{league_id}/golfers/upload_roster",
-                f"/leagues/{league_id}/golfers/import_from_spreadsheet",
             ]
-            for candidate in candidate_actions:
+            for candidate in candidate_paths:
                 test_url = GG_BASE_URL + candidate
                 logger.info("GG sync: probing %s", test_url)
-                test_resp = sess.get(test_url, timeout=15, allow_redirects=False)
-                logger.info("GG sync: %s → status %d", candidate, test_resp.status_code)
-                if test_resp.status_code in (200, 302, 405):
-                    form_action = candidate
-                    break
+                try:
+                    test_resp = sess.get(test_url, timeout=15, allow_redirects=False)
+                    logger.info(
+                        "GG sync: %s → status %d", candidate, test_resp.status_code
+                    )
+                    if test_resp.status_code in (200, 302, 405):
+                        form_action = candidate
+                        break
+                except Exception as e:
+                    logger.warning("GG sync: probe failed for %s: %s", candidate, e)
 
-        # Find the file input field name
-        file_input_name = "file"
-        file_inputs = re.findall(
-            r'<input[^>]*type=["\']file["\'][^>]*>', page_html, re.IGNORECASE
-        )
-        logger.info("GG sync: file inputs on page: %s", file_inputs)
-        for fi in file_inputs:
-            name_m = re.search(r'name=["\']([^"\']+)["\']', fi)
-            # Skip photo-related file inputs
-            if name_m and "photo" not in fi.lower():
-                file_input_name = name_m.group(1)
-                logger.info("GG sync: using file input name: %s", file_input_name)
-                break
+        # Log context around key HTML elements for debugging
+        if not form_action:
+            for keyword in ["Choose File", "spreadsheet", "upload_roster",
+                            "file_field", "type=\"file\""]:
+                idx = page_html.lower().find(keyword.lower())
+                if idx >= 0:
+                    snippet = page_html[max(0, idx - 300):idx + 300]
+                    logger.info(
+                        "GG sync: HTML context around '%s': ...%s...",
+                        keyword, snippet,
+                    )
 
         if not form_action:
             return {
                 "status": "error",
                 "message": (
-                    f"Could not find the roster upload endpoint. "
+                    f"Could not find the roster upload form. "
                     f"Page: {members_resp.url}. "
-                    f"Forms found: {all_form_actions}. "
-                    f"Relevant links: {relevant_links}."
+                    f"Forms found: {all_form_actions}."
                 ),
                 "rows_submitted": 0,
                 "timestamp": timestamp,
