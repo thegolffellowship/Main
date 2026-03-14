@@ -55,7 +55,10 @@ IMPORTANT RULES:
 FIELD-SPECIFIC GUIDANCE:
 - "customer": The buyer / registrant name. Always use Title Case \
   (e.g. "Mike Jenkins", not "mike jenkins" or "MIKE JENKINS").
-- "item_name": Use the event/product name exactly as shown (e.g. "Feb 22 - LaCANTERA"). \
+- "item_name": Use the FULL event/product name exactly as shown in the Order Summary, \
+  including the venue/course name. For example, "Austin Kickoff SHADOWGLEN" must stay \
+  as "Austin Kickoff SHADOWGLEN" — do NOT strip the course name. Other examples: \
+  "Feb 22 - LaCANTERA", "San Antonio Kickoff THE QUARRY", "Dallas Classic COWBOYS". \
   Exception: for membership items, normalise the item name to just "TGF MEMBERSHIP" \
   regardless of any city or tier suffix in the original (e.g. "TGF MEMBERSHIP CITY: \
   AUS | New Member..." → "TGF MEMBERSHIP"). \
@@ -122,18 +125,26 @@ FIELD-SPECIFIC GUIDANCE:
   with " - " between them. Preserve the text as-is.
 - "date_of_birth": YYYY-MM-DD format. Often appears on membership orders.
 - "transaction_fees": The processing/transaction fee amount charged on the \
-  order (e.g. "$7.53"). This is an ORDER-level field, not per-item. \
-  Look for "Transaction Fee", "Processing Fee", "Service Fee", etc.
+  order (e.g. "$4.90"). This is an ORDER-level field, not per-item. \
+  Look for "Transaction Fees", "Transaction Fee", "Processing Fee", \
+  "Service Fee", etc. The email often shows it as "Transaction Fees 3.5%: $4.90" — \
+  extract just the dollar amount (e.g. "$4.90").
 - "tee_choice": The tee selection. Normalise to one of: "<50", "50-64", \
   "65+", or "Forward". If the email says "Front" tees, normalise to "Forward". \
   Discard any yardage information (e.g. "6300-6800y").
 - "holes": For events that offer 9 or 18 holes, extract just the number: \
   "9" or "18". Look for "9 or 18 HOLES?" field. If not present, use null.
-- "address": The street address from the Shipping/Mailing Address section.
-- "address2": Second address line (apt, suite, etc.) if present.
-- "address_city": City from the Shipping/Mailing Address.
-- "address_state": State abbreviation from the Shipping/Mailing Address (e.g. "TX").
-- "address_zip": ZIP code from the Shipping/Mailing Address.
+- "address": The street address from the Shipping Address section. The email \
+  typically shows "Shipping Address" followed by the customer name in ALL CAPS, \
+  then the street, city, state, and zip. For example: \
+  "Shipping Address JOHN DOE 123 MAIN ST AUSTIN TX 78701" → \
+  address="123 Main St", address_city="Austin", address_state="TX", \
+  address_zip="78701". Extract the street portion only (not the name). \
+  Use Title Case for the street address.
+- "address2": Second address line (apt, suite, unit, etc.) if present.
+- "address_city": City from the Shipping Address. Use Title Case.
+- "address_state": State abbreviation from the Shipping Address (e.g. "TX").
+- "address_zip": ZIP code from the Shipping Address (e.g. "78701").
 
 Return this exact JSON structure:
 
