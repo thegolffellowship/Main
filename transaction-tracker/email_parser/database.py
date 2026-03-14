@@ -433,6 +433,15 @@ def init_db(db_path: str | Path | None = None) -> None:
                 except sqlite3.OperationalError:
                     pass  # old column doesn't exist — already fully migrated
 
+        # Ensure address columns exist — covers edge cases where shipping_*
+        # columns never existed so the rename above was a no-op.
+        for col in ["address", "address2", "city", "state", "zip"]:
+            try:
+                conn.execute(f"ALTER TABLE items ADD COLUMN {col} TEXT")
+                logger.info("Added missing column: %s", col)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         # Processed emails table — tracks ALL email UIDs we've already sent to
         # the AI, even if no items were extracted.  Prevents re-parsing the same
         # email every 15 minutes and burning API credits.
