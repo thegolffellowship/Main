@@ -359,11 +359,6 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("suffix", "TEXT"),
             ("archived", "INTEGER DEFAULT 0"),
             ("holes", "TEXT"),
-            ("address", "TEXT"),
-            ("address2", "TEXT"),
-            ("city", "TEXT"),
-            ("state", "TEXT"),
-            ("zip", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
@@ -399,7 +394,21 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass  # already renamed or column doesn't exist
 
+        # Clean up _city_deprecated if it still exists
+        try:
+            conn.execute(
+                "UPDATE items SET chapter = _city_deprecated "
+                "WHERE (chapter IS NULL OR chapter = '') "
+                "AND _city_deprecated IS NOT NULL AND _city_deprecated != ''"
+            )
+            conn.execute("ALTER TABLE items DROP COLUMN _city_deprecated")
+            logger.info("Dropped items._city_deprecated after merging into chapter")
+        except sqlite3.OperationalError:
+            pass  # column doesn't exist — already cleaned up
+
         # Step 3: rename shipping_* → plain address field names
+        # Try rename first; if it fails (target column already exists from a
+        # prior ensure_column run), copy data from old → new and drop old.
         for old, new in [
             ("shipping_address", "address"),
             ("shipping_address2", "address2"),
@@ -411,7 +420,18 @@ def init_db(db_path: str | Path | None = None) -> None:
                 conn.execute(f"ALTER TABLE items RENAME COLUMN {old} TO {new}")
                 logger.info("Migrated items.%s → items.%s", old, new)
             except sqlite3.OperationalError:
-                pass  # already renamed or doesn't exist
+                # Rename failed — either already done, or target column exists.
+                # If both old and new columns exist, copy data from old → new.
+                try:
+                    conn.execute(
+                        f"UPDATE items SET [{new}] = [{old}] "
+                        f"WHERE ([{new}] IS NULL OR [{new}] = '') "
+                        f"AND [{old}] IS NOT NULL AND [{old}] != ''"
+                    )
+                    conn.execute(f"ALTER TABLE items DROP COLUMN [{old}]")
+                    logger.info("Copied items.%s → items.%s and dropped old column", old, new)
+                except sqlite3.OperationalError:
+                    pass  # old column doesn't exist — already fully migrated
 
         # Processed emails table — tracks ALL email UIDs we've already sent to
         # the AI, even if no items were extracted.  Prevents re-parsing the same
