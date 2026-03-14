@@ -273,7 +273,7 @@ For a public URL your managers can bookmark:
 
 ### Export
 
-Click **Export CSV** to download all transactions as a spreadsheet. The CSV includes every column: date, customer, item, price, city, course, handicap, side games, tee choice, member status, golf or compete, post game, shirt size, guest name, order ID, and more.
+Click **Export CSV** to download all transactions as a spreadsheet. The CSV includes every column: date, customer, item, price, address, city, state, zip, course, handicap, side games, tee choice, member status, golf or compete, transaction fees, post game, shirt size, guest name, order ID, and more.
 
 ### Manual Actions
 
