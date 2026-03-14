@@ -379,6 +379,7 @@
     let previewRows    = [];
     let columnMapping  = {};  // { field: colIndex }
     let importFileObj  = null;
+    let _ggSyncPoll    = null;   // Golf Genius sync polling interval
 
     const FIELD_LABELS = {
         player_name:    { label: "Player Name",    required: true },
@@ -972,8 +973,6 @@
     }
 
     // ── Golf Genius Sync ─────────────────────────────────────────────
-    let _ggSyncPoll = null;
-
     async function loadGGSyncStatus() {
         try {
             const r = await fetch('/api/handicaps/sync-status');
