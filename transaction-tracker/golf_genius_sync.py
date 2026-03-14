@@ -1,8 +1,8 @@
 """Golf Genius handicap sync via HTTP requests.
 
-Logs into golfgenius.com, navigates to the handicap spreadsheet upload page
-for the specified league, uploads a CSV (Email, Handicap Index, Player Name),
-maps columns, and submits the import.
+Logs into golfgenius.com, navigates to GOLFERS → Upload Roster from
+Spreadsheet, confirms authorization, uploads a CSV with (Email,
+Handicap Index, Player Name), handles column mapping, and submits.
 
 Uses requests.Session (no browser/Playwright required) so this works on
 Railway and other minimal server environments.
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json as _json
 import logging
 import os
 import re
@@ -76,6 +77,63 @@ def _extract_csrf_token(html: str) -> str | None:
     return None
 
 
+def _extract_all_hidden_fields(html: str) -> dict[str, str]:
+    """Extract all hidden input fields from HTML."""
+    fields = {}
+    for m in re.finditer(
+        r'<input[^>]*type=["\']hidden["\'][^>]*>', html, re.IGNORECASE
+    ):
+        tag = m.group(0)
+        name_m = re.search(r'name=["\']([^"\']+)["\']', tag)
+        val_m = re.search(r'value=["\']([^"\']*)["\']', tag)
+        if name_m:
+            fields[name_m.group(1)] = val_m.group(1) if val_m else ""
+    return fields
+
+
+def _gg_login(sess: requests.Session, email: str, password: str) -> dict | None:
+    """Log into Golf Genius. Returns None on success, error dict on failure."""
+    logger.info("GG sync: fetching login page")
+    login_page = sess.get(GG_LOGIN_URL, timeout=30)
+    login_page.raise_for_status()
+
+    csrf = _extract_csrf_token(login_page.text)
+    if not csrf:
+        return {
+            "status": "error",
+            "message": "Could not find CSRF token on Golf Genius login page",
+        }
+
+    logger.info("GG sync: logging in as %s", email)
+    login_data = {
+        "authenticity_token": csrf,
+        "user[email]": email,
+        "user[password]": password,
+        "user[remember_me]": "0",
+        "commit": "Log in",
+    }
+    login_resp = sess.post(
+        GG_LOGIN_URL,
+        data=login_data,
+        timeout=30,
+        allow_redirects=True,
+    )
+
+    if "sign_in" in login_resp.url:
+        error_match = re.search(
+            r'class="[^"]*(?:alert|error|flash)[^"]*"[^>]*>([^<]+)',
+            login_resp.text,
+        )
+        error_msg = (
+            error_match.group(1).strip() if error_match
+            else "Invalid email or password"
+        )
+        return {"status": "error", "message": f"Login failed: {error_msg}"}
+
+    logger.info("GG sync: logged in, redirected to %s", login_resp.url)
+    return None  # success
+
+
 def sync_handicaps_to_league(
     rows: list[dict],
     league_id: str,
@@ -85,6 +143,15 @@ def sync_handicaps_to_league(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Upload handicap indexes to a Golf Genius league via HTTP requests.
+
+    Flow (mirrors the manual browser steps):
+      1. Login to golfgenius.com
+      2. Navigate to GOLFERS → Upload Roster from Spreadsheet
+         URL: /leagues/{league_id}/members?open_option=upload_roster_options
+      3. Parse the page for the upload form, confirm authorization
+      4. POST the CSV file
+      5. Handle column mapping if presented
+      6. Read result
 
     Args:
         rows: list of {"email": ..., "handicap_index": ..., "player_name": ...}
@@ -115,128 +182,162 @@ def sync_handicaps_to_league(
     sess.headers.update(_HEADERS)
 
     try:
-        # ── Step 1: Get login page and CSRF token ─────────────────────
-        logger.info("GG sync: fetching login page")
-        login_page = sess.get(GG_LOGIN_URL, timeout=30)
-        login_page.raise_for_status()
+        # ── Step 1: Login ─────────────────────────────────────────────
+        login_err = _gg_login(sess, email, password)
+        if login_err:
+            return {**login_err, "rows_submitted": 0, "timestamp": timestamp}
 
-        csrf = _extract_csrf_token(login_page.text)
-        if not csrf:
-            return {
-                "status": "error",
-                "message": "Could not find CSRF token on Golf Genius login page",
-                "rows_submitted": 0,
-                "timestamp": timestamp,
-            }
-
-        # ── Step 2: Submit login form ─────────────────────────────────
-        logger.info("GG sync: logging in as %s", email)
-        login_data = {
-            "authenticity_token": csrf,
-            "user[email]": email,
-            "user[password]": password,
-            "user[remember_me]": "0",
-            "commit": "Log in",
-        }
-        login_resp = sess.post(
-            GG_LOGIN_URL,
-            data=login_data,
-            timeout=30,
-            allow_redirects=True,
+        # ── Step 2: Navigate to the roster upload page ────────────────
+        # This is GOLFERS → Upload Roster from Spreadsheet
+        members_url = (
+            f"{GG_BASE_URL}/leagues/{league_id}/members"
+            f"?open_option=upload_roster_options"
         )
+        logger.info("GG sync: navigating to %s", members_url)
+        members_resp = sess.get(members_url, timeout=30)
 
-        # Check if login succeeded — if we're back on sign_in, it failed
-        if "sign_in" in login_resp.url:
-            # Check for error message in response
-            error_match = re.search(
-                r'class="[^"]*(?:alert|error|flash)[^"]*"[^>]*>([^<]+)', login_resp.text
-            )
-            error_msg = error_match.group(1).strip() if error_match else "Invalid email or password"
-            return {
-                "status": "error",
-                "message": f"Login failed: {error_msg}",
-                "rows_submitted": 0,
-                "timestamp": timestamp,
-            }
-
-        logger.info("GG sync: logged in, redirected to %s", login_resp.url)
-
-        # ── Step 3: Navigate to handicap upload page ──────────────────
-        upload_url = (
-            f"{GG_BASE_URL}/leagues/{league_id}/golfers/update_hcps_from_spreadsheet"
-        )
-        logger.info("GG sync: navigating to %s", upload_url)
-        upload_page = sess.get(upload_url, timeout=30)
-
-        if upload_page.status_code == 404:
-            return {
-                "status": "error",
-                "message": f"Handicap upload page not found for league {league_id}. "
-                           "Check the league ID.",
-                "rows_submitted": 0,
-                "timestamp": timestamp,
-            }
-        upload_page.raise_for_status()
-
-        if "update_hcps" not in upload_page.url:
+        if members_resp.status_code == 404:
             return {
                 "status": "error",
                 "message": (
-                    f"Redirected away from handicap upload page to {upload_page.url}. "
-                    f"Check league ID ({league_id}) and GG account permissions."
+                    f"Members page not found for league {league_id}. "
+                    f"URL: {members_url}"
+                ),
+                "rows_submitted": 0,
+                "timestamp": timestamp,
+            }
+        members_resp.raise_for_status()
+        page_html = members_resp.text
+
+        logger.info(
+            "GG sync: members page loaded (url=%s, %d bytes)",
+            members_resp.url, len(page_html),
+        )
+
+        # ── Step 3: Find the upload form and endpoint ─────────────────
+        # Look for file upload forms on the page
+        # The upload form typically has enctype="multipart/form-data"
+        csrf = _extract_csrf_token(page_html)
+
+        # Find form with file input (the roster upload form)
+        # Try to find the form action for the file upload
+        form_action = None
+
+        # Pattern 1: form with enctype multipart
+        form_matches = re.findall(
+            r'<form[^>]*action="([^"]*)"[^>]*enctype="multipart/form-data"[^>]*>',
+            page_html, re.IGNORECASE,
+        )
+        if not form_matches:
+            # Try reversed attribute order
+            form_matches = re.findall(
+                r'<form[^>]*enctype="multipart/form-data"[^>]*action="([^"]*)"[^>]*>',
+                page_html, re.IGNORECASE,
+            )
+        if form_matches:
+            form_action = form_matches[0]
+            logger.info("GG sync: found multipart form action: %s", form_action)
+
+        # Pattern 2: look for upload-related form actions
+        if not form_action:
+            upload_forms = re.findall(
+                r'<form[^>]*action="([^"]*(?:upload|import|roster)[^"]*)"[^>]*>',
+                page_html, re.IGNORECASE,
+            )
+            if upload_forms:
+                form_action = upload_forms[0]
+                logger.info("GG sync: found upload form action: %s", form_action)
+
+        # Pattern 3: look for AJAX upload endpoints in JavaScript
+        if not form_action:
+            # GG might use JavaScript to handle the upload (drag-and-drop modal)
+            # Look for URLs in JS that handle file uploads
+            js_urls = re.findall(
+                r'["\']([^"\']*(?:upload|import|roster)[^"\']*)["\']',
+                page_html, re.IGNORECASE,
+            )
+            for url in js_urls:
+                if url.startswith("/") and ("member" in url or "roster" in url):
+                    form_action = url
+                    logger.info("GG sync: found JS upload URL: %s", form_action)
+                    break
+
+        # Pattern 4: construct the most likely endpoint
+        if not form_action:
+            # Common Rails patterns for file uploads
+            candidate_actions = [
+                f"/leagues/{league_id}/members/upload_roster",
+                f"/leagues/{league_id}/members/import",
+                f"/leagues/{league_id}/golfers/upload_roster",
+                f"/leagues/{league_id}/members/upload",
+            ]
+            for candidate in candidate_actions:
+                logger.info("GG sync: trying upload endpoint %s", candidate)
+                # Try a GET first to see if the endpoint exists
+                test_resp = sess.get(
+                    GG_BASE_URL + candidate, timeout=15,
+                    allow_redirects=False,
+                )
+                # A 200 or 302 (redirect) suggests the endpoint exists
+                if test_resp.status_code in (200, 302, 405):
+                    form_action = candidate
+                    logger.info("GG sync: endpoint %s exists (status %d)",
+                                candidate, test_resp.status_code)
+                    break
+
+        # Find the file input field name
+        file_input_name = "file"
+        file_input_match = re.search(
+            r'<input[^>]*type=["\']file["\'][^>]*name=["\']([^"\']+)["\']',
+            page_html, re.IGNORECASE,
+        )
+        if not file_input_match:
+            file_input_match = re.search(
+                r'<input[^>]*name=["\']([^"\']+)["\'][^>]*type=["\']file["\']',
+                page_html, re.IGNORECASE,
+            )
+        if file_input_match:
+            file_input_name = file_input_match.group(1)
+            logger.info("GG sync: file input field name: %s", file_input_name)
+
+        if not form_action:
+            # Log page content hints for debugging
+            all_forms = re.findall(r'<form[^>]*>', page_html)
+            all_inputs = re.findall(r'<input[^>]*type=["\']file["\'][^>]*>', page_html)
+            all_links = re.findall(r'href="(/[^"]*(?:upload|import)[^"]*)"', page_html)
+            logger.error(
+                "GG sync: could not find upload form. "
+                "Forms: %s | File inputs: %s | Upload links: %s",
+                all_forms[:5], all_inputs[:5], all_links[:10],
+            )
+            return {
+                "status": "error",
+                "message": (
+                    f"Could not find the roster upload form on the members page. "
+                    f"Page URL: {members_resp.url}. "
+                    f"Found {len(all_forms)} form(s), "
+                    f"{len(all_inputs)} file input(s)."
                 ),
                 "rows_submitted": 0,
                 "timestamp": timestamp,
             }
 
-        # Extract CSRF token from upload page
-        csrf = _extract_csrf_token(upload_page.text)
-
-        # ── Step 4: Find the form action and upload CSV ───────────────
-        # The form action is typically the same URL or a related endpoint
-        # Look for the form action on the page
-        form_match = re.search(
-            r'<form[^>]*action="([^"]*)"[^>]*enctype="multipart/form-data"',
-            upload_page.text,
-        )
-        if not form_match:
-            # Try without enctype
-            form_match = re.search(
-                r'<form[^>]*action="([^"]*update_hcps[^"]*)"', upload_page.text
-            )
-
-        form_action = form_match.group(1) if form_match else upload_url
         if form_action.startswith("/"):
             form_action = GG_BASE_URL + form_action
 
-        logger.info("GG sync: uploading CSV (%d rows) to %s", len(rows), form_action)
+        # ── Step 4: Upload the CSV file ───────────────────────────────
+        logger.info(
+            "GG sync: uploading CSV (%d rows) to %s", len(rows), form_action
+        )
 
-        # Build multipart form data
-        upload_data = {}
+        upload_data = _extract_all_hidden_fields(page_html)
         if csrf:
             upload_data["authenticity_token"] = csrf
 
-        # Check for any hidden fields in the form
-        hidden_fields = re.findall(
-            r'<input\s+type="hidden"\s+name="([^"]+)"\s+value="([^"]*)"',
-            upload_page.text,
-        )
-        for name, value in hidden_fields:
-            upload_data[name] = value
-
         csv_bytes = csv_content.encode("utf-8")
         files = {
-            "file": ("handicaps.csv", csv_bytes, "text/csv"),
+            file_input_name: ("handicaps.csv", csv_bytes, "text/csv"),
         }
-
-        # Also try common GG file field names
-        file_input_match = re.search(
-            r'<input[^>]*type="file"[^>]*name="([^"]+)"', upload_page.text
-        )
-        if file_input_match:
-            file_field_name = file_input_match.group(1)
-            if file_field_name != "file":
-                files = {file_field_name: ("handicaps.csv", csv_bytes, "text/csv")}
 
         upload_resp = sess.post(
             form_action,
@@ -247,15 +348,15 @@ def sync_handicaps_to_league(
         )
         upload_resp.raise_for_status()
 
-        logger.info("GG sync: upload response URL: %s (status %d)",
-                     upload_resp.url, upload_resp.status_code)
-
-        # ── Step 5: Handle column mapping page ────────────────────────
-        # After upload, GG may show a column mapping page with dropdowns.
-        # We need to detect if we're on the mapping page and submit it.
+        logger.info(
+            "GG sync: upload response URL: %s (status %d)",
+            upload_resp.url, upload_resp.status_code,
+        )
         page_html = upload_resp.text
 
-        # Check if the response contains column mapping selects
+        # ── Step 5: Handle column mapping page ────────────────────────
+        # After upload, GG may show a column mapping page with dropdowns
+        # where you map CSV columns to GG fields.
         has_mapping = bool(re.search(r'<select[^>]*>', page_html))
         mapping_form_match = re.search(
             r'<form[^>]*action="([^"]*)"[^>]*>', page_html
@@ -267,75 +368,61 @@ def sync_handicaps_to_league(
             if mapping_action.startswith("/"):
                 mapping_action = GG_BASE_URL + mapping_action
 
-            # Get the new CSRF token
             new_csrf = _extract_csrf_token(page_html)
-
-            # Parse select elements and their options to build form data
-            mapping_data = {}
+            mapping_data = _extract_all_hidden_fields(page_html)
             if new_csrf:
                 mapping_data["authenticity_token"] = new_csrf
 
-            # Extract hidden fields
-            hidden_fields = re.findall(
-                r'<input\s+type="hidden"\s+name="([^"]+)"\s+value="([^"]*)"',
-                page_html,
-            )
-            for name, value in hidden_fields:
-                mapping_data[name] = value
-
-            # Parse select elements
+            # Parse select elements and map columns intelligently
             selects = re.findall(
                 r'<select[^>]*name="([^"]+)"[^>]*>(.*?)</select>',
-                page_html,
-                re.DOTALL,
+                page_html, re.DOTALL,
             )
 
             for sel_name, sel_body in selects:
-                # Find the label/context for this select
-                # Look backwards in the HTML for a label
                 sel_pos = page_html.find(f'name="{sel_name}"')
-                context_chunk = page_html[max(0, sel_pos - 500):sel_pos].lower()
+                context = page_html[max(0, sel_pos - 500):sel_pos].lower()
 
-                # Parse options
                 options = re.findall(
                     r'<option\s+value="([^"]*)"[^>]*>([^<]*)</option>',
                     sel_body,
                 )
+                opt_dict = {t.strip().lower(): v for v, t in options}
+                opt_texts = [t.strip().lower() for _, t in options]
 
-                # Determine what this select should be mapped to
-                option_dict = {text.strip().lower(): val for val, text in options}
-                option_texts = [text.strip().lower() for _, text in options]
-
-                if any(kw in context_chunk for kw in ("unique", "identifier", "match", "player id")):
-                    # Map to Email
+                # Map identifier/unique field → Email
+                if any(kw in context for kw in (
+                    "unique", "identifier", "match", "player id"
+                )):
                     for label in ("email", "e-mail"):
-                        if label in option_dict:
-                            mapping_data[sel_name] = option_dict[label]
+                        if label in opt_dict:
+                            mapping_data[sel_name] = opt_dict[label]
                             logger.info("GG sync: mapped '%s' → Email", sel_name)
                             break
-                elif any(kw in context_chunk for kw in ("handicap", "index", "hcp")):
-                    # Map to Handicap Index
+                # Map handicap field → Handicap Index
+                elif any(kw in context for kw in ("handicap", "index", "hcp")):
                     for label in ("handicap index", "handicap_index", "index"):
-                        if label in option_dict:
-                            mapping_data[sel_name] = option_dict[label]
-                            logger.info("GG sync: mapped '%s' → Handicap Index", sel_name)
+                        if label in opt_dict:
+                            mapping_data[sel_name] = opt_dict[label]
+                            logger.info(
+                                "GG sync: mapped '%s' → Handicap Index", sel_name
+                            )
                             break
-                elif any("email" in t for t in option_texts):
-                    # Fallback: if has Email option, assume it's the identifier select
+                # Fallback: if option list has "email", use it
+                elif any("email" in t for t in opt_texts):
                     for label in ("email", "e-mail"):
-                        if label in option_dict:
-                            mapping_data[sel_name] = option_dict[label]
+                        if label in opt_dict:
+                            mapping_data[sel_name] = opt_dict[label]
                             break
-                elif any("handicap" in t for t in option_texts):
-                    # Fallback: if has Handicap option, assume it's the HCP select
+                elif any("handicap" in t for t in opt_texts):
                     for label in ("handicap index", "handicap_index", "index"):
-                        if label in option_dict:
-                            mapping_data[sel_name] = option_dict[label]
+                        if label in opt_dict:
+                            mapping_data[sel_name] = opt_dict[label]
                             break
 
-            # Look for submit button value
+            # Look for submit button
             submit_match = re.search(
-                r'<input[^>]*type="submit"[^>]*value="([^"]*[Ii]mport[^"]*)"[^>]*name="([^"]*)"',
+                r'<input[^>]*type="submit"[^>]*value="([^"]*)"[^>]*name="([^"]*)"',
                 page_html,
             )
             if submit_match:
@@ -349,7 +436,10 @@ def sync_handicaps_to_league(
             )
             mapping_resp.raise_for_status()
             page_html = mapping_resp.text
-            logger.info("GG sync: mapping submitted, response URL: %s", mapping_resp.url)
+            logger.info(
+                "GG sync: mapping submitted, response URL: %s",
+                mapping_resp.url,
+            )
 
         # ── Step 6: Read result message ───────────────────────────────
         result_text = ""
@@ -365,7 +455,7 @@ def sync_handicaps_to_league(
                     break
 
         if not result_text:
-            result_text = f"Import submitted for {len(rows)} players"
+            result_text = f"Upload submitted for {len(rows)} players"
 
         logger.info("GG sync: result — %s", result_text)
 
