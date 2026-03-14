@@ -214,172 +214,142 @@ def sync_handicaps_to_league(
             members_resp.url, len(page_html),
         )
 
-        # ── Step 3: Find the upload form and endpoint ─────────────────
-        # The upload form is in a sidebar panel on the members page itself
-        # (opened by ?open_option=upload_roster_options). We need to find
-        # the <form> with a file input that is NOT the photo upload form.
+        # ── Step 3: Upload CSV to the spreadsheetfiles endpoint ───────
+        # Confirmed endpoint: POST /leagues/{id}/spreadsheetfiles
+        # This creates a spreadsheet file record, then redirects to
+        # /leagues/{id}/spreadsheetfiles/{file_id}/post_prepare
         csrf = _extract_csrf_token(page_html)
 
-        # Log all forms on the page for debugging
-        all_form_actions = re.findall(
-            r'<form[^>]*action="([^"]*)"[^>]*>', page_html, re.IGNORECASE
+        upload_url = f"{GG_BASE_URL}/leagues/{league_id}/spreadsheetfiles"
+        csv_bytes = csv_content.encode("utf-8")
+
+        upload_data = {}
+        if csrf:
+            upload_data["authenticity_token"] = csrf
+
+        # Try several possible file field names
+        possible_field_names = [
+            "spreadsheet_file[file]",
+            "file",
+            "spreadsheet_file",
+            "spreadsheetfile[file]",
+        ]
+
+        # Check if there's a file input on the page to determine field name
+        file_inputs = re.findall(
+            r'<input[^>]*type=["\']file["\'][^>]*>', page_html, re.IGNORECASE
         )
-        logger.info("GG sync: all form actions on page: %s", all_form_actions)
+        for fi in file_inputs:
+            name_m = re.search(r'name=["\']([^"\']+)["\']', fi)
+            if name_m and "photo" not in fi.lower():
+                found_name = name_m.group(1)
+                if found_name not in possible_field_names:
+                    possible_field_names.insert(0, found_name)
+                logger.info("GG sync: file input name from page: %s", found_name)
 
-        # Find ALL forms with their full tag + body up to next </form>
-        form_blocks = re.findall(
-            r'(<form[^>]*>)(.*?)</form>', page_html, re.DOTALL | re.IGNORECASE
-        )
-        logger.info("GG sync: found %d form blocks total", len(form_blocks))
-
-        form_action = None
-        file_input_name = "file"
-
-        # Strategy 1: Find form blocks that contain a file input
-        # but are NOT the photo upload form
-        for form_tag, form_body in form_blocks:
-            # Check if this form has a file input
-            has_file = bool(re.search(
-                r'<input[^>]*type=["\']file["\']', form_body, re.IGNORECASE
-            ))
-            if not has_file:
-                continue
-
-            # Extract action
-            action_m = re.search(r'action="([^"]*)"', form_tag, re.IGNORECASE)
-            action = action_m.group(1) if action_m else ""
-
-            # Skip photo/avatar upload forms
-            combined = (action + form_body[:500]).lower()
-            if "photo" in combined or "avatar" in combined:
-                logger.info("GG sync: skipping photo form: %s", action)
-                continue
-
-            form_action = action
-            logger.info("GG sync: found file upload form: action=%s", action)
-
-            # Extract file input name
-            fi_m = re.search(
-                r'<input[^>]*type=["\']file["\'][^>]*name=["\']([^"\']+)["\']',
-                form_body, re.IGNORECASE,
-            )
-            if not fi_m:
-                fi_m = re.search(
-                    r'<input[^>]*name=["\']([^"\']+)["\'][^>]*type=["\']file["\']',
-                    form_body, re.IGNORECASE,
-                )
-            if fi_m:
-                file_input_name = fi_m.group(1)
-                logger.info("GG sync: file input name: %s", file_input_name)
-
-            # Log the form body snippet for debugging
+        upload_resp = None
+        for field_name in possible_field_names:
+            files = {
+                field_name: ("handicaps.csv", csv_bytes, "text/csv"),
+            }
             logger.info(
-                "GG sync: form body (first 600 chars): %s",
-                form_body[:600],
+                "GG sync: POST %s (field=%s, %d rows)",
+                upload_url, field_name, len(rows),
             )
-            break
-
-        # Strategy 2: If no form with file input found, look for
-        # JavaScript upload endpoints or data attributes
-        if not form_action:
-            # Look for data-url or data-upload-url attributes
-            data_urls = re.findall(
-                r'data-(?:url|upload[_-]?url|action)=["\']([^"\']+)["\']',
-                page_html, re.IGNORECASE,
+            resp = sess.post(
+                upload_url,
+                data=upload_data,
+                files=files,
+                timeout=60,
+                allow_redirects=True,
             )
-            logger.info("GG sync: data-url attributes: %s", data_urls)
-
-            # Look for JS URLs referencing upload/spreadsheet
-            js_urls = re.findall(
-                r'["\'](/[^"\']*(?:spreadsheet_file|spreadsheetfile|upload_roster|import_roster)[^"\']*)["\']',
-                page_html, re.IGNORECASE,
+            logger.info(
+                "GG sync: POST → status %d, final url: %s",
+                resp.status_code, resp.url,
             )
-            logger.info("GG sync: JS upload URLs: %s", js_urls)
-            for url in js_urls:
-                if "photo" not in url.lower():
-                    form_action = url
-                    logger.info("GG sync: using JS upload URL: %s", url)
-                    break
+            # Success: 200 or redirect followed to post_prepare page
+            if resp.status_code in (200, 201):
+                upload_resp = resp
+                logger.info("GG sync: upload succeeded with field=%s", field_name)
+                break
+            elif resp.status_code == 422:
+                logger.info("GG sync: 422 with field=%s, trying next", field_name)
+                continue
+            else:
+                logger.info(
+                    "GG sync: status %d with field=%s, response: %s",
+                    resp.status_code, field_name, resp.text[:500],
+                )
+                # If we got a non-404 error, the endpoint exists
+                if resp.status_code != 404:
+                    continue
+                # 404 means wrong endpoint entirely, stop trying field names
+                break
 
-        # Strategy 3: Try known GG endpoint patterns
-        if not form_action:
-            candidate_paths = [
-                f"/leagues/{league_id}/spreadsheet_files",
-                f"/leagues/{league_id}/members/spreadsheet_files",
-                f"/leagues/{league_id}/members/upload_roster",
-                f"/leagues/{league_id}/members/import_from_spreadsheet",
-                f"/leagues/{league_id}/members/upload_spreadsheet",
-                f"/leagues/{league_id}/members/import",
-            ]
-            for candidate in candidate_paths:
-                test_url = GG_BASE_URL + candidate
-                logger.info("GG sync: probing %s", test_url)
-                try:
-                    test_resp = sess.get(test_url, timeout=15, allow_redirects=False)
-                    logger.info(
-                        "GG sync: %s → status %d", candidate, test_resp.status_code
-                    )
-                    if test_resp.status_code in (200, 302, 405):
-                        form_action = candidate
-                        break
-                except Exception as e:
-                    logger.warning("GG sync: probe failed for %s: %s", candidate, e)
-
-        # Log context around key HTML elements for debugging
-        if not form_action:
-            for keyword in ["Choose File", "spreadsheet", "upload_roster",
-                            "file_field", "type=\"file\""]:
-                idx = page_html.lower().find(keyword.lower())
-                if idx >= 0:
-                    snippet = page_html[max(0, idx - 300):idx + 300]
-                    logger.info(
-                        "GG sync: HTML context around '%s': ...%s...",
-                        keyword, snippet,
-                    )
-
-        if not form_action:
+        if not upload_resp:
             return {
                 "status": "error",
                 "message": (
-                    f"Could not find the roster upload form. "
-                    f"Page: {members_resp.url}. "
-                    f"Forms found: {all_form_actions}."
+                    f"CSV upload failed to {upload_url}. "
+                    f"Tried field names: {possible_field_names}."
                 ),
                 "rows_submitted": 0,
                 "timestamp": timestamp,
             }
 
-        if form_action.startswith("/"):
-            form_action = GG_BASE_URL + form_action
-
-        # ── Step 4: Upload the CSV file ───────────────────────────────
-        logger.info(
-            "GG sync: uploading CSV (%d rows) to %s", len(rows), form_action
-        )
-
-        upload_data = _extract_all_hidden_fields(page_html)
-        if csrf:
-            upload_data["authenticity_token"] = csrf
-
-        csv_bytes = csv_content.encode("utf-8")
-        files = {
-            file_input_name: ("handicaps.csv", csv_bytes, "text/csv"),
-        }
-
-        upload_resp = sess.post(
-            form_action,
-            data=upload_data,
-            files=files,
-            timeout=60,
-            allow_redirects=True,
-        )
-        upload_resp.raise_for_status()
-
-        logger.info(
-            "GG sync: upload response URL: %s (status %d)",
-            upload_resp.url, upload_resp.status_code,
-        )
         page_html = upload_resp.text
+
+        # ── Step 4: Handle post_prepare page ─────────────────────────
+        # After upload, GG shows a post_prepare page. For active leagues,
+        # it shows a warning: "This league has started and we cannot replace
+        # the player roster" with options: "Cancel" or "Add New Golfers".
+        # We need to click "Add New Golfers" to proceed.
+
+        if "post_prepare" in upload_resp.url or "post_prepare" in page_html:
+            logger.info("GG sync: on post_prepare page: %s", upload_resp.url)
+
+            # Check for the "Add New Golfers" button/link
+            add_new_match = re.search(
+                r'href="([^"]*)"[^>]*>(?:[^<]*Add New Golfers[^<]*)</a>',
+                page_html, re.IGNORECASE,
+            )
+            if not add_new_match:
+                # Try as a form button
+                add_new_match = re.search(
+                    r'<(?:a|button)[^>]*(?:href|formaction)="([^"]*)"[^>]*>[^<]*Add New[^<]*',
+                    page_html, re.IGNORECASE,
+                )
+
+            if add_new_match:
+                add_url = add_new_match.group(1)
+                if add_url.startswith("/"):
+                    add_url = GG_BASE_URL + add_url
+                logger.info("GG sync: clicking 'Add New Golfers': %s", add_url)
+
+                new_csrf = _extract_csrf_token(page_html) or csrf
+                add_data = _extract_all_hidden_fields(page_html)
+                if new_csrf:
+                    add_data["authenticity_token"] = new_csrf
+
+                add_resp = sess.get(add_url, timeout=30)
+                logger.info(
+                    "GG sync: 'Add New Golfers' → status %d, url: %s",
+                    add_resp.status_code, add_resp.url,
+                )
+                if add_resp.status_code == 200:
+                    page_html = add_resp.text
+                else:
+                    add_resp.raise_for_status()
+            else:
+                # No "Add New Golfers" — might be a new league where replace is OK
+                # Look for any continue/submit button
+                logger.info("GG sync: no 'Add New Golfers' found, checking for other options")
+
+                # Log the page content for debugging
+                logger.info(
+                    "GG sync: post_prepare page (first 1000 chars): %s",
+                    page_html[:1000],
+                )
 
         # ── Step 5: Handle column mapping page ────────────────────────
         # After upload, GG may show a column mapping page with dropdowns
