@@ -1042,8 +1042,9 @@ def api_re_extract_fields():
     """Re-parse existing transaction emails to backfill new fields.
 
     Fetches original emails from Graph API, re-runs AI extraction,
-    and updates only the specified fields (partner_request, fellowship,
-    notes, holes, address) on existing items without overwriting other data.
+    and updates backfill fields (partner_request, fellowship, notes, holes,
+    address, transaction_fees) on existing items. Also overwrites item_name
+    if the AI returns an improved value.
     """
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
@@ -1054,10 +1055,15 @@ def api_re_extract_fields():
         return jsonify({"error": "Azure AD credentials not configured"}), 400
 
     BACKFILL_FIELDS = ["partner_request", "fellowship", "notes", "holes",
-                       "address", "address2", "city", "state", "zip"]
+                       "address", "address2", "city", "state", "zip",
+                       "transaction_fees"]
+    # Fields where re-extract should overwrite existing (possibly wrong) values
+    OVERWRITE_FIELDS = {"item_name"}
 
     items = get_all_items()
-    # Find items missing any of the new fields
+    # Find items missing any backfill fields; since transaction_fees is new,
+    # this will pick up virtually all existing items, and the OVERWRITE_FIELDS
+    # logic below will also correct item_name where the AI now returns better data.
     candidates = [
         it for it in items
         if it.get("transaction_status") in (None, "active")
@@ -1111,6 +1117,11 @@ def api_re_extract_fields():
                 for field in BACKFILL_FIELDS:
                     new_val = parsed.get(field)
                     if new_val and not it.get(field):
+                        changes[field] = new_val
+                # Overwrite fields — update even if existing value is present
+                for field in OVERWRITE_FIELDS:
+                    new_val = parsed.get(field)
+                    if new_val and new_val != it.get(field):
                         changes[field] = new_val
 
                 if changes:

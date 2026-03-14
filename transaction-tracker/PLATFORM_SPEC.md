@@ -376,6 +376,7 @@ transaction-tracker/
 | `/api/audit/autofix-side-games` | POST | Fixes misplaced side_games data |
 | `/api/audit/autofix-all` | POST | Normalizes names, courses, side_games, item_names |
 | `/api/audit/autofix-tee-choices` | POST | Standardizes tee_choice values |
+| `/api/audit/re-extract-fields` | POST | Re-extract fields from original email. Backfills: address, city, state, zip, transaction_fees, partner_request, fellowship, notes, holes. Overwrites: item_name |
 
 ### Reports
 
@@ -411,7 +412,7 @@ transaction-tracker/
 ### Key Parsing Rules
 
 - Customer names: Title Case, special handling for Mc/Mac/O' prefixes
-- Item names: Memberships normalized to "TGF MEMBERSHIP"
+- Item names: Memberships normalized to "TGF MEMBERSHIP"; event names include full venue (e.g. "Austin Kickoff SHADOWGLEN")
 - Side games + golf_or_compete are often combined in emails and must be split (e.g. "COMPETE + BOTH NET & GROSS" -> golf_or_compete="COMPETE", side_games="BOTH")
 - Course names mapped to canonical spellings (La Cantera, TPC San Antonio, The Quarry, etc.)
 - City inferred from course name

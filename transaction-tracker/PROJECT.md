@@ -269,7 +269,7 @@ Data quality assurance page comparing raw emails to parsed data.
   - Fix Side Games — Moves misplaced side_games data from golf_or_compete
   - Fix All — Normalizes customer names, course names, side games, item names; backfills customer emails/phones and RSVP full-names/emails
   - Fix Tee Choices — Standardizes tee choice values (<50, 50-64, 65+, Forward)
-  - Re-extract Fields — Backfill new item data fields from original email text using AI
+  - Re-extract Fields — Backfill address, transaction_fees, partner_request, fellowship, notes, holes from original email using AI; also corrects incomplete item_name values (e.g. "Austin Kickoff" → "Austin Kickoff SHADOWGLEN")
 - **Autofix confirmation + undo** — Preview changes before applying; one-click rollback of last autofix
 - **Date range and limit controls** — Filter audit emails by 7/14/30/90 days with adjustable result limits
 - **Search** — Filter by subject, sender, status
@@ -630,7 +630,7 @@ computes a current handicap index using the official USGA WHS lookup table.
 | `/api/audit/autofix-all` | POST | Normalize names, courses, side games, tees; backfill emails/phones |
 | `/api/audit/undo-autofix` | POST | Undo the last autofix operation |
 | `/api/audit/autofix-tee-choices` | POST | Standardize tee choices |
-| `/api/audit/re-extract-fields` | POST | Re-extract item fields from original email using AI |
+| `/api/audit/re-extract-fields` | POST | Re-extract item fields from original email using AI. Backfills: address, city, state, zip, transaction_fees, partner_request, fellowship, notes, holes. Overwrites: item_name |
 
 ### Customers
 
