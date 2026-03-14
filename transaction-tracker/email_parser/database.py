@@ -2,7 +2,7 @@
 SQLite storage layer for parsed transactions.
 
 Each row represents a single line item.  One email with 3 items becomes 3 rows.
-Dedicated columns for Golf Fellowship fields (city, handicap, side_games, etc.)
+Dedicated columns for Golf Fellowship fields (chapter, handicap, side_games, etc.)
 so they can be filtered and sorted directly from the dashboard.
 """
 
@@ -234,12 +234,12 @@ ITEM_COLUMNS = [
     "customer_email", "customer_phone",
     "order_id", "order_date", "order_time", "total_amount", "transaction_fees",
     "item_name", "event_date", "item_price", "quantity",
-    "city", "chapter", "course", "handicap", "has_handicap",
+    "chapter", "course", "handicap", "has_handicap",
     "side_games", "tee_choice",
     "user_status", "post_game", "returning_or_new",
     "partner_request", "fellowship", "notes",
     "holes",
-    "shipping_address", "shipping_address2", "shipping_city", "shipping_state", "shipping_zip",
+    "address", "address2", "city", "state", "zip",
     "shirt_size", "guest_name", "date_of_birth",
     "net_points_race", "gross_points_race", "city_match_play",
     "subject", "from_addr",
@@ -298,7 +298,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 event_date       TEXT,
                 item_price       TEXT,
                 quantity         INTEGER DEFAULT 1,
-                city             TEXT,
+                chapter          TEXT,
                 course           TEXT,
                 handicap         TEXT,
                 side_games       TEXT,
@@ -310,11 +310,11 @@ def init_db(db_path: str | Path | None = None) -> None:
                 fellowship       TEXT,
                 notes            TEXT,
                 holes            TEXT,
-                shipping_address TEXT,
-                shipping_address2 TEXT,
-                shipping_city    TEXT,
-                shipping_state   TEXT,
-                shipping_zip     TEXT,
+                address          TEXT,
+                address2         TEXT,
+                city             TEXT,
+                state            TEXT,
+                zip              TEXT,
                 shirt_size       TEXT,
                 guest_name       TEXT,
                 date_of_birth    TEXT,
@@ -359,11 +359,6 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("suffix", "TEXT"),
             ("archived", "INTEGER DEFAULT 0"),
             ("holes", "TEXT"),
-            ("shipping_address", "TEXT"),
-            ("shipping_address2", "TEXT"),
-            ("shipping_city", "TEXT"),
-            ("shipping_state", "TEXT"),
-            ("shipping_zip", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
@@ -384,6 +379,59 @@ def init_db(db_path: str | Path | None = None) -> None:
             logger.info("Migrated items.fellowship_after → items.fellowship")
         except sqlite3.OperationalError:
             pass  # already renamed or doesn't exist
+
+        # Migration: merge event city → chapter, then rename shipping_* → address fields
+        # Step 1: copy city data into chapter where chapter is empty
+        try:
+            conn.execute(
+                "UPDATE items SET chapter = city "
+                "WHERE (chapter IS NULL OR chapter = '') "
+                "AND city IS NOT NULL AND city != ''"
+            )
+            # Step 2: rename old city column out of the way
+            conn.execute("ALTER TABLE items RENAME COLUMN city TO _city_deprecated")
+            logger.info("Migrated items.city → items.chapter (merged)")
+        except sqlite3.OperationalError:
+            pass  # already renamed or column doesn't exist
+
+        # Clean up _city_deprecated if it still exists
+        try:
+            conn.execute(
+                "UPDATE items SET chapter = _city_deprecated "
+                "WHERE (chapter IS NULL OR chapter = '') "
+                "AND _city_deprecated IS NOT NULL AND _city_deprecated != ''"
+            )
+            conn.execute("ALTER TABLE items DROP COLUMN _city_deprecated")
+            logger.info("Dropped items._city_deprecated after merging into chapter")
+        except sqlite3.OperationalError:
+            pass  # column doesn't exist — already cleaned up
+
+        # Step 3: rename shipping_* → plain address field names
+        # Try rename first; if it fails (target column already exists from a
+        # prior ensure_column run), copy data from old → new and drop old.
+        for old, new in [
+            ("shipping_address", "address"),
+            ("shipping_address2", "address2"),
+            ("shipping_city", "city"),
+            ("shipping_state", "state"),
+            ("shipping_zip", "zip"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE items RENAME COLUMN {old} TO {new}")
+                logger.info("Migrated items.%s → items.%s", old, new)
+            except sqlite3.OperationalError:
+                # Rename failed — either already done, or target column exists.
+                # If both old and new columns exist, copy data from old → new.
+                try:
+                    conn.execute(
+                        f"UPDATE items SET [{new}] = [{old}] "
+                        f"WHERE ([{new}] IS NULL OR [{new}] = '') "
+                        f"AND [{old}] IS NOT NULL AND [{old}] != ''"
+                    )
+                    conn.execute(f"ALTER TABLE items DROP COLUMN [{old}]")
+                    logger.info("Copied items.%s → items.%s and dropped old column", old, new)
+                except sqlite3.OperationalError:
+                    pass  # old column doesn't exist — already fully migrated
 
         # Processed emails table — tracks ALL email UIDs we've already sent to
         # the AI, even if no items were extracted.  Prevents re-parsing the same
@@ -972,7 +1020,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
         # --- Field fill rates ---------------------------------------------------
         critical_fields = [
             "customer", "customer_email", "order_id", "order_date",
-            "item_name", "item_price", "event_date", "city", "course",
+            "item_name", "item_price", "event_date", "chapter", "course",
         ]
         golf_fields = [
             "handicap", "side_games", "tee_choice", "user_status",
@@ -1005,7 +1053,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
 
         # --- Value distributions for key columns ---------------------------------
         distributions = {}
-        for field in ["city", "course", "user_status", "tee_choice"]:
+        for field in ["chapter", "course", "user_status", "tee_choice"]:
             counts: dict[str, int] = {}
             for it in items:
                 val = it.get(field) or "(empty)"
@@ -1334,9 +1382,9 @@ _NON_EVENT_KEYWORDS = [
 ]
 
 
-def _is_event_item(item_name: str, *, course: str = "", city: str = "") -> bool:
+def _is_event_item(item_name: str, *, course: str = "", chapter: str = "") -> bool:
     """Heuristic: an item is an event if it has a date-like pattern, course name,
-    event-type keyword, series identifier, or course/city metadata."""
+    event-type keyword, series identifier, or course/chapter metadata."""
     if not item_name:
         return False
     lower = item_name.lower()
@@ -1344,8 +1392,8 @@ def _is_event_item(item_name: str, *, course: str = "", city: str = "") -> bool:
     for kw in _NON_EVENT_KEYWORDS:
         if kw in lower:
             return False
-    # If the item row has course or city metadata → it's an event
-    if (course and course.strip()) or (city and city.strip()):
+    # If the item row has course or chapter metadata → it's an event
+    if (course and course.strip()) or (chapter and chapter.strip()):
         return True
     # Contains a month name or date pattern → likely an event
     month_pattern = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b"
@@ -1386,7 +1434,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
     """
     with _connect(db_path) as conn:
         items = conn.execute(
-            "SELECT DISTINCT item_name, event_date, course, city FROM items"
+            "SELECT DISTINCT item_name, event_date, course, chapter FROM items"
         ).fetchall()
 
         # Load existing aliases so we can skip aliased names (case-insensitive)
@@ -1401,7 +1449,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
         skipped_aliased = 0
         for item in items:
             name = item["item_name"] or ""
-            if not _is_event_item(name, course=item["course"] or "", city=item["city"] or ""):
+            if not _is_event_item(name, course=item["course"] or "", chapter=item["chapter"] or ""):
                 skipped_non_event += 1
                 continue
             # Skip names that are aliases of another event
@@ -1418,7 +1466,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
                 conn.execute(
                     """INSERT INTO events (item_name, event_date, course, chapter, event_type)
                        VALUES (?, ?, ?, ?, 'event')""",
-                    (name, item["event_date"], item["course"], item["city"]),
+                    (name, item["event_date"], item["course"], item["chapter"]),
                 )
                 inserted += 1
             except sqlite3.IntegrityError:
@@ -1617,7 +1665,7 @@ def get_orphaned_items(db_path: str | Path | None = None) -> list[dict]:
                       COUNT(*) as item_count,
                       MIN(i.event_date) as event_date,
                       MIN(i.course) as course,
-                      MIN(i.city) as city,
+                      MIN(i.chapter) as chapter,
                       GROUP_CONCAT(DISTINCT i.customer) as customers
                FROM items i
                LEFT JOIN events e ON i.item_name = e.item_name COLLATE NOCASE
@@ -1703,8 +1751,7 @@ def update_customer_info(customer_name: str, fields: dict,
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
-               "shipping_address", "shipping_address2", "shipping_city",
-               "shipping_state", "shipping_zip"}
+               "address", "address2", "city", "state", "zip"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return 0
@@ -2751,7 +2798,7 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
         if orig.get("transaction_status") not in (None, "active"):
             return None  # already credited/transferred
 
-        # Fetch the target event for date/course/city
+        # Fetch the target event for date/course/chapter
         target_event = conn.execute(
             "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (target_event_name,)
         ).fetchone()
@@ -2769,7 +2816,7 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
         new_values["item_name"] = target_event_name
         new_values["event_date"] = target_event.get("event_date") or orig.get("event_date")
         new_values["course"] = target_event.get("course") or orig.get("course")
-        new_values["city"] = target_event.get("city") or orig.get("city")
+        new_values["chapter"] = target_event.get("chapter") or orig.get("chapter")
         new_values["item_price"] = "$0.00 (credit)"
         new_values["email_uid"] = f"transfer-{item_id}"
         new_values["item_index"] = 0
@@ -2915,7 +2962,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
 
     with _connect(db_path) as conn:
 
-        # Look up the event for date/course/city
+        # Look up the event for date/course/chapter
         event = conn.execute(
             "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
         ).fetchone()
@@ -2933,7 +2980,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         new_values["order_date"] = datetime.now().strftime("%Y-%m-%d")
         new_values["event_date"] = event.get("event_date") or ""
         new_values["course"] = event.get("course") or ""
-        new_values["city"] = event.get("city") or ""
+        new_values["chapter"] = event.get("chapter") or ""
         new_values["transaction_status"] = "active"
 
         if mode == "comp":
@@ -3087,7 +3134,7 @@ def match_rsvp_to_event(event_identifier: str, event_date: str | None,
       2. Extract course name from identifier and match course + date
       3. Extract course name from identifier and match course alone (single match)
       4. Match by event_date alone ONLY if single event on that date AND
-         the city from the identifier matches the event's city
+         the chapter from the identifier matches the event's chapter
     """
     with _connect(db_path) as conn:
         identifier_upper = (event_identifier or "").upper().strip()

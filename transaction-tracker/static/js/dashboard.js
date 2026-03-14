@@ -21,7 +21,7 @@ let currentSortDir = "desc";
 // Columns that are searchable when "All columns" filter is selected
 const SEARCHABLE_FIELDS = [
     "customer", "customer_email", "customer_phone",
-    "item_name", "item_price", "city", "course", "handicap",
+    "item_name", "item_price", "chapter", "course", "handicap",
     "side_games", "tee_choice", "user_status",
     "post_game", "order_id", "order_date", "event_date", "merchant",
 ];
@@ -918,7 +918,7 @@ function exportCSV() {
 
     const headers = [
         "Event Date", "Order Date", "Customer", "Email", "Phone",
-        "Item", "Price", "Transaction Fees", "City", "Chapter", "Course",
+        "Item", "Price", "Transaction Fees", "Chapter", "Course",
         "Handicap", "Has Handicap",
         "Side Games", "Tee Choice", "Member Status", "Golf or Compete",
         "Post Game", "Returning/New", "Shirt Size", "Guest Name",
@@ -929,7 +929,7 @@ function exportCSV() {
 
     const fields = [
         "event_date", "order_date", "customer", "customer_email", "customer_phone",
-        "item_name", "item_price", "transaction_fees", "city", "chapter", "course",
+        "item_name", "item_price", "transaction_fees", "chapter", "course",
         "handicap", "has_handicap",
         "side_games", "tee_choice", "user_status",
         "post_game", "returning_or_new", "shirt_size",
@@ -1039,7 +1039,7 @@ function onAuthReady() {
 // ---------------------------------------------------------------------------
 const EDIT_FIELDS = [
     "customer", "item_name", "item_price", "transaction_fees", "event_date",
-    "city", "chapter", "course", "handicap", "has_handicap", "side_games",
+    "chapter", "course", "handicap", "has_handicap", "side_games",
     "tee_choice", "user_status",
     "partner_request", "fellowship", "notes",
     "returning_or_new", "date_of_birth",

@@ -1052,7 +1052,7 @@ def api_re_extract_fields():
         return jsonify({"error": "Azure AD credentials not configured"}), 400
 
     BACKFILL_FIELDS = ["partner_request", "fellowship", "notes", "holes",
-                       "shipping_address", "shipping_city", "shipping_state", "shipping_zip"]
+                       "address", "city", "state", "zip"]
 
     items = get_all_items()
     # Find items missing any of the new fields

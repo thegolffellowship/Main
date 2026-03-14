@@ -76,16 +76,16 @@ def get_transactions(
     customer: str = "",
     event: str = "",
     status: str = "",
-    city: str = "",
+    chapter: str = "",
     limit: int = 100,
 ) -> str:
-    """Get all transactions from the live database. Returns the full list — use customer/event/city/status to narrow results.
+    """Get all transactions from the live database. Returns the full list — use customer/event/chapter/status to narrow results.
 
     Args:
         customer: Filter by customer name (checked client-side, partial match)
         event: Filter by event/item name (checked client-side, partial match)
         status: Filter by status: active, credited, or transferred
-        city: Filter by city (partial match)
+        chapter: Filter by chapter (partial match)
         limit: Max rows to return (default 100)
     """
     items = _get("/api/items")
@@ -96,8 +96,8 @@ def get_transactions(
         items = [i for i in items if event.lower() in (i.get("item_name") or "").lower()]
     if status:
         items = [i for i in items if (i.get("transaction_status") or "active") == status]
-    if city:
-        items = [i for i in items if city.lower() in (i.get("city") or "").lower()]
+    if chapter:
+        items = [i for i in items if chapter.lower() in (i.get("chapter") or "").lower()]
     return json.dumps(items[:limit], indent=2)
 
 
@@ -217,7 +217,7 @@ def search_transactions(query: str, limit: int = 50) -> str:
         if q in (i.get("customer") or "").lower()
         or q in (i.get("item_name") or "").lower()
         or q in (i.get("course") or "").lower()
-        or q in (i.get("city") or "").lower()
+        or q in (i.get("chapter") or "").lower()
         or q in (i.get("order_id") or "").lower()
         or q in (i.get("subject") or "").lower()
     ]
@@ -276,17 +276,17 @@ def undo_credit_or_transfer(transaction_id: int) -> str:
 
 
 @mcp.tool()
-def create_new_event(event_name: str, event_date: str = "", course: str = "", city: str = "") -> str:
+def create_new_event(event_name: str, event_date: str = "", course: str = "", chapter: str = "") -> str:
     """Create a new event.
 
     Args:
         event_name: The event name (must be unique)
         event_date: Event date YYYY-MM-DD
         course: Golf course name
-        city: City
+        chapter: Chapter/city
     """
     return json.dumps(
-        _post("/api/events", {"item_name": event_name, "event_date": event_date, "course": course, "city": city}),
+        _post("/api/events", {"item_name": event_name, "event_date": event_date, "course": course, "chapter": chapter}),
         indent=2,
     )
 

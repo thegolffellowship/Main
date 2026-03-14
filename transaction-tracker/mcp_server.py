@@ -61,7 +61,7 @@ def get_transactions(
     customer: str = "",
     event: str = "",
     status: str = "",
-    city: str = "",
+    chapter: str = "",
     date_from: str = "",
     date_to: str = "",
     limit: int = 100,
@@ -72,7 +72,7 @@ def get_transactions(
         customer: Filter by customer name (partial match, case-insensitive)
         event: Filter by event/item name (partial match, case-insensitive)
         status: Filter by transaction status: active, credited, or transferred
-        city: Filter by city (partial match, case-insensitive)
+        chapter: Filter by chapter (partial match, case-insensitive)
         date_from: Earliest order date (YYYY-MM-DD)
         date_to: Latest order date (YYYY-MM-DD)
         limit: Max rows to return (default 100)
@@ -94,9 +94,9 @@ def get_transactions(
     if status:
         clauses.append("COALESCE(transaction_status, 'active') = ?")
         params.append(status)
-    if city:
-        clauses.append("city LIKE ?")
-        params.append(f"%{city}%")
+    if chapter:
+        clauses.append("chapter LIKE ?")
+        params.append(f"%{chapter}%")
     if date_from:
         clauses.append("order_date >= ?")
         params.append(date_from)
@@ -213,7 +213,7 @@ def get_customer_details(customer_name: str) -> str:
 
 @mcp.tool()
 def search_transactions(query: str, limit: int = 50) -> str:
-    """Full-text search across customer, item name, course, city, order ID, and email subject.
+    """Full-text search across customer, item name, course, chapter, order ID, and email subject.
 
     Args:
         query: Search term
@@ -224,7 +224,7 @@ def search_transactions(query: str, limit: int = 50) -> str:
     rows = conn.execute(
         """SELECT * FROM items
            WHERE customer LIKE ? OR item_name LIKE ? OR course LIKE ?
-              OR city LIKE ? OR order_id LIKE ? OR subject LIKE ?
+              OR chapter LIKE ? OR order_id LIKE ? OR subject LIKE ?
            ORDER BY order_date DESC LIMIT ?""",
         (like, like, like, like, like, like, limit),
     ).fetchall()
@@ -244,7 +244,7 @@ def update_transaction(transaction_id: int, fields: dict) -> str:
         transaction_id: The item/transaction ID to update
         fields: Dict of field names to new values. Allowed fields:
                 customer, customer_email, customer_phone, order_id,
-                item_name, event_date, item_price, quantity, city, course,
+                item_name, event_date, item_price, quantity, chapter, course,
                 handicap, side_games, tee_choice, user_status,
                 post_game, returning_or_new, shirt_size,
                 guest_name, date_of_birth, net_points_race,
@@ -304,7 +304,7 @@ def create_new_event(
     event_name: str,
     event_date: str = "",
     course: str = "",
-    city: str = "",
+    chapter: str = "",
     course_cost: float = None,
     tgf_markup: float = None,
     side_game_fee: float = None,
@@ -316,13 +316,13 @@ def create_new_event(
         event_name: The event name (must be unique)
         event_date: Event date in YYYY-MM-DD format
         course: Golf course name
-        city: City where event is held
+        chapter: Chapter/city where event is held
         course_cost: Course/vendor cost per player
         tgf_markup: TGF markup per player
         side_game_fee: TGF side game admin fee per game
         transaction_fee_pct: Transaction fee percentage (default 3.5)
     """
-    ev = create_event(event_name, event_date or None, course or None, city or None,
+    ev = create_event(event_name, event_date or None, course or None, chapter or None,
                       course_cost=course_cost, tgf_markup=tgf_markup,
                       side_game_fee=side_game_fee, transaction_fee_pct=transaction_fee_pct)
     if ev:
@@ -336,7 +336,7 @@ def update_existing_event(event_id: int, fields: dict) -> str:
 
     Args:
         event_id: The event ID to update
-        fields: Dict of fields to update. Allowed: item_name, event_date, course, city, event_type, course_cost, tgf_markup, side_game_fee, transaction_fee_pct
+        fields: Dict of fields to update. Allowed: item_name, event_date, course, chapter, event_type, course_cost, tgf_markup, side_game_fee, transaction_fee_pct
     """
     ok = update_event(event_id, fields)
     if ok:
