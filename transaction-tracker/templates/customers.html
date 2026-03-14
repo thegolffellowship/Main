@@ -2194,9 +2194,12 @@
             try {
                 const hcpRes = await fetch("/api/handicaps/players");
                 const hcpPlayers = await hcpRes.json();
+                // Build map keyed by both customer_name and player_name (lowercased)
                 const hcpMap = {};
                 hcpPlayers.forEach(p => {
+                    if (p.handicap_index === null || p.handicap_index === undefined) return;
                     if (p.customer_name) hcpMap[p.customer_name.toLowerCase()] = p.handicap_index;
+                    if (p.player_name) hcpMap[p.player_name.toLowerCase()] = p.handicap_index;
                 });
                 allCustomers.forEach(c => {
                     const idx = hcpMap[c.name.toLowerCase()];

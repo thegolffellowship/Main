@@ -4194,6 +4194,19 @@ def _match_customer_name(conn: sqlite3.Connection, player_name: str) -> str | No
         if row:
             return row["customer"]
 
+    # 6. Last-name-only match: if exactly one customer shares the same last name,
+    #    assume it's the same person (handles nickname differences like Rob/Robert).
+    if len(parts) >= 2:
+        last = parts[-1]
+        rows = conn.execute(
+            """SELECT DISTINCT customer FROM items
+               WHERE LOWER(last_name) = LOWER(?)
+               AND customer IS NOT NULL AND customer != ''""",
+            (last,),
+        ).fetchall()
+        if len(rows) == 1:
+            return rows[0]["customer"]
+
     return None
 
 
