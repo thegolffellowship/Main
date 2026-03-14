@@ -155,8 +155,14 @@ Two visual separator rows appear in the expanded rounds table:
 - Role is stored in the global `currentRole` variable (set by `auth.js`)
 - Do **not** use `window._userRole` — that variable is never set
 
+### Player ↔ Customer linking
+- `handicap_player_links` table bridges Golf Genius player names to transaction customer names
+- `_match_customer_name()` in `database.py` tries: exact match, first+last, LIKE, aliases, reversed name, last-name-only (unique)
+- `/api/handicaps/players` auto-runs `relink_all_unlinked_players()` on each request
+- Customers page also matches by `player_name` as fallback (not just `customer_name`)
+
 ### Key files
-- `email_parser/database.py` — `_HANDICAP_DIFF_LOOKUP` (server-side table)
+- `email_parser/database.py` — `_HANDICAP_DIFF_LOOKUP` (server-side table), `_match_customer_name()` (linking logic)
 - `templates/handicaps.html` — `DIFF_LOOKUP` (client-side JS table, must match)
 - Both tables must always be kept in sync.
 

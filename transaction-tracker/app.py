@@ -2604,7 +2604,15 @@ def page_handicaps():
 
 @app.route("/api/handicaps/players")
 def api_handicap_players():
-    """Return all players with their current handicap index."""
+    """Return all players with their current handicap index.
+
+    Also runs a quick auto-link pass for any unlinked players so that
+    newly added customers are matched to their handicap records.
+    """
+    try:
+        relink_all_unlinked_players()
+    except Exception:
+        logger.debug("Auto-link pass failed (non-critical)", exc_info=True)
     players = get_all_handicap_players()
     return jsonify(players)
 

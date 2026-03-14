@@ -306,7 +306,10 @@ computes a current handicap index using the official USGA WHS lookup table.
   - Names in `LAST, FIRST` format are normalized to `First Last` title case.
   - Duplicate rounds are skipped (dedup on player + date + round ID, or
     player + date + course + tee when no round ID is present).
-  - Players are auto-linked to matching customers on import.
+  - Players are auto-linked to matching customers on import and re-linked
+    automatically on every `/api/handicaps/players` request (covers new customers
+    added after import). Matching tries: exact name, first+last, LIKE pattern,
+    aliases, reversed name, and unique last-name match.
 - **Settings** — Configurable `min_rounds` (default 3) and `multiplier`
   (default 0.96).
 - **Delete** — Remove individual rounds or all rounds for a player.
