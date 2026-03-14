@@ -108,7 +108,7 @@ function updateNavForRole() {
     // Hide admin-only tabs for non-admin roles
     document.querySelectorAll(".tab-nav a").forEach(link => {
         const href = link.getAttribute("href");
-        if (href === "/audit" || href === "/matrix") {
+        if (href === "/audit" || href === "/matrix" || href === "/database") {
             link.style.display = (currentRole === "admin") ? "" : "none";
         }
     });
