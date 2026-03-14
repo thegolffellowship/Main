@@ -957,6 +957,16 @@ def mark_email_processed(email_uid: str, items_found: int = 0,
         conn.commit()
 
 
+def clear_failed_processed(db_path: str | Path | None = None) -> int:
+    """Remove processed_emails entries that yielded 0 items so they can be retried."""
+    with _connect(db_path) as conn:
+        cursor = conn.execute(
+            "DELETE FROM processed_emails WHERE items_found = 0"
+        )
+        conn.commit()
+        return cursor.rowcount
+
+
 def get_all_items(db_path: str | Path | None = None) -> list[dict]:
     """Return all item rows ordered by order_date descending."""
     with _connect(db_path) as conn:

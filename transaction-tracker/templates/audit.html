@@ -390,6 +390,9 @@
             <button id="btn-re-extract" class="btn btn-secondary" title="Re-parse emails to fill in partner requests, fellowship, and notes">
                 Re-extract Fields
             </button>
+            <button id="btn-retry-failed" class="btn btn-secondary" title="Re-process emails that previously parsed 0 items">
+                Retry Failed
+            </button>
             <button id="btn-run-audit" class="btn btn-primary" title="Re-fetch emails and compare">
                 <span class="btn-icon">&#128269;</span> Run Audit
             </button>
@@ -790,6 +793,26 @@
             }
         });
 
+        // Retry Failed button
+        document.getElementById("btn-retry-failed").addEventListener("click", async () => {
+            const btn = document.getElementById("btn-retry-failed");
+            if (!confirm("This will re-process all emails that previously parsed 0 items. This uses API credits. Continue?")) return;
+            btn.disabled = true;
+            btn.textContent = "Retrying...";
+            try {
+                const res = await fetch("/api/audit/retry-failed", { method: "POST" });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "Request failed");
+                showToast(data.message, null);
+                if (data.cleared > 0) runAudit();
+            } catch (err) {
+                showToast("Retry failed: " + err.message, null);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Retry Failed";
+            }
+        });
+
         // Auto-run audit on page load
         runAudit();
 
@@ -804,6 +827,7 @@
                 // Show/hide audit-specific header buttons
                 document.getElementById("btn-autofix").style.display = target === "email-audit" ? "" : "none";
                 document.getElementById("btn-re-extract").style.display = target === "email-audit" ? "" : "none";
+                document.getElementById("btn-retry-failed").style.display = target === "email-audit" ? "" : "none";
                 document.getElementById("btn-run-audit").style.display = target === "email-audit" ? "" : "none";
                 if (target === "feedback") loadFeedback();
             });

@@ -447,18 +447,24 @@ def parse_email(email_data: dict) -> list[dict]:
     Returns a *list* of flat dicts — one per line item — ready for DB insert.
     Returns an empty list if parsing fails or no items are found.
     """
+    subject = email_data.get("subject", "")
     body = email_data.get("text", "")
     if not body and email_data.get("html"):
         body = _strip_html(email_data["html"])
     if not body:
+        logger.warning("Empty email body for subject=%s uid=%s", subject, email_data.get("uid", ""))
         return []
 
     parsed = _call_ai(body)
     if not parsed:
+        logger.warning("AI returned no result for subject=%s uid=%s (body length=%d)",
+                        subject, email_data.get("uid", ""), len(body))
         return []
 
     items = parsed.get("items") or []
     if not items:
+        logger.warning("AI returned 0 items for subject=%s uid=%s (body length=%d)",
+                        subject, email_data.get("uid", ""), len(body))
         return []
 
     # Filter out phantom items — must have at least an item_name
