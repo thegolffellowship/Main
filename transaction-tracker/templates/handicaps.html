@@ -992,7 +992,8 @@
             if (!val) continue;
             const label = key === 'san_antonio' ? 'SA' : key === 'austin' ? 'Austin' : key;
             const ts = val.timestamp ? new Date(val.timestamp + 'Z').toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
-            parts.push(`${statusIcon(val.status)} ${label}: ${val.rows_submitted ?? 0} players${ts ? ' · ' + ts : ''}`);
+            const detail = val.status === 'error' ? val.message : `${val.rows_submitted ?? 0} players`;
+            parts.push(`${statusIcon(val.status)} ${label}: ${detail}${ts ? ' · ' + ts : ''}`);
         }
         el.textContent = parts.join(' | ');
 
@@ -1032,18 +1033,21 @@
                 headers: {'Content-Type':'application/json'},
                 body: JSON.stringify(body),
             });
-            const d = await r.json();
+            let d;
+            try { d = await r.json(); } catch (_) {
+                d = {message: `Server error (HTTP ${r.status})`};
+            }
             if (d.status === 'started') {
                 // Poll every 5 s until complete
                 if (_ggSyncPoll) clearInterval(_ggSyncPoll);
                 _ggSyncPoll = setInterval(loadGGSyncStatus, 5000);
             } else {
-                document.getElementById('gg-sync-status').textContent = d.message || 'Error';
+                document.getElementById('gg-sync-status').textContent = d.message || d.error || 'Error';
                 saBtn.disabled = false;
                 ausBtn.disabled = false;
             }
         } catch(e) {
-            document.getElementById('gg-sync-status').textContent = 'Request failed';
+            document.getElementById('gg-sync-status').textContent = 'Request failed: ' + e.message;
             saBtn.disabled = false;
             ausBtn.disabled = false;
         }
