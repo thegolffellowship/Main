@@ -13,94 +13,8 @@ logger = logging.getLogger(__name__)
 # Microsoft Graph API base URL
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
-# Senders commonly associated with purchase/transaction receipts
-TRANSACTION_SENDERS = [
-    "mysimplestore.com",
-    "amazon.com",
-    "paypal.com",
-    "venmo.com",
-    "square.com",
-    "squareup.com",
-    "stripe.com",
-    "apple.com",
-    "google.com",
-    "shopify.com",
-    "ebay.com",
-    "walmart.com",
-    "target.com",
-    "bestbuy.com",
-    "uber.com",
-    "lyft.com",
-    "doordash.com",
-    "grubhub.com",
-    "ubereats.com",
-    "netflix.com",
-    "spotify.com",
-    "chase.com",
-    "bankofamerica.com",
-    "wellsfargo.com",
-    "citi.com",
-    "capitalone.com",
-    "americanexpress.com",
-    "discover.com",
-    # Golf / tee-time / event platforms
-    "golfnow.com",
-    "teeoff.com",
-    "foreup.com",
-    "chronogolf.com",
-    "golfgenius.com",
-    "clubessential.com",
-    "lightspeedhq.com",
-    "clover.com",
-    "toasttab.com",
-    "eventbrite.com",
-    "golfchannel.com",
-    # General business / payments
-    "intuit.com",
-    "quickbooks.com",
-    "freshbooks.com",
-    "waveapps.com",
-    "zelle.com",
-    "cashapp.com",
-    "notify.thegolffellowship.com",
-    "thegolffellowship.com",
-    "noreply",
-    "no-reply",
-]
-
 TRANSACTION_SUBJECTS = [
     "new order",
-    "receipt",
-    "order confirmation",
-    "payment",
-    "transaction",
-    "purchase",
-    "invoice",
-    "billing",
-    "charged",
-    "your order",
-    "order shipped",
-    "payment received",
-    "payment sent",
-    "autopay",
-    "statement",
-    # Golf / event related
-    "tee time",
-    "booking",
-    "reservation",
-    "registration",
-    "membership",
-    "renewal",
-    "dues",
-    "entry fee",
-    "round of golf",
-    "golf event",
-    "tournament",
-    "confirmation",
-    "thank you for your",
-    "your booking",
-    "event registration",
-    "subscription",
 ]
 
 
@@ -123,16 +37,11 @@ def _get_graph_token(tenant_id: str, client_id: str, client_secret: str) -> str 
 
 
 def _is_transaction_email(subject: str, from_address: str) -> bool:
-    """Heuristic check: does the email look like a transaction/receipt?"""
-    subject_lower = (subject or "").lower()
-    from_lower = (from_address or "").lower()
-
-    for domain in TRANSACTION_SENDERS:
-        if domain in from_lower:
-            return True
+    """Only accept emails whose subject starts with 'New Order'."""
+    subject_lower = (subject or "").lower().strip()
 
     for keyword in TRANSACTION_SUBJECTS:
-        if keyword in subject_lower:
+        if subject_lower.startswith(keyword):
             return True
 
     return False

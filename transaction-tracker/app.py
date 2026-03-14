@@ -101,6 +101,7 @@ from email_parser.database import (
     get_handicap_export_data,
     relink_all_unlinked_players,
     mark_email_processed,
+    clear_failed_processed,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -1041,7 +1042,7 @@ def api_re_extract_fields():
 
     Fetches original emails from Graph API, re-runs AI extraction,
     and updates only the specified fields (partner_request, fellowship,
-    notes, holes, shipping address) on existing items without overwriting other data.
+    notes, holes, address) on existing items without overwriting other data.
     """
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
@@ -1052,7 +1053,7 @@ def api_re_extract_fields():
         return jsonify({"error": "Azure AD credentials not configured"}), 400
 
     BACKFILL_FIELDS = ["partner_request", "fellowship", "notes", "holes",
-                       "address", "city", "state", "zip"]
+                       "address", "address2", "city", "state", "zip"]
 
     items = get_all_items()
     # Find items missing any of the new fields
@@ -1127,6 +1128,33 @@ def api_re_extract_fields():
         "updated": updated,
         "skipped": skipped,
         "errors": errors,
+    })
+
+
+@app.route("/api/audit/retry-failed", methods=["POST"])
+@require_role("admin")
+def api_retry_failed():
+    """Re-process emails that previously parsed 0 items.
+
+    Clears 0-item entries from processed_emails, then re-runs check_inbox
+    which will pick them up as 'new' emails and re-parse them.
+    """
+    cleared = clear_failed_processed()
+    if cleared == 0:
+        return jsonify({"status": "ok", "cleared": 0, "message": "No failed emails to retry"})
+
+    # Now re-run inbox check to pick up the cleared emails
+    try:
+        check_inbox()
+    except Exception:
+        logger.exception("Retry failed: inbox check error")
+        return jsonify({"status": "partial", "cleared": cleared,
+                        "message": f"Cleared {cleared} entries but inbox check failed"}), 500
+
+    return jsonify({
+        "status": "ok",
+        "cleared": cleared,
+        "message": f"Cleared {cleared} failed entries and re-processed inbox",
     })
 
 
