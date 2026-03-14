@@ -921,6 +921,96 @@ def audit_page():
     return render_template("audit.html")
 
 
+@app.route("/database")
+def database_page():
+    if session.get("role") != "admin":
+        return render_template("index.html")
+    return render_template("database.html")
+
+
+@app.route("/api/database/tables")
+@require_role("admin")
+def api_database_tables():
+    """List all user tables and their row counts."""
+    conn = get_connection()
+    try:
+        tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        ).fetchall()
+        result = []
+        for t in tables:
+            name = t["name"]
+            count = conn.execute(f'SELECT COUNT(*) AS c FROM "{name}"').fetchone()["c"]
+            result.append({"name": name, "row_count": count})
+        return jsonify(result)
+    finally:
+        conn.close()
+
+
+@app.route("/api/database/table/<table_name>")
+@require_role("admin")
+def api_database_table(table_name):
+    """Return rows from a specific table with pagination."""
+    conn = get_connection()
+    try:
+        # Validate table name exists (prevent SQL injection)
+        valid = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        ).fetchone()
+        if not valid:
+            return jsonify({"error": "Table not found"}), 404
+
+        limit = request.args.get("limit", 100, type=int)
+        offset = request.args.get("offset", 0, type=int)
+        search = request.args.get("search", "").strip()
+        sort_col = request.args.get("sort", "").strip()
+        sort_dir = request.args.get("dir", "asc").strip().lower()
+
+        # Get column names
+        cols_info = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+        columns = [c["name"] for c in cols_info]
+
+        # Build query
+        where_clause = ""
+        params: list = []
+        if search:
+            # Search across all text columns
+            conditions = [f'CAST("{col}" AS TEXT) LIKE ?' for col in columns]
+            where_clause = "WHERE " + " OR ".join(conditions)
+            params = [f"%{search}%"] * len(columns)
+
+        # Total count (with search filter)
+        total = conn.execute(
+            f'SELECT COUNT(*) AS c FROM "{table_name}" {where_clause}', params
+        ).fetchone()["c"]
+
+        # Sort
+        order_clause = ""
+        if sort_col and sort_col in columns:
+            direction = "DESC" if sort_dir == "desc" else "ASC"
+            order_clause = f'ORDER BY "{sort_col}" {direction}'
+        else:
+            order_clause = "ORDER BY rowid DESC"
+
+        rows = conn.execute(
+            f'SELECT * FROM "{table_name}" {where_clause} {order_clause} LIMIT ? OFFSET ?',
+            params + [limit, offset],
+        ).fetchall()
+
+        return jsonify({
+            "table": table_name,
+            "columns": columns,
+            "rows": [dict(r) for r in rows],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        })
+    finally:
+        conn.close()
+
+
 @app.route("/api/matrix", methods=["PUT"])
 @require_role("admin")
 def api_matrix_save():
