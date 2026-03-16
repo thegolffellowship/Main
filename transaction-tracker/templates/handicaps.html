@@ -1412,45 +1412,41 @@
     }
 
     // ── Link / Unlink player to customer ─────────────────────────────
-    let _linkPlayerName = '';
-    let _allCustomerNames = [];
-    let _selectedCustomer = '';
+    var _linkPlayerName = '';
+    var _allCustomerNames = [];
+    var _selectedCustomer = '';
 
     function openLinkModal(playerName) {
-        try {
-            _linkPlayerName = playerName;
-            _selectedCustomer = '';
-            document.getElementById('link-modal-player-name').textContent = playerName;
-            document.getElementById('link-search-input').value = '';
-            document.getElementById('link-error').style.display = 'none';
-            document.getElementById('btn-confirm-link').disabled = true;
+        _linkPlayerName = playerName;
+        _selectedCustomer = '';
+        document.getElementById('link-modal-player-name').textContent = playerName;
+        document.getElementById('link-search-input').value = '';
+        document.getElementById('link-error').style.display = 'none';
+        document.getElementById('btn-confirm-link').disabled = true;
 
-            const modal = document.getElementById('modal-link-player');
-            modal.style.display = 'flex';
+        const modal = document.getElementById('modal-link-player');
+        modal.style.display = 'flex';
 
-            // Fetch customer names then render
-            if (!_allCustomerNames.length) {
-                const list = document.getElementById('link-customer-list');
-                list.innerHTML = '<div style="padding:12px;color:#94a3b8;">Loading customers...</div>';
-                fetch('/api/customers/names')
-                    .then(r => {
-                        if (!r.ok) throw new Error('HTTP ' + r.status);
-                        return r.json();
-                    })
-                    .then(names => {
-                        _allCustomerNames = names;
-                        filterLinkCustomers();
-                        document.getElementById('link-search-input').focus();
-                    })
-                    .catch(err => {
-                        list.innerHTML = '<div style="padding:12px;color:#ef4444;">Failed to load customers: ' + err.message + '</div>';
-                    });
-            } else {
-                filterLinkCustomers();
-                document.getElementById('link-search-input').focus();
-            }
-        } catch(err) {
-            alert('ERROR in openLinkModal: ' + err.message + '\n' + err.stack);
+        // Fetch customer names then render
+        if (!_allCustomerNames.length) {
+            const list = document.getElementById('link-customer-list');
+            list.innerHTML = '<div style="padding:12px;color:#94a3b8;">Loading customers...</div>';
+            fetch('/api/customers/names')
+                .then(r => {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(names => {
+                    _allCustomerNames = names;
+                    filterLinkCustomers();
+                    document.getElementById('link-search-input').focus();
+                })
+                .catch(err => {
+                    list.innerHTML = '<div style="padding:12px;color:#ef4444;">Failed to load customers: ' + err.message + '</div>';
+                });
+        } else {
+            filterLinkCustomers();
+            document.getElementById('link-search-input').focus();
         }
     }
 
