@@ -2762,6 +2762,21 @@ def api_handicap_for_customer():
     })
 
 
+@app.route("/api/handicaps/index-map")
+def api_handicap_index_map():
+    """Return a map of customer_name (lowercase) → handicap_index for all linked players.
+
+    Lightweight endpoint used by the events page to display live HCP values.
+    """
+    players = get_all_handicap_players()
+    index_map = {}
+    for p in players:
+        cname = p.get("customer_name")
+        if cname and p.get("handicap_index") is not None:
+            index_map[cname.lower()] = p["handicap_index"]
+    return jsonify(index_map)
+
+
 @app.route("/api/handicaps/rounds/<int:round_id>", methods=["DELETE"])
 @require_role("manager")
 def api_delete_handicap_round(round_id):
