@@ -197,7 +197,12 @@ Two visual separator rows appear in the expanded rounds table:
 5. **Message History** — collapsible section
 
 ### Columns in registrations table
-Order: RSVP circle → Order Date → Customer → Handicap → Holes → Side Games → Tee → Status → Price → Actions
+Order: RSVP circle → Customer → HCP → Holes → Games → Tee → Status → Order → Price → Actions
+
+### Status normalization
+The `user_status` field is cleaned at display time via `_cleanStatus()`:
+- Strips parenthetical notes like "($25 Off + FREE Drink)"
+- Normalizes to: "1st TIMER", "MEMBER", "GUEST", or "MANAGER"
 
 ### Holes field
 - Parsed from emails: "9 or 18 HOLES?" field → stored as `holes` TEXT column
