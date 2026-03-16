@@ -160,6 +160,36 @@
         .status-used     { color: #b45309; font-weight: 600; font-size: 0.8em; }
         .status-active   { color: #16a34a; font-size: 0.8em; }
         .status-excluded { color: #9ca3af; font-size: 0.8em; }
+
+        /* ── Player link styles ────────────────────────────────────── */
+        .player-link { color: var(--primary, #1e40af); text-decoration: none; font-weight: 700; }
+        .player-link:hover { text-decoration: underline; }
+        .player-unlinked { font-weight: 700; color: #1e293b; }
+        .btn-link-action {
+            font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; cursor: pointer;
+            border: 1px solid #cbd5e1; background: #f8fafc; color: #475569;
+            font-weight: 600; white-space: nowrap;
+        }
+        .btn-link-action:hover { background: #e2e8f0; }
+        .btn-link-action.primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+        .btn-link-action.primary:hover { background: #2563eb; }
+        .btn-unlink {
+            font-size: 0.62rem; padding: 1px 5px; border-radius: 3px; cursor: pointer;
+            border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626;
+            font-weight: 600; margin-left: 4px; vertical-align: middle;
+        }
+        .btn-unlink:hover { background: #fee2e2; }
+        .link-customer-list {
+            max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0;
+            border-radius: 6px; margin-top: 8px;
+        }
+        .link-customer-item {
+            padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f1f5f9;
+            font-size: 0.88em;
+        }
+        .link-customer-item:hover { background: #eff6ff; }
+        .link-customer-item:last-child { border-bottom: none; }
+        .link-customer-item.selected { background: #dbeafe; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -303,6 +333,30 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Link Player Modal ─────────────────────────────────── -->
+    <div id="modal-link-player" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2 id="link-modal-title">Link Player to Customer</h2>
+                <button class="modal-close" onclick="closeLinkModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:0.88em;color:#64748b;margin-bottom:8px;">
+                    Player: <strong id="link-modal-player-name"></strong>
+                </p>
+                <input type="text" id="link-search-input" placeholder="Search customers..."
+                       style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:0.9em;"
+                       oninput="filterLinkCustomers()">
+                <div id="link-customer-list" class="link-customer-list"></div>
+                <div id="link-error" class="form-error" style="display:none;margin-top:10px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeLinkModal()">Cancel</button>
+                <button class="btn btn-primary" id="btn-confirm-link" onclick="confirmLinkPlayer()" disabled>Link</button>
             </div>
         </div>
     </div>
@@ -568,17 +622,33 @@
             const tr = document.createElement('tr');
             tr.className = 'player-row';
             tr.dataset.player = p.player_name;
+            // Player name cell: link to customer if linked, plain name + action buttons if not
+            const canManage = role === 'admin' || role === 'manager';
+            let playerCell;
+            let actionCell = '';
+            if (p.customer_name) {
+                playerCell = `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}">${esc(p.player_name)}</a>`;
+                if (canManage) {
+                    actionCell = `<button class="btn-unlink" onclick="unlinkPlayer(${esc(JSON.stringify(p.player_name))})" title="Unlink from ${esc(p.customer_name)}">×</button>`;
+                }
+            } else {
+                playerCell = `<span class="player-unlinked">${esc(p.player_name)}</span>`;
+                if (canManage) {
+                    actionCell = `<button class="btn-link-action primary" onclick="openLinkModal(${esc(JSON.stringify(p.player_name))})">Link</button> <button class="btn-link-action" onclick="addCustomerForPlayer(${esc(JSON.stringify(p.player_name))})">Add Customer</button>`;
+                }
+            }
+
             tr.innerHTML = `
                 <td><button class="expand-btn ${isExpanded?'open':''}"
                     onclick="toggleRounds(${esc(JSON.stringify(p.player_name))}, this)">▶</button></td>
-                <td><strong>${esc(p.player_name)}</strong></td>
+                <td>${playerCell}</td>
                 <td>${indexCell}</td>
                 <td>${activeLabel}</td>
                 <td>${totalRounds}</td>
                 <td>${p.latest_round_date || '—'}</td>
                 <td class="diff-col">${p.best_differential !== null ? p.best_differential.toFixed(1) : '—'}</td>
                 <td class="diff-col">${p.avg_differential !== null ? p.avg_differential.toFixed(1) : '—'}</td>
-                <td></td>
+                <td>${actionCell}</td>
             `;
             tbody.appendChild(tr);
 
@@ -622,7 +692,9 @@
                         <div class="hcp-mc-top" id="m-top-${id}"
                              onclick="toggleMobileCard(${esc(JSON.stringify(p.player_name))}, this)">
                             <div class="hcp-mc-info">
-                                <div class="hcp-mc-name">${esc(p.player_name)}</div>
+                                <div class="hcp-mc-name">${p.customer_name
+                                    ? `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}" onclick="event.stopPropagation()">${esc(p.player_name)}</a>`
+                                    : esc(p.player_name)}</div>
                                 <div class="hcp-mc-sub">${esc(sub)}</div>
                             </div>
                             <div class="hcp-mc-right">
@@ -1254,6 +1326,146 @@
     }
     function safeid(s) {
         return s.replace(/[^a-zA-Z0-9]/g, '_');
+    }
+
+    // ── Link / Unlink player to customer ─────────────────────────────
+    let _linkPlayerName = '';
+    let _allCustomerNames = [];
+    let _selectedCustomer = '';
+
+    async function openLinkModal(playerName) {
+        _linkPlayerName = playerName;
+        _selectedCustomer = '';
+        document.getElementById('link-modal-player-name').textContent = playerName;
+        document.getElementById('link-search-input').value = '';
+        document.getElementById('link-error').style.display = 'none';
+        document.getElementById('btn-confirm-link').disabled = true;
+        document.getElementById('modal-link-player').style.display = 'flex';
+
+        // Fetch customer names if not loaded
+        if (!_allCustomerNames.length) {
+            try {
+                const res = await fetch('/api/customers/names');
+                _allCustomerNames = await res.json();
+            } catch (e) {
+                _allCustomerNames = [];
+            }
+        }
+        filterLinkCustomers();
+        document.getElementById('link-search-input').focus();
+    }
+
+    function closeLinkModal() {
+        document.getElementById('modal-link-player').style.display = 'none';
+        _linkPlayerName = '';
+        _selectedCustomer = '';
+    }
+
+    function filterLinkCustomers() {
+        const q = (document.getElementById('link-search-input').value || '').toLowerCase();
+        const list = document.getElementById('link-customer-list');
+        const filtered = q ? _allCustomerNames.filter(n => n.toLowerCase().includes(q)) : _allCustomerNames;
+        const show = filtered.slice(0, 100);
+        list.innerHTML = show.map(n =>
+            `<div class="link-customer-item${n === _selectedCustomer ? ' selected' : ''}"
+                  onclick="selectLinkCustomer(this, ${esc(JSON.stringify(n))})">${esc(n)}</div>`
+        ).join('');
+        if (filtered.length > 100) {
+            list.innerHTML += `<div style="padding:8px 12px;color:#94a3b8;font-size:0.82em;">${filtered.length - 100} more — refine your search</div>`;
+        }
+        if (!filtered.length) {
+            list.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:0.88em;">No matching customers found</div>';
+        }
+    }
+
+    function selectLinkCustomer(el, name) {
+        _selectedCustomer = name;
+        document.getElementById('btn-confirm-link').disabled = false;
+        document.querySelectorAll('#link-customer-list .link-customer-item').forEach(i => i.classList.remove('selected'));
+        el.classList.add('selected');
+    }
+
+    async function confirmLinkPlayer() {
+        if (!_linkPlayerName || !_selectedCustomer) return;
+        const btn = document.getElementById('btn-confirm-link');
+        btn.disabled = true;
+        btn.textContent = 'Linking…';
+        try {
+            const res = await fetch('/api/handicaps/link-player', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_name: _linkPlayerName, customer_name: _selectedCustomer })
+            });
+            const d = await res.json();
+            if (d.error) throw new Error(d.error);
+            closeLinkModal();
+            loadPlayers();
+        } catch (e) {
+            const err = document.getElementById('link-error');
+            err.textContent = 'Failed: ' + e.message;
+            err.style.display = '';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Link';
+        }
+    }
+
+    async function unlinkPlayer(playerName) {
+        if (!confirm(`Unlink "${playerName}" from their customer?`)) return;
+        try {
+            const res = await fetch('/api/handicaps/unlink-player', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_name: playerName })
+            });
+            const d = await res.json();
+            if (d.error) throw new Error(d.error);
+            loadPlayers();
+        } catch (e) {
+            alert('Failed: ' + e.message);
+        }
+    }
+
+    async function addCustomerForPlayer(playerName) {
+        const parts = playerName.trim().split(/\s+/);
+        const firstName = parts[0] || '';
+        const lastName = parts.slice(1).join(' ') || '';
+        if (!confirm(`Create a new customer record for "${playerName}" and link them?`)) return;
+        try {
+            const res = await fetch('/api/customers/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: playerName, first_name: firstName, last_name: lastName })
+            });
+            const d = await res.json();
+            if (d.error) throw new Error(d.error);
+
+            // Now link the player to the newly created customer
+            await fetch('/api/handicaps/link-player', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_name: playerName, customer_name: playerName })
+            });
+            _allCustomerNames = []; // reset cache
+            loadPlayers();
+        } catch (e) {
+            if (e.message === 'Customer already exists') {
+                // Customer exists, just link
+                try {
+                    await fetch('/api/handicaps/link-player', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ player_name: playerName, customer_name: playerName })
+                    });
+                    _allCustomerNames = [];
+                    loadPlayers();
+                } catch (e2) {
+                    alert('Failed to link: ' + e2.message);
+                }
+            } else {
+                alert('Failed: ' + e.message);
+            }
+        }
     }
     </script>
 
