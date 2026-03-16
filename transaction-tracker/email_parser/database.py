@@ -4110,6 +4110,35 @@ def compute_handicap_index(differentials: list[float],
     return round(index * 10) / 10
 
 
+def _match_customer_by_email(conn: sqlite3.Connection, email: str) -> str | None:
+    """Match a player to a customer by email address.
+
+    Looks up the email in the items table (customer_email column) and returns
+    the canonical customer name. This is the highest-confidence matching method.
+    """
+    if not email:
+        return None
+    row = conn.execute(
+        """SELECT DISTINCT customer FROM items
+           WHERE LOWER(customer_email) = LOWER(?)
+           AND customer IS NOT NULL AND customer != ''
+           LIMIT 1""",
+        (email,),
+    ).fetchone()
+    if row:
+        return row["customer"]
+    # Also check customer_aliases for email aliases
+    row = conn.execute(
+        """SELECT ca.customer_name FROM customer_aliases ca
+           WHERE ca.alias_type = 'email' AND LOWER(ca.alias_value) = LOWER(?)
+           LIMIT 1""",
+        (email,),
+    ).fetchone()
+    if row:
+        return row["customer_name"]
+    return None
+
+
 def _match_customer_name(conn: sqlite3.Connection, player_name: str) -> str | None:
     """Try to find a matching customer name in the items table.
 
@@ -4254,6 +4283,8 @@ def import_handicap_rounds(rounds: list[dict],
       course_name (str|None), tee_name (str|None),
       adjusted_score (int|str), rating (float|str), slope (int|str),
       differential (float|str|None) — used as-is when provided, else computed.
+      player_email (str|None) — optional; when provided, used as first-priority
+      method to link the player to a customer record via customer_email.
 
     Names in 'Last, First' format are normalised to 'First Last' Title Case.
     Dedup key: (player_name, round_date, round_id) when round_id present;
@@ -4279,6 +4310,7 @@ def import_handicap_rounds(rounds: list[dict],
                 player_name = _normalize_player_name(raw_name)
 
                 # Try to link to a customer (once per unique player_name per import)
+                player_email = (r.get("player_email") or "").strip().lower() or None
                 if player_name not in _linked:
                     _linked.add(player_name)
                     existing = conn.execute(
@@ -4287,7 +4319,12 @@ def import_handicap_rounds(rounds: list[dict],
                     ).fetchone()
                     # Re-attempt linking if player exists but has no customer_name yet
                     if existing is None:
-                        customer_name = _match_customer_name(conn, player_name)
+                        # Try email-based match first (highest confidence)
+                        customer_name = None
+                        if player_email:
+                            customer_name = _match_customer_by_email(conn, player_email)
+                        if not customer_name:
+                            customer_name = _match_customer_name(conn, player_name)
                         conn.execute(
                             """INSERT INTO handicap_player_links (player_name, customer_name)
                                VALUES (?, ?)
@@ -4297,7 +4334,11 @@ def import_handicap_rounds(rounds: list[dict],
                         if customer_name:
                             matched += 1
                     elif not existing["customer_name"]:
-                        customer_name = _match_customer_name(conn, player_name)
+                        customer_name = None
+                        if player_email:
+                            customer_name = _match_customer_by_email(conn, player_email)
+                        if not customer_name:
+                            customer_name = _match_customer_name(conn, player_name)
                         if customer_name:
                             conn.execute(
                                 "UPDATE handicap_player_links SET customer_name = ? WHERE player_name = ?",

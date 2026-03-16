@@ -1718,6 +1718,12 @@
                 : overrides[r.id];
             if (override === "not_playing") { notPlaying++; return; }
 
+            // Credited/refunded/transferred players are inactive — exclude from stats
+            if (r.transaction_status === "credited" || r.transaction_status === "refunded" || r.transaction_status === "transferred") {
+                notPlaying++;
+                return;
+            }
+
             // WD players: count exclusions driven by which credits were given
             if (r.transaction_status === "wd") {
                 let wdCredits = {};
@@ -2069,10 +2075,15 @@
         }
 
         // ---- PLAYERS VIEW ----
-        // Filter registrants if a game filter is active
-        let filtered = registrants;
+        // Separate inactive players (credited, refunded, transferred, WD)
+        const INACTIVE_STATUSES = ["credited", "refunded", "transferred", "wd"];
+        const inactivePlayers = registrants.filter(r => INACTIVE_STATUSES.includes(r.transaction_status));
+        const activePlayers = registrants.filter(r => !INACTIVE_STATUSES.includes(r.transaction_status));
+
+        // Filter active registrants if a game filter is active
+        let filtered = activePlayers;
         if (activeFilter) {
-            filtered = registrants.filter(r => {
+            filtered = activePlayers.filter(r => {
                 const type = classifyGameType(r.side_games);
                 if (activeFilter === "NET") return type === "NET" || type === "BOTH";
                 if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
@@ -2222,6 +2233,44 @@
         });
 
         html += '</tbody></table>';
+
+        // Inactive players section (credited, refunded, transferred, WD)
+        if (inactivePlayers.length) {
+            const statusLabels = {
+                credited: "Credit",
+                refunded: "Refunded",
+                transferred: "Transferred",
+                wd: "WD",
+            };
+            const statusColors = {
+                credited: "#b45309",
+                refunded: "#991b1b",
+                transferred: "#6b21a8",
+                wd: "#991b1b",
+            };
+            const badgeColors = {
+                credited: { bg: "#fef3c7", color: "#92400e", border: "#fde68a" },
+                refunded: { bg: "#fee2e2", color: "#991b1b", border: "#fecaca" },
+                transferred: { bg: "#f3e8ff", color: "#6b21a8", border: "#e9d5ff" },
+                wd: { bg: "#fee2e2", color: "#991b1b", border: "#fecaca" },
+            };
+            html += '<div class="rsvp-section inactive-players-section">';
+            html += `<h4 style="color:#6b7280;">Inactive (${inactivePlayers.length})</h4>`;
+            html += '<div class="rsvp-player-list">';
+            inactivePlayers.forEach(r => {
+                const st = r.transaction_status || "credited";
+                const bc = badgeColors[st] || badgeColors.credited;
+                html += `<div class="rsvp-player-card">`;
+                html += `<span class="rsvp-badge" style="background:${bc.bg};color:${bc.color};border:1px solid ${bc.border};">${statusLabels[st] || st}</span> `;
+                html += `<strong>${escapeHtml(r.customer || 'Unknown')}</strong>`;
+                if (r.customer_email) html += ` <span class="rsvp-email">${escapeHtml(r.customer_email)}</span>`;
+                if (r.credit_amount) html += ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>`;
+                // Reverse button
+                html += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
+                html += `</div>`;
+            });
+            html += '</div></div>';
+        }
 
         // RSVP sections — only show if RSVPs exist for this event
         if (rsvps.length) {
