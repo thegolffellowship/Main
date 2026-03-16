@@ -1315,7 +1315,7 @@
                 actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "active" && !r.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
-                actionBtn += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.75rem;">WD</button>`;
+                actionBtn += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
                 if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
@@ -1325,6 +1325,7 @@
                 ["Order Date", r.order_date || "\u2014"],
                 ["Price", r.item_price || "\u2014"],
                 ["Handicap", r.handicap || "\u2014"],
+                ["Holes", r.holes || "\u2014"],
                 ["Status", r.user_status || "\u2014"],
                 ["Partner Request", r.partner_request || "\u2014"],
                 ["Fellowship", r.fellowship || "\u2014"],
@@ -1412,6 +1413,17 @@
                 }
                 badgesHtml += '</span>';
                 if (!mobileGamesView && !mobilePairingsView) {
+                    // 9/18 holes filter
+                    const mHolesFilter = eventHolesFilter[ev.id] || null;
+                    const mCount9 = registrants.filter(r => r.holes === "9" || r.holes === 9).length;
+                    const mCount18 = registrants.filter(r => r.holes === "18" || r.holes === 18).length;
+                    if (mCount9 > 0 || mCount18 > 0) {
+                        badgesHtml += '<span class="view-toggle-group">';
+                        badgesHtml += `<span class="game-stat-badge ${mHolesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${mCount9}</strong></span>`;
+                        badgesHtml += `<span class="game-stat-badge ${mHolesFilter === '18' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="18">18 <strong>${mCount18}</strong></span>`;
+                        badgesHtml += '</span>';
+                    }
+
                     badgesHtml += '<span class="view-toggle-group">';
                     badgesHtml += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
                     badgesHtml += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
@@ -1434,6 +1446,11 @@
                             if (activeFilter === "NO GAMES") return type === "NO GAMES";
                             return true;
                         });
+                    }
+                    // Apply holes filter
+                    const mHolesF = eventHolesFilter[ev.id] || null;
+                    if (mHolesF) {
+                        filteredRegs = filteredRegs.filter(r => String(r.holes) === mHolesF);
                     }
                     filteredRegs = sortRegistrants(filteredRegs);
                     if (!activeFilter || activeFilter === "NO GAMES") {
@@ -1587,6 +1604,9 @@
     // Track per-event game filter: null = all, "NET", "GROSS", "NO GAMES"
     let eventGameFilter = {};
 
+    // Track per-event holes filter: null = all, "9", "18"
+    let eventHolesFilter = {};
+
     // Detail table sort state
     let detailSortField = "customer";
     let detailSortDir = "asc";
@@ -1599,6 +1619,7 @@
         { key: "item_price", label: "Price", default: true },
         { key: "handicap", label: "Handicap", default: true },
         { key: "side_games", label: "Side Games", default: true },
+        { key: "holes", label: "Holes", default: true },
         { key: "tee_choice", label: "Tee", default: true },
         { key: "user_status", label: "Status", default: true },
         { key: "partner_request", label: "Partner", default: false },
@@ -1994,6 +2015,17 @@
 
         // Sub-filter badges (only in PLAYERS view)
         if (!gamesView && !pairingsView) {
+            // 9/18 holes filter toggle
+            const holesFilter = eventHolesFilter[ev.id] || null;
+            const count9 = registrants.filter(r => r.holes === "9" || r.holes === 9).length;
+            const count18 = registrants.filter(r => r.holes === "18" || r.holes === 18).length;
+            if (count9 > 0 || count18 > 0) {
+                html += '<span class="view-toggle-group">';
+                html += `<span class="game-stat-badge ${holesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${count9}</strong></span>`;
+                html += `<span class="game-stat-badge ${holesFilter === '18' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="18">18 <strong>${count18}</strong></span>`;
+                html += '</span>';
+            }
+
             html += '<span class="view-toggle-group">';
             html += `<span class="game-stat-badge ${activeFilter === 'NET' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="NET">NET <strong>${stats.net}</strong></span>`;
             html += `<span class="game-stat-badge ${activeFilter === 'GROSS' ? 'active' : ''}" data-event-id="${ev.id}" data-filter="GROSS">GROSS <strong>${stats.gross}</strong></span>`;
@@ -2046,6 +2078,12 @@
                 if (activeFilter === "NO GAMES") return type === "NO GAMES";
                 return true;
             });
+        }
+
+        // Filter by holes (9 or 18) if active
+        const holesFilter = eventHolesFilter[ev.id] || null;
+        if (holesFilter) {
+            filtered = filtered.filter(r => String(r.holes) === holesFilter);
         }
 
         // Sort the filtered registrants
@@ -2169,7 +2207,7 @@
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "active" && !r.transferred_from_id) {
                         btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
-                        btns += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.72rem;">WD</button>`;
+                        btns += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
                         if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
                         btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
@@ -2327,6 +2365,20 @@
                     delete eventGameFilter[ev.id];
                 } else {
                     eventGameFilter[ev.id] = filter;
+                }
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Holes filter badges (9 | 18 toggle)
+        container.querySelectorAll(".game-stat-badge[data-holes-filter]").forEach(badge => {
+            badge.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const val = badge.dataset.holesFilter;
+                if (!val || eventHolesFilter[ev.id] === val) {
+                    delete eventHolesFilter[ev.id];
+                } else {
+                    eventHolesFilter[ev.id] = val;
                 }
                 rerenderDetail(container, ev);
             });
