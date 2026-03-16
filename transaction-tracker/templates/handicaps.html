@@ -161,6 +161,14 @@
         .status-active   { color: #16a34a; font-size: 0.8em; }
         .status-excluded { color: #9ca3af; font-size: 0.8em; }
 
+        /* ── Sortable column headers ────────────────────────────────── */
+        .sortable-th {
+            cursor: pointer; user-select: none; white-space: nowrap;
+        }
+        .sortable-th:hover { color: var(--primary, #1e40af); }
+        .sort-arrow { font-size: 0.7em; color: #94a3b8; margin-left: 2px; }
+        .sortable-th.sort-active .sort-arrow { color: var(--primary, #1e40af); font-weight: 700; }
+
         /* ── Player link styles ────────────────────────────────────── */
         .player-link { color: var(--primary, #1e40af); text-decoration: none; font-weight: 700; }
         .player-link:hover { text-decoration: underline; }
@@ -260,8 +268,16 @@
                 <option value="index-desc">Index (High → Low)</option>
                 <option value="name-asc">Name (A → Z)</option>
                 <option value="name-desc">Name (Z → A)</option>
-                <option value="rounds-desc">Most Rounds</option>
-                <option value="latest-desc">Most Recent</option>
+                <option value="active-desc">Active Rounds (Most)</option>
+                <option value="active-asc">Active Rounds (Least)</option>
+                <option value="total-desc">Total Rounds (Most)</option>
+                <option value="total-asc">Total Rounds (Least)</option>
+                <option value="latest-desc">Latest Round (Recent)</option>
+                <option value="latest-asc">Latest Round (Oldest)</option>
+                <option value="best-asc">Best Diff (Low → High)</option>
+                <option value="best-desc">Best Diff (High → Low)</option>
+                <option value="avg-asc">Avg Diff (Low → High)</option>
+                <option value="avg-desc">Avg Diff (High → Low)</option>
             </select>
         </section>
 
@@ -273,13 +289,13 @@
                     <thead>
                         <tr>
                             <th style="width:28px;"></th>
-                            <th>Player</th>
-                            <th>Handicap Index</th>
-                            <th>Active Rounds</th>
-                            <th>Total Rounds</th>
-                            <th>Latest Round</th>
-                            <th>Best Diff</th>
-                            <th>Avg Diff</th>
+                            <th class="sortable-th" data-sort="name">Player <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="index">Handicap Index <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="active">Active Rounds <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="total">Total Rounds <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="latest">Latest Round <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="best">Best Diff <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="avg">Avg Diff <span class="sort-arrow"></span></th>
                             <th></th>
                         </tr>
                     </thead>
@@ -459,6 +475,31 @@
             renderTable();
         });
 
+        // Clickable column headers for sorting
+        document.querySelectorAll('.sortable-th').forEach(th => {
+            th.addEventListener('click', () => {
+                const col = th.dataset.sort;
+                const sortMap = {
+                    name:   ['name-asc', 'name-desc'],
+                    index:  ['index-asc', 'index-desc'],
+                    active: ['active-desc', 'active-asc'],
+                    total:  ['total-desc', 'total-asc'],
+                    latest: ['latest-desc', 'latest-asc'],
+                    best:   ['best-asc', 'best-desc'],
+                    avg:    ['avg-asc', 'avg-desc'],
+                };
+                const [primary, secondary] = sortMap[col] || [];
+                if (!primary) return;
+                currentSort = currentSort === primary ? secondary : primary;
+                // Sync dropdown if matching option exists
+                const sel = document.getElementById('sort-select');
+                if ([...sel.options].some(o => o.value === currentSort)) {
+                    sel.value = currentSort;
+                }
+                renderTable();
+            });
+        });
+
         document.getElementById('import-file-input').addEventListener('change', onFileChosen);
         document.getElementById('btn-import').addEventListener('click', openImportModal);
         document.getElementById('btn-settings').addEventListener('click', openSettingsModal);
@@ -579,24 +620,38 @@
         );
 
         // Sort
+        const _nullNum = (v) => v === null || v === undefined ? Infinity : v;
         players.sort((a, b) => {
             switch (currentSort) {
-                case 'index-asc':
-                    if (a.handicap_index === null && b.handicap_index === null) return 0;
-                    if (a.handicap_index === null) return 1;
-                    if (b.handicap_index === null) return -1;
-                    return a.handicap_index - b.handicap_index;
-                case 'index-desc':
-                    if (a.handicap_index === null && b.handicap_index === null) return 0;
-                    if (a.handicap_index === null) return 1;
-                    if (b.handicap_index === null) return -1;
-                    return b.handicap_index - a.handicap_index;
-                case 'name-asc':  return a.player_name.localeCompare(b.player_name);
-                case 'name-desc': return b.player_name.localeCompare(a.player_name);
-                case 'rounds-desc': return (b.active_rounds||0) - (a.active_rounds||0);
+                case 'index-asc':  return _nullNum(a.handicap_index) - _nullNum(b.handicap_index);
+                case 'index-desc': return _nullNum(b.handicap_index) - _nullNum(a.handicap_index);
+                case 'name-asc':   return a.player_name.localeCompare(b.player_name);
+                case 'name-desc':  return b.player_name.localeCompare(a.player_name);
+                case 'active-desc': case 'rounds-desc': return (b.active_rounds||0) - (a.active_rounds||0);
+                case 'active-asc':  return (a.active_rounds||0) - (b.active_rounds||0);
+                case 'total-desc':  return (b.total_rounds||0) - (a.total_rounds||0);
+                case 'total-asc':   return (a.total_rounds||0) - (b.total_rounds||0);
                 case 'latest-desc': return (b.latest_round_date||'').localeCompare(a.latest_round_date||'');
+                case 'latest-asc':  return (a.latest_round_date||'').localeCompare(b.latest_round_date||'');
+                case 'best-asc':    return _nullNum(a.best_differential) - _nullNum(b.best_differential);
+                case 'best-desc':   return _nullNum(b.best_differential) - _nullNum(a.best_differential);
+                case 'avg-asc':     return _nullNum(a.avg_differential) - _nullNum(b.avg_differential);
+                case 'avg-desc':    return _nullNum(b.avg_differential) - _nullNum(a.avg_differential);
             }
             return 0;
+        });
+
+        // Update sort arrows on column headers
+        document.querySelectorAll('.sortable-th').forEach(th => {
+            const col = th.dataset.sort;
+            const arrow = th.querySelector('.sort-arrow');
+            const isActive = currentSort.startsWith(col) || (col === 'active' && currentSort === 'rounds-desc');
+            th.classList.toggle('sort-active', isActive);
+            if (isActive) {
+                arrow.textContent = currentSort.endsWith('-asc') ? '▲' : '▼';
+            } else {
+                arrow.textContent = '';
+            }
         });
 
         const role = currentRole;

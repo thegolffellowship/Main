@@ -45,9 +45,13 @@ IMPORTANT RULES:
 - The top-level value must be a JSON object with the keys described below.
 - An order may contain MULTIPLE items. Return each item separately in the \
   "items" array. However, ONLY create an item if there is a real product or \
-  event line item with a name and price. Do NOT create phantom items from \
-  section headers, form field labels, or repeated text. If the order has one \
-  product line, return exactly one item.
+  event line item with a distinct name in the Order Summary. Do NOT create \
+  phantom items from section headers, form field labels, or repeated text. \
+  If the order has one product line, return exactly one item. \
+  IMPORTANT: Items with a $0.00 price ARE valid line items and MUST be \
+  included (e.g. "SEASON CONTESTS" at $0.00 is a real item). Never merge \
+  or skip a $0 item — each named line item in the Order Summary gets its \
+  own entry in the "items" array.
 - If a field is not present in the email, use null for that field.
 - Dollar amounts should include the "$" sign (e.g. "$158.00").
 - Dates should be in YYYY-MM-DD format.
