@@ -500,20 +500,6 @@
             });
         });
 
-        // Event delegation for Link / Add Customer buttons
-        document.getElementById('hcp-tbody').addEventListener('click', function(e) {
-            const btn = e.target.closest('[data-action]');
-            if (!btn) return;
-            const player = btn.dataset.player;
-            if (btn.dataset.action === 'link') {
-                openLinkModal(player);
-            } else if (btn.dataset.action === 'add-customer') {
-                addCustomerForPlayer(player);
-            } else if (btn.dataset.action === 'unlink') {
-                unlinkPlayer(player);
-            }
-        });
-
         document.getElementById('import-file-input').addEventListener('change', onFileChosen);
         document.getElementById('btn-import').addEventListener('click', openImportModal);
         document.getElementById('btn-settings').addEventListener('click', openSettingsModal);
@@ -698,12 +684,12 @@
             if (p.customer_name) {
                 playerCell = `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}">${esc(p.player_name)}</a>`;
                 if (canManage) {
-                    actionCell = `<button class="btn-unlink" data-action="unlink" data-player="${esc(p.player_name)}" title="Unlink from ${esc(p.customer_name)}">×</button>`;
+                    actionCell = `<span class="action-unlink" data-player-name="${esc(p.player_name)}" data-customer-name="${esc(p.customer_name)}"></span>`;
                 }
             } else {
                 playerCell = `<span class="player-unlinked">${esc(p.player_name)}</span>`;
                 if (canManage) {
-                    actionCell = `<button class="btn-link-action primary" data-action="link" data-player="${esc(p.player_name)}">Link</button> <button class="btn-link-action" data-action="add-customer" data-player="${esc(p.player_name)}">Add Customer</button>`;
+                    actionCell = `<span class="action-buttons" data-player-name="${esc(p.player_name)}"></span>`;
                 }
             }
 
@@ -720,6 +706,34 @@
                 <td>${actionCell}</td>
             `;
             tbody.appendChild(tr);
+
+            // Attach action buttons programmatically (avoids inline onclick / innerHTML issues)
+            const actionSpan = tr.querySelector('.action-buttons');
+            if (actionSpan) {
+                const pName = actionSpan.dataset.playerName;
+                const linkBtn = document.createElement('button');
+                linkBtn.className = 'btn-link-action primary';
+                linkBtn.textContent = 'Link';
+                linkBtn.addEventListener('click', function(ev) { ev.stopPropagation(); openLinkModal(pName); });
+                const addBtn = document.createElement('button');
+                addBtn.className = 'btn-link-action';
+                addBtn.textContent = 'Add Customer';
+                addBtn.addEventListener('click', function(ev) { ev.stopPropagation(); addCustomerForPlayer(pName); });
+                actionSpan.appendChild(linkBtn);
+                actionSpan.appendChild(document.createTextNode(' '));
+                actionSpan.appendChild(addBtn);
+            }
+            const unlinkSpan = tr.querySelector('.action-unlink');
+            if (unlinkSpan) {
+                const pName = unlinkSpan.dataset.playerName;
+                const cName = unlinkSpan.dataset.customerName;
+                const unlinkBtn = document.createElement('button');
+                unlinkBtn.className = 'btn-unlink';
+                unlinkBtn.textContent = '×';
+                unlinkBtn.title = 'Unlink from ' + cName;
+                unlinkBtn.addEventListener('click', function(ev) { ev.stopPropagation(); unlinkPlayer(pName); });
+                unlinkSpan.appendChild(unlinkBtn);
+            }
 
             // Expanded row placeholder
             const expandTr = document.createElement('tr');
@@ -1440,9 +1454,10 @@
     }
 
     // Close modal on outside click
-    document.getElementById('modal-link-player').addEventListener('click', function(e) {
-        if (e.target === this) closeLinkModal();
-    });
+    (function() {
+        var el = document.getElementById('modal-link-player');
+        if (el) el.addEventListener('click', function(e) { if (e.target === this) closeLinkModal(); });
+    })();
 
     function filterLinkCustomers() {
         const q = (document.getElementById('link-search-input').value || '').toLowerCase();
