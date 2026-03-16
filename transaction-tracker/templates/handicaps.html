@@ -500,6 +500,20 @@
             });
         });
 
+        // Event delegation for Link / Add Customer buttons
+        document.getElementById('hcp-tbody').addEventListener('click', function(e) {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            const player = btn.dataset.player;
+            if (btn.dataset.action === 'link') {
+                openLinkModal(player);
+            } else if (btn.dataset.action === 'add-customer') {
+                addCustomerForPlayer(player);
+            } else if (btn.dataset.action === 'unlink') {
+                unlinkPlayer(player);
+            }
+        });
+
         document.getElementById('import-file-input').addEventListener('change', onFileChosen);
         document.getElementById('btn-import').addEventListener('click', openImportModal);
         document.getElementById('btn-settings').addEventListener('click', openSettingsModal);
@@ -684,12 +698,12 @@
             if (p.customer_name) {
                 playerCell = `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}">${esc(p.player_name)}</a>`;
                 if (canManage) {
-                    actionCell = `<button class="btn-unlink" onclick="unlinkPlayer(${esc(JSON.stringify(p.player_name))})" title="Unlink from ${esc(p.customer_name)}">×</button>`;
+                    actionCell = `<button class="btn-unlink" data-action="unlink" data-player="${esc(p.player_name)}" title="Unlink from ${esc(p.customer_name)}">×</button>`;
                 }
             } else {
                 playerCell = `<span class="player-unlinked">${esc(p.player_name)}</span>`;
                 if (canManage) {
-                    actionCell = `<button class="btn-link-action primary" onclick="openLinkModal(${esc(JSON.stringify(p.player_name))})">Link</button> <button class="btn-link-action" onclick="addCustomerForPlayer(${esc(JSON.stringify(p.player_name))})">Add Customer</button>`;
+                    actionCell = `<button class="btn-link-action primary" data-action="link" data-player="${esc(p.player_name)}">Link</button> <button class="btn-link-action" data-action="add-customer" data-player="${esc(p.player_name)}">Add Customer</button>`;
                 }
             }
 
