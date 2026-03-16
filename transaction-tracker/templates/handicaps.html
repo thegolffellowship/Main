@@ -1061,8 +1061,11 @@
     }
 
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCalcModal(); });
-    document.getElementById('calc-modal-overlay').addEventListener('click', function(e) {
-        if (e.target === this) closeCalcModal();
+    document.addEventListener('DOMContentLoaded', function() {
+        var overlay = document.getElementById('calc-modal-overlay');
+        if (overlay) overlay.addEventListener('click', function(e) {
+            if (e.target === this) closeCalcModal();
+        });
     });
 
     function buildCalcHTML(playerName, rounds) {
@@ -1412,9 +1415,9 @@
     }
 
     // ── Link / Unlink player to customer ─────────────────────────────
-    var _linkPlayerName = '';
-    var _allCustomerNames = [];
-    var _selectedCustomer = '';
+    let _linkPlayerName = '';
+    let _allCustomerNames = [];
+    let _selectedCustomer = '';
 
     function openLinkModal(playerName) {
         _linkPlayerName = playerName;
