@@ -2894,6 +2894,7 @@ def api_handicap_import_preview():
 
         auto_mapping = {
             "player_name":     _find_col(["name", "player", "player_name", "player name"]),
+            "player_email":    _find_col(["email", "player_email", "player email", "e-mail"]),
             "round_date":      _find_col(["play at", "date", "round_date", "played"]),
             "round_id":        _find_col(["round id", "round_id", "roundid"]),
             "course_name":     _find_col(["course name", "course", "course_name"]),
@@ -2995,6 +2996,7 @@ def api_handicap_import():
 
         rounds = []
         last_player_name = None  # support fill-down name format
+        last_player_email = None  # support fill-down email format
         for row in all_data_rows:
             def _get(field):
                 idx = mapping.get(field)
@@ -3012,8 +3014,16 @@ def api_handicap_import():
             if not player_name:
                 continue
 
+            # Email: fill-down like player_name (email only appears on first row per player)
+            player_email = _get("player_email")
+            if player_email:
+                last_player_email = player_email
+            elif not player_email and player_name == last_player_name:
+                player_email = last_player_email
+
             rounds.append({
                 "player_name": player_name,
+                "player_email": player_email,
                 "round_date":  _parse_date(row[mapping["round_date"]] if mapping.get("round_date") is not None and mapping["round_date"] < len(row) else None),
                 "round_id":    _get("round_id"),
                 "course_name": _get("course_name"),

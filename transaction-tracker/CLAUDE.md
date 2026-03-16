@@ -157,7 +157,10 @@ Two visual separator rows appear in the expanded rounds table:
 
 ### Player ↔ Customer linking
 - `handicap_player_links` table bridges Golf Genius player names to transaction customer names
-- `_match_customer_name()` in `database.py` tries: exact match, first+last, LIKE, aliases, reversed name, last-name-only (unique)
+- **Email-based matching** (highest priority): `_match_customer_by_email()` looks up email in `items.customer_email` and `customer_aliases` (alias_type='email')
+- **Name-based matching** (fallback): `_match_customer_name()` tries: exact match, first+last, LIKE, aliases, reversed name, last-name-only (unique)
+- Import supports `player_email` column — when present, email matching is tried first before name matching
+- Both email and name columns support fill-down format (value on first row, blank on subsequent rows for same player)
 - `/api/handicaps/players` auto-runs `relink_all_unlinked_players()` on each request
 - Customers page also matches by `player_name` as fallback (not just `customer_name`)
 
