@@ -3088,7 +3088,9 @@ def api_handicap_link_player():
     conn = get_connection()
     try:
         conn.execute(
-            "UPDATE handicap_player_links SET customer_name = ? WHERE player_name = ?",
+            "INSERT INTO handicap_player_links (player_name, customer_name) VALUES (?, ?) "
+            "ON CONFLICT(player_name) DO UPDATE SET customer_name = excluded.customer_name, "
+            "linked_at = datetime('now')",
             (customer_name, player_name),
         )
         conn.commit()
