@@ -1304,7 +1304,8 @@
             const sideGame = classifyGameType(r.side_games);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
-            const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
+            const holes = (r.holes || "").trim();
+            const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
             let actionBtn = '';
             if (isSynthetic) {
@@ -1616,12 +1617,12 @@
         { key: "rsvp", label: "", default: true },
         { key: "order_date", label: "Order Date", default: true },
         { key: "customer", label: "Customer", default: true },
-        { key: "item_price", label: "Price", default: true },
         { key: "handicap", label: "Handicap", default: true },
-        { key: "side_games", label: "Side Games", default: true },
         { key: "holes", label: "Holes", default: true },
+        { key: "side_games", label: "Side Games", default: true },
         { key: "tee_choice", label: "Tee", default: true },
         { key: "user_status", label: "Status", default: true },
+        { key: "item_price", label: "Price", default: true },
         { key: "partner_request", label: "Partner", default: false },
         { key: "fellowship", label: "Fellowship", default: false },
         { key: "notes", label: "Notes", default: false },

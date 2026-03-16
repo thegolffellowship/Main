@@ -1316,6 +1316,10 @@ tr.order-item.order-item-hidden {
     vertical-align: middle;
     margin-left: 0.35rem;
 }
+.mobile-card-top .mc-primary .mc-holes {
+    background: #fef3c7;
+    color: #92400e;
+}
 .mobile-card-top .mc-primary .mc-tee {
     background: #f0fdf4;
     color: #166534;

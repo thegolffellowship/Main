@@ -473,7 +473,8 @@ function renderMobileCard(row) {
     const tag = statusTag(row);
     const sideGameLabel = classifyGameType(row.side_games);
     const tee = (row.tee_choice || "").trim();
-    const topTags = `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
+    const holes = (row.holes || "").trim();
+    const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}<span class="mc-type">${escapeHtml(sideGameLabel)}</span>${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
 
     // Detail fields
     const fields = [
