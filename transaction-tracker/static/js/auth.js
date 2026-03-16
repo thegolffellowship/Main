@@ -102,6 +102,9 @@ function updateRoleUI() {
         badge.style.display = "none";
         logoutBtn.style.display = "none";
     }
+    // Show admin-only buttons
+    const expandQtyBtn = document.getElementById("btn-expand-qty");
+    if (expandQtyBtn) expandQtyBtn.style.display = (currentRole === "admin") ? "" : "none";
 }
 
 function updateNavForRole() {
