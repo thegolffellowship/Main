@@ -138,6 +138,12 @@ FIELD-SPECIFIC GUIDANCE:
   Discard any yardage information (e.g. "6300-6800y").
 - "holes": For events that offer 9 or 18 holes, extract just the number: \
   "9" or "18". Look for "9 or 18 HOLES?" field. If not present, use null.
+- "item_price": The PER-UNIT price for this item (e.g. "$57.00"). \
+  If the email shows "$57.00 x 2  $114.00", the item_price is "$57.00" \
+  (the single-unit price), NOT the extended total.
+- "quantity": The number of units purchased for this line item. Default 1. \
+  Look for patterns like "$57.00 x 2", "× 2", "qty: 2", or a multiplier \
+  next to the price. If the email shows "$57.00 x 2  $114.00", quantity is 2.
 - "address": The street address from the Shipping Address section. The email \
   typically shows "Shipping Address" followed by the customer name in ALL CAPS, \
   then the street, city, state, and zip. For example: \
@@ -171,8 +177,8 @@ Return this exact JSON structure:
     {
       "item_name": "<product or event name>",
       "event_date": "<YYYY-MM-DD date of the event, parsed from item name>",
-      "item_price": "<price for this item, e.g. $158.00>",
-      "quantity": <integer, default 1>,
+      "item_price": "<PER-UNIT price, e.g. $57.00>",
+      "quantity": "<integer — number of units purchased, default 1>",
       "chapter": "<city/chapter — Austin, San Antonio, Dallas, etc.>",
       "course": "<golf course name if mentioned>",
       "handicap": "<numeric handicap value if mentioned>",
@@ -452,6 +458,67 @@ def _call_ai(email_text: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Quantity expansion — split qty>1 items into separate rows
+# ---------------------------------------------------------------------------
+
+
+def _expand_quantity_rows(rows: list[dict]) -> list[dict]:
+    """Expand rows with quantity > 1 into individual rows.
+
+    For a qty=2 item purchased by "Victor Arias" with partner_request
+    "Victor Arias III":
+      - Row 0: Victor Arias (buyer), qty=1
+      - Row 1: Victor Arias III (partner), qty=1
+
+    For qty=3 with one partner name:
+      - Row 0: buyer, Row 1: named partner, Row 2: "Guest of <buyer>"
+
+    If no partner name is available, extra rows use "Guest of <buyer>".
+    """
+    expanded = []
+    for row in rows:
+        qty = row.get("quantity") or 1
+        if qty <= 1:
+            expanded.append(row)
+            continue
+
+        buyer = row.get("customer") or "Unknown"
+        partner_name = (row.get("partner_request") or "").strip()
+
+        # Buyer's own row — always first, quantity set to 1
+        buyer_row = dict(row, quantity=1)
+        expanded.append(buyer_row)
+
+        # Additional rows for qty - 1 extra units
+        for extra_i in range(1, qty):
+            extra_row = dict(row, quantity=1)
+            if extra_i == 1 and partner_name:
+                # First extra unit goes to the named partner
+                extra_row["customer"] = _normalize_customer_name(partner_name)
+                extra_row["partner_request"] = None
+                extra_row["notes"] = f"Purchased by {buyer}"
+            else:
+                # No partner name available — use placeholder
+                extra_row["customer"] = f"Guest of {buyer}"
+                extra_row["notes"] = f"Purchased by {buyer}"
+            # Clear buyer-specific fields for the partner
+            extra_row["customer_email"] = None
+            extra_row["customer_phone"] = None
+            extra_row["address"] = None
+            extra_row["address2"] = None
+            extra_row["city"] = None
+            extra_row["state"] = None
+            extra_row["zip"] = None
+            expanded.append(extra_row)
+
+    # Re-assign sequential item_index values
+    for i, r in enumerate(expanded):
+        r["item_index"] = i
+
+    return expanded
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -543,6 +610,9 @@ def parse_email(email_data: dict) -> list[dict]:
             "subject": subject,
             "from_addr": from_addr,
         })
+
+    # Expand any items with quantity > 1 into separate per-player rows
+    rows = _expand_quantity_rows(rows)
 
     return rows
 
