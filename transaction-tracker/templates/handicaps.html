@@ -1417,6 +1417,7 @@
     let _selectedCustomer = '';
 
     function openLinkModal(playerName) {
+        alert('DEBUG: openLinkModal called for ' + playerName);
         _linkPlayerName = playerName;
         _selectedCustomer = '';
         document.getElementById('link-modal-player-name').textContent = playerName;
