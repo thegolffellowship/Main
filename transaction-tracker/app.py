@@ -3072,6 +3072,64 @@ def api_handicap_auto_link():
     return jsonify(result)
 
 
+@app.route("/api/handicaps/link-player", methods=["POST"])
+@require_role("manager")
+def api_handicap_link_player():
+    """Link a single handicap player to a customer name."""
+    data = request.get_json(force=True)
+    player_name = (data.get("player_name") or "").strip()
+    customer_name = (data.get("customer_name") or "").strip()
+    if not player_name:
+        return jsonify({"error": "player_name required"}), 400
+    if not customer_name:
+        return jsonify({"error": "customer_name required"}), 400
+
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE handicap_player_links SET customer_name = ? WHERE player_name = ?",
+            (customer_name, player_name),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"status": "ok", "player_name": player_name, "customer_name": customer_name})
+
+
+@app.route("/api/handicaps/unlink-player", methods=["POST"])
+@require_role("manager")
+def api_handicap_unlink_player():
+    """Unlink a handicap player from their customer."""
+    data = request.get_json(force=True)
+    player_name = (data.get("player_name") or "").strip()
+    if not player_name:
+        return jsonify({"error": "player_name required"}), 400
+
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE handicap_player_links SET customer_name = NULL WHERE player_name = ?",
+            (player_name,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"status": "ok", "player_name": player_name})
+
+
+@app.route("/api/customers/names")
+def api_customer_names():
+    """Return a sorted list of unique customer names for autocomplete/linking."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT customer FROM items WHERE customer IS NOT NULL AND TRIM(customer) != '' ORDER BY customer COLLATE NOCASE"
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify([r["customer"] for r in rows])
+
+
 @app.route("/api/handicaps/link-debug")
 @require_role("admin")
 def api_handicap_link_debug():
