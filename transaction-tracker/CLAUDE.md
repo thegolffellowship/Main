@@ -175,6 +175,39 @@ Two visual separator rows appear in the expanded rounds table:
 - **Scheduler** checks inbox every 15 minutes via APScheduler
 - **Dashboard** at `/` with search, filter, sort, CSV export
 
+## Events Page — Player Status Architecture
+
+### Transaction statuses
+- `active` — normal registration, shown in main table
+- `rsvp_only` — RSVP without payment, shown in main table (yellow background)
+- `gg_rsvp` — Golf Genius RSVP, shown in main table (yellow background)
+- `credited` — payment credited back, shown in **Inactive** section below table
+- `refunded` — payment refunded, shown in **Inactive** section below table
+- `transferred` — transferred to another player, shown in **Inactive** section below table
+- `wd` — withdrawn, shown in **Inactive** section below table
+
+### Event detail view sections (top to bottom)
+1. **Toggle bar** — PLAYERS | PAIRINGS | GAMES + 9|18 holes filter + NET | GROSS | NONE
+2. **Registrations table** — only active/rsvp players (compact rows)
+3. **Inactive section** — credited/refunded/transferred/WD players in a gray box with Reverse buttons
+4. **Not Playing section** — GG RSVP players marked as not playing (red box)
+5. **Message History** — collapsible section
+
+### Columns in registrations table
+Order: RSVP circle → Order Date → Customer → Handicap → Holes → Side Games → Tee → Status → Price → Actions
+
+### Holes field
+- Parsed from emails: "9 or 18 HOLES?" field → stored as `holes` TEXT column
+- Shown as column in both Transactions and Events tables
+- Mobile collapsed view: amber badge showing "9h" or "18h" (first of three badges: Holes, Games, Tees)
+- 9|18 toggle filter in Events: filters registrants by hole count
+- Can be backfilled via `/api/audit/re-extract-fields`
+
+### Game stats computation (`computeGameStats`)
+- Excludes credited/refunded/transferred players from counts
+- WD players: complex logic based on which game components were credited
+- RSVP-only players: counted in PLAYERS total but as NONE (no games)
+
 ## Key files
 
 - `app.py` — routes, scheduler, webhook
