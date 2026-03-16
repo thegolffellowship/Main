@@ -1017,6 +1017,7 @@
     let allRsvps = {};  // keyed by event_name → array of rsvp objects
     let allRsvpOverrides = {};  // keyed by event_name → {item_id: status}
     let allRsvpEmailOverrides = {};  // keyed by event_name → {email: status}
+    let handicapIndexMap = {};  // keyed by lowercase customer_name → handicap_index
     let expandedEventId = null;
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
@@ -1157,6 +1158,15 @@
             allRsvpEmailOverrides = data.email_overrides || {};
         } catch (err) {
             console.error("Failed to bulk-fetch RSVPs:", err);
+        }
+    }
+
+    async function fetchHandicapIndexMap() {
+        try {
+            const res = await fetch("/api/handicaps/index-map");
+            handicapIndexMap = await res.json();
+        } catch (err) {
+            console.error("Failed to fetch handicap index map:", err);
         }
     }
 
@@ -1337,7 +1347,7 @@
             const fields = [
                 ["Order Date", r.order_date || "\u2014"],
                 ["Price", r.item_price || "\u2014"],
-                ["Handicap", r.handicap || "\u2014"],
+                ["HCP", (() => { const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined; return lh !== undefined ? String(lh) : (r.handicap || "\u2014"); })()],
                 ["Holes", r.holes || "\u2014"],
                 ["Status", _cleanStatus(r.user_status)],
                 ["Partner Request", r.partner_request || "\u2014"],
@@ -2239,6 +2249,11 @@
                     html += `<td style="${style}">${btns}</td>`;
                 } else if (c.key === "user_status") {
                     html += `<td style="${style}">${escapeHtml(_cleanStatus(r.user_status))}</td>`;
+                } else if (c.key === "handicap") {
+                    // Show live handicap index from the handicap system, fall back to item field
+                    const liveHcp = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    const hcpVal = liveHcp !== undefined ? String(liveHcp) : (r.handicap || "");
+                    html += `<td style="${style}">${escapeHtml(hcpVal || "\u2014")}</td>`;
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
                 }
@@ -5016,8 +5031,8 @@
             }
         });
 
-        // Fetch items first (for registrant details), then sync events and fetch
-        await fetchItems();
+        // Fetch items and handicap data first, then sync events and fetch
+        await Promise.all([fetchItems(), fetchHandicapIndexMap()]);
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
         fetchOrphanedItems();
 
@@ -5033,7 +5048,7 @@
                     return el && el.style.display === "flex";
                 });
                 if (!anyModalOpen) {
-                    await fetchItems();
+                    await Promise.all([fetchItems(), fetchHandicapIndexMap()]);
                     await fetchEvents();
                     fetchOrphanedItems();
                 }
