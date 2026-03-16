@@ -2774,7 +2774,11 @@ def api_handicap_index_map():
     for p in players:
         cname = p.get("customer_name")
         if cname and p.get("handicap_index") is not None:
-            index_map[cname.lower()] = p["handicap_index"]
+            idx9 = p["handicap_index"]
+            index_map[cname.lower()] = {
+                "index_9": idx9,
+                "index_18": round(idx9 * 2, 1),
+            }
     return jsonify(index_map)
 
 

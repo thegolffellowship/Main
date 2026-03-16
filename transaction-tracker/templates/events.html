@@ -1024,7 +1024,7 @@
     let allRsvps = {};  // keyed by event_name → array of rsvp objects
     let allRsvpOverrides = {};  // keyed by event_name → {item_id: status}
     let allRsvpEmailOverrides = {};  // keyed by event_name → {email: status}
-    let handicapIndexMap = {};  // keyed by lowercase customer_name → handicap_index
+    let handicapIndexMap = {};  // keyed by lowercase customer_name → {index_9, index_18}
     let expandedEventId = null;
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
@@ -1354,7 +1354,7 @@
             const fields = [
                 ["Order Date", r.order_date || "\u2014"],
                 ["Price", r.item_price || "\u2014"],
-                ["HCP", (() => { const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined; return lh !== undefined ? String(lh) : (r.handicap || "\u2014"); })()],
+                ["HCP", (() => { const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined; return lh !== undefined ? lh.index_9.toFixed(1) + 'N / ' + lh.index_18.toFixed(1) : (r.handicap || "\u2014"); })()],
                 ["Holes", r.holes || "\u2014"],
                 ["Status", _cleanStatus(r.user_status)],
                 ["Partner Request", r.partner_request || "\u2014"],
@@ -2259,8 +2259,11 @@
                 } else if (c.key === "handicap") {
                     // Show live handicap index from the handicap system, fall back to item field
                     const liveHcp = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
-                    const hcpVal = liveHcp !== undefined ? String(liveHcp) : (r.handicap || "");
-                    html += `<td style="${style}">${escapeHtml(hcpVal || "\u2014")}</td>`;
+                    if (liveHcp !== undefined) {
+                        html += `<td style="${style}"><span style="font-weight:600;">${liveHcp.index_9.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:2px;font-weight:500;">N</span><span style="font-size:0.88em;color:#64748b;"> / ${liveHcp.index_18.toFixed(1)}</span></td>`;
+                    } else {
+                        html += `<td style="${style}">${escapeHtml(r.handicap || "\u2014")}</td>`;
+                    }
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
                 }

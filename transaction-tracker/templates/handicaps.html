@@ -290,13 +290,13 @@
                         <tr>
                             <th style="width:28px;"></th>
                             <th class="sortable-th" data-sort="name">Player <span class="sort-arrow"></span></th>
-                            <th class="sortable-th" data-sort="index">Handicap Index <span class="sort-arrow"></span></th>
-                            <th class="sortable-th" data-sort="active">Active Rounds <span class="sort-arrow"></span></th>
-                            <th class="sortable-th" data-sort="total">Total Rounds <span class="sort-arrow"></span></th>
-                            <th class="sortable-th" data-sort="latest">Latest Round <span class="sort-arrow"></span></th>
-                            <th class="sortable-th" data-sort="best">Best Diff <span class="sort-arrow"></span></th>
-                            <th class="sortable-th" data-sort="avg">Avg Diff <span class="sort-arrow"></span></th>
-                            <th></th>
+                            <th class="sortable-th" data-sort="index">HCP <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="active">Active <span class="sort-arrow"></span> <span class="hcp-info-btn" title="Scores from last 12 months" style="cursor:help;font-size:0.7em;vertical-align:middle;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1.5px solid #94a3b8;color:#94a3b8;font-weight:600;margin-left:2px;">i</span></th>
+                            <th class="sortable-th" data-sort="total">Total <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="latest">Latest <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="best">Best <span class="sort-arrow"></span></th>
+                            <th class="sortable-th" data-sort="avg">Avg <span class="sort-arrow"></span></th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="hcp-tbody">
@@ -667,8 +667,9 @@
         tbody.innerHTML = '';
         for (const p of players) {
             const isExpanded = expandedRows.has(p.player_name);
+            const idx18 = p.handicap_index_18;
             const indexCell = p.handicap_index !== null
-                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span> ${indexTag(p.handicap_index)}<button class="hcp-info-btn" onclick="showCalcModal(event,${esc(JSON.stringify(p.player_name))})" title="Show calculation">i</button>`
+                ? `<span class="hcp-index">${p.handicap_index.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:3px;font-weight:500;">N</span><span style="font-size:0.82em;color:#64748b;margin-left:2px;"> / ${idx18.toFixed(1)}</span> ${indexTag(p.handicap_index)}<button class="hcp-info-btn" onclick="showCalcModal(event,${esc(JSON.stringify(p.player_name))})" title="Show calculation">i</button>`
                 : '<span class="hcp-na">N/A</span>';
             const activeRounds = p.active_rounds ?? 0;
             const totalRounds  = p.total_rounds ?? 0;
@@ -763,7 +764,7 @@
                 players.forEach(p => {
                     const id = safeid(p.player_name);
                     const idxHtml = p.handicap_index !== null
-                        ? `<span class="hcp-mc-idx">${p.handicap_index.toFixed(1)}</span><span class="hcp-mc-n">N</span>`
+                        ? `<span class="hcp-mc-idx">${p.handicap_index.toFixed(1)}</span><span class="hcp-mc-n">N</span><span style="font-size:0.85rem;color:#64748b;margin-left:2px;"> / ${p.handicap_index_18.toFixed(1)}</span>`
                         : `<span class="hcp-mc-idx na">N/A</span>`;
                     const sub = [
                         (p.active_rounds ?? 0) + ' active',

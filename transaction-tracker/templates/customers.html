@@ -709,7 +709,8 @@
             meta.push("$" + c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0}));
             if (c.handicapIndex !== null) {
                 const hcpStr = c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1);
-                meta.push('HCP: ' + hcpStr + ' N');
+                const hcp18 = c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex * 2).toFixed(1) : (c.handicapIndex * 2).toFixed(1);
+                meta.push('HCP: ' + hcpStr + 'N / ' + hcp18);
             }
 
             return `
@@ -845,7 +846,7 @@
                 <td style="font-weight:600; font-variant-numeric:tabular-nums;">$${c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${c.email ? `<a href="mailto:${encodeURIComponent(c.email)}" class="cell-link" onclick="event.stopPropagation()">${escapeHtml(c.email)}</a>` : '\u2014'}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.phone || "\u2014")}</td>
-                <td style="font-size:0.78rem; font-weight:600; color:${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '#16a34a' : '#2563eb') : 'var(--text-muted)'};">${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1)) + ' N' : '\u2014'}</td>
+                <td style="font-size:0.78rem; font-weight:600; color:${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '#16a34a' : '#2563eb') : 'var(--text-muted)'};">${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1)) + '<span style="font-size:0.85em;color:#94a3b8;font-weight:500;margin-left:2px;">N</span><span style="font-size:0.9em;color:#64748b;font-weight:500;"> / ' + (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex * 2).toFixed(1) : (c.handicapIndex * 2).toFixed(1)) + '</span>' : '\u2014'}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
             </tr>
             <tr class="cust-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${escapeHtml(c.name)}">
@@ -1157,8 +1158,9 @@
             <div class="cust-scores-container" data-customer-name="${escapeHtml(customer.name)}">
                 ${customer.handicapIndex !== null
                     ? `<div style="margin-bottom:0.75rem; display:flex; align-items:baseline; gap:0.5rem;">
-                        <span style="font-size:1.5rem; font-weight:700; color:${customer.handicapIndex < 0 ? '#16a34a' : '#2563eb'};">${customer.handicapIndex < 0 ? '+' + Math.abs(customer.handicapIndex).toFixed(1) : customer.handicapIndex.toFixed(1)}</span>
-                        <span style="font-size:0.82rem; color:var(--text-muted);">N (9-hole index)</span>
+                        <span style="font-size:1.5rem; font-weight:700; color:${customer.handicapIndex < 0 ? '#16a34a' : '#2563eb'};">${customer.handicapIndex < 0 ? '+' + Math.abs(customer.handicapIndex).toFixed(1) : customer.handicapIndex.toFixed(1)}</span><span style="font-size:0.9rem; color:#94a3b8; font-weight:500;">N</span>
+                        <span style="font-size:1.1rem; color:#64748b;"> / ${customer.handicapIndex < 0 ? '+' + Math.abs(customer.handicapIndex * 2).toFixed(1) : (customer.handicapIndex * 2).toFixed(1)}</span>
+                        <span style="font-size:0.82rem; color:var(--text-muted);">(9-hole / 18-hole)</span>
                       </div>`
                     : '<div style="margin-bottom:0.75rem; font-size:0.82rem; color:var(--text-muted);">No handicap data linked</div>'}
                 <div class="cust-scores-table-wrapper" style="font-size:0.78rem;">
