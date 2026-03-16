@@ -2982,6 +2982,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                         handicap: str = "", user_status: str = "",
                         payment_amount: str = "", payment_source: str = "",
                         customer_email: str = "", customer_phone: str = "",
+                        holes: str = "",
                         db_path: str | Path | None = None) -> dict | None:
     """
     Add a player to an event.
@@ -3021,6 +3022,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         if mode == "comp":
             new_values["merchant"] = "Manual Entry"
             new_values["item_price"] = "$0.00 (comp)"
+            new_values["holes"] = holes or None
             new_values["side_games"] = side_games or None
             new_values["tee_choice"] = tee_choice or None
             new_values["handicap"] = handicap or None
@@ -3033,6 +3035,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
             source_label = payment_source or "External"
             new_values["merchant"] = f"Paid Separately ({source_label})"
             new_values["item_price"] = payment_amount or "$0.00"
+            new_values["holes"] = holes or None
             new_values["side_games"] = side_games or None
             new_values["tee_choice"] = tee_choice or None
             new_values["handicap"] = handicap or None
