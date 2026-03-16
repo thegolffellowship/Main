@@ -354,7 +354,7 @@
     </div>
 
     <!-- ── Link Player Modal ─────────────────────────────────── -->
-    <div id="modal-link-player" class="modal-overlay" style="display:none;">
+    <div id="modal-link-player" class="modal-overlay" style="display:none;z-index:2000;">
         <div class="modal" style="max-width:480px;">
             <div class="modal-header">
                 <h2 id="link-modal-title">Link Player to Customer</h2>
@@ -1388,26 +1388,35 @@
     let _allCustomerNames = [];
     let _selectedCustomer = '';
 
-    async function openLinkModal(playerName) {
+    function openLinkModal(playerName) {
         _linkPlayerName = playerName;
         _selectedCustomer = '';
         document.getElementById('link-modal-player-name').textContent = playerName;
         document.getElementById('link-search-input').value = '';
         document.getElementById('link-error').style.display = 'none';
         document.getElementById('btn-confirm-link').disabled = true;
-        document.getElementById('modal-link-player').style.display = 'flex';
 
-        // Fetch customer names if not loaded
+        const modal = document.getElementById('modal-link-player');
+        modal.style.display = 'flex';
+
+        // Fetch customer names then render
         if (!_allCustomerNames.length) {
-            try {
-                const res = await fetch('/api/customers/names');
-                _allCustomerNames = await res.json();
-            } catch (e) {
-                _allCustomerNames = [];
-            }
+            const list = document.getElementById('link-customer-list');
+            list.innerHTML = '<div style="padding:12px;color:#94a3b8;">Loading customers...</div>';
+            fetch('/api/customers/names')
+                .then(r => r.json())
+                .then(names => {
+                    _allCustomerNames = names;
+                    filterLinkCustomers();
+                    document.getElementById('link-search-input').focus();
+                })
+                .catch(() => {
+                    list.innerHTML = '<div style="padding:12px;color:#ef4444;">Failed to load customers.</div>';
+                });
+        } else {
+            filterLinkCustomers();
+            document.getElementById('link-search-input').focus();
         }
-        filterLinkCustomers();
-        document.getElementById('link-search-input').focus();
     }
 
     function closeLinkModal() {
@@ -1415,6 +1424,11 @@
         _linkPlayerName = '';
         _selectedCustomer = '';
     }
+
+    // Close modal on outside click
+    document.getElementById('modal-link-player').addEventListener('click', function(e) {
+        if (e.target === this) closeLinkModal();
+    });
 
     function filterLinkCustomers() {
         const q = (document.getElementById('link-search-input').value || '').toLowerCase();
