@@ -4653,6 +4653,7 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
             "player_name": name,
             "customer_name": row["customer_name"],
             "handicap_index": index,
+            "handicap_index_18": round(index * 2, 1) if index is not None else None,
             "total_rounds": row["total_rounds"],
             "active_rounds": row["active_rounds"],
             "latest_round_date": row["latest_round_date"],
