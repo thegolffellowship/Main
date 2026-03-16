@@ -564,6 +564,13 @@
 
                 <!-- Golf details: shown for comp and paid_separately, hidden for rsvp -->
                 <div id="ap-golf-details" class="edit-grid">
+                    <label><span>Holes <span style="color:#e11d48;">*</span></span>
+                        <select id="add-player-holes" class="modal-input">
+                            <option value="">Select…</option>
+                            <option value="9">9</option>
+                            <option value="18">18</option>
+                        </select>
+                    </label>
                     <label><span>Side Games <span style="color:#e11d48;">*</span></span>
                         <select id="add-player-side-games" class="modal-input">
                             <option value="">Select…</option>
@@ -3682,6 +3689,7 @@
         // Clear all fields
         document.getElementById("add-player-manager").value = "";
         document.getElementById("add-player-name").value = "";
+        document.getElementById("add-player-holes").value = "";
         document.getElementById("add-player-side-games").value = "";
         document.getElementById("add-player-tee").value = "";
         document.getElementById("add-player-handicap").value = "";
@@ -3730,6 +3738,8 @@
         };
 
         if (mode !== "rsvp") {
+            payload.holes = document.getElementById("add-player-holes").value;
+            if (!payload.holes) missing.push("Holes");
             payload.side_games = document.getElementById("add-player-side-games").value;
             if (!payload.side_games) missing.push("Side Games");
             payload.tee_choice = document.getElementById("add-player-tee").value;
