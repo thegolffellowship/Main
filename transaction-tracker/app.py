@@ -1260,6 +1260,114 @@ def api_retry_failed():
     })
 
 
+@app.route("/api/audit/expand-quantities", methods=["POST"])
+@require_role("admin")
+def api_expand_quantities():
+    """Find items with quantity > 1 and create missing partner rows.
+
+    For each item with qty > 1, checks if partner rows already exist
+    (same email_uid, consecutive item_index). If not, creates them using
+    the partner_request name or 'Guest of <buyer>'.
+
+    This is a one-time backfill for orders placed before quantity expansion
+    was added to the parser.
+    """
+    from email_parser.parser import _normalize_customer_name
+
+    conn = get_connection()
+    try:
+        # Find items with quantity > 1
+        qty_items = conn.execute(
+            "SELECT * FROM items WHERE quantity > 1 ORDER BY id"
+        ).fetchall()
+
+        created = 0
+        skipped = 0
+        details = []
+
+        for item in qty_items:
+            item = dict(item)
+            qty = item["quantity"]
+            email_uid = item["email_uid"]
+            base_index = item["item_index"]
+            buyer = item["customer"] or "Unknown"
+
+            # Check how many rows already exist for this email_uid
+            existing = conn.execute(
+                "SELECT item_index FROM items WHERE email_uid = ? ORDER BY item_index",
+                (email_uid,),
+            ).fetchall()
+            existing_indices = {r["item_index"] for r in existing}
+
+            # Find the next available item_index
+            max_idx = max(existing_indices) if existing_indices else -1
+
+            partner_name = (item.get("partner_request") or "").strip()
+
+            for extra_i in range(1, qty):
+                new_idx = max_idx + extra_i
+                if new_idx in existing_indices:
+                    skipped += 1
+                    continue
+
+                # Build the partner row from the original
+                partner_row = dict(item)
+                partner_row["item_index"] = new_idx
+                partner_row["quantity"] = 1
+                partner_row["customer_email"] = None
+                partner_row["customer_phone"] = None
+                partner_row["address"] = None
+                partner_row["address2"] = None
+                partner_row["city"] = None
+                partner_row["state"] = None
+                partner_row["zip"] = None
+                # Remove DB-generated fields
+                partner_row.pop("id", None)
+                partner_row.pop("created_at", None)
+
+                if extra_i == 1 and partner_name:
+                    partner_row["customer"] = _normalize_customer_name(partner_name)
+                    partner_row["partner_request"] = None
+                    partner_row["notes"] = f"Purchased by {buyer}"
+                else:
+                    partner_row["customer"] = f"Guest of {buyer}"
+                    partner_row["notes"] = f"Purchased by {buyer}"
+
+                # Insert the partner row
+                cols = [c for c in partner_row.keys() if c not in ("id", "created_at")]
+                placeholders = ", ".join("?" for _ in cols)
+                col_names = ", ".join(cols)
+                values = tuple(partner_row.get(c) for c in cols)
+
+                try:
+                    conn.execute(
+                        f"INSERT OR IGNORE INTO items ({col_names}) VALUES ({placeholders})",
+                        values,
+                    )
+                    created += 1
+                    details.append(f"{buyer} → {partner_row['customer']} ({item['item_name']})")
+                except Exception as e:
+                    logger.warning("Failed to create partner row: %s", e)
+                    skipped += 1
+
+            # Update original row quantity to 1
+            conn.execute(
+                "UPDATE items SET quantity = 1 WHERE id = ?", (item["id"],)
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify({
+        "status": "ok",
+        "found_qty_items": len(qty_items),
+        "created": created,
+        "skipped": skipped,
+        "details": details,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Routes — Events
 # ---------------------------------------------------------------------------
