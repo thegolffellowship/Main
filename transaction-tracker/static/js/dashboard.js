@@ -913,6 +913,32 @@ async function sendReport() {
     }
 }
 
+async function expandQuantities() {
+    const btn = document.getElementById("btn-expand-qty");
+    if (!confirm("This will split any x2/x3 purchases into separate player entries. Continue?")) return;
+    btn.disabled = true;
+    btn.textContent = "Expanding...";
+
+    try {
+        const res = await fetch("/api/audit/expand-quantities", { method: "POST" });
+        const data = await res.json();
+        if (data.error) {
+            alert("Error: " + data.error);
+        } else if (data.created === 0) {
+            alert("No quantity purchases found to expand.");
+        } else {
+            alert(`Done! Created ${data.created} new player entries:\n\n${data.details.join("\n")}`);
+            loadData();
+        }
+    } catch (err) {
+        console.error("Expand quantities failed:", err);
+        alert("Failed to expand quantities.");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Expand Qty Purchases";
+    }
+}
+
 function exportCSV() {
     if (!allItems.length) {
         alert("No items to export.");
@@ -1291,6 +1317,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
     document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);
     document.getElementById("btn-send-report").addEventListener("click", sendReport);
+    document.getElementById("btn-expand-qty").addEventListener("click", expandQuantities);
 
     // Edit modal
     document.getElementById("edit-form").addEventListener("submit", handleEditSubmit);
