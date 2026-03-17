@@ -1309,12 +1309,13 @@
 
     function getRegistrants(eventName) {
         // Find the event's aliases so items with old/variant names are included
+        // Use case-insensitive matching (item_name may differ in case from event name)
         const ev = allEvents.find(e => e.item_name === eventName);
-        const names = new Set([eventName]);
+        const names = new Set([eventName.toLowerCase()]);
         if (ev && ev.aliases) {
-            ev.aliases.forEach(a => names.add(a));
+            ev.aliases.forEach(a => names.add(a.toLowerCase()));
         }
-        return allItems.filter(item => names.has(item.item_name)
+        return allItems.filter(item => names.has((item.item_name || "").toLowerCase())
             && ['active', 'rsvp_only', 'wd', 'credited', 'refunded', 'transferred'].includes(item.transaction_status || 'active'));
     }
 

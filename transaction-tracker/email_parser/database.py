@@ -1491,11 +1491,21 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
             if name.lower() in alias_set:
                 skipped_aliased += 1
                 continue
-            # Case-insensitive duplicate check
+            # Case-insensitive duplicate check — auto-create alias when case differs
             existing = conn.execute(
-                "SELECT id FROM events WHERE LOWER(item_name) = LOWER(?)", (name,)
+                "SELECT id, item_name FROM events WHERE LOWER(item_name) = LOWER(?)", (name,)
             ).fetchone()
             if existing:
+                # If item_name differs only in case, register it as an alias
+                if existing["item_name"] != name:
+                    try:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) VALUES (?, ?)",
+                            (name, existing["item_name"]),
+                        )
+                        alias_set.add(name.lower())
+                    except Exception:
+                        pass
                 continue
             try:
                 conn.execute(
