@@ -2186,6 +2186,11 @@
         let html = '<div class="games-panel">';
         html += `<div class="games-panel-header">${holes}-HOLE GAMES &mdash; ${totalPC} Total, ${netPC} Net, ${grossPC} Gross</div>`;
 
+        // Hole-in-One pot — standalone display above the games table, not included in event totals
+        if (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
+            html += `<div class="hole-in-one-banner">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)}</div>`;
+        }
+
         html += '<table class="games-table">';
         html += '<colgroup><col class="gc-game"><col class="gc-fund"><col class="gc-mwp"><col class="gc-flights"><col class="gc-1st"><col class="gc-2nd"><col class="gc-3rd"><col class="gc-4th"></colgroup>';
         html += '<thead><tr><th>Game</th><th>Pot</th><th>MWP</th><th>Flights</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th></tr></thead>';
@@ -2212,11 +2217,10 @@
                 }
             });
 
-            if (gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
-                inclMWP += numVal(gEvent.holeInOne);
-                html += `<tr><td>Hole-in-One</td><td>${fmt$(gEvent.holeInOne)}</td><td>${fmt$(gEvent.holeInOne)}</td><td></td>${empty4}</tr>`;
-            }
-            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gEvent.eventTotalPot) || "—"}</td><td>${fmt$(inclMWP)}</td><td></td>${empty4}</tr>`;
+            // Subtract hole-in-one from eventTotalPot since it's displayed separately
+            const hioVal = (gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") ? numVal(gEvent.holeInOne) : 0;
+            const inclPot = numVal(gEvent.eventTotalPot) - hioVal;
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(inclPot) || "—"}</td><td>${fmt$(inclMWP)}</td><td></td>${empty4}</tr>`;
         } else {
             html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough players (${totalPC})</td></tr>`;
         }
@@ -2281,7 +2285,7 @@
             const skinsLabel = grossPC < 8 ? "1/2 Net Skins" : "Skins Gross";
             if (gGross.skinsTotal && gGross.skinsTotal !== "NO_EVENT" && gGross.skinsTotal !== "NO_GAME") {
                 const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
-                const skinsMwpVal = numVal(gGross.skinsTotal);
+                const skinsMwpVal = numVal(gGross.skinsTotal) / skinsFlights;
                 grossMWP += skinsMwpVal;
                 html += `<tr><td><strong>${skinsLabel}</strong></td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
                 if (gGross.skins && gGross.skins.length) {
@@ -2312,7 +2316,8 @@
         html += '</tbody>';
 
         // Grand total row inside the table, aligned under Pot and MWP columns
-        const eventTotal = (gEvent && totalPC >= 4) ? (Number(gEvent.eventTotalPot) || 0) : 0;
+        const hioExclude = (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") ? numVal(gEvent.holeInOne) : 0;
+        const eventTotal = (gEvent && totalPC >= 4) ? ((Number(gEvent.eventTotalPot) || 0) - hioExclude) : 0;
         const netTotal = (gNet && netPC >= 2) ? (Number(gNet.netTotalPot) || 0) : 0;
         const grossTotal = (gGross && grossPC >= 2) ? (Number(gGross.grossTotalPot) || 0) : 0;
         const totalMWP = inclMWP + netMWP + grossMWP;
@@ -4009,8 +4014,10 @@
         const gNet = matrix[String(netPC)];
         const gGross = matrix[String(grossPC)];
 
+        // Exclude hole-in-one from included games calculation
+        const wdHio = (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") ? Number(gEvent.holeInOne) || 0 : 0;
         const includedGames = (gEvent && totalPC > 0)
-            ? Math.round(gEvent.eventTotalPot / totalPC * 100) / 100 : 0;
+            ? Math.round((gEvent.eventTotalPot - wdHio) / totalPC * 100) / 100 : 0;
 
         const gameType = classifyGameType(item.side_games);
         let netGames = 0, grossGames = 0;
