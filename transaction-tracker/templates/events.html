@@ -1679,18 +1679,35 @@
             // Also exclude RSVPs that have been overridden to not_playing via email override
             const mRsvps = allRsvps[ev.item_name] || [];
             const mEmailOvr = allRsvpEmailOverrides[ev.item_name] || {};
-            const mRegEmails = new Set(registrants.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
-            const mRegNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+            const MOBILE_INACTIVE_DEDUP = ["credited", "refunded", "transferred", "wd"];
+            const mActiveRegs = registrants.filter(r => !MOBILE_INACTIVE_DEDUP.includes(r.transaction_status));
+            const mRegEmails = new Set(mActiveRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+            const mRegNames = new Set(mActiveRegs.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+            const mInactiveRegs = registrants.filter(r => MOBILE_INACTIVE_DEDUP.includes(r.transaction_status));
+            const mInactiveEmails = new Set(mInactiveRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+            const mActiveItemIds = new Set(mActiveRegs.map(r => r.id));
+            const mItemEmailMap = {};
+            mActiveRegs.forEach(r => { if (r.id) mItemEmailMap[r.id] = (r.customer_email || "").toLowerCase(); });
             const mUnmatched = mRsvps.filter(r => {
                 if (r.response !== 'PLAYING') return false;
-                if (r.matched_item_id) return false;
+                if (r.matched_item_id && mActiveItemIds.has(r.matched_item_id)) {
+                    const rsvpEmail = (r.player_email || "").toLowerCase();
+                    const itemEmail = mItemEmailMap[r.matched_item_id] || "";
+                    if (rsvpEmail && itemEmail && rsvpEmail !== itemEmail) {
+                        // Mismatched email — incorrectly matched, treat as unmatched
+                    } else {
+                        return false;
+                    }
+                }
                 const email = (r.player_email || "").toLowerCase();
                 if (email && mEmailOvr[email] === "not_playing") return false;
                 if (email && mRegEmails.has(email)) return false;
+                if (email && mInactiveEmails.has(email)) return false;
                 const resolved = (r.resolved_name || "").toLowerCase();
                 const first = (r.player_name || "").toLowerCase();
                 if (resolved && mRegNames.has(resolved)) return false;
-                if (first && [...mRegNames].some(n => n.startsWith(first))) return false;
+                // Only use first-name heuristic when we don't have a resolved full name
+                if (!resolved && first && [...mRegNames].some(n => n.startsWith(first))) return false;
                 return true;
             });
             const mGgRows = mUnmatched.map((r, i) => ({
@@ -1806,6 +1823,7 @@
                         <button class="btn btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#059669; color:#fff; border:none; border-radius:6px; cursor:pointer;">+ Add Payment</button>
                         ${mRsvpOnlyCount > 0 ? `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Remind All (${mRsvpOnlyCount})</button>` : ''}
                         <button class="btn btn-message-players" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;">Message Players</button>
+                        <button class="btn btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#6366f1; color:#fff; border:none; border-radius:6px; cursor:pointer;">Audit RSVPs</button>
                         <button class="btn btn-edit btn-mobile-edit-event" data-edit-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Edit</button>
                         ${currentRole === "admin" ? `<button class="btn btn-edit btn-mobile-merge-event" data-merge-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Merge</button>` : ''}
                         ${currentRole === "admin" ? `<button class="btn btn-danger btn-mobile-delete-event" data-delete-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Delete</button>` : ''}
@@ -2021,14 +2039,30 @@
         const registrants = getRegistrants(ev.item_name);
         const rsvps = allRsvps[ev.item_name] || [];
         const emailOvr = allRsvpEmailOverrides[ev.item_name] || {};
-        const regEmails = new Set(registrants.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
-        const regNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const INACTIVE_STATUSES_TP = ["credited", "refunded", "transferred", "wd"];
+        const activeRegsTP = registrants.filter(r => !INACTIVE_STATUSES_TP.includes(r.transaction_status));
+        const inactiveRegsTP = registrants.filter(r => INACTIVE_STATUSES_TP.includes(r.transaction_status));
+        const regEmails = new Set(activeRegsTP.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+        const regNames = new Set(activeRegsTP.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const inactiveEmailsTP = new Set(inactiveRegsTP.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+        const activeItemIdsTP = new Set(activeRegsTP.map(r => r.id));
+        const itemEmailMapTP = {};
+        activeRegsTP.forEach(r => { if (r.id) itemEmailMapTP[r.id] = (r.customer_email || "").toLowerCase(); });
         const unmatchedPlaying = rsvps.filter(r => {
             if (r.response !== 'PLAYING') return false;
-            if (r.matched_item_id) return false;
+            if (r.matched_item_id && activeItemIdsTP.has(r.matched_item_id)) {
+                const rsvpEmail = (r.player_email || "").toLowerCase();
+                const itemEmail = itemEmailMapTP[r.matched_item_id] || "";
+                if (rsvpEmail && itemEmail && rsvpEmail !== itemEmail) {
+                    // Mismatched email — incorrectly matched, treat as unmatched
+                } else {
+                    return false;
+                }
+            }
             const email = (r.player_email || "").toLowerCase();
             if (email && emailOvr[email] === "not_playing") return false;
             if (email && regEmails.has(email)) return false;
+            if (email && inactiveEmailsTP.has(email)) return false;
             const resolved = (r.resolved_name || "").toLowerCase();
             const first = (r.player_name || "").toLowerCase();
             if (resolved && regNames.has(resolved)) return false;
@@ -2342,22 +2376,38 @@
         const playingRsvps = rsvps.filter(r => r.response === 'PLAYING');
         const notPlayingRsvps = rsvps.filter(r => r.response === 'NOT PLAYING');
         const matchedItemIds = new Set(rsvps.filter(r => r.matched_item_id).map(r => r.matched_item_id));
-        // Frontend dedup: also exclude GG RSVPs whose email or name matches an existing registrant
+        // Frontend dedup: exclude GG RSVPs whose email or name matches an existing registrant
         // Also exclude RSVPs that have been overridden to not_playing via email override
-        // Only dedup against ACTIVE registrants — inactive (credited/refunded/transferred/WD) players
-        // should not suppress an RSVP from appearing in the active player list.
         const dEmailOvr = allRsvpEmailOverrides[ev.item_name] || {};
         const INACTIVE_FOR_DEDUP = ["credited", "refunded", "transferred", "wd"];
         const activeRegs = registrants.filter(r => !INACTIVE_FOR_DEDUP.includes(r.transaction_status));
+        const inactiveRegs = registrants.filter(r => INACTIVE_FOR_DEDUP.includes(r.transaction_status));
         const regEmails = new Set(activeRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
         const regNames = new Set(activeRegs.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        // Also track inactive registrant emails — credited/transferred players should not
+        // reappear as synthetic GG RSVP rows (they're already in the Inactive section)
+        const inactiveEmails = new Set(inactiveRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
         const activeItemIds = new Set(activeRegs.map(r => r.id));
+        // Build a map of item_id → email for verifying RSVP matches
+        const itemEmailMap = {};
+        activeRegs.forEach(r => { if (r.id) itemEmailMap[r.id] = (r.customer_email || "").toLowerCase(); });
         const unmatchedPlaying = playingRsvps.filter(r => {
-            // If matched to an active item, the RSVP circle shows on that row — skip synthetic row
-            if (r.matched_item_id && activeItemIds.has(r.matched_item_id)) return false;
+            // If matched to an active item AND the email matches, the RSVP circle shows on that row
+            // If matched_item_id points to a different player (wrong match), treat as unmatched
+            if (r.matched_item_id && activeItemIds.has(r.matched_item_id)) {
+                const rsvpEmail = (r.player_email || "").toLowerCase();
+                const itemEmail = itemEmailMap[r.matched_item_id] || "";
+                if (rsvpEmail && itemEmail && rsvpEmail !== itemEmail) {
+                    // Mismatched email — this RSVP was incorrectly matched, treat as unmatched
+                } else {
+                    return false;
+                }
+            }
             const email = (r.player_email || "").toLowerCase();
             if (email && dEmailOvr[email] === "not_playing") return false;
             if (email && regEmails.has(email)) return false;
+            // Don't create synthetic rows for players already in the Inactive section
+            if (email && inactiveEmails.has(email)) return false;
             const resolved = (r.resolved_name || "").toLowerCase();
             const first = (r.player_name || "").toLowerCase();
             if (resolved && regNames.has(resolved)) return false;
@@ -2499,6 +2549,7 @@
             html += `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Send payment reminder to all ${rsvpOnlyCount} RSVP-only player(s)">Remind All (${rsvpOnlyCount})</button>`;
         }
         html += `<button class="btn btn-message-players" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Send email to event players">Message Players</button>`;
+        html += `<button class="btn btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#6366f1; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Audit and fix RSVP matches for this event">Audit RSVPs</button>`;
         html += '<div class="column-toggle-wrapper">';
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
@@ -3259,6 +3310,35 @@
             });
         });
 
+        // Audit RSVPs button
+        container.querySelectorAll(".btn-audit-rsvps").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const eventName = btn.dataset.eventName;
+                btn.disabled = true;
+                btn.textContent = "Auditing...";
+                try {
+                    const res = await fetch(`/api/rsvps/audit-event/${encodeURIComponent(eventName)}`, { method: "POST" });
+                    const data = await res.json();
+                    if (data.error) {
+                        alert("Audit error: " + data.error);
+                    } else {
+                        const msg = `Audit complete:\n- ${data.cleared} bad match(es) cleared\n- ${data.rematched} RSVP(s) rematched`;
+                        alert(msg);
+                        // Refresh RSVPs and re-render
+                        delete allRsvps[eventName];
+                        await getEventRsvps(eventName);
+                        render();
+                    }
+                } catch (err) {
+                    alert("Audit failed: " + err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = "Audit RSVPs";
+                }
+            });
+        });
+
         // Edit / Merge / Delete event buttons (mobile cards)
         container.querySelectorAll(".btn-mobile-edit-event").forEach(btn => {
             btn.addEventListener("click", (e) => { e.stopPropagation(); openEditEvent(parseInt(btn.dataset.editEvent)); });
@@ -3324,14 +3404,30 @@
         // Build GG RSVP synthetic rows (unmatched RSVPs with player_email)
         const rsvps = allRsvps[eventName] || [];
         const emailOvr = allRsvpEmailOverrides[eventName] || {};
-        const regEmails = new Set(registrants.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
-        const regNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const MSG_INACTIVE = ["credited", "refunded", "transferred", "wd"];
+        const msgActiveRegs = registrants.filter(r => !MSG_INACTIVE.includes(r.transaction_status));
+        const msgInactiveRegs = registrants.filter(r => MSG_INACTIVE.includes(r.transaction_status));
+        const regEmails = new Set(msgActiveRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+        const regNames = new Set(msgActiveRegs.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const msgInactiveEmails = new Set(msgInactiveRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+        const msgActiveIds = new Set(msgActiveRegs.map(r => r.id));
+        const msgItemEmailMap = {};
+        msgActiveRegs.forEach(r => { if (r.id) msgItemEmailMap[r.id] = (r.customer_email || "").toLowerCase(); });
         const unmatchedPlaying = rsvps.filter(r => {
             if (r.response !== 'PLAYING') return false;
-            if (r.matched_item_id) return false;
+            if (r.matched_item_id && msgActiveIds.has(r.matched_item_id)) {
+                const rsvpEmail = (r.player_email || "").toLowerCase();
+                const itemEmail = msgItemEmailMap[r.matched_item_id] || "";
+                if (rsvpEmail && itemEmail && rsvpEmail !== itemEmail) {
+                    // Mismatched email — incorrectly matched
+                } else {
+                    return false;
+                }
+            }
             const email = (r.player_email || "").toLowerCase();
             if (email && emailOvr[email] === "not_playing") return false;
             if (email && regEmails.has(email)) return false;
+            if (email && msgInactiveEmails.has(email)) return false;
             const resolved = (r.resolved_name || "").toLowerCase();
             const first = (r.player_name || "").toLowerCase();
             if (resolved && regNames.has(resolved)) return false;
