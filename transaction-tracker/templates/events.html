@@ -2344,11 +2344,17 @@
         const matchedItemIds = new Set(rsvps.filter(r => r.matched_item_id).map(r => r.matched_item_id));
         // Frontend dedup: also exclude GG RSVPs whose email or name matches an existing registrant
         // Also exclude RSVPs that have been overridden to not_playing via email override
+        // Only dedup against ACTIVE registrants — inactive (credited/refunded/transferred/WD) players
+        // should not suppress an RSVP from appearing in the active player list.
         const dEmailOvr = allRsvpEmailOverrides[ev.item_name] || {};
-        const regEmails = new Set(registrants.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
-        const regNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const INACTIVE_FOR_DEDUP = ["credited", "refunded", "transferred", "wd"];
+        const activeRegs = registrants.filter(r => !INACTIVE_FOR_DEDUP.includes(r.transaction_status));
+        const regEmails = new Set(activeRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+        const regNames = new Set(activeRegs.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const activeItemIds = new Set(activeRegs.map(r => r.id));
         const unmatchedPlaying = playingRsvps.filter(r => {
-            if (r.matched_item_id) return false;
+            // If matched to an active item, the RSVP circle shows on that row — skip synthetic row
+            if (r.matched_item_id && activeItemIds.has(r.matched_item_id)) return false;
             const email = (r.player_email || "").toLowerCase();
             if (email && dEmailOvr[email] === "not_playing") return false;
             if (email && regEmails.has(email)) return false;

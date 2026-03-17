@@ -499,7 +499,7 @@ footer {
     letter-spacing: 0.04em;
 }
 .registrants-table {
-    width: 100%;
+    width: auto;
     border-collapse: collapse;
     font-size: 0.82rem;
 }
