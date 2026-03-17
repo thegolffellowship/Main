@@ -2132,10 +2132,17 @@
     }
 
     function extractHolesType(eventName, format) {
+        // For 9/18 Combo events, use the event name prefix to determine hole count
+        // (e.g. "a9.1 Star Ranch" → 9, "s18.1 The Quarry" → 18)
+        if (format === "9/18 Combo") {
+            const m = (eventName || "").match(/^[a-z](\d+)\./i);
+            if (m) return parseInt(m[1]);
+            return 9; // default combo events to 9
+        }
         // Prefer the explicit format field on the event
         if (format) {
             if (format === "9 Holes") return 9;
-            if (format === "18 Holes" || format === "9/18 Combo") return 18;
+            if (format === "18 Holes") return 18;
         }
         // Fallback: legacy naming convention e.g. "e18.EventName"
         const m = (eventName || "").match(/^[a-z](\d+)\./i);
