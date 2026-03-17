@@ -3203,12 +3203,75 @@ def api_handicap_link_player():
             "INSERT INTO handicap_player_links (player_name, customer_name) VALUES (?, ?) "
             "ON CONFLICT(player_name) DO UPDATE SET customer_name = excluded.customer_name, "
             "linked_at = datetime('now')",
-            (customer_name, player_name),
+            (player_name, customer_name),
         )
         conn.commit()
     finally:
         conn.close()
     return jsonify({"status": "ok", "player_name": player_name, "customer_name": customer_name})
+
+
+@app.route("/api/handicaps/repair-swapped-links", methods=["POST"])
+@require_role("admin")
+def api_repair_swapped_links():
+    """Fix links where player_name and customer_name were swapped due to a bug.
+
+    Detection: if the stored player_name exists as a customer in items but NOT
+    in handicap_rounds, and the stored customer_name exists in handicap_rounds
+    but NOT as a customer in items — the link is backwards and needs swapping.
+    """
+    conn = get_connection()
+    try:
+        links = conn.execute(
+            "SELECT player_name, customer_name FROM handicap_player_links "
+            "WHERE customer_name IS NOT NULL"
+        ).fetchall()
+
+        # Build lookup sets
+        hcp_players = {r["player_name"].lower() for r in conn.execute(
+            "SELECT DISTINCT player_name FROM handicap_rounds"
+        ).fetchall()}
+        item_customers = {r["customer"].lower() for r in conn.execute(
+            "SELECT DISTINCT customer FROM items WHERE customer IS NOT NULL"
+        ).fetchall()}
+
+        swapped = []
+        for lnk in links:
+            pn = lnk["player_name"]
+            cn = lnk["customer_name"]
+            pn_l = pn.lower()
+            cn_l = cn.lower()
+
+            # If stored player_name looks like a customer (in items) but not a
+            # handicap player, AND stored customer_name looks like a handicap
+            # player but not a customer — they're swapped.
+            if (pn_l in item_customers and pn_l not in hcp_players and
+                    cn_l in hcp_players and cn_l not in item_customers):
+                swapped.append((pn, cn))
+
+        # Fix the swapped links
+        for old_pn, old_cn in swapped:
+            # Delete the wrong row, insert corrected one
+            conn.execute(
+                "DELETE FROM handicap_player_links WHERE player_name = ?",
+                (old_pn,),
+            )
+            conn.execute(
+                "INSERT INTO handicap_player_links (player_name, customer_name) "
+                "VALUES (?, ?) ON CONFLICT(player_name) DO UPDATE SET "
+                "customer_name = excluded.customer_name, linked_at = datetime('now')",
+                (old_cn, old_pn),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify({
+        "status": "ok",
+        "repaired": len(swapped),
+        "details": [f"{pn} ↔ {cn}" for pn, cn in swapped],
+    })
 
 
 @app.route("/api/handicaps/unlink-player", methods=["POST"])
