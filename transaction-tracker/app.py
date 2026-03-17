@@ -1766,6 +1766,15 @@ def api_create_event():
         tgf_markup=data.get("tgf_markup"),
         side_game_fee=data.get("side_game_fee"),
         transaction_fee_pct=data.get("transaction_fee_pct"),
+        course_cost_9=data.get("course_cost_9"),
+        course_cost_18=data.get("course_cost_18"),
+        tgf_markup_9=data.get("tgf_markup_9"),
+        tgf_markup_18=data.get("tgf_markup_18"),
+        side_game_fee_9=data.get("side_game_fee_9"),
+        side_game_fee_18=data.get("side_game_fee_18"),
+        tgf_markup_final=data.get("tgf_markup_final"),
+        tgf_markup_final_9=data.get("tgf_markup_final_9"),
+        tgf_markup_final_18=data.get("tgf_markup_final_18"),
     )
     if event:
         return jsonify({"status": "ok", "event": event}), 201
