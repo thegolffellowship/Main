@@ -4513,14 +4513,33 @@ def get_handicap_export_data(chapter: str | None = None,
                WHERE l.customer_name IS NOT NULL""",
         ).fetchall()
 
-    # Build a map: player_name → (email, chapter) from best linked record
+        # Also collect ALL chapters per customer for multi-chapter players
+        all_chapters = conn.execute(
+            """SELECT DISTINCT LOWER(l.customer_name) AS cname_lower,
+                      i.chapter
+               FROM handicap_player_links l
+               JOIN items i ON LOWER(i.customer) = LOWER(l.customer_name)
+               WHERE l.customer_name IS NOT NULL
+                 AND i.chapter IS NOT NULL AND TRIM(i.chapter) != ''""",
+        ).fetchall()
+
+    # Build set of chapters per customer name (lowercase)
+    customer_chapters: dict[str, set[str]] = {}
+    for row in all_chapters:
+        customer_chapters.setdefault(row["cname_lower"], set()).add(
+            row["chapter"].lower()
+        )
+
+    # Build a map: player_name → (email, chapter, all_chapters) from best linked record
     link_map: dict[str, dict] = {}
     for lnk in links:
         pname = lnk["player_name"]
         if pname not in link_map:
+            cname_lower = (lnk["customer_name"] or "").strip().lower()
             link_map[pname] = {
                 "email": (lnk["customer_email"] or "").strip().lower(),
                 "chapter": lnk["chapter"] or "",
+                "all_chapters": customer_chapters.get(cname_lower, set()),
             }
 
     # Check if ANY linked player has chapter data; if not, skip chapter filtering
@@ -4539,9 +4558,10 @@ def get_handicap_export_data(chapter: str | None = None,
                 no_email.append(pname)
             continue
 
-        # Chapter filter — only apply if chapter data actually exists in the DB
-        if chapter and has_chapter_data and info["chapter"].lower() != chapter.lower():
-            continue
+        # Chapter filter — include player if they have ANY transaction in the chapter
+        if chapter and has_chapter_data:
+            if chapter.lower() not in info["all_chapters"]:
+                continue
 
         if p["handicap_index"] is None:
             no_index.append(pname)
