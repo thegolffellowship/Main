@@ -4,9 +4,11 @@ Scans your email inbox for Golf Fellowship order emails, uses **Claude AI** to p
 
 ## What It Does
 
-- **AI-powered parsing** — sends each email to Claude, which extracts every field automatically. No brittle regex. If the store changes their email format, the AI adapts.
-- **Multi-item orders** — one email with 3 items becomes 3 separate rows, each with its own data.
-- **Dedicated columns** — Item Name, City, Course, Handicap, Side Games, Tee Choice, Member Status, Golf or Compete, etc. All filterable and sortable.
+- **AI-powered parsing** — sends each "New Order" email from mysimplestore.com to Claude, which extracts every field automatically. No brittle regex. If the store changes their email format, the AI adapts.
+- **Multi-item orders** — one email with 3 items becomes 3 separate rows, each with its own data. Quantity expansion splits x2 purchases into separate rows for buyer and partner.
+- **Dedicated columns** — Item Name, Chapter, Course, Handicap, Side Games, Tee Choice, User Status, Holes, etc. All filterable and sortable.
+- **Handicap management** — track and calculate 9-hole handicap indexes with Golf Genius sync.
+- **Admin database browser** — browse and inspect the full database from the web UI.
 - **Webhook connector** — external systems can push order data in via API.
 - **Daily email report** — automated summary of new transactions sent to you every morning.
 - **CSV export** — download everything as a spreadsheet at any time.
