@@ -207,6 +207,62 @@
         .parse-warning-item-name { font-weight: 600; color: #991b1b; }
         .parse-warning-item-meta { color: #6b7280; font-size: 0.78rem; }
         .parse-warning-item-actions { display: flex; gap: 0.3rem; }
+        /* Expandable player detail row */
+        .player-expand-row td {
+            padding: 0 !important;
+            border-bottom: none !important;
+        }
+        .player-expand-row.visible td {
+            border-bottom: 1px solid var(--border) !important;
+        }
+        .player-detail-panel {
+            display: none;
+            padding: 0.5rem 1rem 0.6rem 2.2rem;
+            background: #f8fafc;
+            border-top: 1px dashed #e2e8f0;
+        }
+        .player-expand-row.visible .player-detail-panel {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .player-detail-item {
+            font-size: 0.78rem;
+            line-height: 1.4;
+        }
+        .player-detail-label {
+            font-weight: 600;
+            color: #64748b;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            margin-bottom: 0.1rem;
+        }
+        .player-detail-value {
+            color: #1e293b;
+        }
+        .player-info-icon {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            line-height: 14px;
+            text-align: center;
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: #3b82f6;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 50%;
+            margin-left: 4px;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+        .registrants-table tbody tr.player-row-clickable {
+            cursor: pointer;
+        }
+        .registrants-table tbody tr.player-row-clickable:hover {
+            background: #f1f5f9;
+        }
         /* Mobile: hide events table column toggle */
         @media (max-width: 768px) {
             .column-toggle-wrapper { display: none; }
@@ -2491,12 +2547,15 @@
             const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (manual)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
             const isManualRow = (r.email_uid || "").startsWith("manual-");
             const isCompRow = (r.email_uid || "").startsWith("manual-comp");
-            let rowClass;
-            if (isRsvpOnly || isGgRsvp) rowClass = ' class="row-rsvp-only"';
-            else if (txStatus !== "active") rowClass = ` class="row-${txStatus}"`;
-            else if (r.transferred_from_id) rowClass = ' class="row-from-transfer"';
-            else rowClass = '';
-            html += `<tr${rowClass}>`;
+            const hasExtraInfo = !!(r.partner_request || r.fellowship || r.notes);
+            let rowClasses = [];
+            if (isRsvpOnly || isGgRsvp) rowClasses.push("row-rsvp-only");
+            else if (txStatus !== "active") rowClasses.push(`row-${txStatus}`);
+            else if (r.transferred_from_id) rowClasses.push("row-from-transfer");
+            if (hasExtraInfo) rowClasses.push("player-row-clickable");
+            const rowClass = rowClasses.length ? ` class="${rowClasses.join(' ')}"` : '';
+            html += `<tr${rowClass} ${hasExtraInfo ? `data-expand-player="${r.id}"` : ''}>`;
+
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
                 const rowBg = (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;' : isCompRow ? 'background-color:#dcfce7;' : isManualRow ? 'background-color:#dbeafe;' : '';
@@ -2515,7 +2574,8 @@
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
                     if (isCompRow || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
                     else if (isManualRow && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
-                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}</td>`;
+                    const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
+                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
@@ -2554,6 +2614,22 @@
                 }
             });
             html += '</tr>';
+            // Expandable detail row for notes/partner/fellowship
+            if (hasExtraInfo) {
+                const colCount = DETAIL_COLUMNS.filter(c => detailVisibleColumns[c.key] !== false).length;
+                html += `<tr class="player-expand-row" data-expand-for="${r.id}"><td colspan="${colCount + 1}" style="padding:0;">`;
+                html += '<div class="player-detail-panel">';
+                if (r.partner_request) {
+                    html += `<div class="player-detail-item"><div class="player-detail-label">Playing Partner</div><div class="player-detail-value">${escapeHtml(r.partner_request)}</div></div>`;
+                }
+                if (r.fellowship) {
+                    html += `<div class="player-detail-item"><div class="player-detail-label">Fellowship Request</div><div class="player-detail-value">${escapeHtml(r.fellowship)}</div></div>`;
+                }
+                if (r.notes) {
+                    html += `<div class="player-detail-item"><div class="player-detail-label">Notes</div><div class="player-detail-value">${escapeHtml(r.notes)}</div></div>`;
+                }
+                html += '</div></td></tr>';
+            }
             // Render child payment sub-rows for this parent
             const children = childPayments.filter(c => String(c.parent_item_id) === String(r.id));
             children.forEach(child => {
@@ -2754,6 +2830,28 @@
     }
 
     function attachDetailHandlers(container, ev) {
+        // Expandable player detail rows
+        container.querySelectorAll("tr[data-expand-player]").forEach(row => {
+            row.addEventListener("click", (e) => {
+                // Don't expand when clicking links, buttons, or RSVP circles
+                if (e.target.closest("a, button, .rsvp-circle, .rsvp-only-tag, .player-info-icon")) return;
+                const playerId = row.dataset.expandPlayer;
+                const detailRow = container.querySelector(`tr[data-expand-for="${playerId}"]`);
+                if (detailRow) detailRow.classList.toggle("visible");
+            });
+        });
+        // Info icon also toggles the detail row
+        container.querySelectorAll(".player-info-icon").forEach(icon => {
+            icon.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const row = icon.closest("tr[data-expand-player]");
+                if (!row) return;
+                const playerId = row.dataset.expandPlayer;
+                const detailRow = container.querySelector(`tr[data-expand-for="${playerId}"]`);
+                if (detailRow) detailRow.classList.toggle("visible");
+            });
+        });
+
         // PLAYERS / PAIRINGS / GAMES view toggle
         container.querySelectorAll("[data-toggle-games]").forEach(badge => {
             badge.addEventListener("click", (e) => {
