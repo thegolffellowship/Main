@@ -66,6 +66,7 @@ from email_parser.database import (
     get_all_rsvps_bulk,
     get_rsvp_stats,
     rematch_rsvps,
+    audit_event_rsvps,
     manual_match_rsvp,
     unmatch_rsvp,
     get_rsvp_overrides,
@@ -2594,6 +2595,21 @@ def api_rsvp_rematch():
         return jsonify({"status": "ok", **result})
     except Exception as e:
         logger.exception("RSVP rematch failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rsvps/audit-event/<path:event_name>", methods=["POST"])
+@require_role("manager")
+def api_audit_event_rsvps(event_name):
+    """Audit and fix RSVP matches for a specific event.
+
+    Clears bad matches (email mismatch) and re-attempts matching.
+    """
+    try:
+        result = audit_event_rsvps(event_name)
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.exception("RSVP audit failed for event: %s", event_name)
         return jsonify({"error": str(e)}), 500
 
 

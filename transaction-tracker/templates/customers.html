@@ -610,7 +610,6 @@
             { key: "customer_email", label: "Email", value: customer.email || "" },
             { key: "customer_phone", label: "Phone", value: customer.phone || "" },
             { key: "chapter", label: "Chapter", value: customer.chapter || "" },
-            { key: "handicap", label: "Handicap", value: (customer.items[0] || {}).handicap || "" },
             { key: "date_of_birth", label: "Date of Birth", value: (customer.items[0] || {}).date_of_birth || "" },
             { key: "shirt_size", label: "Shirt Size", value: (customer.items[0] || {}).shirt_size || "" },
             { key: "address", label: "Address", value: customer.items.map(i => i.address).find(Boolean) || "" },
@@ -937,7 +936,6 @@
             { key: "customer_email", label: "Email", value: customer.email || "" },
             { key: "customer_phone", label: "Phone", value: customer.phone || "" },
             { key: "chapter", label: "Chapter", value: customer.chapter || "" },
-            { key: "handicap", label: "Handicap", value: (customer.items[0] || {}).handicap || "" },
             { key: "date_of_birth", label: "DOB", value: customer.items.map(i => i.date_of_birth).find(Boolean) || "" },
             { key: "shirt_size", label: "Shirt Size", value: customer.items.map(i => i.shirt_size).find(Boolean) || "" },
         ];

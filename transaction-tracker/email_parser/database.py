@@ -3577,10 +3577,33 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
             if row:
                 return row["id"]
 
-        # Strategy 2: First name match (loose — only if one match)
+        # Strategy 1b: Match via customer_aliases email lookup
+        # If the RSVP email matches a customer alias email, find that customer's items
+        if player_email:
+            alias_customer = conn.execute(
+                """SELECT ca.customer_name FROM customer_aliases ca
+                   WHERE ca.alias_type = 'email'
+                     AND LOWER(ca.alias_value) = LOWER(?)""",
+                (player_email,),
+            ).fetchone()
+            if alias_customer:
+                row = conn.execute(
+                    f"""SELECT id FROM items
+                       WHERE customer = ?
+                         AND item_name COLLATE NOCASE IN ({placeholders})
+                         AND COALESCE(transaction_status, 'active') = 'active'""",
+                    [alias_customer["customer_name"]] + name_list,
+                ).fetchone()
+                if row:
+                    return row["id"]
+
+        # Strategy 2: First name match (loose — only if exactly one match)
+        # Guard: only use first-name matching when there's no ambiguity.
+        # If there are multiple items with names starting with the same first name,
+        # do NOT match (e.g. "Daniel" could be "Daniel South" or "Daniel Miller").
         if player_name:
             rows = conn.execute(
-                f"""SELECT id FROM items
+                f"""SELECT id, customer FROM items
                    WHERE customer LIKE ?
                      AND item_name COLLATE NOCASE IN ({placeholders})
                      AND COALESCE(transaction_status, 'active') = 'active'""",
@@ -3924,6 +3947,93 @@ def rematch_rsvps(db_path: str | Path | None = None) -> dict:
         conn.commit()
         logger.info("Rematch: %d events, %d items rematched", rematched_events, rematched_items)
         return {"rematched_events": rematched_events, "rematched_items": rematched_items}
+
+
+def audit_event_rsvps(event_name: str, db_path: str | Path | None = None) -> dict:
+    """Audit and fix RSVP-to-item matches for a specific event.
+
+    Checks all RSVPs matched to this event and:
+    1. Clears matched_item_id when the RSVP email doesn't match the item's email
+       (fixes false positives from first-name matching)
+    2. Re-attempts matching for RSVPs with no matched_item_id
+
+    Returns {"cleared": N, "rematched": N, "details": [...]}
+    """
+    with _connect(db_path) as conn:
+        rsvps = conn.execute(
+            "SELECT * FROM rsvps WHERE matched_event = ?",
+            (event_name,),
+        ).fetchall()
+
+        cleared = 0
+        rematched = 0
+        details = []
+
+        for row in rsvps:
+            rsvp = dict(row)
+
+            # Check existing matched_item_id for email mismatch
+            if rsvp.get("matched_item_id"):
+                item = conn.execute(
+                    "SELECT id, customer, customer_email FROM items WHERE id = ?",
+                    (rsvp["matched_item_id"],),
+                ).fetchone()
+                if item:
+                    rsvp_email = (rsvp.get("player_email") or "").strip().lower()
+                    item_email = (item["customer_email"] or "").strip().lower()
+                    if rsvp_email and item_email and rsvp_email != item_email:
+                        # Mismatched — clear the bad match
+                        conn.execute(
+                            "UPDATE rsvps SET matched_item_id = NULL WHERE id = ?",
+                            (rsvp["id"],),
+                        )
+                        details.append({
+                            "action": "cleared",
+                            "rsvp_player": rsvp.get("player_name"),
+                            "rsvp_email": rsvp.get("player_email"),
+                            "was_matched_to": item["customer"],
+                            "item_email": item["customer_email"],
+                        })
+                        cleared += 1
+                        rsvp["matched_item_id"] = None  # proceed to re-match below
+                elif not item:
+                    # Item was deleted — clear the stale reference
+                    conn.execute(
+                        "UPDATE rsvps SET matched_item_id = NULL WHERE id = ?",
+                        (rsvp["id"],),
+                    )
+                    details.append({
+                        "action": "cleared_deleted",
+                        "rsvp_player": rsvp.get("player_name"),
+                        "rsvp_email": rsvp.get("player_email"),
+                        "was_matched_to_id": rsvp.get("matched_item_id"),
+                    })
+                    cleared += 1
+                    rsvp["matched_item_id"] = None
+
+            # Re-attempt matching for unmatched RSVPs
+            if not rsvp.get("matched_item_id"):
+                matched_item = match_rsvp_to_item(
+                    rsvp.get("player_email"), rsvp.get("player_name"),
+                    event_name, db_path,
+                )
+                if matched_item:
+                    conn.execute(
+                        "UPDATE rsvps SET matched_item_id = ? WHERE id = ?",
+                        (matched_item, rsvp["id"]),
+                    )
+                    details.append({
+                        "action": "rematched",
+                        "rsvp_player": rsvp.get("player_name"),
+                        "rsvp_email": rsvp.get("player_email"),
+                        "matched_to_item_id": matched_item,
+                    })
+                    rematched += 1
+
+        conn.commit()
+        logger.info("Audit event '%s': cleared %d bad matches, rematched %d",
+                     event_name, cleared, rematched)
+        return {"cleared": cleared, "rematched": rematched, "details": details}
 
 
 def manual_match_rsvp(rsvp_id: int, event_name: str,
