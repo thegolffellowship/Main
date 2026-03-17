@@ -605,14 +605,6 @@ def _validate_parsed_items(rows: list[dict]) -> list[dict]:
                 "message": f"Item name \"{item_name}\" is suspiciously short — may be truncated.",
             })
 
-        # 3. Event-like item has no event_date
-        if (row.get("course") or row.get("chapter")) and not row.get("event_date"):
-            if not _MEMBERSHIP_RE.match(item_name):
-                row_warnings.append({
-                    "code": "MISSING_EVENT_DATE",
-                    "message": f"Item \"{item_name}\" has course/chapter but no event_date.",
-                })
-
         if row_warnings:
             row["_parse_warnings"] = row_warnings
             warnings.extend(row_warnings)
