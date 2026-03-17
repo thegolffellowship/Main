@@ -536,6 +536,22 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.OperationalError:
                 pass  # already exists
 
+        # Migration: add combo pricing columns (9/18 separate pricing)
+        for col, col_type in [("course_cost_9", "REAL"),
+                               ("course_cost_18", "REAL"),
+                               ("tgf_markup_9", "REAL"),
+                               ("tgf_markup_18", "REAL"),
+                               ("side_game_fee_9", "REAL"),
+                               ("side_game_fee_18", "REAL"),
+                               ("tgf_markup_final", "REAL"),
+                               ("tgf_markup_final_9", "REAL"),
+                               ("tgf_markup_final_18", "REAL")]:
+            try:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
+                logger.info("Added events.%s column", col)
+            except sqlite3.OperationalError:
+                pass  # already exists
+
         # RSVPs table — Golf Genius round signup confirmations
         conn.execute(
             """
@@ -1539,7 +1555,10 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
     allowed = {"item_name", "event_date", "course", "chapter", "format", "start_type", "start_time",
                 "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
                 "tee_time_count_18", "event_type", "tee_direction", "tee_direction_18",
-                "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct"}
+                "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct",
+                "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
+                "side_game_fee_9", "side_game_fee_18",
+                "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
@@ -2924,6 +2943,11 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
                  tee_direction: str = None, tee_direction_18: str = None,
                  course_cost: float = None, tgf_markup: float = None,
                  side_game_fee: float = None, transaction_fee_pct: float = None,
+                 course_cost_9: float = None, course_cost_18: float = None,
+                 tgf_markup_9: float = None, tgf_markup_18: float = None,
+                 side_game_fee_9: float = None, side_game_fee_18: float = None,
+                 tgf_markup_final: float = None, tgf_markup_final_9: float = None,
+                 tgf_markup_final_18: float = None,
                  db_path: str | Path | None = None) -> dict | None:
     """Manually create a new event. Returns the event dict or None if duplicate (case-insensitive)."""
     with _connect(db_path) as conn:
@@ -2935,8 +2959,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
             return None
         try:
             cursor = conn.execute(
-                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
-                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct),
+                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
+                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18),
             )
             conn.commit()
             new_id = cursor.lastrowid
@@ -2982,7 +3006,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                         handicap: str = "", user_status: str = "",
                         payment_amount: str = "", payment_source: str = "",
                         customer_email: str = "", customer_phone: str = "",
-                        holes: str = "",
+                        holes: str = "", order_date: str = "",
                         db_path: str | Path | None = None) -> dict | None:
     """
     Add a player to an event.
@@ -3013,7 +3037,8 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         new_values["customer_email"] = customer_email or None
         new_values["customer_phone"] = customer_phone or None
         new_values["item_name"] = event_name
-        new_values["order_date"] = datetime.now().strftime("%Y-%m-%d")
+        # Use client-provided local date if available, otherwise server UTC
+        new_values["order_date"] = order_date if order_date else datetime.now().strftime("%Y-%m-%d")
         new_values["event_date"] = event.get("event_date") or ""
         new_values["course"] = event.get("course") or ""
         new_values["chapter"] = event.get("chapter") or ""
@@ -4113,23 +4138,42 @@ def compute_handicap_index(differentials: list[float],
     return round(index * 10) / 10
 
 
-def _match_customer_by_email(conn: sqlite3.Connection, email: str) -> str | None:
+def _match_customer_by_email(conn: sqlite3.Connection, email: str,
+                             player_name: str = "") -> str | None:
     """Match a player to a customer by email address.
 
     Looks up the email in the items table (customer_email column) and returns
-    the canonical customer name. This is the highest-confidence matching method.
+    the canonical customer name. When multiple customers share the same email,
+    prefers the one whose name is most similar to ``player_name``.
     """
     if not email:
         return None
-    row = conn.execute(
+    rows = conn.execute(
         """SELECT DISTINCT customer FROM items
            WHERE LOWER(customer_email) = LOWER(?)
-           AND customer IS NOT NULL AND customer != ''
-           LIMIT 1""",
+           AND customer IS NOT NULL AND customer != ''""",
         (email,),
-    ).fetchone()
-    if row:
-        return row["customer"]
+    ).fetchall()
+    if rows:
+        if len(rows) == 1:
+            return rows[0]["customer"]
+        # Multiple customers share this email — pick the best name match
+        if player_name:
+            pn = player_name.lower().strip()
+            best = None
+            best_score = -1
+            for row in rows:
+                cname = (row["customer"] or "").lower().strip()
+                # Score: count matching words between player name and customer name
+                pn_words = set(pn.split())
+                cn_words = set(cname.split())
+                score = len(pn_words & cn_words)
+                if score > best_score:
+                    best_score = score
+                    best = row["customer"]
+            if best:
+                return best
+        return rows[0]["customer"]
     # Also check customer_aliases for email aliases
     row = conn.execute(
         """SELECT ca.customer_name FROM customer_aliases ca
@@ -4325,7 +4369,7 @@ def import_handicap_rounds(rounds: list[dict],
                         # Try email-based match first (highest confidence)
                         customer_name = None
                         if player_email:
-                            customer_name = _match_customer_by_email(conn, player_email)
+                            customer_name = _match_customer_by_email(conn, player_email, player_name)
                         if not customer_name:
                             customer_name = _match_customer_name(conn, player_name)
                         conn.execute(
@@ -4339,7 +4383,7 @@ def import_handicap_rounds(rounds: list[dict],
                     elif not existing["customer_name"]:
                         customer_name = None
                         if player_email:
-                            customer_name = _match_customer_by_email(conn, player_email)
+                            customer_name = _match_customer_by_email(conn, player_email, player_name)
                         if not customer_name:
                             customer_name = _match_customer_name(conn, player_name)
                         if customer_name:
