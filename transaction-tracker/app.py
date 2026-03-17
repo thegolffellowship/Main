@@ -54,6 +54,10 @@ from email_parser.database import (
     merge_events,
     get_orphaned_items,
     resolve_orphaned_items,
+    save_parse_warnings,
+    get_parse_warnings,
+    dismiss_parse_warning,
+    resolve_parse_warning,
     get_all_event_aliases,
     get_known_rsvp_uids,
     save_rsvps,
@@ -206,6 +210,11 @@ def check_inbox():
                 total_saved += count
                 _inbox_check_status["items_saved"] = total_saved
                 logger.info("Email %d/%d: saved %d items", i, len(new_emails), count)
+                # Persist any parse warnings (e.g. item_name is just a course name)
+                try:
+                    save_parse_warnings(rows)
+                except Exception:
+                    logger.exception("Failed to save parse warnings (non-fatal)")
             else:
                 logger.info("Email %d/%d: no items extracted", i, len(new_emails))
             # Always mark as processed so we don't re-parse next cycle
@@ -1880,6 +1889,31 @@ def api_resolve_orphan():
         return jsonify({"error": "old_item_name and target_event are required."}), 400
     result = resolve_orphaned_items(old_name, target)
     return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/parse-warnings")
+def api_parse_warnings():
+    """Return open parse warnings (items flagged during parsing)."""
+    status = request.args.get("status", "open")
+    return jsonify(get_parse_warnings(status))
+
+
+@app.route("/api/parse-warnings/<int:warning_id>/dismiss", methods=["POST"])
+@require_role("admin")
+def api_dismiss_parse_warning(warning_id):
+    """Dismiss a parse warning. Admin only."""
+    if dismiss_parse_warning(warning_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Warning not found."}), 404
+
+
+@app.route("/api/parse-warnings/<int:warning_id>/resolve", methods=["POST"])
+@require_role("admin")
+def api_resolve_parse_warning(warning_id):
+    """Mark a parse warning as resolved. Admin only."""
+    if resolve_parse_warning(warning_id):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Warning not found."}), 404
 
 
 # ---------------------------------------------------------------------------

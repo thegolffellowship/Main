@@ -647,6 +647,25 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_event_aliases_canonical ON event_aliases(canonical_event_name)"
         )
 
+        # Parse warnings — flagged items that may have been parsed incorrectly
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS parse_warnings (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_uid    TEXT,
+                order_id     TEXT,
+                customer     TEXT,
+                item_name    TEXT,
+                warning_code TEXT NOT NULL,
+                message      TEXT NOT NULL,
+                status       TEXT NOT NULL DEFAULT 'open'
+                    CHECK(status IN ('open', 'dismissed', 'resolved')),
+                created_at   TEXT DEFAULT (datetime('now')),
+                UNIQUE(email_uid, warning_code, item_name)
+            )
+            """
+        )
+
         # Support feedback — bug reports and feature requests from the chat widget
         conn.execute(
             """
@@ -1417,6 +1436,15 @@ def undo_autofix(details: list[dict], db_path: str | Path | None = None) -> dict
 # Events table
 # ---------------------------------------------------------------------------
 
+# Canonical course names — if an item_name is JUST a course name, it's
+# probably a parsing error (missing event code like "a9.1").
+_KNOWN_COURSE_NAMES = {
+    "la cantera", "tpc san antonio", "the quarry", "cowboys golf club",
+    "tpc craig ranch", "wolfdancer", "falconhead", "moody gardens",
+    "morris williams", "cedar creek", "kissing tree", "plum creek",
+    "landa park", "vaaler creek", "hancock park", "shadowglen", "star ranch",
+}
+
 # Keywords that indicate an item is NOT an event (membership, merch, etc.)
 _NON_EVENT_KEYWORDS = [
     "member", "membership", "shirt", "merch", "hat", "polo",
@@ -1458,6 +1486,7 @@ def _is_event_item(item_name: str, *, course: str = "", chapter: str = "") -> bo
         "cantera", "morris", "cedar", "cowboys", "wolfdancer", "falconhead",
         "moody", "quarry", "tpc", "kissing", "plum", "landa", "vaaler",
         "hancock", "craig ranch", "northern hills", "shadowglen",
+        "star ranch",
     ]
     for ck in course_keywords:
         if ck in lower:
@@ -1490,6 +1519,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
         inserted = 0
         skipped_non_event = 0
         skipped_aliased = 0
+        suspicious_names = []
         for item in items:
             name = item["item_name"] or ""
             if not _is_event_item(name, course=item["course"] or "", chapter=item["chapter"] or ""):
@@ -1522,14 +1552,41 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
                     (name, item["event_date"], item["course"], item["chapter"]),
                 )
                 inserted += 1
+                # Flag events whose name is suspiciously just a course name
+                if name.strip().lower() in _KNOWN_COURSE_NAMES:
+                    suspicious_names.append(name)
+                    logger.warning(
+                        "Suspicious event name '%s' — looks like just a course name "
+                        "(event code likely missing from parsed item_name)", name,
+                    )
+                    # Auto-create a parse warning so admins see it
+                    try:
+                        conn.execute(
+                            """INSERT OR IGNORE INTO parse_warnings
+                               (email_uid, order_id, customer, item_name,
+                                warning_code, message)
+                               SELECT i.email_uid, i.order_id, i.customer, i.item_name,
+                                      'COURSE_NAME_ONLY',
+                                      'Event "' || i.item_name || '" looks like just a course name — the event identifier (e.g. series code) was likely missed during parsing.'
+                               FROM items i
+                               WHERE i.item_name = ? COLLATE NOCASE
+                               LIMIT 1""",
+                            (name,),
+                        )
+                    except Exception:
+                        pass
             except sqlite3.IntegrityError:
                 logger.debug("Duplicate event skipped during sync: %s", name)
 
         conn.commit()
         logger.info("Events sync: %d new, %d non-event skipped, %d aliased skipped",
                     inserted, skipped_non_event, skipped_aliased)
+        if suspicious_names:
+            logger.warning("Events sync: %d suspicious event names (course-name-only): %s",
+                          len(suspicious_names), ", ".join(suspicious_names))
         return {"inserted": inserted, "skipped_non_event": skipped_non_event,
-                "skipped_aliased": skipped_aliased, "total_items_scanned": len(items)}
+                "skipped_aliased": skipped_aliased, "total_items_scanned": len(items),
+                "suspicious_names": suspicious_names}
 
 
 def get_all_events(db_path: str | Path | None = None) -> list[dict]:
@@ -1790,6 +1847,83 @@ def resolve_orphaned_items(old_item_name: str, target_event_name: str,
             "target_event": target_event_name,
             "items_linked": items_linked,
         }
+
+
+# ---------------------------------------------------------------------------
+# Parse Warnings
+# ---------------------------------------------------------------------------
+
+
+def save_parse_warnings(rows: list[dict], db_path: str | Path | None = None) -> int:
+    """Persist parse warnings extracted from parsed item rows.
+
+    Looks for ``_parse_warnings`` lists attached by ``_validate_parsed_items()``.
+    Deduplicates by (email_uid, warning_code, item_name).
+    Returns number of warnings saved.
+    """
+    saved = 0
+    with _connect(db_path) as conn:
+        for row in rows:
+            warnings = row.get("_parse_warnings")
+            if not warnings:
+                continue
+            for w in warnings:
+                try:
+                    conn.execute(
+                        """INSERT OR IGNORE INTO parse_warnings
+                           (email_uid, order_id, customer, item_name, warning_code, message)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (
+                            row.get("email_uid"),
+                            row.get("order_id"),
+                            row.get("customer"),
+                            row.get("item_name"),
+                            w["code"],
+                            w["message"],
+                        ),
+                    )
+                    saved += 1
+                except Exception:
+                    logger.exception("Failed to save parse warning")
+        conn.commit()
+    if saved:
+        logger.warning("Saved %d parse warnings", saved)
+    return saved
+
+
+def get_parse_warnings(status: str = "open",
+                       db_path: str | Path | None = None) -> list[dict]:
+    """Return parse warnings filtered by status."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM parse_warnings WHERE status = ? ORDER BY created_at DESC",
+            (status,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def dismiss_parse_warning(warning_id: int,
+                          db_path: str | Path | None = None) -> bool:
+    """Dismiss a parse warning."""
+    with _connect(db_path) as conn:
+        cursor = conn.execute(
+            "UPDATE parse_warnings SET status = 'dismissed' WHERE id = ?",
+            (warning_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def resolve_parse_warning(warning_id: int,
+                          db_path: str | Path | None = None) -> bool:
+    """Mark a parse warning as resolved."""
+    with _connect(db_path) as conn:
+        cursor = conn.execute(
+            "UPDATE parse_warnings SET status = 'resolved' WHERE id = ?",
+            (warning_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 # ---------------------------------------------------------------------------
