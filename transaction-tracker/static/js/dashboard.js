@@ -423,6 +423,31 @@ function formatOrderDateTime(row) {
     return `${date} ${h}:${m} ${ampm}`;
 }
 
+function cellForChildPayment(key, row) {
+    // Child payment rows show limited columns with muted styling
+    if (key === "customer") {
+        return `<span style="padding-left:1.5rem;color:#059669;font-size:0.78rem;font-weight:600;">+PAY</span> <span style="font-size:0.78rem;color:#6b7280;">${escapeHtml(row.side_games || row.notes || "Payment")}</span>`;
+    }
+    if (key === "item_price") return `<span style="font-size:0.82rem;">${escapeHtml(row.item_price || "\u2014")}</span>`;
+    if (key === "order_date") return `<span style="font-size:0.78rem;color:#6b7280;">${escapeHtml(row.order_date || "\u2014")}</span>`;
+    if (key === "side_games") return `<span style="font-size:0.82rem;">${escapeHtml(row.side_games || "\u2014")}</span>`;
+    if (key === "actions") {
+        let btns = "";
+        const status = row.transaction_status || "active";
+        if (status === "active") {
+            btns += `<button class="btn btn-credit" data-action="credit" data-id="${row.id}" style="font-size:0.65rem;">Credit</button>`;
+        } else if (status === "credited" || status === "refunded") {
+            btns += `<button class="btn btn-reverse" data-action="reverse" data-id="${row.id}" style="font-size:0.65rem;">Reverse</button>`;
+        }
+        if (currentRole === "admin") {
+            btns += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}" style="font-size:0.65rem;">Delete</button>`;
+        }
+        return btns;
+    }
+    if (key === "item_name") return `<span style="font-size:0.78rem;color:#6b7280;">\u2014</span>`;
+    return `<span style="font-size:0.78rem;color:#6b7280;">\u2014</span>`;
+}
+
 function cellForColumn(key, row) {
     if (key === "order_date") {
         const display = formatOrderDateTime(row);
@@ -527,6 +552,35 @@ function renderMobileCard(row) {
     </div>`;
 }
 
+function renderMobileChildCard(child) {
+    const status = child.transaction_status || "active";
+    const statusCls = status !== "active" ? ` row-${status}` : "";
+    const opacity = status !== "active" ? "opacity:0.6;" : "";
+    let actionHtml = "";
+    if (status === "active") {
+        actionHtml += `<button class="btn btn-credit" data-action="credit" data-id="${child.id}" style="font-size:0.65rem;">Credit</button>`;
+    } else if (status === "credited" || status === "refunded") {
+        actionHtml += `<button class="btn btn-reverse" data-action="reverse" data-id="${child.id}" style="font-size:0.65rem;">Reverse</button>`;
+    }
+    if (currentRole === "admin") {
+        actionHtml += ` <button class="btn btn-danger" data-action="delete" data-id="${child.id}" style="font-size:0.65rem;">Delete</button>`;
+    }
+    return `
+    <div class="mobile-card child-payment-card${statusCls}" data-id="${child.id}" style="margin-left:1.2rem;border-left:3px solid #059669;background:#f0fdf4;${opacity}">
+        <div class="mobile-card-top" data-action="toggle-expand">
+            <div class="mc-primary">
+                <span style="color:#059669;font-size:0.72rem;font-weight:600;">+PAY</span>
+                <span class="mc-customer" style="font-size:0.82rem;">${escapeHtml(child.side_games || child.notes || "Payment")}</span>
+                <span style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml(child.item_price || "\u2014")}</span>
+                ${status !== "active" ? `<span class="mc-type" style="background:#fef3c7;color:#92400e;font-size:0.65rem;">${status}</span>` : ""}
+            </div>
+        </div>
+        <div class="mobile-card-details">
+            <div class="mc-actions">${actionHtml}</div>
+        </div>
+    </div>`;
+}
+
 function renderMobileCards(items) {
     let container = document.getElementById("txn-mobile-cards");
     if (!container) {
@@ -542,6 +596,24 @@ function renderMobileCards(items) {
         return;
     }
 
+    // Build parent → children map
+    const childMap = new Map();
+    const childIds = new Set();
+    items.forEach(row => {
+        if (row.parent_item_id) {
+            const pid = String(row.parent_item_id);
+            if (!childMap.has(pid)) childMap.set(pid, []);
+            childMap.get(pid).push(row);
+            childIds.add(row.id);
+        }
+    });
+
+    function renderChildCards(parentId) {
+        const children = childMap.get(String(parentId));
+        if (!children || !children.length) return "";
+        return children.map(c => renderMobileChildCard(c)).join("");
+    }
+
     // Group items by order_id for order grouping (same logic as desktop)
     const orderGroups = new Map();
     items.forEach(row => {
@@ -555,11 +627,14 @@ function renderMobileCards(items) {
     const seen = new Set();
     let html = "";
     items.forEach(row => {
+        // Skip child payment rows — rendered after their parent
+        if (childIds.has(row.id)) return;
+
         const oid = row.order_id;
-        if (oid && orderGroups.has(oid) && orderGroups.get(oid).length > 1) {
+        if (oid && orderGroups.has(oid) && orderGroups.get(oid).filter(r => !childIds.has(r.id)).length > 1) {
             if (seen.has(oid)) return;
             seen.add(oid);
-            const group = orderGroups.get(oid);
+            const group = orderGroups.get(oid).filter(r => !childIds.has(r.id));
             const total = group.reduce((s, r) => s + parsePrice(r.item_price), 0);
             const customer = group[0].customer || "Unknown";
             const date = formatOrderDateTime(group[0]);
@@ -577,10 +652,11 @@ function renderMobileCards(items) {
                         <span style="font-weight:400;font-size:0.75rem;color:var(--text-muted);">${escapeHtml(date)}</span>
                     </div>
                 </div>
-                ${group.map(r => renderMobileCard(r)).join("")}
+                ${group.map(r => renderMobileCard(r) + renderChildCards(r.id)).join("")}
             </div>`;
         } else {
             html += renderMobileCard(row);
+            html += renderChildCards(row.id);
         }
     });
 
@@ -613,6 +689,33 @@ function renderTable(items) {
 
     const ordered = getOrderedColumns();
 
+    // Build parent → children map for payment sub-rows
+    const childMap = new Map();  // parent_item_id → [child rows]
+    const childIds = new Set();
+    items.forEach(row => {
+        if (row.parent_item_id) {
+            const pid = String(row.parent_item_id);
+            if (!childMap.has(pid)) childMap.set(pid, []);
+            childMap.get(pid).push(row);
+            childIds.add(row.id);
+        }
+    });
+
+    // Helper to render child payment rows after a parent
+    function renderChildRows(parentId) {
+        const children = childMap.get(String(parentId));
+        if (!children || !children.length) return "";
+        let childHtml = "";
+        children.forEach(child => {
+            const cStatus = child.transaction_status || "active";
+            const cClass = cStatus !== "active" ? ` row-${cStatus}` : "";
+            childHtml += `<tr data-id="${child.id}" class="child-payment-row${cClass}" style="background:#f0fdf4;">
+                ${ordered.map(col => `<td${tdClass(col.key)}>${cellForChildPayment(col.key, child)}</td>`).join("")}
+            </tr>`;
+        });
+        return childHtml;
+    }
+
     // Group items by order_id for order grouping
     const orderGroups = new Map();
     const ungrouped = [];
@@ -630,12 +733,15 @@ function renderTable(items) {
     const seen = new Set();
     let html = "";
     items.forEach(row => {
+        // Skip child payment rows — they're rendered after their parent
+        if (childIds.has(row.id)) return;
+
         const oid = row.order_id;
         if (oid && orderGroups.has(oid) && orderGroups.get(oid).length > 1) {
             // Multi-item order — render summary + item rows on first encounter
             if (seen.has(oid)) return;
             seen.add(oid);
-            const group = orderGroups.get(oid);
+            const group = orderGroups.get(oid).filter(r => !childIds.has(r.id));
             const total = group.reduce((s, r) => s + parsePrice(r.item_price), 0);
             const names = group.map(r => r.item_name || "\u2014").join(", ");
             const truncNames = names.length > 60 ? names.slice(0, 57) + "..." : names;
@@ -652,13 +758,14 @@ function renderTable(items) {
                 </td>
             </tr>`;
 
-            // Item rows (indented)
+            // Item rows (indented) + their child payments
             group.forEach(r => {
                 const status = r.transaction_status || "active";
                 const statusCls = status !== "active" ? ` row-${status}` : (r.transferred_from_id ? ' row-from-transfer' : '');
                 html += `<tr data-id="${r.id}" class="order-item${statusCls}" data-order-id="${escapeHtml(oid)}">
                     ${ordered.map(col => `<td${tdClass(col.key)}>${cellForColumn(col.key, r)}</td>`).join("")}
                 </tr>`;
+                html += renderChildRows(r.id);
             });
         } else {
             // Single-item order or no order_id — regular flat row
@@ -667,6 +774,7 @@ function renderTable(items) {
             html += `<tr data-id="${row.id}"${rowClass}>
                 ${ordered.map(col => `<td${tdClass(col.key)}>${cellForColumn(col.key, row)}</td>`).join("")}
             </tr>`;
+            html += renderChildRows(row.id);
         }
     });
 

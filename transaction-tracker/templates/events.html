@@ -1610,8 +1610,9 @@
                 if (!mobileGamesView && !mobilePairingsView) {
                     // 9/18 holes filter
                     const mHolesFilter = eventHolesFilter[ev.id] || null;
-                    const mCount9 = registrants.filter(r => !r.parent_item_id && (r.holes === "9" || r.holes === 9)).length;
-                    const mCount18 = registrants.filter(r => !r.parent_item_id && (r.holes === "18" || r.holes === 18)).length;
+                    const mInactive = ["credited", "refunded", "transferred", "wd"];
+                    const mCount9 = registrants.filter(r => !r.parent_item_id && !mInactive.includes(r.transaction_status) && (r.holes === "9" || r.holes === 9)).length;
+                    const mCount18 = registrants.filter(r => !r.parent_item_id && !mInactive.includes(r.transaction_status) && (r.holes === "18" || r.holes === 18)).length;
                     if (mCount9 > 0 || mCount18 > 0) {
                         badgesHtml += '<span class="view-toggle-group">';
                         badgesHtml += `<span class="game-stat-badge ${mHolesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${mCount9}</strong></span>`;
@@ -2270,8 +2271,9 @@
         if (!gamesView && !pairingsView) {
             // 9/18 holes filter toggle
             const holesFilter = eventHolesFilter[ev.id] || null;
-            const count9 = registrants.filter(r => !r.parent_item_id && (r.holes === "9" || r.holes === 9)).length;
-            const count18 = registrants.filter(r => !r.parent_item_id && (r.holes === "18" || r.holes === 18)).length;
+            const holeInactive = ["credited", "refunded", "transferred", "wd"];
+            const count9 = registrants.filter(r => !r.parent_item_id && !holeInactive.includes(r.transaction_status) && (r.holes === "9" || r.holes === 9)).length;
+            const count18 = registrants.filter(r => !r.parent_item_id && !holeInactive.includes(r.transaction_status) && (r.holes === "18" || r.holes === 18)).length;
             if (count9 > 0 || count18 > 0) {
                 html += '<span class="view-toggle-group">';
                 html += `<span class="game-stat-badge ${holesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${count9}</strong></span>`;
@@ -2495,10 +2497,11 @@
             });
             html += '</tr>';
             // Render child payment sub-rows for this parent
-            const children = childPayments.filter(c => String(c.parent_item_id) === String(r.id)
-                && !INACTIVE_STATUSES.includes(c.transaction_status));
+            const children = childPayments.filter(c => String(c.parent_item_id) === String(r.id));
             children.forEach(child => {
-                html += `<tr class="child-payment-row" style="background:#f0fdf4;">`;
+                const childSt = child.transaction_status || "active";
+                const childBg = (childSt === "credited" || childSt === "refunded") ? "#fef9ee" : "#f0fdf4";
+                html += `<tr class="child-payment-row" style="background:${childBg};${childSt !== 'active' ? 'opacity:0.6;' : ''}">`;
                 DETAIL_COLUMNS.forEach(c => {
                     const vis = detailVisibleColumns[c.key] !== false;
                     const style = (vis ? '' : 'display:none;') + 'font-size:0.78rem;color:#6b7280;';
@@ -2513,7 +2516,15 @@
                     } else if (c.key === "order_date") {
                         html += `<td style="${style}">${escapeHtml(child.order_date || "\u2014")}</td>`;
                     } else if (c.key === "actions") {
-                        html += `<td style="${style}"><button class="btn btn-delete-manual" data-delete-id="${child.id}" data-player-name="${escapeHtml(child.customer || '')} payment" style="font-size:0.6rem;">Delete</button></td>`;
+                        let childBtns = "";
+                        const childStatus = child.transaction_status || "active";
+                        if (childStatus === "active") {
+                            childBtns += `<button class="btn btn-credit" data-credit-id="${child.id}" style="font-size:0.6rem;">Credit</button> `;
+                        } else if (childStatus === "credited" || childStatus === "refunded") {
+                            childBtns += `<button class="btn btn-reverse" data-reverse-id="${child.id}" style="font-size:0.6rem;">Reverse</button> `;
+                        }
+                        childBtns += `<button class="btn btn-delete-manual" data-delete-id="${child.id}" data-player-name="${escapeHtml(child.customer || '')} payment" style="font-size:0.6rem;">Delete</button>`;
+                        html += `<td style="${style}">${childBtns}</td>`;
                     } else {
                         html += `<td style="${style}">\u2014</td>`;
                     }
