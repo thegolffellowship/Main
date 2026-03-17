@@ -1610,8 +1610,9 @@
                 if (!mobileGamesView && !mobilePairingsView) {
                     // 9/18 holes filter
                     const mHolesFilter = eventHolesFilter[ev.id] || null;
-                    const mCount9 = registrants.filter(r => !r.parent_item_id && (r.holes === "9" || r.holes === 9)).length;
-                    const mCount18 = registrants.filter(r => !r.parent_item_id && (r.holes === "18" || r.holes === 18)).length;
+                    const mInactive = ["credited", "refunded", "transferred", "wd"];
+                    const mCount9 = registrants.filter(r => !r.parent_item_id && !mInactive.includes(r.transaction_status) && (r.holes === "9" || r.holes === 9)).length;
+                    const mCount18 = registrants.filter(r => !r.parent_item_id && !mInactive.includes(r.transaction_status) && (r.holes === "18" || r.holes === 18)).length;
                     if (mCount9 > 0 || mCount18 > 0) {
                         badgesHtml += '<span class="view-toggle-group">';
                         badgesHtml += `<span class="game-stat-badge ${mHolesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${mCount9}</strong></span>`;
@@ -2270,8 +2271,9 @@
         if (!gamesView && !pairingsView) {
             // 9/18 holes filter toggle
             const holesFilter = eventHolesFilter[ev.id] || null;
-            const count9 = registrants.filter(r => !r.parent_item_id && (r.holes === "9" || r.holes === 9)).length;
-            const count18 = registrants.filter(r => !r.parent_item_id && (r.holes === "18" || r.holes === 18)).length;
+            const holeInactive = ["credited", "refunded", "transferred", "wd"];
+            const count9 = registrants.filter(r => !r.parent_item_id && !holeInactive.includes(r.transaction_status) && (r.holes === "9" || r.holes === 9)).length;
+            const count18 = registrants.filter(r => !r.parent_item_id && !holeInactive.includes(r.transaction_status) && (r.holes === "18" || r.holes === 18)).length;
             if (count9 > 0 || count18 > 0) {
                 html += '<span class="view-toggle-group">';
                 html += `<span class="game-stat-badge ${holesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${count9}</strong></span>`;
