@@ -434,7 +434,10 @@ function cellForColumn(key, row) {
     if (key === "order_id") return `<span class="order-id">${cell(row.order_id, "order_id", row.id)}</span>`;
     if (key === "actions") {
         const status = row.transaction_status || "active";
-        let btns = `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
+        let btns = "";
+        if (currentRole === "admin") {
+            btns += `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
+        }
         if (status === "active" && !row.transferred_from_id) {
             btns += ` <button class="btn btn-credit" data-action="credit" data-id="${row.id}">Credit</button>`;
         } else if (status === "credited" || status === "transferred" || status === "refunded") {
@@ -491,8 +494,11 @@ function renderMobileCard(row) {
         ["Order ID", row.order_id || "\u2014"],
     ];
 
-    // Action buttons
-    let actionHtml = `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
+    // Action buttons — Edit/Delete only for admin; Credit for all roles
+    let actionHtml = "";
+    if (currentRole === "admin") {
+        actionHtml += `<button class="btn btn-edit" data-action="edit" data-id="${row.id}">Edit</button>`;
+    }
     if (status === "active" && !row.transferred_from_id) {
         actionHtml += ` <button class="btn btn-credit" data-action="credit" data-id="${row.id}">Credit</button>`;
     } else if (status === "credited" || status === "transferred" || status === "refunded") {

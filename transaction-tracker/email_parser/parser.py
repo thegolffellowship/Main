@@ -73,13 +73,15 @@ FIELD-SPECIFIC GUIDANCE:
 - "event_date": The date of the golf event, NOT the order date. Parse it from \
   the item name when present (e.g. "Feb 22 - LaCANTERA" → "2026-02-22"). Use \
   the current year (2026) if only month and day are given.
-- "chapter": The city/chapter for the item. For EVENT items, infer it from \
-  the course name or event context (e.g. La Cantera/TPC San Antonio/The Quarry \
-  = "San Antonio", Cowboys Golf Club/TPC Craig Ranch = "Dallas", \
-  Wolfdancer/Falconhead = "Austin", Moody Gardens = "Galveston"). \
+- "chapter": The TGF chapter for the item. ONLY four valid values: \
+  "San Antonio", "Austin", "Houston", "DFW". \
+  For EVENT items, infer from the course name (e.g. La Cantera/TPC San Antonio/The Quarry \
+  = "San Antonio", Cowboys Golf Club/TPC Craig Ranch = "DFW", \
+  Wolfdancer/Falconhead/Star Ranch = "Austin"). \
   For MEMBERSHIP items, extract from "CITY: AUS" or "CITY: SA" etc. \
-  Normalise to full city names: AUS/ATX → "Austin", SA/SAT → "San Antonio", \
-  DAL/DFW → "Dallas", HOU → "Houston", GAL → "Galveston".
+  Normalise: AUS/ATX → "Austin", SA/SAT → "San Antonio", DAL/DFW → "DFW", HOU → "Houston". \
+  IMPORTANT: Do NOT use the customer's shipping/billing address city as chapter. \
+  The chapter must be inferred from the golf course or event location, not the customer address.
 - "course": Use consistent canonical course names. Standard spellings: \
   "La Cantera", "TPC San Antonio", "The Quarry", "Cowboys Golf Club", \
   "TPC Craig Ranch", "Wolfdancer", "Falconhead", "Moody Gardens", \
@@ -394,22 +396,37 @@ _CHAPTER_MAP = {
     "sa": "San Antonio",
     "sat": "San Antonio",
     "san antonio": "San Antonio",
-    "dal": "Dallas",
-    "dfw": "Dallas",
-    "dallas": "Dallas",
+    "dal": "DFW",
+    "dfw": "DFW",
+    "dallas": "DFW",
+    "fort worth": "DFW",
     "hou": "Houston",
     "houston": "Houston",
-    "gal": "Galveston",
-    "galveston": "Galveston",
 }
+
+# Only these four chapters are valid
+_VALID_CHAPTERS = {"San Antonio", "Austin", "Houston", "DFW"}
 
 
 def _normalize_chapter(chapter: str | None) -> str | None:
-    """Normalise chapter abbreviations to full city names."""
+    """Normalise chapter to one of the four valid TGF chapters.
+
+    Returns None if the chapter cannot be mapped to a valid value.
+    This prevents cities from shipping addresses (e.g. Elgin) from
+    being stored as chapter.
+    """
     if not chapter:
         return chapter
     lookup = chapter.strip().lower()
-    return _CHAPTER_MAP.get(lookup, chapter.strip().title())
+    mapped = _CHAPTER_MAP.get(lookup)
+    if mapped:
+        return mapped
+    # Check if it's already a valid chapter name (case-insensitive)
+    for valid in _VALID_CHAPTERS:
+        if lookup == valid.lower():
+            return valid
+    # Not a valid chapter — discard it
+    return None
 
 
 _MEMBERSHIP_RE = re.compile(r"^TGF\s+MEMBERSHIP\b.*", re.IGNORECASE)

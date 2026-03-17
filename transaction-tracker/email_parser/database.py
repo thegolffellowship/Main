@@ -3094,6 +3094,80 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         return new_values
 
 
+def add_payment_to_event(event_name: str, customer: str,
+                         payment_item: str = "", payment_amount: str = "",
+                         payment_source: str = "", note: str = "",
+                         order_date: str = "",
+                         db_path: str | Path | None = None) -> dict | None:
+    """Add an additional payment record for an existing player in an event.
+
+    Creates a new item row tied to the event with the payment details.
+    Used for supplemental payments like side game fees paid separately.
+    """
+    import time as _time
+
+    with _connect(db_path) as conn:
+        event = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
+        ).fetchone()
+        event = dict(event) if event else {}
+
+        # Look up the existing player's data (email, phone, status, etc.)
+        existing = conn.execute(
+            """SELECT customer_email, customer_phone, user_status, tee_choice, holes
+               FROM items WHERE item_name = ? COLLATE NOCASE AND customer = ? COLLATE NOCASE
+               AND COALESCE(transaction_status, 'active') = 'active'
+               ORDER BY id DESC LIMIT 1""",
+            (event_name, customer),
+        ).fetchone()
+        existing = dict(existing) if existing else {}
+
+        uid = f"manual-payment-{int(_time.time() * 1000)}"
+
+        # Determine side_games from payment_item
+        side_games = ""
+        if "net" in (payment_item or "").lower():
+            side_games = "NET"
+        elif "gross" in (payment_item or "").lower():
+            side_games = "GROSS"
+        elif "both" in (payment_item or "").lower():
+            side_games = "BOTH"
+
+        new_values = {col: None for col in ITEM_COLUMNS}
+        new_values["email_uid"] = uid
+        new_values["item_index"] = 0
+        new_values["customer"] = customer
+        new_values["customer_email"] = existing.get("customer_email")
+        new_values["customer_phone"] = existing.get("customer_phone")
+        new_values["item_name"] = event_name
+        new_values["order_date"] = order_date if order_date else datetime.now().strftime("%Y-%m-%d")
+        new_values["event_date"] = event.get("event_date") or ""
+        new_values["course"] = event.get("course") or ""
+        new_values["chapter"] = event.get("chapter") or ""
+        new_values["transaction_status"] = "active"
+        new_values["merchant"] = f"Manual Entry ({payment_source})"
+        new_values["item_price"] = payment_amount
+        new_values["side_games"] = side_games or payment_item
+        new_values["holes"] = existing.get("holes") or ""
+        new_values["tee_choice"] = existing.get("tee_choice") or ""
+        new_values["user_status"] = existing.get("user_status") or ""
+        new_values["notes"] = note or f"{payment_item} — {payment_amount} via {payment_source}"
+
+        cols = ", ".join(ITEM_COLUMNS)
+        placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
+        cursor = conn.execute(
+            f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+            tuple(new_values.get(c) for c in ITEM_COLUMNS),
+        )
+        new_id = cursor.lastrowid
+        conn.commit()
+
+        new_values["id"] = new_id
+        logger.info("Added payment %s for %s at %s (id=%d)",
+                     payment_item, customer, event_name, new_id)
+        return new_values
+
+
 def upgrade_rsvp_to_paid(item_id: int, payment_amount: str = "",
                          payment_source: str = "", side_games: str = "",
                          tee_choice: str = "", handicap: str = "",
