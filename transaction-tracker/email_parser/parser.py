@@ -306,6 +306,10 @@ _NAME_PREFIX_MAP = {
     "o'": lambda rest: "O'" + rest.capitalize(),
 }
 
+# Roman numerals and suffixes that should stay uppercase
+_UPPERCASE_SUFFIXES = {"ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
+                       "jr", "sr"}
+
 
 def _normalize_customer_name(name: str | None) -> str | None:
     """Normalise customer name to Title Case with special-case handling."""
@@ -314,7 +318,11 @@ def _normalize_customer_name(name: str | None) -> str | None:
     parts = name.strip().split()
     result = []
     for i, part in enumerate(parts):
-        lower = part.lower()
+        lower = part.lower().rstrip(".")
+        # Roman numerals and suffixes → uppercase
+        if lower in _UPPERCASE_SUFFIXES:
+            result.append(part.upper().rstrip("."))
+            continue
         # Handle Mc/Mac/O' prefixes
         handled = False
         for prefix, formatter in _NAME_PREFIX_MAP.items():
