@@ -245,6 +245,7 @@ ITEM_COLUMNS = [
     "subject", "from_addr",
     "transaction_status", "credit_note", "transferred_from_id", "transferred_to_id",
     "wd_reason", "wd_note", "wd_credits", "credit_amount",
+    "parent_item_id",
 ]
 
 
@@ -441,6 +442,13 @@ def init_db(db_path: str | Path | None = None) -> None:
                 logger.info("Added missing column: %s", col)
             except sqlite3.OperationalError:
                 pass  # column already exists
+
+        # Ensure parent_item_id column exists for child payment records
+        try:
+            conn.execute("ALTER TABLE items ADD COLUMN parent_item_id TEXT")
+            logger.info("Added missing column: parent_item_id")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
         # Processed emails table — tracks ALL email UIDs we've already sent to
         # the AI, even if no items were extracted.  Prevents re-parsing the same
@@ -2786,11 +2794,17 @@ def get_item(item_id: int, db_path: str | Path | None = None) -> dict | None:
 
 
 def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None) -> bool:
-    """Mark an item as credited (money held for future use)."""
+    """Mark an item as credited (money held for future use). Cascades to child payments."""
     with _connect(db_path) as conn:
         cursor = conn.execute(
             "UPDATE items SET transaction_status = 'credited', credit_note = ? WHERE id = ? AND COALESCE(transaction_status, 'active') = 'active'",
             (note or "Credit on account", item_id),
+        )
+        # Cascade to child payment items
+        conn.execute(
+            "UPDATE items SET transaction_status = 'credited', credit_note = ? "
+            "WHERE parent_item_id = ? AND COALESCE(transaction_status, 'active') = 'active'",
+            (note or "Credit on account (cascaded from parent)", str(item_id)),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -2798,7 +2812,7 @@ def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None)
 
 def refund_item(item_id: int, method: str = "", note: str = "",
                 db_path: str | Path | None = None) -> bool:
-    """Mark an item as refunded via GoDaddy or Venmo."""
+    """Mark an item as refunded via GoDaddy or Venmo. Cascades to child payments."""
     refund_note = f"Refunded via {method}" if method else "Refunded"
     if note:
         refund_note += f" — {note}"
@@ -2807,6 +2821,12 @@ def refund_item(item_id: int, method: str = "", note: str = "",
             "UPDATE items SET transaction_status = 'refunded', credit_note = ? "
             "WHERE id = ? AND COALESCE(transaction_status, 'active') = 'active'",
             (refund_note, item_id),
+        )
+        # Cascade to child payment items
+        conn.execute(
+            "UPDATE items SET transaction_status = 'refunded', credit_note = ? "
+            "WHERE parent_item_id = ? AND COALESCE(transaction_status, 'active') = 'active'",
+            (refund_note + " (cascaded from parent)", str(item_id)),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -2838,6 +2858,12 @@ def wd_item(
                    credit_amount = ?
                WHERE id = ? AND COALESCE(transaction_status, 'active') = 'active'""",
             (note or "", credits_json or "", credit_amount or "", item_id),
+        )
+        # Cascade WD to child payment items
+        conn.execute(
+            "UPDATE items SET transaction_status = 'wd', wd_reason = 'WD', wd_note = ? "
+            "WHERE parent_item_id = ? AND COALESCE(transaction_status, 'active') = 'active'",
+            (note or "WD (cascaded from parent)", str(item_id)),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -2940,6 +2966,14 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
                    wd_reason = NULL, wd_note = NULL, wd_credits = NULL, credit_amount = NULL
                WHERE id = ?""",
             (item_id,),
+        )
+        # Also reverse any child payment items
+        conn.execute(
+            """UPDATE items
+               SET transaction_status = 'active', credit_note = NULL,
+                   wd_reason = NULL, wd_note = NULL, wd_credits = NULL, credit_amount = NULL
+               WHERE parent_item_id = ?""",
+            (str(item_id),),
         )
         conn.commit()
         return True
@@ -3099,10 +3133,12 @@ def add_payment_to_event(event_name: str, customer: str,
                          payment_source: str = "", note: str = "",
                          order_date: str = "",
                          db_path: str | Path | None = None) -> dict | None:
-    """Add an additional payment record for an existing player in an event.
+    """Add a child payment record linked to an existing player's registration.
 
-    Creates a new item row tied to the event with the payment details.
-    Used for supplemental payments like side game fees paid separately.
+    Creates a new item row with parent_item_id pointing to the player's main
+    registration. Child payments only carry payment-related fields (games,
+    price, order_date) — not holes, tee, status. They are excluded from
+    player counts and shown as indented sub-rows under the parent.
     """
     import time as _time
 
@@ -3112,15 +3148,19 @@ def add_payment_to_event(event_name: str, customer: str,
         ).fetchone()
         event = dict(event) if event else {}
 
-        # Look up the existing player's data (email, phone, status, etc.)
-        existing = conn.execute(
-            """SELECT customer_email, customer_phone, user_status, tee_choice, holes
+        # Find the parent item (the player's main registration)
+        parent = conn.execute(
+            """SELECT id, customer_email, customer_phone
                FROM items WHERE item_name = ? COLLATE NOCASE AND customer = ? COLLATE NOCASE
                AND COALESCE(transaction_status, 'active') = 'active'
+               AND parent_item_id IS NULL
                ORDER BY id DESC LIMIT 1""",
             (event_name, customer),
         ).fetchone()
-        existing = dict(existing) if existing else {}
+        if not parent:
+            return None
+        parent = dict(parent)
+        parent_id = parent["id"]
 
         uid = f"manual-payment-{int(_time.time() * 1000)}"
 
@@ -3137,8 +3177,8 @@ def add_payment_to_event(event_name: str, customer: str,
         new_values["email_uid"] = uid
         new_values["item_index"] = 0
         new_values["customer"] = customer
-        new_values["customer_email"] = existing.get("customer_email")
-        new_values["customer_phone"] = existing.get("customer_phone")
+        new_values["customer_email"] = parent.get("customer_email")
+        new_values["customer_phone"] = parent.get("customer_phone")
         new_values["item_name"] = event_name
         new_values["order_date"] = order_date if order_date else datetime.now().strftime("%Y-%m-%d")
         new_values["event_date"] = event.get("event_date") or ""
@@ -3148,10 +3188,9 @@ def add_payment_to_event(event_name: str, customer: str,
         new_values["merchant"] = f"Manual Entry ({payment_source})"
         new_values["item_price"] = payment_amount
         new_values["side_games"] = side_games or payment_item
-        new_values["holes"] = existing.get("holes") or ""
-        new_values["tee_choice"] = existing.get("tee_choice") or ""
-        new_values["user_status"] = existing.get("user_status") or ""
+        # Child payments do NOT carry holes, tee, status — only the parent has those
         new_values["notes"] = note or f"{payment_item} — {payment_amount} via {payment_source}"
+        new_values["parent_item_id"] = str(parent_id)
 
         cols = ", ".join(ITEM_COLUMNS)
         placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
