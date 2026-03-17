@@ -1600,6 +1600,17 @@ tr.order-item.order-item-hidden {
     padding-bottom: 0.35rem;
     border-bottom: 2px solid var(--primary);
 }
+.hole-in-one-banner {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #b8860b;
+    background: #fff8e1;
+    border: 1px solid #f0d060;
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
 .games-panel-empty {
     padding: 0.75rem;
     color: var(--text-muted);
