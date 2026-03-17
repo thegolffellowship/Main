@@ -1963,9 +1963,6 @@
         { key: "user_status", label: "Status", default: true },
         { key: "order_date", label: "Order", default: true },
         { key: "item_price", label: "Price", default: true },
-        { key: "partner_request", label: "Partner", default: false },
-        { key: "fellowship", label: "Fellowship", default: false },
-        { key: "notes", label: "Notes", default: false },
         { key: "actions", label: "Actions", default: true },
     ];
 
@@ -2035,7 +2032,7 @@
             const resolved = (r.resolved_name || "").toLowerCase();
             const first = (r.player_name || "").toLowerCase();
             if (resolved && regNames.has(resolved)) return false;
-            if (first && [...regNames].some(n => n.startsWith(first))) return false;
+            if (!resolved && first && [...regNames].some(n => n.startsWith(first))) return false;
             return true;
         });
         const syntheticRows = unmatchedPlaying.map((r, i) => ({
@@ -2358,7 +2355,10 @@
             const resolved = (r.resolved_name || "").toLowerCase();
             const first = (r.player_name || "").toLowerCase();
             if (resolved && regNames.has(resolved)) return false;
-            if (first && [...regNames].some(n => n.startsWith(first))) return false;
+            // Only use first-name heuristic when we don't have a resolved full name.
+            // If resolved_name is available but didn't match, the player is genuinely unmatched
+            // (avoids false dedup when two players share the same first name, e.g. Daniel South vs Daniel Miller).
+            if (!resolved && first && [...regNames].some(n => n.startsWith(first))) return false;
             return true;
         });
 
@@ -3329,7 +3329,7 @@
             const resolved = (r.resolved_name || "").toLowerCase();
             const first = (r.player_name || "").toLowerCase();
             if (resolved && regNames.has(resolved)) return false;
-            if (first && [...regNames].some(n => n.startsWith(first))) return false;
+            if (!resolved && first && [...regNames].some(n => n.startsWith(first))) return false;
             return true;
         });
         const ggRows = unmatchedPlaying.map((r, i) => ({
