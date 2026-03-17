@@ -57,7 +57,10 @@ IMPORTANT RULES:
 - Dates should be in YYYY-MM-DD format.
 
 FIELD-SPECIFIC GUIDANCE:
-- "customer": The buyer / registrant name. Always use Title Case \
+- "customer": The buyer / registrant name — the person who placed and paid for \
+  the order. This is the name from "New order from:", the Shipping Address, or \
+  the email header. Do NOT use the "Playing Partner Request" name here — that \
+  is a DIFFERENT person and goes in "partner_request". Always use Title Case \
   (e.g. "Mike Jenkins", not "mike jenkins" or "MIKE JENKINS").
 - "item_name": Use the FULL event/product name exactly as shown in the Order Summary, \
   including the venue/course name. For example, "Austin Kickoff SHADOWGLEN" must stay \
