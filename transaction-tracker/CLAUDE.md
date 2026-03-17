@@ -25,7 +25,7 @@ WebFetch https://main-production-b95c.up.railway.app/api/audit
 This returns:
 - `fill_rates` — percentage of rows where each field is populated
 - `problems` — list of rows missing critical fields (customer, order_id, item_name, etc.)
-- `distributions` — value counts for city, course, member_status, golf_or_compete, tee_choice
+- `distributions` — value counts for chapter, course, user_status, tee_choice
 
 ### How to inspect recent data
 
@@ -172,11 +172,12 @@ Two visual separator rows appear in the expanded rounds table:
 ## Architecture
 
 - **Flask app** in `transaction-tracker/app.py`
-- **Email parsing** via Claude AI in `email_parser/parser.py`
-- **Email fetching** via Microsoft Graph API in `email_parser/fetcher.py`
+- **Email parsing** via Claude Haiku in `email_parser/parser.py`
+- **Email fetching** via Microsoft Graph API in `email_parser/fetcher.py` — only processes emails with "New Order" subject lines; all processed email UIDs tracked in `processed_emails` table to prevent re-parsing
 - **SQLite DB** at `transaction-tracker/transactions.db` (local is empty; live data on Railway)
 - **Scheduler** checks inbox every 15 minutes via APScheduler
 - **Dashboard** at `/` with search, filter, sort, CSV export
+- **Golf Genius sync** via direct HTTP requests in `golf_genius_sync.py` (rewritten from Playwright)
 
 ## Events Page — Player Status Architecture
 
@@ -223,7 +224,11 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - `email_parser/database.py` — schema, CRUD, audit queries
 - `email_parser/fetcher.py` — Microsoft Graph email fetching
 - `templates/index.html` — dashboard HTML
+- `templates/handicaps.html` — Handicap management page
+- `templates/database.html` — Admin database browser
 - `static/js/dashboard.js` — client-side search/filter/export
+- `static/js/auth.js` — PIN auth + role management
+- `golf_genius_sync.py` — Golf Genius handicap sync via HTTP
 
 ## Git Merge & PR Best Practices
 
