@@ -63,9 +63,18 @@ FIELD-SPECIFIC GUIDANCE:
   is a DIFFERENT person and goes in "partner_request". Always use Title Case \
   (e.g. "Mike Jenkins", not "mike jenkins" or "MIKE JENKINS").
 - "item_name": Use the FULL event/product name exactly as shown in the Order Summary, \
-  including the venue/course name. For example, "Austin Kickoff SHADOWGLEN" must stay \
-  as "Austin Kickoff SHADOWGLEN" — do NOT strip the course name. Other examples: \
-  "Feb 22 - LaCANTERA", "San Antonio Kickoff THE QUARRY", "Dallas Classic COWBOYS". \
+  including any series/event code prefix AND the venue/course name. \
+  CRITICAL: Many events have a series code like "a9.1", "s18.2", "h5.3", "d3.1" \
+  (letter + number + dot + number) at the beginning — you MUST include this code \
+  as part of the item_name. For example: \
+    "a9.1 STAR RANCH" → item_name = "a9.1 STAR RANCH" (NOT just "Star Ranch") \
+    "s18.2 La CANTERA" → item_name = "s18.2 La CANTERA" (NOT just "La Cantera") \
+    "Austin Kickoff SHADOWGLEN" → item_name = "Austin Kickoff SHADOWGLEN" \
+    "Feb 22 - LaCANTERA" → item_name = "Feb 22 - LaCANTERA" \
+  NEVER use just a course name (e.g. "Star Ranch", "La Cantera", "ShadowGlen") \
+  as the item_name — that is always wrong. The item_name must include the full \
+  event identifier as shown in the Order Summary. Look carefully at the Order \
+  Summary section for the complete product/event title. \
   Exception: for membership items, normalise the item name to just "TGF MEMBERSHIP" \
   regardless of any city or tier suffix in the original (e.g. "TGF MEMBERSHIP CITY: \
   AUS | New Member..." → "TGF MEMBERSHIP"). \
@@ -429,6 +438,13 @@ def _normalize_chapter(chapter: str | None) -> str | None:
     return None
 
 
+# Course names that should NEVER be the entire item_name — they indicate
+# the AI missed the event identifier / series code prefix.
+_COURSE_ONLY_NAMES = {v.lower() for v in _COURSE_CANONICAL.values()}
+# Also add common raw variants
+_COURSE_ONLY_NAMES |= set(_COURSE_CANONICAL.keys())
+
+
 _MEMBERSHIP_RE = re.compile(r"^TGF\s+MEMBERSHIP\b.*", re.IGNORECASE)
 
 
@@ -550,6 +566,60 @@ def _expand_quantity_rows(rows: list[dict]) -> list[dict]:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _validate_parsed_items(rows: list[dict]) -> list[dict]:
+    """Check parsed items for suspicious patterns and attach warnings.
+
+    Returns the same rows with a ``_parse_warnings`` list added to any
+    row that has a potential issue.  Callers can persist these warnings
+    for admin review.
+    """
+    warnings: list[dict] = []
+    for row in rows:
+        item_name = (row.get("item_name") or "").strip()
+        if not item_name:
+            continue
+
+        row_warnings = []
+
+        # 1. item_name is JUST a course name (e.g. "Star Ranch" instead of "a9.1 STAR RANCH")
+        if item_name.lower() in _COURSE_ONLY_NAMES:
+            row_warnings.append({
+                "code": "COURSE_NAME_ONLY",
+                "message": (
+                    f"Item name \"{item_name}\" is just a course name — the event "
+                    f"identifier (e.g. series code like 'a9.1') was likely missed "
+                    f"during parsing. Check the original email Order Summary."
+                ),
+            })
+            logger.warning(
+                "Parse validation: item_name '%s' is just a course name "
+                "(order_id=%s, customer=%s) — event code likely missing",
+                item_name, row.get("order_id"), row.get("customer"),
+            )
+
+        # 2. item_name is very short and looks like it might be truncated
+        # (real event names are usually 10+ chars, e.g. "a9.1 Star Ranch")
+        elif len(item_name) < 6 and not _MEMBERSHIP_RE.match(item_name):
+            row_warnings.append({
+                "code": "ITEM_NAME_TOO_SHORT",
+                "message": f"Item name \"{item_name}\" is suspiciously short — may be truncated.",
+            })
+
+        # 3. Event-like item has no event_date
+        if (row.get("course") or row.get("chapter")) and not row.get("event_date"):
+            if not _MEMBERSHIP_RE.match(item_name):
+                row_warnings.append({
+                    "code": "MISSING_EVENT_DATE",
+                    "message": f"Item \"{item_name}\" has course/chapter but no event_date.",
+                })
+
+        if row_warnings:
+            row["_parse_warnings"] = row_warnings
+            warnings.extend(row_warnings)
+
+    return rows
+
+
 def parse_email(email_data: dict) -> list[dict]:
     """
     Parse a single email dict (from fetcher) using Claude AI.
@@ -641,6 +711,9 @@ def parse_email(email_data: dict) -> list[dict]:
 
     # Expand any items with quantity > 1 into separate per-player rows
     rows = _expand_quantity_rows(rows)
+
+    # Validate parsed items and attach warnings for suspicious patterns
+    rows = _validate_parsed_items(rows)
 
     return rows
 

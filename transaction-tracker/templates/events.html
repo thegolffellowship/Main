@@ -162,6 +162,51 @@
         /* Resolve mode toggle */
         .resolve-mode-btn { background: #f9fafb; color: var(--text-muted); transition: background 0.15s, color 0.15s; }
         .resolve-mode-active { background: var(--primary) !important; color: #fff !important; }
+        /* Parse warning banner */
+        .parse-warning-banner {
+            background: #fee2e2;
+            border: 2px solid #ef4444;
+            border-left: 5px solid #dc2626;
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(220, 38, 38, 0.15);
+        }
+        .parse-warning-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            flex-wrap: wrap;
+            font-size: 0.92rem;
+        }
+        .parse-warning-icon { font-size: 1.3rem; }
+        .parse-warning-subtitle { font-size: 0.82rem; color: #991b1b; flex: 1; }
+        .parse-warning-toggle-btn {
+            background: #fff1f2;
+            border: 1px solid #ef4444;
+            border-radius: 6px;
+            padding: 0.3rem 0.85rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #991b1b;
+            cursor: pointer;
+        }
+        .parse-warning-toggle-btn:hover { background: #fecaca; }
+        .parse-warning-list { padding: 0.25rem 1rem 0.75rem; }
+        .parse-warning-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.55rem 0;
+            border-top: 1px solid #fca5a5;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .parse-warning-item-info { font-size: 0.85rem; flex: 1; min-width: 200px; }
+        .parse-warning-item-name { font-weight: 600; color: #991b1b; }
+        .parse-warning-item-meta { color: #6b7280; font-size: 0.78rem; }
+        .parse-warning-item-actions { display: flex; gap: 0.3rem; }
         /* Mobile: hide events table column toggle */
         @media (max-width: 768px) {
             .column-toggle-wrapper { display: none; }
@@ -172,6 +217,8 @@
             .view-toggle-group { margin-right: 0.2rem; }
             .orphan-banner-header { font-size: 0.82rem; }
             .orphan-subtitle { display: none; }
+            .parse-warning-header { font-size: 0.82rem; }
+            .parse-warning-subtitle { display: none; }
         }
     </style>
 </head>
@@ -233,6 +280,17 @@
                 <div class="stat-value" id="stat-past">—</div>
                 <div class="stat-label">Past</div>
             </div>
+        </section>
+
+        <!-- Parse Warnings Banner (admin only) -->
+        <section id="parse-warning-banner" class="parse-warning-banner" style="display:none;">
+            <div class="parse-warning-header">
+                <span class="parse-warning-icon">&#9888;</span>
+                <strong><span id="parse-warning-count">0</span> Parse Warning(s)</strong>
+                <span class="parse-warning-subtitle">Items that may have been parsed incorrectly — review and fix</span>
+                <button class="parse-warning-toggle-btn" id="parse-warning-toggle-btn">Show &#9662;</button>
+            </div>
+            <div id="parse-warning-list" class="parse-warning-list" style="display:none;"></div>
         </section>
 
         <!-- Orphaned Items Banner (admin only) -->
@@ -4772,6 +4830,71 @@
     }
 
     // =========================================================================
+    // Parse Warnings
+    // =========================================================================
+    let parseWarnings = [];
+
+    async function fetchParseWarnings() {
+        if (currentRole !== "admin") return;
+        try {
+            const res = await fetch("/api/parse-warnings");
+            parseWarnings = await res.json();
+            renderParseWarningBanner();
+        } catch (err) {
+            console.error("Failed to fetch parse warnings:", err);
+        }
+    }
+
+    function renderParseWarningBanner() {
+        const banner = document.getElementById("parse-warning-banner");
+        if (!parseWarnings.length || currentRole !== "admin") {
+            banner.style.display = "none";
+            return;
+        }
+        banner.style.display = "block";
+        document.getElementById("parse-warning-count").textContent = parseWarnings.length;
+
+        const list = document.getElementById("parse-warning-list");
+        list.innerHTML = parseWarnings.map(w => {
+            const date = w.created_at ? w.created_at.split("T")[0] || w.created_at.split(" ")[0] : "";
+            return `
+            <div class="parse-warning-item">
+                <div class="parse-warning-item-info">
+                    <span class="parse-warning-item-name">${escapeHtml(w.item_name || "—")}</span>
+                    <span class="parse-warning-item-meta">
+                        ${escapeHtml(w.customer || "—")} &middot;
+                        Order ${escapeHtml(w.order_id || "—")} &middot;
+                        ${escapeHtml(date)} &middot;
+                        <em>${escapeHtml(w.message)}</em>
+                    </span>
+                </div>
+                <div class="parse-warning-item-actions">
+                    <button class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
+                            data-pw-dismiss="${w.id}">Dismiss</button>
+                </div>
+            </div>`;
+        }).join("");
+
+        // Attach dismiss handlers
+        list.querySelectorAll("[data-pw-dismiss]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const id = btn.dataset.pwDismiss;
+                try {
+                    await fetch(`/api/parse-warnings/${id}/dismiss`, { method: "POST" });
+                    parseWarnings = parseWarnings.filter(w => String(w.id) !== String(id));
+                    renderParseWarningBanner();
+                } catch (err) {
+                    alert("Failed to dismiss warning.");
+                }
+            });
+        });
+
+        // Auto-expand so it's immediately visible
+        list.style.display = "";
+        document.getElementById("parse-warning-toggle-btn").textContent = "Hide \u25B4";
+    }
+
+    // =========================================================================
     // Orphaned Items
     // =========================================================================
     let orphanedItems = [];
@@ -5678,6 +5801,19 @@
             });
         });
 
+        // Parse warning banner toggle
+        document.getElementById("parse-warning-toggle-btn").addEventListener("click", () => {
+            const list = document.getElementById("parse-warning-list");
+            const btn = document.getElementById("parse-warning-toggle-btn");
+            if (list.style.display === "none") {
+                list.style.display = "";
+                btn.textContent = "Hide \u25B4";
+            } else {
+                list.style.display = "none";
+                btn.textContent = "Show \u25BE";
+            }
+        });
+
         // Orphan banner toggle
         document.getElementById("orphan-toggle-btn").addEventListener("click", () => {
             const list = document.getElementById("orphan-list");
@@ -5694,6 +5830,7 @@
         // Fetch items and handicap data first, then sync events and fetch
         await Promise.all([fetchItems(), fetchHandicapIndexMap()]);
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
+        fetchParseWarnings();
         fetchOrphanedItems();
 
         // Auto-refresh every 30s to keep multiple users in sync
@@ -5710,6 +5847,7 @@
                 if (!anyModalOpen) {
                     await Promise.all([fetchItems(), fetchHandicapIndexMap()]);
                     await fetchEvents();
+                    fetchParseWarnings();
                     fetchOrphanedItems();
                 }
             } catch (err) {
