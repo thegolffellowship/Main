@@ -1610,8 +1610,8 @@
                 if (!mobileGamesView && !mobilePairingsView) {
                     // 9/18 holes filter
                     const mHolesFilter = eventHolesFilter[ev.id] || null;
-                    const mCount9 = registrants.filter(r => r.holes === "9" || r.holes === 9).length;
-                    const mCount18 = registrants.filter(r => r.holes === "18" || r.holes === 18).length;
+                    const mCount9 = registrants.filter(r => !r.parent_item_id && (r.holes === "9" || r.holes === 9)).length;
+                    const mCount18 = registrants.filter(r => !r.parent_item_id && (r.holes === "18" || r.holes === 18)).length;
                     if (mCount9 > 0 || mCount18 > 0) {
                         badgesHtml += '<span class="view-toggle-group">';
                         badgesHtml += `<span class="game-stat-badge ${mHolesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${mCount9}</strong></span>`;
@@ -1632,14 +1632,14 @@
                 } else if (mobileGamesView) {
                     detailHtml = badgesHtml + renderGamesPanel(ev);
                 } else {
-                    // Separate inactive (credited/refunded/transferred/WD) from active
+                    // Separate inactive, children, and active
                     const MOBILE_INACTIVE = ["credited", "refunded", "transferred", "wd"];
-                    const mobileActive = registrants.filter(r => !MOBILE_INACTIVE.includes(r.transaction_status));
-                    const mobileInactive = registrants.filter(r => MOBILE_INACTIVE.includes(r.transaction_status));
+                    const mobileActive = registrants.filter(r => !MOBILE_INACTIVE.includes(r.transaction_status) && !r.parent_item_id);
+                    const mobileInactive = registrants.filter(r => MOBILE_INACTIVE.includes(r.transaction_status) && !r.parent_item_id);
                     let filteredRegs = mobileActive;
                     if (activeFilter) {
                         filteredRegs = mobileActive.filter(r => {
-                            const type = classifyGameType(r.side_games);
+                            const type = getEffectiveGameType(r, registrants);
                             if (activeFilter === "NET") return type === "NET" || type === "BOTH";
                             if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
                             if (activeFilter === "NO GAMES") return type === "NO GAMES";
@@ -1931,11 +1931,32 @@
         return computeGameStats(all, ev.item_name).players;
     }
 
+    function getEffectiveGameType(r, allRegs) {
+        // Combine parent's games with any child payment games
+        const parentGames = classifyGameType(r.side_games);
+        if (!r.id) return parentGames;
+        const children = allRegs.filter(c => c.parent_item_id && String(c.parent_item_id) === String(r.id));
+        if (!children.length) return parentGames;
+        let hasNet = parentGames === "NET" || parentGames === "BOTH";
+        let hasGross = parentGames === "GROSS" || parentGames === "BOTH";
+        children.forEach(c => {
+            const ct = classifyGameType(c.side_games);
+            if (ct === "NET" || ct === "BOTH") hasNet = true;
+            if (ct === "GROSS" || ct === "BOTH") hasGross = true;
+        });
+        if (hasNet && hasGross) return "BOTH";
+        if (hasNet) return "NET";
+        if (hasGross) return "GROSS";
+        return parentGames;
+    }
+
     function computeGameStats(registrants, eventName) {
         const overrides = allRsvpOverrides[eventName] || {};
         const emailOverrides = allRsvpEmailOverrides[eventName] || {};
         let net = 0, gross = 0, noGames = 0, notPlaying = 0;
-        registrants.forEach(r => {
+        // Only count parent items (skip child payments)
+        const parents = registrants.filter(r => !r.parent_item_id);
+        parents.forEach(r => {
             // Check if this player has been manually overridden to not_playing
             const isSynthetic = String(r.id).startsWith("gg-rsvp");
             const override = isSynthetic
@@ -1959,7 +1980,7 @@
                 // If included_games credited, remove from PLAYERS count
                 if (creditedIncluded) { notPlaying++; }
                 // Only count in game types that were NOT credited
-                const type = classifyGameType(r.side_games);
+                const type = getEffectiveGameType(r, registrants);
                 if (!creditedNet && (type === "NET" || type === "BOTH")) { net++; }
                 if (!creditedGross && (type === "GROSS" || type === "BOTH")) { gross++; }
                 // If all their games were credited, and included was credited, they're fully out
@@ -1975,13 +1996,13 @@
 
             // RSVP-only players count toward total but not net/gross
             if (r.transaction_status === "rsvp_only") { noGames++; return; }
-            const type = classifyGameType(r.side_games);
+            const type = getEffectiveGameType(r, registrants);
             if (type === "BOTH") { net++; gross++; }
             else if (type === "NET") { net++; }
             else if (type === "GROSS") { gross++; }
             else { noGames++; }
         });
-        return { players: registrants.length - notPlaying, net, gross, noGames, notPlaying };
+        return { players: parents.length - notPlaying, net, gross, noGames, notPlaying };
     }
 
     function getRsvpForItem(itemId, eventName) {
@@ -2249,8 +2270,8 @@
         if (!gamesView && !pairingsView) {
             // 9/18 holes filter toggle
             const holesFilter = eventHolesFilter[ev.id] || null;
-            const count9 = registrants.filter(r => r.holes === "9" || r.holes === 9).length;
-            const count18 = registrants.filter(r => r.holes === "18" || r.holes === 18).length;
+            const count9 = registrants.filter(r => !r.parent_item_id && (r.holes === "9" || r.holes === 9)).length;
+            const count18 = registrants.filter(r => !r.parent_item_id && (r.holes === "18" || r.holes === 18)).length;
             if (count9 > 0 || count18 > 0) {
                 html += '<span class="view-toggle-group">';
                 html += `<span class="game-stat-badge ${holesFilter === '9' ? 'active' : ''}" data-event-id="${ev.id}" data-holes-filter="9">9 <strong>${count9}</strong></span>`;
@@ -2300,16 +2321,18 @@
         }
 
         // ---- PLAYERS VIEW ----
-        // Separate inactive players (credited, refunded, transferred, WD)
+        // Separate inactive players and child payments
         const INACTIVE_STATUSES = ["credited", "refunded", "transferred", "wd"];
-        const inactivePlayers = registrants.filter(r => INACTIVE_STATUSES.includes(r.transaction_status));
-        const activePlayers = registrants.filter(r => !INACTIVE_STATUSES.includes(r.transaction_status));
+        const inactivePlayers = registrants.filter(r => INACTIVE_STATUSES.includes(r.transaction_status) && !r.parent_item_id);
+        const childPayments = registrants.filter(r => r.parent_item_id);
+        const activePlayers = registrants.filter(r => !INACTIVE_STATUSES.includes(r.transaction_status) && !r.parent_item_id);
 
         // Filter active registrants if a game filter is active
+        // Use effective game type (parent + children combined)
         let filtered = activePlayers;
         if (activeFilter) {
             filtered = activePlayers.filter(r => {
-                const type = classifyGameType(r.side_games);
+                const type = getEffectiveGameType(r, registrants);
                 if (activeFilter === "NET") return type === "NET" || type === "BOTH";
                 if (activeFilter === "GROSS") return type === "GROSS" || type === "BOTH";
                 if (activeFilter === "NO GAMES") return type === "NO GAMES";
@@ -2461,11 +2484,42 @@
                     } else {
                         html += `<td style="${style}">${escapeHtml(r.handicap || "\u2014")}</td>`;
                     }
+                } else if (c.key === "side_games") {
+                    // Show effective game type (parent + children combined)
+                    const effectiveType = getEffectiveGameType(r, registrants);
+                    const displayGames = effectiveType === "NO GAMES" ? "NONE" : effectiveType;
+                    html += `<td style="${style}">${escapeHtml(displayGames)}</td>`;
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
                 }
             });
             html += '</tr>';
+            // Render child payment sub-rows for this parent
+            const children = childPayments.filter(c => String(c.parent_item_id) === String(r.id)
+                && !INACTIVE_STATUSES.includes(c.transaction_status));
+            children.forEach(child => {
+                html += `<tr class="child-payment-row" style="background:#f0fdf4;">`;
+                DETAIL_COLUMNS.forEach(c => {
+                    const vis = detailVisibleColumns[c.key] !== false;
+                    const style = (vis ? '' : 'display:none;') + 'font-size:0.78rem;color:#6b7280;';
+                    if (c.key === "rsvp") {
+                        html += `<td class="rsvp-col"></td>`;
+                    } else if (c.key === "customer") {
+                        html += `<td style="${style}; padding-left:2rem;"><span style="color:#059669; font-size:0.65rem; font-weight:600; margin-right:0.25rem;">+PAY</span> ${escapeHtml(child.side_games || child.notes || "Payment")}</td>`;
+                    } else if (c.key === "side_games") {
+                        html += `<td style="${style}; font-weight:600;">${escapeHtml(child.side_games || "\u2014")}</td>`;
+                    } else if (c.key === "item_price") {
+                        html += `<td style="${style}; font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(child.item_price || "\u2014")}</td>`;
+                    } else if (c.key === "order_date") {
+                        html += `<td style="${style}">${escapeHtml(child.order_date || "\u2014")}</td>`;
+                    } else if (c.key === "actions") {
+                        html += `<td style="${style}"><button class="btn btn-delete-manual" data-delete-id="${child.id}" data-player-name="${escapeHtml(child.customer || '')} payment" style="font-size:0.6rem;">Delete</button></td>`;
+                    } else {
+                        html += `<td style="${style}">\u2014</td>`;
+                    }
+                });
+                html += '</tr>';
+            });
         });
 
         html += '</tbody></table>';
