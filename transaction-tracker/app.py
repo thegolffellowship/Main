@@ -41,6 +41,7 @@ from email_parser.database import (
     create_event,
     seed_events,
     add_player_to_event,
+    add_payment_to_event,
     upgrade_rsvp_to_paid,
     autofix_side_games,
     autofix_all,
@@ -558,8 +559,9 @@ def api_data_snapshot():
 
 
 @app.route("/api/items/<int:item_id>", methods=["PATCH"])
+@require_role("admin")
 def api_update_item(item_id):
-    """Update specific fields on an item row (for inline editing)."""
+    """Update specific fields on an item row (for inline editing). Admin only."""
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON."}), 400
@@ -1969,6 +1971,35 @@ def api_add_player():
         return jsonify({"error": "Failed to add player."}), 500
     except Exception as e:
         logger.exception("Error adding player: %s", e)
+        return jsonify({"error": f"Server error: {e}"}), 500
+
+
+@app.route("/api/events/add-payment", methods=["POST"])
+def api_add_payment():
+    """Add an additional payment record for an existing event player."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("event_name") or not data.get("customer"):
+        return jsonify({"error": "event_name and customer are required."}), 400
+    if not data.get("payment_amount") or not data.get("payment_source"):
+        return jsonify({"error": "payment_amount and payment_source are required."}), 400
+    err = validate_json_fields(data)
+    if err:
+        return jsonify({"error": err}), 400
+    try:
+        item = add_payment_to_event(
+            event_name=data["event_name"],
+            customer=data["customer"],
+            payment_item=data.get("payment_item", ""),
+            payment_amount=data.get("payment_amount", ""),
+            payment_source=data.get("payment_source", ""),
+            note=data.get("note", ""),
+            order_date=data.get("order_date", ""),
+        )
+        if item:
+            return jsonify({"status": "ok", "item": item}), 201
+        return jsonify({"error": "Failed to add payment."}), 500
+    except Exception as e:
+        logger.exception("Error adding payment: %s", e)
         return jsonify({"error": f"Server error: {e}"}), 500
 
 

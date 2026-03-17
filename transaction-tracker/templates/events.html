@@ -307,6 +307,8 @@
                             <option value="">Select chapter...</option>
                             <option value="San Antonio">San Antonio</option>
                             <option value="Austin">Austin</option>
+                            <option value="Houston">Houston</option>
+                            <option value="DFW">DFW</option>
                         </select>
                     </label>
                 </div>
@@ -704,6 +706,66 @@
         </div>
     </div>
 
+    <!-- Add Payment Modal -->
+    <div id="add-payment-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal add-player-modal">
+            <div class="modal-header">
+                <h2>Add Payment</h2>
+                <button id="add-payment-close" class="modal-close">&times;</button>
+            </div>
+            <div id="add-payment-event-info" class="credit-info ap-field-section"></div>
+            <form id="add-payment-form" class="edit-form">
+                <div class="edit-grid">
+                    <label><span>Player <span class="ap-required">*</span></span>
+                        <select id="add-payment-player" class="modal-input" aria-required="true">
+                            <option value="">Select player…</option>
+                        </select>
+                    </label>
+                    <label><span>Item <span class="ap-required">*</span></span>
+                        <select id="add-payment-item" class="modal-input" aria-required="true">
+                            <option value="">Select item…</option>
+                            <option value="NET Games">NET Games</option>
+                            <option value="GROSS Games">GROSS Games</option>
+                            <option value="BOTH Games">BOTH Games (Net + Gross)</option>
+                            <option value="Event Upgrade">Event Upgrade (9→18 holes)</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="add-payment-other-field" class="ap-field-section" style="display:none;">
+                    <label>Description
+                        <input type="text" id="add-payment-other-desc" class="modal-input" placeholder="Describe the payment…">
+                    </label>
+                </div>
+                <div class="edit-grid">
+                    <label><span>Amount <span class="ap-required">*</span></span>
+                        <div style="position:relative;">
+                            <span style="position:absolute;left:0.65rem;top:50%;transform:translateY(-50%);font-weight:600;color:var(--text-muted);pointer-events:none;">$</span>
+                            <input type="text" id="add-payment-amount" class="modal-input" inputmode="decimal" placeholder="0.00" style="padding-left:1.4rem;">
+                        </div>
+                    </label>
+                    <label><span>Payment Source <span class="ap-required">*</span></span>
+                        <select id="add-payment-source" class="modal-input">
+                            <option value="">Select…</option>
+                            <option value="Venmo">Venmo</option>
+                            <option value="Zelle">Zelle</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="ap-field-section">
+                    <label>Note (optional)
+                        <input type="text" id="add-payment-note" class="modal-input" placeholder="e.g. Paid $16 for gross games via Venmo">
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="add-payment-cancel" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" id="add-payment-submit-btn" class="btn btn-primary">Add Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Upgrade RSVP Modal -->
     <div id="upgrade-rsvp-overlay" class="modal-overlay" style="display:none;">
         <div class="modal" style="max-width:420px;">
@@ -779,12 +841,13 @@
                     <label>Event Name<input type="text" id="add-event-name" class="modal-input" required aria-required="true"></label>
                     <label>Date<input type="date" id="add-event-date" class="modal-input"></label>
                     <label>Course<input type="text" id="add-event-course" class="modal-input"></label>
-                    <!-- TODO: pull chapters from a chapters table when the full platform is built -->
                     <label>Chapter
                         <select id="add-event-chapter" class="modal-input">
                             <option value="">Select chapter...</option>
                             <option value="San Antonio">San Antonio</option>
                             <option value="Austin">Austin</option>
+                            <option value="Houston">Houston</option>
+                            <option value="DFW">DFW</option>
                         </select>
                     </label>
                 </div>
@@ -965,12 +1028,13 @@
                     <label>Event Name<input type="text" id="resolve-new-name" class="modal-input"></label>
                     <label>Date<input type="date" id="resolve-new-date" class="modal-input"></label>
                     <label>Course<input type="text" id="resolve-new-course" class="modal-input"></label>
-                    <!-- TODO: pull chapters from a chapters table when the full platform is built -->
                     <label>Chapter
                         <select id="resolve-new-chapter" class="modal-input">
                             <option value="">Select chapter...</option>
                             <option value="San Antonio">San Antonio</option>
                             <option value="Austin">Austin</option>
+                            <option value="Houston">Houston</option>
+                            <option value="DFW">DFW</option>
                         </select>
                     </label>
                 </div>
@@ -1624,6 +1688,7 @@
                     detailHtml = badgesHtml + `
                     <div style="display:flex; gap:0.5rem; margin-bottom:0.65rem; flex-wrap:wrap;">
                         <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">+ Add Player</button>
+                        <button class="btn btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#059669; color:#fff; border:none; border-radius:6px; cursor:pointer;">+ Add Payment</button>
                         ${mRsvpOnlyCount > 0 ? `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Remind All (${mRsvpOnlyCount})</button>` : ''}
                         <button class="btn btn-message-players" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;">Message Players</button>
                         <button class="btn btn-edit btn-mobile-edit-event" data-edit-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Edit</button>
@@ -2272,6 +2337,7 @@
         html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; flex-wrap:wrap;">';
         html += `<h4 style="margin:0;">Registrations (${filtered.length}${activeFilter ? ' \u2014 ' + activeFilter : ''})</h4>`;
         html += `<button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>`;
+        html += `<button class="btn btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#059669; color:#fff; border:none; border-radius:6px; cursor:pointer;">+ Add Payment</button>`;
         if (rsvpOnlyCount > 0) {
             html += `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Send payment reminder to all ${rsvpOnlyCount} RSVP-only player(s)">Remind All (${rsvpOnlyCount})</button>`;
         }
@@ -2907,6 +2973,14 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openAddPlayerModal(btn.dataset.eventName);
+            });
+        });
+
+        // Add Payment button
+        container.querySelectorAll(".btn-add-payment").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openAddPaymentModal(btn.dataset.eventName);
             });
         });
 
@@ -4120,6 +4194,93 @@
         } catch (err) { alert("Failed to add player."); }
     }
 
+    // ---- Add Payment modal ----
+    let addPaymentEventName = null;
+
+    function openAddPaymentModal(eventName) {
+        addPaymentEventName = eventName;
+        document.getElementById("add-payment-event-info").innerHTML =
+            `Payment for event: <strong>${escapeHtml(eventName)}</strong>`;
+        // Populate player dropdown from current registrants (active only)
+        const regs = getRegistrants(eventName).filter(r =>
+            !["credited", "refunded", "transferred", "wd", "rsvp_only", "gg_rsvp"].includes(r.transaction_status || "active")
+        );
+        const sorted = [...regs].sort((a, b) => {
+            const an = lastNameSortKey(a.customer || "");
+            const bn = lastNameSortKey(b.customer || "");
+            return an.localeCompare(bn);
+        });
+        const playerSelect = document.getElementById("add-payment-player");
+        playerSelect.innerHTML = '<option value="">Select player…</option>' +
+            sorted.map(r => `<option value="${escapeHtml(r.customer)}">${escapeHtml(r.customer)}</option>`).join("");
+        // Reset fields
+        document.getElementById("add-payment-item").value = "";
+        document.getElementById("add-payment-amount").value = "";
+        document.getElementById("add-payment-source").value = "";
+        document.getElementById("add-payment-note").value = "";
+        document.getElementById("add-payment-other-desc").value = "";
+        document.getElementById("add-payment-other-field").style.display = "none";
+        document.getElementById("add-payment-overlay").style.display = "flex";
+    }
+
+    function closeAddPaymentModal() {
+        document.getElementById("add-payment-overlay").style.display = "none";
+        addPaymentEventName = null;
+    }
+
+    async function handleAddPaymentSubmit(e) {
+        e.preventDefault();
+        const missing = [];
+        const customer = document.getElementById("add-payment-player").value;
+        if (!customer) missing.push("Player");
+        let itemType = document.getElementById("add-payment-item").value;
+        if (!itemType) missing.push("Item");
+        const rawAmount = document.getElementById("add-payment-amount").value.trim().replace(/[^0-9.]/g, "");
+        if (!rawAmount) missing.push("Amount");
+        const source = document.getElementById("add-payment-source").value;
+        if (!source) missing.push("Payment Source");
+
+        if (itemType === "Other") {
+            const desc = document.getElementById("add-payment-other-desc").value.trim();
+            if (desc) itemType = desc;
+        }
+
+        if (missing.length > 1) { alert("All required fields must be entered."); return; }
+        if (missing.length === 1) { alert(`Please enter ${missing[0]}.`); return; }
+
+        const num = parseFloat(rawAmount);
+        if (isNaN(num) || num <= 0) { alert("Please enter a valid dollar amount."); return; }
+
+        const now = new Date();
+        const localDate = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+
+        const payload = {
+            event_name: addPaymentEventName,
+            customer: customer,
+            payment_item: itemType,
+            payment_amount: "$" + num.toFixed(2),
+            payment_source: source,
+            note: document.getElementById("add-payment-note").value.trim(),
+            order_date: localDate,
+        };
+
+        try {
+            const res = await fetch("/api/events/add-payment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                alert(data.error || "Failed to add payment.");
+                return;
+            }
+            closeAddPaymentModal();
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) { alert("Failed to add payment."); }
+    }
+
     // ---- Link RSVP to Customer modal ----
     let linkRsvpEmail = "";
     let linkRsvpPlayerName = "";
@@ -5263,6 +5424,17 @@
         // Mode toggle for Add Player
         document.querySelectorAll('input[name="add-player-mode"]').forEach(radio => {
             radio.addEventListener("change", updateAddPlayerMode);
+        });
+
+        // Add Payment modal
+        document.getElementById("add-payment-form").addEventListener("submit", handleAddPaymentSubmit);
+        document.getElementById("add-payment-cancel").addEventListener("click", closeAddPaymentModal);
+        document.getElementById("add-payment-close").addEventListener("click", closeAddPaymentModal);
+        document.getElementById("add-payment-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeAddPaymentModal();
+        });
+        document.getElementById("add-payment-item").addEventListener("change", function() {
+            document.getElementById("add-payment-other-field").style.display = this.value === "Other" ? "" : "none";
         });
 
         // Show email/phone fields for new players + auto-fill status
