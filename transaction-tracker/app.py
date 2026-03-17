@@ -1962,6 +1962,7 @@ def api_add_player():
             customer_email=data.get("customer_email", ""),
             customer_phone=data.get("customer_phone", ""),
             holes=data.get("holes", ""),
+            order_date=data.get("order_date", ""),
         )
         if item:
             return jsonify({"status": "ok", "item": item}), 201

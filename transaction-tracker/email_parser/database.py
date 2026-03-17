@@ -3006,7 +3006,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
                         handicap: str = "", user_status: str = "",
                         payment_amount: str = "", payment_source: str = "",
                         customer_email: str = "", customer_phone: str = "",
-                        holes: str = "",
+                        holes: str = "", order_date: str = "",
                         db_path: str | Path | None = None) -> dict | None:
     """
     Add a player to an event.
@@ -3037,7 +3037,8 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         new_values["customer_email"] = customer_email or None
         new_values["customer_phone"] = customer_phone or None
         new_values["item_name"] = event_name
-        new_values["order_date"] = datetime.now().strftime("%Y-%m-%d")
+        # Use client-provided local date if available, otherwise server UTC
+        new_values["order_date"] = order_date if order_date else datetime.now().strftime("%Y-%m-%d")
         new_values["event_date"] = event.get("event_date") or ""
         new_values["course"] = event.get("course") or ""
         new_values["chapter"] = event.get("chapter") or ""
@@ -4137,23 +4138,42 @@ def compute_handicap_index(differentials: list[float],
     return round(index * 10) / 10
 
 
-def _match_customer_by_email(conn: sqlite3.Connection, email: str) -> str | None:
+def _match_customer_by_email(conn: sqlite3.Connection, email: str,
+                             player_name: str = "") -> str | None:
     """Match a player to a customer by email address.
 
     Looks up the email in the items table (customer_email column) and returns
-    the canonical customer name. This is the highest-confidence matching method.
+    the canonical customer name. When multiple customers share the same email,
+    prefers the one whose name is most similar to ``player_name``.
     """
     if not email:
         return None
-    row = conn.execute(
+    rows = conn.execute(
         """SELECT DISTINCT customer FROM items
            WHERE LOWER(customer_email) = LOWER(?)
-           AND customer IS NOT NULL AND customer != ''
-           LIMIT 1""",
+           AND customer IS NOT NULL AND customer != ''""",
         (email,),
-    ).fetchone()
-    if row:
-        return row["customer"]
+    ).fetchall()
+    if rows:
+        if len(rows) == 1:
+            return rows[0]["customer"]
+        # Multiple customers share this email — pick the best name match
+        if player_name:
+            pn = player_name.lower().strip()
+            best = None
+            best_score = -1
+            for row in rows:
+                cname = (row["customer"] or "").lower().strip()
+                # Score: count matching words between player name and customer name
+                pn_words = set(pn.split())
+                cn_words = set(cname.split())
+                score = len(pn_words & cn_words)
+                if score > best_score:
+                    best_score = score
+                    best = row["customer"]
+            if best:
+                return best
+        return rows[0]["customer"]
     # Also check customer_aliases for email aliases
     row = conn.execute(
         """SELECT ca.customer_name FROM customer_aliases ca
@@ -4349,7 +4369,7 @@ def import_handicap_rounds(rounds: list[dict],
                         # Try email-based match first (highest confidence)
                         customer_name = None
                         if player_email:
-                            customer_name = _match_customer_by_email(conn, player_email)
+                            customer_name = _match_customer_by_email(conn, player_email, player_name)
                         if not customer_name:
                             customer_name = _match_customer_name(conn, player_name)
                         conn.execute(
@@ -4363,7 +4383,7 @@ def import_handicap_rounds(rounds: list[dict],
                     elif not existing["customer_name"]:
                         customer_name = None
                         if player_email:
-                            customer_name = _match_customer_by_email(conn, player_email)
+                            customer_name = _match_customer_by_email(conn, player_email, player_name)
                         if not customer_name:
                             customer_name = _match_customer_name(conn, player_name)
                         if customer_name:
