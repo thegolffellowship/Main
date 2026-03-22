@@ -3484,6 +3484,12 @@ def match_rsvp_to_event(event_identifier: str, event_date: str | None,
                     start = i + 1
             course_part = " ".join(parts[start:])
 
+        # Strip trailing golf-course qualifiers (e.g. "TERAVISTA front" → "TERAVISTA")
+        _COURSE_SUFFIXES = {"front", "back", "nine", "side", "course"}
+        cp_words = course_part.split()
+        if len(cp_words) > 1 and cp_words[-1].lower() in _COURSE_SUFFIXES:
+            course_part = " ".join(cp_words[:-1])
+
         normalized_course = _normalize_course_name(course_part)
 
         # Strategy 2: Normalized course name + date (high confidence)
