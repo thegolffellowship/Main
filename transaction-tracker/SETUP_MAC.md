@@ -200,13 +200,13 @@ The dashboard shows a table with these columns (each one is sortable and filtera
 - **Customer** — who placed the order
 - **Item** — event name (e.g., "Feb 22 - LaCANTERA")
 - **Price** — price for this specific item
-- **City** — city for the event
+- **Chapter** — TGF chapter (Austin, San Antonio, Dallas, Houston, Galveston)
 - **Course** — golf course name
 - **Handicap** — player's handicap
 - **Side Games** — selected side games (NET Points Race, City Match Play, etc.)
 - **Tee** — tee choice
-- **Status** — member or non-member
-- **Type** — Golf, Compete, Event Only
+- **Status** — user status (MEMBER, 1st TIMER, GUEST, MANAGER)
+- **Holes** — 9 or 18
 - **Order ID** — order confirmation number
 
 Use the **search box** to find anything. Use the **column filter** dropdown to search within just one column (e.g., only Side Games). Click **Export CSV** to download as a spreadsheet.

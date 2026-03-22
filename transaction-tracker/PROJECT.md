@@ -129,9 +129,9 @@ The main page. Shows all parsed transaction data in a sortable, searchable table
 - **Stats cards** — Items count, Orders count, Total Spent, Earliest/Latest dates
 - **Category filters** — All, Upcoming Events, Past Events, Memberships (with counts)
 - **Search** — Full-text search across all columns or specific column filter
-- **Sort** — Click column headers or use dropdown (order date, event date, price, customer, city, side games)
+- **Sort** — Click column headers or use dropdown (order date, event date, price, customer, chapter, side games)
 - **Column visibility toggle** — Show/hide any of 24+ columns, saved to localStorage
-- **Inline editing** — Click any row to open Edit modal (customer, item name, price, event date, city, course, handicap, side games, tee choice, status, chapter, has_handicap, returning/new, DOB, points races, match play)
+- **Inline editing** — Click any row to open Edit modal (customer, item name, price, event date, chapter, course, handicap, side games, tee choice, user_status, has_handicap, returning/new, DOB, points races, match play)
 - **Credit/Transfer system** — Mark items as "credited" (money held) or "transferred" to another event, with reversibility
 - **Delete** — Admin-only row deletion
 - **CSV export** — 24-column export of filtered data
@@ -195,9 +195,9 @@ Customer directory derived from transaction history.
 - **Two view modes:**
   - **List view** (default) — Table with expandable inline detail rows
   - **Cards view** — Card grid with bottom detail panel
-- **Customer detail** — Expandable per-customer showing all their transactions (event date, item, price, city, course, side games, order date, actions)
+- **Customer detail** — Expandable per-customer showing all their transactions (event date, item, price, chapter, course, side games, order date, actions)
 - **Status derivation** — MEMBER (has a TGF MEMBERSHIP item), GUEST (non-member), 1st TIMER (single purchase, no membership)
-- **Chapter derivation** — Most frequent city from their transactions, or chapter from membership
+- **Chapter derivation** — Most frequent chapter from their transactions, or chapter from membership
 - **Filters** — Status (Member/Guest/1st Timer), Chapter dropdown
 - **Sort** — Name, purchases count, total spent, last activity
 - **Search** — By name, email, chapter
@@ -337,15 +337,14 @@ computes a current handicap index using the official USGA WHS lookup table.
 | event_date | TEXT | Date of the golf event (not the order date) |
 | item_price | TEXT | Line item price (e.g. "$158.00") |
 | quantity | INTEGER | Default 1 |
-| city | TEXT | Event city (null for memberships) |
-| chapter | TEXT | TGF chapter: Austin, San Antonio, Dallas, Houston, Galveston (memberships only) |
+| chapter | TEXT | TGF chapter: Austin, San Antonio, Dallas, Houston, Galveston |
 | course | TEXT | Canonical golf course name |
 | handicap | TEXT | Numeric handicap value (events) |
 | has_handicap | TEXT | YES/NO (memberships only) |
 | side_games | TEXT | NET / GROSS / BOTH / NONE |
 | tee_choice | TEXT | <50 / 50-64 / 65+ / Forward |
-| member_status | TEXT | MEMBER / NON-MEMBER |
-| golf_or_compete | TEXT | GOLF / COMPETE |
+| user_status | TEXT | MEMBER / 1st TIMER / GUEST / MANAGER |
+| city | TEXT | Shipping/billing city (address field) |
 | post_game | TEXT | Post-game fellowship selection |
 | returning_or_new | TEXT | New / Returning (memberships) |
 | shirt_size | TEXT | |
@@ -744,7 +743,7 @@ The Claude prompt extracts these fields per order:
 - merchant, customer, customer_email, customer_phone, order_id, order_date, total_amount, transaction_fees
 
 And per item:
-- item_name, event_date, item_price, quantity, city, chapter, course, handicap, has_handicap, side_games, tee_choice, member_status, golf_or_compete, post_game, returning_or_new, shirt_size, guest_name, date_of_birth, net_points_race, gross_points_race, city_match_play
+- item_name, event_date, item_price, quantity, chapter, course, handicap, has_handicap, side_games, tee_choice, user_status, holes, post_game, returning_or_new, shirt_size, guest_name, date_of_birth, net_points_race, gross_points_race, city_match_play
 
 ---
 
