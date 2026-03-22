@@ -275,7 +275,7 @@ For a public URL your managers can bookmark:
 
 ### Export
 
-Click **Export CSV** to download all transactions as a spreadsheet. The CSV includes every column: date, customer, item, price, address, city, state, zip, course, handicap, side games, tee choice, member status, golf or compete, transaction fees, post game, shirt size, guest name, order ID, and more.
+Click **Export CSV** to download all transactions as a spreadsheet. The CSV includes every column: date, customer, item, price, chapter, course, handicap, side games, tee choice, user status, holes, transaction fees, post game, shirt size, guest name, order ID, and more.
 
 ### Manual Actions
 
@@ -304,13 +304,12 @@ curl -X POST https://your-domain.com/api/connector/ingest \
       "order_date": "2026-02-11",
       "item_name": "Feb 22 - LaCANTERA",
       "item_price": "$158.00",
-      "city": "San Antonio",
+      "chapter": "San Antonio",
       "course": "LaCANTERA",
       "side_games": "NET Points Race",
       "handicap": "12",
       "tee_choice": "<50 | 6300-6800y",
-      "member_status": "MEMBER = $158",
-      "golf_or_compete": "COMPETE"
+      "user_status": "MEMBER"
     }]
   }'
 ```
@@ -360,13 +359,12 @@ SQLite, stored at `transaction-tracker/transactions.db`. Each row is a single li
 | `customer` | Kenneth Carter |
 | `order_id` | R854482675 |
 | `order_date` | 2026-02-10 |
-| `city` | San Antonio |
+| `chapter` | San Antonio |
 | `course` | LaCANTERA |
 | `handicap` | 12 |
 | `side_games` | NET Points Race, City Match Play |
 | `tee_choice` | <50 \| 6300-6800y |
-| `member_status` | MEMBER = $158 |
-| `golf_or_compete` | COMPETE |
+| `user_status` | MEMBER |
 | `post_game` | YES |
 | `returning_or_new` | Returning |
 | `shirt_size` | XL |
