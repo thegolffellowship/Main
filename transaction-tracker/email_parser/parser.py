@@ -371,6 +371,10 @@ _COURSE_CANONICAL = {
     "shadowglen": "ShadowGlen",
     "shadow glen": "ShadowGlen",
     "star ranch": "Star Ranch",
+    "teravista": "Teravista",
+    "canyon springs": "Canyon Springs",
+    "silverhorn": "Silverhorn",
+    "willow springs": "Willow Springs",
 }
 
 
