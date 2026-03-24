@@ -1031,7 +1031,81 @@ def init_db(db_path: str | Path | None = None) -> None:
             if row["cnt"] > 0:
                 logger.warning("Data quality: %d items have NULL/empty %s", row["cnt"], col)
 
+        # Backfill customer_id for existing items that aren't linked yet.
+        # Runs after all tables (including customers / customer_emails) are
+        # created.  On fresh databases this is a no-op.
+        _backfill_customer_ids(conn)
+
         logger.info("Database initialized at %s", db_path or DB_PATH)
+
+
+def _lookup_customer_id(conn: sqlite3.Connection,
+                        customer_name: str | None,
+                        customer_email: str | None) -> int | None:
+    """Resolve a customer_id from the customers table.
+
+    Tries (in order):
+    1. Email match via customer_emails table.
+    2. Exact first_name + last_name match in customers table.
+    Returns the customer_id or None if no match is found.
+    """
+    # 1. Email lookup
+    if customer_email:
+        row = conn.execute(
+            """SELECT ce.customer_id FROM customer_emails ce
+               WHERE LOWER(ce.email) = LOWER(?) LIMIT 1""",
+            (customer_email.strip(),),
+        ).fetchone()
+        if row:
+            return row["customer_id"]
+
+    # 2. Name lookup
+    if customer_name:
+        parts = customer_name.strip().split()
+        if len(parts) >= 2:
+            first = parts[0]
+            last = parts[-1]
+            row = conn.execute(
+                """SELECT customer_id FROM customers
+                   WHERE LOWER(first_name) = LOWER(?)
+                     AND LOWER(last_name) = LOWER(?)
+                   LIMIT 1""",
+                (first, last),
+            ).fetchone()
+            if row:
+                return row["customer_id"]
+    return None
+
+
+def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
+    """Populate customer_id for existing items that don't have one yet.
+
+    Returns the number of rows updated.
+    """
+    rows = conn.execute(
+        """SELECT DISTINCT customer, customer_email FROM items
+           WHERE customer_id IS NULL
+             AND (customer IS NOT NULL AND customer != '')"""
+    ).fetchall()
+
+    if not rows:
+        return 0
+
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, row["customer"], row["customer_email"])
+        if cid is not None:
+            cur = conn.execute(
+                """UPDATE items SET customer_id = ?
+                   WHERE customer_id IS NULL AND customer = ?""",
+                (cid, row["customer"]),
+            )
+            updated += cur.rowcount
+
+    if updated:
+        conn.commit()
+        logger.info("Backfilled customer_id for %d item rows", updated)
+    return updated
 
 
 def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
@@ -1047,6 +1121,11 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
         inserted = 0
         skipped = 0
         for row in rows:
+            # Auto-resolve customer_id if not already set
+            if not row.get("customer_id"):
+                row["customer_id"] = _lookup_customer_id(
+                    conn, row.get("customer"), row.get("customer_email")
+                )
             values = tuple(row.get(col) for col in ITEM_COLUMNS)
             try:
                 cursor = conn.execute(sql, values)
