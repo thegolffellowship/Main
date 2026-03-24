@@ -561,6 +561,19 @@ def api_audit():
     return jsonify(report)
 
 
+@app.route("/api/migrate-customers-preview")
+@require_role("admin")
+def api_migrate_customers_preview():
+    """Dry-run preview of customer migration — read-only, no inserts."""
+    from migrate_customers import dry_run_json
+    from email_parser.database import get_connection
+    conn = get_connection()
+    try:
+        return jsonify(dry_run_json(conn))
+    finally:
+        conn.close()
+
+
 @app.route("/api/data-snapshot")
 def api_data_snapshot():
     """Quick snapshot of recent items + stats for inspection."""
