@@ -398,24 +398,19 @@
         return "GUEST";
     }
 
-    // Derive chapter — prefer actual chapter column from membership rows,
-    // fall back to most frequent chapter in transactions
+    // Derive chapter — most frequent chapter across all transactions
     function deriveChapter(items) {
-        // First check for an explicit chapter value (from membership orders)
-        for (const item of items) {
-            const ch = (item.chapter || "").trim();
-            if (ch) return ch;
-        }
-        // Fallback: most frequent chapter from transactions
-        const cityCounts = {};
+        const chapterCounts = {};
         items.forEach(item => {
+            if ((item.transaction_status || "active") !== "active" &&
+                (item.transaction_status || "active") !== "rsvp_only") return;
             const ch = (item.chapter || "").trim();
             if (ch) {
-                cityCounts[ch] = (cityCounts[ch] || 0) + 1;
+                chapterCounts[ch] = (chapterCounts[ch] || 0) + 1;
             }
         });
-        if (!Object.keys(cityCounts).length) return "";
-        return Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0][0];
+        if (!Object.keys(chapterCounts).length) return "";
+        return Object.entries(chapterCounts).sort((a, b) => b[1] - a[1])[0][0];
     }
 
     function statusBadgeClass(status) {
@@ -466,7 +461,18 @@
             if (item.transaction_status === "wd" && item.credit_amount) {
                 map[name].creditTotal += parseFloat((item.credit_amount || "0").replace(/[^0-9.]/g, "")) || 0;
             }
-            if (!map[name].email && item.customer_email) map[name].email = item.customer_email;
+            // Email: most recent non-guest usage wins (matches migrate_customers logic)
+            if (item.customer_email) {
+                const isGuest = (item.user_status || "").trim().toUpperCase().startsWith("GUEST");
+                const date = item.order_date || item.event_date || "";
+                if (!isGuest && (!map[name]._emailDate || date > map[name]._emailDate)) {
+                    map[name].email = item.customer_email;
+                    map[name]._emailDate = date;
+                } else if (!map[name].email) {
+                    // Fallback: use any email if we have nothing yet
+                    map[name].email = item.customer_email;
+                }
+            }
             if (!map[name].phone && item.customer_phone) map[name].phone = item.customer_phone;
             if (item.archived === 1 || item.archived === "1") map[name].archived = true;
             if (!map[name].first_name && item.first_name) map[name].first_name = item.first_name;
@@ -482,6 +488,7 @@
         customers.forEach(c => {
             c.status = deriveStatus(c.items);
             c.chapter = deriveChapter(c.items);
+            delete c._emailDate;  // clean up helper property
         });
 
         return customers.sort((a, b) => lastNameSortKey(a.name).localeCompare(lastNameSortKey(b.name)));
