@@ -1092,58 +1092,79 @@ def _resolve_or_create_customer(
     phone: str | None = None,
     chapter: str | None = None,
     user_status: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
 ) -> int | None:
     """Resolve an existing customer_id, or create a new customers record.
 
     Tries ``_lookup_customer_id`` first.  If no match is found *and* we have
-    at least a two-part name, creates a new ``customers`` row (and a
+    a usable first+last name, creates a new ``customers`` row (and a
     ``customer_emails`` row when an email is provided).
 
-    Returns the customer_id, or None only when the name is missing/single-word
-    (we can't safely create a record without first + last).
+    Skips auto-creation for "Guest of ..." names.
+
+    Returns the customer_id, or None when the name is missing, single-word,
+    or a guest-of entry.
     """
     # 1. Try existing lookup
     cid = _lookup_customer_id(conn, customer_name, customer_email)
     if cid is not None:
         return cid
 
-    # 2. Need at least "First Last" to create a record
-    if not customer_name:
-        return None
-    parts = customer_name.strip().split()
-    if len(parts) < 2:
+    # 2. Skip "Guest of ..." customers — leave customer_id NULL
+    if customer_name and customer_name.strip().lower().startswith("guest of"):
         return None
 
-    first = parts[0]
-    last = parts[-1]
+    # 3. Determine first/last — prefer pre-parsed fields, fall back to splitting name
+    first = (first_name or "").strip() or None
+    last = (last_name or "").strip() or None
+    if not first or not last:
+        if not customer_name:
+            return None
+        parts = customer_name.strip().split()
+        if len(parts) < 2:
+            return None
+        first = first or parts[0]
+        last = last or parts[-1]
 
-    # Map user_status to customers.current_player_status
-    player_status = None
-    if user_status:
-        player_status = _STATUS_MAP.get(user_status.strip().upper())
+    # 4. Wrap creation in try/except — never block a transaction save
+    try:
+        # Map user_status to customers.current_player_status
+        player_status = None
+        if user_status:
+            player_status = _STATUS_MAP.get(user_status.strip().upper())
 
-    cursor = conn.execute(
-        """INSERT INTO customers
-               (first_name, last_name, phone, chapter,
-                current_player_status, acquisition_source, account_status)
-           VALUES (?, ?, ?, ?, ?, 'godaddy', 'active')""",
-        (first, last, phone or None, chapter or None, player_status),
-    )
-    new_cid = cursor.lastrowid
-    logger.info("Auto-created customer %s %s (customer_id=%d)", first, last, new_cid)
+        cursor = conn.execute(
+            """INSERT INTO customers
+                   (first_name, last_name, phone, chapter,
+                    current_player_status, first_timer_ever,
+                    acquisition_source, account_status)
+               VALUES (?, ?, ?, ?, ?, NULL, 'godaddy', 'active')""",
+            (first, last, phone or None, chapter or None, player_status),
+        )
+        new_cid = cursor.lastrowid
+        logger.info("Auto-created customer %s %s (customer_id=%d)", first, last, new_cid)
 
-    # Link email if provided
-    if customer_email and customer_email.strip():
-        try:
-            conn.execute(
-                """INSERT INTO customer_emails (customer_id, email, is_primary)
-                   VALUES (?, ?, 1)""",
-                (new_cid, customer_email.strip()),
-            )
-        except sqlite3.IntegrityError:
-            pass  # email already linked to another customer
+        # Link email if provided
+        if customer_email and customer_email.strip():
+            try:
+                conn.execute(
+                    """INSERT INTO customer_emails
+                           (customer_id, email, is_primary, is_golf_genius, label)
+                       VALUES (?, ?, 1, 1, 'godaddy')""",
+                    (new_cid, customer_email.strip()),
+                )
+            except sqlite3.IntegrityError:
+                pass  # email already linked to another customer
 
-    return new_cid
+        return new_cid
+
+    except Exception:
+        logger.warning(
+            "Failed to auto-create customer for %r — proceeding with customer_id=NULL",
+            customer_name, exc_info=True,
+        )
+        return None
 
 
 def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
@@ -1197,6 +1218,8 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                     phone=row.get("customer_phone"),
                     chapter=row.get("chapter"),
                     user_status=row.get("user_status"),
+                    first_name=row.get("first_name"),
+                    last_name=row.get("last_name"),
                 )
             values = tuple(row.get(col) for col in ITEM_COLUMNS)
             try:
