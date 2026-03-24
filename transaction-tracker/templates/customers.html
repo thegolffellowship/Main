@@ -1219,7 +1219,7 @@
                 html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(r.round_date || '')}</td>`;
                 html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(r.course_name || '')}</td>`;
                 html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(r.tee_name || '')}</td>`;
-                html += `<td style="padding:0.3rem 0.6rem; text-align:right;">${r.score != null ? r.score : ''}</td>`;
+                html += `<td style="padding:0.3rem 0.6rem; text-align:right;">${r.adjusted_score != null ? r.adjusted_score : ''}</td>`;
                 html += `<td style="padding:0.3rem 0.6rem; text-align:right;">${r.differential != null ? r.differential.toFixed(1) : ''}</td>`;
                 html += `<td style="padding:0.3rem 0.6rem; text-align:center;">${isUsed ? '★' : ''}</td>`;
                 html += '</tr>';
