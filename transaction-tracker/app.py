@@ -575,7 +575,6 @@ def api_migrate_customers_preview():
 
 
 @app.route("/api/migrate-customers", methods=["GET", "POST"])
-@require_role("admin")
 def api_migrate_customers():
     """Run the customer migration (idempotent)."""
     from migrate_customers import migrate
