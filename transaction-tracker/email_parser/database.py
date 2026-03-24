@@ -794,6 +794,78 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_season_contests_type ON season_contests(contest_type)"
         )
 
+        # ── Customer identity tables ──────────────────────────────────
+        # Core customer record.  Mirrors the TGF Platform MVP users
+        # schema so that merging the two systems later is a clean lookup.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS customers (
+                customer_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform_user_id     INTEGER,
+                first_name           VARCHAR(100) NOT NULL,
+                last_name            VARCHAR(100) NOT NULL,
+                phone                VARCHAR(30),
+                chapter              VARCHAR(50),
+                ghin_number          VARCHAR(20),
+                current_player_status VARCHAR(30)
+                                     CHECK (current_player_status IN (
+                                         'active_member', 'expired_member',
+                                         'active_guest', 'inactive', 'first_timer'
+                                     )),
+                first_timer_ever     INTEGER,
+                acquisition_source   VARCHAR(50),
+                account_status       VARCHAR(20) NOT NULL DEFAULT 'active'
+                                     CHECK (account_status IN (
+                                         'active', 'inactive', 'banned'
+                                     )),
+                created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        # Multiple emails per customer.
+        # is_primary  = the canonical identity email (max one per customer).
+        # is_golf_genius = the email used for Golf Genius handicap exports
+        #                  (max one per customer).
+        # These can be the same address or different ones.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS customer_emails (
+                email_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id     INTEGER NOT NULL
+                                REFERENCES customers(customer_id)
+                                ON DELETE CASCADE,
+                email           VARCHAR(200) NOT NULL,
+                is_primary      INTEGER NOT NULL DEFAULT 0,
+                is_golf_genius  INTEGER NOT NULL DEFAULT 0,
+                label           VARCHAR(50),
+                created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(customer_id, email)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_emails_customer "
+            "ON customer_emails(customer_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_emails_email "
+            "ON customer_emails(email)"
+        )
+        # At most one primary email per customer
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_emails_primary "
+            "ON customer_emails(customer_id, is_primary) "
+            "WHERE is_primary = 1"
+        )
+        # At most one Golf Genius email per customer
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_emails_gg "
+            "ON customer_emails(customer_id, is_golf_genius) "
+            "WHERE is_golf_genius = 1"
+        )
+
         # Seed built-in message templates on first run
         existing = conn.execute("SELECT COUNT(*) as cnt FROM message_templates WHERE is_system = 1").fetchone()
         if existing["cnt"] == 0:
