@@ -10,7 +10,7 @@ Setup:
     python mcp_server_remote.py
 
 Environment variables:
-    TGF_API_URL   — Base URL of the Railway app (default: https://main-production-b95c.up.railway.app)
+    TGF_API_URL   — Base URL of the Railway app (default: https://tgf-tracker.up.railway.app)
     TGF_ADMIN_PIN — Admin PIN for write operations that require admin auth
 """
 
@@ -21,7 +21,7 @@ import sys
 import requests
 from mcp.server.fastmcp import FastMCP
 
-API_URL = os.environ.get("TGF_API_URL", "https://main-production-b95c.up.railway.app").rstrip("/")
+API_URL = os.environ.get("TGF_API_URL", "https://tgf-tracker.up.railway.app").rstrip("/")
 ADMIN_PIN = os.environ.get("TGF_ADMIN_PIN", "")
 
 mcp = FastMCP("TGF Transaction Tracker")

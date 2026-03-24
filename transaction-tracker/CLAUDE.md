@@ -2,7 +2,7 @@
 
 ## Deployed URL
 
-**Railway:** `https://main-production-b95c.up.railway.app`
+**Railway:** `https://tgf-tracker.up.railway.app`
 
 ## Inspection Endpoints
 
@@ -19,7 +19,7 @@ about what's been parsed — query these live endpoints:
 ### How to check data quality
 
 ```
-WebFetch https://main-production-b95c.up.railway.app/api/audit
+WebFetch https://tgf-tracker.up.railway.app/api/audit
 ```
 
 This returns:
@@ -30,13 +30,13 @@ This returns:
 ### How to inspect recent data
 
 ```
-WebFetch https://main-production-b95c.up.railway.app/api/data-snapshot?limit=20
+WebFetch https://tgf-tracker.up.railway.app/api/data-snapshot?limit=20
 ```
 
 ### How to get full data
 
 ```
-WebFetch https://main-production-b95c.up.railway.app/api/items
+WebFetch https://tgf-tracker.up.railway.app/api/items
 ```
 
 ## Railway Persistent Volume (IMPORTANT)
@@ -71,7 +71,7 @@ Add this to your `claude_desktop_config.json` (Settings → Developer → Edit C
   "mcpServers": {
     "tgf-transactions": {
       "type": "streamable-http",
-      "url": "https://main-production-b95c.up.railway.app/mcp/mcp"
+      "url": "https://tgf-tracker.up.railway.app/mcp/mcp"
     }
   }
 }
