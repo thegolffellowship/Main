@@ -1085,6 +1085,28 @@ _STATUS_MAP = {
 }
 
 
+def _emit_unlinked_partner_warning(
+    conn: sqlite3.Connection,
+    customer_name: str | None,
+    reason: str,
+    email_uid: str | None = None,
+    order_id: str | None = None,
+    item_name: str | None = None,
+) -> None:
+    """Insert an UNLINKED_PARTNER parse warning for a partner row that
+    could not be linked to a customer record."""
+    try:
+        conn.execute(
+            """INSERT OR IGNORE INTO parse_warnings
+               (email_uid, order_id, customer, item_name, warning_code, message)
+               VALUES (?, ?, ?, ?, 'UNLINKED_PARTNER', ?)""",
+            (email_uid, order_id, customer_name, item_name,
+             f"Could not create customer record for \"{customer_name}\": {reason}"),
+        )
+    except Exception:
+        logger.debug("Failed to insert UNLINKED_PARTNER warning for %r", customer_name)
+
+
 def _resolve_or_create_customer(
     conn: sqlite3.Connection,
     customer_name: str | None,
@@ -1094,6 +1116,10 @@ def _resolve_or_create_customer(
     user_status: str | None = None,
     first_name: str | None = None,
     last_name: str | None = None,
+    *,
+    email_uid: str | None = None,
+    order_id: str | None = None,
+    item_name: str | None = None,
 ) -> int | None:
     """Resolve an existing customer_id, or create a new customers record.
 
@@ -1102,6 +1128,10 @@ def _resolve_or_create_customer(
     ``customer_emails`` row when an email is provided).
 
     Skips auto-creation for "Guest of ..." names.
+
+    When creation fails (name too short, DB error, etc.) an
+    ``UNLINKED_PARTNER`` parse warning is emitted so the manager can
+    review it later.
 
     Returns the customer_id, or None when the name is missing, single-word,
     or a guest-of entry.
@@ -1120,9 +1150,16 @@ def _resolve_or_create_customer(
     last = (last_name or "").strip() or None
     if not first or not last:
         if not customer_name:
+            _emit_unlinked_partner_warning(
+                conn, customer_name, "name is missing",
+                email_uid, order_id, item_name)
             return None
         parts = customer_name.strip().split()
         if len(parts) < 2:
+            _emit_unlinked_partner_warning(
+                conn, customer_name,
+                "single-word name — cannot determine first/last",
+                email_uid, order_id, item_name)
             return None
         first = first or parts[0]
         last = last or parts[-1]
@@ -1159,23 +1196,37 @@ def _resolve_or_create_customer(
 
         return new_cid
 
-    except Exception:
+    except Exception as exc:
         logger.warning(
             "Failed to auto-create customer for %r — proceeding with customer_id=NULL",
             customer_name, exc_info=True,
         )
+        _emit_unlinked_partner_warning(
+            conn, customer_name, f"DB error: {exc}",
+            email_uid, order_id, item_name)
         return None
 
 
 def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
     """Populate customer_id for existing items that don't have one yet.
 
-    Returns the number of rows updated.
+    Uses ``_resolve_or_create_customer`` so that expanded partner rows
+    (e.g. "Will Massey") get a customer record auto-created if one
+    doesn't already exist.  Emits ``UNLINKED_PARTNER`` parse warnings
+    for any names that can't be resolved.
+
+    Returns the number of item rows updated.
     """
+    # Pull one representative row per distinct customer name so we have
+    # context fields (chapter, user_status, phone, email_uid, etc.)
     rows = conn.execute(
-        """SELECT DISTINCT customer, customer_email FROM items
+        """SELECT customer, customer_email, customer_phone, chapter,
+                  user_status, first_name, last_name,
+                  email_uid, order_id, item_name
+           FROM items
            WHERE customer_id IS NULL
-             AND (customer IS NOT NULL AND customer != '')"""
+             AND (customer IS NOT NULL AND customer != '')
+           GROUP BY customer"""
     ).fetchall()
 
     if not rows:
@@ -1183,7 +1234,17 @@ def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
 
     updated = 0
     for row in rows:
-        cid = _lookup_customer_id(conn, row["customer"], row["customer_email"])
+        cid = _resolve_or_create_customer(
+            conn, row["customer"], row["customer_email"],
+            phone=row["customer_phone"],
+            chapter=row["chapter"],
+            user_status=row["user_status"],
+            first_name=row["first_name"],
+            last_name=row["last_name"],
+            email_uid=row["email_uid"],
+            order_id=row["order_id"],
+            item_name=row["item_name"],
+        )
         if cid is not None:
             cur = conn.execute(
                 """UPDATE items SET customer_id = ?
@@ -1220,6 +1281,9 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                     user_status=row.get("user_status"),
                     first_name=row.get("first_name"),
                     last_name=row.get("last_name"),
+                    email_uid=row.get("email_uid"),
+                    order_id=row.get("order_id"),
+                    item_name=row.get("item_name"),
                 )
             values = tuple(row.get(col) for col in ITEM_COLUMNS)
             try:
@@ -3506,6 +3570,7 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
             conn, customer, customer_email,
             phone=customer_phone, chapter=new_values.get("chapter"),
             user_status=user_status,
+            item_name=event_name,
         )
 
         cols = ", ".join(ITEM_COLUMNS)
@@ -3592,6 +3657,7 @@ def add_payment_to_event(event_name: str, customer: str,
             conn, customer, parent.get("customer_email"),
             phone=parent.get("customer_phone"),
             chapter=new_values.get("chapter"),
+            item_name=event_name,
         )
 
         cols = ", ".join(ITEM_COLUMNS)
