@@ -446,10 +446,27 @@ def init_db(db_path: str | Path | None = None) -> None:
 
         # Ensure parent_item_id column exists for child payment records
         try:
-            conn.execute("ALTER TABLE items ADD COLUMN parent_item_id TEXT")
+            conn.execute("ALTER TABLE items ADD COLUMN parent_item_id INTEGER")
             logger.info("Added missing column: parent_item_id")
         except sqlite3.OperationalError:
             pass  # column already exists
+
+        # Migrate parent_item_id from TEXT to INTEGER (cast existing string values)
+        try:
+            text_rows = conn.execute(
+                "SELECT id, parent_item_id FROM items "
+                "WHERE parent_item_id IS NOT NULL AND typeof(parent_item_id) = 'text'"
+            ).fetchall()
+            if text_rows:
+                for r in text_rows:
+                    conn.execute(
+                        "UPDATE items SET parent_item_id = CAST(parent_item_id AS INTEGER) WHERE id = ?",
+                        (r["id"],),
+                    )
+                conn.commit()
+                logger.info("Migrated %d parent_item_id values from TEXT to INTEGER", len(text_rows))
+        except Exception:
+            logger.exception("parent_item_id TEXT→INTEGER migration failed (non-fatal)")
 
         # Ensure customer_id column exists for linking items to customers
         try:
@@ -957,6 +974,20 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute("UPDATE items SET customer = '(Unknown)' WHERE customer IS NULL OR customer = ''")
         conn.execute("UPDATE items SET item_name = '(Unknown Item)' WHERE item_name IS NULL OR item_name = ''")
 
+        # Normalize empty-string phone fields to NULL in customers table
+        phone_cleaned = conn.execute(
+            "UPDATE customers SET phone = NULL WHERE phone = '' OR phone = ' '"
+        ).rowcount
+        if phone_cleaned:
+            logger.info("Normalized %d empty phone fields to NULL in customers table", phone_cleaned)
+
+        # Also normalize in items table
+        items_phone_cleaned = conn.execute(
+            "UPDATE items SET customer_phone = NULL WHERE customer_phone = '' OR customer_phone = ' '"
+        ).rowcount
+        if items_phone_cleaned:
+            logger.info("Normalized %d empty customer_phone fields to NULL in items table", items_phone_cleaned)
+
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
         # and updates that would set these columns to NULL or empty string.
@@ -1030,6 +1061,9 @@ def init_db(db_path: str | Path | None = None) -> None:
             ).fetchone()
             if row["cnt"] > 0:
                 logger.warning("Data quality: %d items have NULL/empty %s", row["cnt"], col)
+
+        # ── One-time duplicate customer merge (idempotent) ──────────
+        _merge_duplicate_customers(conn)
 
         # Backfill customer_id for existing items that aren't linked yet.
         # Runs after all tables (including customers / customer_emails) are
@@ -1207,6 +1241,147 @@ def _resolve_or_create_customer(
         return None
 
 
+def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
+    """Merge known duplicate customer records (idempotent).
+
+    For each pair, reassigns all items from the duplicate to the canonical
+    record, then deletes the duplicate customer row and its emails/aliases.
+    """
+    # Pairs: (lookup_column, lookup_value, canonical_name_preference, email_to_keep)
+    # We find pairs by email or phone, keep the lower customer_id (older),
+    # unless a specific name is preferred.
+    MERGE_PAIRS = [
+        # Matt Jenkins / Matthew Jenkins — same email mattjenkins521@gmail.com
+        {
+            "find_by": "email",
+            "find_value": "mattjenkins521@gmail.com",
+            "canonical_rule": "lower_id",  # keep whichever customer_id is older
+        },
+        # Stu Kirksey / Stuart Kirksey — same phone (512) 964-7371
+        {
+            "find_by": "phone_digits",
+            "find_value": "5129647371",
+            "canonical_name": "Stu",  # keep the customer whose first_name = 'Stu'
+            "canonical_email": "stuartkirksey@gmail.com",
+        },
+        # Michael Murphy / Mike Murphy — same email mmurphy4250@gmail.com
+        {
+            "find_by": "email",
+            "find_value": "mmurphy4250@gmail.com",
+            "canonical_rule": "lower_id",
+        },
+    ]
+
+    for pair in MERGE_PAIRS:
+        try:
+            if pair["find_by"] == "email":
+                # Find all customer_ids linked to this email
+                rows = conn.execute(
+                    "SELECT DISTINCT customer_id FROM customer_emails WHERE LOWER(email) = ?",
+                    (pair["find_value"].lower(),),
+                ).fetchall()
+            elif pair["find_by"] == "phone_digits":
+                # Find customers by phone digits (strip non-digits for comparison)
+                rows = conn.execute(
+                    """SELECT customer_id FROM customers
+                       WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, '(', ''), ')', ''), '-', ''), ' ', '') LIKE ?""",
+                    (f"%{pair['find_value']}%",),
+                ).fetchall()
+            else:
+                continue
+
+            cids = sorted(set(r["customer_id"] for r in rows))
+            if len(cids) < 2:
+                continue  # no duplicates found or already merged
+
+            # Determine canonical (keep) vs duplicate (remove)
+            if pair.get("canonical_name"):
+                # Find the one matching the preferred first_name
+                canonical_id = None
+                for cid in cids:
+                    cust = conn.execute(
+                        "SELECT first_name FROM customers WHERE customer_id = ?", (cid,)
+                    ).fetchone()
+                    if cust and cust["first_name"] == pair["canonical_name"]:
+                        canonical_id = cid
+                        break
+                if not canonical_id:
+                    canonical_id = cids[0]
+            else:
+                # lower_id = older record
+                canonical_id = cids[0]
+
+            duplicates = [cid for cid in cids if cid != canonical_id]
+
+            for dup_id in duplicates:
+                # Count items before merge
+                dup_count = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM items WHERE customer_id = ?", (dup_id,)
+                ).fetchone()["cnt"]
+
+                # Reassign all items from duplicate to canonical
+                conn.execute(
+                    "UPDATE items SET customer_id = ? WHERE customer_id = ?",
+                    (canonical_id, dup_id),
+                )
+
+                # Move any customer_emails not already on canonical
+                dup_emails = conn.execute(
+                    "SELECT email FROM customer_emails WHERE customer_id = ?", (dup_id,)
+                ).fetchall()
+                for de in dup_emails:
+                    try:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO customer_emails (customer_id, email) VALUES (?, ?)",
+                            (canonical_id, de["email"]),
+                        )
+                    except sqlite3.IntegrityError:
+                        pass
+                conn.execute("DELETE FROM customer_emails WHERE customer_id = ?", (dup_id,))
+
+                # Move customer_aliases
+                try:
+                    dup_name_row = conn.execute(
+                        "SELECT first_name, last_name FROM customers WHERE customer_id = ?", (dup_id,)
+                    ).fetchone()
+                    if dup_name_row:
+                        dup_full = f"{dup_name_row['first_name']} {dup_name_row['last_name']}"
+                        canon_row = conn.execute(
+                            "SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                            (canonical_id,),
+                        ).fetchone()
+                        if canon_row:
+                            canon_full = f"{canon_row['first_name']} {canon_row['last_name']}"
+                            # Add dup name as alias of canonical
+                            conn.execute(
+                                "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_name, alias_type) "
+                                "VALUES (?, ?, 'name')",
+                                (canon_full, dup_full),
+                            )
+                except Exception:
+                    logger.debug("Failed to create alias during customer merge", exc_info=True)
+
+                # Delete the duplicate customer record
+                conn.execute("DELETE FROM customers WHERE customer_id = ?", (dup_id,))
+
+                # Update canonical email if specified
+                if pair.get("canonical_email"):
+                    conn.execute(
+                        "UPDATE customer_emails SET is_primary = 1 WHERE customer_id = ? AND email = ?",
+                        (canonical_id, pair["canonical_email"]),
+                    )
+
+                logger.info(
+                    "Merged duplicate customer #%d into #%d (%d items reassigned)",
+                    dup_id, canonical_id, dup_count,
+                )
+
+        except Exception:
+            logger.exception("Customer merge failed for pair: %s", pair)
+
+    conn.commit()
+
+
 def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
     """Populate customer_id for existing items that don't have one yet.
 
@@ -1253,8 +1428,10 @@ def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
             )
             updated += cur.rowcount
 
+    # Always commit — _resolve_or_create_customer() may have INSERTed
+    # new customer records even if no item rows were updated.
+    conn.commit()
     if updated:
-        conn.commit()
         logger.info("Backfilled customer_id for %d item rows", updated)
     return updated
 
@@ -1861,7 +2038,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
                         )
                         alias_set.add(name.lower())
                     except Exception:
-                        pass
+                        logger.debug("Failed to auto-create alias for %r", name, exc_info=True)
                 continue
             try:
                 conn.execute(
@@ -1892,7 +2069,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
                             (name,),
                         )
                     except Exception:
-                        pass
+                        logger.debug("Failed to create COURSE_NAME_ONLY warning for %r", name, exc_info=True)
             except sqlite3.IntegrityError:
                 logger.debug("Duplicate event skipped during sync: %s", name)
 
@@ -3256,7 +3433,7 @@ def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None)
         conn.execute(
             "UPDATE items SET transaction_status = 'credited', credit_note = ? "
             "WHERE parent_item_id = ? AND COALESCE(transaction_status, 'active') = 'active'",
-            (note or "Credit on account (cascaded from parent)", str(item_id)),
+            (note or "Credit on account (cascaded from parent)", item_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -3278,7 +3455,7 @@ def refund_item(item_id: int, method: str = "", note: str = "",
         conn.execute(
             "UPDATE items SET transaction_status = 'refunded', credit_note = ? "
             "WHERE parent_item_id = ? AND COALESCE(transaction_status, 'active') = 'active'",
-            (refund_note + " (cascaded from parent)", str(item_id)),
+            (refund_note + " (cascaded from parent)", item_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -3315,7 +3492,7 @@ def wd_item(
         conn.execute(
             "UPDATE items SET transaction_status = 'wd', wd_reason = 'WD', wd_note = ? "
             "WHERE parent_item_id = ? AND COALESCE(transaction_status, 'active') = 'active'",
-            (note or "WD (cascaded from parent)", str(item_id)),
+            (note or "WD (cascaded from parent)", item_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -3425,7 +3602,7 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
                SET transaction_status = 'active', credit_note = NULL,
                    wd_reason = NULL, wd_note = NULL, wd_credits = NULL, credit_amount = NULL
                WHERE parent_item_id = ?""",
-            (str(item_id),),
+            (item_id,),
         )
         conn.commit()
         return True
@@ -3650,7 +3827,7 @@ def add_payment_to_event(event_name: str, customer: str,
         new_values["side_games"] = side_games or payment_item
         # Child payments do NOT carry holes, tee, status — only the parent has those
         new_values["notes"] = note or f"{payment_item} — {payment_amount} via {payment_source}"
-        new_values["parent_item_id"] = str(parent_id)
+        new_values["parent_item_id"] = parent_id
 
         # Resolve or create customer_id from customers table
         new_values["customer_id"] = _resolve_or_create_customer(
