@@ -456,6 +456,19 @@ def dry_run_json(conn: sqlite3.Connection) -> dict:
 
     existing = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
 
+    # Diagnostic: inspect alias table and conflict rows
+    aliases = conn.execute(
+        "SELECT customer_name, alias_type, alias_value FROM customer_aliases WHERE alias_type = 'name'"
+    ).fetchall()
+    stu_rows = conn.execute(
+        "SELECT customer, customer_email, user_status, order_date, transaction_status "
+        "FROM items WHERE LOWER(customer) LIKE '%kirksey%'"
+    ).fetchall()
+    will_rows = conn.execute(
+        "SELECT customer, customer_email, user_status, order_date, transaction_status "
+        "FROM items WHERE LOWER(customer_email) = 'colbyjohnson8@gmail.com'"
+    ).fetchall()
+
     return {
         "unique_customers_to_process": processable,
         "rows_skipped_null_blank": null_blank,
@@ -467,6 +480,22 @@ def dry_run_json(conn: sqlite3.Connection) -> dict:
             for r in conflicts
         ],
         "customers_already_in_table": existing,
+        "_debug_aliases": [
+            {"customer_name": r["customer_name"], "alias_value": r["alias_value"]}
+            for r in aliases
+        ],
+        "_debug_kirksey_rows": [
+            {"customer": r["customer"], "email": r["customer_email"],
+             "user_status": r["user_status"], "order_date": r["order_date"],
+             "transaction_status": r["transaction_status"]}
+            for r in stu_rows
+        ],
+        "_debug_colby_email_rows": [
+            {"customer": r["customer"], "email": r["customer_email"],
+             "user_status": r["user_status"], "order_date": r["order_date"],
+             "transaction_status": r["transaction_status"]}
+            for r in will_rows
+        ],
     }
 
 
