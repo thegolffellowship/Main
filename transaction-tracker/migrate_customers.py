@@ -71,11 +71,11 @@ def migrate(conn: sqlite3.Connection) -> dict:
     rows = conn.execute("""
         SELECT customer, first_name, last_name,
                customer_email, customer_phone,
-               chapter, user_status, order_date
+               chapter, user_status, order_date,
+               transaction_status
         FROM items
         WHERE customer IS NOT NULL AND customer != ''
           AND customer NOT LIKE 'Guest of %'
-          AND transaction_status NOT IN ('credited', 'refunded')
         ORDER BY order_date DESC
     """).fetchall()
 
@@ -137,16 +137,22 @@ def migrate(conn: sqlite3.Connection) -> dict:
         chapters = [r["chapter"] for r in item_rows if r["chapter"]]
         chapter = Counter(chapters).most_common(1)[0][0] if chapters else None
 
-        # -- current_player_status: from most recent row --
+        # -- current_player_status: from most recent *active* row --
+        #    (skip credited/refunded rows for status determination)
+        _inactive = ("credited", "refunded")
         current_status = None
         for r in item_rows:
+            if (r["transaction_status"] or "") in _inactive:
+                continue
             mapped = _map_status(r["user_status"])
             if mapped:
                 current_status = mapped
                 break
 
-        # -- first_timer_ever --
-        statuses = {(r["user_status"] or "").strip().upper() for r in item_rows}
+        # -- first_timer_ever (only from active rows) --
+        active_rows = [r for r in item_rows
+                       if (r["transaction_status"] or "") not in _inactive]
+        statuses = {(r["user_status"] or "").strip().upper() for r in active_rows}
         has_first_timer = "1ST TIMER" in statuses
         has_member = "MEMBER" in statuses
         non_null_statuses = statuses - {""}
@@ -260,7 +266,6 @@ def dry_run(conn: sqlite3.Connection) -> None:
         SELECT COUNT(DISTINCT customer) FROM items
         WHERE customer IS NOT NULL AND customer != ''
           AND customer NOT LIKE 'Guest of %'
-          AND transaction_status NOT IN ('credited', 'refunded')
     """).fetchone()[0]
     print(f"1. Unique customers to process:  {processable}")
 
@@ -280,7 +285,6 @@ def dry_run(conn: sqlite3.Connection) -> None:
         WHERE customer IS NOT NULL AND customer != ''
           AND customer NOT LIKE 'Guest of %'
           AND customer_email IS NOT NULL AND customer_email != ''
-          AND transaction_status NOT IN ('credited', 'refunded')
     """).fetchone()[0]
     print(f"3. Unique emails to link:        {unique_emails}")
 
@@ -291,7 +295,6 @@ def dry_run(conn: sqlite3.Connection) -> None:
             FROM items
             WHERE customer IS NOT NULL AND customer != ''
               AND customer NOT LIKE 'Guest of %'
-              AND transaction_status NOT IN ('credited', 'refunded')
             GROUP BY customer COLLATE NOCASE
             HAVING SUM(CASE WHEN customer_email IS NOT NULL
                              AND customer_email != '' THEN 1 ELSE 0 END) = 0
@@ -308,7 +311,6 @@ def dry_run(conn: sqlite3.Connection) -> None:
         WHERE customer IS NOT NULL AND customer != ''
           AND customer NOT LIKE 'Guest of %'
           AND customer_email IS NOT NULL AND customer_email != ''
-          AND transaction_status NOT IN ('credited', 'refunded')
         GROUP BY LOWER(customer_email)
         HAVING COUNT(DISTINCT customer) > 1
         ORDER BY name_count DESC
@@ -340,7 +342,6 @@ def dry_run_json(conn: sqlite3.Connection) -> dict:
         SELECT COUNT(DISTINCT customer) FROM items
         WHERE customer IS NOT NULL AND customer != ''
           AND customer NOT LIKE 'Guest of %'
-          AND transaction_status NOT IN ('credited', 'refunded')
     """).fetchone()[0]
 
     null_blank = conn.execute(
@@ -355,7 +356,6 @@ def dry_run_json(conn: sqlite3.Connection) -> dict:
         WHERE customer IS NOT NULL AND customer != ''
           AND customer NOT LIKE 'Guest of %'
           AND customer_email IS NOT NULL AND customer_email != ''
-          AND transaction_status NOT IN ('credited', 'refunded')
     """).fetchone()[0]
 
     no_email = conn.execute("""
@@ -364,7 +364,6 @@ def dry_run_json(conn: sqlite3.Connection) -> dict:
             FROM items
             WHERE customer IS NOT NULL AND customer != ''
               AND customer NOT LIKE 'Guest of %'
-              AND transaction_status NOT IN ('credited', 'refunded')
             GROUP BY customer COLLATE NOCASE
             HAVING SUM(CASE WHEN customer_email IS NOT NULL
                              AND customer_email != '' THEN 1 ELSE 0 END) = 0
@@ -379,7 +378,6 @@ def dry_run_json(conn: sqlite3.Connection) -> dict:
         WHERE customer IS NOT NULL AND customer != ''
           AND customer NOT LIKE 'Guest of %'
           AND customer_email IS NOT NULL AND customer_email != ''
-          AND transaction_status NOT IN ('credited', 'refunded')
         GROUP BY LOWER(customer_email)
         HAVING COUNT(DISTINCT customer) > 1
         ORDER BY name_count DESC
