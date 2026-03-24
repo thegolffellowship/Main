@@ -3406,6 +3406,9 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
             new_values["merchant"] = "Manual Entry"
             new_values["item_price"] = "$0.00"
 
+        # Resolve customer_id from customers table
+        new_values["customer_id"] = _lookup_customer_id(conn, customer, customer_email)
+
         cols = ", ".join(ITEM_COLUMNS)
         placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
         cursor = conn.execute(
@@ -3484,6 +3487,11 @@ def add_payment_to_event(event_name: str, customer: str,
         # Child payments do NOT carry holes, tee, status — only the parent has those
         new_values["notes"] = note or f"{payment_item} — {payment_amount} via {payment_source}"
         new_values["parent_item_id"] = str(parent_id)
+
+        # Resolve customer_id from customers table
+        new_values["customer_id"] = _lookup_customer_id(
+            conn, customer, parent.get("customer_email")
+        )
 
         cols = ", ".join(ITEM_COLUMNS)
         placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
