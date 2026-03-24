@@ -149,7 +149,7 @@ def migrate(conn: sqlite3.Connection) -> dict:
 
     for name, item_rows in groups.items():
         for r in item_rows:
-            if (r["user_status"] or "").strip().upper() == "GUEST":
+            if (r["user_status"] or "").strip().upper().startswith("GUEST"):
                 continue
             email = (r["customer_email"] or "").strip()
             if not email:
@@ -315,7 +315,7 @@ def dry_run(conn: sqlite3.Connection) -> None:
 
     # 1. Unique customer names that would be processed (alias-aware)
     processable = conn.execute("""
-        SELECT COUNT(DISTINCT COALESCE(ca.customer_name, i.customer))
+        SELECT COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer)))
         FROM items i
         LEFT JOIN customer_aliases ca
           ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
@@ -346,13 +346,13 @@ def dry_run(conn: sqlite3.Connection) -> None:
     # 4. Customers with zero emails (alias-aware)
     no_email = conn.execute("""
         SELECT COUNT(*) FROM (
-            SELECT COALESCE(ca.customer_name, i.customer) AS canonical
+            SELECT LOWER(COALESCE(ca.customer_name, i.customer)) AS canonical
             FROM items i
             LEFT JOIN customer_aliases ca
               ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
             WHERE i.customer IS NOT NULL AND i.customer != ''
               AND i.customer NOT LIKE 'Guest of %'
-            GROUP BY LOWER(canonical)
+            GROUP BY canonical
             HAVING SUM(CASE WHEN i.customer_email IS NOT NULL
                              AND i.customer_email != '' THEN 1 ELSE 0 END) = 0
         )
@@ -364,16 +364,16 @@ def dry_run(conn: sqlite3.Connection) -> None:
     conflicts = conn.execute("""
         SELECT LOWER(i.customer_email) AS email,
                GROUP_CONCAT(DISTINCT COALESCE(ca.customer_name, i.customer)) AS customer_names,
-               COUNT(DISTINCT COALESCE(ca.customer_name, i.customer)) AS name_count
+               COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer))) AS name_count
         FROM items i
         LEFT JOIN customer_aliases ca
           ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
         WHERE i.customer IS NOT NULL AND i.customer != ''
           AND i.customer NOT LIKE 'Guest of %'
           AND i.customer_email IS NOT NULL AND i.customer_email != ''
-          AND UPPER(TRIM(COALESCE(i.user_status, ''))) != 'GUEST'
+          AND UPPER(TRIM(COALESCE(i.user_status, ''))) NOT LIKE 'GUEST%'
         GROUP BY LOWER(i.customer_email)
-        HAVING COUNT(DISTINCT COALESCE(ca.customer_name, i.customer)) > 1
+        HAVING COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer))) > 1
         ORDER BY name_count DESC
     """).fetchall()
 
@@ -402,7 +402,7 @@ def dry_run_json(conn: sqlite3.Connection) -> dict:
     _ensure_aliases(conn)
 
     processable = conn.execute("""
-        SELECT COUNT(DISTINCT COALESCE(ca.customer_name, i.customer))
+        SELECT COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer)))
         FROM items i
         LEFT JOIN customer_aliases ca
           ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
@@ -426,13 +426,13 @@ def dry_run_json(conn: sqlite3.Connection) -> dict:
 
     no_email = conn.execute("""
         SELECT COUNT(*) FROM (
-            SELECT COALESCE(ca.customer_name, i.customer) AS canonical
+            SELECT LOWER(COALESCE(ca.customer_name, i.customer)) AS canonical
             FROM items i
             LEFT JOIN customer_aliases ca
               ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
             WHERE i.customer IS NOT NULL AND i.customer != ''
               AND i.customer NOT LIKE 'Guest of %'
-            GROUP BY LOWER(canonical)
+            GROUP BY canonical
             HAVING SUM(CASE WHEN i.customer_email IS NOT NULL
                              AND i.customer_email != '' THEN 1 ELSE 0 END) = 0
         )
@@ -441,16 +441,16 @@ def dry_run_json(conn: sqlite3.Connection) -> dict:
     conflicts = conn.execute("""
         SELECT LOWER(i.customer_email) AS email,
                GROUP_CONCAT(DISTINCT COALESCE(ca.customer_name, i.customer)) AS customer_names,
-               COUNT(DISTINCT COALESCE(ca.customer_name, i.customer)) AS name_count
+               COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer))) AS name_count
         FROM items i
         LEFT JOIN customer_aliases ca
           ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
         WHERE i.customer IS NOT NULL AND i.customer != ''
           AND i.customer NOT LIKE 'Guest of %'
           AND i.customer_email IS NOT NULL AND i.customer_email != ''
-          AND UPPER(TRIM(COALESCE(i.user_status, ''))) != 'GUEST'
+          AND UPPER(TRIM(COALESCE(i.user_status, ''))) NOT LIKE 'GUEST%'
         GROUP BY LOWER(i.customer_email)
-        HAVING COUNT(DISTINCT COALESCE(ca.customer_name, i.customer)) > 1
+        HAVING COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer))) > 1
         ORDER BY name_count DESC
     """).fetchall()
 
