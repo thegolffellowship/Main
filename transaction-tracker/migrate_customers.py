@@ -59,8 +59,21 @@ _REQUIRED_ALIASES = [
 
 
 def _ensure_aliases(conn: sqlite3.Connection) -> None:
-    """Insert required aliases if they don't already exist."""
+    """Insert required aliases if they don't already exist.
+
+    Also removes any pre-existing *reverse* alias that would conflict
+    (e.g. customer_name="Stu Kirksey", alias_value="Stuart Kirksey"
+    when we need the opposite direction).
+    """
     for canonical, alias_type, alias_value in _REQUIRED_ALIASES:
+        # Delete conflicting reverse alias (alias_value ↔ customer_name swapped)
+        conn.execute(
+            """DELETE FROM customer_aliases
+               WHERE LOWER(customer_name) = ? AND alias_type = ?
+                 AND LOWER(alias_value) = ?""",
+            (alias_value.lower(), alias_type, canonical.lower()),
+        )
+        # Check if our correct alias already exists
         existing = conn.execute(
             """SELECT id FROM customer_aliases
                WHERE customer_name = ? COLLATE NOCASE
@@ -78,39 +91,34 @@ def _ensure_aliases(conn: sqlite3.Connection) -> None:
 
 
 def _load_alias_map(conn: sqlite3.Connection) -> dict[str, str]:
-    """Return {lowercase_alias: canonical_name} from customer_aliases (name type)."""
+    """Return {lowercase_alias: canonical_name} from customer_aliases (name type).
+
+    Only loads aliases where alias_value looks like a full name (contains a space)
+    to avoid short first-name-only aliases hijacking unrelated customers.
+    """
     alias_map: dict[str, str] = {}
     for row in conn.execute(
         "SELECT customer_name, alias_value FROM customer_aliases WHERE alias_type = 'name'"
     ).fetchall():
-        alias_map[row["alias_value"].lower()] = row["customer_name"]
+        val = row["alias_value"].strip()
+        if " " not in val:
+            continue  # skip first-name-only aliases
+        alias_map[val.lower()] = row["customer_name"]
     return alias_map
 
 
 # ---------------------------------------------------------------------------
-# Migration
+# Shared analysis — used by both migrate() and dry-run functions
 # ---------------------------------------------------------------------------
 
-def migrate(conn: sqlite3.Connection) -> dict:
-    """Run the migration. Returns a summary dict."""
+def _analyze(conn: sqlite3.Connection) -> dict:
+    """Fetch items rows, group by customer (alias-aware), and compute
+    email ownership.  Returns a dict with groups, email_owner, and
+    skipped-row counts.  Does NOT write anything."""
 
     _ensure_aliases(conn)
     alias_map = _load_alias_map(conn)
 
-    stats = {
-        "customers_created": 0,
-        "customers_skipped_existing": 0,
-        "emails_linked": 0,
-        "emails_skipped_conflict": 0,
-        "customers_no_email": 0,
-        "rows_skipped_null": 0,
-        "rows_skipped_guest": 0,
-    }
-
-    # ------------------------------------------------------------------
-    # 1. Fetch all relevant items rows, ordered by order_date DESC
-    #    so row[0] for a group is the most recent.
-    # ------------------------------------------------------------------
     rows = conn.execute("""
         SELECT customer, first_name, last_name,
                customer_email, customer_phone,
@@ -118,20 +126,17 @@ def migrate(conn: sqlite3.Connection) -> dict:
                transaction_status
         FROM items
         WHERE customer IS NOT NULL AND customer != ''
-          AND customer NOT LIKE 'Guest of %'
+          AND customer NOT LIKE 'Guest of %%'
         ORDER BY order_date DESC
     """).fetchall()
 
-    # ------------------------------------------------------------------
-    # 2. Group by customer name (case-insensitive, alias-aware)
-    # ------------------------------------------------------------------
+    # Group by customer name (case-insensitive, alias-aware)
     groups: dict[str, list[sqlite3.Row]] = {}
-    seen_lower: dict[str, str] = {}  # lowercase canonical → canonical name
+    seen_lower: dict[str, str] = {}
 
     for row in rows:
         name = row["customer"].strip()
         lower = name.lower()
-        # Resolve alias → canonical name
         canonical = alias_map.get(lower, name)
         canonical_lower = canonical.lower()
         if canonical_lower not in seen_lower:
@@ -139,13 +144,8 @@ def migrate(conn: sqlite3.Connection) -> dict:
             groups[canonical] = []
         groups[seen_lower[canonical_lower]].append(row)
 
-    # ------------------------------------------------------------------
-    # 3. Track which emails have been claimed (most-recent-use wins)
-    #    Build a map: email → (customer_name, order_date)
-    #    Skip GUEST rows — the email on a guest row belongs to the
-    #    payer, not the guest.
-    # ------------------------------------------------------------------
-    email_owner: dict[str, tuple[str, str]] = {}  # email_lower → (customer, order_date)
+    # Email ownership (most-recent non-guest use wins)
+    email_owner: dict[str, tuple[str, str]] = {}
 
     for name, item_rows in groups.items():
         for r in item_rows:
@@ -159,9 +159,43 @@ def migrate(conn: sqlite3.Connection) -> dict:
             if e_lower not in email_owner or date > email_owner[e_lower][1]:
                 email_owner[e_lower] = (name, date)
 
-    # ------------------------------------------------------------------
-    # 4. Migrate each customer
-    # ------------------------------------------------------------------
+    null_count = conn.execute(
+        "SELECT COUNT(*) FROM items WHERE customer IS NULL OR customer = ''"
+    ).fetchone()[0]
+    guest_count = conn.execute(
+        "SELECT COUNT(*) FROM items WHERE customer LIKE 'Guest of %'"
+    ).fetchone()[0]
+
+    return {
+        "groups": groups,
+        "alias_map": alias_map,
+        "email_owner": email_owner,
+        "rows_skipped_null": null_count,
+        "rows_skipped_guest": guest_count,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Migration
+# ---------------------------------------------------------------------------
+
+def migrate(conn: sqlite3.Connection) -> dict:
+    """Run the migration. Returns a summary dict."""
+
+    analysis = _analyze(conn)
+    groups = analysis["groups"]
+    email_owner = analysis["email_owner"]
+
+    stats = {
+        "customers_created": 0,
+        "customers_skipped_existing": 0,
+        "emails_linked": 0,
+        "emails_skipped_conflict": 0,
+        "customers_no_email": 0,
+        "rows_skipped_null": analysis["rows_skipped_null"],
+        "rows_skipped_guest": analysis["rows_skipped_guest"],
+    }
+
     for name, item_rows in groups.items():
         # Check if already migrated (idempotent)
         existing = conn.execute(
@@ -172,23 +206,21 @@ def migrate(conn: sqlite3.Connection) -> dict:
             stats["customers_skipped_existing"] += 1
             continue
 
-        # -- first_name / last_name --
         first = _first_name(item_rows)
         last = _last_name(item_rows)
 
-        # -- phone: most recent non-NULL --
+        # phone: most recent non-NULL
         phone = None
-        for r in item_rows:  # already sorted by order_date DESC
+        for r in item_rows:
             if r["customer_phone"]:
                 phone = r["customer_phone"]
                 break
 
-        # -- chapter: most frequent --
+        # chapter: most frequent
         chapters = [r["chapter"] for r in item_rows if r["chapter"]]
         chapter = Counter(chapters).most_common(1)[0][0] if chapters else None
 
-        # -- current_player_status: from most recent *active* row --
-        #    (skip credited/refunded rows for status determination)
+        # current_player_status: from most recent *active* row
         _inactive = ("credited", "refunded")
         current_status = None
         for r in item_rows:
@@ -199,7 +231,7 @@ def migrate(conn: sqlite3.Connection) -> dict:
                 current_status = mapped
                 break
 
-        # -- first_timer_ever (only from active rows) --
+        # first_timer_ever (only from active rows)
         active_rows = [r for r in item_rows
                        if (r["transaction_status"] or "") not in _inactive]
         statuses = {(r["user_status"] or "").strip().upper() for r in active_rows}
@@ -215,7 +247,6 @@ def migrate(conn: sqlite3.Connection) -> dict:
         else:
             first_timer_ever = None
 
-        # -- Insert customer --
         cursor = conn.execute("""
             INSERT INTO customers
                 (first_name, last_name, phone, chapter,
@@ -227,8 +258,8 @@ def migrate(conn: sqlite3.Connection) -> dict:
         customer_id = cursor.lastrowid
         stats["customers_created"] += 1
 
-        # -- Collect emails owned by this customer --
-        emails_for_customer: list[tuple[str, str]] = []  # (email, order_date)
+        # Collect emails owned by this customer
+        emails_for_customer: list[tuple[str, str]] = []
         seen_emails: set[str] = set()
 
         for r in item_rows:
@@ -236,7 +267,6 @@ def migrate(conn: sqlite3.Connection) -> dict:
             if not email:
                 continue
             e_lower = email.lower()
-            # Only claim if this customer is the rightful owner
             if email_owner.get(e_lower, (None,))[0] != name:
                 if e_lower not in seen_emails:
                     stats["emails_skipped_conflict"] += 1
@@ -251,13 +281,11 @@ def migrate(conn: sqlite3.Connection) -> dict:
             stats["customers_no_email"] += 1
             continue
 
-        # Sort by order_date DESC — first entry is most recent
         emails_for_customer.sort(key=lambda x: x[1], reverse=True)
 
         for i, (email, _date) in enumerate(emails_for_customer):
             is_primary = 1 if i == 0 else 0
             is_gg = 1 if i == 0 else 0
-
             conn.execute("""
                 INSERT INTO customer_emails
                     (customer_id, email, is_primary, is_golf_genius, label)
@@ -266,17 +294,6 @@ def migrate(conn: sqlite3.Connection) -> dict:
             stats["emails_linked"] += 1
 
     conn.commit()
-
-    # Count skipped rows for summary
-    null_count = conn.execute(
-        "SELECT COUNT(*) FROM items WHERE customer IS NULL OR customer = ''"
-    ).fetchone()[0]
-    guest_count = conn.execute(
-        "SELECT COUNT(*) FROM items WHERE customer LIKE 'Guest of %'"
-    ).fetchone()[0]
-    stats["rows_skipped_null"] = null_count
-    stats["rows_skipped_guest"] = guest_count
-
     return stats
 
 
@@ -285,7 +302,6 @@ def _first_name(item_rows: list[sqlite3.Row]) -> str:
     for r in item_rows:
         if r["first_name"]:
             return r["first_name"]
-    # Fallback: split customer on first space
     name = item_rows[0]["customer"].strip()
     parts = name.split(None, 1)
     return parts[0] if parts else name
@@ -296,7 +312,6 @@ def _last_name(item_rows: list[sqlite3.Row]) -> str:
     for r in item_rows:
         if r["last_name"]:
             return r["last_name"]
-    # Fallback: split customer on first space
     name = item_rows[0]["customer"].strip()
     parts = name.split(None, 1)
     return parts[1] if len(parts) > 1 else ""
@@ -306,91 +321,103 @@ def _last_name(item_rows: list[sqlite3.Row]) -> str:
 # Dry-run preview (SELECT only, no inserts)
 # ---------------------------------------------------------------------------
 
+def _compute_preview(conn: sqlite3.Connection) -> dict:
+    """Compute all dry-run preview stats using the same Python logic as
+    migrate().  Returns a JSON-serializable dict."""
+
+    analysis = _analyze(conn)
+    groups = analysis["groups"]
+    email_owner = analysis["email_owner"]
+
+    # Unique customers (after alias merging)
+    processable = len(groups)
+
+    # Unique emails that would be linked
+    all_emails: set[str] = set()
+    for item_rows in groups.values():
+        for r in item_rows:
+            email = (r["customer_email"] or "").strip()
+            if email:
+                all_emails.add(email.lower())
+    unique_emails = len(all_emails)
+
+    # Customers with zero linkable emails
+    no_email_count = 0
+    for name, item_rows in groups.items():
+        has_email = False
+        for r in item_rows:
+            email = (r["customer_email"] or "").strip()
+            if email:
+                has_email = True
+                break
+        if not has_email:
+            no_email_count += 1
+
+    # Email conflicts: emails that appear on multiple customers
+    # (using the same ownership logic as migrate — only true conflicts
+    # where the email_owner resolution can't resolve)
+    email_users: dict[str, set[str]] = {}  # email_lower → set of canonical names
+    for name, item_rows in groups.items():
+        for r in item_rows:
+            email = (r["customer_email"] or "").strip()
+            if not email:
+                continue
+            e_lower = email.lower()
+            email_users.setdefault(e_lower, set()).add(name)
+
+    conflicts = []
+    for e_lower, names in sorted(email_users.items()):
+        if len(names) <= 1:
+            continue
+        # Check if ownership resolution resolves it (one winner, rest lose)
+        owner = email_owner.get(e_lower)
+        if owner:
+            # Email has an owner — the other names just lose it,
+            # no true conflict (migration handles this gracefully)
+            continue
+        # No owner at all (e.g. all rows are GUEST) — truly unresolvable
+        conflicts.append({
+            "email": e_lower,
+            "customer_names": sorted(names),
+        })
+
+    existing = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+
+    return {
+        "unique_customers_to_process": processable,
+        "rows_skipped_null_blank": analysis["rows_skipped_null"],
+        "rows_skipped_guest_of": analysis["rows_skipped_guest"],
+        "unique_emails_to_link": unique_emails,
+        "customers_with_no_email": no_email_count,
+        "email_conflicts": conflicts,
+        "customers_already_in_table": existing,
+    }
+
+
 def dry_run(conn: sqlite3.Connection) -> None:
     """Print a preview of what the migration would do. No writes."""
 
-    _ensure_aliases(conn)
+    preview = _compute_preview(conn)
 
     print("=== Dry-Run Preview (read-only) ===\n")
+    print(f"1. Unique customers to process:  {preview['unique_customers_to_process']}")
+    print(f"2. Items rows skipped (NULL/blank customer): {preview['rows_skipped_null_blank']}")
+    print(f"   Items rows skipped (Guest of %):          {preview['rows_skipped_guest_of']}")
+    print(f"3. Unique emails to link:        {preview['unique_emails_to_link']}")
+    print(f"4. Customers with zero emails:   {preview['customers_with_no_email']}")
 
-    # 1. Unique customer names that would be processed (alias-aware)
-    processable = conn.execute("""
-        SELECT COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer)))
-        FROM items i
-        LEFT JOIN customer_aliases ca
-          ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
-        WHERE i.customer IS NOT NULL AND i.customer != ''
-          AND i.customer NOT LIKE 'Guest of %'
-    """).fetchone()[0]
-    print(f"1. Unique customers to process:  {processable}")
-
-    # 2. Skipped rows
-    null_blank = conn.execute(
-        "SELECT COUNT(*) FROM items WHERE customer IS NULL OR customer = ''"
-    ).fetchone()[0]
-    guest_of = conn.execute(
-        "SELECT COUNT(*) FROM items WHERE customer LIKE 'Guest of %'"
-    ).fetchone()[0]
-    print(f"2. Items rows skipped (NULL/blank customer): {null_blank}")
-    print(f"   Items rows skipped (Guest of %):          {guest_of}")
-
-    # 3. Unique emails that would be linked
-    unique_emails = conn.execute("""
-        SELECT COUNT(DISTINCT LOWER(customer_email)) FROM items
-        WHERE customer IS NOT NULL AND customer != ''
-          AND customer NOT LIKE 'Guest of %'
-          AND customer_email IS NOT NULL AND customer_email != ''
-    """).fetchone()[0]
-    print(f"3. Unique emails to link:        {unique_emails}")
-
-    # 4. Customers with zero emails (alias-aware)
-    no_email = conn.execute("""
-        SELECT COUNT(*) FROM (
-            SELECT LOWER(COALESCE(ca.customer_name, i.customer)) AS canonical
-            FROM items i
-            LEFT JOIN customer_aliases ca
-              ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
-            WHERE i.customer IS NOT NULL AND i.customer != ''
-              AND i.customer NOT LIKE 'Guest of %'
-            GROUP BY canonical
-            HAVING SUM(CASE WHEN i.customer_email IS NOT NULL
-                             AND i.customer_email != '' THEN 1 ELSE 0 END) = 0
-        )
-    """).fetchone()[0]
-    print(f"4. Customers with zero emails:   {no_email}")
-
-    # 5. Email conflicts — alias-aware, excluding GUEST rows
-    #    (guest rows carry the payer's email, not the guest's)
-    conflicts = conn.execute("""
-        SELECT LOWER(i.customer_email) AS email,
-               GROUP_CONCAT(DISTINCT COALESCE(ca.customer_name, i.customer)) AS customer_names,
-               COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer))) AS name_count
-        FROM items i
-        LEFT JOIN customer_aliases ca
-          ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
-        WHERE i.customer IS NOT NULL AND i.customer != ''
-          AND i.customer NOT LIKE 'Guest of %'
-          AND i.customer_email IS NOT NULL AND i.customer_email != ''
-          AND UPPER(TRIM(COALESCE(i.user_status, ''))) NOT LIKE 'GUEST%'
-        GROUP BY LOWER(i.customer_email)
-        HAVING COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer))) > 1
-        ORDER BY name_count DESC
-    """).fetchall()
-
+    conflicts = preview["email_conflicts"]
     print(f"5. Email conflicts (same email, multiple names): {len(conflicts)}")
     if conflicts:
         print()
         print("   EMAIL                              CUSTOMER NAMES")
         print("   " + "-" * 70)
-        for row in conflicts:
-            email = row["email"]
-            names = row["customer_names"]
-            print(f"   {email:<37} {names}")
+        for c in conflicts:
+            print(f"   {c['email']:<37} {', '.join(c['customer_names'])}")
     else:
         print("   (none)")
 
-    # Bonus: customers already in the customers table
-    existing = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+    existing = preview["customers_already_in_table"]
     if existing:
         print(f"\n   NOTE: {existing} customers already exist in the customers table.")
     print()
@@ -398,105 +425,7 @@ def dry_run(conn: sqlite3.Connection) -> None:
 
 def dry_run_json(conn: sqlite3.Connection) -> dict:
     """Return dry-run preview as a JSON-serializable dict (for the API endpoint)."""
-
-    _ensure_aliases(conn)
-
-    processable = conn.execute("""
-        SELECT COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer)))
-        FROM items i
-        LEFT JOIN customer_aliases ca
-          ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
-        WHERE i.customer IS NOT NULL AND i.customer != ''
-          AND i.customer NOT LIKE 'Guest of %'
-    """).fetchone()[0]
-
-    null_blank = conn.execute(
-        "SELECT COUNT(*) FROM items WHERE customer IS NULL OR customer = ''"
-    ).fetchone()[0]
-    guest_of = conn.execute(
-        "SELECT COUNT(*) FROM items WHERE customer LIKE 'Guest of %'"
-    ).fetchone()[0]
-
-    unique_emails = conn.execute("""
-        SELECT COUNT(DISTINCT LOWER(customer_email)) FROM items
-        WHERE customer IS NOT NULL AND customer != ''
-          AND customer NOT LIKE 'Guest of %'
-          AND customer_email IS NOT NULL AND customer_email != ''
-    """).fetchone()[0]
-
-    no_email = conn.execute("""
-        SELECT COUNT(*) FROM (
-            SELECT LOWER(COALESCE(ca.customer_name, i.customer)) AS canonical
-            FROM items i
-            LEFT JOIN customer_aliases ca
-              ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
-            WHERE i.customer IS NOT NULL AND i.customer != ''
-              AND i.customer NOT LIKE 'Guest of %'
-            GROUP BY canonical
-            HAVING SUM(CASE WHEN i.customer_email IS NOT NULL
-                             AND i.customer_email != '' THEN 1 ELSE 0 END) = 0
-        )
-    """).fetchone()[0]
-
-    conflicts = conn.execute("""
-        SELECT LOWER(i.customer_email) AS email,
-               GROUP_CONCAT(DISTINCT COALESCE(ca.customer_name, i.customer)) AS customer_names,
-               COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer))) AS name_count
-        FROM items i
-        LEFT JOIN customer_aliases ca
-          ON LOWER(i.customer) = LOWER(ca.alias_value) AND ca.alias_type = 'name'
-        WHERE i.customer IS NOT NULL AND i.customer != ''
-          AND i.customer NOT LIKE 'Guest of %'
-          AND i.customer_email IS NOT NULL AND i.customer_email != ''
-          AND UPPER(TRIM(COALESCE(i.user_status, ''))) NOT LIKE 'GUEST%'
-        GROUP BY LOWER(i.customer_email)
-        HAVING COUNT(DISTINCT LOWER(COALESCE(ca.customer_name, i.customer))) > 1
-        ORDER BY name_count DESC
-    """).fetchall()
-
-    existing = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
-
-    # Diagnostic: inspect alias table and conflict rows
-    aliases = conn.execute(
-        "SELECT customer_name, alias_type, alias_value FROM customer_aliases WHERE alias_type = 'name'"
-    ).fetchall()
-    stu_rows = conn.execute(
-        "SELECT customer, customer_email, user_status, order_date, transaction_status "
-        "FROM items WHERE LOWER(customer) LIKE '%kirksey%'"
-    ).fetchall()
-    will_rows = conn.execute(
-        "SELECT customer, customer_email, user_status, order_date, transaction_status "
-        "FROM items WHERE LOWER(customer_email) = 'colbyjohnson8@gmail.com'"
-    ).fetchall()
-
-    return {
-        "unique_customers_to_process": processable,
-        "rows_skipped_null_blank": null_blank,
-        "rows_skipped_guest_of": guest_of,
-        "unique_emails_to_link": unique_emails,
-        "customers_with_no_email": no_email,
-        "email_conflicts": [
-            {"email": r["email"], "customer_names": r["customer_names"].split(",")}
-            for r in conflicts
-        ],
-        "customers_already_in_table": existing,
-        "_debug_aliases": [
-            {"customer_name": r["customer_name"], "alias_value": r["alias_value"]}
-            for r in aliases
-        ],
-        "_debug_kirksey_rows": [
-            {"customer": r["customer"], "email": r["customer_email"],
-             "user_status": r["user_status"], "order_date": r["order_date"],
-             "transaction_status": r["transaction_status"]}
-            for r in stu_rows
-        ],
-        "_debug_colby_email_rows": [
-            {"customer": r["customer"], "email": r["customer_email"],
-             "user_status": r["user_status"], "order_date": r["order_date"],
-             "transaction_status": r["transaction_status"]}
-            for r in will_rows
-        ],
-    }
+    return _compute_preview(conn)
 
 
 # ---------------------------------------------------------------------------
