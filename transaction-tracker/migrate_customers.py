@@ -247,28 +247,119 @@ def _last_name(item_rows: list[sqlite3.Row]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Dry-run preview (SELECT only, no inserts)
+# ---------------------------------------------------------------------------
+
+def dry_run(conn: sqlite3.Connection) -> None:
+    """Print a preview of what the migration would do. No writes."""
+
+    print("=== Dry-Run Preview (read-only) ===\n")
+
+    # 1. Unique customer names that would be processed
+    processable = conn.execute("""
+        SELECT COUNT(DISTINCT customer) FROM items
+        WHERE customer IS NOT NULL AND customer != ''
+          AND customer NOT LIKE 'Guest of %'
+          AND transaction_status NOT IN ('credited', 'refunded')
+    """).fetchone()[0]
+    print(f"1. Unique customers to process:  {processable}")
+
+    # 2. Skipped rows
+    null_blank = conn.execute(
+        "SELECT COUNT(*) FROM items WHERE customer IS NULL OR customer = ''"
+    ).fetchone()[0]
+    guest_of = conn.execute(
+        "SELECT COUNT(*) FROM items WHERE customer LIKE 'Guest of %'"
+    ).fetchone()[0]
+    print(f"2. Items rows skipped (NULL/blank customer): {null_blank}")
+    print(f"   Items rows skipped (Guest of %):          {guest_of}")
+
+    # 3. Unique emails that would be linked
+    unique_emails = conn.execute("""
+        SELECT COUNT(DISTINCT LOWER(customer_email)) FROM items
+        WHERE customer IS NOT NULL AND customer != ''
+          AND customer NOT LIKE 'Guest of %'
+          AND customer_email IS NOT NULL AND customer_email != ''
+          AND transaction_status NOT IN ('credited', 'refunded')
+    """).fetchone()[0]
+    print(f"3. Unique emails to link:        {unique_emails}")
+
+    # 4. Customers with zero emails
+    no_email = conn.execute("""
+        SELECT COUNT(*) FROM (
+            SELECT customer
+            FROM items
+            WHERE customer IS NOT NULL AND customer != ''
+              AND customer NOT LIKE 'Guest of %'
+              AND transaction_status NOT IN ('credited', 'refunded')
+            GROUP BY customer COLLATE NOCASE
+            HAVING SUM(CASE WHEN customer_email IS NOT NULL
+                             AND customer_email != '' THEN 1 ELSE 0 END) = 0
+        )
+    """).fetchone()[0]
+    print(f"4. Customers with zero emails:   {no_email}")
+
+    # 5. Email conflicts — same email used by multiple customer names
+    conflicts = conn.execute("""
+        SELECT LOWER(customer_email) AS email,
+               GROUP_CONCAT(DISTINCT customer) AS customer_names,
+               COUNT(DISTINCT customer) AS name_count
+        FROM items
+        WHERE customer IS NOT NULL AND customer != ''
+          AND customer NOT LIKE 'Guest of %'
+          AND customer_email IS NOT NULL AND customer_email != ''
+          AND transaction_status NOT IN ('credited', 'refunded')
+        GROUP BY LOWER(customer_email)
+        HAVING COUNT(DISTINCT customer) > 1
+        ORDER BY name_count DESC
+    """).fetchall()
+
+    print(f"5. Email conflicts (same email, multiple names): {len(conflicts)}")
+    if conflicts:
+        print()
+        print("   EMAIL                              CUSTOMER NAMES")
+        print("   " + "-" * 70)
+        for row in conflicts:
+            email = row["email"]
+            names = row["customer_names"]
+            print(f"   {email:<37} {names}")
+    else:
+        print("   (none)")
+
+    # Bonus: customers already in the customers table
+    existing = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+    if existing:
+        print(f"\n   NOTE: {existing} customers already exist in the customers table.")
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main():
+    import sys
+
     print(f"Connecting to: {DB_PATH}")
     conn = get_connection()
 
     try:
-        stats = migrate(conn)
+        if "--dry-run" in sys.argv:
+            dry_run(conn)
+        else:
+            stats = migrate(conn)
+            print()
+            print("=== Migration Summary ===")
+            print(f"  Customers created:          {stats['customers_created']}")
+            print(f"  Customers already existed:   {stats['customers_skipped_existing']}")
+            print(f"  Emails linked:              {stats['emails_linked']}")
+            print(f"  Emails skipped (conflict):  {stats['emails_skipped_conflict']}")
+            print(f"  Customers with no email:    {stats['customers_no_email']}")
+            print(f"  Items rows skipped (NULL):  {stats['rows_skipped_null']}")
+            print(f"  Items rows skipped (Guest): {stats['rows_skipped_guest']}")
+            print()
     finally:
         conn.close()
-
-    print()
-    print("=== Migration Summary ===")
-    print(f"  Customers created:          {stats['customers_created']}")
-    print(f"  Customers already existed:   {stats['customers_skipped_existing']}")
-    print(f"  Emails linked:              {stats['emails_linked']}")
-    print(f"  Emails skipped (conflict):  {stats['emails_skipped_conflict']}")
-    print(f"  Customers with no email:    {stats['customers_no_email']}")
-    print(f"  Items rows skipped (NULL):  {stats['rows_skipped_null']}")
-    print(f"  Items rows skipped (Guest): {stats['rows_skipped_guest']}")
-    print()
 
 
 if __name__ == "__main__":
