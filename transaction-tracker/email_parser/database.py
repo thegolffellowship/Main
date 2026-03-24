@@ -246,6 +246,7 @@ ITEM_COLUMNS = [
     "transaction_status", "credit_note", "transferred_from_id", "transferred_to_id",
     "wd_reason", "wd_note", "wd_credits", "credit_amount",
     "parent_item_id",
+    "customer_id",
 ]
 
 
@@ -447,6 +448,13 @@ def init_db(db_path: str | Path | None = None) -> None:
         try:
             conn.execute("ALTER TABLE items ADD COLUMN parent_item_id TEXT")
             logger.info("Added missing column: parent_item_id")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+        # Ensure customer_id column exists for linking items to customers
+        try:
+            conn.execute("ALTER TABLE items ADD COLUMN customer_id INTEGER")
+            logger.info("Added missing column: customer_id")
         except sqlite3.OperationalError:
             pass  # column already exists
 
