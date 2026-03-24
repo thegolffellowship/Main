@@ -1077,6 +1077,75 @@ def _lookup_customer_id(conn: sqlite3.Connection,
     return None
 
 
+# Status mapping — mirrors migrate_customers._STATUS_MAP
+_STATUS_MAP = {
+    "MEMBER":    "active_member",
+    "GUEST":     "active_guest",
+    "1ST TIMER": "first_timer",
+}
+
+
+def _resolve_or_create_customer(
+    conn: sqlite3.Connection,
+    customer_name: str | None,
+    customer_email: str | None,
+    phone: str | None = None,
+    chapter: str | None = None,
+    user_status: str | None = None,
+) -> int | None:
+    """Resolve an existing customer_id, or create a new customers record.
+
+    Tries ``_lookup_customer_id`` first.  If no match is found *and* we have
+    at least a two-part name, creates a new ``customers`` row (and a
+    ``customer_emails`` row when an email is provided).
+
+    Returns the customer_id, or None only when the name is missing/single-word
+    (we can't safely create a record without first + last).
+    """
+    # 1. Try existing lookup
+    cid = _lookup_customer_id(conn, customer_name, customer_email)
+    if cid is not None:
+        return cid
+
+    # 2. Need at least "First Last" to create a record
+    if not customer_name:
+        return None
+    parts = customer_name.strip().split()
+    if len(parts) < 2:
+        return None
+
+    first = parts[0]
+    last = parts[-1]
+
+    # Map user_status to customers.current_player_status
+    player_status = None
+    if user_status:
+        player_status = _STATUS_MAP.get(user_status.strip().upper())
+
+    cursor = conn.execute(
+        """INSERT INTO customers
+               (first_name, last_name, phone, chapter,
+                current_player_status, acquisition_source, account_status)
+           VALUES (?, ?, ?, ?, ?, 'godaddy', 'active')""",
+        (first, last, phone or None, chapter or None, player_status),
+    )
+    new_cid = cursor.lastrowid
+    logger.info("Auto-created customer %s %s (customer_id=%d)", first, last, new_cid)
+
+    # Link email if provided
+    if customer_email and customer_email.strip():
+        try:
+            conn.execute(
+                """INSERT INTO customer_emails (customer_id, email, is_primary)
+                   VALUES (?, ?, 1)""",
+                (new_cid, customer_email.strip()),
+            )
+        except sqlite3.IntegrityError:
+            pass  # email already linked to another customer
+
+    return new_cid
+
+
 def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
     """Populate customer_id for existing items that don't have one yet.
 
@@ -1123,8 +1192,11 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
         for row in rows:
             # Auto-resolve customer_id if not already set
             if not row.get("customer_id"):
-                row["customer_id"] = _lookup_customer_id(
-                    conn, row.get("customer"), row.get("customer_email")
+                row["customer_id"] = _resolve_or_create_customer(
+                    conn, row.get("customer"), row.get("customer_email"),
+                    phone=row.get("customer_phone"),
+                    chapter=row.get("chapter"),
+                    user_status=row.get("user_status"),
                 )
             values = tuple(row.get(col) for col in ITEM_COLUMNS)
             try:
@@ -3406,8 +3478,12 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
             new_values["merchant"] = "Manual Entry"
             new_values["item_price"] = "$0.00"
 
-        # Resolve customer_id from customers table
-        new_values["customer_id"] = _lookup_customer_id(conn, customer, customer_email)
+        # Resolve or create customer_id from customers table
+        new_values["customer_id"] = _resolve_or_create_customer(
+            conn, customer, customer_email,
+            phone=customer_phone, chapter=new_values.get("chapter"),
+            user_status=user_status,
+        )
 
         cols = ", ".join(ITEM_COLUMNS)
         placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
@@ -3488,9 +3564,11 @@ def add_payment_to_event(event_name: str, customer: str,
         new_values["notes"] = note or f"{payment_item} — {payment_amount} via {payment_source}"
         new_values["parent_item_id"] = str(parent_id)
 
-        # Resolve customer_id from customers table
-        new_values["customer_id"] = _lookup_customer_id(
-            conn, customer, parent.get("customer_email")
+        # Resolve or create customer_id from customers table
+        new_values["customer_id"] = _resolve_or_create_customer(
+            conn, customer, parent.get("customer_email"),
+            phone=parent.get("customer_phone"),
+            chapter=new_values.get("chapter"),
         )
 
         cols = ", ".join(ITEM_COLUMNS)
