@@ -574,6 +574,20 @@ def api_migrate_customers_preview():
         conn.close()
 
 
+@app.route("/api/migrate-customers", methods=["POST"])
+@require_role("admin")
+def api_migrate_customers():
+    """Run the customer migration (idempotent)."""
+    from migrate_customers import migrate
+    from email_parser.database import get_connection
+    conn = get_connection()
+    try:
+        stats = migrate(conn)
+        return jsonify(stats)
+    finally:
+        conn.close()
+
+
 @app.route("/api/data-snapshot")
 def api_data_snapshot():
     """Quick snapshot of recent items + stats for inspection."""
