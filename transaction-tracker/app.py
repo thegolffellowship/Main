@@ -110,6 +110,8 @@ from email_parser.database import (
     mark_email_processed,
     clear_failed_processed,
     refund_item,
+    get_app_setting,
+    set_app_setting,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -982,7 +984,8 @@ def matrix_page():
     # Admin-only page
     if session.get("role") != "admin":
         return render_template("index.html")
-    return render_template("matrix.html")
+    matrix9, matrix18 = _load_matrix()
+    return render_template("matrix.html", matrix9=matrix9, matrix18=matrix18)
 
 
 @app.route("/changelog")
@@ -1091,27 +1094,45 @@ def api_database_table(table_name):
         conn.close()
 
 
+def _load_matrix_from_file() -> tuple[dict, dict]:
+    """Parse the static games-matrix.js file and return (matrix9, matrix18)."""
+    matrix_path = os.path.join(
+        os.path.dirname(__file__), "static", "js", "games-matrix.js"
+    )
+    with open(matrix_path, "r") as f:
+        content = f.read()
+    m9 = re.search(r"window\.GAMES_MATRIX_9\s*=\s*(\{.*?\});", content, re.DOTALL)
+    m18 = re.search(r"window\.GAMES_MATRIX_18\s*=\s*(\{.*?\});", content, re.DOTALL)
+    return json.loads(m9.group(1)), json.loads(m18.group(1))
+
+
+def _load_matrix() -> tuple[dict, dict]:
+    """Load matrices from DB if saved, otherwise from the static JS file."""
+    db9 = get_app_setting("games_matrix_9")
+    db18 = get_app_setting("games_matrix_18")
+    if db9 and db18:
+        return json.loads(db9), json.loads(db18)
+    return _load_matrix_from_file()
+
+
+@app.route("/api/matrix", methods=["GET"])
+def api_matrix_get():
+    """Return the current games matrix (from DB if edited, else from static file)."""
+    matrix9, matrix18 = _load_matrix()
+    return jsonify({"matrix9": matrix9, "matrix18": matrix18})
+
+
 @app.route("/api/matrix", methods=["PUT"])
 @require_role("admin")
 def api_matrix_save():
-    """Save edits to the side-games matrix JS file."""
+    """Save edits to the side-games matrix (persisted in DB)."""
     try:
         data = request.get_json(force=True)
         changes = data.get("changes", {})
         if not changes:
             return jsonify({"error": "No changes provided"}), 400
 
-        matrix_path = os.path.join(
-            os.path.dirname(__file__), "static", "js", "games-matrix.js"
-        )
-        with open(matrix_path, "r") as f:
-            content = f.read()
-
-        # Parse existing matrices
-        m9 = re.search(r"window\.GAMES_MATRIX_9\s*=\s*(\{.*?\});", content, re.DOTALL)
-        m18 = re.search(r"window\.GAMES_MATRIX_18\s*=\s*(\{.*?\});", content, re.DOTALL)
-        matrix9 = json.loads(m9.group(1))
-        matrix18 = json.loads(m18.group(1))
+        matrix9, matrix18 = _load_matrix()
 
         for change_key, new_val in changes.items():
             parts = change_key.split(":", 2)
@@ -1133,18 +1154,27 @@ def api_matrix_save():
             else:
                 entry[field_key] = new_val
 
-        # Write back
-        new_content = "// Auto-generated from 25-SideGame-PrizeMatrix.xlsx\n"
-        new_content += "// Last edited via Matrix UI\n\n"
-        new_content += "window.GAMES_MATRIX_9 = "
-        new_content += json.dumps(matrix9, indent=2)
-        new_content += ";\n\n"
-        new_content += "window.GAMES_MATRIX_18 = "
-        new_content += json.dumps(matrix18, indent=2)
-        new_content += ";\n"
+        # Persist to database (survives Railway redeploys)
+        set_app_setting("games_matrix_9", json.dumps(matrix9))
+        set_app_setting("games_matrix_18", json.dumps(matrix18))
 
-        with open(matrix_path, "w") as f:
-            f.write(new_content)
+        # Also update the static file as a cache (best-effort, may be read-only)
+        try:
+            matrix_path = os.path.join(
+                os.path.dirname(__file__), "static", "js", "games-matrix.js"
+            )
+            new_content = "// Auto-generated from 25-SideGame-PrizeMatrix.xlsx\n"
+            new_content += "// Last edited via Matrix UI\n\n"
+            new_content += "window.GAMES_MATRIX_9 = "
+            new_content += json.dumps(matrix9, indent=2)
+            new_content += ";\n\n"
+            new_content += "window.GAMES_MATRIX_18 = "
+            new_content += json.dumps(matrix18, indent=2)
+            new_content += ";\n"
+            with open(matrix_path, "w") as f:
+                f.write(new_content)
+        except Exception:
+            logger.debug("Could not update static matrix file (non-fatal)")
 
         return jsonify({"status": "ok", "matrix9": matrix9, "matrix18": matrix18})
     except Exception as e:
@@ -1453,7 +1483,8 @@ def api_expand_quantities():
 # ---------------------------------------------------------------------------
 @app.route("/events")
 def events_page():
-    return render_template("events.html")
+    matrix9, matrix18 = _load_matrix()
+    return render_template("events.html", matrix9=matrix9, matrix18=matrix18)
 
 
 @app.route("/customers")
