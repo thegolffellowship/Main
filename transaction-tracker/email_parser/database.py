@@ -468,6 +468,24 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("parent_item_id TEXT→INTEGER migration failed (non-fatal)")
 
+        # Migrate transferred_from_id / transferred_to_id from TEXT to INTEGER
+        for col in ("transferred_from_id", "transferred_to_id"):
+            try:
+                text_rows = conn.execute(
+                    f"SELECT id, {col} FROM items "
+                    f"WHERE {col} IS NOT NULL AND typeof({col}) = 'text'"
+                ).fetchall()
+                if text_rows:
+                    for r in text_rows:
+                        conn.execute(
+                            f"UPDATE items SET {col} = CAST({col} AS INTEGER) WHERE id = ?",
+                            (r["id"],),
+                        )
+                    conn.commit()
+                    logger.info("Migrated %d %s values from TEXT to INTEGER", len(text_rows), col)
+            except Exception:
+                logger.exception("%s TEXT→INTEGER migration failed (non-fatal)", col)
+
         # Ensure customer_id column exists for linking items to customers
         try:
             conn.execute("ALTER TABLE items ADD COLUMN customer_id INTEGER")
@@ -3542,7 +3560,7 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
         new_values["order_date"] = orig.get("order_date") or ""
         new_values["transaction_status"] = "active"
         new_values["credit_note"] = f"Transferred from {orig.get('item_name', '')} (#{item_id})"
-        new_values["transferred_from_id"] = str(item_id)
+        new_values["transferred_from_id"] = item_id
         new_values["transferred_to_id"] = None
 
         cols = ", ".join(ITEM_COLUMNS)
