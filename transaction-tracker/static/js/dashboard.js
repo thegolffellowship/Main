@@ -23,7 +23,7 @@ const SEARCHABLE_FIELDS = [
     "customer", "customer_email", "customer_phone",
     "item_name", "item_price", "chapter", "course", "handicap",
     "side_games", "tee_choice", "user_status",
-    "post_game", "order_id", "order_date", "event_date", "merchant",
+    "post_game", "order_id", "order_date", "merchant",
 ];
 
 // Column definitions for toggle and rendering
@@ -65,13 +65,14 @@ function classifyItem(item) {
     for (const kw of NON_EVENT_KEYWORDS) {
         if (name.includes(kw)) return "membership";
     }
-    // It's an event — check if upcoming or past
-    const eventDate = item.event_date || "";
-    if (eventDate) {
+    // It's an event — classify by order_date as a proxy
+    const orderDate = item.order_date || "";
+    if (orderDate) {
         const today = new Date().toISOString().split("T")[0];
-        return eventDate >= today ? "upcoming" : "past";
+        // Orders placed less than 30 days ago are likely upcoming events
+        const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+        return orderDate >= cutoff ? "upcoming" : "past";
     }
-    // No event date but has course/month keywords → treat as past (no date known)
     return "past";
 }
 
@@ -1060,7 +1061,7 @@ function exportCSV() {
     }
 
     const headers = [
-        "Event Date", "Order Date", "Customer", "Email", "Phone",
+        "Order Date", "Customer", "Email", "Phone",
         "Item", "Price", "Transaction Fees", "Chapter", "Course",
         "Handicap", "Has Handicap",
         "Holes", "Side Games", "Tee Choice", "Member Status", "Golf or Compete",
@@ -1071,7 +1072,7 @@ function exportCSV() {
     ];
 
     const fields = [
-        "event_date", "order_date", "customer", "customer_email", "customer_phone",
+        "order_date", "customer", "customer_email", "customer_phone",
         "item_name", "item_price", "transaction_fees", "chapter", "course",
         "handicap", "has_handicap",
         "holes", "side_games", "tee_choice", "user_status",
@@ -1181,7 +1182,7 @@ function onAuthReady() {
 // Edit Modal
 // ---------------------------------------------------------------------------
 const EDIT_FIELDS = [
-    "customer", "item_name", "item_price", "transaction_fees", "event_date",
+    "customer", "item_name", "item_price", "transaction_fees",
     "chapter", "course", "handicap", "has_handicap", "side_games",
     "tee_choice", "user_status",
     "partner_request", "fellowship", "notes",
