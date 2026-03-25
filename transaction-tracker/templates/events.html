@@ -2230,12 +2230,10 @@
         // ── INCLUDED GAMES section (based on total player count) ──
         html += `<tr class="games-section-row"><td colspan="${C}">INCLUDED GAMES (${totalPC} players)</td></tr>`;
         let inclMWP = 0;
-        let inclActualPot = 0;  // sum only active game pots
 
         if (gEvent && totalPC >= 4) {
             const teamType = gEvent.teamType || "Team Net";
-            if (gEvent.teamTotal && gEvent.teamTotal !== "NO_EVENT" && gEvent.teamTotal !== "NO_GAME") {
-                inclActualPot += numVal(gEvent.teamTotal);
+            if (gEvent.teamTotal !== "NO_EVENT") {
                 inclMWP += numVal(gEvent.teamMWP);
                 html += `<tr><td>${escapeHtml(teamType)}</td><td>${fmt$(gEvent.teamTotal) || "—"}</td><td>${fmt$(gEvent.teamMWP) || "—"}</td><td></td><td>${fmt$(gEvent.team1st) || "—"}</td><td>${fmt$(gEvent.team2nd) || "—"}</td><td></td><td></td></tr>`;
             }
@@ -2245,13 +2243,15 @@
                 if (v === "NO_GAME" || v === "NO_EVENT") {
                     html += `<tr class="games-row-disabled"><td>CTP #${i+1}</td><td colspan="${C-1}">No Game</td></tr>`;
                 } else if (v != null) {
-                    inclActualPot += numVal(v);
                     inclMWP += numVal(v);
                     html += `<tr><td>CTP #${i+1}</td><td>${fmt$(v)}</td><td>${fmt$(v)}</td><td></td>${empty4}</tr>`;
                 }
             });
 
-            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(inclActualPot)}</td><td>${fmt$(inclMWP)}</td><td></td>${empty4}</tr>`;
+            // Subtract hole-in-one from eventTotalPot since it's displayed separately
+            const hioVal = (gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") ? numVal(gEvent.holeInOne) : 0;
+            const inclPot = numVal(gEvent.eventTotalPot) - hioVal;
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(inclPot) || "—"}</td><td>${fmt$(inclMWP)}</td><td></td>${empty4}</tr>`;
         } else {
             html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough players (${totalPC})</td></tr>`;
         }
@@ -2259,7 +2259,6 @@
         // ── NET GAMES section (based on net player count) ──
         html += `<tr class="games-section-row"><td colspan="${C}">NET GAMES (${netPC} players)</td></tr>`;
         let netMWP = 0;
-        let netActualPot = 0;  // sum only active game pots
 
         if (gNet && netPC >= 2) {
             const netFlights = gNet.netFlights ? parseInt(gNet.netFlights) : 1;
@@ -2288,7 +2287,6 @@
             }
             netMWP += indNetMWP;
 
-            if (gNet.individualNet && gNet.individualNet !== "NO_GAME" && gNet.individualNet !== "NO_EVENT") netActualPot += numVal(gNet.individualNet);
             html += `<tr><td><strong>Individual Net</strong></td><td>${fmt$(gNet.individualNet) || "—"}</td><td>${fmt$(indNetMWP) || "—"}</td><td>${netFlights}</td>${empty4}</tr>`;
 
             for (let i = 0; i < netFlights && i < netFlightData.length; i++) {
@@ -2300,15 +2298,12 @@
             }
 
             if (holes === 9) {
-                if (gNet.cityMVP && gNet.cityMVP !== "NO_GAME" && gNet.cityMVP !== "NO_EVENT") { netActualPot += numVal(gNet.cityMVP); netMWP += numVal(gNet.cityMVP); html += `<tr><td>City MVP</td><td>${fmt$(gNet.cityMVP)}</td><td>${fmt$(gNet.cityMVP)}</td><td></td>${empty4}</tr>`; }
-                else if (gNet.cityMVP === "NO_GAME") { html += `<tr class="games-row-disabled"><td>City MVP</td><td colspan="${C-1}">No Game</td></tr>`; }
-                if (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME" && gNet.tgfMVP !== "NO_EVENT") { netActualPot += numVal(gNet.tgfMVP); netMWP += numVal(gNet.tgfMVP); html += `<tr><td>TGF MVP</td><td>${fmt$(gNet.tgfMVP)}</td><td>${fmt$(gNet.tgfMVP)}</td><td></td>${empty4}</tr>`; }
-                else if (gNet.tgfMVP === "NO_GAME") { html += `<tr class="games-row-disabled"><td>TGF MVP</td><td colspan="${C-1}">No Game</td></tr>`; }
+                if (gNet.cityMVP) { netMWP += numVal(gNet.cityMVP); html += `<tr><td>City MVP</td><td>${fmt$(gNet.cityMVP)}</td><td>${fmt$(gNet.cityMVP)}</td><td></td>${empty4}</tr>`; }
+                if (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME") { netMWP += numVal(gNet.tgfMVP); html += `<tr><td>TGF MVP</td><td>${fmt$(gNet.tgfMVP)}</td><td>${fmt$(gNet.tgfMVP)}</td><td></td>${empty4}</tr>`; }
             } else {
-                if (gNet.mvp && gNet.mvp !== "NO_GAME" && gNet.mvp !== "NO_EVENT") { netActualPot += numVal(gNet.mvp); netMWP += numVal(gNet.mvp); html += `<tr><td>MVP</td><td>${fmt$(gNet.mvp)}</td><td>${fmt$(gNet.mvp)}</td><td></td>${empty4}</tr>`; }
-                else if (gNet.mvp === "NO_GAME") { html += `<tr class="games-row-disabled"><td>MVP</td><td colspan="${C-1}">No Game</td></tr>`; }
+                if (gNet.mvp) { netMWP += numVal(gNet.mvp); html += `<tr><td>MVP</td><td>${fmt$(gNet.mvp)}</td><td>${fmt$(gNet.mvp)}</td><td></td>${empty4}</tr>`; }
             }
-            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(netActualPot)}</td><td>${fmt$(netMWP)}</td><td></td>${empty4}</tr>`;
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gNet.netTotalPot) || "—"}</td><td>${fmt$(netMWP)}</td><td></td>${empty4}</tr>`;
         } else {
             html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough net players (${netPC})</td></tr>`;
         }
@@ -2317,13 +2312,11 @@
         html += `<tr class="games-section-row"><td colspan="${C}">GROSS GAMES (${grossPC} players)</td></tr>`;
         let grossMWP = 0;
 
-        let grossActualPot = 0;  // sum only active game pots
         if (gGross && grossPC >= 2) {
             const skinsLabel = grossPC < 8 ? "1/2 Net Skins" : "Skins Gross";
             if (gGross.skinsTotal && gGross.skinsTotal !== "NO_EVENT" && gGross.skinsTotal !== "NO_GAME") {
                 const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
                 const skinsMwpVal = numVal(gGross.skinsTotal) / skinsFlights;
-                grossActualPot += numVal(gGross.skinsTotal);
                 grossMWP += skinsMwpVal;
                 html += `<tr><td><strong>${skinsLabel}</strong></td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
                 if (gGross.skins && gGross.skins.length) {
@@ -2336,7 +2329,6 @@
 
             if (gGross.individualGross && gGross.individualGross !== "NO_GAME" && gGross.individualGross !== "NO_EVENT") {
                 const gFlights = gGross.grossFlights ? parseInt(gGross.grossFlights) : 0;
-                grossActualPot += numVal(gGross.individualGross);
                 const grossIndMWP = numVal(gGross.grossLow1st);
                 grossMWP += grossIndMWP;
                 let details = '';
@@ -2347,7 +2339,7 @@
                 html += `<tr class="games-row-disabled"><td>Ind. Gross</td><td colspan="${C-1}">No Game</td></tr>`;
             }
 
-            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(grossActualPot)}</td><td>${fmt$(grossMWP)}</td><td></td>${empty4}</tr>`;
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gGross.grossTotalPot) || "—"}</td><td>${fmt$(grossMWP)}</td><td></td>${empty4}</tr>`;
         } else {
             html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough gross players (${grossPC})</td></tr>`;
         }
@@ -2355,9 +2347,10 @@
         html += '</tbody>';
 
         // Grand total row inside the table, aligned under Pot and MWP columns
-        const eventTotal = inclActualPot;
-        const netTotal = netActualPot;
-        const grossTotal = grossActualPot;
+        const hioExclude = (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") ? numVal(gEvent.holeInOne) : 0;
+        const eventTotal = (gEvent && totalPC >= 4) ? ((Number(gEvent.eventTotalPot) || 0) - hioExclude) : 0;
+        const netTotal = (gNet && netPC >= 2) ? (Number(gNet.netTotalPot) || 0) : 0;
+        const grossTotal = (gGross && grossPC >= 2) ? (Number(gGross.grossTotalPot) || 0) : 0;
         const totalMWP = inclMWP + netMWP + grossMWP;
         html += `<tfoot><tr class="games-grand-total-row"><td>TOTAL</td><td>${fmt$(eventTotal + netTotal + grossTotal)}</td><td>${fmt$(totalMWP)}</td><td></td>${empty4}</tr></tfoot>`;
 
