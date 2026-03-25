@@ -13,6 +13,7 @@ import secrets
 import logging
 import shutil
 import sqlite3
+import time
 import threading
 from datetime import datetime, timedelta
 from functools import wraps
@@ -126,6 +127,29 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Simple in-memory rate limiter for login endpoint
+# ---------------------------------------------------------------------------
+_login_attempts: dict[str, list[float]] = {}  # IP → list of timestamps
+_LOGIN_MAX_ATTEMPTS = 10
+_LOGIN_WINDOW_SECONDS = 15 * 60  # 15 minutes
+
+
+def _check_login_rate_limit() -> bool:
+    """Return True if the request IP is within rate limits, False if exceeded."""
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
+    ip = ip.split(",")[0].strip()  # first IP in X-Forwarded-For chain
+    now = time.time()
+    cutoff = now - _LOGIN_WINDOW_SECONDS
+    # Clean old entries
+    attempts = [t for t in _login_attempts.get(ip, []) if t > cutoff]
+    _login_attempts[ip] = attempts
+    if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
+        return False
+    attempts.append(now)
+    return True
+
 
 app = Flask(__name__)
 _secret_key = os.getenv("SECRET_KEY")
@@ -915,7 +939,7 @@ def api_audit_emails():
             issues = []
             for row in db_rows:
                 missing = []
-                for f in ["customer", "order_id", "item_name", "item_price", "event_date"]:
+                for f in ["customer", "order_id", "item_name", "item_price"]:
                     if not row.get(f):
                         missing.append(f)
                 if missing:
@@ -3814,6 +3838,9 @@ def api_customer_season_contests(customer_name):
 @app.route("/api/auth/login", methods=["POST"])
 def api_auth_login():
     """Authenticate with a PIN and set the session role."""
+    if not _check_login_rate_limit():
+        return jsonify({"error": "Too many login attempts. Please try again in 15 minutes."}), 429
+
     # Re-read .env so PIN changes take effect without a server restart
     load_dotenv(override=True)
 

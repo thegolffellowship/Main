@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+from html.parser import HTMLParser
 
 import anthropic
 
@@ -21,11 +22,37 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
+class _HTMLTextExtractor(HTMLParser):
+    """Safe HTML-to-text converter — immune to ReDoS on malformed input."""
+
+    _SKIP_TAGS = frozenset({"style", "script"})
+
+    def __init__(self):
+        super().__init__()
+        self._pieces: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() in self._SKIP_TAGS:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag):
+        if tag.lower() in self._SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data):
+        if self._skip_depth == 0:
+            self._pieces.append(data)
+
+    def get_text(self) -> str:
+        return " ".join(self._pieces)
+
+
 def _strip_html(raw_html: str) -> str:
     """Remove HTML tags and decode entities to plain text."""
-    text = re.sub(r"<style[^>]*>.*?</style>", " ", raw_html, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<script[^>]*>.*?</script>", " ", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", " ", text)
+    extractor = _HTMLTextExtractor()
+    extractor.feed(raw_html)
+    text = extractor.get_text()
     text = html.unescape(text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
@@ -79,9 +106,6 @@ FIELD-SPECIFIC GUIDANCE:
   regardless of any city or tier suffix in the original (e.g. "TGF MEMBERSHIP CITY: \
   AUS | New Member..." → "TGF MEMBERSHIP"). \
   For standalone season contest purchases, use "SEASON CONTESTS" as the item name.
-- "event_date": The date of the golf event, NOT the order date. Parse it from \
-  the item name when present (e.g. "Feb 22 - LaCANTERA" → "2026-02-22"). Use \
-  the current year (2026) if only month and day are given.
 - "chapter": The TGF chapter for the item. ONLY four valid values: \
   "San Antonio", "Austin", "Houston", "DFW". \
   For EVENT items, infer from the course name (e.g. La Cantera/TPC San Antonio/The Quarry \
@@ -190,7 +214,6 @@ Return this exact JSON structure:
   "items": [
     {
       "item_name": "<product or event name>",
-      "event_date": "<YYYY-MM-DD date of the event, parsed from item name>",
       "item_price": "<PER-UNIT price, e.g. $57.00>",
       "quantity": "<integer — number of units purchased, default 1>",
       "chapter": "<city/chapter — Austin, San Antonio, Dallas, etc.>",
@@ -461,6 +484,11 @@ def _normalize_item_name(name: str | None) -> str | None:
     return name
 
 
+_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+_ACTIVE_MODEL = os.getenv("CLAUDE_MODEL", _DEFAULT_MODEL)
+logger.info("Claude parser model: %s", _ACTIVE_MODEL)
+
+
 def _call_ai(email_text: str) -> dict | None:
     """Send email text to Claude and return the parsed JSON dict."""
     api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -468,11 +496,13 @@ def _call_ai(email_text: str) -> dict | None:
         logger.error("ANTHROPIC_API_KEY not set — cannot parse email with AI")
         return None
 
+    model = os.getenv("CLAUDE_MODEL", _DEFAULT_MODEL)
+
     client = anthropic.Anthropic(api_key=api_key)
 
     try:
         message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=model,
             max_tokens=2048,
             messages=[
                 {
@@ -674,7 +704,6 @@ def parse_email(email_data: dict) -> list[dict]:
             "total_amount": parsed.get("total_amount") or "",
             "transaction_fees": parsed.get("transaction_fees"),
             "item_name": _normalize_item_name(item.get("item_name")) or "",
-            "event_date": item.get("event_date"),
             "item_price": item.get("item_price") or "",
             "quantity": item.get("quantity") or 1,
             "chapter": _normalize_chapter(item.get("chapter")),
@@ -691,6 +720,7 @@ def parse_email(email_data: dict) -> list[dict]:
             "holes": item.get("holes"),
             "address": parsed.get("address"),
             "address2": parsed.get("address2"),
+            "transaction_status": "active",
             "city": parsed.get("address_city"),
             "state": parsed.get("address_state"),
             "zip": parsed.get("address_zip"),

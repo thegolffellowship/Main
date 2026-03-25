@@ -13,6 +13,37 @@ logger = logging.getLogger(__name__)
 # Microsoft Graph API base URL
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
+# Transient HTTP status codes worth retrying
+_TRANSIENT_CODES = {429, 500, 502, 503, 504}
+_RETRY_BACKOFFS = [2, 4, 8]  # seconds between retries
+
+
+def _request_with_retry(method: str, url: str, **kwargs) -> requests.Response:
+    """HTTP request with retry on transient errors (429, 5xx).
+
+    Respects Retry-After header on 429 responses.
+    """
+    for attempt in range(len(_RETRY_BACKOFFS) + 1):
+        resp = requests.request(method, url, **kwargs)
+        if resp.status_code not in _TRANSIENT_CODES:
+            return resp
+        if attempt < len(_RETRY_BACKOFFS):
+            wait = _RETRY_BACKOFFS[attempt]
+            if resp.status_code == 429:
+                retry_after = resp.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        wait = max(int(retry_after), 1)
+                    except ValueError:
+                        pass
+            logger.warning(
+                "Graph API %s %s returned %d — retry %d/%d in %ds",
+                method.upper(), url, resp.status_code, attempt + 1, len(_RETRY_BACKOFFS), wait,
+            )
+            time.sleep(wait)
+    # All retries exhausted — return last response (caller will raise_for_status)
+    return resp
+
 TRANSACTION_SUBJECTS = [
     "new order",
 ]
@@ -91,10 +122,10 @@ def fetch_transaction_emails(
     first_page = True
     while first_page or next_link:
         if first_page:
-            resp = requests.get(base_url, headers=headers, params=params, timeout=30)
+            resp = _request_with_retry("get", base_url, headers=headers, params=params, timeout=30)
             first_page = False
         else:
-            resp = requests.get(next_link, headers=headers, timeout=30)
+            resp = _request_with_retry("get", next_link, headers=headers, timeout=30)
 
         logger.info("Graph API response status: %s  url: %s", resp.status_code, resp.url)
         resp.raise_for_status()
@@ -161,7 +192,7 @@ def fetch_email_by_id(
     params = {"$select": "id,subject,from,receivedDateTime,body"}
 
     try:
-        resp = requests.get(url, headers=headers, params=params, timeout=30)
+        resp = _request_with_retry("get", url, headers=headers, params=params, timeout=30)
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
@@ -225,7 +256,7 @@ def send_mail_graph(
     url = f"{GRAPH_BASE}/users/{from_address}/sendMail"
 
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        resp = _request_with_retry("post", url, headers=headers, json=payload, timeout=30)
         resp.raise_for_status()
         logger.info("Email sent via Graph API to %s", to_address)
         return True

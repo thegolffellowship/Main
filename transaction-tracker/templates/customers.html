@@ -296,6 +296,7 @@
     let allCustomers = [];
     let allItems = [];
     let selectedCustomer = null;
+    let activeDetailTab = "transactions";  // track active tab across re-renders
     let currentView = "list";
     let currentSortField = "name";
     let currentSortDir = "asc";
@@ -464,7 +465,7 @@
             // Email: most recent non-guest usage wins (matches migrate_customers logic)
             if (item.customer_email) {
                 const isGuest = (item.user_status || "").trim().toUpperCase().startsWith("GUEST");
-                const date = item.order_date || item.event_date || "";
+                const date = item.order_date || "";
                 if (!isGuest && (!map[name]._emailDate || date > map[name]._emailDate)) {
                     map[name].email = item.customer_email;
                     map[name]._emailDate = date;
@@ -479,8 +480,8 @@
             if (!map[name].last_name && item.last_name) map[name].last_name = item.last_name;
             if (!map[name].middle_name && item.middle_name) map[name].middle_name = item.middle_name;
             if (!map[name].suffix && item.suffix) map[name].suffix = item.suffix;
-            const date = item.order_date || item.event_date || "";
-            if (date > map[name].latestDate) map[name].latestDate = date;
+            const date2 = item.order_date || "";
+            if (date2 > map[name].latestDate) map[name].latestDate = date2;
         });
 
         // Derive status and chapter for each customer
@@ -771,6 +772,7 @@
                     tab.addEventListener("click", (e) => {
                         e.stopPropagation();
                         const target = tab.dataset.tab;
+                        activeDetailTab = target;  // persist across re-renders
                         expandedCard.querySelectorAll(".cust-tab").forEach(t => {
                             const isActive = t.dataset.tab === target;
                             t.classList.toggle("active", isActive);
@@ -1117,15 +1119,16 @@
             ${customer.archived ? '<span style="font-size:0.72rem; color:#b45309; margin-left:0.3rem; font-weight:600;">ARCHIVED</span>' : ''}
         </div>`;
 
-        // Tab bar
+        // Tab bar — restore active tab from global state
+        const _at = activeDetailTab;
         html += `<div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.75rem; border-bottom:2px solid var(--border);">
-            <button type="button" class="cust-tab active" data-tab="transactions" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
-            <button type="button" class="cust-tab" data-tab="scores" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Scores</button>
-            <button type="button" class="cust-tab" data-tab="info" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
+            <button type="button" class="cust-tab ${_at === 'transactions' ? 'active' : ''}" data-tab="transactions" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'transactions' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'transactions' ? '#2563eb' : 'var(--text-muted)'};">Transactions</button>
+            <button type="button" class="cust-tab ${_at === 'scores' ? 'active' : ''}" data-tab="scores" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'scores' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'scores' ? '#2563eb' : 'var(--text-muted)'};">Scores</button>
+            <button type="button" class="cust-tab ${_at === 'info' ? 'active' : ''}" data-tab="info" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'info' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'info' ? '#2563eb' : 'var(--text-muted)'};">Info</button>
         </div>`;
 
         // Transactions tab content
-        html += '<div class="cust-tab-content cust-tab-transactions">';
+        html += `<div class="cust-tab-content cust-tab-transactions" style="${_at !== 'transactions' ? 'display:none;' : ''}">`;
         html += '<table class="registrants-table"><thead><tr>';
         html += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
         html += '</tr></thead><tbody>';
@@ -1159,7 +1162,7 @@
         html += '</tbody></table></div>';
 
         // Scores tab content (loaded async)
-        html += `<div class="cust-tab-content cust-tab-scores" style="display:none;">
+        html += `<div class="cust-tab-content cust-tab-scores" style="${_at !== 'scores' ? 'display:none;' : ''}">
             <div class="cust-scores-container" data-customer-name="${escapeHtml(customer.name)}">
                 ${customer.handicapIndex !== null
                     ? `<div style="margin-bottom:0.75rem; display:flex; align-items:baseline; gap:0.5rem;">
@@ -1175,7 +1178,7 @@
         </div>`;
 
         // Info tab content
-        html += `<div class="cust-tab-content cust-tab-info" style="display:none;">${renderCustInfoPanel(customer)}</div>`;
+        html += `<div class="cust-tab-content cust-tab-info" style="${_at !== 'info' ? 'display:none;' : ''}">${renderCustInfoPanel(customer)}</div>`;
 
         return html;
     }
@@ -1268,6 +1271,7 @@
             tab.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const target = tab.dataset.tab;
+                activeDetailTab = target;  // persist across re-renders
                 container.querySelectorAll(".cust-tab").forEach(t => {
                     const isActive = t.dataset.tab === target;
                     t.classList.toggle("active", isActive);
@@ -1290,6 +1294,18 @@
                 container.querySelector(".cust-tab-info").style.display = target === "info" ? "" : "none";
             });
         });
+
+        // Auto-load scores if scores tab is already active on re-render
+        if (activeDetailTab === "scores") {
+            const scoresTab = container.querySelector(".cust-tab-scores");
+            if (scoresTab) {
+                const wrapper = scoresTab.querySelector(".cust-scores-table-wrapper");
+                if (wrapper && wrapper.textContent.includes("Loading")) {
+                    const custName = scoresTab.querySelector(".cust-scores-container")?.dataset?.customerName;
+                    if (custName) loadCustomerScores(custName, wrapper);
+                }
+            }
+        }
 
         // Archive toggle
         container.querySelectorAll(".cust-archive-toggle").forEach(btn => {
@@ -1429,6 +1445,7 @@
             if (prevRow) prevRow.classList.remove("expanded");
             if (prevDetail) prevDetail.classList.remove("visible");
             selectedCustomer = null;
+            activeDetailTab = "transactions";  // reset tab when collapsing
         }
 
         // If clicking same row, just collapse
@@ -1469,14 +1486,15 @@
         const panelBody = document.getElementById("detail-panel-body");
         let panelHtml = '';
 
-        // Tab bar
+        // Tab bar — restore active tab from global state
+        const _at2 = activeDetailTab;
         panelHtml += `<div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.75rem; border-bottom:2px solid var(--border);">
-            <button type="button" class="cust-tab active" data-tab="transactions" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
-            <button type="button" class="cust-tab" data-tab="info" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
+            <button type="button" class="cust-tab ${_at2 === 'transactions' || (_at2 === 'scores') ? 'active' : ''}" data-tab="transactions" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'transactions' || _at2 === 'scores' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'transactions' || _at2 === 'scores' ? '#2563eb' : 'var(--text-muted)'};">Transactions</button>
+            <button type="button" class="cust-tab ${_at2 === 'info' ? 'active' : ''}" data-tab="info" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'info' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'info' ? '#2563eb' : 'var(--text-muted)'};">Info</button>
         </div>`;
 
         // Transactions tab
-        panelHtml += '<div class="cust-tab-content cust-tab-transactions">';
+        panelHtml += `<div class="cust-tab-content cust-tab-transactions" style="${_at2 === 'info' ? 'display:none;' : ''}">`;
         panelHtml += '<table style="width:100%; border-collapse:collapse;"><thead><tr>';
         panelHtml += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
         panelHtml += '</tr></thead><tbody>';
@@ -1507,7 +1525,7 @@
         panelHtml += '</tbody></table></div>';
 
         // Info tab
-        panelHtml += `<div class="cust-tab-content cust-tab-info" style="display:none;">${renderCustInfoPanel(customer)}</div>`;
+        panelHtml += `<div class="cust-tab-content cust-tab-info" style="${_at2 !== 'info' ? 'display:none;' : ''}">${renderCustInfoPanel(customer)}</div>`;
 
         panelBody.innerHTML = panelHtml;
 

@@ -233,7 +233,7 @@ ITEM_COLUMNS = [
     "first_name", "last_name", "middle_name", "suffix",
     "customer_email", "customer_phone",
     "order_id", "order_date", "order_time", "total_amount", "transaction_fees",
-    "item_name", "event_date", "item_price", "quantity",
+    "item_name", "item_price", "quantity",
     "chapter", "course", "handicap", "has_handicap",
     "side_games", "tee_choice",
     "user_status", "post_game", "returning_or_new",
@@ -297,7 +297,6 @@ def init_db(db_path: str | Path | None = None) -> None:
                 order_time       TEXT,
                 total_amount     TEXT,
                 item_name        TEXT NOT NULL,
-                event_date       TEXT,
                 item_price       TEXT,
                 quantity         INTEGER DEFAULT 1,
                 chapter          TEXT,
@@ -339,7 +338,6 @@ def init_db(db_path: str | Path | None = None) -> None:
         for col, col_type in [
             ("customer_email", "TEXT"),
             ("customer_phone", "TEXT"),
-            ("event_date", "TEXT"),
             ("transaction_status", "TEXT DEFAULT 'active'"),
             ("credit_note", "TEXT"),
             ("transferred_from_id", "INTEGER"),
@@ -492,6 +490,25 @@ def init_db(db_path: str | Path | None = None) -> None:
             logger.info("Added missing column: customer_id")
         except sqlite3.OperationalError:
             pass  # column already exists
+
+        # Migration: drop event_date column from items (unreliable data)
+        try:
+            conn.execute("ALTER TABLE items DROP COLUMN event_date")
+            logger.info("Dropped items.event_date column")
+        except sqlite3.OperationalError:
+            pass  # column already dropped or doesn't exist
+
+        # Migration: backfill NULL transaction_status → 'active' for parsed orders
+        try:
+            updated = conn.execute(
+                "UPDATE items SET transaction_status = 'active' "
+                "WHERE transaction_status IS NULL AND merchant != 'Manual Entry'"
+            ).rowcount
+            if updated:
+                conn.commit()
+                logger.info("Backfilled transaction_status='active' on %d rows", updated)
+        except Exception:
+            logger.exception("transaction_status backfill failed (non-fatal)")
 
         # Processed emails table — tracks ALL email UIDs we've already sent to
         # the AI, even if no items were extracted.  Prevents re-parsing the same
@@ -1595,7 +1612,7 @@ def get_audit_report(db_path: str | Path | None = None) -> dict:
         # --- Field fill rates ---------------------------------------------------
         critical_fields = [
             "customer", "customer_email", "order_id", "order_date",
-            "item_name", "item_price", "event_date", "chapter", "course",
+            "item_name", "item_price", "chapter", "course",
         ]
         golf_fields = [
             "handicap", "side_games", "tee_choice", "user_status",
@@ -2019,7 +2036,7 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
     """
     with _connect(db_path) as conn:
         items = conn.execute(
-            "SELECT DISTINCT item_name, event_date, course, chapter FROM items"
+            "SELECT DISTINCT item_name, course, chapter FROM items"
         ).fetchall()
 
         # Load existing aliases so we can skip aliased names (case-insensitive)
@@ -2060,9 +2077,9 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
                 continue
             try:
                 conn.execute(
-                    """INSERT INTO events (item_name, event_date, course, chapter, event_type)
-                       VALUES (?, ?, ?, ?, 'event')""",
-                    (name, item["event_date"], item["course"], item["chapter"]),
+                    """INSERT INTO events (item_name, course, chapter, event_type)
+                       VALUES (?, ?, ?, 'event')""",
+                    (name, item["course"], item["chapter"]),
                 )
                 inserted += 1
                 # Flag events whose name is suspiciously just a course name
@@ -2289,7 +2306,6 @@ def get_orphaned_items(db_path: str | Path | None = None) -> list[dict]:
         rows = conn.execute(
             """SELECT i.item_name,
                       COUNT(*) as item_count,
-                      MIN(i.event_date) as event_date,
                       MIN(i.course) as course,
                       MIN(i.chapter) as chapter,
                       GROUP_CONCAT(DISTINCT i.customer) as customers
@@ -3551,7 +3567,6 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
         # Create new item at target event
         new_values = {col: orig.get(col) for col in ITEM_COLUMNS}
         new_values["item_name"] = target_event_name
-        new_values["event_date"] = target_event.get("event_date") or orig.get("event_date")
         new_values["course"] = target_event.get("course") or orig.get("course")
         new_values["chapter"] = target_event.get("chapter") or orig.get("chapter")
         new_values["item_price"] = "$0.00 (credit)"
@@ -3730,7 +3745,6 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         new_values["item_name"] = event_name
         # Use client-provided local date if available, otherwise server UTC
         new_values["order_date"] = order_date if order_date else datetime.now().strftime("%Y-%m-%d")
-        new_values["event_date"] = event.get("event_date") or ""
         new_values["course"] = event.get("course") or ""
         new_values["chapter"] = event.get("chapter") or ""
         new_values["transaction_status"] = "active"
@@ -3836,7 +3850,6 @@ def add_payment_to_event(event_name: str, customer: str,
         new_values["customer_phone"] = parent.get("customer_phone")
         new_values["item_name"] = event_name
         new_values["order_date"] = order_date if order_date else datetime.now().strftime("%Y-%m-%d")
-        new_values["event_date"] = event.get("event_date") or ""
         new_values["course"] = event.get("course") or ""
         new_values["chapter"] = event.get("chapter") or ""
         new_values["transaction_status"] = "active"

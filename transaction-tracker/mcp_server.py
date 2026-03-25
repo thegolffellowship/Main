@@ -244,7 +244,7 @@ def update_transaction(transaction_id: int, fields: dict) -> str:
         transaction_id: The item/transaction ID to update
         fields: Dict of field names to new values. Allowed fields:
                 customer, customer_email, customer_phone, order_id,
-                item_name, event_date, item_price, quantity, chapter, course,
+                item_name, item_price, quantity, chapter, course,
                 handicap, side_games, tee_choice, user_status,
                 post_game, returning_or_new, shirt_size,
                 guest_name, date_of_birth, net_points_race,
