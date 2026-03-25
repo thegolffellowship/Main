@@ -2322,7 +2322,7 @@
         let grossMWP = 0;
 
         if (gGross && grossPC >= 2) {
-            const skinsLabel = grossPC < 8 ? "1/2 Net Skins" : "Skins Gross";
+            const skinsLabel = grossPC < 8 ? "Skins 1/2 Net" : "Skins Gross";
             if (gGross.skinsTotal && gGross.skinsTotal !== "NO_EVENT" && gGross.skinsTotal !== "NO_GAME") {
                 const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
                 const skinsMwpVal = numVal(gGross.skinsTotal) / skinsFlights;

@@ -426,7 +426,7 @@
                 if (rd.computed === "skinsType") {
                     bodyHtml += `<tr class="${rd.cls || ""}"><td class="row-label">${rd.label}</td>`;
                     playerCounts.forEach(pc => {
-                        const skinsType = pc < 8 ? "½ Skins Net" : "Skins Gross";
+                        const skinsType = pc < 8 ? "Skins ½ Net" : "Skins Gross";
                         const cls = pc < 8 ? "cell-half-net" : "";
                         bodyHtml += `<td class="${cls}">${skinsType}</td>`;
                     });
