@@ -13,12 +13,32 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TGF Tracker">
     <style>
+        /* Sticky header + nav + controls */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .tab-nav {
+            position: sticky;
+            top: 0; /* JS will compute actual offset */
+            z-index: 99;
+            background: var(--bg, #fff);
+            margin-bottom: 0;
+            padding-top: 0.25rem;
+        }
         .matrix-controls {
             display: flex;
             align-items: center;
             gap: 1rem;
-            margin-bottom: 1rem;
             flex-wrap: wrap;
+            position: sticky;
+            top: 0; /* JS will compute actual offset */
+            z-index: 98;
+            background: var(--bg, #fff);
+            padding: 0.6rem 0;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
         }
         .toggle-group {
             display: inline-flex;
@@ -102,6 +122,18 @@
             text-align: left;
             font-size: 0.8rem;
             letter-spacing: 0.03em;
+        }
+        .matrix-table .section-header-row td,
+        .matrix-table .section-header-row th {
+            background: color-mix(in srgb, var(--primary) 15%, var(--surface));
+            font-weight: 600;
+            font-size: 0.72rem;
+            text-align: right;
+            color: var(--text-muted);
+        }
+        .matrix-table .section-header-row .row-label {
+            text-align: left;
+            background: color-mix(in srgb, var(--primary) 15%, var(--surface));
         }
         .matrix-table .subtotal-row td {
             font-weight: 700;
@@ -237,6 +269,19 @@
         let rangeMax = 20;
         let pendingChanges = {};  // { "holes:playerCount:fieldKey": newValue }
 
+        // Compute sticky offsets after DOM is ready
+        function setStickyOffsets() {
+            const hdr = document.querySelector("header");
+            const nav = document.querySelector(".tab-nav");
+            const ctrl = document.querySelector(".matrix-controls");
+            const hdrH = hdr ? hdr.offsetHeight : 0;
+            const navH = nav ? nav.offsetHeight : 0;
+            if (nav) nav.style.top = hdrH + "px";
+            if (ctrl) ctrl.style.top = (hdrH + navH) + "px";
+        }
+        window.addEventListener("load", setStickyOffsets);
+        window.addEventListener("resize", setStickyOffsets);
+
         function getMatrix() {
             return currentHoles === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
         }
@@ -248,6 +293,7 @@
 
             // Section: EVENT GAMES
             rows.push({ section: "EVENT GAMES" });
+            rows.push({ playerHeader: true });
             rows.push({ label: "Total Pot", key: "eventTotalPot", cls: "subtotal-row" });
             rows.push({ label: "Team Game", key: "teamTotal" });
             rows.push({ label: "  Team Type", key: "teamType", cls: "sub-row", editable: false });
@@ -264,6 +310,7 @@
 
             // Section: NET GAMES
             rows.push({ section: "NET GAMES" });
+            rows.push({ playerHeader: true });
             rows.push({ label: "Total Pot", key: "netTotalPot", cls: "subtotal-row" });
             rows.push({ label: "Individual Net", key: "individualNet" });
             if (is18) rows.push({ label: "  % Paid", key: "netPctPaid", cls: "sub-row" });
@@ -295,8 +342,10 @@
 
             // Section: GROSS GAMES
             rows.push({ section: "GROSS GAMES" });
+            rows.push({ playerHeader: true });
             rows.push({ label: "Total Pot", key: "grossTotalPot", cls: "subtotal-row" });
             rows.push({ label: "Skins Total", key: "skinsTotal" });
+            rows.push({ label: "  Skins Type", key: "skinsType", cls: "sub-row", editable: false, computed: "skinsType" });
             rows.push({ label: "  Skins Flights", key: "skinsFlights", cls: "sub-row" });
             // Skins per-skin values
             for (let i = 0; i < 9; i++) {
@@ -337,6 +386,13 @@
             return { text: String(val), cls };
         }
 
+        function buildPlayerHeaderRow(playerCounts) {
+            let html = `<tr class="section-header-row"><td class="row-label">Game</td>`;
+            playerCounts.forEach(pc => { html += `<td>${pc}</td>`; });
+            html += `</tr>`;
+            return html;
+        }
+
         function render() {
             const matrix = getMatrix();
             const rowDefs = getRowDefs();
@@ -360,6 +416,21 @@
             rowDefs.forEach(rd => {
                 if (rd.section) {
                     bodyHtml += `<tr class="section-row"><td class="row-label" colspan="${playerCounts.length + 1}">${rd.section}</td></tr>`;
+                    return;
+                }
+                if (rd.playerHeader) {
+                    bodyHtml += buildPlayerHeaderRow(playerCounts);
+                    return;
+                }
+                // Computed Skins Type row
+                if (rd.computed === "skinsType") {
+                    bodyHtml += `<tr class="${rd.cls || ""}"><td class="row-label">${rd.label}</td>`;
+                    playerCounts.forEach(pc => {
+                        const skinsType = pc < 8 ? "½ Skins Net" : "Skins Gross";
+                        const cls = pc < 8 ? "cell-half-net" : "";
+                        bodyHtml += `<td class="${cls}">${skinsType}</td>`;
+                    });
+                    bodyHtml += `</tr>`;
                     return;
                 }
                 const rowCls = rd.cls || "";
