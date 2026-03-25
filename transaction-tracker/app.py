@@ -130,8 +130,11 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 _secret_key = os.getenv("SECRET_KEY")
 if not _secret_key:
-    logger.warning("SECRET_KEY not set — using insecure default. Set SECRET_KEY in environment for production.")
-    _secret_key = "dev-secret-key"
+    raise RuntimeError(
+        "SECRET_KEY environment variable is not set. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\" "
+        "and add SECRET_KEY=<value> to your .env file or Railway environment variables."
+    )
 app.secret_key = _secret_key
 
 
@@ -140,6 +143,19 @@ def handle_500(e):
     """Return JSON instead of HTML for unhandled server errors."""
     logger.exception("Unhandled server error: %s", e)
     return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/health")
+def health_check():
+    """Health check endpoint for Railway / monitoring. No auth required."""
+    try:
+        conn = get_connection()
+        conn.execute("SELECT 1")
+        conn.close()
+        return jsonify({"status": "ok", "db": "ok"}), 200
+    except Exception as e:
+        logger.error("Health check failed: %s", e)
+        return jsonify({"status": "error", "db": "error", "detail": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -622,6 +638,7 @@ def api_delete_item(item_id):
 
 
 @app.route("/api/events/delete-manual-player/<int:item_id>", methods=["DELETE"])
+@require_role("manager")
 def api_delete_manual_player(item_id):
     """Delete a manually added player. Only works for manual entries."""
     if delete_manual_player(item_id):
@@ -699,7 +716,7 @@ def admin_backup():
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.close()
     except Exception:
-        pass
+        logger.debug("WAL checkpoint on backup copy failed (non-fatal)", exc_info=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return send_file(
         backup_path,
@@ -1747,6 +1764,7 @@ def api_event_aliases():
 
 
 @app.route("/api/events/sync", methods=["POST"])
+@require_role("manager")
 def api_sync_events():
     """Scan items and auto-create event entries for event-type items."""
     try:
@@ -1758,6 +1776,7 @@ def api_sync_events():
 
 
 @app.route("/api/events/<int:event_id>", methods=["PATCH"])
+@require_role("manager")
 def api_update_event(event_id):
     """Update fields on an event."""
     data = request.get_json(silent=True)
@@ -1781,6 +1800,7 @@ def api_delete_event(event_id):
 
 
 @app.route("/api/events", methods=["POST"])
+@require_role("manager")
 def api_create_event():
     """Manually create a new event."""
     data = request.get_json(silent=True)
@@ -1948,6 +1968,7 @@ def api_resolve_parse_warning(warning_id):
 # Routes — Credit / Transfer
 # ---------------------------------------------------------------------------
 @app.route("/api/items/<int:item_id>/credit", methods=["POST"])
+@require_role("admin")
 def api_credit_item(item_id):
     """Mark an item as credited (money held for future event)."""
     data = request.get_json(silent=True) or {}
@@ -1957,6 +1978,7 @@ def api_credit_item(item_id):
 
 
 @app.route("/api/items/<int:item_id>/wd", methods=["POST"])
+@require_role("admin")
 def api_wd_item(item_id):
     """Mark an item as WD (withdrawn) with optional partial credit."""
     data = request.get_json(silent=True) or {}
@@ -1969,6 +1991,7 @@ def api_wd_item(item_id):
 
 
 @app.route("/api/items/<int:item_id>/refund", methods=["POST"])
+@require_role("admin")
 def api_refund_item(item_id):
     """Mark an item as refunded via GoDaddy or Venmo."""
     data = request.get_json(silent=True) or {}
@@ -1981,6 +2004,7 @@ def api_refund_item(item_id):
 
 
 @app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
+@require_role("admin")
 def api_transfer_item(item_id):
     """Transfer an item to a different event."""
     data = request.get_json(silent=True)
@@ -1993,6 +2017,7 @@ def api_transfer_item(item_id):
 
 
 @app.route("/api/items/<int:item_id>/reverse-credit", methods=["POST"])
+@require_role("admin")
 def api_reverse_credit(item_id):
     """Reverse a credit or transfer, restoring the original item to active."""
     if reverse_credit(item_id):
@@ -2001,6 +2026,7 @@ def api_reverse_credit(item_id):
 
 
 @app.route("/api/events/add-player", methods=["POST"])
+@require_role("manager")
 def api_add_player():
     """Add a player to an event (comp, RSVP only, or paid separately)."""
     data = request.get_json(silent=True)
@@ -2037,6 +2063,7 @@ def api_add_player():
 
 
 @app.route("/api/events/add-payment", methods=["POST"])
+@require_role("manager")
 def api_add_payment():
     """Add an additional payment record for an existing event player."""
     data = request.get_json(silent=True)
@@ -2066,6 +2093,7 @@ def api_add_payment():
 
 
 @app.route("/api/events/upgrade-rsvp", methods=["POST"])
+@require_role("manager")
 def api_upgrade_rsvp():
     """Upgrade an RSVP-only placeholder to a full paid registration."""
     data = request.get_json(silent=True)
@@ -2086,6 +2114,7 @@ def api_upgrade_rsvp():
 
 
 @app.route("/api/events/send-reminder", methods=["POST"])
+@require_role("manager")
 def api_send_reminder():
     """Send a payment reminder email to an RSVP-only player."""
     data = request.get_json(silent=True)
@@ -2128,6 +2157,7 @@ def api_send_reminder():
 
 
 @app.route("/api/events/send-reminder-all", methods=["POST"])
+@require_role("manager")
 def api_send_reminder_all():
     """Send payment reminder emails to ALL RSVP-only players for an event."""
     data = request.get_json(silent=True)
@@ -2330,7 +2360,7 @@ def api_send_messages():
         for ov in overrides:
             rsvp_overrides[ov["item_id"]] = ov["status"]
     except Exception:
-        pass
+        logger.warning("Failed to load RSVP overrides for %s", event_name, exc_info=True)
 
     rsvps_for_event = {}
     rsvp_list = []
@@ -2340,14 +2370,14 @@ def api_send_messages():
             if rv.get("matched_item_id"):
                 rsvps_for_event[rv["matched_item_id"]] = rv["response"]
     except Exception:
-        pass
+        logger.warning("Failed to load RSVPs for event %s", event_name, exc_info=True)
 
     # Build GG RSVP synthetic rows (unmatched RSVPs with player_email)
     email_overrides = {}
     try:
         email_overrides = get_rsvp_email_overrides(event_name)
     except Exception:
-        pass
+        logger.warning("Failed to load RSVP email overrides for %s", event_name, exc_info=True)
 
     reg_emails = {(r.get("customer_email") or "").strip().lower() for r in registrants if r.get("customer_email")}
     reg_names = {(r.get("customer") or "").strip().lower() for r in registrants if r.get("customer")}
@@ -2599,6 +2629,7 @@ def api_rsvp_stats():
 
 
 @app.route("/api/rsvps/check-now", methods=["POST"])
+@require_role("manager")
 def api_rsvp_check_now():
     """Manually trigger an RSVP inbox check."""
     rsvp_address = os.getenv("RSVP_EMAIL_ADDRESS")
@@ -2615,6 +2646,7 @@ def api_rsvp_check_now():
 
 
 @app.route("/api/rsvps/rematch", methods=["POST"])
+@require_role("manager")
 def api_rsvp_rematch():
     """Re-run matching logic on unmatched RSVPs."""
     try:
@@ -2674,6 +2706,7 @@ def api_rsvp_overrides(event_name):
 
 
 @app.route("/api/rsvps/overrides", methods=["POST"])
+@require_role("manager")
 def api_set_rsvp_override():
     """Set a manual RSVP override for a registrant (by item_id or player_email)."""
     data = request.get_json(force=True)
@@ -2709,6 +2742,7 @@ def api_rsvp_config_status():
 
 
 @app.route("/api/report/send-now", methods=["POST"])
+@require_role("manager")
 def api_send_report_now():
     """Manually trigger the daily report."""
     if not os.getenv("DAILY_REPORT_TO"):
@@ -3716,7 +3750,7 @@ def api_sync_golf_genius():
         try:
             update_handicap_settings({"last_gg_sync": json.dumps(_gg_sync_jobs)})
         except Exception:
-            pass
+            logger.warning("Failed to persist GG sync results", exc_info=True)
 
     threading.Thread(target=_run_sync, daemon=True).start()
     return jsonify({"status": "started", "chapters": [c[0] for c in chapters_to_sync]})
@@ -3734,7 +3768,7 @@ def api_handicap_sync_status():
         if raw:
             persisted = json.loads(raw)
     except Exception:
-        pass
+        logger.debug("Failed to load persisted GG sync results", exc_info=True)
 
     merged = {**persisted, **_gg_sync_jobs}
     return jsonify(merged)
