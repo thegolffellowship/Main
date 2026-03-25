@@ -831,6 +831,17 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # App-level key-value settings (persists across deploys on Railway volume)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
         # Season contest enrollments — tracks who's in NET Points Race,
         # GROSS Points Race, City Match Play, etc.
         conn.execute(
@@ -5811,3 +5822,25 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         conn.commit()
     logger.info("Season contest sync: %d new enrollments", enrolled)
     return {"enrolled": enrolled}
+
+
+# ---------------------------------------------------------------------------
+# App Settings — persistent key/value store (survives Railway redeploys)
+# ---------------------------------------------------------------------------
+
+def get_app_setting(key: str, db_path: str | Path | None = None) -> str | None:
+    """Return a single app setting value, or None if not set."""
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_app_setting(key: str, value: str, db_path: str | Path | None = None) -> None:
+    """Upsert a single app setting."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+            (key, value),
+        )
+        conn.commit()

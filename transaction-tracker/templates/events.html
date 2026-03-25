@@ -1291,6 +1291,15 @@
     <script src="/static/js/chat-widget.js"></script>
     <script src="/static/js/games-matrix.js"></script>
     <script>
+    // Override static matrix with DB-persisted version (injected server-side)
+    (function() {
+        var db9 = {{ matrix9 | tojson }};
+        var db18 = {{ matrix18 | tojson }};
+        if (db9) window.GAMES_MATRIX_9 = db9;
+        if (db18) window.GAMES_MATRIX_18 = db18;
+    })();
+    </script>
+    <script>
     let allEvents = [];
     let allItems = [];
     let allRsvps = {};  // keyed by event_name → array of rsvp objects
