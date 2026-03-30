@@ -1144,15 +1144,23 @@
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${item.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(item.credit_amount)}</span>` : ''}`;
             else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            // Show "Purchased by" badge when someone else paid
+            let purchasedByTag = "";
+            if (item.notes) {
+                const pbMatch = item.notes.match(/Purchased by (.+)/i);
+                if (pbMatch) {
+                    purchasedByTag = \` <span style="font-size:0.65rem; background:#dbeafe; color:#1e40af; padding:0.1rem 0.4rem; border-radius:3px; font-weight:500;" title="Paid for by \${escapeHtml(pbMatch[1])}">Paid by \${escapeHtml(pbMatch[1])}</span>\`;
+                }
+            }
             let actionBtn = "";
             if (txStatus === "active" && !item.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
-            html += `<tr${rowClass}>
+            html += `<tr${rowClass} data-txn-id="${item.id}" style="cursor:pointer;">
                 <td>${escapeHtml(item.order_date || "\u2014")}</td>
-                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
+                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}${purchasedByTag}</td>
                 <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
                 <td>${escapeHtml(item.side_games || "\u2014")}</td>
                 <td>${actionBtn}</td>
@@ -1264,6 +1272,16 @@
         // Prevent event-name links from toggling the row
         container.querySelectorAll("a.cell-link").forEach(a => {
             a.addEventListener("click", (e) => e.stopPropagation());
+        });
+
+        // Click transaction row → navigate to Transactions tab and highlight it
+        container.querySelectorAll("tr[data-txn-id]").forEach(tr => {
+            tr.addEventListener("click", (e) => {
+                if (e.target.closest("a, button")) return;
+                e.stopPropagation();
+                const txnId = tr.dataset.txnId;
+                if (txnId) window.location.href = `/?txn=${txnId}`;
+            });
         });
 
         // Tab switching (Transactions / Scores / Info)

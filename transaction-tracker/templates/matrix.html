@@ -13,20 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TGF Tracker">
     <style>
-        /* Sticky header + nav + controls */
-        header {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        .tab-nav {
-            position: sticky;
-            top: 0; /* JS will compute actual offset */
-            z-index: 99;
-            background: var(--bg, #fff);
-            margin-bottom: 0;
-            padding-top: 0.25rem;
-        }
+        /* Matrix-specific sticky controls (header + nav are global) */
         .matrix-controls {
             display: flex;
             align-items: center;
@@ -269,18 +256,17 @@
         let rangeMax = 20;
         let pendingChanges = {};  // { "holes:playerCount:fieldKey": newValue }
 
-        // Compute sticky offsets after DOM is ready
-        function setStickyOffsets() {
+        // Compute sticky offset for matrix controls (below header + nav)
+        function setControlsOffset() {
             const hdr = document.querySelector("header");
             const nav = document.querySelector(".tab-nav");
             const ctrl = document.querySelector(".matrix-controls");
             const hdrH = hdr ? hdr.offsetHeight : 0;
             const navH = nav ? nav.offsetHeight : 0;
-            if (nav) nav.style.top = hdrH + "px";
             if (ctrl) ctrl.style.top = (hdrH + navH) + "px";
         }
-        window.addEventListener("load", setStickyOffsets);
-        window.addEventListener("resize", setStickyOffsets);
+        window.addEventListener("load", setControlsOffset);
+        window.addEventListener("resize", setControlsOffset);
 
         function getMatrix() {
             return currentHoles === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;

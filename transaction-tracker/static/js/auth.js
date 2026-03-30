@@ -134,4 +134,16 @@ async function initAuth() {
     if (loginSubmit) loginSubmit.addEventListener("click", handleLogin);
     if (loginPin) loginPin.addEventListener("keydown", (e) => { if (e.key === "Enter") handleLogin(); });
     if (logoutBtn) logoutBtn.addEventListener("click", handleLogout);
+
+    // Compute sticky offsets for header → tab-nav stacking
+    _setStickyOffsets();
+    window.addEventListener("resize", _setStickyOffsets);
+}
+
+function _setStickyOffsets() {
+    const hdr = document.querySelector("header");
+    const nav = document.querySelector(".tab-nav");
+    if (hdr && nav) {
+        nav.style.top = hdr.offsetHeight + "px";
+    }
 }
