@@ -334,7 +334,7 @@ async function fetchItems() {
     try {
         const res = await fetch("/api/items");
         const raw = await res.json();
-        allItems = raw.filter(i => !PLACEHOLDER_MERCHANTS.includes(i.merchant));
+        allItems = raw.filter(i => !PLACEHOLDER_MERCHANTS.includes(i.merchant) && i.transaction_status !== "rsvp_only");
         updateCategoryCounts();
         applyFilters();
     } catch (err) {
