@@ -265,6 +265,7 @@
             const navH = nav ? nav.offsetHeight : 0;
             if (ctrl) ctrl.style.top = (hdrH + navH) + "px";
         }
+        setControlsOffset();
         window.addEventListener("load", setControlsOffset);
         window.addEventListener("resize", setControlsOffset);
 
