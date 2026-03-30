@@ -799,6 +799,31 @@ function renderTable(items) {
     renderMobileCards(items);
 
     document.getElementById("row-count").textContent = `Showing ${items.length} item(s)`;
+
+    // Deep-link: highlight a specific transaction if ?txn= param is present
+    if (window._pendingTxnHighlight) {
+        const txnId = window._pendingTxnHighlight;
+        const targetRow = tbody.querySelector(`tr[data-id="${txnId}"]`);
+        if (targetRow) {
+            window._pendingTxnHighlight = null;
+            // If inside a collapsed order group, expand it first
+            const oid = targetRow.dataset.orderId;
+            if (oid) {
+                const summary = tbody.querySelector(`tr.order-summary[data-order-id="${oid}"]`);
+                if (summary && summary.classList.contains("collapsed")) {
+                    summary.click();
+                }
+            }
+            // Scroll and highlight
+            setTimeout(() => {
+                targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+                targetRow.classList.add("txn-highlight");
+                setTimeout(() => targetRow.classList.remove("txn-highlight"), 3000);
+            }, 100);
+            // Clean up URL
+            window.history.replaceState({}, "", "/");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1411,6 +1436,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadColumnOrder();
     buildColumnToggle();
     renderHeaderRow();
+
+    // Check for deep-link to a specific transaction (from Customers page)
+    const _urlParams = new URLSearchParams(window.location.search);
+    if (_urlParams.get("txn")) {
+        window._pendingTxnHighlight = _urlParams.get("txn");
+    }
 
     fetchItems();
     fetchStats();

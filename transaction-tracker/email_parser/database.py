@@ -1185,6 +1185,18 @@ def _lookup_customer_id(conn: sqlite3.Connection,
         if row:
             return row["customer_id"]
 
+    # 5. Fallback: check items table directly for email match (catches pre-migration customers)
+    if customer_email:
+        row = conn.execute(
+            """SELECT customer_id FROM items
+               WHERE LOWER(customer_email) = LOWER(?)
+                 AND customer_id IS NOT NULL
+               LIMIT 1""",
+            (customer_email.strip(),),
+        ).fetchone()
+        if row:
+            return row["customer_id"]
+
     return None
 
 
@@ -1303,7 +1315,20 @@ def _resolve_or_create_customer(
                     (new_cid, customer_email.strip()),
                 )
             except sqlite3.IntegrityError:
-                pass  # email already linked to another customer
+                # Email already belongs to another customer — use that one
+                # instead of the orphan we just created
+                existing = conn.execute(
+                    """SELECT customer_id FROM customer_emails
+                       WHERE LOWER(email) = LOWER(?) LIMIT 1""",
+                    (customer_email.strip(),),
+                ).fetchone()
+                if existing:
+                    # Delete the orphan customer we just created
+                    conn.execute("DELETE FROM customers WHERE customer_id = ?", (new_cid,))
+                    logger.info("Email %s already belongs to customer_id=%d — "
+                                "discarded orphan customer_id=%d",
+                                customer_email, existing["customer_id"], new_cid)
+                    return existing["customer_id"]
 
         return new_cid
 

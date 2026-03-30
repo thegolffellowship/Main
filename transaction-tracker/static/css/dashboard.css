@@ -42,6 +42,9 @@ header {
     justify-content: space-between;
     align-items: center;
     box-shadow: var(--shadow);
+    position: sticky;
+    top: 0;
+    z-index: 100;
 }
 header h1 {
     font-size: 1.5rem;
@@ -378,6 +381,10 @@ footer {
     gap: 0;
     margin-bottom: 1.5rem;
     border-bottom: 2px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 99;
+    background: var(--surface);
 }
 .tab-nav a {
     display: inline-flex;
@@ -401,6 +408,16 @@ footer {
 .tab-nav a.active {
     color: var(--primary);
     border-bottom-color: var(--primary);
+}
+
+/* ---- Transaction deep-link highlight ---- */
+tr.txn-highlight {
+    background: #fef08a !important;
+    animation: txn-pulse 0.6s ease-in-out 2;
+}
+@keyframes txn-pulse {
+    0%, 100% { background: #fef08a; }
+    50% { background: #fde047; }
 }
 
 /* ---- Column Toggle ---- */
