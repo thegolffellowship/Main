@@ -1149,7 +1149,7 @@
             if (item.notes) {
                 const pbMatch = item.notes.match(/Purchased by (.+)/i);
                 if (pbMatch) {
-                    purchasedByTag = \` <span style="font-size:0.65rem; background:#dbeafe; color:#1e40af; padding:0.1rem 0.4rem; border-radius:3px; font-weight:500;" title="Paid for by \${escapeHtml(pbMatch[1])}">Paid by \${escapeHtml(pbMatch[1])}</span>\`;
+                    purchasedByTag = ` <span style="font-size:0.65rem; background:#dbeafe; color:#1e40af; padding:0.1rem 0.4rem; border-radius:3px; font-weight:500;" title="Paid for by ${escapeHtml(pbMatch[1])}">Paid by ${escapeHtml(pbMatch[1])}</span>`;
                 }
             }
             let actionBtn = "";
