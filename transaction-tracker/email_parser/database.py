@@ -1126,10 +1126,12 @@ def _lookup_customer_id(conn: sqlite3.Connection,
 
     Tries (in order):
     1. Email match via customer_emails table.
-    2. Exact first_name + last_name match in customers table.
+    2. Alias email match via customer_aliases table (type='email').
+    3. Exact first_name + last_name match in customers table.
+    4. Alias name match via customer_aliases table (type='name').
     Returns the customer_id or None if no match is found.
     """
-    # 1. Email lookup
+    # 1. Email lookup via customer_emails
     if customer_email:
         row = conn.execute(
             """SELECT ce.customer_id FROM customer_emails ce
@@ -1139,7 +1141,21 @@ def _lookup_customer_id(conn: sqlite3.Connection,
         if row:
             return row["customer_id"]
 
-    # 2. Name lookup
+    # 2. Alias email lookup via customer_aliases → resolve customer_name → customers
+    if customer_email:
+        row = conn.execute(
+            """SELECT c.customer_id FROM customer_aliases ca
+               JOIN customers c
+                 ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+               WHERE ca.alias_type = 'email'
+                 AND LOWER(ca.alias_value) = LOWER(?)
+               LIMIT 1""",
+            (customer_email.strip(),),
+        ).fetchone()
+        if row:
+            return row["customer_id"]
+
+    # 3. Name lookup — exact first + last
     if customer_name:
         parts = customer_name.strip().split()
         if len(parts) >= 2:
@@ -1154,6 +1170,21 @@ def _lookup_customer_id(conn: sqlite3.Connection,
             ).fetchone()
             if row:
                 return row["customer_id"]
+
+    # 4. Alias name lookup — the incoming customer_name matches a known alias
+    if customer_name:
+        row = conn.execute(
+            """SELECT c.customer_id FROM customer_aliases ca
+               JOIN customers c
+                 ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+               WHERE ca.alias_type = 'name'
+                 AND LOWER(ca.alias_value) = LOWER(?)
+               LIMIT 1""",
+            (customer_name.strip(),),
+        ).fetchone()
+        if row:
+            return row["customer_id"]
+
     return None
 
 
@@ -3312,6 +3343,57 @@ def merge_customers(source_name: str, target_name: str,
             (target_name, source_name),
         )
         items_updated = cursor.rowcount
+
+        # ---- Merge customers table records (customer_id) ----
+        # Find target and source customer_ids
+        target_cust = conn.execute(
+            """SELECT customer_id FROM customers
+               WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)
+               LIMIT 1""",
+            (target_name.strip(),),
+        ).fetchone()
+        source_cust = conn.execute(
+            """SELECT customer_id FROM customers
+               WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)
+               LIMIT 1""",
+            (source_name.strip(),),
+        ).fetchone()
+
+        if target_cust and source_cust and target_cust["customer_id"] != source_cust["customer_id"]:
+            target_cid = target_cust["customer_id"]
+            source_cid = source_cust["customer_id"]
+
+            # Reassign all items from source customer_id to target
+            conn.execute(
+                "UPDATE items SET customer_id = ? WHERE customer_id = ?",
+                (target_cid, source_cid),
+            )
+
+            # Move source's customer_emails to target (skip duplicates)
+            src_emails = conn.execute(
+                "SELECT email FROM customer_emails WHERE customer_id = ?",
+                (source_cid,),
+            ).fetchall()
+            for e in src_emails:
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO customer_emails (customer_id, email, label) VALUES (?, ?, 'merged')",
+                        (target_cid, e["email"]),
+                    )
+                except sqlite3.IntegrityError:
+                    pass
+            conn.execute("DELETE FROM customer_emails WHERE customer_id = ?", (source_cid,))
+
+            # Delete the now-orphaned source customers row
+            conn.execute("DELETE FROM customers WHERE customer_id = ?", (source_cid,))
+            logger.info("Merged customer_id %d → %d (emails moved, source deleted)",
+                        source_cid, target_cid)
+        elif target_cust and not source_cust:
+            # Source has no customers row — just reassign any items with source name
+            conn.execute(
+                "UPDATE items SET customer_id = ? WHERE customer = ? AND customer_id IS NULL",
+                (target_cust["customer_id"], target_name),
+            )
 
         # Backfill email/phone on all target items that are missing them
         if best_email:
