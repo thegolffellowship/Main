@@ -135,11 +135,9 @@ async function initAuth() {
     if (loginPin) loginPin.addEventListener("keydown", (e) => { if (e.key === "Enter") handleLogin(); });
     if (logoutBtn) logoutBtn.addEventListener("click", handleLogout);
 
-    // Compute sticky offsets for header → tab-nav stacking
-    _setStickyOffsets();
-    window.addEventListener("resize", _setStickyOffsets);
 }
 
+// Sticky offsets — runs on every page that loads auth.js, regardless of initAuth()
 function _setStickyOffsets() {
     const hdr = document.querySelector("header");
     const nav = document.querySelector(".tab-nav");
@@ -147,3 +145,10 @@ function _setStickyOffsets() {
         nav.style.top = hdr.offsetHeight + "px";
     }
 }
+// Run immediately, on DOM ready, on load, and on resize
+_setStickyOffsets();
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", _setStickyOffsets);
+}
+window.addEventListener("load", _setStickyOffsets);
+window.addEventListener("resize", _setStickyOffsets);
