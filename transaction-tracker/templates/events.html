@@ -1319,7 +1319,6 @@
         const s = String(name).trim();
         const parts = s.split(/\s+/);
         if (parts.length <= 1) return s.toLowerCase();
-        // Strip name suffixes so "Arias Jr" sorts by "Arias", not "Jr"
         const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
         let suffix = "";
         while (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) {
@@ -1327,6 +1326,22 @@
         }
         const last = parts.pop() || "";
         return (last + ", " + parts.join(" ") + " " + suffix).toLowerCase().trim();
+    }
+
+    /** Format "First Last" → "Last, First" for display. Handles suffixes. */
+    function displayName(name) {
+        const s = String(name || "").trim();
+        if (!s) return "\u2014";
+        const parts = s.split(/\s+/);
+        if (parts.length <= 1) return s;
+        const suffixes = new Set(["Jr", "Jr.", "SR", "Sr", "Sr.", "II", "III", "IV", "V"]);
+        const suffixParts = [];
+        while (parts.length > 1 && suffixes.has(parts[parts.length - 1])) {
+            suffixParts.unshift(parts.pop());
+        }
+        if (parts.length <= 1) return s;
+        const last = parts.pop();
+        return last + ", " + parts.join(" ") + (suffixParts.length ? " " + suffixParts.join(" ") : "");
     }
 
     function buildEvPickerOptions(events) {
@@ -1655,7 +1670,7 @@
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         ${circleHtml}
-                        <span class="mc-customer"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}" onclick="event.stopPropagation()">${escapeHtml(r.customer || "\u2014")}</a></span>
+                        <span class="mc-customer"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}" onclick="event.stopPropagation()">${escapeHtml(displayName(r.customer))}</a></span>
                         ${topTags} ${tag}
                     </div>
                     <span class="mc-chevron">&#9656;</span>
@@ -1816,7 +1831,7 @@
                             const bc = sBadge[st] || sBadge.credited;
                             mobileInactiveHtml += `<div class="rsvp-player-card">`;
                             mobileInactiveHtml += `<span class="rsvp-badge" style="background:${bc.bg};color:${bc.color};border:1px solid ${bc.border};">${sLabels[st] || st}</span> `;
-                            mobileInactiveHtml += `<strong>${escapeHtml(r.customer || 'Unknown')}</strong>`;
+                            mobileInactiveHtml += `<strong>${escapeHtml(displayName(r.customer || 'Unknown'))}</strong>`;
                             if (r.customer_email) mobileInactiveHtml += ` <span class="rsvp-email">${escapeHtml(r.customer_email)}</span>`;
                             if (r.credit_amount) mobileInactiveHtml += ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>`;
                             mobileInactiveHtml += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
@@ -2653,7 +2668,7 @@
                     if (isCompRow || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
                     else if (isManualRow && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
-                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(r.customer || "\u2014")}</a>${tag}${infoIcon}</td>`;
+                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
@@ -2775,7 +2790,7 @@
                 const bc = badgeColors[st] || badgeColors.credited;
                 html += `<div class="rsvp-player-card">`;
                 html += `<span class="rsvp-badge" style="background:${bc.bg};color:${bc.color};border:1px solid ${bc.border};">${statusLabels[st] || st}</span> `;
-                html += `<strong>${escapeHtml(r.customer || 'Unknown')}</strong>`;
+                html += `<strong>${escapeHtml(displayName(r.customer || 'Unknown'))}</strong>`;
                 if (r.customer_email) html += ` <span class="rsvp-email">${escapeHtml(r.customer_email)}</span>`;
                 if (r.credit_amount) html += ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>`;
                 // Reverse button
@@ -3495,7 +3510,7 @@
             customList.innerHTML = allRegs.map(r =>
                 `<label style="display:flex; align-items:center; gap:0.4rem; padding:0.2rem 0; border-bottom:1px solid var(--border); cursor:pointer;">` +
                 `<input type="checkbox" class="compose-custom-cb" value="${escapeHtml(r.customer_email)}" checked>` +
-                `<strong>${escapeHtml(r.customer || "Unknown")}</strong>` +
+                `<strong>${escapeHtml(displayName(r.customer || "Unknown"))}</strong>` +
                 ` <span style="color:var(--text-muted);">${escapeHtml(r.customer_email || "")}</span>` +
                 `</label>`
             ).join("");
@@ -3514,7 +3529,7 @@
             countEl.textContent = `This will reach ${total} player${total !== 1 ? "s" : ""} with email addresses${extraNote}`;
             listEl.innerHTML = recipients.map(r =>
                 `<div style="padding:0.15rem 0; border-bottom:1px solid var(--border);">` +
-                `<strong>${escapeHtml(r.customer || "Unknown")}</strong>` +
+                `<strong>${escapeHtml(displayName(r.customer || "Unknown"))}</strong>` +
                 ` <span style="color:var(--text-muted);">${escapeHtml(r.customer_email || "")}</span>` +
                 `</div>`
             ).join("");
@@ -4558,7 +4573,7 @@
         });
         const playerSelect = document.getElementById("add-payment-player");
         playerSelect.innerHTML = '<option value="">Select player…</option>' +
-            sorted.map(r => `<option value="${escapeHtml(r.customer)}">${escapeHtml(r.customer)}</option>`).join("");
+            sorted.map(r => `<option value="${escapeHtml(r.customer)}">${escapeHtml(displayName(r.customer))}</option>`).join("");
         // Reset fields
         document.getElementById("add-payment-item").value = "";
         document.getElementById("add-payment-amount").value = "";

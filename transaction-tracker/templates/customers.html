@@ -189,9 +189,11 @@
             <div id="cust-merge-info" class="credit-info"></div>
             <div class="credit-fields">
                 <label>Merge into (target customer)
-                    <select id="cust-merge-target" class="modal-input">
-                        <option value="">Select a customer...</option>
-                    </select>
+                    <div style="position:relative;">
+                        <input type="text" id="cust-merge-target-input" class="modal-input" placeholder="Type to search customers..." autocomplete="off">
+                        <input type="hidden" id="cust-merge-target">
+                        <div id="cust-merge-suggestions" style="display:none; position:absolute; top:100%; left:0; right:0; max-height:220px; overflow-y:auto; background:var(--bg-card); border:1px solid var(--border); border-top:none; border-radius:0 0 6px 6px; z-index:200; box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div>
+                    </div>
                 </label>
             </div>
             <div class="modal-actions">
@@ -425,8 +427,29 @@
         const s = String(name).trim();
         const parts = s.split(/\s+/);
         if (parts.length <= 1) return s.toLowerCase();
+        const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
+        let suffix = "";
+        while (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) {
+            suffix = parts.pop() + " " + suffix;
+        }
+        const last = parts.pop() || "";
+        return (last + ", " + parts.join(" ") + " " + suffix).toLowerCase().trim();
+    }
+
+    /** Format "First Last" → "Last, First" for display. Handles suffixes. */
+    function displayName(name) {
+        const s = String(name || "").trim();
+        if (!s) return "\u2014";
+        const parts = s.split(/\s+/);
+        if (parts.length <= 1) return s;
+        const suffixes = new Set(["Jr", "Jr.", "SR", "Sr", "Sr.", "II", "III", "IV", "V"]);
+        const suffixParts = [];
+        while (parts.length > 1 && suffixes.has(parts[parts.length - 1])) {
+            suffixParts.unshift(parts.pop());
+        }
+        if (parts.length <= 1) return s; // all parts were suffixes, return original
         const last = parts.pop();
-        return (last + ", " + parts.join(" ")).toLowerCase();
+        return last + ", " + parts.join(" ") + (suffixParts.length ? " " + suffixParts.join(" ") : "");
     }
 
     // Build customer aggregate data from items
@@ -724,7 +747,7 @@
             <div class="mobile-card ${isExpanded ? 'expanded' : ''}" data-cust-name="${escapeHtml(c.name)}" ${isExpanded ? 'style="border-color:var(--primary);"' : ''}>
                 <div class="mobile-card-top cust-mobile-top" data-name="${escapeHtml(c.name)}">
                     <div class="mc-primary">
-                        <span class="mc-customer">${escapeHtml(c.name)}</span>
+                        <span class="mc-customer">${escapeHtml(displayName(c.name))}</span>
                         <span class="status-badge-sm ${statusBadgeClass(c.status)}" style="margin-left:0.35rem; vertical-align:middle;">${escapeHtml(c.status)}</span>
                         ${c.creditTotal > 0 ? `<span class="status-tag status-tag-credited" style="margin-left:0.25rem; vertical-align:middle;">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} Credit</span>` : ''}
                         ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-customer="${escapeHtml(c.name)}" style="font-size:0.65rem; padding:0.1rem 0.3rem; margin-left:0.25rem; vertical-align:middle;" onclick="event.stopPropagation(); openCustMergeModal('${escapeHtml(c.name).replace(/'/g, "\\'")}')">Merge</button>` : ''}
@@ -847,7 +870,7 @@
             const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
             html += `
             <tr data-name="${escapeHtml(c.name)}" class="cust-row-clickable ${isExpanded ? 'expanded' : ''}">
-                <td><strong>${escapeHtml(c.name)}</strong>${c.creditTotal > 0 ? ` <span class="status-tag status-tag-credited">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} Credit</span>` : ''}</td>
+                <td><strong>${escapeHtml(displayName(c.name))}</strong>${c.creditTotal > 0 ? ` <span class="status-tag status-tag-credited">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} Credit</span>` : ''}</td>
                 <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span></td>
                 <td>${escapeHtml(c.chapter || "\u2014")}</td>
                 <td>${c.items.length}</td>
@@ -901,7 +924,7 @@
             return `
             <div class="customer-card ${isSelected ? 'selected' : ''}" data-name="${escapeHtml(c.name)}">
                 <div class="customer-card-name">
-                    ${escapeHtml(c.name)}
+                    ${escapeHtml(displayName(c.name))}
                     <span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span>
                     ${c.creditTotal > 0 ? `<span class="status-tag status-tag-credited">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} Credit</span>` : ''}
                 </div>
@@ -1488,7 +1511,7 @@
         detail.style.display = "block";
 
         document.getElementById("detail-title").innerHTML =
-            `${escapeHtml(customer.name)} <span class="status-badge-sm ${statusBadgeClass(customer.status)}">${escapeHtml(customer.status)}</span>`;
+            `${escapeHtml(displayName(customer.name))} <span class="status-badge-sm ${statusBadgeClass(customer.status)}">${escapeHtml(customer.status)}</span>`;
 
         const meta = [];
         if (customer.chapter) meta.push("Chapter: " + escapeHtml(customer.chapter));
@@ -1666,21 +1689,75 @@
         mergeSourceName = sourceName;
         const source = allCustomers.find(c => c.name === sourceName);
         document.getElementById("cust-merge-info").innerHTML =
-            `<strong>${escapeHtml(sourceName)}</strong> — ${source ? source.items.length : '?'} purchase(s)`;
+            `<strong>${escapeHtml(displayName(sourceName))}</strong> — ${source ? source.items.length : '?'} purchase(s)`;
 
-        // Populate target dropdown with all OTHER customers
-        const select = document.getElementById("cust-merge-target");
-        select.innerHTML = '<option value="">Select a customer...</option>';
-        allCustomers
+        // Reset autocomplete
+        const input = document.getElementById("cust-merge-target-input");
+        const hidden = document.getElementById("cust-merge-target");
+        const sugBox = document.getElementById("cust-merge-suggestions");
+        input.value = "";
+        hidden.value = "";
+        sugBox.style.display = "none";
+
+        // Build candidate list sorted by last name
+        const candidates = allCustomers
             .filter(c => c.name !== sourceName)
-            .forEach(c => {
-                const opt = document.createElement("option");
-                opt.value = c.name;
-                opt.textContent = `${c.name} (${c.items.length} purchases)`;
-                select.appendChild(opt);
-            });
+            .sort((a, b) => lastNameSortKey(a.name).localeCompare(lastNameSortKey(b.name)));
+
+        function renderSuggestions(query) {
+            const q = query.toLowerCase().trim();
+            const matches = q ? candidates.filter(c => c.name.toLowerCase().includes(q)) : candidates.slice(0, 30);
+            if (!matches.length) {
+                sugBox.innerHTML = '<div style="padding:0.5rem 0.75rem; color:var(--text-muted); font-size:0.82rem;">No matches</div>';
+            } else {
+                sugBox.innerHTML = matches.slice(0, 50).map(c =>
+                    `<div class="merge-suggestion" data-name="${escapeHtml(c.name)}" style="padding:0.4rem 0.75rem; cursor:pointer; font-size:0.85rem; border-bottom:1px solid var(--border);">${escapeHtml(displayName(c.name))} <span style="color:var(--text-muted); font-size:0.75rem;">(${c.items.length} purchases)</span></div>`
+                ).join("");
+            }
+            sugBox.style.display = "block";
+        }
+
+        input.addEventListener("input", function() {
+            hidden.value = "";
+            renderSuggestions(this.value);
+        });
+
+        sugBox.addEventListener("click", function(e) {
+            const item = e.target.closest(".merge-suggestion");
+            if (item) {
+                const name = item.dataset.name;
+                input.value = displayName(name);
+                hidden.value = name;
+                sugBox.style.display = "none";
+            }
+        });
+
+        input.addEventListener("focus", function() {
+            if (!hidden.value) renderSuggestions(this.value);
+        });
+
+        // Close suggestions on outside click
+        document.addEventListener("click", function closeSug(e) {
+            if (!e.target.closest("#cust-merge-suggestions") && e.target !== input) {
+                sugBox.style.display = "none";
+            }
+        });
+
+        // Hover highlight
+        sugBox.addEventListener("mouseover", function(e) {
+            const item = e.target.closest(".merge-suggestion");
+            if (item) {
+                sugBox.querySelectorAll(".merge-suggestion").forEach(s => s.style.background = "");
+                item.style.background = "var(--primary-light, #eff6ff)";
+            }
+        });
+        sugBox.addEventListener("mouseout", function(e) {
+            const item = e.target.closest(".merge-suggestion");
+            if (item) item.style.background = "";
+        });
 
         document.getElementById("cust-merge-overlay").style.display = "flex";
+        setTimeout(() => input.focus(), 100);
     }
 
     function closeCustMergeModal() {

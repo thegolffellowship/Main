@@ -164,7 +164,8 @@ function linkedCell(value, field, rowId) {
     if (!value) return cell(value, field, rowId);
     const display = escapeHtml(value);
     if (field === "customer") {
-        return `<a class="cell-link" href="/customers?name=${encodeURIComponent(value)}" title="View all transactions for ${display}">${display}</a>`;
+        const dn = escapeHtml(displayName(value));
+        return `<a class="cell-link" href="/customers?name=${encodeURIComponent(value)}" title="View all transactions for ${display}">${dn}</a>`;
     }
     if (field === "item_name") {
         return `<a class="cell-link" href="/events?item=${encodeURIComponent(value)}" title="View event details for ${display}">${display}</a>`;
@@ -841,8 +842,29 @@ function lastNameSortKey(name) {
     const s = String(name).trim();
     const parts = s.split(/\s+/);
     if (parts.length <= 1) return s.toLowerCase();
+    const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
+    let suffix = "";
+    while (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) {
+        suffix = parts.pop() + " " + suffix;
+    }
+    const last = parts.pop() || "";
+    return (last + ", " + parts.join(" ") + " " + suffix).toLowerCase().trim();
+}
+
+/** Format "First Last" → "Last, First" for display. Handles suffixes. */
+function displayName(name) {
+    const s = String(name || "").trim();
+    if (!s) return "\u2014";
+    const parts = s.split(/\s+/);
+    if (parts.length <= 1) return s;
+    const suffixes = new Set(["Jr", "Jr.", "SR", "Sr", "Sr.", "II", "III", "IV", "V"]);
+    const suffixParts = [];
+    while (parts.length > 1 && suffixes.has(parts[parts.length - 1])) {
+        suffixParts.unshift(parts.pop());
+    }
+    if (parts.length <= 1) return s;
     const last = parts.pop();
-    return (last + ", " + parts.join(" ")).toLowerCase();
+    return last + ", " + parts.join(" ") + (suffixParts.length ? " " + suffixParts.join(" ") : "");
 }
 
 function sortItems(items, sortKey) {
@@ -1309,7 +1331,7 @@ async function openCreditModal(itemId) {
 
     // Populate info
     document.getElementById("credit-info").innerHTML =
-        `<strong>${escapeHtml(item.customer || "Unknown")}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
+        `<strong>${escapeHtml(displayName(item.customer || "Unknown"))}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
         `Price: <strong>${escapeHtml(item.item_price || "$0")}</strong>`;
 
     // Reset UI
