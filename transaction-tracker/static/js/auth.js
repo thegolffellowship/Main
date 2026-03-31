@@ -125,8 +125,8 @@ async function initAuth() {
         updateRoleUI();
         updateNavForRole();
         if (typeof onAuthReady === "function") onAuthReady();
-        // Recalculate sticky offsets after all UI changes (role badge, nav tabs, page buttons)
-        _setStickyOffsets();
+        // Recalculate sticky offsets after browser reflows newly-shown buttons
+        requestAnimationFrame(_setStickyOffsets);
     }
 
     // Bind login modal events (with null guards)
