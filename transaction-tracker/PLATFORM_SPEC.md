@@ -539,6 +539,8 @@ All pages use **vanilla JavaScript** (no frameworks). Each HTML template contain
 - Credit/Transfer modal with event picker
 - CSV export
 - `escapeHtml()` helper for XSS prevention
+- `displayName()` helper formats "First Last" → "Last, First" with suffix handling for display
+- `lastNameSortKey()` sorts by last name, stripping suffixes (Jr, III) so variants group together
 - `parsePrice()` strips `$,` for numeric sorting
 - Email addresses rendered as clickable `mailto:` links
 

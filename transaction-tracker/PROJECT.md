@@ -219,6 +219,9 @@ Customer directory derived from transaction history.
 - **Clickable emails** — `mailto:` links
 - **"Purchased by" badge** — Blue badge on transactions where someone else paid for this player
 - **Click-to-navigate** — Click a transaction row to jump to that item in the Transactions tab (deep-link via `?txn=` param)
+- **"Last, First" name display** — All names show as "Last, First" with suffix handling across all pages
+- **Last-name sorting** — Names sort by last name; suffixes (Jr, III) stripped from sort key so variants group together
+- **Merge autocomplete** — Merge Customer modal uses typeahead search instead of dropdown (faster for 300+ customers)
 
 ### 4. RSVP Log (`/rsvps`)
 
@@ -1115,6 +1118,10 @@ The app is installable as a Progressive Web App:
 
 **Navigation & UI:**
 - Sticky header and tab nav on ALL pages (global CSS + auth.js `_setStickyOffsets()`)
+- Sticky nav recalculates after `initAuth()` and `onAuthReady()` to handle dynamic header height changes
+- "Last, First" name display format across all pages (Transactions, Events, Customers, Handicaps, RSVPs)
+- Last-name sorting with suffix stripping (Jr, Sr, II, III, IV, V) on all pages
+- Merge Customer modal uses typeahead autocomplete instead of dropdown
 - RSVP-only items filtered out of Transactions tab (only show in Events)
 - Transaction deep-linking with highlight animation
 - Database browser page for admin table inspection
