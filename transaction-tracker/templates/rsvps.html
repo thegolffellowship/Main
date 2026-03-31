@@ -308,6 +308,36 @@
     let rsvpSortDir = "desc";
 
     // ---- Helpers ----
+    /** Build a "LastName, FirstName..." key for consistent name sorting. */
+    function lastNameSortKey(name) {
+        const s = String(name).trim();
+        const parts = s.split(/\s+/);
+        if (parts.length <= 1) return s.toLowerCase();
+        const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
+        let suffix = "";
+        while (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) {
+            suffix = parts.pop() + " " + suffix;
+        }
+        const last = parts.pop() || "";
+        return (last + ", " + parts.join(" ") + " " + suffix).toLowerCase().trim();
+    }
+
+    /** Format "First Last" → "Last, First" for display. Handles suffixes. */
+    function displayName(name) {
+        const s = String(name || "").trim();
+        if (!s) return "\u2014";
+        const parts = s.split(/\s+/);
+        if (parts.length <= 1) return s;
+        const sfx = new Set(["Jr", "Jr.", "SR", "Sr", "Sr.", "II", "III", "IV", "V"]);
+        const sfxParts = [];
+        while (parts.length > 1 && sfx.has(parts[parts.length - 1])) {
+            sfxParts.unshift(parts.pop());
+        }
+        if (parts.length <= 1) return s;
+        const last = parts.pop();
+        return last + ", " + parts.join(" ") + (sfxParts.length ? " " + sfxParts.join(" ") : "");
+    }
+
     function escapeHtml(str) {
         const div = document.createElement("div");
         div.textContent = str || "";
@@ -364,7 +394,7 @@
             const items = await res.json();
             const names = new Set();
             items.forEach(i => { if (i.customer) names.add(i.customer); });
-            allCustomerNames = [...names].sort((a, b) => a.localeCompare(b));
+            allCustomerNames = [...names].sort((a, b) => lastNameSortKey(a).localeCompare(lastNameSortKey(b)));
         } catch (err) {
             console.error("Failed to fetch customer names:", err);
         }
@@ -421,8 +451,13 @@
         filtered.sort((a, b) => {
             let va = a[rsvpSortField] || "";
             let vb = b[rsvpSortField] || "";
-            if (typeof va === "string") va = va.toLowerCase();
-            if (typeof vb === "string") vb = vb.toLowerCase();
+            if (rsvpSortField === "player_name") {
+                va = lastNameSortKey(a.resolved_name || a.player_name || "");
+                vb = lastNameSortKey(b.resolved_name || b.player_name || "");
+            } else if (typeof va === "string") {
+                va = va.toLowerCase();
+                vb = (vb || "").toLowerCase();
+            }
             if (va < vb) return rsvpSortDir === "asc" ? -1 : 1;
             if (va > vb) return rsvpSortDir === "asc" ? 1 : -1;
             return 0;
@@ -545,7 +580,7 @@
             `Link <strong>${escapeHtml(playerName)}</strong> (${escapeHtml(email)}) to an existing customer.`;
         const sel = document.getElementById("link-rsvp-target");
         sel.innerHTML = '<option value="">Select a customer...</option>' +
-            allCustomerNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+            allCustomerNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(displayName(n))}</option>`).join("");
         document.getElementById("link-rsvp-overlay").style.display = "flex";
     }
 
@@ -687,11 +722,11 @@
         const isAdmin = currentRole === "admin";
         let html = "";
         filtered.forEach(r => {
-            const displayName = r.resolved_name || r.player_name || "\u2014";
+            const rName = r.resolved_name || r.player_name || "\u2014";
             const nameExtra = r.has_player_card && r.resolved_name !== r.player_name
                 ? ` <span style="color:var(--text-muted);font-size:0.75rem;">(${escapeHtml(r.player_name)})</span>` : "";
             html += `<tr>
-                <td style="${!r.has_player_card && isAdmin ? 'white-space:normal;' : ''}"><strong>${escapeHtml(displayName)}</strong>${nameExtra}${unlinkedBtns(r)}</td>
+                <td style="${!r.has_player_card && isAdmin ? 'white-space:normal;' : ''}"><strong>${escapeHtml(displayName(rName))}</strong>${nameExtra}${unlinkedBtns(r)}</td>
                 <td>${escapeHtml(r.player_email || "\u2014")}</td>
                 <td>${escapeHtml(r.gg_event_name || "\u2014")}</td>
                 <td>${responseBadge(r.response)}</td>
@@ -717,7 +752,8 @@
         }
 
         container.innerHTML = filtered.map(r => {
-            const mobileDisplayName = r.resolved_name || r.player_name || "\u2014";
+            const mobileRawName = r.resolved_name || r.player_name || "\u2014";
+            const mobileDisplayName = displayName(mobileRawName);
             const fields = [
                 ["Email", r.player_email || "\u2014"],
                 ["Event", r.gg_event_name || "\u2014"],
