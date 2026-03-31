@@ -7,9 +7,15 @@ Scans your email inbox for Golf Fellowship order emails, uses **Claude AI** to p
 - **AI-powered parsing** — sends each "New Order" email from mysimplestore.com to Claude, which extracts every field automatically. No brittle regex. If the store changes their email format, the AI adapts.
 - **Multi-item orders** — one email with 3 items becomes 3 separate rows, each with its own data. Quantity expansion splits x2 purchases into separate rows for buyer and partner.
 - **Dedicated columns** — Item Name, Chapter, Course, Handicap, Side Games, Tee Choice, User Status, Holes, etc. All filterable and sortable.
-- **Handicap management** — track and calculate 9-hole handicap indexes with Golf Genius sync.
+- **Event management** — auto-detects events from transactions, tracks registrations, supports manual player additions, RSVP tracking, payment reminders, tee time planning with sunset advisor.
+- **Customer directory** — derives member status, chapter affiliation, purchase history from transactions. Roster import, alias management, customer merging.
+- **Handicap management** — 9-hole WHS handicap index calculator with Golf Genius sync, round history, and export.
+- **Side games matrix** — interactive prize calculator for NET/GROSS/Skins games by player count (9h and 18h).
+- **RSVP integration** — Golf Genius RSVP email parsing with auto-matching to registered players.
+- **Bulk messaging** — compose and send event communications with templates, audience filtering, and message log.
 - **Admin database browser** — browse and inspect the full database from the web UI.
 - **Webhook connector** — external systems can push order data in via API.
+- **MCP server** — 21 tools for Claude (Desktop or Code) to directly query and modify the database.
 - **Daily email report** — automated summary of new transactions sent to you every morning.
 - **CSV export** — download everything as a spreadsheet at any time.
 
@@ -332,19 +338,27 @@ curl -X POST https://your-domain.com/api/connector/ingest \
 
 ---
 
-## API Reference
+## API Reference (Key Endpoints)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/` | None | Web dashboard |
-| GET | `/api/items` | None | All item rows as JSON |
-| GET | `/api/stats` | None | Summary stats (items, orders, total, date range) |
+| GET | `/` | None | Transactions dashboard |
+| GET | `/events` | None | Events management page |
+| GET | `/customers` | None | Customer directory |
+| GET | `/handicaps` | Manager | Handicap management |
+| GET | `/matrix` | Admin | Side games prize matrix |
+| GET | `/audit` | Admin | Email audit/QA |
+| GET | `/database` | Admin | Database browser |
+| GET | `/api/items` | None | All transaction items as JSON |
+| GET | `/api/stats` | None | Summary statistics |
+| GET | `/api/events` | None | All events with registrations |
 | POST | `/api/check-now` | None | Trigger manual inbox check |
-| DELETE | `/api/items/:id` | None | Delete an item row |
-| GET | `/api/config-status` | None | Check which services are configured |
 | POST | `/api/connector/ingest` | X-API-Key | Push items or raw email via webhook |
-| GET | `/api/connector/info` | None | Connector endpoint documentation |
-| POST | `/api/report/send-now` | None | Trigger daily report email immediately |
+| POST | `/api/report/send-now` | None | Trigger daily report email |
+| POST | `/api/auth/login` | None | Authenticate with PIN |
+| GET | `/admin/backup` | Admin | Download SQLite database file |
+
+See `PROJECT.md` for the full API reference (98 endpoints).
 
 ---
 
@@ -377,31 +391,40 @@ SQLite, stored at `transaction-tracker/transactions.db`. Each row is a single li
 
 ```
 transaction-tracker/
-├── app.py                    # Flask app, routes, scheduler, webhook
+├── app.py                    # Flask app, all routes, scheduler, webhook (~3900 lines)
+├── asgi_app.py               # ASGI wrapper for Railway deployment
+├── mcp_server.py             # MCP server (21 tools for Claude integration)
+├── mcp_auth.py               # MCP OAuth 2.0 authentication
+├── golf_genius_sync.py       # Golf Genius handicap sync via HTTP
 ├── requirements.txt          # Python dependencies
 ├── .env.example              # Configuration template
-├── .gitignore
 ├── test_parser.py            # Parser tests (uses mocked AI responses)
 ├── email_parser/
 │   ├── __init__.py
 │   ├── fetcher.py            # Microsoft Graph email fetching
 │   ├── parser.py             # Claude AI email parsing
-│   ├── database.py           # SQLite storage layer
+│   ├── database.py           # SQLite storage layer (~3500 lines)
 │   ├── report.py             # Daily digest email (Graph API)
 │   └── rsvp_parser.py        # Golf Genius RSVP parsing
 ├── templates/
 │   ├── index.html            # Transactions dashboard
 │   ├── events.html           # Events management + Tee Time Advisor
 │   ├── customers.html        # Customer directory + roster import
+│   ├── handicaps.html        # Handicap management (manager)
 │   ├── audit.html            # Email audit/QA (admin)
 │   ├── rsvps.html            # RSVP management
 │   ├── matrix.html           # Side games prize matrix
+│   ├── database.html         # Admin database browser
 │   └── changelog.html        # Version changelog
 └── static/
     ├── css/
-    │   └── dashboard.css     # Dashboard styles
+    │   └── dashboard.css     # All app styling (single file)
     └── js/
-        └── dashboard.js      # Dashboard interactivity
+        ├── auth.js           # PIN-based auth + sticky nav
+        ├── dashboard.js      # Transactions page logic
+        ├── games-matrix.js   # Prize matrix data (9h & 18h)
+        ├── chat-widget.js    # Support/feedback chat widget
+        └── version.js        # Version number + changelog
 ```
 
 ---
@@ -424,6 +447,6 @@ transaction-tracker/
 
 ## Costs
 
-- **Anthropic API**: ~$0.01-0.03 per email parsed (Claude Sonnet). At 50 orders/month, that's roughly $0.50-1.50/month.
+- **Anthropic API**: ~$0.01-0.03 per email parsed (Claude Sonnet). At 50 orders/month, that's roughly $0.50-1.50/month. Re-extraction and autofix operations also use AI credits.
 - **Hosting**: Free on Railway/Render free tier. $5-6/mo for a VPS.
 - **Everything else**: Free (SQLite, Flask, email via Microsoft Graph API).

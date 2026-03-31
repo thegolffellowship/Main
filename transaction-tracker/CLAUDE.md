@@ -169,15 +169,71 @@ Two visual separator rows appear in the expanded rounds table:
 - `templates/handicaps.html` — `DIFF_LOOKUP` (client-side JS table, must match)
 - Both tables must always be kept in sync.
 
+## Customer Identity System
+
+### Tables
+- `customers` — Master customer records with `customer_id`, name, phone, chapter, GHIN, status
+- `customer_emails` — Multiple emails per customer (supports primary + Golf Genius flags)
+- `customer_aliases` — Name and email aliases linking variant names to canonical customers
+- `items.customer_id` — FK linking transactions to the `customers` table
+
+### Customer Lookup Flow (`_lookup_customer_id` — 5-step cascade)
+When a new transaction arrives, the system resolves the customer in this order:
+1. **Email via `customer_emails`** — exact email match
+2. **Alias email via `customer_aliases`** — alias_type='email' JOIN customers
+3. **Exact first+last name** in `customers` table
+4. **Alias name via `customer_aliases`** — alias_type='name' JOIN customers
+5. **Fallback: `items.customer_email`** — checks existing items for pre-migration customers
+
+### Customer Resolution (`_resolve_or_create_customer`)
+- Calls `_lookup_customer_id` first
+- If no match, creates a new `customers` row + `customer_emails` row
+- On email IntegrityError (duplicate), returns the existing owner's customer_id instead of creating an orphan
+
+### Customer Merge (`merge_customers`)
+- Reassigns `items.customer` string (all transactions)
+- Reassigns `items.customer_id` from source to target
+- Moves `customer_emails` from source to target
+- Creates name alias for old name
+- Deletes orphaned source `customers` row
+
 ## Architecture
 
-- **Flask app** in `transaction-tracker/app.py`
-- **Email parsing** via Claude Haiku in `email_parser/parser.py`
+- **Flask app** in `transaction-tracker/app.py` (~3900+ lines, 98 routes)
+- **Email parsing** via Claude Sonnet in `email_parser/parser.py`
 - **Email fetching** via Microsoft Graph API in `email_parser/fetcher.py` — only processes emails with "New Order" subject lines; all processed email UIDs tracked in `processed_emails` table to prevent re-parsing
 - **SQLite DB** at `transaction-tracker/transactions.db` (local is empty; live data on Railway)
 - **Scheduler** checks inbox every 15 minutes via APScheduler
 - **Dashboard** at `/` with search, filter, sort, CSV export
 - **Golf Genius sync** via direct HTTP requests in `golf_genius_sync.py` (rewritten from Playwright)
+- **MCP Server** in `mcp_server.py` — 21 tools for Claude direct DB access
+
+## Transactions Page — Key Behaviors
+
+### RSVP-only filtering
+- Items with `transaction_status = "rsvp_only"` are filtered OUT of the Transactions tab
+- They only appear in the Events tab (with amber background)
+- Filter: `allItems = raw.filter(i => !PLACEHOLDER_MERCHANTS.includes(i.merchant) && i.transaction_status !== "rsvp_only")`
+
+### Transaction deep-linking
+- URL parameter `?txn=<item_id>` scrolls to and highlights a specific transaction row
+- Used by Customers page click-to-navigate feature
+- Auto-expands collapsed order groups if the target row is inside one
+- Highlight uses yellow pulse animation (`txn-highlight` class)
+
+### Order grouping
+- Multi-item orders (same `order_id`) display as collapsible groups
+- Summary row shows item count and total; expands to show individual items
+
+## Customers Page — Key Behaviors
+
+### "Purchased by" badge
+- When `item.notes` contains "Purchased by X", a blue badge shows on the transaction row
+- Indicates someone else paid for this player's registration
+
+### Click-to-navigate
+- Transaction rows in customer detail have `data-txn-id` and are clickable
+- Clicking navigates to `/?txn=<id>` which deep-links to the Transactions tab
 
 ## Events Page — Player Status Architecture
 
@@ -217,18 +273,68 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - WD players: complex logic based on which game components were credited
 - RSVP-only players: counted in PLAYERS total but as NONE (no games)
 
+## Side Games Matrix
+
+### Persistence
+- Matrix data is stored in `app_settings` table (key: `matrix_9h` / `matrix_18h`)
+- Also cached in `static/js/games-matrix.js` as fallback
+- `PUT /api/matrix` saves to DB primary, file as cache
+- Templates receive matrix data server-side via Jinja: `var db9 = {{ matrix9 | tojson }};`
+
+### Skins labels
+- "Skins ½ Net" when gross player count < 8
+- "Skins Gross" when gross player count >= 8
+
+### Skins Type row
+- Computed row in matrix showing which skins format applies per player count
+
+## Sticky Navigation
+
+- `header` is sticky globally: `position: sticky; top: 0; z-index: 100;`
+- `.tab-nav` is sticky globally: `position: sticky; z-index: 99;`
+- `auth.js` runs `_setStickyOffsets()` at module level (self-executing, not inside `initAuth()`)
+  to compute `.tab-nav`'s `top` offset from `header.offsetHeight`
+- Runs on DOMContentLoaded, load, and resize events
+- Works on ALL pages that include `auth.js`, even ones that don't call `initAuth()`
+- Page-specific sticky elements (e.g. `.matrix-controls`) add their own offsets on top
+
 ## Key files
 
-- `app.py` — routes, scheduler, webhook
+- `app.py` — routes, scheduler, webhook (~3900 lines)
 - `email_parser/parser.py` — AI extraction prompt and logic
-- `email_parser/database.py` — schema, CRUD, audit queries
+- `email_parser/database.py` — schema, CRUD, audit queries, customer matching (~3500 lines)
 - `email_parser/fetcher.py` — Microsoft Graph email fetching
-- `templates/index.html` — dashboard HTML
+- `email_parser/report.py` — Daily digest email builder + sender
+- `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
+- `templates/index.html` — Transactions dashboard
+- `templates/events.html` — Events management + Tee Time Advisor
+- `templates/customers.html` — Customer directory + roster import
 - `templates/handicaps.html` — Handicap management page
+- `templates/matrix.html` — Side games prize matrix
+- `templates/audit.html` — Email audit/QA (admin)
+- `templates/rsvps.html` — RSVP log
 - `templates/database.html` — Admin database browser
-- `static/js/dashboard.js` — client-side search/filter/export
-- `static/js/auth.js` — PIN auth + role management
+- `templates/changelog.html` — Version changelog
+- `static/js/dashboard.js` — Transactions page logic (largest JS file)
+- `static/js/auth.js` — PIN auth + role management + sticky nav offsets
+- `static/js/games-matrix.js` — Prize matrix data (9-hole & 18-hole, 2-64 players)
+- `static/js/version.js` — Version number + changelog data
+- `static/js/chat-widget.js` — Support/feedback chat widget
 - `golf_genius_sync.py` — Golf Genius handicap sync via HTTP
+- `mcp_server.py` — MCP server (21 tools for Claude direct DB access)
+
+## Database Tables (20 total)
+
+`items`, `processed_emails`, `events`, `event_aliases`, `rsvps`, `rsvp_overrides`,
+`rsvp_email_overrides`, `customers`, `customer_emails`, `customer_aliases`,
+`handicap_rounds`, `handicap_player_links`, `handicap_settings`,
+`message_templates`, `message_log`, `feedback`, `parse_warnings`,
+`season_contests`, `app_settings`
+
+Key tables not documented elsewhere in this file:
+- `app_settings` — persistent key-value store (matrix data, feature flags)
+- `season_contests` — contest enrollment tracking (NET/GROSS points race, city match play)
+- `parse_warnings` — flagged items with potential parsing errors (open/dismissed/resolved)
 
 ## Git Merge & PR Best Practices
 

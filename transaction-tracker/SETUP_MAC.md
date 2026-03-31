@@ -1,5 +1,7 @@
 # Mac Setup Guide (No Coding Experience Needed)
 
+> **Note:** This guide was written for the initial IMAP-based email setup. The app now uses **Microsoft Graph API** with Azure AD for email access (see `.env.example` and `README.md` for current setup). Steps 6 (App Password) is outdated — you now need Azure AD app registration credentials instead. Steps 1-5 and 7-9 are still valid.
+
 This guide walks you through every click and keystroke to get the TGF Transaction Tracker running on your Mac. You'll have a live dashboard showing all your Golf Fellowship orders with the ability to filter by side games, handicap, city, and more.
 
 **Time required:** About 20 minutes for initial setup.

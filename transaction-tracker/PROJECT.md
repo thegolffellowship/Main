@@ -1,7 +1,7 @@
 # TGF Transaction Tracker — Project Documentation
 
 > **The Golf Fellowship** — AI-powered transaction and event management platform
-> **Current Version:** v1.3.0 (March 4, 2026)
+> **Current Version:** v1.4.0 (March 30, 2026)
 > **Live URL:** https://tgf-tracker.up.railway.app
 
 ---
@@ -80,6 +80,8 @@ Main/
     ├── mcp_server.py                   # MCP server (21 tools for Claude)
     ├── mcp_auth.py                     # OAuth 2.0 for MCP (client credentials + PKCE)
     ├── mcp_server_remote.py            # Remote MCP via SSE
+    ├── golf_genius_sync.py             # Golf Genius handicap sync via HTTP
+    ├── migrate_customers.py            # Customer migration script
     ├── seed_sa_events.py               # Script to seed San Antonio events
     ├── test_parser.py                  # Parser unit tests
     ├── requirements.txt                # Python dependencies
@@ -103,6 +105,7 @@ Main/
     │   ├── rsvps.html                  # RSVP log page
     │   ├── matrix.html                 # Side Games prize matrix (admin)
     │   ├── audit.html                  # Email audit / QA page (admin)
+    │   ├── database.html               # Admin database browser
     │   └── changelog.html              # Version history page (admin)
     │
     └── static/
@@ -111,6 +114,7 @@ Main/
         │   ├── auth.js                 # Shared PIN auth, login modal, role management
         │   ├── dashboard.js            # Transactions page logic (largest JS file)
         │   ├── games-matrix.js         # Prize matrix data (9-hole & 18-hole, 2-64 players)
+        │   ├── chat-widget.js         # Support/feedback chat widget
         │   └── version.js              # Version number + changelog data
         ├── manifest.json               # PWA manifest
         ├── icon.svg                    # App icon (SVG)
@@ -213,6 +217,8 @@ Customer directory derived from transaction history.
 - **Mobile cards** — Automatic card layout on small screens with merge/edit/delete buttons
 - **WD badge** — Show withdrawal status and credit amounts on customer cards
 - **Clickable emails** — `mailto:` links
+- **"Purchased by" badge** — Blue badge on transactions where someone else paid for this player
+- **Click-to-navigate** — Click a transaction row to jump to that item in the Transactions tab (deep-link via `?txn=` param)
 
 ### 4. RSVP Log (`/rsvps`)
 
@@ -249,7 +255,11 @@ Interactive prize structure calculator based on player count.
 - **Save bar** — Shows unsaved change count, Save/Discard buttons
 - **Auto-calculated** — Skins values computed from skins total / number of skins
 - **NO_EVENT / NO_GAME markers** — Visual indicators for unavailable games at certain player counts
-- **Skins label logic** — Shows "1/2 Net Skins" when <8 gross players, "Skins Gross" when >=8
+- **Skins label logic** — Shows "Skins ½ Net" when <8 gross players, "Skins Gross" when >=8
+- **Skins Type row** — Computed row showing which skins format applies per player count
+- **Repeated player count headers** — Player count header row repeated after each section banner
+- **Persistent storage** — Matrix edits saved to `app_settings` DB table (survives Railway redeploys); also cached in `games-matrix.js` as fallback
+- **Server-side injection** — Templates receive matrix data via Jinja (`{{ matrix9 | tojson }}`) to avoid async race conditions
 
 ### 6. Email Audit (`/audit`) — Admin Only
 
@@ -534,6 +544,76 @@ computes a current handicap index using the official USGA WHS lookup table.
 | value | TEXT NOT NULL | Stored as text |
 | updated_at | TEXT | |
 
+### `customers` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| customer_id | TEXT PK | UUID-style identifier |
+| platform_user_id | TEXT | External platform ID (nullable) |
+| first_name | TEXT | |
+| last_name | TEXT | |
+| phone | TEXT | |
+| chapter | TEXT | Primary chapter affiliation |
+| ghin_number | TEXT | GHIN handicap number |
+| current_player_status | TEXT | `active_member` / `expired_member` / `active_guest` / `inactive` / `first_timer` |
+| first_timer_ever | INTEGER | Whether this customer was ever a first timer |
+| acquisition_source | TEXT | How they found TGF |
+| account_status | TEXT | `active` / `inactive` / `banned` |
+| created_at | TEXT | |
+| updated_at | TEXT | |
+
+### `customer_emails` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| email_id | TEXT PK | UUID-style identifier |
+| customer_id | TEXT NOT NULL | FK to customers.customer_id (CASCADE) |
+| email | TEXT NOT NULL | Email address |
+| is_primary | INTEGER DEFAULT 0 | Primary email flag |
+| is_golf_genius | INTEGER DEFAULT 0 | Golf Genius email flag |
+| label | TEXT | Optional label |
+| created_at | TEXT | |
+
+**Constraints:** UNIQUE(customer_id, email), unique index on (customer_id, is_primary) WHERE is_primary=1
+
+### `app_settings` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| key | TEXT PK | Setting key (e.g. `matrix_9h`, `matrix_18h`) |
+| value | TEXT NOT NULL | JSON or string value |
+| updated_at | TEXT | |
+
+### `season_contests` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| customer_name | TEXT NOT NULL | |
+| contest_type | TEXT NOT NULL | `net_points_race` / `gross_points_race` / `city_match_play` |
+| chapter | TEXT | Chapter affiliation |
+| season | TEXT | Season identifier (e.g. "2026") |
+| source_item_id | INTEGER | FK to items.id |
+| enrolled_at | TEXT | |
+
+**Constraint:** UNIQUE(customer_name, contest_type, chapter, season)
+
+### `parse_warnings` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| email_uid | TEXT | Source email |
+| order_id | TEXT | |
+| customer | TEXT | |
+| item_name | TEXT | |
+| warning_code | TEXT | Warning type identifier |
+| message | TEXT | Human-readable warning |
+| status | TEXT | `open` / `dismissed` / `resolved` |
+| created_at | TEXT | |
+
+**Constraint:** UNIQUE(email_uid, warning_code, item_name)
+
 ---
 
 ## API Endpoints
@@ -550,6 +630,7 @@ computes a current handicap index using the official USGA WHS lookup table.
 | `/audit` | Admin | Email audit/QA |
 | `/changelog` | Admin | Version history |
 | `/handicaps` | Manager | 9-hole WHS handicap index calculator |
+| `/database` | Admin | Database browser — browse all tables |
 
 ### Items / Transactions
 
@@ -685,12 +766,50 @@ computes a current handicap index using the official USGA WHS lookup table.
 | `/api/handicaps/settings` | PATCH | Update `min_rounds` and/or `multiplier` |
 | `/api/handicaps/import-preview` | POST | Parse uploaded Excel, return headers + 10 preview rows + auto-mapping |
 | `/api/handicaps/import` | POST | Import rounds from Excel with column mapping |
+| `/api/handicaps/auto-link` | POST | Auto-link players to matching customers |
+| `/api/handicaps/link-player` | POST | Manually link a player to a customer |
+| `/api/handicaps/unlink-player` | DELETE | Unlink a player from their customer |
+| `/api/handicaps/repair-swapped-links` | POST | Fix swapped player-customer links |
+| `/api/handicaps/link-debug` | GET | Debug info for player-customer linking |
+| `/api/handicaps/unlinked-players` | GET | Players without customer links |
+| `/api/handicaps/create-customers-for-unlinked` | POST | Create customer records for unlinked players |
+| `/api/handicaps/for-customer` | GET | Handicap index for a specific customer |
+| `/api/handicaps/index-map` | GET | Map of all player handicap indexes |
+| `/api/handicaps/export-preview` | GET | Preview handicap export data |
+| `/api/handicaps/export-csv` | GET | Download handicap data as CSV |
+| `/api/handicaps/sync-golf-genius` | POST | Sync handicaps from Golf Genius |
+| `/api/handicaps/sync-status` | GET | Status of Golf Genius sync |
+| `/api/handicaps/purge-invalid` | POST | Delete rounds with rating > 50 (18-hole scores) |
 
 ### Matrix (Admin)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/matrix` | PUT | Save edits to games-matrix.js |
+| `/api/matrix` | GET | Get current matrix data (9h + 18h) |
+| `/api/matrix` | PUT | Save matrix edits to DB + file cache |
+
+### Season Contests
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/season-contests` | GET | All contest enrollments |
+| `/api/season-contests/sync` | POST | Sync enrollments from membership items |
+| `/api/season-contests/customer/<name>` | GET | Contests for a specific customer |
+
+### Parse Warnings
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/parse-warnings` | GET | All open parse warnings |
+| `/api/parse-warnings/<id>/dismiss` | POST | Dismiss a warning |
+| `/api/parse-warnings/<id>/resolve` | POST | Mark a warning as resolved |
+
+### Database Browser (Admin)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/database/tables` | GET | List all database tables |
+| `/api/database/table/<name>` | GET | Browse rows in a specific table |
 
 ### Reports
 
@@ -964,6 +1083,47 @@ The app is installable as a Progressive Web App:
 
 ## Version History
 
+### v1.4.0 — March 30, 2026 — "Customer Identity, Matrix Persistence & Sticky Nav"
+
+**Customer Identity System:**
+- New `customers` and `customer_emails` tables for proper customer records
+- 5-step customer lookup cascade: email → alias email → exact name → alias name → items.customer_email fallback
+- Email-based auto-matching resolves returning customers even when name variants differ (e.g. "W Paul Reed" vs "Paul Reed")
+- `_resolve_or_create_customer()` handles email IntegrityErrors by returning existing owner instead of creating orphans
+- Full customer merge now includes `customers` table records, `customer_emails`, and `items.customer_id`
+- "Purchased by" badge on customer transaction rows when someone else paid
+- Click-to-navigate from customer transactions to Transactions tab (deep-linking via `?txn=` parameter)
+
+**Side Games Matrix Persistence:**
+- Matrix edits now saved to `app_settings` DB table (survives Railway redeploys)
+- Server-side Jinja injection replaces async fetch to avoid race conditions
+- Skins label standardized: "Skins ½ Net" (was "1/2 Net Skins")
+- Added Skins Type computed row and repeated player count headers per section
+- Sticky header/nav/controls on Matrix page
+
+**Handicap System Enhancements:**
+- Golf Genius sync via direct HTTP requests (rewritten from Playwright)
+- Email-based player matching (highest priority) with `player_email` column support
+- Fill-down format support for both email and name columns in imports
+- Player ↔ Customer linking improvements: auto-link, repair swapped links, unlinked player management
+- Export preview and CSV download
+- WHS Rule 5.2 rounding (round-to-nearest-tenth, not truncation)
+
+**Season Contests:**
+- `season_contests` table tracking NET/GROSS Points Race and City Match Play enrollments
+- Sync from membership items, per-customer contest lookup
+
+**Navigation & UI:**
+- Sticky header and tab nav on ALL pages (global CSS + auth.js `_setStickyOffsets()`)
+- RSVP-only items filtered out of Transactions tab (only show in Events)
+- Transaction deep-linking with highlight animation
+- Database browser page for admin table inspection
+- Parse warnings system for flagging potential AI extraction errors
+
+**Infrastructure:**
+- `app_settings` table for persistent key-value storage
+- `parse_warnings` table for extraction quality tracking
+
 ### v1.3.0 — March 4, 2026 — "Messaging, Roster Import & RSVP Linking"
 
 **Bulk Messaging:**
@@ -1042,7 +1202,7 @@ The app is installable as a Progressive Web App:
 - Redesigned Add Player dialog with 3 modes: Manager Comp, RSVP Only, Paid Separately
 - GG RSVP dot with 4 states: blank, auto-green, red, manual-green
 - RSVP-only players can be upgraded to full registration via Record Payment
-- Skins label shows "1/2 Net Skins" when <8 gross players, "Skins Gross" when >=8
+- Skins label shows "Skins ½ Net" when <8 gross players, "Skins Gross" when >=8
 - Fixed skins NO_EVENT display bug
 - Side Games Matrix page with 9/18 toggle and inline editing
 - Populated Net and Gross data for 2-3 players in games matrix
