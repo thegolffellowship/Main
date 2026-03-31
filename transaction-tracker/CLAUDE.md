@@ -227,6 +227,23 @@ When a new transaction arrives, the system resolves the customer in this order:
 
 ## Customers Page — Key Behaviors
 
+### Name display format
+- All customer/player names display as **"Last, First"** across all pages
+- `displayName()` helper converts "First Last" → "Last, First" with suffix handling
+- Suffixes (Jr, Sr, II, III, IV, V) are preserved after the first name
+- Example: "Victor Arias III" → "Arias, Victor III"
+- The underlying data (`items.customer`) remains "First Last" — only display changes
+
+### Name sorting
+- `lastNameSortKey()` sorts by last name, stripping suffixes before comparison
+- Used on all pages: Transactions, Events, Customers, Handicaps, RSVP Log
+- "Victor Arias III" and "Victor Arias JR" sort together under "Arias"
+
+### Merge customer modal
+- Uses typeahead autocomplete input (not a dropdown)
+- Type to search, click to select from suggestions
+- Candidates sorted by last name with purchase counts
+
 ### "Purchased by" badge
 - When `item.notes` contains "Purchased by X", a blue badge shows on the transaction row
 - Indicates someone else paid for this player's registration
@@ -296,6 +313,9 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
   to compute `.tab-nav`'s `top` offset from `header.offsetHeight`
 - Runs on DOMContentLoaded, load, and resize events
 - Works on ALL pages that include `auth.js`, even ones that don't call `initAuth()`
+- `_setStickyOffsets()` also runs after `initAuth()` completes — critical because
+  `onAuthReady()` may show/hide header buttons that change header height (e.g. Handicaps
+  page shows Import, Sync, Settings buttons for admin, which increases header height)
 - Page-specific sticky elements (e.g. `.matrix-controls`) add their own offsets on top
 
 ## Key files
