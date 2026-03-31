@@ -211,7 +211,7 @@
             <span id="role-badge" class="role-badge" style="display:none;"></span>
             <button id="btn-import" class="btn btn-primary" style="display:none;">Import Rounds</button>
             <!-- Golf Genius sync group — admin only -->
-            <div id="gg-sync-group" style="display:none;display:inline-flex;gap:6px;align-items:center;">
+            <div id="gg-sync-group" style="display:none;gap:6px;align-items:center;">
                 <button id="btn-dl-sa"    class="btn btn-secondary" title="Download San Antonio handicap CSV for manual Golf Genius upload" style="display:none;">⬇ SA CSV</button>
                 <button id="btn-dl-austin" class="btn btn-secondary" title="Download Austin handicap CSV for manual Golf Genius upload" style="display:none;">⬇ Austin CSV</button>
                 <input id="gg-test-email" type="email" placeholder="Test email (1 player)" title="Enter one player's email to test before syncing the full league" style="display:none;font-size:0.8em;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;width:190px;">
@@ -587,6 +587,7 @@
             document.getElementById('btn-dl-austin').style.display = '';
         }
         if (currentRole === 'admin') {
+            document.getElementById('gg-sync-group').style.display = 'inline-flex';
             document.getElementById('btn-settings').style.display = '';
             document.getElementById('btn-purge').style.display = '';
             document.getElementById('btn-repair-links').style.display = '';
@@ -598,8 +599,10 @@
             document.getElementById('gg-sync-status').style.display = '';
             loadGGSyncStatus();
         }
-        // Recalculate sticky offsets after header buttons are shown
-        if (typeof _setStickyOffsets === "function") _setStickyOffsets();
+        // Recalculate sticky offsets after browser reflows the newly-shown buttons
+        requestAnimationFrame(function() {
+            if (typeof _setStickyOffsets === "function") _setStickyOffsets();
+        });
     }
 
     // ── Data loaders ────────────────────────────────────────────────
