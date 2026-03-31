@@ -16,6 +16,11 @@ transaction-tracker/
 ├── asgi_app.py                   # ASGI wrapper for Railway deployment
 ├── mcp_server.py                 # MCP server (21 tools for Claude integration)
 ├── mcp_auth.py                   # MCP OAuth 2.0 authentication
+├── mcp_server_remote.py          # Remote MCP via SSE
+├── golf_genius_sync.py           # Golf Genius handicap sync via HTTP
+├── migrate_customers.py          # Customer migration script
+├── seed_sa_events.py             # Script to seed San Antonio events
+├── test_parser.py                # Parser unit tests
 ├── requirements.txt
 ├── .env / .env.example
 ├── transactions.db               # SQLite database
@@ -23,7 +28,7 @@ transaction-tracker/
 │   ├── __init__.py
 │   ├── parser.py                 # Claude AI email extraction
 │   ├── fetcher.py                # Microsoft Graph email fetching
-│   ├── database.py               # SQLite storage & queries
+│   ├── database.py               # SQLite storage & queries (~3500 lines)
 │   ├── report.py                 # Daily digest email sender
 │   └── rsvp_parser.py            # Golf Genius RSVP email parsing
 ├── templates/
@@ -33,11 +38,15 @@ transaction-tracker/
 │   ├── audit.html                # Email audit/QA page (admin)
 │   ├── rsvps.html                # RSVP management
 │   ├── matrix.html               # Side games prize matrix
+│   ├── handicaps.html            # Handicap management (manager)
+│   ├── database.html             # Admin database browser
 │   └── changelog.html            # Version changelog
 └── static/
     ├── js/
-    │   ├── auth.js               # PIN-based authentication
+    │   ├── auth.js               # PIN-based auth + sticky nav offsets
     │   ├── dashboard.js          # Main dashboard interactivity
+    │   ├── games-matrix.js       # Prize matrix data (9h & 18h, 2-64 players)
+    │   ├── chat-widget.js        # Support/feedback chat widget
     │   └── version.js            # Version number & update detection
     └── css/
         └── dashboard.css         # All styling (single file)
@@ -240,6 +249,102 @@ transaction-tracker/
 | status | TEXT DEFAULT 'open' | open/resolved/dismissed |
 | created_at | TEXT | |
 
+### `handicap_rounds` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| player_name | TEXT NOT NULL | Normalised `First Last` title case |
+| round_date | TEXT NOT NULL | YYYY-MM-DD |
+| round_id | TEXT | Golf Genius / Handicap Server round identifier |
+| course_name | TEXT | |
+| tee_name | TEXT | e.g. `1 - White`, `2 - Gold` |
+| adjusted_score | INTEGER NOT NULL | |
+| rating | REAL NOT NULL | Course rating |
+| slope | INTEGER NOT NULL | Slope rating |
+| differential | REAL | Computed on import if not provided |
+| created_at | TEXT | |
+
+### `handicap_player_links` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| player_name | TEXT PK | Normalised player name |
+| customer_name | TEXT | Matched customer (nullable) |
+| linked_at | TEXT | |
+
+### `handicap_settings` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| key | TEXT PK | `min_rounds` or `multiplier` |
+| value | TEXT NOT NULL | |
+| updated_at | TEXT | |
+
+### `customers` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| customer_id | TEXT PK | UUID-style identifier |
+| platform_user_id | TEXT | External platform ID |
+| first_name | TEXT | |
+| last_name | TEXT | |
+| phone | TEXT | |
+| chapter | TEXT | |
+| ghin_number | TEXT | |
+| current_player_status | TEXT | active_member/expired_member/active_guest/inactive/first_timer |
+| first_timer_ever | INTEGER | |
+| acquisition_source | TEXT | |
+| account_status | TEXT | active/inactive/banned |
+| created_at | TEXT | |
+| updated_at | TEXT | |
+
+### `customer_emails` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| email_id | TEXT PK | |
+| customer_id | TEXT NOT NULL | FK to customers (CASCADE) |
+| email | TEXT NOT NULL | |
+| is_primary | INTEGER DEFAULT 0 | |
+| is_golf_genius | INTEGER DEFAULT 0 | |
+| label | TEXT | |
+| created_at | TEXT | |
+
+### `app_settings` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| key | TEXT PK | e.g. `matrix_9h`, `matrix_18h` |
+| value | TEXT NOT NULL | JSON or string |
+| updated_at | TEXT | |
+
+### `season_contests` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| customer_name | TEXT NOT NULL | |
+| contest_type | TEXT NOT NULL | net_points_race/gross_points_race/city_match_play |
+| chapter | TEXT | |
+| season | TEXT | |
+| source_item_id | INTEGER | FK to items.id |
+| enrolled_at | TEXT | |
+
+### `parse_warnings` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK AUTOINCREMENT | |
+| email_uid | TEXT | |
+| order_id | TEXT | |
+| customer | TEXT | |
+| item_name | TEXT | |
+| warning_code | TEXT | |
+| message | TEXT | |
+| status | TEXT | open/dismissed/resolved |
+| created_at | TEXT | |
+
 ---
 
 ## API Endpoints
@@ -254,6 +359,8 @@ transaction-tracker/
 | `/audit` | GET | Email audit/QA page (admin) |
 | `/rsvps` | GET | RSVP management page |
 | `/matrix` | GET | Side games prize matrix |
+| `/handicaps` | GET | 9-hole WHS handicap calculator (manager) |
+| `/database` | GET | Admin database browser |
 | `/changelog` | GET | Version changelog |
 
 ### Items / Transactions
