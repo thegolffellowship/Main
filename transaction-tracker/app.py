@@ -3949,11 +3949,13 @@ def accounting_page():
 # ── Entities ──────────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/entities")
+@require_role("admin")
 def api_acct_entities():
     return jsonify(get_all_acct_entities())
 
 
 @app.route("/api/accounting/entities", methods=["POST"])
+@require_role("admin")
 def api_acct_create_entity():
     d = request.json or {}
     if not d.get("name") or not d.get("short_name"):
@@ -3965,6 +3967,7 @@ def api_acct_create_entity():
 
 
 @app.route("/api/accounting/entities/<int:eid>", methods=["PATCH"])
+@require_role("admin")
 def api_acct_update_entity(eid):
     d = request.json or {}
     return jsonify(update_acct_entity(eid, **d))
@@ -3973,6 +3976,7 @@ def api_acct_update_entity(eid):
 # ── Categories ────────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/categories")
+@require_role("admin")
 def api_acct_categories():
     entity_id = request.args.get("entity_id", type=int)
     cat_type = request.args.get("type")
@@ -3980,6 +3984,7 @@ def api_acct_categories():
 
 
 @app.route("/api/accounting/categories", methods=["POST"])
+@require_role("admin")
 def api_acct_create_category():
     d = request.json or {}
     if not d.get("name") or not d.get("type"):
@@ -3990,12 +3995,14 @@ def api_acct_create_category():
 
 
 @app.route("/api/accounting/categories/<int:cid>", methods=["PATCH"])
+@require_role("admin")
 def api_acct_update_category(cid):
     d = request.json or {}
     return jsonify(update_acct_category(cid, **d))
 
 
 @app.route("/api/accounting/categories/<int:cid>", methods=["DELETE"])
+@require_role("admin")
 def api_acct_delete_category(cid):
     delete_acct_category(cid)
     return jsonify({"status": "ok"})
@@ -4004,12 +4011,14 @@ def api_acct_delete_category(cid):
 # ── Accounts ──────────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/accounts")
+@require_role("admin")
 def api_acct_accounts():
     entity_id = request.args.get("entity_id", type=int)
     return jsonify(get_acct_accounts(entity_id=entity_id))
 
 
 @app.route("/api/accounting/accounts", methods=["POST"])
+@require_role("admin")
 def api_acct_create_account():
     d = request.json or {}
     if not d.get("name") or not d.get("account_type"):
@@ -4021,12 +4030,14 @@ def api_acct_create_account():
 
 
 @app.route("/api/accounting/accounts/<int:aid>", methods=["PATCH"])
+@require_role("admin")
 def api_acct_update_account(aid):
     d = request.json or {}
     return jsonify(update_acct_account(aid, **d))
 
 
 @app.route("/api/accounting/accounts/balances")
+@require_role("admin")
 def api_acct_account_balances():
     return jsonify(get_acct_account_balances())
 
@@ -4034,6 +4045,7 @@ def api_acct_account_balances():
 # ── Transactions ──────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/transactions")
+@require_role("admin")
 def api_acct_transactions():
     return jsonify(get_acct_transactions(
         entity_id=request.args.get("entity_id", type=int),
@@ -4049,6 +4061,7 @@ def api_acct_transactions():
 
 
 @app.route("/api/accounting/transactions/<int:tid>")
+@require_role("admin")
 def api_acct_transaction(tid):
     txn = get_acct_transaction(tid)
     if not txn:
@@ -4057,6 +4070,7 @@ def api_acct_transaction(tid):
 
 
 @app.route("/api/accounting/transactions", methods=["POST"])
+@require_role("admin")
 def api_acct_create_transaction():
     d = request.json or {}
     required = ["date", "description", "total_amount", "type"]
@@ -4085,6 +4099,7 @@ def api_acct_create_transaction():
 
 
 @app.route("/api/accounting/transactions/<int:tid>", methods=["PUT"])
+@require_role("admin")
 def api_acct_update_transaction(tid):
     d = request.json or {}
     splits = d.get("splits")
@@ -4100,12 +4115,14 @@ def api_acct_update_transaction(tid):
 
 
 @app.route("/api/accounting/transactions/<int:tid>", methods=["DELETE"])
+@require_role("admin")
 def api_acct_delete_transaction(tid):
     delete_acct_transaction(tid)
     return jsonify({"status": "ok"})
 
 
 @app.route("/api/accounting/transactions/<int:tid>/reconcile", methods=["POST"])
+@require_role("admin")
 def api_acct_reconcile(tid):
     d = request.json or {}
     return jsonify(reconcile_acct_transaction(tid, d.get("reconciled", True)))
@@ -4114,11 +4131,13 @@ def api_acct_reconcile(tid):
 # ── Tags ──────────────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/tags")
+@require_role("admin")
 def api_acct_tags():
     return jsonify(get_acct_tags())
 
 
 @app.route("/api/accounting/tags", methods=["POST"])
+@require_role("admin")
 def api_acct_create_tag():
     d = request.json or {}
     if not d.get("name"):
@@ -4130,6 +4149,7 @@ def api_acct_create_tag():
 
 
 @app.route("/api/accounting/tags/<int:tid>", methods=["DELETE"])
+@require_role("admin")
 def api_acct_delete_tag(tid):
     delete_acct_tag(tid)
     return jsonify({"status": "ok"})
@@ -4138,6 +4158,7 @@ def api_acct_delete_tag(tid):
 # ── Reports ───────────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/reports/summary")
+@require_role("admin")
 def api_acct_report_summary():
     return jsonify(get_acct_summary(
         entity_id=request.args.get("entity_id", type=int),
@@ -4147,6 +4168,7 @@ def api_acct_report_summary():
 
 
 @app.route("/api/accounting/reports/monthly")
+@require_role("admin")
 def api_acct_report_monthly():
     return jsonify(get_acct_monthly_totals(
         entity_id=request.args.get("entity_id", type=int),
@@ -4155,6 +4177,7 @@ def api_acct_report_monthly():
 
 
 @app.route("/api/accounting/reports/categories")
+@require_role("admin")
 def api_acct_report_categories():
     return jsonify(get_acct_category_breakdown(
         entity_id=request.args.get("entity_id", type=int),
@@ -4167,6 +4190,7 @@ def api_acct_report_categories():
 # ── CSV Import ────────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/import/preview", methods=["POST"])
+@require_role("admin")
 def api_acct_import_preview():
     if "file" in request.files:
         csv_text = request.files["file"].read().decode("utf-8", errors="replace")
@@ -4186,6 +4210,7 @@ def api_acct_import_preview():
 
 
 @app.route("/api/accounting/import/commit", methods=["POST"])
+@require_role("admin")
 def api_acct_import_commit():
     d = request.json or {}
     if not d.get("rows") or not d.get("account_id") or not d.get("entity_id"):
@@ -4197,11 +4222,13 @@ def api_acct_import_commit():
 # ── Recurring ─────────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/recurring")
+@require_role("admin")
 def api_acct_recurring():
     return jsonify(get_acct_recurring())
 
 
 @app.route("/api/accounting/recurring", methods=["POST"])
+@require_role("admin")
 def api_acct_create_recurring():
     d = request.json or {}
     required = ["description", "amount", "type", "entity_id", "frequency", "next_date"]
@@ -4215,6 +4242,7 @@ def api_acct_create_recurring():
 
 
 @app.route("/api/accounting/recurring/<int:rid>", methods=["DELETE"])
+@require_role("admin")
 def api_acct_delete_recurring(rid):
     delete_acct_recurring(rid)
     return jsonify({"status": "ok"})
@@ -4223,6 +4251,7 @@ def api_acct_delete_recurring(rid):
 # ── Receipt Upload ────────────────────────────────────────────────────────
 
 @app.route("/api/accounting/upload-receipt", methods=["POST"])
+@require_role("admin")
 def api_acct_upload_receipt():
     """Upload a receipt image/PDF and return the file path."""
     if "file" not in request.files:
