@@ -144,6 +144,10 @@ from email_parser.database import (
     auto_categorize_transactions,
     get_acct_review_queue,
     get_acct_categorization_stats,
+    reset_acct_data,
+    get_acct_account_rules,
+    set_acct_account_rule,
+    get_all_acct_account_rules,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -4335,6 +4339,9 @@ def api_acct_ai_bulk_categorize():
                 updates = {"category_id": cat_id}
                 if ent_id:
                     updates["entity_id"] = ent_id
+                evt_id = suggestion.get("event_id")
+                if evt_id:
+                    updates["event_id"] = evt_id
                 set_clause = ", ".join(f"{k} = ?" for k in updates)
                 conn.execute(
                     f"UPDATE acct_splits SET {set_clause} WHERE id = ?",
@@ -4344,6 +4351,44 @@ def api_acct_ai_bulk_categorize():
                 updated += 1
 
     return jsonify({"updated": updated, "total": len(queue)})
+
+
+# ── Reset & Account Rules ─────────────────────────────────────────────────
+
+@app.route("/api/accounting/reset", methods=["POST"])
+@require_role("admin")
+def api_acct_reset():
+    """Wipe all accounting data and re-seed entities + categories."""
+    result = reset_acct_data()
+    return jsonify(result)
+
+
+@app.route("/api/accounting/accounts/<int:aid>/rules")
+@require_role("admin")
+def api_acct_get_rules(aid):
+    return jsonify(get_acct_account_rules(aid))
+
+
+@app.route("/api/accounting/accounts/<int:aid>/rules", methods=["POST"])
+@require_role("admin")
+def api_acct_set_rule(aid):
+    d = request.json or {}
+    if not d.get("rule_type") or "rule_value" not in d:
+        return jsonify({"error": "rule_type and rule_value required"}), 400
+    set_acct_account_rule(aid, d["rule_type"], d["rule_value"])
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/accounting/events-list")
+@require_role("admin")
+def api_acct_events_list():
+    """Return events from the events directory for linking to accounting transactions."""
+    events = get_all_events()
+    return jsonify([{
+        "id": e["id"], "item_name": e["item_name"],
+        "event_date": e.get("event_date"), "course": e.get("course"),
+        "chapter": e.get("chapter"),
+    } for e in events])
 
 
 # ---------------------------------------------------------------------------

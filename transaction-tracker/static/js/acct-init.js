@@ -3,13 +3,15 @@
    ========================================================= */
 
 async function reloadMasterData() {
-    const [entities, accounts, categories, tags] = await Promise.all([
+    const [entities, accounts, categories, tags, events] = await Promise.all([
         api('/entities'), api('/accounts'), api('/categories'), api('/tags'),
+        api('/events-list').catch(() => []),
     ]);
     ACCT.entities = entities;
     ACCT.accounts = accounts;
     ACCT.categories = categories;
     ACCT.tags = tags;
+    ACCT.events = events;
     renderEntityPills();
     populateDropdowns();
 }

@@ -1226,6 +1226,34 @@ def init_db(db_path: str | Path | None = None) -> None:
         if existing_cats["cnt"] == 0:
             _seed_acct_categories(conn)
 
+        # ── Accounting schema migrations ──
+        # Add event_id to splits (links accounting transactions to TGF events)
+        for col, col_type in [
+            ("event_id", "INTEGER"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE acct_splits ADD COLUMN {col} {col_type}")
+                logger.info("Added acct_splits.%s", col)
+            except sqlite3.OperationalError:
+                pass
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_splits_event ON acct_splits(event_id)")
+
+        # Account-level rules/heuristics for AI bookkeeper
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_account_rules (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id      INTEGER NOT NULL,
+                rule_type       TEXT NOT NULL,
+                rule_value      TEXT NOT NULL,
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (account_id) REFERENCES acct_accounts(id),
+                UNIQUE(account_id, rule_type)
+            )
+            """
+        )
+
         # Repair: clear matched_item_id on RSVPs that point to wrong items.
         # Two cases:
         #   1. Points to non-event items (Customer Entry, RSVP Import, etc.)
@@ -6436,6 +6464,46 @@ def get_acct_account_balances(db_path: str | Path | None = None) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Account Rules (AI bookkeeper heuristics)
+# ---------------------------------------------------------------------------
+
+def get_acct_account_rules(account_id: int, db_path: str | Path | None = None) -> dict:
+    """Return all rules for an account as a dict."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT rule_type, rule_value FROM acct_account_rules WHERE account_id = ?",
+            (account_id,),
+        ).fetchall()
+    return {r["rule_type"]: r["rule_value"] for r in rows}
+
+
+def set_acct_account_rule(account_id: int, rule_type: str, rule_value: str,
+                          db_path: str | Path | None = None) -> None:
+    """Upsert an account rule."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO acct_account_rules (account_id, rule_type, rule_value)
+               VALUES (?, ?, ?)
+               ON CONFLICT(account_id, rule_type) DO UPDATE SET rule_value = excluded.rule_value""",
+            (account_id, rule_type, rule_value),
+        )
+        conn.commit()
+
+
+def get_all_acct_account_rules(db_path: str | Path | None = None) -> dict:
+    """Return all account rules keyed by account_id."""
+    with _connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM acct_account_rules").fetchall()
+    result = {}
+    for r in rows:
+        aid = r["account_id"]
+        if aid not in result:
+            result[aid] = {}
+        result[aid][r["rule_type"]] = r["rule_value"]
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Transactions (with splits)
 # ---------------------------------------------------------------------------
 
@@ -6496,10 +6564,12 @@ def get_acct_transactions(entity_id: int | None = None, account_id: int | None =
             # Attach splits
             splits = conn.execute(
                 """SELECT s.*, e.short_name as entity_name, e.color as entity_color,
-                          c.name as category_name
+                          c.name as category_name,
+                          ev.item_name as event_name
                    FROM acct_splits s
                    LEFT JOIN acct_entities e ON e.id = s.entity_id
                    LEFT JOIN acct_categories c ON c.id = s.category_id
+                   LEFT JOIN events ev ON ev.id = s.event_id
                    WHERE s.transaction_id = ?
                    ORDER BY s.id""",
                 (txn["id"],),
@@ -6573,9 +6643,9 @@ def create_acct_transaction(date: str, description: str, total_amount: float,
         if splits:
             for sp in splits:
                 conn.execute(
-                    "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (txn_id, sp["entity_id"], sp.get("category_id"), sp["amount"], sp.get("memo")),
+                    "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo, event_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (txn_id, sp["entity_id"], sp.get("category_id"), sp["amount"], sp.get("memo"), sp.get("event_id")),
                 )
 
         if tag_ids:
@@ -6614,9 +6684,9 @@ def update_acct_transaction(txn_id: int, db_path: str | Path | None = None, **kw
             conn.execute("DELETE FROM acct_splits WHERE transaction_id = ?", (txn_id,))
             for sp in splits:
                 conn.execute(
-                    "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (txn_id, sp["entity_id"], sp.get("category_id"), sp["amount"], sp.get("memo")),
+                    "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo, event_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (txn_id, sp["entity_id"], sp.get("category_id"), sp["amount"], sp.get("memo"), sp.get("event_id")),
                 )
 
         if tag_ids is not None:
@@ -7304,8 +7374,13 @@ def auto_categorize_transactions(descriptions: list[str],
 
 def _ai_categorize_batch(items: list[tuple[str, str]],
                          categories: list[dict], entities: list[dict],
-                         db_path: str | Path | None = None) -> list[dict]:
-    """Use Claude to categorize a batch of transactions."""
+                         db_path: str | Path | None = None,
+                         account_context: str | None = None) -> list[dict]:
+    """Use Claude to categorize a batch of transactions.
+
+    Includes event context from the events directory and account-level
+    heuristics so the AI knows which account typically maps to which entity.
+    """
     if not items:
         return []
 
@@ -7325,33 +7400,61 @@ def _ai_categorize_batch(items: list[tuple[str, str]],
 
     entity_list = "\n".join(f"  {e['id']}: {e['name']} ({e['short_name']})" for e in entities)
 
+    # Get upcoming/recent events for context
+    event_context = ""
+    try:
+        with _connect(db_path) as conn:
+            events = conn.execute(
+                """SELECT id, item_name, event_date, course, chapter
+                   FROM events
+                   WHERE event_date >= date('now', '-60 days')
+                   ORDER BY event_date
+                   LIMIT 30"""
+            ).fetchall()
+        if events:
+            event_context = "\n\nRECENT/UPCOMING EVENTS (for linking golf expenses):\n" + "\n".join(
+                f"  {ev['id']}: {ev['item_name']} at {ev['course'] or '?'} on {ev['event_date'] or '?'} ({ev['chapter'] or ''})"
+                for ev in events
+            )
+    except Exception:
+        pass
+
+    # Account-level heuristics
+    acct_hint = ""
+    if account_context:
+        acct_hint = f"\n\nACCOUNT CONTEXT:\n{account_context}"
+
     txn_list = "\n".join(
         f"  {i+1}. [{ttype.upper()}] {desc}"
         for i, (desc, ttype) in enumerate(items)
     )
 
-    prompt = f"""You are an expert bookkeeper. Categorize each transaction below into the most appropriate category and entity.
+    prompt = f"""You are an expert bookkeeper for a golf fellowship organization (TGF) and personal finances.
+Categorize each transaction and optionally link it to a TGF event.
 
 ENTITIES:
 {entity_list}
 
-{cat_list}
+{cat_list}{event_context}{acct_hint}
 
 TRANSACTIONS TO CATEGORIZE:
 {txn_list}
 
 For each transaction, return a JSON array with one object per transaction:
 [
-  {{"category_id": <number>, "entity_id": <number>}},
+  {{"category_id": <number>, "entity_id": <number>, "event_id": <number or null>}},
   ...
 ]
 
 Rules:
 - Match the category to the transaction type (expense categories for expenses, income for income)
 - For personal purchases (groceries, restaurants, gas, Amazon, etc.) use Personal entity
-- For golf/event-related items, use TGF entity
+- For golf-related expenses (golf courses, event supplies, course fees), use TGF entity
+  and set event_id to the closest matching event by course name and date
+- Golf course names in transactions often appear as partial matches (e.g. "THE QUARRY GC" = "The Quarry")
 - For business services, software, design tools, use the most appropriate business entity
-- If truly ambiguous, use entity_id null and category_id null
+- Only set event_id when you're reasonably confident the expense relates to a specific event
+- If truly ambiguous, use entity_id null and category_id null, event_id null
 - Return ONLY the JSON array, no other text"""
 
     try:
@@ -7379,6 +7482,7 @@ Rules:
                 break
             cat_id = item.get("category_id")
             ent_id = item.get("entity_id")
+            evt_id = item.get("event_id")
             cat_name = next((c["name"] for c in categories if c["id"] == cat_id), None) if cat_id else None
             ent_name = next((e["short_name"] for e in entities if e["id"] == ent_id), None) if ent_id else None
             results.append({
@@ -7386,6 +7490,7 @@ Rules:
                 "category_name": cat_name,
                 "entity_id": ent_id,
                 "entity_name": ent_name,
+                "event_id": evt_id,
                 "confidence": "ai",
                 "source": "AI suggestion",
             })
@@ -7434,3 +7539,33 @@ def get_acct_categorization_stats(db_path: str | Path | None = None) -> dict:
         "uncategorized": uncategorized,
         "pct": round(categorized / total * 100, 1) if total > 0 else 0,
     }
+
+
+def reset_acct_data(db_path: str | Path | None = None) -> dict:
+    """Wipe all accounting data and re-seed entities + categories."""
+    with _connect(db_path) as conn:
+        conn.execute("PRAGMA foreign_keys = ON")
+        # Delete in dependency order
+        for table in ("acct_transaction_tags", "acct_splits", "acct_transactions",
+                      "acct_recurring", "acct_categories", "acct_accounts",
+                      "acct_tags", "acct_entities"):
+            conn.execute(f"DELETE FROM {table}")
+
+        # Re-seed entities
+        conn.executemany(
+            "INSERT INTO acct_entities (name, short_name, color) VALUES (?, ?, ?)",
+            [
+                ("The Golf Fellowship", "TGF", "#16a34a"),
+                ("Personal", "Personal", "#2563eb"),
+            ],
+        )
+
+        # Re-seed categories
+        _seed_acct_categories(conn)
+
+        conn.commit()
+
+        cat_count = conn.execute("SELECT COUNT(*) as cnt FROM acct_categories").fetchone()["cnt"]
+        ent_count = conn.execute("SELECT COUNT(*) as cnt FROM acct_entities").fetchone()["cnt"]
+
+    return {"entities": ent_count, "categories": cat_count, "message": "All accounting data reset and re-seeded"}
