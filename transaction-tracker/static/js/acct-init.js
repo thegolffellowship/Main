@@ -122,6 +122,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#btn-csv-commit').addEventListener('click', commitCsvImport);
     $('#btn-csv-remap').addEventListener('click', remapCsv);
 
+    // AI Bookkeeper
+    $('#btn-ai-categorize').addEventListener('click', runAiCategorize);
+    $('#btn-review-queue').addEventListener('click', loadReviewQueue);
+    $('#btn-close-review').addEventListener('click', () => {
+        $('#review-queue').style.display = 'none';
+        loadDashboard();
+    });
+
     // Transaction filters
     let _searchTimer;
     $('#txn-search').addEventListener('input', () => {

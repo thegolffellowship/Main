@@ -74,6 +74,31 @@
                 </div>
             </div>
 
+            <!-- AI Bookkeeper Banner -->
+            <div class="acct-bookkeeper-banner" id="bookkeeper-banner" style="display:none;">
+                <div class="acct-bookkeeper-info">
+                    <strong>AI Bookkeeper</strong>
+                    <span id="bookkeeper-status"></span>
+                </div>
+                <div class="acct-bookkeeper-actions">
+                    <button class="btn btn-secondary btn-sm" id="btn-ai-categorize" title="AI auto-categorize all uncategorized transactions">
+                        Auto-Categorize
+                    </button>
+                    <button class="btn btn-secondary btn-sm" id="btn-review-queue" title="Review uncategorized transactions">
+                        Review Queue
+                    </button>
+                </div>
+            </div>
+
+            <!-- Review Queue (hidden by default) -->
+            <div class="acct-review-queue" id="review-queue" style="display:none;">
+                <div class="acct-review-header">
+                    <h3>Transactions Needing Review</h3>
+                    <button class="btn btn-secondary btn-sm" id="btn-close-review">Close</button>
+                </div>
+                <div id="review-queue-list"></div>
+            </div>
+
             <!-- Date Range Selector -->
             <div class="acct-date-range">
                 <select id="date-range-preset">

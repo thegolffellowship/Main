@@ -2124,6 +2124,21 @@ div.mobile-card.row-rsvp-only {
 .acct-csv-preview-info { font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 600; }
 .acct-csv-preview-table { max-height: 400px; overflow-y: auto; }
 .acct-csv-mapping { padding: 0.75rem; background: var(--detail-bg); border-radius: var(--radius); border: 1px solid var(--border); }
+/* ---- AI Bookkeeper ---- */
+.acct-bookkeeper-banner {
+    display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+    padding: 0.75rem 1rem; margin-bottom: 1rem;
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe); border-radius: var(--radius);
+    border: 1px solid #7dd3fc; box-shadow: var(--shadow);
+}
+.acct-bookkeeper-info { font-size: 0.85rem; }
+.acct-bookkeeper-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.acct-review-queue {
+    margin-bottom: 1.5rem; padding: 1rem; background: var(--surface);
+    border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.acct-review-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+.acct-review-header h3 { margin: 0; font-size: 1rem; }
 .acct-csv-transfer-link { padding: 0.75rem; background: #eff6ff; border-radius: var(--radius); border: 1px solid #bfdbfe; }
 .acct-csv-transfer-info { font-size: 0.9rem; }
 .acct-csv-mapping h4 { font-size: 0.85rem; }

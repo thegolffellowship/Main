@@ -6129,33 +6129,139 @@ def set_app_setting(key: str, value: str, db_path: str | Path | None = None) -> 
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _seed_acct_categories(conn: sqlite3.Connection) -> None:
-    """Populate default income & expense categories for all entities."""
-    expense_cats = [
-        "Golf Course Fees", "Event Supplies", "Food & Beverage",
-        "Marketing & Promotion", "Software & Subscriptions", "Insurance",
-        "Office Supplies", "Travel", "Utilities", "Rent / Lease",
-        "Professional Services", "Equipment", "Maintenance & Repairs",
-        "Bank & Processing Fees", "Taxes & Licenses", "Payroll",
-        "Groceries", "Gas & Auto", "Dining Out", "Entertainment",
-        "Healthcare", "Clothing", "Home & Garden", "Education",
-        "Gifts & Donations", "Personal Care", "Miscellaneous",
+    """Populate standard accounting categories.
+
+    Business expenses follow IRS Schedule C / standard chart of accounts.
+    Personal expenses follow standard personal finance categories.
+    TGF-specific categories are entity-scoped.
+    """
+    # ── Business Expense Categories (standard bookkeeping) ──
+    business_expenses = [
+        # IRS Schedule C / standard COA categories
+        ("Advertising & Marketing", None),
+        ("Bank & Processing Fees", None),
+        ("Business Insurance", None),
+        ("Business Meals", None),
+        ("Car & Truck Expenses", None),
+        ("Commissions & Fees", None),
+        ("Contract Labor", None),
+        ("Cost of Goods Sold", None),
+        ("Depreciation", None),
+        ("Dues & Subscriptions", None),
+        ("Equipment & Tools", None),
+        ("Interest Expense", None),
+        ("Legal & Professional Services", None),
+        ("Licenses & Permits", None),
+        ("Office Expenses & Supplies", None),
+        ("Payroll Expenses", None),
+        ("Postage & Shipping", None),
+        ("Printing & Reproduction", None),
+        ("Rent / Lease — Equipment", None),
+        ("Rent / Lease — Space", None),
+        ("Repairs & Maintenance", None),
+        ("Software & Technology", None),
+        ("Taxes — Federal", None),
+        ("Taxes — State & Local", None),
+        ("Taxes — Payroll", None),
+        ("Telephone & Internet", None),
+        ("Travel — Lodging", None),
+        ("Travel — Transportation", None),
+        ("Utilities", None),
+        ("Other Business Expense", None),
     ]
+
+    # ── Personal Expense Categories ──
+    personal_expenses = [
+        ("Groceries", None),
+        ("Dining & Restaurants", None),
+        ("Gas & Fuel", None),
+        ("Auto — Insurance", None),
+        ("Auto — Maintenance", None),
+        ("Auto — Payment", None),
+        ("Healthcare — Medical", None),
+        ("Healthcare — Dental", None),
+        ("Healthcare — Pharmacy", None),
+        ("Housing — Mortgage / Rent", None),
+        ("Housing — Insurance", None),
+        ("Housing — Property Tax", None),
+        ("Housing — Repairs", None),
+        ("Utilities — Electric", None),
+        ("Utilities — Gas", None),
+        ("Utilities — Water", None),
+        ("Utilities — Internet / Cable", None),
+        ("Utilities — Phone", None),
+        ("Clothing & Apparel", None),
+        ("Personal Care", None),
+        ("Entertainment", None),
+        ("Subscriptions & Streaming", None),
+        ("Education & Training", None),
+        ("Childcare", None),
+        ("Pet Care", None),
+        ("Gifts & Donations", None),
+        ("Charity — Deductible", None),
+        ("Home & Garden", None),
+        ("Fitness & Recreation", None),
+        ("ATM / Cash Withdrawal", None),
+        ("Other Personal Expense", None),
+    ]
+
+    # ── TGF-Specific Categories (entity-scoped) ──
+    # These get linked to the TGF entity (id=1 from seed)
+    tgf_entity = conn.execute(
+        "SELECT id FROM acct_entities WHERE short_name = 'TGF'"
+    ).fetchone()
+    tgf_id = tgf_entity["id"] if tgf_entity else None
+
+    tgf_expenses = [
+        ("Golf Course Fees / Green Fees", tgf_id),
+        ("Event Supplies & Prizes", tgf_id),
+        ("Food & Beverage — Events", tgf_id),
+        ("Side Game Payouts", tgf_id),
+        ("Golf Cart Fees", tgf_id),
+        ("Range & Practice Fees", tgf_id),
+        ("Tournament Entry Fees", tgf_id),
+    ]
+
+    # ── Income Categories (standard) ──
     income_cats = [
-        "Event Revenue", "Membership Fees", "Side Game Fees",
-        "Sponsorship", "Merchandise Sales",
-        "Salary / Wages", "Freelance Income", "Investment Income",
-        "Reimbursements", "Other Income",
+        # Business income
+        ("Sales Revenue", None),
+        ("Service Revenue", None),
+        ("Consulting Income", None),
+        ("Commission Income", None),
+        ("Rental Income", None),
+        ("Interest Income", None),
+        ("Dividend Income", None),
+        ("Refunds & Returns", None),
+        ("Reimbursements", None),
+        ("Other Business Income", None),
+        # Personal income
+        ("Salary & Wages", None),
+        ("Freelance / Contract Income", None),
+        ("Investment Income", None),
+        ("Other Personal Income", None),
+        # TGF-specific income
+        ("Event Revenue", tgf_id),
+        ("Membership Fees", tgf_id),
+        ("Side Game Fees", tgf_id),
+        ("Sponsorship Revenue", tgf_id),
+        ("Merchandise Sales", tgf_id),
     ]
-    for name in expense_cats:
+
+    sort = 0
+    for name, entity_id in business_expenses + personal_expenses + tgf_expenses:
         conn.execute(
-            "INSERT INTO acct_categories (name, type, sort_order) VALUES (?, 'expense', ?)",
-            (name, expense_cats.index(name)),
+            "INSERT INTO acct_categories (name, type, entity_id, sort_order) VALUES (?, 'expense', ?, ?)",
+            (name, entity_id, sort),
         )
-    for name in income_cats:
+        sort += 1
+    sort = 0
+    for name, entity_id in income_cats:
         conn.execute(
-            "INSERT INTO acct_categories (name, type, sort_order) VALUES (?, 'income', ?)",
-            (name, income_cats.index(name)),
+            "INSERT INTO acct_categories (name, type, entity_id, sort_order) VALUES (?, 'income', ?, ?)",
+            (name, entity_id, sort),
         )
+        sort += 1
 
 
 # ---------------------------------------------------------------------------
@@ -7082,3 +7188,249 @@ def process_acct_recurring(db_path: str | Path | None = None) -> int:
             conn.commit()
         created += 1
     return created
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AI Bookkeeper — Auto-categorization & Review Queue
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _get_category_rules(db_path: str | Path | None = None) -> list[dict]:
+    """Return learned vendor→category mappings from past categorisations."""
+    with _connect(db_path) as conn:
+        # Learn from existing categorised transactions: group by description pattern → category
+        rows = conn.execute(
+            """SELECT UPPER(TRIM(t.description)) as vendor,
+                      s.category_id, c.name as category_name, c.type as category_type,
+                      s.entity_id, e.short_name as entity_name,
+                      COUNT(*) as times_used
+               FROM acct_transactions t
+               JOIN acct_splits s ON s.transaction_id = t.id
+               LEFT JOIN acct_categories c ON c.id = s.category_id
+               LEFT JOIN acct_entities e ON e.id = s.entity_id
+               WHERE s.category_id IS NOT NULL
+               GROUP BY UPPER(TRIM(t.description)), s.category_id, s.entity_id
+               ORDER BY times_used DESC"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def auto_categorize_transactions(descriptions: list[str],
+                                 txn_types: list[str] | None = None,
+                                 db_path: str | Path | None = None) -> list[dict]:
+    """Auto-categorize transaction descriptions using learned rules + AI.
+
+    Returns a list of suggestions: [{description, category_id, category_name,
+    entity_id, entity_name, confidence, source}].
+
+    Strategy:
+    1. Exact vendor match from past categorisations (confidence: "high")
+    2. Fuzzy vendor match — same vendor prefix (confidence: "medium")
+    3. Claude AI classification (confidence: "ai")
+    """
+    rules = _get_category_rules(db_path)
+    categories = get_acct_categories(db_path=db_path)
+    entities = get_all_acct_entities(db_path=db_path)
+
+    results = []
+    ai_batch = []  # descriptions needing AI help
+
+    for i, desc in enumerate(descriptions):
+        desc_upper = desc.strip().upper()
+        txn_type = (txn_types[i] if txn_types and i < len(txn_types) else "expense")
+
+        # Skip transfers — they don't need categories
+        if txn_type == "transfer":
+            results.append({
+                "description": desc, "category_id": None, "category_name": None,
+                "entity_id": None, "entity_name": None,
+                "confidence": "skip", "source": "transfer",
+            })
+            continue
+
+        # 1. Exact match
+        exact = [r for r in rules if r["vendor"] == desc_upper]
+        if exact:
+            best = max(exact, key=lambda r: r["times_used"])
+            results.append({
+                "description": desc,
+                "category_id": best["category_id"],
+                "category_name": best["category_name"],
+                "entity_id": best["entity_id"],
+                "entity_name": best["entity_name"],
+                "confidence": "high",
+                "source": f"matched {best['times_used']}x",
+            })
+            continue
+
+        # 2. Prefix match (first 10+ chars or first word)
+        prefix = desc_upper[:12] if len(desc_upper) >= 12 else desc_upper.split()[0] if desc_upper else ""
+        prefix_matches = [r for r in rules if r["vendor"].startswith(prefix) and len(prefix) >= 4]
+        if prefix_matches:
+            best = max(prefix_matches, key=lambda r: r["times_used"])
+            results.append({
+                "description": desc,
+                "category_id": best["category_id"],
+                "category_name": best["category_name"],
+                "entity_id": best["entity_id"],
+                "entity_name": best["entity_name"],
+                "confidence": "medium",
+                "source": f"similar to '{best['vendor'][:30]}'",
+            })
+            continue
+
+        # 3. Queue for AI
+        ai_batch.append((i, desc, txn_type))
+        results.append(None)  # placeholder
+
+    # ── AI batch categorization ──
+    if ai_batch:
+        ai_results = _ai_categorize_batch(
+            [(desc, ttype) for _, desc, ttype in ai_batch],
+            categories, entities, db_path,
+        )
+        for j, (idx, desc, _) in enumerate(ai_batch):
+            if j < len(ai_results) and ai_results[j]:
+                results[idx] = ai_results[j]
+                results[idx]["description"] = desc
+            else:
+                results[idx] = {
+                    "description": desc, "category_id": None, "category_name": None,
+                    "entity_id": None, "entity_name": None,
+                    "confidence": "none", "source": "uncategorized",
+                }
+
+    return results
+
+
+def _ai_categorize_batch(items: list[tuple[str, str]],
+                         categories: list[dict], entities: list[dict],
+                         db_path: str | Path | None = None) -> list[dict]:
+    """Use Claude to categorize a batch of transactions."""
+    if not items:
+        return []
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return [None] * len(items)
+
+    # Build category and entity lists for the prompt
+    expense_cats = [c for c in categories if c["type"] == "expense" and c["is_active"]]
+    income_cats = [c for c in categories if c["type"] == "income" and c["is_active"]]
+
+    cat_list = "EXPENSE CATEGORIES:\n" + "\n".join(
+        f"  {c['id']}: {c['name']}" for c in expense_cats
+    ) + "\n\nINCOME CATEGORIES:\n" + "\n".join(
+        f"  {c['id']}: {c['name']}" for c in income_cats
+    )
+
+    entity_list = "\n".join(f"  {e['id']}: {e['name']} ({e['short_name']})" for e in entities)
+
+    txn_list = "\n".join(
+        f"  {i+1}. [{ttype.upper()}] {desc}"
+        for i, (desc, ttype) in enumerate(items)
+    )
+
+    prompt = f"""You are an expert bookkeeper. Categorize each transaction below into the most appropriate category and entity.
+
+ENTITIES:
+{entity_list}
+
+{cat_list}
+
+TRANSACTIONS TO CATEGORIZE:
+{txn_list}
+
+For each transaction, return a JSON array with one object per transaction:
+[
+  {{"category_id": <number>, "entity_id": <number>}},
+  ...
+]
+
+Rules:
+- Match the category to the transaction type (expense categories for expenses, income for income)
+- For personal purchases (groceries, restaurants, gas, Amazon, etc.) use Personal entity
+- For golf/event-related items, use TGF entity
+- For business services, software, design tools, use the most appropriate business entity
+- If truly ambiguous, use entity_id null and category_id null
+- Return ONLY the JSON array, no other text"""
+
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = resp.content[0].text.strip()
+        # Extract JSON from response
+        if text.startswith("["):
+            data = json.loads(text)
+        else:
+            # Try to find JSON in the response
+            match = re.search(r"\[.*\]", text, re.DOTALL)
+            if match:
+                data = json.loads(match.group())
+            else:
+                return [None] * len(items)
+
+        results = []
+        for j, item in enumerate(data):
+            if j >= len(items):
+                break
+            cat_id = item.get("category_id")
+            ent_id = item.get("entity_id")
+            cat_name = next((c["name"] for c in categories if c["id"] == cat_id), None) if cat_id else None
+            ent_name = next((e["short_name"] for e in entities if e["id"] == ent_id), None) if ent_id else None
+            results.append({
+                "category_id": cat_id,
+                "category_name": cat_name,
+                "entity_id": ent_id,
+                "entity_name": ent_name,
+                "confidence": "ai",
+                "source": "AI suggestion",
+            })
+        return results
+
+    except Exception as e:
+        logger.warning("AI categorization failed: %s", e)
+        return [None] * len(items)
+
+
+def get_acct_review_queue(db_path: str | Path | None = None) -> list[dict]:
+    """Return transactions that need attention: uncategorized, untagged, or unsplit."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT t.*, a.name as account_name,
+                      (SELECT COUNT(*) FROM acct_splits s WHERE s.transaction_id = t.id AND s.category_id IS NOT NULL) as categorized_splits,
+                      (SELECT COUNT(*) FROM acct_splits s WHERE s.transaction_id = t.id) as total_splits
+               FROM acct_transactions t
+               LEFT JOIN acct_accounts a ON a.id = t.account_id
+               WHERE t.type != 'transfer'
+                 AND t.id NOT IN (
+                     SELECT s.transaction_id FROM acct_splits s WHERE s.category_id IS NOT NULL
+                 )
+               ORDER BY t.date DESC
+               LIMIT 100"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_acct_categorization_stats(db_path: str | Path | None = None) -> dict:
+    """Return stats about categorization coverage."""
+    with _connect(db_path) as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE type != 'transfer'"
+        ).fetchone()["cnt"]
+        categorized = conn.execute(
+            """SELECT COUNT(DISTINCT t.id) as cnt
+               FROM acct_transactions t
+               JOIN acct_splits s ON s.transaction_id = t.id
+               WHERE s.category_id IS NOT NULL AND t.type != 'transfer'"""
+        ).fetchone()["cnt"]
+        uncategorized = total - categorized
+    return {
+        "total": total,
+        "categorized": categorized,
+        "uncategorized": uncategorized,
+        "pct": round(categorized / total * 100, 1) if total > 0 else 0,
+    }

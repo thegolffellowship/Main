@@ -141,6 +141,9 @@ from email_parser.database import (
     get_acct_recurring,
     create_acct_recurring,
     delete_acct_recurring,
+    auto_categorize_transactions,
+    get_acct_review_queue,
+    get_acct_categorization_stats,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -4269,6 +4272,78 @@ def api_acct_upload_receipt():
     path = os.path.join(receipts_dir, safe_name)
     f.save(path)
     return jsonify({"path": path, "filename": safe_name})
+
+
+# ── AI Bookkeeper ─────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/ai/categorize", methods=["POST"])
+@require_role("admin")
+def api_acct_ai_categorize():
+    """Auto-categorize transactions using learned rules + AI."""
+    d = request.json or {}
+    descriptions = d.get("descriptions", [])
+    txn_types = d.get("types", [])
+    if not descriptions:
+        return jsonify({"error": "descriptions required"}), 400
+    results = auto_categorize_transactions(descriptions, txn_types)
+    return jsonify(results)
+
+
+@app.route("/api/accounting/ai/review-queue")
+@require_role("admin")
+def api_acct_ai_review_queue():
+    """Return transactions needing categorization."""
+    return jsonify(get_acct_review_queue())
+
+
+@app.route("/api/accounting/ai/stats")
+@require_role("admin")
+def api_acct_ai_stats():
+    """Return categorization coverage stats."""
+    return jsonify(get_acct_categorization_stats())
+
+
+@app.route("/api/accounting/ai/bulk-categorize", methods=["POST"])
+@require_role("admin")
+def api_acct_ai_bulk_categorize():
+    """AI-categorize all uncategorized transactions in one shot."""
+    queue = get_acct_review_queue()
+    if not queue:
+        return jsonify({"updated": 0, "message": "All transactions are categorized"})
+
+    descriptions = [t["description"] for t in queue]
+    types = [t["type"] for t in queue]
+    suggestions = auto_categorize_transactions(descriptions, types)
+
+    updated = 0
+    for txn, suggestion in zip(queue, suggestions):
+        if not suggestion or suggestion["confidence"] == "none":
+            continue
+        cat_id = suggestion.get("category_id")
+        ent_id = suggestion.get("entity_id")
+        if not cat_id:
+            continue
+
+        # Update the first split with the suggested category + entity
+        from email_parser.database import _connect
+        with _connect() as conn:
+            split = conn.execute(
+                "SELECT id, entity_id FROM acct_splits WHERE transaction_id = ? LIMIT 1",
+                (txn["id"],),
+            ).fetchone()
+            if split:
+                updates = {"category_id": cat_id}
+                if ent_id:
+                    updates["entity_id"] = ent_id
+                set_clause = ", ".join(f"{k} = ?" for k in updates)
+                conn.execute(
+                    f"UPDATE acct_splits SET {set_clause} WHERE id = ?",
+                    (*updates.values(), split["id"]),
+                )
+                conn.commit()
+                updated += 1
+
+    return jsonify({"updated": updated, "total": len(queue)})
 
 
 # ---------------------------------------------------------------------------
