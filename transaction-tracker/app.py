@@ -141,6 +141,13 @@ from email_parser.database import (
     get_acct_recurring,
     create_acct_recurring,
     delete_acct_recurring,
+    auto_categorize_transactions,
+    get_acct_review_queue,
+    get_acct_categorization_stats,
+    reset_acct_data,
+    get_acct_account_rules,
+    set_acct_account_rule,
+    get_all_acct_account_rules,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -4269,6 +4276,119 @@ def api_acct_upload_receipt():
     path = os.path.join(receipts_dir, safe_name)
     f.save(path)
     return jsonify({"path": path, "filename": safe_name})
+
+
+# ── AI Bookkeeper ─────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/ai/categorize", methods=["POST"])
+@require_role("admin")
+def api_acct_ai_categorize():
+    """Auto-categorize transactions using learned rules + AI."""
+    d = request.json or {}
+    descriptions = d.get("descriptions", [])
+    txn_types = d.get("types", [])
+    if not descriptions:
+        return jsonify({"error": "descriptions required"}), 400
+    results = auto_categorize_transactions(descriptions, txn_types)
+    return jsonify(results)
+
+
+@app.route("/api/accounting/ai/review-queue")
+@require_role("admin")
+def api_acct_ai_review_queue():
+    """Return transactions needing categorization."""
+    return jsonify(get_acct_review_queue())
+
+
+@app.route("/api/accounting/ai/stats")
+@require_role("admin")
+def api_acct_ai_stats():
+    """Return categorization coverage stats."""
+    return jsonify(get_acct_categorization_stats())
+
+
+@app.route("/api/accounting/ai/bulk-categorize", methods=["POST"])
+@require_role("admin")
+def api_acct_ai_bulk_categorize():
+    """AI-categorize all uncategorized transactions in one shot."""
+    queue = get_acct_review_queue()
+    if not queue:
+        return jsonify({"updated": 0, "message": "All transactions are categorized"})
+
+    descriptions = [t["description"] for t in queue]
+    types = [t["type"] for t in queue]
+    suggestions = auto_categorize_transactions(descriptions, types)
+
+    updated = 0
+    for txn, suggestion in zip(queue, suggestions):
+        if not suggestion or suggestion["confidence"] == "none":
+            continue
+        cat_id = suggestion.get("category_id")
+        ent_id = suggestion.get("entity_id")
+        if not cat_id:
+            continue
+
+        # Update the first split with the suggested category + entity
+        from email_parser.database import _connect
+        with _connect() as conn:
+            split = conn.execute(
+                "SELECT id, entity_id FROM acct_splits WHERE transaction_id = ? LIMIT 1",
+                (txn["id"],),
+            ).fetchone()
+            if split:
+                updates = {"category_id": cat_id}
+                if ent_id:
+                    updates["entity_id"] = ent_id
+                evt_id = suggestion.get("event_id")
+                if evt_id:
+                    updates["event_id"] = evt_id
+                set_clause = ", ".join(f"{k} = ?" for k in updates)
+                conn.execute(
+                    f"UPDATE acct_splits SET {set_clause} WHERE id = ?",
+                    (*updates.values(), split["id"]),
+                )
+                conn.commit()
+                updated += 1
+
+    return jsonify({"updated": updated, "total": len(queue)})
+
+
+# ── Reset & Account Rules ─────────────────────────────────────────────────
+
+@app.route("/api/accounting/reset", methods=["POST"])
+@require_role("admin")
+def api_acct_reset():
+    """Wipe all accounting data and re-seed entities + categories."""
+    result = reset_acct_data()
+    return jsonify(result)
+
+
+@app.route("/api/accounting/accounts/<int:aid>/rules")
+@require_role("admin")
+def api_acct_get_rules(aid):
+    return jsonify(get_acct_account_rules(aid))
+
+
+@app.route("/api/accounting/accounts/<int:aid>/rules", methods=["POST"])
+@require_role("admin")
+def api_acct_set_rule(aid):
+    d = request.json or {}
+    if not d.get("rule_type") or "rule_value" not in d:
+        return jsonify({"error": "rule_type and rule_value required"}), 400
+    set_acct_account_rule(aid, d["rule_type"], d["rule_value"])
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/accounting/events-list")
+@require_role("admin")
+def api_acct_events_list():
+    """Return events from the events directory for linking to accounting transactions."""
+    events = get_all_events()
+    return jsonify([{
+        "id": e["id"], "item_name": e["item_name"],
+        "event_date": e.get("event_date"), "course": e.get("course"),
+        "chapter": e.get("chapter"),
+    } for e in events])
 
 
 # ---------------------------------------------------------------------------

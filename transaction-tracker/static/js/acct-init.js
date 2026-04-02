@@ -3,13 +3,15 @@
    ========================================================= */
 
 async function reloadMasterData() {
-    const [entities, accounts, categories, tags] = await Promise.all([
+    const [entities, accounts, categories, tags, events] = await Promise.all([
         api('/entities'), api('/accounts'), api('/categories'), api('/tags'),
+        api('/events-list').catch(() => []),
     ]);
     ACCT.entities = entities;
     ACCT.accounts = accounts;
     ACCT.categories = categories;
     ACCT.tags = tags;
+    ACCT.events = events;
     renderEntityPills();
     populateDropdowns();
 }
@@ -121,6 +123,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     $('#btn-csv-commit').addEventListener('click', commitCsvImport);
     $('#btn-csv-remap').addEventListener('click', remapCsv);
+
+    // AI Bookkeeper
+    $('#btn-ai-categorize').addEventListener('click', runAiCategorize);
+    $('#btn-review-queue').addEventListener('click', loadReviewQueue);
+    $('#btn-close-review').addEventListener('click', () => {
+        $('#review-queue').style.display = 'none';
+        loadDashboard();
+    });
 
     // Transaction filters
     let _searchTimer;

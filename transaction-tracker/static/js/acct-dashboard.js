@@ -8,12 +8,16 @@ async function loadDashboard() {
     const qs = buildQS({ entity_id: ACCT.activeEntity, start_date: start, end_date: end });
 
     try {
-        const [summary, monthly, balances, txnData] = await Promise.all([
+        const [summary, monthly, balances, txnData, aiStats] = await Promise.all([
             api('/reports/summary' + qs),
             api('/reports/monthly' + buildQS({ entity_id: ACCT.activeEntity, months: 12 })),
             api('/accounts/balances'),
             api('/transactions' + buildQS({ entity_id: ACCT.activeEntity, limit: 10 })),
+            api('/ai/stats').catch(() => null),
         ]);
+
+        // AI Bookkeeper banner
+        renderBookkeeperBanner(aiStats);
 
         // Summary cards
         $('#card-income').textContent = fmt(summary.total_income);
@@ -98,5 +102,117 @@ function renderRecentTransactions(txns) {
 
     el.querySelectorAll('.acct-txn-row').forEach(row => {
         row.addEventListener('click', () => openEditTransaction(parseInt(row.dataset.id)));
+    });
+}
+
+
+// ── AI Bookkeeper ────────────────────────────────────────
+
+function renderBookkeeperBanner(stats) {
+    const banner = $('#bookkeeper-banner');
+    if (!stats || stats.total === 0) {
+        banner.style.display = 'none';
+        return;
+    }
+    banner.style.display = 'flex';
+    const statusEl = $('#bookkeeper-status');
+    if (stats.uncategorized === 0) {
+        statusEl.innerHTML = `<span class="acct-positive">All ${stats.total} transactions categorized</span>`;
+        $('#btn-ai-categorize').style.display = 'none';
+        $('#btn-review-queue').style.display = 'none';
+    } else {
+        statusEl.innerHTML = `<span class="acct-negative">${stats.uncategorized} of ${stats.total} transactions need categorization</span> (${stats.pct}% done)`;
+        $('#btn-ai-categorize').style.display = '';
+        $('#btn-review-queue').style.display = '';
+    }
+}
+
+async function runAiCategorize() {
+    const btn = $('#btn-ai-categorize');
+    btn.disabled = true;
+    btn.textContent = 'Categorizing...';
+    try {
+        const res = await api('/ai/bulk-categorize', { method: 'POST' });
+        alert(`AI categorized ${res.updated} of ${res.total} transactions`);
+        loadDashboard();
+    } catch (e) {
+        alert('AI categorization error: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Auto-Categorize';
+    }
+}
+
+async function loadReviewQueue() {
+    $('#review-queue').style.display = '';
+    try {
+        const queue = await api('/ai/review-queue');
+        renderReviewQueue(queue);
+    } catch (e) {
+        console.error('Review queue error:', e);
+    }
+}
+
+function renderReviewQueue(txns) {
+    const el = $('#review-queue-list');
+    if (!txns.length) {
+        el.innerHTML = '<p class="acct-empty">All transactions are categorized!</p>';
+        return;
+    }
+    el.innerHTML = `<table class="acct-table">
+        <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th><th>Category</th><th>Entity</th></tr></thead>
+        <tbody>${txns.map(t => `<tr class="acct-txn-row" data-id="${t.id}">
+            <td>${t.date}</td>
+            <td>${t.description}</td>
+            <td class="${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</td>
+            <td><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></td>
+            <td>
+                <select class="acct-select-sm review-cat" data-txn-id="${t.id}">
+                    <option value="">— Select —</option>
+                    ${ACCT.categories.filter(c => c.type === t.type).map(c =>
+                        `<option value="${c.id}">${c.name}</option>`
+                    ).join('')}
+                </select>
+            </td>
+            <td>
+                <select class="acct-select-sm review-entity" data-txn-id="${t.id}">
+                    ${ACCT.entities.map(e =>
+                        `<option value="${e.id}">${e.short_name}</option>`
+                    ).join('')}
+                </select>
+            </td>
+        </tr>`).join('')}</tbody></table>`;
+
+    // Bind change events — save immediately on select
+    el.querySelectorAll('.review-cat').forEach(sel => {
+        sel.addEventListener('change', async () => {
+            const txnId = sel.dataset.txnId;
+            const catId = sel.value ? parseInt(sel.value) : null;
+            const entitySel = el.querySelector(`.review-entity[data-txn-id="${txnId}"]`);
+            const entityId = entitySel ? parseInt(entitySel.value) : null;
+            if (!catId) return;
+            try {
+                // Get existing transaction to preserve splits
+                const txn = await api('/transactions/' + txnId);
+                const splits = txn.splits.map(s => ({
+                    entity_id: entityId || s.entity_id,
+                    category_id: catId,
+                    amount: s.amount,
+                    memo: s.memo,
+                }));
+                await api('/transactions/' + txnId, { method: 'PUT', body: { splits } });
+                sel.style.borderColor = 'var(--green)';
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        });
+    });
+
+    // Click row to open full editor
+    el.querySelectorAll('.acct-txn-row').forEach(row => {
+        row.addEventListener('click', (e) => {
+            if (e.target.tagName === 'SELECT') return;
+            openEditTransaction(parseInt(row.dataset.id));
+        });
     });
 }

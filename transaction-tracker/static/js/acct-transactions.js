@@ -37,7 +37,7 @@ function renderTransactionList(txns, total) {
         <tbody>${txns.map(t => {
             const splitBadges = t.splits.map(s =>
                 `<span class="acct-split-badge" style="border-color:${s.entity_color || '#6b7280'}">
-                    <strong>${s.entity_name || '?'}</strong> ${s.category_name || ''} ${fmt(s.amount)}
+                    <strong>${s.entity_name || '?'}</strong> ${s.category_name || ''}${s.event_name ? ' <em>' + s.event_name + '</em>' : ''} ${fmt(s.amount)}
                 </span>`
             ).join(' ');
             return `<tr class="acct-txn-row" data-id="${t.id}">
@@ -159,7 +159,7 @@ async function openEditTransaction(id) {
         if (txn.transfer_to_account_id) $('#txn-transfer-to').value = txn.transfer_to_account_id;
 
         renderSplitRows(txn.splits.map(s => ({
-            entity_id: s.entity_id, category_id: s.category_id || '', amount: s.amount, memo: s.memo || ''
+            entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || ''
         })));
         renderTagChips(txn.tags.map(t => t.id));
 
@@ -226,9 +226,13 @@ function splitRowHTML(s, idx) {
     const catOpts = '<option value="">—</option>' + ACCT.categories.map(c =>
         `<option value="${c.id}" ${c.id == s.category_id ? 'selected' : ''}>[${c.type[0].toUpperCase()}] ${c.name}</option>`
     ).join('');
+    const eventOpts = '<option value="">No Event</option>' + ACCT.events.map(ev =>
+        `<option value="${ev.id}" ${ev.id == s.event_id ? 'selected' : ''}>${ev.item_name}${ev.event_date ? ' (' + ev.event_date + ')' : ''}</option>`
+    ).join('');
     return `<div class="acct-split-row" data-idx="${idx}">
         <select class="split-entity acct-select-sm">${entityOpts}</select>
         <select class="split-category acct-select-sm">${catOpts}</select>
+        <select class="split-event acct-select-sm" title="Link to event">${eventOpts}</select>
         <input type="number" class="split-amount acct-input-sm" step="0.01" value="${s.amount || ''}" placeholder="0.00">
         <input type="text" class="split-memo acct-input-sm" value="${s.memo || ''}" placeholder="Memo">
         <button class="btn-icon-sm split-remove" title="Remove">&times;</button>
@@ -283,9 +287,11 @@ function collectSplits() {
     $$('.acct-split-row').forEach(row => {
         const amt = parseFloat(row.querySelector('.split-amount').value);
         if (!amt) return;
+        const eventSel = row.querySelector('.split-event');
         splits.push({
             entity_id: parseInt(row.querySelector('.split-entity').value),
             category_id: row.querySelector('.split-category').value ? parseInt(row.querySelector('.split-category').value) : null,
+            event_id: eventSel && eventSel.value ? parseInt(eventSel.value) : null,
             amount: amt,
             memo: row.querySelector('.split-memo').value.trim() || null,
         });

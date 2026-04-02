@@ -7,6 +7,8 @@ const ACCT = {
     accounts: [],
     categories: [],
     tags: [],
+    events: [],
+    accountRules: {},
     activeEntity: null,   // null = "All"
     activeTab: 'dashboard',
     txnPage: 0,
