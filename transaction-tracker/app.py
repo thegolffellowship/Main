@@ -4215,8 +4215,11 @@ def api_acct_import_commit():
     d = request.json or {}
     if not d.get("rows") or not d.get("account_id") or not d.get("entity_id"):
         return jsonify({"error": "rows, account_id, and entity_id required"}), 400
-    count = import_acct_csv(d["rows"], d["account_id"], d["entity_id"])
-    return jsonify({"imported": count})
+    result = import_acct_csv(
+        d["rows"], d["account_id"], d["entity_id"],
+        transfer_account_id=d.get("transfer_account_id"),
+    )
+    return jsonify(result)
 
 
 # ── Recurring ─────────────────────────────────────────────────────────────

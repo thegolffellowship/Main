@@ -6878,23 +6878,120 @@ def _normalise_csv_date(raw: str) -> str | None:
 
 
 def import_acct_csv(rows: list[dict], account_id: int, default_entity_id: int,
-                    db_path: str | Path | None = None) -> int:
+                    transfer_account_id: int | None = None,
+                    db_path: str | Path | None = None) -> dict:
     """Bulk-import transactions from pre-parsed CSV rows.
-    Each row: {date, description, amount, type}."""
-    count = 0
+
+    Each row: {date, description, amount, type, category?, memo?}.
+    For transfers: if transfer_account_id is set, links them.
+    Also checks for existing matching transfers to avoid duplicates.
+    Returns {"imported": N, "matched": N, "skipped": N}.
+    """
+    imported = 0
+    matched = 0
+    skipped = 0
+
     for row in rows:
-        create_acct_transaction(
-            date=row["date"],
-            description=row["description"],
-            total_amount=float(row["amount"]),
-            txn_type=row.get("type", "expense"),
-            account_id=account_id,
-            source="csv_import",
-            splits=[{"entity_id": default_entity_id, "amount": float(row["amount"])}],
-            db_path=db_path,
-        )
-        count += 1
-    return count
+        txn_type = row.get("type", "expense")
+        amount = float(row["amount"])
+
+        if txn_type == "transfer":
+            # Check if the other side of this transfer already exists
+            existing = _find_matching_transfer(
+                amount=amount,
+                date=row["date"],
+                account_id=account_id,
+                db_path=db_path,
+            )
+            if existing:
+                # Link the existing transaction to this account
+                _link_transfer_accounts(
+                    txn_id=existing["id"],
+                    account_id=account_id,
+                    this_is_source=existing["account_id"] != account_id,
+                    db_path=db_path,
+                )
+                matched += 1
+                continue
+
+            # Create new transfer with account linkage
+            create_acct_transaction(
+                date=row["date"],
+                description=row["description"],
+                total_amount=amount,
+                txn_type="transfer",
+                account_id=account_id,
+                transfer_to_account_id=transfer_account_id,
+                notes=row.get("memo") or None,
+                source="csv_import",
+                splits=[{"entity_id": default_entity_id, "amount": amount}],
+                db_path=db_path,
+            )
+        else:
+            create_acct_transaction(
+                date=row["date"],
+                description=row["description"],
+                total_amount=amount,
+                txn_type=txn_type,
+                account_id=account_id,
+                notes=row.get("memo") or None,
+                source="csv_import",
+                splits=[{"entity_id": default_entity_id, "amount": amount}],
+                db_path=db_path,
+            )
+        imported += 1
+
+    return {"imported": imported, "matched": matched, "skipped": skipped}
+
+
+def _find_matching_transfer(amount: float, date: str,
+                            account_id: int,
+                            db_path: str | Path | None = None) -> dict | None:
+    """Find an existing transfer transaction that matches this one.
+
+    Matches by: same amount, type='transfer', within 5 days, and either
+    has no second account linked yet or the second account is this account.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT * FROM acct_transactions
+               WHERE type = 'transfer'
+                 AND ABS(total_amount - ?) < 0.01
+                 AND ABS(julianday(date) - julianday(?)) <= 5
+                 AND account_id != ?
+                 AND (transfer_to_account_id IS NULL OR transfer_to_account_id = ?)
+               ORDER BY ABS(julianday(date) - julianday(?))
+               LIMIT 1""",
+            (amount, date, account_id, account_id, date),
+        ).fetchall()
+    return dict(rows[0]) if rows else None
+
+
+def _link_transfer_accounts(txn_id: int, account_id: int, this_is_source: bool,
+                            db_path: str | Path | None = None) -> None:
+    """Link the second account to an existing transfer transaction."""
+    with _connect(db_path) as conn:
+        if this_is_source:
+            # This account is the source (money leaving) — set as account_id
+            # and move the existing account_id to transfer_to
+            existing = conn.execute(
+                "SELECT account_id FROM acct_transactions WHERE id = ?", (txn_id,)
+            ).fetchone()
+            conn.execute(
+                """UPDATE acct_transactions
+                   SET transfer_to_account_id = ?, updated_at = datetime('now')
+                   WHERE id = ?""",
+                (account_id, txn_id),
+            )
+        else:
+            # This account is the destination — set transfer_to_account_id
+            conn.execute(
+                """UPDATE acct_transactions
+                   SET transfer_to_account_id = ?, updated_at = datetime('now')
+                   WHERE id = ?""",
+                (account_id, txn_id),
+            )
+        conn.commit()
 
 
 # ---------------------------------------------------------------------------

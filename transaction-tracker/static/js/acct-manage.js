@@ -173,6 +173,7 @@ async function previewCsv() {
         renderCsvMapping(_csvHeaders, _csvMapping);
         $('#csv-preview-count').textContent = data.count;
         renderCsvPreview(data.rows);
+        showTransferSection(data.rows);
         $('#csv-step-upload').style.display = 'none';
         $('#csv-step-preview').style.display = '';
     } catch (e) {
@@ -260,18 +261,48 @@ function renderCsvPreview(rows) {
     </table>${rows.length > 50 ? `<p class="acct-muted">Showing 50 of ${rows.length} transactions...</p>` : ''}`;
 }
 
+function showTransferSection(rows) {
+    const transferCount = rows.filter(r => r.type === 'transfer').length;
+    const section = $('#csv-transfer-section');
+    if (transferCount === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = '';
+    $('#csv-transfer-count').textContent = transferCount;
+
+    // Populate transfer account dropdown (exclude the import account)
+    const importAccountId = $('#csv-account').value;
+    const opts = ACCT.accounts
+        .filter(a => String(a.id) !== importAccountId)
+        .map(a => `<option value="${a.id}">${a.name}</option>`)
+        .join('');
+    $('#csv-transfer-account').innerHTML =
+        '<option value="">— Don\'t link (decide later) —</option>' + opts;
+}
+
 async function commitCsvImport() {
     if (!ACCT.csvData || !ACCT.csvData.length) return;
     const accountId = $('#csv-account').value;
     const entityId = $('#csv-entity').value;
     if (!accountId || !entityId) { alert('Select an account and entity'); return; }
 
+    const transferAccountId = $('#csv-transfer-account') && $('#csv-transfer-account').value
+        ? parseInt($('#csv-transfer-account').value) : null;
+
     try {
         const res = await api('/import/commit', {
             method: 'POST',
-            body: { rows: ACCT.csvData, account_id: parseInt(accountId), entity_id: parseInt(entityId) },
+            body: {
+                rows: ACCT.csvData,
+                account_id: parseInt(accountId),
+                entity_id: parseInt(entityId),
+                transfer_account_id: transferAccountId,
+            },
         });
-        alert(`Imported ${res.imported} transactions`);
+        const parts = [`Imported ${res.imported} transactions`];
+        if (res.matched) parts.push(`${res.matched} transfers matched to existing`);
+        alert(parts.join(', '));
         $('#csv-modal').style.display = 'none';
         refreshActiveTab();
     } catch (e) {
