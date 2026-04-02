@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accounting — TGF Tracker</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TGF Tracker">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>Accounting</h1>
+            <p class="subtitle">Multi-Entity Money Management</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.2.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <!-- Entity selector pills -->
+            <div class="acct-entity-pills" id="entity-pills"></div>
+            <button id="btn-add-txn" class="btn btn-primary" title="Add transaction">
+                + Transaction
+            </button>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">
+                Log Out
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Global Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/accounting" class="active">Accounting</a>
+            <a href="/database" class="admin-nav" style="display:none;">Database</a>
+        </nav>
+
+        <!-- Accounting Sub-Tabs -->
+        <div class="acct-subtabs" id="acct-subtabs">
+            <button class="acct-subtab active" data-tab="dashboard">Dashboard</button>
+            <button class="acct-subtab" data-tab="transactions">Transactions</button>
+            <button class="acct-subtab" data-tab="accounts">Accounts</button>
+            <button class="acct-subtab" data-tab="categories">Categories</button>
+            <button class="acct-subtab" data-tab="reports">Reports</button>
+        </div>
+
+        <!-- ═══ DASHBOARD TAB ═══ -->
+        <section class="acct-tab-panel active" id="panel-dashboard">
+            <!-- Summary Cards -->
+            <div class="acct-summary-cards" id="summary-cards">
+                <div class="acct-card acct-card-income">
+                    <div class="acct-card-label">Income</div>
+                    <div class="acct-card-value" id="card-income">$0.00</div>
+                </div>
+                <div class="acct-card acct-card-expense">
+                    <div class="acct-card-label">Expenses</div>
+                    <div class="acct-card-value" id="card-expenses">$0.00</div>
+                </div>
+                <div class="acct-card acct-card-net">
+                    <div class="acct-card-label">Net</div>
+                    <div class="acct-card-value" id="card-net">$0.00</div>
+                </div>
+            </div>
+
+            <!-- Date Range Selector -->
+            <div class="acct-date-range">
+                <select id="date-range-preset">
+                    <option value="this_month">This Month</option>
+                    <option value="last_month">Last Month</option>
+                    <option value="this_quarter">This Quarter</option>
+                    <option value="this_year" selected>This Year</option>
+                    <option value="last_year">Last Year</option>
+                    <option value="all">All Time</option>
+                    <option value="custom">Custom Range</option>
+                </select>
+                <input type="date" id="date-start" style="display:none;">
+                <input type="date" id="date-end" style="display:none;">
+            </div>
+
+            <!-- Monthly Chart -->
+            <div class="acct-section">
+                <h3>Monthly Trend</h3>
+                <div class="acct-chart-container" id="monthly-chart"></div>
+            </div>
+
+            <!-- Account Balances -->
+            <div class="acct-section">
+                <h3>Account Balances</h3>
+                <div id="account-balances-dashboard"></div>
+            </div>
+
+            <!-- Recent Transactions -->
+            <div class="acct-section">
+                <h3>Recent Transactions</h3>
+                <div id="recent-transactions"></div>
+            </div>
+        </section>
+
+        <!-- ═══ TRANSACTIONS TAB ═══ -->
+        <section class="acct-tab-panel" id="panel-transactions">
+            <div class="acct-toolbar">
+                <input type="text" id="txn-search" class="acct-search" placeholder="Search transactions...">
+                <select id="txn-filter-type" class="acct-select">
+                    <option value="">All Types</option>
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                    <option value="transfer">Transfer</option>
+                </select>
+                <select id="txn-filter-account" class="acct-select">
+                    <option value="">All Accounts</option>
+                </select>
+                <select id="txn-filter-category" class="acct-select">
+                    <option value="">All Categories</option>
+                </select>
+                <button class="btn btn-secondary" id="btn-import-csv" title="Import bank statement CSV">
+                    Import CSV
+                </button>
+            </div>
+            <div class="acct-txn-list" id="txn-list"></div>
+            <div class="acct-pagination" id="txn-pagination"></div>
+        </section>
+
+        <!-- ═══ ACCOUNTS TAB ═══ -->
+        <section class="acct-tab-panel" id="panel-accounts">
+            <div class="acct-toolbar">
+                <button class="btn btn-primary" id="btn-add-account">+ Add Account</button>
+            </div>
+            <div class="acct-accounts-grid" id="accounts-grid"></div>
+        </section>
+
+        <!-- ═══ CATEGORIES TAB ═══ -->
+        <section class="acct-tab-panel" id="panel-categories">
+            <div class="acct-toolbar">
+                <button class="btn btn-primary" id="btn-add-category">+ Add Category</button>
+                <div class="acct-cat-type-toggle">
+                    <button class="acct-subtab active" data-cattype="expense">Expense</button>
+                    <button class="acct-subtab" data-cattype="income">Income</button>
+                </div>
+            </div>
+            <div class="acct-categories-list" id="categories-list"></div>
+        </section>
+
+        <!-- ═══ REPORTS TAB ═══ -->
+        <section class="acct-tab-panel" id="panel-reports">
+            <div class="acct-toolbar">
+                <select id="report-type" class="acct-select">
+                    <option value="pnl">Profit & Loss</option>
+                    <option value="category_breakdown">Category Breakdown</option>
+                    <option value="monthly_trend">Monthly Trend</option>
+                </select>
+                <select id="report-period" class="acct-select">
+                    <option value="this_month">This Month</option>
+                    <option value="this_quarter">This Quarter</option>
+                    <option value="this_year" selected>This Year</option>
+                    <option value="last_year">Last Year</option>
+                    <option value="all">All Time</option>
+                </select>
+            </div>
+            <div class="acct-report-content" id="report-content"></div>
+        </section>
+    </main>
+
+    <!-- ═══ TRANSACTION MODAL ═══ -->
+    <div class="modal-overlay" id="txn-modal" style="display:none;">
+        <div class="modal acct-modal">
+            <div class="modal-header">
+                <h2 id="txn-modal-title">Add Transaction</h2>
+                <button class="modal-close" id="txn-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="txn-edit-id">
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Date</label>
+                        <input type="date" id="txn-date" required>
+                    </div>
+                    <div class="acct-form-group acct-form-grow">
+                        <label>Description</label>
+                        <input type="text" id="txn-description" placeholder="e.g. Costco, Green fee..." required>
+                    </div>
+                </div>
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Amount</label>
+                        <input type="number" id="txn-amount" step="0.01" min="0" placeholder="0.00" required>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Type</label>
+                        <select id="txn-type">
+                            <option value="expense">Expense</option>
+                            <option value="income">Income</option>
+                            <option value="transfer">Transfer</option>
+                        </select>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Account</label>
+                        <select id="txn-account"></select>
+                    </div>
+                </div>
+                <div class="acct-form-row" id="transfer-row" style="display:none;">
+                    <div class="acct-form-group">
+                        <label>Transfer To</label>
+                        <select id="txn-transfer-to"></select>
+                    </div>
+                </div>
+
+                <!-- Splits Section -->
+                <div class="acct-splits-section">
+                    <div class="acct-splits-header">
+                        <h3>Split Details</h3>
+                        <button class="btn btn-secondary btn-sm" id="btn-add-split">+ Add Split</button>
+                    </div>
+                    <div class="acct-splits-list" id="splits-list"></div>
+                    <div class="acct-splits-total">
+                        <span>Split Total:</span>
+                        <span id="splits-total">$0.00</span>
+                        <span id="splits-diff" class="acct-splits-diff"></span>
+                    </div>
+                </div>
+
+                <!-- Tags -->
+                <div class="acct-form-group">
+                    <label>Tags</label>
+                    <div class="acct-tags-input" id="txn-tags-input"></div>
+                </div>
+
+                <!-- Notes -->
+                <div class="acct-form-group">
+                    <label>Notes</label>
+                    <textarea id="txn-notes" rows="2" placeholder="Optional notes..."></textarea>
+                </div>
+
+                <!-- Receipt -->
+                <div class="acct-form-group">
+                    <label>Receipt</label>
+                    <div class="acct-receipt-upload" id="receipt-upload">
+                        <input type="file" id="receipt-file" accept="image/*,.pdf" style="display:none;">
+                        <button class="btn btn-secondary btn-sm" id="btn-upload-receipt">Choose File</button>
+                        <span id="receipt-filename"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="txn-modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="txn-modal-save">Save Transaction</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ ACCOUNT MODAL ═══ -->
+    <div class="modal-overlay" id="account-modal" style="display:none;">
+        <div class="modal acct-modal acct-modal-sm">
+            <div class="modal-header">
+                <h2 id="account-modal-title">Add Account</h2>
+                <button class="modal-close" id="account-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="account-edit-id">
+                <div class="acct-form-group">
+                    <label>Account Name</label>
+                    <input type="text" id="account-name" placeholder="e.g. Chase Checking" required>
+                </div>
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Type</label>
+                        <select id="account-type">
+                            <option value="checking">Checking</option>
+                            <option value="savings">Savings</option>
+                            <option value="credit_card">Credit Card</option>
+                            <option value="cash">Cash</option>
+                            <option value="venmo">Venmo</option>
+                            <option value="paypal">PayPal</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Entity</label>
+                        <select id="account-entity"></select>
+                    </div>
+                </div>
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Institution</label>
+                        <input type="text" id="account-institution" placeholder="e.g. Chase">
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Last 4 Digits</label>
+                        <input type="text" id="account-last-four" maxlength="4" placeholder="1234">
+                    </div>
+                </div>
+                <div class="acct-form-group">
+                    <label>Opening Balance</label>
+                    <input type="number" id="account-balance" step="0.01" value="0" placeholder="0.00">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="account-modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="account-modal-save">Save Account</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ CATEGORY MODAL ═══ -->
+    <div class="modal-overlay" id="category-modal" style="display:none;">
+        <div class="modal acct-modal acct-modal-sm">
+            <div class="modal-header">
+                <h2>Add Category</h2>
+                <button class="modal-close" id="category-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="acct-form-group">
+                    <label>Category Name</label>
+                    <input type="text" id="category-name" placeholder="e.g. Office Supplies" required>
+                </div>
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Type</label>
+                        <select id="category-type">
+                            <option value="expense">Expense</option>
+                            <option value="income">Income</option>
+                        </select>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Entity (optional)</label>
+                        <select id="category-entity">
+                            <option value="">All Entities</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="category-modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="category-modal-save">Save Category</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ CSV IMPORT MODAL ═══ -->
+    <div class="modal-overlay" id="csv-modal" style="display:none;">
+        <div class="modal acct-modal acct-modal-lg">
+            <div class="modal-header">
+                <h2>Import Bank Statement</h2>
+                <button class="modal-close" id="csv-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Step 1: Upload -->
+                <div id="csv-step-upload">
+                    <div class="acct-form-group">
+                        <label>CSV File</label>
+                        <input type="file" id="csv-file" accept=".csv,.txt">
+                    </div>
+                    <div class="acct-form-row">
+                        <div class="acct-form-group">
+                            <label>Date Column</label>
+                            <input type="number" id="csv-date-col" value="0" min="0">
+                        </div>
+                        <div class="acct-form-group">
+                            <label>Description Column</label>
+                            <input type="number" id="csv-desc-col" value="1" min="0">
+                        </div>
+                        <div class="acct-form-group">
+                            <label>Amount Column</label>
+                            <input type="number" id="csv-amount-col" value="2" min="0">
+                        </div>
+                    </div>
+                    <div class="acct-form-row">
+                        <div class="acct-form-group">
+                            <label>Account</label>
+                            <select id="csv-account"></select>
+                        </div>
+                        <div class="acct-form-group">
+                            <label>Default Entity</label>
+                            <select id="csv-entity"></select>
+                        </div>
+                    </div>
+                    <label class="acct-checkbox">
+                        <input type="checkbox" id="csv-has-header" checked> File has header row
+                    </label>
+                    <button class="btn btn-primary" id="btn-csv-preview">Preview Import</button>
+                </div>
+                <!-- Step 2: Preview -->
+                <div id="csv-step-preview" style="display:none;">
+                    <div class="acct-csv-preview-info">
+                        <span id="csv-preview-count">0</span> transactions found
+                    </div>
+                    <div class="acct-csv-preview-table" id="csv-preview-table"></div>
+                    <div class="acct-form-row" style="margin-top:1rem;">
+                        <button class="btn btn-secondary" id="btn-csv-back">Back</button>
+                        <button class="btn btn-primary" id="btn-csv-commit">Import All</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/acct-core.js"></script>
+    <script src="/static/js/acct-dashboard.js"></script>
+    <script src="/static/js/acct-transactions.js"></script>
+    <script src="/static/js/acct-manage.js"></script>
+    <script src="/static/js/acct-init.js"></script>
+    <script src="/static/js/chat-widget.js"></script>
+</body>
+</html>

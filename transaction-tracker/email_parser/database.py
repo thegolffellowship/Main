@@ -1055,6 +1055,177 @@ def init_db(db_path: str | Path | None = None) -> None:
                 END
             """)
 
+        # ── Accounting module tables ──────────────────────────────
+        # Multi-entity bookkeeping: entities, categories, accounts,
+        # transactions with split support, tags, and recurring templates.
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_entities (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE,
+                short_name  TEXT NOT NULL UNIQUE,
+                color       TEXT DEFAULT '#2563eb',
+                is_active   INTEGER DEFAULT 1,
+                created_at  TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_categories (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_id   INTEGER,
+                name        TEXT NOT NULL,
+                type        TEXT NOT NULL CHECK(type IN ('income', 'expense')),
+                parent_id   INTEGER,
+                icon        TEXT,
+                is_active   INTEGER DEFAULT 1,
+                sort_order  INTEGER DEFAULT 0,
+                FOREIGN KEY (entity_id) REFERENCES acct_entities(id),
+                FOREIGN KEY (parent_id) REFERENCES acct_categories(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_categories_entity ON acct_categories(entity_id)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_accounts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_id       INTEGER,
+                name            TEXT NOT NULL,
+                account_type    TEXT NOT NULL
+                    CHECK(account_type IN ('checking', 'savings', 'credit_card', 'cash', 'venmo', 'paypal', 'other')),
+                institution     TEXT,
+                last_four       TEXT,
+                opening_balance REAL DEFAULT 0,
+                is_active       INTEGER DEFAULT 1,
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (entity_id) REFERENCES acct_entities(id)
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_transactions (
+                id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                date                   TEXT NOT NULL,
+                description            TEXT NOT NULL,
+                total_amount           REAL NOT NULL,
+                type                   TEXT NOT NULL CHECK(type IN ('income', 'expense', 'transfer')),
+                account_id             INTEGER,
+                transfer_to_account_id INTEGER,
+                notes                  TEXT,
+                receipt_path           TEXT,
+                source                 TEXT DEFAULT 'manual',
+                source_ref             TEXT,
+                is_reconciled          INTEGER DEFAULT 0,
+                created_at             TEXT DEFAULT (datetime('now')),
+                updated_at             TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (account_id) REFERENCES acct_accounts(id),
+                FOREIGN KEY (transfer_to_account_id) REFERENCES acct_accounts(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_txn_date ON acct_transactions(date DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_txn_account ON acct_transactions(account_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_txn_type ON acct_transactions(type)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_splits (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                transaction_id  INTEGER NOT NULL,
+                entity_id       INTEGER NOT NULL,
+                category_id     INTEGER,
+                amount          REAL NOT NULL,
+                memo            TEXT,
+                FOREIGN KEY (transaction_id) REFERENCES acct_transactions(id) ON DELETE CASCADE,
+                FOREIGN KEY (entity_id) REFERENCES acct_entities(id),
+                FOREIGN KEY (category_id) REFERENCES acct_categories(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_splits_txn ON acct_splits(transaction_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_splits_entity ON acct_splits(entity_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_splits_category ON acct_splits(category_id)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_tags (
+                id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                name  TEXT NOT NULL UNIQUE,
+                color TEXT DEFAULT '#6b7280'
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_transaction_tags (
+                transaction_id INTEGER NOT NULL,
+                tag_id         INTEGER NOT NULL,
+                PRIMARY KEY (transaction_id, tag_id),
+                FOREIGN KEY (transaction_id) REFERENCES acct_transactions(id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES acct_tags(id)
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_recurring (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                description TEXT NOT NULL,
+                amount      REAL NOT NULL,
+                type        TEXT NOT NULL CHECK(type IN ('income', 'expense')),
+                entity_id   INTEGER NOT NULL,
+                category_id INTEGER,
+                account_id  INTEGER,
+                frequency   TEXT NOT NULL CHECK(frequency IN ('weekly', 'biweekly', 'monthly', 'quarterly', 'yearly')),
+                next_date   TEXT NOT NULL,
+                is_active   INTEGER DEFAULT 1,
+                created_at  TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (entity_id) REFERENCES acct_entities(id),
+                FOREIGN KEY (category_id) REFERENCES acct_categories(id),
+                FOREIGN KEY (account_id) REFERENCES acct_accounts(id)
+            )
+            """
+        )
+
+        # Seed default entities on first run
+        existing_entities = conn.execute("SELECT COUNT(*) as cnt FROM acct_entities").fetchone()
+        if existing_entities["cnt"] == 0:
+            conn.executemany(
+                "INSERT INTO acct_entities (name, short_name, color) VALUES (?, ?, ?)",
+                [
+                    ("The Golf Fellowship", "TGF", "#16a34a"),
+                    ("Personal", "Personal", "#2563eb"),
+                ],
+            )
+
+        # Seed default categories on first run
+        existing_cats = conn.execute("SELECT COUNT(*) as cnt FROM acct_categories").fetchone()
+        if existing_cats["cnt"] == 0:
+            _seed_acct_categories(conn)
+
         # Repair: clear matched_item_id on RSVPs that point to wrong items.
         # Two cases:
         #   1. Points to non-event items (Customer Entry, RSVP Import, etc.)
@@ -5951,3 +6122,721 @@ def set_app_setting(key: str, value: str, db_path: str | Path | None = None) -> 
             (key, value),
         )
         conn.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Accounting Module — Multi-Entity Bookkeeping
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _seed_acct_categories(conn: sqlite3.Connection) -> None:
+    """Populate default income & expense categories for all entities."""
+    expense_cats = [
+        "Golf Course Fees", "Event Supplies", "Food & Beverage",
+        "Marketing & Promotion", "Software & Subscriptions", "Insurance",
+        "Office Supplies", "Travel", "Utilities", "Rent / Lease",
+        "Professional Services", "Equipment", "Maintenance & Repairs",
+        "Bank & Processing Fees", "Taxes & Licenses", "Payroll",
+        "Groceries", "Gas & Auto", "Dining Out", "Entertainment",
+        "Healthcare", "Clothing", "Home & Garden", "Education",
+        "Gifts & Donations", "Personal Care", "Miscellaneous",
+    ]
+    income_cats = [
+        "Event Revenue", "Membership Fees", "Side Game Fees",
+        "Sponsorship", "Merchandise Sales",
+        "Salary / Wages", "Freelance Income", "Investment Income",
+        "Reimbursements", "Other Income",
+    ]
+    for name in expense_cats:
+        conn.execute(
+            "INSERT INTO acct_categories (name, type, sort_order) VALUES (?, 'expense', ?)",
+            (name, expense_cats.index(name)),
+        )
+    for name in income_cats:
+        conn.execute(
+            "INSERT INTO acct_categories (name, type, sort_order) VALUES (?, 'income', ?)",
+            (name, income_cats.index(name)),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Entities
+# ---------------------------------------------------------------------------
+
+def get_all_acct_entities(db_path: str | Path | None = None) -> list[dict]:
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM acct_entities WHERE is_active = 1 ORDER BY id"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_acct_entity(name: str, short_name: str, color: str = "#2563eb",
+                       db_path: str | Path | None = None) -> dict:
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO acct_entities (name, short_name, color) VALUES (?, ?, ?)",
+            (name, short_name, color),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM acct_entities WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def update_acct_entity(entity_id: int, db_path: str | Path | None = None, **fields) -> dict:
+    allowed = {"name", "short_name", "color", "is_active"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return {}
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    with _connect(db_path) as conn:
+        conn.execute(
+            f"UPDATE acct_entities SET {set_clause} WHERE id = ?",
+            (*updates.values(), entity_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM acct_entities WHERE id = ?", (entity_id,)).fetchone()
+    return dict(row) if row else {}
+
+
+# ---------------------------------------------------------------------------
+# Categories
+# ---------------------------------------------------------------------------
+
+def get_acct_categories(entity_id: int | None = None, cat_type: str | None = None,
+                        db_path: str | Path | None = None) -> list[dict]:
+    clauses, params = ["is_active = 1"], []
+    if entity_id is not None:
+        clauses.append("(entity_id = ? OR entity_id IS NULL)")
+        params.append(entity_id)
+    if cat_type:
+        clauses.append("type = ?")
+        params.append(cat_type)
+    where = " AND ".join(clauses)
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM acct_categories WHERE {where} ORDER BY type, sort_order, name",
+            params,
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_acct_category(name: str, cat_type: str, entity_id: int | None = None,
+                         parent_id: int | None = None, icon: str | None = None,
+                         db_path: str | Path | None = None) -> dict:
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO acct_categories (name, type, entity_id, parent_id, icon) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (name, cat_type, entity_id, parent_id, icon),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM acct_categories WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def update_acct_category(cat_id: int, db_path: str | Path | None = None, **fields) -> dict:
+    allowed = {"name", "type", "entity_id", "parent_id", "icon", "is_active", "sort_order"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return {}
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    with _connect(db_path) as conn:
+        conn.execute(
+            f"UPDATE acct_categories SET {set_clause} WHERE id = ?",
+            (*updates.values(), cat_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM acct_categories WHERE id = ?", (cat_id,)).fetchone()
+    return dict(row) if row else {}
+
+
+def delete_acct_category(cat_id: int, db_path: str | Path | None = None) -> bool:
+    with _connect(db_path) as conn:
+        conn.execute("UPDATE acct_categories SET is_active = 0 WHERE id = ?", (cat_id,))
+        conn.commit()
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Payment Accounts
+# ---------------------------------------------------------------------------
+
+def get_acct_accounts(entity_id: int | None = None,
+                      db_path: str | Path | None = None) -> list[dict]:
+    if entity_id is not None:
+        sql = "SELECT * FROM acct_accounts WHERE is_active = 1 AND entity_id = ? ORDER BY name"
+        params: tuple = (entity_id,)
+    else:
+        sql = "SELECT * FROM acct_accounts WHERE is_active = 1 ORDER BY name"
+        params = ()
+    with _connect(db_path) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_acct_account(name: str, account_type: str, entity_id: int | None = None,
+                        institution: str | None = None, last_four: str | None = None,
+                        opening_balance: float = 0,
+                        db_path: str | Path | None = None) -> dict:
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO acct_accounts (name, account_type, entity_id, institution, last_four, opening_balance) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (name, account_type, entity_id, institution, last_four, opening_balance),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM acct_accounts WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def update_acct_account(account_id: int, db_path: str | Path | None = None, **fields) -> dict:
+    allowed = {"name", "account_type", "entity_id", "institution", "last_four", "opening_balance", "is_active"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return {}
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    with _connect(db_path) as conn:
+        conn.execute(
+            f"UPDATE acct_accounts SET {set_clause} WHERE id = ?",
+            (*updates.values(), account_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM acct_accounts WHERE id = ?", (account_id,)).fetchone()
+    return dict(row) if row else {}
+
+
+def get_acct_account_balances(db_path: str | Path | None = None) -> list[dict]:
+    """Return all active accounts with computed current balance."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT a.*,
+                   a.opening_balance
+                   + COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
+                               WHERE t.account_id = a.id AND t.type = 'income'), 0)
+                   - COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
+                               WHERE t.account_id = a.id AND t.type = 'expense'), 0)
+                   + COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
+                               WHERE t.transfer_to_account_id = a.id AND t.type = 'transfer'), 0)
+                   - COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
+                               WHERE t.account_id = a.id AND t.type = 'transfer'), 0)
+                   AS current_balance
+            FROM acct_accounts a
+            WHERE a.is_active = 1
+            ORDER BY a.name
+            """
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Transactions (with splits)
+# ---------------------------------------------------------------------------
+
+def get_acct_transactions(entity_id: int | None = None, account_id: int | None = None,
+                          category_id: int | None = None,
+                          start_date: str | None = None, end_date: str | None = None,
+                          search: str | None = None, txn_type: str | None = None,
+                          limit: int = 200, offset: int = 0,
+                          db_path: str | Path | None = None) -> dict:
+    """Return transactions with their splits. Filters by entity/account/category/date/search."""
+    with _connect(db_path) as conn:
+        clauses, params = [], []
+
+        if entity_id is not None:
+            clauses.append("t.id IN (SELECT transaction_id FROM acct_splits WHERE entity_id = ?)")
+            params.append(entity_id)
+        if account_id is not None:
+            clauses.append("t.account_id = ?")
+            params.append(account_id)
+        if category_id is not None:
+            clauses.append("t.id IN (SELECT transaction_id FROM acct_splits WHERE category_id = ?)")
+            params.append(category_id)
+        if start_date:
+            clauses.append("t.date >= ?")
+            params.append(start_date)
+        if end_date:
+            clauses.append("t.date <= ?")
+            params.append(end_date)
+        if search:
+            clauses.append("(t.description LIKE ? OR t.notes LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        if txn_type:
+            clauses.append("t.type = ?")
+            params.append(txn_type)
+
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+
+        # Get total count for pagination
+        count_row = conn.execute(
+            f"SELECT COUNT(*) as cnt FROM acct_transactions t{where}", params
+        ).fetchone()
+        total = count_row["cnt"]
+
+        # Get transactions
+        rows = conn.execute(
+            f"""SELECT t.*, a.name as account_name, a.account_type as account_type_name
+                FROM acct_transactions t
+                LEFT JOIN acct_accounts a ON a.id = t.account_id
+                {where}
+                ORDER BY t.date DESC, t.id DESC
+                LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        ).fetchall()
+
+        txns = []
+        for r in rows:
+            txn = dict(r)
+            # Attach splits
+            splits = conn.execute(
+                """SELECT s.*, e.short_name as entity_name, e.color as entity_color,
+                          c.name as category_name
+                   FROM acct_splits s
+                   LEFT JOIN acct_entities e ON e.id = s.entity_id
+                   LEFT JOIN acct_categories c ON c.id = s.category_id
+                   WHERE s.transaction_id = ?
+                   ORDER BY s.id""",
+                (txn["id"],),
+            ).fetchall()
+            txn["splits"] = [dict(s) for s in splits]
+            # Attach tags
+            tags = conn.execute(
+                """SELECT t.* FROM acct_tags t
+                   JOIN acct_transaction_tags tt ON tt.tag_id = t.id
+                   WHERE tt.transaction_id = ?""",
+                (txn["id"],),
+            ).fetchall()
+            txn["tags"] = [dict(tg) for tg in tags]
+            txns.append(txn)
+
+    return {"transactions": txns, "total": total, "limit": limit, "offset": offset}
+
+
+def get_acct_transaction(txn_id: int, db_path: str | Path | None = None) -> dict | None:
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            """SELECT t.*, a.name as account_name
+               FROM acct_transactions t
+               LEFT JOIN acct_accounts a ON a.id = t.account_id
+               WHERE t.id = ?""",
+            (txn_id,),
+        ).fetchone()
+        if not row:
+            return None
+        txn = dict(row)
+        splits = conn.execute(
+            """SELECT s.*, e.short_name as entity_name, e.color as entity_color,
+                      c.name as category_name
+               FROM acct_splits s
+               LEFT JOIN acct_entities e ON e.id = s.entity_id
+               LEFT JOIN acct_categories c ON c.id = s.category_id
+               WHERE s.transaction_id = ? ORDER BY s.id""",
+            (txn_id,),
+        ).fetchall()
+        txn["splits"] = [dict(s) for s in splits]
+        tags = conn.execute(
+            """SELECT t.* FROM acct_tags t
+               JOIN acct_transaction_tags tt ON tt.tag_id = t.id
+               WHERE tt.transaction_id = ?""",
+            (txn_id,),
+        ).fetchall()
+        txn["tags"] = [dict(tg) for tg in tags]
+    return txn
+
+
+def create_acct_transaction(date: str, description: str, total_amount: float,
+                            txn_type: str, account_id: int | None = None,
+                            transfer_to_account_id: int | None = None,
+                            notes: str | None = None, receipt_path: str | None = None,
+                            source: str = "manual", source_ref: str | None = None,
+                            splits: list[dict] | None = None,
+                            tag_ids: list[int] | None = None,
+                            db_path: str | Path | None = None) -> dict:
+    """Create a transaction with splits. Each split: {entity_id, category_id, amount, memo}."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            """INSERT INTO acct_transactions
+               (date, description, total_amount, type, account_id, transfer_to_account_id,
+                notes, receipt_path, source, source_ref)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (date, description, total_amount, txn_type, account_id,
+             transfer_to_account_id, notes, receipt_path, source, source_ref),
+        )
+        txn_id = cur.lastrowid
+
+        if splits:
+            for sp in splits:
+                conn.execute(
+                    "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (txn_id, sp["entity_id"], sp.get("category_id"), sp["amount"], sp.get("memo")),
+                )
+
+        if tag_ids:
+            for tid in tag_ids:
+                try:
+                    conn.execute(
+                        "INSERT INTO acct_transaction_tags (transaction_id, tag_id) VALUES (?, ?)",
+                        (txn_id, tid),
+                    )
+                except sqlite3.IntegrityError:
+                    pass
+
+        conn.commit()
+    return get_acct_transaction(txn_id, db_path)
+
+
+def update_acct_transaction(txn_id: int, db_path: str | Path | None = None, **kwargs) -> dict:
+    """Update transaction fields and optionally replace splits and tags."""
+    splits = kwargs.pop("splits", None)
+    tag_ids = kwargs.pop("tag_ids", None)
+
+    allowed = {"date", "description", "total_amount", "type", "account_id",
+               "transfer_to_account_id", "notes", "receipt_path", "is_reconciled"}
+    updates = {k: v for k, v in kwargs.items() if k in allowed}
+
+    with _connect(db_path) as conn:
+        if updates:
+            updates["updated_at"] = datetime.utcnow().isoformat()
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            conn.execute(
+                f"UPDATE acct_transactions SET {set_clause} WHERE id = ?",
+                (*updates.values(), txn_id),
+            )
+
+        if splits is not None:
+            conn.execute("DELETE FROM acct_splits WHERE transaction_id = ?", (txn_id,))
+            for sp in splits:
+                conn.execute(
+                    "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (txn_id, sp["entity_id"], sp.get("category_id"), sp["amount"], sp.get("memo")),
+                )
+
+        if tag_ids is not None:
+            conn.execute("DELETE FROM acct_transaction_tags WHERE transaction_id = ?", (txn_id,))
+            for tid in tag_ids:
+                try:
+                    conn.execute(
+                        "INSERT INTO acct_transaction_tags (transaction_id, tag_id) VALUES (?, ?)",
+                        (txn_id, tid),
+                    )
+                except sqlite3.IntegrityError:
+                    pass
+
+        conn.commit()
+    return get_acct_transaction(txn_id, db_path)
+
+
+def delete_acct_transaction(txn_id: int, db_path: str | Path | None = None) -> bool:
+    with _connect(db_path) as conn:
+        # Enable FK cascade for this connection
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("DELETE FROM acct_transactions WHERE id = ?", (txn_id,))
+        conn.commit()
+    return True
+
+
+def reconcile_acct_transaction(txn_id: int, reconciled: bool = True,
+                               db_path: str | Path | None = None) -> dict:
+    with _connect(db_path) as conn:
+        conn.execute(
+            "UPDATE acct_transactions SET is_reconciled = ?, updated_at = datetime('now') WHERE id = ?",
+            (1 if reconciled else 0, txn_id),
+        )
+        conn.commit()
+    return get_acct_transaction(txn_id, db_path)
+
+
+# ---------------------------------------------------------------------------
+# Tags
+# ---------------------------------------------------------------------------
+
+def get_acct_tags(db_path: str | Path | None = None) -> list[dict]:
+    with _connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM acct_tags ORDER BY name").fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_acct_tag(name: str, color: str = "#6b7280",
+                    db_path: str | Path | None = None) -> dict:
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO acct_tags (name, color) VALUES (?, ?)", (name, color),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM acct_tags WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def delete_acct_tag(tag_id: int, db_path: str | Path | None = None) -> bool:
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM acct_transaction_tags WHERE tag_id = ?", (tag_id,))
+        conn.execute("DELETE FROM acct_tags WHERE id = ?", (tag_id,))
+        conn.commit()
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Reports
+# ---------------------------------------------------------------------------
+
+def get_acct_summary(entity_id: int | None = None,
+                     start_date: str | None = None, end_date: str | None = None,
+                     db_path: str | Path | None = None) -> dict:
+    """P&L summary: total income, expenses, net, by category."""
+    with _connect(db_path) as conn:
+        clauses, params = [], []
+        if start_date:
+            clauses.append("t.date >= ?")
+            params.append(start_date)
+        if end_date:
+            clauses.append("t.date <= ?")
+            params.append(end_date)
+        if entity_id is not None:
+            clauses.append("s.entity_id = ?")
+            params.append(entity_id)
+
+        where = (" AND " + " AND ".join(clauses)) if clauses else ""
+
+        # Income by category
+        income_rows = conn.execute(
+            f"""SELECT c.name as category, COALESCE(SUM(s.amount), 0) as total
+                FROM acct_splits s
+                JOIN acct_transactions t ON t.id = s.transaction_id
+                LEFT JOIN acct_categories c ON c.id = s.category_id
+                WHERE t.type = 'income'{where}
+                GROUP BY c.name ORDER BY total DESC""",
+            params,
+        ).fetchall()
+
+        # Expense by category
+        expense_rows = conn.execute(
+            f"""SELECT c.name as category, COALESCE(SUM(s.amount), 0) as total
+                FROM acct_splits s
+                JOIN acct_transactions t ON t.id = s.transaction_id
+                LEFT JOIN acct_categories c ON c.id = s.category_id
+                WHERE t.type = 'expense'{where}
+                GROUP BY c.name ORDER BY total DESC""",
+            params,
+        ).fetchall()
+
+        total_income = sum(r["total"] for r in income_rows)
+        total_expenses = sum(r["total"] for r in expense_rows)
+
+    return {
+        "total_income": round(total_income, 2),
+        "total_expenses": round(total_expenses, 2),
+        "net": round(total_income - total_expenses, 2),
+        "income_by_category": [dict(r) for r in income_rows],
+        "expense_by_category": [dict(r) for r in expense_rows],
+    }
+
+
+def get_acct_monthly_totals(entity_id: int | None = None, months: int = 12,
+                            db_path: str | Path | None = None) -> list[dict]:
+    """Monthly income/expense totals for charting."""
+    with _connect(db_path) as conn:
+        entity_clause = ""
+        params: list = []
+        if entity_id is not None:
+            entity_clause = "AND s.entity_id = ?"
+            params.append(entity_id)
+
+        rows = conn.execute(
+            f"""SELECT strftime('%Y-%m', t.date) as month,
+                       SUM(CASE WHEN t.type = 'income' THEN s.amount ELSE 0 END) as income,
+                       SUM(CASE WHEN t.type = 'expense' THEN s.amount ELSE 0 END) as expenses
+                FROM acct_splits s
+                JOIN acct_transactions t ON t.id = s.transaction_id
+                WHERE t.type IN ('income', 'expense')
+                  AND t.date >= date('now', '-' || ? || ' months')
+                  {entity_clause}
+                GROUP BY month ORDER BY month""",
+            [months] + params,
+        ).fetchall()
+
+    return [{"month": r["month"],
+             "income": round(r["income"], 2),
+             "expenses": round(r["expenses"], 2),
+             "net": round(r["income"] - r["expenses"], 2)} for r in rows]
+
+
+def get_acct_category_breakdown(entity_id: int | None = None, txn_type: str = "expense",
+                                start_date: str | None = None, end_date: str | None = None,
+                                db_path: str | Path | None = None) -> list[dict]:
+    """Category breakdown for pie/bar charts."""
+    with _connect(db_path) as conn:
+        clauses, params = ["t.type = ?"], [txn_type]
+        if entity_id is not None:
+            clauses.append("s.entity_id = ?")
+            params.append(entity_id)
+        if start_date:
+            clauses.append("t.date >= ?")
+            params.append(start_date)
+        if end_date:
+            clauses.append("t.date <= ?")
+            params.append(end_date)
+        where = " AND ".join(clauses)
+
+        rows = conn.execute(
+            f"""SELECT c.id as category_id, COALESCE(c.name, 'Uncategorized') as category,
+                       SUM(s.amount) as total, COUNT(*) as count
+                FROM acct_splits s
+                JOIN acct_transactions t ON t.id = s.transaction_id
+                LEFT JOIN acct_categories c ON c.id = s.category_id
+                WHERE {where}
+                GROUP BY c.id ORDER BY total DESC""",
+            params,
+        ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# CSV Import
+# ---------------------------------------------------------------------------
+
+def preview_acct_csv(csv_text: str, date_col: int = 0, desc_col: int = 1,
+                     amount_col: int = 2, has_header: bool = True,
+                     db_path: str | Path | None = None) -> list[dict]:
+    """Parse CSV text and return preview rows. Does not write to DB."""
+    import csv
+    import io
+    reader = csv.reader(io.StringIO(csv_text))
+    rows = list(reader)
+    if has_header and rows:
+        header = rows[0]
+        rows = rows[1:]
+    else:
+        header = []
+
+    preview = []
+    for i, row in enumerate(rows):
+        if len(row) <= max(date_col, desc_col, amount_col):
+            continue
+        raw_amount = row[amount_col].strip().replace("$", "").replace(",", "")
+        try:
+            amount = abs(float(raw_amount))
+        except ValueError:
+            continue
+        # Negative amounts in CSV are typically expenses
+        is_expense = raw_amount.startswith("-") or (raw_amount.startswith("(") and raw_amount.endswith(")"))
+        preview.append({
+            "row": i + (2 if has_header else 1),
+            "date": row[date_col].strip(),
+            "description": row[desc_col].strip(),
+            "amount": amount,
+            "type": "expense" if is_expense else "income",
+        })
+    return preview
+
+
+def import_acct_csv(rows: list[dict], account_id: int, default_entity_id: int,
+                    db_path: str | Path | None = None) -> int:
+    """Bulk-import transactions from pre-parsed CSV rows.
+    Each row: {date, description, amount, type}."""
+    count = 0
+    for row in rows:
+        create_acct_transaction(
+            date=row["date"],
+            description=row["description"],
+            total_amount=float(row["amount"]),
+            txn_type=row.get("type", "expense"),
+            account_id=account_id,
+            source="csv_import",
+            splits=[{"entity_id": default_entity_id, "amount": float(row["amount"])}],
+            db_path=db_path,
+        )
+        count += 1
+    return count
+
+
+# ---------------------------------------------------------------------------
+# Recurring Transactions
+# ---------------------------------------------------------------------------
+
+def get_acct_recurring(db_path: str | Path | None = None) -> list[dict]:
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT r.*, e.short_name as entity_name, c.name as category_name,
+                      a.name as account_name
+               FROM acct_recurring r
+               LEFT JOIN acct_entities e ON e.id = r.entity_id
+               LEFT JOIN acct_categories c ON c.id = r.category_id
+               LEFT JOIN acct_accounts a ON a.id = r.account_id
+               WHERE r.is_active = 1 ORDER BY r.next_date"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_acct_recurring(description: str, amount: float, txn_type: str,
+                          entity_id: int, frequency: str, next_date: str,
+                          category_id: int | None = None, account_id: int | None = None,
+                          db_path: str | Path | None = None) -> dict:
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            """INSERT INTO acct_recurring
+               (description, amount, type, entity_id, category_id, account_id, frequency, next_date)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (description, amount, txn_type, entity_id, category_id, account_id, frequency, next_date),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM acct_recurring WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def delete_acct_recurring(rec_id: int, db_path: str | Path | None = None) -> bool:
+    with _connect(db_path) as conn:
+        conn.execute("UPDATE acct_recurring SET is_active = 0 WHERE id = ?", (rec_id,))
+        conn.commit()
+    return True
+
+
+def process_acct_recurring(db_path: str | Path | None = None) -> int:
+    """Create transactions for any recurring entries whose next_date has passed."""
+    from dateutil.relativedelta import relativedelta
+    today = datetime.now().strftime("%Y-%m-%d")
+    created = 0
+    with _connect(db_path) as conn:
+        due = conn.execute(
+            "SELECT * FROM acct_recurring WHERE is_active = 1 AND next_date <= ?",
+            (today,),
+        ).fetchall()
+
+    for rec in due:
+        create_acct_transaction(
+            date=rec["next_date"],
+            description=rec["description"],
+            total_amount=rec["amount"],
+            txn_type=rec["type"],
+            account_id=rec["account_id"],
+            source="recurring",
+            source_ref=str(rec["id"]),
+            splits=[{"entity_id": rec["entity_id"], "category_id": rec["category_id"],
+                     "amount": rec["amount"]}],
+            db_path=db_path,
+        )
+        # Advance next_date
+        current = datetime.strptime(rec["next_date"], "%Y-%m-%d")
+        freq = rec["frequency"]
+        if freq == "weekly":
+            nxt = current + timedelta(weeks=1)
+        elif freq == "biweekly":
+            nxt = current + timedelta(weeks=2)
+        elif freq == "monthly":
+            nxt = current + relativedelta(months=1)
+        elif freq == "quarterly":
+            nxt = current + relativedelta(months=3)
+        elif freq == "yearly":
+            nxt = current + relativedelta(years=1)
+        else:
+            nxt = current + relativedelta(months=1)
+        with _connect(db_path) as conn:
+            conn.execute(
+                "UPDATE acct_recurring SET next_date = ? WHERE id = ?",
+                (nxt.strftime("%Y-%m-%d"), rec["id"]),
+            )
+            conn.commit()
+        created += 1
+    return created

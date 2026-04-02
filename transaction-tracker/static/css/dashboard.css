@@ -1898,3 +1898,244 @@ div.mobile-card.row-rsvp-only {
     font-size: 0.88rem;
     margin-top: 0.5rem;
 }
+
+/* =========================================================
+   Accounting Module Styles
+   ========================================================= */
+
+/* ---- Entity Pill Selector ---- */
+.acct-entity-pills { display: flex; gap: 0.35rem; margin-right: 0.75rem; }
+.acct-pill {
+    padding: 0.3rem 0.75rem; border-radius: 999px; border: 2px solid var(--border);
+    background: var(--surface); cursor: pointer; font-size: 0.8rem; font-weight: 600;
+    transition: all 0.15s;
+}
+.acct-pill:hover { border-color: var(--pill-color, var(--primary)); }
+.acct-pill.active {
+    background: var(--pill-color, var(--primary)); color: #fff;
+    border-color: var(--pill-color, var(--primary));
+}
+
+/* ---- Sub-tabs ---- */
+.acct-subtabs {
+    display: flex; gap: 0; background: var(--surface); border-bottom: 2px solid var(--border);
+    padding: 0 1rem; position: sticky; z-index: 97;
+}
+.acct-subtab {
+    padding: 0.65rem 1.25rem; border: none; background: none; cursor: pointer;
+    font-size: 0.875rem; font-weight: 500; color: var(--text-muted);
+    border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s;
+}
+.acct-subtab:hover { color: var(--text); }
+.acct-subtab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ---- Tab Panels ---- */
+.acct-tab-panel { display: none; padding: 1.5rem; }
+.acct-tab-panel.active { display: block; }
+
+/* ---- Summary Cards ---- */
+.acct-summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+.acct-card {
+    background: var(--surface); border-radius: var(--radius); padding: 1.25rem;
+    box-shadow: var(--shadow); border-left: 4px solid var(--border);
+}
+.acct-card-income { border-left-color: var(--green); }
+.acct-card-expense { border-left-color: var(--red); }
+.acct-card-net { border-left-color: var(--primary); }
+.acct-card-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.acct-card-value { font-size: 1.75rem; font-weight: 700; margin-top: 0.25rem; }
+.acct-positive { color: var(--green); }
+.acct-negative { color: var(--red); }
+
+/* ---- Date Range ---- */
+.acct-date-range { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1.5rem; }
+.acct-date-range select, .acct-date-range input {
+    padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 0.85rem;
+}
+
+/* ---- Section ---- */
+.acct-section { margin-bottom: 2rem; }
+.acct-section h3 { font-size: 1rem; margin-bottom: 0.75rem; }
+
+/* ---- Chart ---- */
+.acct-chart-container { background: var(--surface); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); }
+.acct-chart { display: flex; align-items: flex-end; gap: 0.5rem; height: 200px; padding-top: 1rem; }
+.acct-chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.acct-chart-bars { display: flex; gap: 2px; align-items: flex-end; width: 100%; height: 180px; }
+.acct-chart-bar { flex: 1; border-radius: 3px 3px 0 0; min-height: 2px; transition: height 0.3s; cursor: pointer; }
+.acct-bar-income { background: var(--green); }
+.acct-bar-expense { background: var(--red); }
+.acct-chart-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem; }
+.acct-chart-legend { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
+.acct-legend-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; }
+.acct-legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* ---- Balance Grid ---- */
+.acct-balance-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; }
+.acct-balance-card {
+    background: var(--surface); border-radius: var(--radius); padding: 1rem;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+}
+.acct-balance-name { font-weight: 600; font-size: 0.9rem; }
+.acct-balance-type { font-size: 0.75rem; color: var(--text-muted); text-transform: capitalize; }
+.acct-balance-amount { font-size: 1.25rem; font-weight: 700; margin-top: 0.5rem; }
+
+/* ---- Tables ---- */
+.acct-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+.acct-table th { text-align: left; padding: 0.6rem 0.75rem; font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+.acct-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+.acct-table-full { margin-top: 0.5rem; }
+.acct-table .text-right { text-align: right; }
+.acct-txn-row { cursor: pointer; transition: background 0.1s; }
+.acct-txn-row:hover { background: var(--row-hover); }
+
+/* ---- Badges ---- */
+.acct-entity-badge {
+    display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px;
+    color: #fff; font-size: 0.7rem; font-weight: 600;
+}
+.acct-type-badge {
+    display: inline-block; padding: 0.15rem 0.5rem; border-radius: var(--radius);
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+}
+.acct-type-income { background: #dcfce7; color: #166534; }
+.acct-type-expense { background: #fef2f2; color: #991b1b; }
+.acct-type-transfer { background: #eff6ff; color: #1e40af; }
+.acct-reconciled { color: var(--green); margin-left: 0.25rem; font-size: 0.8rem; }
+
+/* ---- Split Badges ---- */
+.acct-split-cell { max-width: 300px; }
+.acct-split-badge {
+    display: inline-block; padding: 0.15rem 0.4rem; margin: 0.1rem;
+    border: 1px solid; border-radius: var(--radius); font-size: 0.7rem; white-space: nowrap;
+}
+
+/* ---- Tags ---- */
+.acct-tag-chip {
+    display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px;
+    font-size: 0.7rem; color: #fff; margin: 0.1rem;
+}
+.acct-tag-selectable { cursor: pointer; border: 1px solid; transition: all 0.15s; }
+.acct-tag-selectable:hover { opacity: 0.8; }
+
+/* ---- Toolbar ---- */
+.acct-toolbar {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+    margin-bottom: 1rem; padding: 0.75rem; background: var(--surface);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.acct-search {
+    flex: 1; min-width: 200px; padding: 0.5rem 0.75rem; border: 1px solid var(--border);
+    border-radius: var(--radius); font-size: 0.85rem;
+}
+.acct-select {
+    padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 0.85rem; background: var(--surface);
+}
+
+/* ---- Modals ---- */
+.acct-modal { width: 90%; max-width: 700px; max-height: 90vh; overflow-y: auto; }
+.acct-modal-sm { max-width: 500px; }
+.acct-modal-lg { max-width: 900px; }
+
+/* ---- Form ---- */
+.acct-form-row { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }
+.acct-form-group { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.acct-form-grow { flex: 1; }
+.acct-form-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+.acct-form-group input, .acct-form-group select, .acct-form-group textarea {
+    padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 0.85rem; width: 100%;
+}
+.acct-checkbox { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; margin: 0.5rem 0; }
+
+/* ---- Splits Editor ---- */
+.acct-splits-section {
+    margin: 1rem 0; padding: 1rem; background: var(--detail-bg); border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+.acct-splits-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+.acct-splits-header h3 { font-size: 0.9rem; margin: 0; }
+.acct-split-row {
+    display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;
+    padding: 0.5rem; background: var(--surface); border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+.acct-select-sm { padding: 0.35rem 0.5rem; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); min-width: 100px; }
+.acct-input-sm { padding: 0.35rem 0.5rem; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); width: 80px; }
+.split-memo { flex: 1; min-width: 80px; }
+.split-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: 1.2rem; padding: 0 0.25rem; }
+.acct-splits-total {
+    display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem;
+    padding-top: 0.5rem; border-top: 1px solid var(--border); font-weight: 600;
+}
+.acct-splits-diff { font-size: 0.8rem; font-weight: 400; }
+.btn-sm { font-size: 0.8rem; padding: 0.3rem 0.75rem; }
+.btn-icon-sm { background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 0 0.3rem; color: var(--text-muted); }
+.btn-icon-sm:hover { color: var(--red); }
+
+/* ---- Receipt Upload ---- */
+.acct-receipt-upload { display: flex; align-items: center; gap: 0.5rem; }
+
+/* ---- Accounts Grid ---- */
+.acct-accounts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.acct-account-card {
+    background: var(--surface); border-radius: var(--radius); padding: 1.25rem;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+}
+.acct-account-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+.acct-account-header h4 { margin: 0; font-size: 1rem; }
+.acct-account-type { font-size: 0.75rem; color: var(--text-muted); text-transform: capitalize; background: var(--bg); padding: 0.15rem 0.5rem; border-radius: var(--radius); }
+.acct-account-inst { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+.acct-account-balance { font-size: 1.5rem; font-weight: 700; }
+
+/* ---- Categories List ---- */
+.acct-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 0.5rem; }
+.acct-cat-item {
+    display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.75rem;
+    background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border);
+}
+.acct-cat-name { flex: 1; font-size: 0.85rem; }
+.acct-cat-entity { font-size: 0.7rem; color: var(--text-muted); }
+.acct-cat-type-toggle { display: flex; gap: 0; }
+
+/* ---- Reports ---- */
+.acct-report-pnl h3 { margin: 1.5rem 0 0.5rem; }
+.acct-report-pnl h3:first-child { margin-top: 0; }
+.acct-report-total td { border-top: 2px solid var(--text); font-size: 0.9rem; }
+.acct-report-net { margin-top: 1.5rem; padding: 1rem; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); text-align: center; }
+.acct-report-net span { font-size: 2rem; font-weight: 700; }
+.acct-cat-bar-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+.acct-cat-bar-label { width: 180px; font-size: 0.8rem; text-align: right; flex-shrink: 0; }
+.acct-cat-bar-track { flex: 1; height: 20px; background: var(--bg); border-radius: var(--radius); overflow: hidden; }
+.acct-cat-bar-fill { height: 100%; border-radius: var(--radius); transition: width 0.3s; }
+.acct-cat-bar-val { width: 80px; font-size: 0.8rem; font-weight: 600; }
+
+/* ---- Pagination ---- */
+.acct-pagination { display: flex; gap: 0.25rem; justify-content: center; margin-top: 1rem; }
+.acct-page-btn {
+    padding: 0.35rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); cursor: pointer; font-size: 0.8rem;
+}
+.acct-page-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* ---- CSV Preview ---- */
+.acct-csv-preview-info { font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 600; }
+.acct-csv-preview-table { max-height: 400px; overflow-y: auto; }
+
+/* ---- Empty State ---- */
+.acct-empty { color: var(--text-muted); text-align: center; padding: 2rem; font-size: 0.9rem; }
+.acct-muted { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.5rem; }
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+    .acct-summary-cards { grid-template-columns: 1fr; }
+    .acct-form-row { flex-direction: column; }
+    .acct-split-row { flex-wrap: wrap; }
+    .acct-entity-pills { margin: 0; }
+    .acct-toolbar { flex-direction: column; }
+    .acct-cat-bar-label { width: 100px; }
+    .acct-modal { width: 98%; }
+    .header-actions { flex-wrap: wrap; gap: 0.35rem; }
+}

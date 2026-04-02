@@ -112,6 +112,35 @@ from email_parser.database import (
     refund_item,
     get_app_setting,
     set_app_setting,
+    # Accounting module
+    get_all_acct_entities,
+    create_acct_entity,
+    update_acct_entity,
+    get_acct_categories,
+    create_acct_category,
+    update_acct_category,
+    delete_acct_category,
+    get_acct_accounts,
+    create_acct_account,
+    update_acct_account,
+    get_acct_account_balances,
+    get_acct_transactions,
+    get_acct_transaction,
+    create_acct_transaction,
+    update_acct_transaction,
+    delete_acct_transaction,
+    reconcile_acct_transaction,
+    get_acct_tags,
+    create_acct_tag,
+    delete_acct_tag,
+    get_acct_summary,
+    get_acct_monthly_totals,
+    get_acct_category_breakdown,
+    preview_acct_csv,
+    import_acct_csv,
+    get_acct_recurring,
+    create_acct_recurring,
+    delete_acct_recurring,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -3905,6 +3934,309 @@ def api_auth_logout():
     """Clear the session role."""
     session.pop("role", None)
     return jsonify({"status": "ok"})
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Accounting Module — Multi-Entity Bookkeeping
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.route("/accounting")
+def accounting_page():
+    """Multi-entity accounting dashboard."""
+    return render_template("accounting.html")
+
+
+# ── Entities ──────────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/entities")
+def api_acct_entities():
+    return jsonify(get_all_acct_entities())
+
+
+@app.route("/api/accounting/entities", methods=["POST"])
+def api_acct_create_entity():
+    d = request.json or {}
+    if not d.get("name") or not d.get("short_name"):
+        return jsonify({"error": "name and short_name required"}), 400
+    try:
+        return jsonify(create_acct_entity(d["name"], d["short_name"], d.get("color", "#2563eb")))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/accounting/entities/<int:eid>", methods=["PATCH"])
+def api_acct_update_entity(eid):
+    d = request.json or {}
+    return jsonify(update_acct_entity(eid, **d))
+
+
+# ── Categories ────────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/categories")
+def api_acct_categories():
+    entity_id = request.args.get("entity_id", type=int)
+    cat_type = request.args.get("type")
+    return jsonify(get_acct_categories(entity_id=entity_id, cat_type=cat_type))
+
+
+@app.route("/api/accounting/categories", methods=["POST"])
+def api_acct_create_category():
+    d = request.json or {}
+    if not d.get("name") or not d.get("type"):
+        return jsonify({"error": "name and type required"}), 400
+    return jsonify(create_acct_category(
+        d["name"], d["type"], d.get("entity_id"), d.get("parent_id"), d.get("icon"),
+    ))
+
+
+@app.route("/api/accounting/categories/<int:cid>", methods=["PATCH"])
+def api_acct_update_category(cid):
+    d = request.json or {}
+    return jsonify(update_acct_category(cid, **d))
+
+
+@app.route("/api/accounting/categories/<int:cid>", methods=["DELETE"])
+def api_acct_delete_category(cid):
+    delete_acct_category(cid)
+    return jsonify({"status": "ok"})
+
+
+# ── Accounts ──────────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/accounts")
+def api_acct_accounts():
+    entity_id = request.args.get("entity_id", type=int)
+    return jsonify(get_acct_accounts(entity_id=entity_id))
+
+
+@app.route("/api/accounting/accounts", methods=["POST"])
+def api_acct_create_account():
+    d = request.json or {}
+    if not d.get("name") or not d.get("account_type"):
+        return jsonify({"error": "name and account_type required"}), 400
+    return jsonify(create_acct_account(
+        d["name"], d["account_type"], d.get("entity_id"),
+        d.get("institution"), d.get("last_four"), d.get("opening_balance", 0),
+    ))
+
+
+@app.route("/api/accounting/accounts/<int:aid>", methods=["PATCH"])
+def api_acct_update_account(aid):
+    d = request.json or {}
+    return jsonify(update_acct_account(aid, **d))
+
+
+@app.route("/api/accounting/accounts/balances")
+def api_acct_account_balances():
+    return jsonify(get_acct_account_balances())
+
+
+# ── Transactions ──────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/transactions")
+def api_acct_transactions():
+    return jsonify(get_acct_transactions(
+        entity_id=request.args.get("entity_id", type=int),
+        account_id=request.args.get("account_id", type=int),
+        category_id=request.args.get("category_id", type=int),
+        start_date=request.args.get("start_date"),
+        end_date=request.args.get("end_date"),
+        search=request.args.get("search"),
+        txn_type=request.args.get("type"),
+        limit=request.args.get("limit", 200, type=int),
+        offset=request.args.get("offset", 0, type=int),
+    ))
+
+
+@app.route("/api/accounting/transactions/<int:tid>")
+def api_acct_transaction(tid):
+    txn = get_acct_transaction(tid)
+    if not txn:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(txn)
+
+
+@app.route("/api/accounting/transactions", methods=["POST"])
+def api_acct_create_transaction():
+    d = request.json or {}
+    required = ["date", "description", "total_amount", "type"]
+    for f in required:
+        if f not in d:
+            return jsonify({"error": f"{f} is required"}), 400
+    splits = d.get("splits", [])
+    if not splits:
+        return jsonify({"error": "At least one split is required"}), 400
+    # Validate split total matches transaction total
+    split_total = sum(s.get("amount", 0) for s in splits)
+    if abs(split_total - float(d["total_amount"])) > 0.01:
+        return jsonify({"error": f"Split total ({split_total:.2f}) doesn't match transaction amount ({d['total_amount']})"}), 400
+    try:
+        txn = create_acct_transaction(
+            date=d["date"], description=d["description"],
+            total_amount=float(d["total_amount"]), txn_type=d["type"],
+            account_id=d.get("account_id"), transfer_to_account_id=d.get("transfer_to_account_id"),
+            notes=d.get("notes"), receipt_path=d.get("receipt_path"),
+            source=d.get("source", "manual"), source_ref=d.get("source_ref"),
+            splits=splits, tag_ids=d.get("tag_ids"),
+        )
+        return jsonify(txn), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/accounting/transactions/<int:tid>", methods=["PUT"])
+def api_acct_update_transaction(tid):
+    d = request.json or {}
+    splits = d.get("splits")
+    if splits is not None and "total_amount" in d:
+        split_total = sum(s.get("amount", 0) for s in splits)
+        if abs(split_total - float(d["total_amount"])) > 0.01:
+            return jsonify({"error": f"Split total ({split_total:.2f}) doesn't match transaction amount ({d['total_amount']})"}), 400
+    try:
+        txn = update_acct_transaction(tid, **d)
+        return jsonify(txn)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/accounting/transactions/<int:tid>", methods=["DELETE"])
+def api_acct_delete_transaction(tid):
+    delete_acct_transaction(tid)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/accounting/transactions/<int:tid>/reconcile", methods=["POST"])
+def api_acct_reconcile(tid):
+    d = request.json or {}
+    return jsonify(reconcile_acct_transaction(tid, d.get("reconciled", True)))
+
+
+# ── Tags ──────────────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/tags")
+def api_acct_tags():
+    return jsonify(get_acct_tags())
+
+
+@app.route("/api/accounting/tags", methods=["POST"])
+def api_acct_create_tag():
+    d = request.json or {}
+    if not d.get("name"):
+        return jsonify({"error": "name required"}), 400
+    try:
+        return jsonify(create_acct_tag(d["name"], d.get("color", "#6b7280")))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/accounting/tags/<int:tid>", methods=["DELETE"])
+def api_acct_delete_tag(tid):
+    delete_acct_tag(tid)
+    return jsonify({"status": "ok"})
+
+
+# ── Reports ───────────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/reports/summary")
+def api_acct_report_summary():
+    return jsonify(get_acct_summary(
+        entity_id=request.args.get("entity_id", type=int),
+        start_date=request.args.get("start_date"),
+        end_date=request.args.get("end_date"),
+    ))
+
+
+@app.route("/api/accounting/reports/monthly")
+def api_acct_report_monthly():
+    return jsonify(get_acct_monthly_totals(
+        entity_id=request.args.get("entity_id", type=int),
+        months=request.args.get("months", 12, type=int),
+    ))
+
+
+@app.route("/api/accounting/reports/categories")
+def api_acct_report_categories():
+    return jsonify(get_acct_category_breakdown(
+        entity_id=request.args.get("entity_id", type=int),
+        txn_type=request.args.get("type", "expense"),
+        start_date=request.args.get("start_date"),
+        end_date=request.args.get("end_date"),
+    ))
+
+
+# ── CSV Import ────────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/import/preview", methods=["POST"])
+def api_acct_import_preview():
+    if "file" in request.files:
+        csv_text = request.files["file"].read().decode("utf-8", errors="replace")
+    elif request.json and "csv_text" in request.json:
+        csv_text = request.json["csv_text"]
+    else:
+        return jsonify({"error": "No CSV data provided"}), 400
+    d = request.form if request.files else (request.json or {})
+    rows = preview_acct_csv(
+        csv_text,
+        date_col=int(d.get("date_col", 0)),
+        desc_col=int(d.get("desc_col", 1)),
+        amount_col=int(d.get("amount_col", 2)),
+        has_header=d.get("has_header", "true") not in ("false", "0", False),
+    )
+    return jsonify({"rows": rows, "count": len(rows)})
+
+
+@app.route("/api/accounting/import/commit", methods=["POST"])
+def api_acct_import_commit():
+    d = request.json or {}
+    if not d.get("rows") or not d.get("account_id") or not d.get("entity_id"):
+        return jsonify({"error": "rows, account_id, and entity_id required"}), 400
+    count = import_acct_csv(d["rows"], d["account_id"], d["entity_id"])
+    return jsonify({"imported": count})
+
+
+# ── Recurring ─────────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/recurring")
+def api_acct_recurring():
+    return jsonify(get_acct_recurring())
+
+
+@app.route("/api/accounting/recurring", methods=["POST"])
+def api_acct_create_recurring():
+    d = request.json or {}
+    required = ["description", "amount", "type", "entity_id", "frequency", "next_date"]
+    for f in required:
+        if f not in d:
+            return jsonify({"error": f"{f} required"}), 400
+    return jsonify(create_acct_recurring(
+        d["description"], float(d["amount"]), d["type"], d["entity_id"],
+        d["frequency"], d["next_date"], d.get("category_id"), d.get("account_id"),
+    ))
+
+
+@app.route("/api/accounting/recurring/<int:rid>", methods=["DELETE"])
+def api_acct_delete_recurring(rid):
+    delete_acct_recurring(rid)
+    return jsonify({"status": "ok"})
+
+
+# ── Receipt Upload ────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/upload-receipt", methods=["POST"])
+def api_acct_upload_receipt():
+    """Upload a receipt image/PDF and return the file path."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "No filename"}), 400
+    # Save to receipts directory
+    receipts_dir = os.path.join(os.path.dirname(DB_PATH), "receipts")
+    os.makedirs(receipts_dir, exist_ok=True)
+    safe_name = f"{secrets.token_hex(8)}_{f.filename}"
+    path = os.path.join(receipts_dir, safe_name)
+    f.save(path)
+    return jsonify({"path": path, "filename": safe_name})
 
 
 # ---------------------------------------------------------------------------
