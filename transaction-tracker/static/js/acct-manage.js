@@ -136,13 +136,20 @@ async function saveCategory() {
 }
 
 
-// ── CSV Import ───────────────────────────────────────────
+// ── CSV Import (Smart Auto-Detect) ───────────────────────
+
+let _csvHeaders = [];
+let _csvMapping = {};
+let _csvRawFile = null;
 
 function openCsvModal() {
     $('#csv-step-upload').style.display = '';
     $('#csv-step-preview').style.display = 'none';
     $('#csv-file').value = '';
     ACCT.csvData = null;
+    _csvHeaders = [];
+    _csvMapping = {};
+    _csvRawFile = null;
     $('#csv-modal').style.display = 'flex';
 }
 
@@ -150,18 +157,20 @@ async function previewCsv() {
     const fileInput = $('#csv-file');
     if (!fileInput.files.length) { alert('Choose a CSV file'); return; }
 
+    _csvRawFile = fileInput.files[0];
     const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-    formData.append('date_col', $('#csv-date-col').value);
-    formData.append('desc_col', $('#csv-desc-col').value);
-    formData.append('amount_col', $('#csv-amount-col').value);
-    formData.append('has_header', $('#csv-has-header').checked ? 'true' : 'false');
+    formData.append('file', _csvRawFile);
 
     try {
         const res = await fetch('/api/accounting/import/preview', { method: 'POST', body: formData });
         const data = await res.json();
         if (data.error) { alert(data.error); return; }
+
+        _csvHeaders = data.headers || [];
+        _csvMapping = data.mapping || {};
         ACCT.csvData = data.rows;
+
+        renderCsvMapping(_csvHeaders, _csvMapping);
         $('#csv-preview-count').textContent = data.count;
         renderCsvPreview(data.rows);
         $('#csv-step-upload').style.display = 'none';
@@ -171,18 +180,84 @@ async function previewCsv() {
     }
 }
 
+function renderCsvMapping(headers, mapping) {
+    const el = $('#csv-mapping-row');
+    if (!headers.length) { el.innerHTML = ''; return; }
+
+    const fields = [
+        { key: 'date', label: 'Date', required: true },
+        { key: 'description', label: 'Description', required: true },
+        { key: 'amount', label: 'Amount', required: true },
+        { key: 'category', label: 'Category', required: false },
+        { key: 'memo', label: 'Memo', required: false },
+    ];
+
+    el.innerHTML = fields.map(f => {
+        const opts = headers.map((h, i) =>
+            `<option value="${i}" ${mapping[f.key] === i ? 'selected' : ''}>${h}</option>`
+        ).join('');
+        const matched = mapping[f.key] != null;
+        return `<div class="acct-form-group">
+            <label>${f.label} ${f.required ? '*' : ''}</label>
+            <select class="csv-col-map" data-field="${f.key}" ${matched ? 'style="border-color:var(--green);"' : ''}>
+                <option value="">— skip —</option>
+                ${opts}
+            </select>
+            ${matched ? '<span class="acct-csv-match-ok">auto-matched</span>' : ''}
+        </div>`;
+    }).join('');
+}
+
+async function remapCsv() {
+    if (!_csvRawFile) return;
+
+    // Collect user-adjusted mapping from dropdowns
+    const formData = new FormData();
+    formData.append('file', _csvRawFile);
+    $$('.csv-col-map').forEach(sel => {
+        if (sel.value !== '') {
+            formData.append(sel.dataset.field + '_col', sel.value);
+        }
+    });
+
+    try {
+        const res = await fetch('/api/accounting/import/preview', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+
+        _csvMapping = data.mapping || {};
+        ACCT.csvData = data.rows;
+
+        renderCsvMapping(data.headers || _csvHeaders, _csvMapping);
+        $('#csv-preview-count').textContent = data.count;
+        renderCsvPreview(data.rows);
+    } catch (e) {
+        alert('Re-map error: ' + e.message);
+    }
+}
+
 function renderCsvPreview(rows) {
     const el = $('#csv-preview-table');
-    if (!rows.length) { el.innerHTML = '<p>No transactions found in CSV</p>'; return; }
+    if (!rows.length) { el.innerHTML = '<p class="acct-empty">No transactions found in CSV. Check column mapping above.</p>'; return; }
     const preview = rows.slice(0, 50);
+    const hasCat = rows.some(r => r.category);
+    const hasMemo = rows.some(r => r.memo);
     el.innerHTML = `<table class="acct-table">
-        <thead><tr><th>Row</th><th>Date</th><th>Description</th><th>Amount</th><th>Type</th></tr></thead>
+        <thead><tr>
+            <th>Date</th><th>Description</th>
+            ${hasCat ? '<th>Category</th>' : ''}
+            <th class="text-right">Amount</th><th>Type</th>
+            ${hasMemo ? '<th>Memo</th>' : ''}
+        </tr></thead>
         <tbody>${preview.map(r => `<tr>
-            <td>${r.row}</td><td>${r.date}</td><td>${r.description}</td>
-            <td class="${r.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(r.amount)}</td>
-            <td>${r.type}</td>
+            <td>${r.date}</td>
+            <td>${r.description}</td>
+            ${hasCat ? `<td class="acct-muted">${r.category || ''}</td>` : ''}
+            <td class="text-right ${r.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(r.amount)}</td>
+            <td><span class="acct-type-badge acct-type-${r.type}">${r.type}</span></td>
+            ${hasMemo ? `<td class="acct-muted">${r.memo || ''}</td>` : ''}
         </tr>`).join('')}</tbody>
-    </table>${rows.length > 50 ? `<p class="acct-muted">Showing 50 of ${rows.length}...</p>` : ''}`;
+    </table>${rows.length > 50 ? `<p class="acct-muted">Showing 50 of ${rows.length} transactions...</p>` : ''}`;
 }
 
 async function commitCsvImport() {

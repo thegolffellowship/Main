@@ -120,6 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         $('#csv-step-preview').style.display = 'none';
     });
     $('#btn-csv-commit').addEventListener('click', commitCsvImport);
+    $('#btn-csv-remap').addEventListener('click', remapCsv);
 
     // Transaction filters
     let _searchTimer;

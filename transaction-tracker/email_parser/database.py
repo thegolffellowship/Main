@@ -6697,39 +6697,162 @@ def get_acct_category_breakdown(entity_id: int | None = None, txn_type: str = "e
 # CSV Import
 # ---------------------------------------------------------------------------
 
-def preview_acct_csv(csv_text: str, date_col: int = 0, desc_col: int = 1,
-                     amount_col: int = 2, has_header: bool = True,
-                     db_path: str | Path | None = None) -> list[dict]:
-    """Parse CSV text and return preview rows. Does not write to DB."""
+def preview_acct_csv(csv_text: str, db_path: str | Path | None = None, **overrides) -> dict:
+    """Parse CSV text, auto-detect column mapping from headers, return preview rows + mapping.
+
+    Recognises common bank export formats (Chase, Amex, Wells Fargo, generic).
+    Returns {"headers": [...], "mapping": {...}, "rows": [...], "count": N}.
+    """
     import csv
     import io
+
     reader = csv.reader(io.StringIO(csv_text))
-    rows = list(reader)
-    if has_header and rows:
-        header = rows[0]
-        rows = rows[1:]
+    all_rows = list(reader)
+    if not all_rows:
+        return {"headers": [], "mapping": {}, "rows": [], "count": 0}
+
+    # ── Auto-detect header row ──
+    # Heuristic: first row is a header if it contains common keywords
+    _DATE_KW = {"date", "transaction date", "trans date", "post date", "posting date", "posted date"}
+    _DESC_KW = {"description", "memo", "details", "payee", "name", "merchant", "narrative", "transaction description"}
+    _AMT_KW = {"amount", "debit", "credit", "total", "value", "sum", "transaction amount"}
+    _CAT_KW = {"category", "type", "class", "group"}
+    _MEMO_KW = {"memo", "note", "notes", "reference", "check", "check or slip #"}
+
+    header_lower = [h.strip().lower() for h in all_rows[0]]
+    has_header = any(h in _DATE_KW | _DESC_KW | _AMT_KW for h in header_lower)
+
+    if has_header:
+        headers = [h.strip() for h in all_rows[0]]
+        data_rows = all_rows[1:]
     else:
-        header = []
+        headers = [f"Column {i+1}" for i in range(len(all_rows[0]))]
+        data_rows = all_rows
+
+    # ── Auto-map columns ──
+    mapping = {"date": None, "description": None, "amount": None, "category": None, "memo": None}
+
+    for i, h in enumerate(header_lower if has_header else []):
+        if mapping["date"] is None and h in _DATE_KW:
+            mapping["date"] = i
+        elif mapping["description"] is None and h in _DESC_KW:
+            mapping["description"] = i
+        elif mapping["amount"] is None and h in _AMT_KW:
+            mapping["amount"] = i
+        elif mapping["category"] is None and h in _CAT_KW:
+            mapping["category"] = i
+        elif mapping["memo"] is None and h in _MEMO_KW:
+            mapping["memo"] = i
+
+    # Fallback: if we didn't match by keyword, try smart guessing
+    if mapping["date"] is None:
+        # First column with date-like values
+        for i in range(len(headers)):
+            sample = data_rows[0][i] if data_rows and i < len(data_rows[0]) else ""
+            if re.match(r"\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}", sample.strip()):
+                mapping["date"] = i
+                break
+
+    if mapping["amount"] is None:
+        # First column with numeric/currency values
+        for i in range(len(headers)):
+            sample = data_rows[0][i] if data_rows and i < len(data_rows[0]) else ""
+            cleaned = sample.strip().replace("$", "").replace(",", "").replace("(", "-").replace(")", "")
+            try:
+                float(cleaned)
+                mapping["amount"] = i
+            except ValueError:
+                continue
+
+    if mapping["description"] is None:
+        # Longest string column that isn't date or amount
+        taken = {mapping["date"], mapping["amount"]}
+        best_i, best_len = None, 0
+        for i in range(len(headers)):
+            if i in taken:
+                continue
+            sample = data_rows[0][i] if data_rows and i < len(data_rows[0]) else ""
+            if len(sample.strip()) > best_len:
+                best_i, best_len = i, len(sample.strip())
+        mapping["description"] = best_i
+
+    # Allow caller overrides
+    for k in ("date", "description", "amount", "category", "memo"):
+        key = f"{k}_col"
+        if key in overrides and overrides[key] is not None:
+            mapping[k] = int(overrides[key])
+
+    # ── Parse rows ──
+    date_idx = mapping.get("date")
+    desc_idx = mapping.get("description")
+    amt_idx = mapping.get("amount")
+    cat_idx = mapping.get("category")
+    memo_idx = mapping.get("memo")
 
     preview = []
-    for i, row in enumerate(rows):
-        if len(row) <= max(date_col, desc_col, amount_col):
+    for i, row in enumerate(data_rows):
+        if not row or all(c.strip() == "" for c in row):
             continue
-        raw_amount = row[amount_col].strip().replace("$", "").replace(",", "")
+
+        # Date
+        raw_date = row[date_idx].strip() if date_idx is not None and date_idx < len(row) else ""
+        if not raw_date:
+            continue
+        # Normalise date to YYYY-MM-DD
+        parsed_date = _normalise_csv_date(raw_date)
+        if not parsed_date:
+            continue
+
+        # Amount
+        raw_amount = row[amt_idx].strip().replace("$", "").replace(",", "") if amt_idx is not None and amt_idx < len(row) else ""
+        raw_amount = raw_amount.replace("(", "-").replace(")", "")
         try:
-            amount = abs(float(raw_amount))
+            amount_val = float(raw_amount)
         except ValueError:
             continue
-        # Negative amounts in CSV are typically expenses
-        is_expense = raw_amount.startswith("-") or (raw_amount.startswith("(") and raw_amount.endswith(")"))
+        is_expense = amount_val < 0
+        amount = abs(amount_val)
+        if amount == 0:
+            continue
+
+        # Description
+        desc = row[desc_idx].strip() if desc_idx is not None and desc_idx < len(row) else "(no description)"
+
+        # Category (optional)
+        cat = row[cat_idx].strip() if cat_idx is not None and cat_idx < len(row) else ""
+
+        # Memo (optional)
+        memo = row[memo_idx].strip() if memo_idx is not None and memo_idx < len(row) else ""
+
         preview.append({
             "row": i + (2 if has_header else 1),
-            "date": row[date_col].strip(),
-            "description": row[desc_col].strip(),
-            "amount": amount,
+            "date": parsed_date,
+            "description": desc,
+            "amount": round(amount, 2),
             "type": "expense" if is_expense else "income",
+            "category": cat,
+            "memo": memo,
         })
-    return preview
+
+    return {
+        "headers": headers,
+        "mapping": {k: v for k, v in mapping.items() if v is not None},
+        "rows": preview,
+        "count": len(preview),
+        "has_header": has_header,
+    }
+
+
+def _normalise_csv_date(raw: str) -> str | None:
+    """Try to parse various date formats into YYYY-MM-DD."""
+    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%m-%d-%Y", "%m-%d-%y",
+                "%d/%m/%Y", "%Y/%m/%d", "%m.%d.%Y", "%m.%d.%y"):
+        try:
+            dt = datetime.strptime(raw.strip(), fmt)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
 
 
 def import_acct_csv(rows: list[dict], account_id: int, default_entity_id: int,
