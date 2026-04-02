@@ -6824,12 +6824,34 @@ def preview_acct_csv(csv_text: str, db_path: str | Path | None = None, **overrid
         # Memo (optional)
         memo = row[memo_idx].strip() if memo_idx is not None and memo_idx < len(row) else ""
 
+        # ── Smart type classification ──
+        # Detect transfers (credit card payments, account transfers, etc.)
+        desc_upper = desc.upper()
+        txn_type = "expense" if is_expense else "income"
+
+        _TRANSFER_PATTERNS = (
+            "AUTOMATIC PAYMENT", "AUTOPAY", "AUTO PAY", "ONLINE PAYMENT",
+            "PAYMENT THANK YOU", "PAYMENT - THANK", "MOBILE PAYMENT",
+            "ONLINE TRANSFER", "TRANSFER TO", "TRANSFER FROM",
+            "FUNDS TRANSFER", "WIRE TRANSFER", "ACH TRANSFER",
+            "VENMO CASHOUT", "PAYPAL TRANSFER", "ZELLE",
+            "CREDIT CARD PAYMENT", "BALANCE TRANSFER",
+        )
+        is_transfer = any(p in desc_upper for p in _TRANSFER_PATTERNS)
+
+        # Also check the Category column if present (Chase uses "Payment" category)
+        if cat and cat.lower() in ("payment", "transfer", "credit card payment"):
+            is_transfer = True
+
+        if is_transfer:
+            txn_type = "transfer"
+
         preview.append({
             "row": i + (2 if has_header else 1),
             "date": parsed_date,
             "description": desc,
             "amount": round(amount, 2),
-            "type": "expense" if is_expense else "income",
+            "type": txn_type,
             "category": cat,
             "memo": memo,
         })
