@@ -1,0 +1,293 @@
+/* =========================================================
+   Accounting Module — Accounts, Categories & CSV Import
+   ========================================================= */
+
+// ── Accounts Tab ─────────────────────────────────────────
+
+async function loadAccounts() {
+    try {
+        const data = await api('/accounts/balances');
+        renderAccountsGrid(data);
+    } catch (e) {
+        console.error('Accounts load error:', e);
+    }
+}
+
+function renderAccountsGrid(accounts) {
+    const el = $('#accounts-grid');
+    if (!accounts.length) {
+        el.innerHTML = '<p class="acct-empty">No accounts yet. Click "+ Add Account" to get started.</p>';
+        return;
+    }
+    el.innerHTML = accounts.map(a => `
+        <div class="acct-account-card" data-id="${a.id}">
+            <div class="acct-account-header">
+                <h4>${a.name}</h4>
+                <span class="acct-account-type">${a.account_type.replace('_', ' ')}</span>
+            </div>
+            <div class="acct-account-details">
+                ${a.institution ? `<div class="acct-account-inst">${a.institution}${a.last_four ? ' ••' + a.last_four : ''}</div>` : ''}
+                <div class="acct-account-balance ${a.current_balance >= 0 ? 'acct-positive' : 'acct-negative'}">
+                    ${fmt(a.current_balance)}
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openAccountModal() {
+    $('#account-edit-id').value = '';
+    $('#account-modal-title').textContent = 'Add Account';
+    $('#account-name').value = '';
+    $('#account-type').value = 'checking';
+    $('#account-institution').value = '';
+    $('#account-last-four').value = '';
+    $('#account-balance').value = '0';
+    $('#account-modal').style.display = 'flex';
+}
+
+async function saveAccount() {
+    const data = {
+        name: $('#account-name').value.trim(),
+        account_type: $('#account-type').value,
+        entity_id: $('#account-entity').value ? parseInt($('#account-entity').value) : null,
+        institution: $('#account-institution').value.trim() || null,
+        last_four: $('#account-last-four').value.trim() || null,
+        opening_balance: parseFloat($('#account-balance').value) || 0,
+    };
+    if (!data.name) { alert('Account name is required'); return; }
+
+    try {
+        const editId = $('#account-edit-id').value;
+        if (editId) {
+            await api('/accounts/' + editId, { method: 'PATCH', body: data });
+        } else {
+            await api('/accounts', { method: 'POST', body: data });
+        }
+        $('#account-modal').style.display = 'none';
+        await reloadMasterData();
+        loadAccounts();
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+
+// ── Categories Tab ───────────────────────────────────────
+
+async function loadCategories() {
+    const type = document.querySelector('.acct-cat-type-toggle .acct-subtab.active');
+    const catType = type ? type.dataset.cattype : 'expense';
+    try {
+        const data = await api('/categories' + buildQS({ type: catType }));
+        renderCategoriesList(data);
+    } catch (e) {
+        console.error('Categories load error:', e);
+    }
+}
+
+function renderCategoriesList(cats) {
+    const el = $('#categories-list');
+    if (!cats.length) {
+        el.innerHTML = '<p class="acct-empty">No categories found</p>';
+        return;
+    }
+    el.innerHTML = `<div class="acct-cat-grid">${cats.map(c => {
+        const ent = c.entity_id ? entityName(c.entity_id) : 'All';
+        return `<div class="acct-cat-item">
+            <span class="acct-cat-name">${c.icon || ''} ${c.name}</span>
+            <span class="acct-cat-entity">${ent}</span>
+            <button class="btn-icon-sm acct-btn-del" data-id="${c.id}" title="Delete">&times;</button>
+        </div>`;
+    }).join('')}</div>`;
+
+    el.querySelectorAll('.acct-btn-del').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!confirm('Delete this category?')) return;
+            await api('/categories/' + btn.dataset.id, { method: 'DELETE' });
+            loadCategories();
+        });
+    });
+}
+
+function openCategoryModal() {
+    $('#category-name').value = '';
+    const activeType = document.querySelector('.acct-cat-type-toggle .acct-subtab.active');
+    $('#category-type').value = activeType ? activeType.dataset.cattype : 'expense';
+    $('#category-modal').style.display = 'flex';
+}
+
+async function saveCategory() {
+    const data = {
+        name: $('#category-name').value.trim(),
+        type: $('#category-type').value,
+        entity_id: $('#category-entity').value ? parseInt($('#category-entity').value) : null,
+    };
+    if (!data.name) { alert('Category name is required'); return; }
+
+    try {
+        await api('/categories', { method: 'POST', body: data });
+        $('#category-modal').style.display = 'none';
+        await reloadMasterData();
+        loadCategories();
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+
+// ── CSV Import ───────────────────────────────────────────
+
+function openCsvModal() {
+    $('#csv-step-upload').style.display = '';
+    $('#csv-step-preview').style.display = 'none';
+    $('#csv-file').value = '';
+    ACCT.csvData = null;
+    $('#csv-modal').style.display = 'flex';
+}
+
+async function previewCsv() {
+    const fileInput = $('#csv-file');
+    if (!fileInput.files.length) { alert('Choose a CSV file'); return; }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('date_col', $('#csv-date-col').value);
+    formData.append('desc_col', $('#csv-desc-col').value);
+    formData.append('amount_col', $('#csv-amount-col').value);
+    formData.append('has_header', $('#csv-has-header').checked ? 'true' : 'false');
+
+    try {
+        const res = await fetch('/api/accounting/import/preview', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        ACCT.csvData = data.rows;
+        $('#csv-preview-count').textContent = data.count;
+        renderCsvPreview(data.rows);
+        $('#csv-step-upload').style.display = 'none';
+        $('#csv-step-preview').style.display = '';
+    } catch (e) {
+        alert('Preview error: ' + e.message);
+    }
+}
+
+function renderCsvPreview(rows) {
+    const el = $('#csv-preview-table');
+    if (!rows.length) { el.innerHTML = '<p>No transactions found in CSV</p>'; return; }
+    const preview = rows.slice(0, 50);
+    el.innerHTML = `<table class="acct-table">
+        <thead><tr><th>Row</th><th>Date</th><th>Description</th><th>Amount</th><th>Type</th></tr></thead>
+        <tbody>${preview.map(r => `<tr>
+            <td>${r.row}</td><td>${r.date}</td><td>${r.description}</td>
+            <td class="${r.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(r.amount)}</td>
+            <td>${r.type}</td>
+        </tr>`).join('')}</tbody>
+    </table>${rows.length > 50 ? `<p class="acct-muted">Showing 50 of ${rows.length}...</p>` : ''}`;
+}
+
+async function commitCsvImport() {
+    if (!ACCT.csvData || !ACCT.csvData.length) return;
+    const accountId = $('#csv-account').value;
+    const entityId = $('#csv-entity').value;
+    if (!accountId || !entityId) { alert('Select an account and entity'); return; }
+
+    try {
+        const res = await api('/import/commit', {
+            method: 'POST',
+            body: { rows: ACCT.csvData, account_id: parseInt(accountId), entity_id: parseInt(entityId) },
+        });
+        alert(`Imported ${res.imported} transactions`);
+        $('#csv-modal').style.display = 'none';
+        refreshActiveTab();
+    } catch (e) {
+        alert('Import error: ' + e.message);
+    }
+}
+
+
+// ── Reports Tab ──────────────────────────────────────────
+
+async function loadReports() {
+    const reportType = $('#report-type').value;
+    const preset = $('#report-period').value;
+    const { start, end } = getDateRange(preset);
+    const qs = buildQS({ entity_id: ACCT.activeEntity, start_date: start, end_date: end });
+
+    try {
+        if (reportType === 'pnl') {
+            const data = await api('/reports/summary' + qs);
+            renderPnlReport(data);
+        } else if (reportType === 'category_breakdown') {
+            const [expenses, income] = await Promise.all([
+                api('/reports/categories' + buildQS({ entity_id: ACCT.activeEntity, type: 'expense', start_date: start, end_date: end })),
+                api('/reports/categories' + buildQS({ entity_id: ACCT.activeEntity, type: 'income', start_date: start, end_date: end })),
+            ]);
+            renderCategoryReport(expenses, income);
+        } else if (reportType === 'monthly_trend') {
+            const data = await api('/reports/monthly' + buildQS({ entity_id: ACCT.activeEntity, months: 24 }));
+            renderMonthlyReport(data);
+        }
+    } catch (e) {
+        console.error('Report error:', e);
+    }
+}
+
+function renderPnlReport(data) {
+    const el = $('#report-content');
+    el.innerHTML = `
+        <div class="acct-report-pnl">
+            <h3>Income</h3>
+            <table class="acct-table">
+                <tbody>
+                    ${data.income_by_category.map(r => `<tr><td>${r.category || 'Uncategorized'}</td><td class="text-right acct-positive">${fmt(r.total)}</td></tr>`).join('')}
+                    <tr class="acct-report-total"><td><strong>Total Income</strong></td><td class="text-right acct-positive"><strong>${fmt(data.total_income)}</strong></td></tr>
+                </tbody>
+            </table>
+            <h3>Expenses</h3>
+            <table class="acct-table">
+                <tbody>
+                    ${data.expense_by_category.map(r => `<tr><td>${r.category || 'Uncategorized'}</td><td class="text-right acct-negative">${fmt(r.total)}</td></tr>`).join('')}
+                    <tr class="acct-report-total"><td><strong>Total Expenses</strong></td><td class="text-right acct-negative"><strong>${fmt(data.total_expenses)}</strong></td></tr>
+                </tbody>
+            </table>
+            <div class="acct-report-net">
+                <h3>Net ${data.net >= 0 ? 'Profit' : 'Loss'}</h3>
+                <span class="${data.net >= 0 ? 'acct-positive' : 'acct-negative'}">${fmt(data.net)}</span>
+            </div>
+        </div>`;
+}
+
+function renderCategoryReport(expenses, income) {
+    const el = $('#report-content');
+    const renderBars = (items, color) => {
+        if (!items.length) return '<p class="acct-empty">No data</p>';
+        const max = Math.max(...items.map(i => i.total), 1);
+        return items.map(i => `
+            <div class="acct-cat-bar-row">
+                <span class="acct-cat-bar-label">${i.category} (${i.count})</span>
+                <div class="acct-cat-bar-track">
+                    <div class="acct-cat-bar-fill" style="width:${(i.total/max*100).toFixed(1)}%;background:${color}"></div>
+                </div>
+                <span class="acct-cat-bar-val">${fmt(i.total)}</span>
+            </div>`).join('');
+    };
+    el.innerHTML = `
+        <h3>Expenses by Category</h3>
+        ${renderBars(expenses, 'var(--red)')}
+        <h3 style="margin-top:2rem;">Income by Category</h3>
+        ${renderBars(income, 'var(--green)')}`;
+}
+
+function renderMonthlyReport(data) {
+    const el = $('#report-content');
+    if (!data.length) { el.innerHTML = '<p class="acct-empty">No data</p>'; return; }
+    el.innerHTML = `<table class="acct-table">
+        <thead><tr><th>Month</th><th class="text-right">Income</th><th class="text-right">Expenses</th><th class="text-right">Net</th></tr></thead>
+        <tbody>${data.map(d => `<tr>
+            <td>${d.month}</td>
+            <td class="text-right acct-positive">${fmt(d.income)}</td>
+            <td class="text-right acct-negative">${fmt(d.expenses)}</td>
+            <td class="text-right ${d.net >= 0 ? 'acct-positive' : 'acct-negative'}">${fmt(d.net)}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+}
