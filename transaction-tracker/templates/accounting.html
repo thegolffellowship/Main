@@ -382,6 +382,22 @@
                         <div class="acct-form-row" id="csv-mapping-row"></div>
                     </div>
                     <!-- Preview table -->
+                    <!-- Transfer account link (shown when transfers detected) -->
+                    <div class="acct-csv-transfer-link" id="csv-transfer-section" style="display:none; margin-top:1rem;">
+                        <div class="acct-csv-transfer-info">
+                            <strong><span id="csv-transfer-count">0</span> transfers detected</strong>
+                            <span class="acct-muted"> (credit card payments, account transfers, etc.)</span>
+                        </div>
+                        <div class="acct-form-row" style="margin-top:0.5rem;">
+                            <div class="acct-form-group acct-form-grow">
+                                <label>Link transfers to account</label>
+                                <select id="csv-transfer-account">
+                                    <option value="">— Don't link (decide later) —</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p class="acct-muted">If both accounts are imported, matching transfers are auto-linked by amount and date.</p>
+                    </div>
                     <div class="acct-csv-preview-info" style="margin-top:1rem;">
                         <strong><span id="csv-preview-count">0</span> transactions found</strong>
                     </div>
