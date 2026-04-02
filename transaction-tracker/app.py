@@ -4198,15 +4198,15 @@ def api_acct_import_preview():
         csv_text = request.json["csv_text"]
     else:
         return jsonify({"error": "No CSV data provided"}), 400
+    # Auto-detect columns from headers; caller can override with explicit indices
     d = request.form if request.files else (request.json or {})
-    rows = preview_acct_csv(
-        csv_text,
-        date_col=int(d.get("date_col", 0)),
-        desc_col=int(d.get("desc_col", 1)),
-        amount_col=int(d.get("amount_col", 2)),
-        has_header=d.get("has_header", "true") not in ("false", "0", False),
-    )
-    return jsonify({"rows": rows, "count": len(rows)})
+    overrides = {}
+    for key in ("date_col", "description_col", "amount_col", "category_col", "memo_col"):
+        val = d.get(key)
+        if val is not None and val != "":
+            overrides[key] = int(val)
+    result = preview_acct_csv(csv_text, **overrides)
+    return jsonify(result)
 
 
 @app.route("/api/accounting/import/commit", methods=["POST"])

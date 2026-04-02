@@ -355,49 +355,40 @@
                 <button class="modal-close" id="csv-modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <!-- Step 1: Upload -->
+                <!-- Step 1: Upload & Auto-Detect -->
                 <div id="csv-step-upload">
                     <div class="acct-form-group">
                         <label>CSV File</label>
-                        <input type="file" id="csv-file" accept=".csv,.txt">
+                        <input type="file" id="csv-file" accept=".csv,.txt,.CSV">
                     </div>
+                    <p class="acct-muted" style="margin:0.5rem 0;">Columns are auto-detected from headers. Supports Chase, Amex, Wells Fargo, and most bank exports.</p>
                     <div class="acct-form-row">
-                        <div class="acct-form-group">
-                            <label>Date Column</label>
-                            <input type="number" id="csv-date-col" value="0" min="0">
-                        </div>
-                        <div class="acct-form-group">
-                            <label>Description Column</label>
-                            <input type="number" id="csv-desc-col" value="1" min="0">
-                        </div>
-                        <div class="acct-form-group">
-                            <label>Amount Column</label>
-                            <input type="number" id="csv-amount-col" value="2" min="0">
-                        </div>
-                    </div>
-                    <div class="acct-form-row">
-                        <div class="acct-form-group">
+                        <div class="acct-form-group acct-form-grow">
                             <label>Account</label>
                             <select id="csv-account"></select>
                         </div>
-                        <div class="acct-form-group">
+                        <div class="acct-form-group acct-form-grow">
                             <label>Default Entity</label>
                             <select id="csv-entity"></select>
                         </div>
                     </div>
-                    <label class="acct-checkbox">
-                        <input type="checkbox" id="csv-has-header" checked> File has header row
-                    </label>
-                    <button class="btn btn-primary" id="btn-csv-preview">Preview Import</button>
+                    <button class="btn btn-primary" id="btn-csv-preview" style="margin-top:0.5rem;">Upload & Preview</button>
                 </div>
-                <!-- Step 2: Preview -->
+                <!-- Step 2: Column Mapping + Preview -->
                 <div id="csv-step-preview" style="display:none;">
-                    <div class="acct-csv-preview-info">
-                        <span id="csv-preview-count">0</span> transactions found
+                    <!-- Auto-detected mapping -->
+                    <div class="acct-csv-mapping" id="csv-mapping-section">
+                        <h4 style="margin:0 0 0.5rem;">Column Mapping <span class="acct-muted">(auto-detected)</span></h4>
+                        <div class="acct-form-row" id="csv-mapping-row"></div>
+                    </div>
+                    <!-- Preview table -->
+                    <div class="acct-csv-preview-info" style="margin-top:1rem;">
+                        <strong><span id="csv-preview-count">0</span> transactions found</strong>
                     </div>
                     <div class="acct-csv-preview-table" id="csv-preview-table"></div>
                     <div class="acct-form-row" style="margin-top:1rem;">
                         <button class="btn btn-secondary" id="btn-csv-back">Back</button>
+                        <button class="btn btn-secondary" id="btn-csv-remap">Re-map Columns</button>
                         <button class="btn btn-primary" id="btn-csv-commit">Import All</button>
                     </div>
                 </div>
