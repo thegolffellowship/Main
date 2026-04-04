@@ -7724,9 +7724,45 @@ def _parse_dollar(val) -> float:
 
 
 def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
-    """Calculate allocation for an event registration item."""
+    """Calculate allocation for an event registration item.
+
+    Uses per-transaction side_games field (NET/GROSS/BOTH/NONE) with exact
+    lookup tables, NOT the event-level side_game_fee field.
+    """
+    # ── Side game lookup tables ──
+    # Prize pool portion (not taxable)
+    _SIDE_PRIZE = {
+        ("NET", "9"): 13, ("NET", "18"): 26,
+        ("GROSS", "9"): 13, ("GROSS", "18"): 26,
+        ("BOTH", "9"): 26, ("BOTH", "18"): 52,
+        ("NONE", "9"): 0, ("NONE", "18"): 0,
+    }
+    # Markup portion (taxable — goes to tgf_operating)
+    _SIDE_MARKUP = {
+        ("NET", "9"): 3, ("NET", "18"): 4,
+        ("GROSS", "9"): 3, ("GROSS", "18"): 4,
+        ("BOTH", "9"): 6, ("BOTH", "18"): 8,
+        ("NONE", "9"): 0, ("NONE", "18"): 0,
+    }
+    # Included game pots (not taxable — goes to prize_pool)
+    # 9-hole: $7 ($4 team net + $2 CTP + $1 HIO)
+    # 18-hole: $14 ($8 team net + $4 CTP + $2 HIO)
+
     item_name = item.get("item_name", "")
     holes = item.get("holes", "")
+    side_games = (item.get("side_games") or "NONE").strip().upper()
+
+    # Normalise side_games value
+    if side_games in ("NET", "GROSS", "BOTH", "NONE"):
+        pass
+    elif "BOTH" in side_games or ("NET" in side_games and "GROSS" in side_games):
+        side_games = "BOTH"
+    elif "NET" in side_games:
+        side_games = "NET"
+    elif "GROSS" in side_games:
+        side_games = "GROSS"
+    else:
+        side_games = "NONE"
 
     # Look up event pricing
     event = conn.execute(
@@ -7754,22 +7790,26 @@ def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
 
     event = dict(event)
 
-    # Determine if 9-hole or 18-hole pricing
-    is_18 = holes and "18" in str(holes)
+    # Determine if 9-hole or 18-hole
+    # Infer from holes field, or from event name (s9.x = 9-hole, s18.x = 18-hole)
+    if not holes:
+        if "s18." in item_name.lower() or "18" in (event.get("format") or ""):
+            holes = "18"
+        else:
+            holes = "9"
+    is_18 = "18" in str(holes)
+    hole_key = "18" if is_18 else "9"
     is_combo = (event.get("format") or "").lower() == "combo"
 
     if is_combo and is_18:
         course_cost = event.get("course_cost_18") or event.get("course_cost")
         tgf_markup = event.get("tgf_markup_18") or event.get("tgf_markup")
-        side_game_fee = event.get("side_game_fee_18") or event.get("side_game_fee")
     elif is_combo:
         course_cost = event.get("course_cost_9") or event.get("course_cost")
         tgf_markup = event.get("tgf_markup_9") or event.get("tgf_markup")
-        side_game_fee = event.get("side_game_fee_9") or event.get("side_game_fee")
     else:
         course_cost = event.get("course_cost")
         tgf_markup = event.get("tgf_markup")
-        side_game_fee = event.get("side_game_fee")
 
     surcharge = event.get("course_surcharge") or 0
 
@@ -7779,17 +7819,17 @@ def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
             "prize_pool": 0, "tgf_operating": 0, "_needs_course_cost": True,
         }
 
-    # Prize pool: included game pots ($7 for 9-hole, $14 for 18-hole)
-    # + side game prize pools per pricing rules
-    base_prize = 14.0 if is_18 else 7.0
-    side_game_prize = (side_game_fee or 0) * 0.5  # ~50% of side game fee goes to prizes
+    # Lookup side game allocations from tables
+    side_prize = _SIDE_PRIZE.get((side_games, hole_key), 0)
+    side_markup = _SIDE_MARKUP.get((side_games, hole_key), 0)
+    base_pots = 14.0 if is_18 else 7.0
 
     return {
         "player_count": 1,
         "course_payable": round(course_cost, 2),
         "course_surcharge": round(surcharge, 2),
-        "prize_pool": round(base_prize + side_game_prize, 2),
-        "tgf_operating": round((tgf_markup or 0) + (side_game_fee or 0) * 0.5, 2),
+        "prize_pool": round(base_pots + side_prize, 2),
+        "tgf_operating": round((tgf_markup or 0) + side_markup, 2),
         "_needs_course_cost": False,
     }
 
