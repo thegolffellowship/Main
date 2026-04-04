@@ -412,6 +412,36 @@ def run_autofix() -> str:
     return json.dumps({"status": "ok", **result})
 
 
+@mcp.tool()
+def reextract_order(order_id: str) -> str:
+    """Re-parse an order's original email to backfill coupon and other missing fields.
+
+    Fetches the original email from Microsoft Graph, re-runs AI extraction,
+    and updates coupon_code, coupon_amount, and other backfill fields on all
+    rows sharing this order_id. Useful for backfilling coupon data on
+    historical orders for sales tax reporting.
+
+    Args:
+        order_id: The GoDaddy order ID (e.g. "R854482675")
+    """
+    import requests as _requests
+
+    base_url = os.environ.get("TRACKER_URL", "https://tgf-tracker.up.railway.app")
+    admin_pin = os.environ.get("ADMIN_PIN", "")
+
+    # Call the Flask endpoint which handles email fetching + AI extraction
+    session = _requests.Session()
+    # Login first
+    session.post(f"{base_url}/api/login", json={"pin": admin_pin})
+    resp = session.post(
+        f"{base_url}/api/audit/reextract-order",
+        json={"order_id": order_id},
+    )
+    if resp.status_code != 200:
+        return json.dumps({"error": resp.text, "status_code": resp.status_code})
+    return json.dumps(resp.json(), indent=2)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  RSVP TOOLS
 # ═══════════════════════════════════════════════════════════════════════

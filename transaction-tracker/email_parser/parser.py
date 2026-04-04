@@ -171,6 +171,14 @@ FIELD-SPECIFIC GUIDANCE:
   Look for "Transaction Fees", "Transaction Fee", "Processing Fee", \
   "Service Fee", etc. The email often shows it as "Transaction Fees 3.5%: $4.90" — \
   extract just the dollar amount (e.g. "$4.90").
+- "coupon_code": If the order includes a coupon or discount line, extract the \
+  coupon code. GoDaddy emails typically show it as "Coupon (tgf-referral-luke): -$25.00" — \
+  extract just the code inside the parentheses (e.g. "tgf-referral-luke"). \
+  If no coupon line exists, use null. This is an ORDER-level field, not per-item.
+- "coupon_amount": The dollar amount of the coupon discount, stored as a POSITIVE \
+  value with "$" sign (e.g. "$25.00"). The email shows it as a negative like "-$25.00" \
+  but store the absolute value. If no coupon line exists, use null. \
+  This is an ORDER-level field, not per-item.
 - "tee_choice": The tee selection. Normalise to one of: "<50", "50-64", \
   "65+", or "Forward". If the email says "Front" tees, normalise to "Forward". \
   Discard any yardage information (e.g. "6300-6800y").
@@ -206,6 +214,8 @@ Return this exact JSON structure:
   "order_time": "<HH:MM:SS in 24-hour format, from the order/transaction timestamp if present, else null>",
   "total_amount": "<total charged including fees, e.g. $222.53>",
   "transaction_fees": "<processing fee amount, e.g. $7.53>",
+  "coupon_code": "<coupon code if present, e.g. tgf-referral-luke, else null>",
+  "coupon_amount": "<coupon discount as positive dollar amount, e.g. $25.00, else null>",
   "address": "<street address>",
   "address2": "<apt/suite/unit if present>",
   "address_city": "<city>",
@@ -703,6 +713,8 @@ def parse_email(email_data: dict) -> list[dict]:
             "order_time": parsed.get("order_time"),
             "total_amount": parsed.get("total_amount") or "",
             "transaction_fees": parsed.get("transaction_fees"),
+            "coupon_code": parsed.get("coupon_code"),
+            "coupon_amount": parsed.get("coupon_amount"),
             "item_name": _normalize_item_name(item.get("item_name")) or "",
             "item_price": item.get("item_price") or "",
             "quantity": item.get("quantity") or 1,
