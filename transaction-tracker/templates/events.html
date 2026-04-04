@@ -283,7 +283,7 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Events — Auto-detected from transaction data</p>
-            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.2.0</a>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.5.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -559,6 +559,7 @@
                             <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="edit-event-tgf_markup" class="modal-input" min="0" step="0.01" placeholder="e.g., 15.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Side Game Fee ($)<input type="number" id="edit-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="edit-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
+                            <label style="font-weight:600; font-size:0.82rem;">Per-Player Surcharge ($)<input type="number" id="edit-event-course_surcharge" class="modal-input" min="0" step="0.01" placeholder="0.00"><span style="font-size:0.7rem; color:var(--text-muted); display:block; margin-top:2px;">e.g. $1.00 for ACGT printing fee</span></label>
                         </div>
                         <div id="edit-pricing-preview" style="margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
                             <div id="edit-pricing-summary"></div>
@@ -618,6 +619,7 @@
                         <!-- Shared transaction fee -->
                         <div class="edit-grid" style="grid-template-columns: 1fr 1fr;">
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="edit-event-transaction_fee_pct_combo" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
+                            <label style="font-weight:600; font-size:0.82rem;">Per-Player Surcharge ($)<input type="number" id="edit-event-course_surcharge_combo" class="modal-input" min="0" step="0.01" placeholder="0.00"><span style="font-size:0.7rem; color:var(--text-muted); display:block; margin-top:2px;">e.g. $1.00 for ACGT printing fee</span></label>
                         </div>
                         <div id="edit-pricing-preview-combo" style="margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
                             <div id="edit-pricing-summary-combo"></div>
@@ -1070,6 +1072,7 @@
                         <label>TGF Markup ($)<input type="number" id="add-event-tgf_markup" class="modal-input" min="0" step="0.01" placeholder="e.g., 15.00"></label>
                         <label>Side Game Fee ($)<input type="number" id="add-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 4.00"></label>
                         <label>Transaction Fee (%)<input type="number" id="add-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
+                        <label>Per-Player Surcharge ($)<input type="number" id="add-event-course_surcharge" class="modal-input" min="0" step="0.01" placeholder="0.00"><span style="font-size:0.7rem; color:var(--text-muted);">e.g. $1.00 for ACGT printing fee</span></label>
                     </div>
                     <div id="add-pricing-preview" style="margin-top:0.5rem; font-size:0.8rem; color:var(--text-muted); display:none;">
                         <span id="add-pricing-summary"></span>
@@ -3980,15 +3983,18 @@
         const mu = parseFloat(document.getElementById(prefix + "-event-tgf_markup").value) || 0;
         const sg = parseFloat(document.getElementById(prefix + "-event-side_game_fee").value) || 0;
         const tf = parseFloat(document.getElementById(prefix + "-event-transaction_fee_pct").value) || 0;
+        const scEl = document.getElementById(prefix + "-event-course_surcharge");
+        const sc = scEl ? parseFloat(scEl.value) || 0 : 0;
         const previewEl = document.getElementById(prefix + "-pricing-preview");
         const summaryEl = document.getElementById(prefix + "-pricing-summary");
         if (!previewEl || !summaryEl) return;
 
-        const subtotal = cc + mu + sg;
+        const subtotal = cc + mu + sg + sc;
         if (subtotal > 0) {
-            const p = calcPricingLine(cc, mu, sg, tf);
+            const p = calcPricingLine(cc + sc, mu, sg, tf);
             let html = `<div style="display:grid; grid-template-columns:auto 1fr; gap:0.2rem 0.75rem; font-size:0.82rem;">`;
             html += `<span style="color:var(--text-muted);">Course Cost:</span><span>$${cc.toFixed(2)}</span>`;
+            if (sc > 0) html += `<span style="color:var(--text-muted);">Surcharge:</span><span>$${sc.toFixed(2)}</span>`;
             html += `<span style="color:var(--text-muted);">TGF Markup:</span><span>$${mu.toFixed(2)}</span>`;
             html += `<span style="color:var(--text-muted);">Side Game Fee:</span><span>$${sg.toFixed(2)}</span>`;
             html += `<span style="color:var(--text-muted);">Subtotal:</span><span>$${p.subtotal.toFixed(2)}</span>`;
@@ -4360,6 +4366,8 @@
             if (addMU) payload.tgf_markup = parseFloat(addMU);
             if (addSG) payload.side_game_fee = parseFloat(addSG);
             if (addTF) payload.transaction_fee_pct = parseFloat(addTF);
+            const addSC = document.getElementById("add-event-course_surcharge").value;
+            if (addSC) payload.course_surcharge = parseFloat(addSC);
             const res = await fetch("/api/events", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -4874,6 +4882,8 @@
         document.getElementById("edit-event-tgf_markup_18").value = ev.tgf_markup_18 != null ? ev.tgf_markup_18 : "";
         document.getElementById("edit-event-side_game_fee_18").value = ev.side_game_fee_18 != null ? ev.side_game_fee_18 : "";
         document.getElementById("edit-event-transaction_fee_pct_combo").value = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : "";
+        document.getElementById("edit-event-course_surcharge").value = ev.course_surcharge != null ? ev.course_surcharge : "";
+        document.getElementById("edit-event-course_surcharge_combo").value = ev.course_surcharge != null ? ev.course_surcharge : "";
         // Reset tax builders
         document.querySelectorAll("[id$='-tax-builder']").forEach(el => el.style.display = "none");
         document.querySelectorAll(".tax-base, .tax-rate").forEach(el => el.value = "");
@@ -5007,6 +5017,11 @@
             const tfNew = tfInput && tfInput.value ? parseFloat(tfInput.value) : null;
             const tfOld = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : null;
             if (tfNew !== tfOld) changes.transaction_fee_pct = tfNew;
+            // Surcharge from combo field
+            const scInput = document.getElementById("edit-event-course_surcharge_combo");
+            const scNew = scInput && scInput.value ? parseFloat(scInput.value) : null;
+            const scOld = ev.course_surcharge != null ? ev.course_surcharge : null;
+            if (scNew !== scOld) changes.course_surcharge = scNew;
             // Calculate and store effective TGF markup (with rounding)
             const cc9 = parseFloat(document.getElementById("edit-event-course_cost_9").value) || 0;
             const mu9 = parseFloat(document.getElementById("edit-event-tgf_markup_9").value) || 0;
@@ -5027,7 +5042,7 @@
             if (ev.tgf_markup_final != null) changes.tgf_markup_final = null;
         } else {
             // Single format pricing
-            ["course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct"].forEach(field => {
+            ["course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct", "course_surcharge"].forEach(field => {
                 const input = document.getElementById("edit-event-" + field);
                 if (!input) return;
                 const newVal = input.value ? parseFloat(input.value) : null;
