@@ -1,5 +1,23 @@
-window.TGF_VERSION = "1.3.0";
+window.TGF_VERSION = "1.5.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "1.5.0",
+    date: "2026-04-04",
+    title: "COO Agent Foundation: Allocation Tracking, Course Cost Infrastructure, list_events MCP Tool",
+    changes: [
+      "Multi-entity accounting system — track income/expenses across TGF, Personal, and future entities with transaction splitting",
+      "AI Bookkeeper — auto-categorizes transactions using learned rules + Claude AI, with event-aware suggestions",
+      "CSV bank import with smart auto-detect column mapping (Chase, Amex, Wells Fargo supported)",
+      "Transfer auto-detection and cross-account linking during CSV import",
+      "Standard accounting categories — IRS Schedule C business, personal finance, and TGF-specific categories",
+      "Event linking on transaction splits — associate expenses with specific TGF events",
+      "Course surcharge field on events — per-player surcharges (e.g. $1 ACGT printing fee)",
+      "Allocation tracking table — breaks down every GoDaddy order into course payable, prize pool, TGF operating, GoDaddy fee, and tax reserve",
+      "Allocation calculation engine with membership and season contest support",
+      "list_events MCP tool — exposes event pricing data to Claude for COO agent queries",
+      "Version sync — all version references now consistent at v1.5.0",
+    ],
+  },
   {
     version: "1.3.0",
     date: "2026-03-04",

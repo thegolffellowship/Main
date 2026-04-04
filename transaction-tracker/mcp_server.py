@@ -149,9 +149,34 @@ def get_recent_snapshot(limit: int = 50) -> str:
 
 
 @mcp.tool()
-def list_events() -> str:
-    """List all events with their registration counts."""
-    return json.dumps(get_all_events(), indent=2)
+def list_events(chapter: str = "", upcoming_only: bool = False) -> str:
+    """List all events with pricing and registration data.
+
+    Args:
+        chapter: Filter by chapter (e.g. "San Antonio", "Austin"). Empty = all.
+        upcoming_only: If True, only return events where event_date >= today.
+
+    Returns per event: item_name, event_date, course, chapter, course_cost,
+    course_cost_9, course_cost_18, tgf_markup, tgf_markup_9, tgf_markup_18,
+    side_game_fee, transaction_fee_pct, course_surcharge, registrations.
+    """
+    from datetime import date as _date
+    events = get_all_events()
+    if chapter:
+        events = [e for e in events if (e.get("chapter") or "").lower() == chapter.lower()]
+    if upcoming_only:
+        today = _date.today().isoformat()
+        events = [e for e in events if (e.get("event_date") or "") >= today]
+    # Return pricing-relevant fields
+    fields = [
+        "id", "item_name", "event_date", "course", "chapter",
+        "course_cost", "course_cost_9", "course_cost_18",
+        "tgf_markup", "tgf_markup_9", "tgf_markup_18",
+        "side_game_fee", "transaction_fee_pct", "course_surcharge",
+        "registrations",
+    ]
+    result = [{k: e.get(k) for k in fields} for e in events]
+    return json.dumps(result, indent=2)
 
 
 @mcp.tool()

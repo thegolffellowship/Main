@@ -1,7 +1,7 @@
 # TGF Transaction Tracker — Project Documentation
 
 > **The Golf Fellowship** — AI-powered transaction and event management platform
-> **Current Version:** v1.4.0 (March 30, 2026)
+> **Current Version:** v1.5.0 (April 4, 2026)
 > **Live URL:** https://tgf-tracker.up.railway.app
 
 ---

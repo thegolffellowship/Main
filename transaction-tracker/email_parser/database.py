@@ -623,6 +623,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.OperationalError:
                 pass  # already exists
 
+        # Migration: add course surcharge field (e.g. $1 ACGT printing fee)
+        try:
+            conn.execute("ALTER TABLE events ADD COLUMN course_surcharge REAL DEFAULT 0")
+            logger.info("Added events.course_surcharge column")
+        except sqlite3.OperationalError:
+            pass  # already exists
+
         # RSVPs table — Golf Genius round signup confirmations
         conn.execute(
             """
@@ -1255,6 +1262,42 @@ def init_db(db_path: str | Path | None = None) -> None:
                 UNIQUE(account_id, rule_type)
             )
             """
+        )
+
+        # Allocation tracking — breaks down every GoDaddy order's dollars
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_allocations (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id            TEXT NOT NULL,
+                item_id             INTEGER REFERENCES items(id),
+                event_name          TEXT,
+                chapter             TEXT,
+                allocation_date     TEXT,
+                player_count        INTEGER DEFAULT 1,
+                course_payable      REAL DEFAULT 0,
+                course_surcharge    REAL DEFAULT 0,
+                prize_pool          REAL DEFAULT 0,
+                tgf_operating       REAL DEFAULT 0,
+                godaddy_fee         REAL DEFAULT 0,
+                tax_reserve         REAL DEFAULT 0,
+                total_collected     REAL DEFAULT 0,
+                allocation_status   TEXT DEFAULT 'pending'
+                    CHECK(allocation_status IN ('pending', 'complete', 'needs_course_cost')),
+                notes               TEXT,
+                created_at          TEXT DEFAULT (datetime('now')),
+                UNIQUE(order_id, item_id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_alloc_order ON acct_allocations(order_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_alloc_event ON acct_allocations(event_name)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_alloc_date ON acct_allocations(allocation_date)"
         )
 
         # Repair: clear matched_item_id on RSVPs that point to wrong items.
@@ -2432,7 +2475,8 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "course_cost", "tgf_markup", "side_game_fee", "transaction_fee_pct",
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
                 "side_game_fee_9", "side_game_fee_18",
-                "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18"}
+                "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18",
+                "course_surcharge"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
@@ -3973,7 +4017,7 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
                  tgf_markup_9: float = None, tgf_markup_18: float = None,
                  side_game_fee_9: float = None, side_game_fee_18: float = None,
                  tgf_markup_final: float = None, tgf_markup_final_9: float = None,
-                 tgf_markup_final_18: float = None,
+                 tgf_markup_final_18: float = None, course_surcharge: float = 0,
                  db_path: str | Path | None = None) -> dict | None:
     """Manually create a new event. Returns the event dict or None if duplicate (case-insensitive)."""
     with _connect(db_path) as conn:
@@ -3985,8 +4029,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
             return None
         try:
             cursor = conn.execute(
-                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
-                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18),
+                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
+                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge),
             )
             conn.commit()
             new_id = cursor.lastrowid
@@ -7572,3 +7616,323 @@ def reset_acct_data(db_path: str | Path | None = None) -> dict:
         ent_count = conn.execute("SELECT COUNT(*) as cnt FROM acct_entities").fetchone()["cnt"]
 
     return {"entities": ent_count, "categories": cat_count, "message": "All accounting data reset and re-seeded"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Allocation Tracking — Per-Order Dollar Breakdown
+# ═══════════════════════════════════════════════════════════════════════════
+
+def calculate_order_allocation(order_id: str, db_path: str | Path | None = None) -> list[dict]:
+    """Calculate how each item in a GoDaddy order is allocated across buckets.
+
+    For EVENT items: course_payable, course_surcharge, prize_pool, tgf_operating,
+    godaddy_fee, tax_reserve.
+    For MEMBERSHIP items: tgf_operating, prize_pool, godaddy_fee, tax_reserve.
+
+    Returns a list of allocation dicts (one per item in the order).
+    """
+    with _connect(db_path) as conn:
+        items = conn.execute(
+            """SELECT * FROM items
+               WHERE order_id = ? AND COALESCE(transaction_status, 'active') = 'active'
+               ORDER BY item_index""",
+            (order_id,),
+        ).fetchall()
+
+        if not items:
+            return []
+
+        items = [dict(i) for i in items]
+
+        # Parse order total (once per order, from first item)
+        order_total = _parse_dollar(items[0].get("total_amount"))
+
+        # GoDaddy fee: 2.7% + $0.30 per order (split evenly across items)
+        gd_fee_total = round(order_total * 0.027 + 0.30, 2) if order_total else 0
+        gd_fee_per_item = round(gd_fee_total / len(items), 2) if items else 0
+
+        results = []
+        for item in items:
+            item_name = item.get("item_name", "")
+            is_membership = "MEMBERSHIP" in item_name.upper()
+
+            if is_membership:
+                alloc = _calc_membership_allocation(item, conn)
+            else:
+                alloc = _calc_event_allocation(item, conn)
+
+            alloc["order_id"] = order_id
+            alloc["item_id"] = item["id"]
+            alloc["event_name"] = item_name
+            alloc["chapter"] = item.get("chapter")
+            alloc["allocation_date"] = item.get("order_date")
+            alloc["godaddy_fee"] = gd_fee_per_item
+            alloc["total_collected"] = _parse_dollar(item.get("item_price")) or 0
+
+            # Tax reserve: 8.25% of TGF operating revenue
+            alloc["tax_reserve"] = round(alloc.get("tgf_operating", 0) * 0.0825, 2)
+
+            # Determine status
+            if is_membership:
+                alloc["allocation_status"] = "complete"
+            elif alloc.get("_needs_course_cost"):
+                alloc["allocation_status"] = "needs_course_cost"
+                alloc["notes"] = "Event pricing not configured — course_cost is NULL"
+            else:
+                alloc["allocation_status"] = "complete"
+
+            alloc.pop("_needs_course_cost", None)
+            results.append(alloc)
+
+        # Upsert allocations
+        for alloc in results:
+            conn.execute(
+                """INSERT INTO acct_allocations
+                   (order_id, item_id, event_name, chapter, allocation_date,
+                    player_count, course_payable, course_surcharge, prize_pool,
+                    tgf_operating, godaddy_fee, tax_reserve, total_collected,
+                    allocation_status, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(order_id, item_id) DO UPDATE SET
+                    event_name=excluded.event_name, chapter=excluded.chapter,
+                    allocation_date=excluded.allocation_date, player_count=excluded.player_count,
+                    course_payable=excluded.course_payable, course_surcharge=excluded.course_surcharge,
+                    prize_pool=excluded.prize_pool, tgf_operating=excluded.tgf_operating,
+                    godaddy_fee=excluded.godaddy_fee, tax_reserve=excluded.tax_reserve,
+                    total_collected=excluded.total_collected,
+                    allocation_status=excluded.allocation_status, notes=excluded.notes""",
+                (alloc["order_id"], alloc["item_id"], alloc["event_name"],
+                 alloc["chapter"], alloc["allocation_date"], alloc.get("player_count", 1),
+                 alloc.get("course_payable", 0), alloc.get("course_surcharge", 0),
+                 alloc.get("prize_pool", 0), alloc.get("tgf_operating", 0),
+                 alloc["godaddy_fee"], alloc["tax_reserve"], alloc["total_collected"],
+                 alloc["allocation_status"], alloc.get("notes")),
+            )
+        conn.commit()
+
+    return results
+
+
+def _parse_dollar(val) -> float:
+    """Parse dollar amount from text like '$158.00' or '158.00'."""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    cleaned = str(val).strip().replace("$", "").replace(",", "")
+    try:
+        return float(cleaned)
+    except ValueError:
+        return 0.0
+
+
+def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
+    """Calculate allocation for an event registration item.
+
+    Uses per-transaction side_games field (NET/GROSS/BOTH/NONE) with exact
+    lookup tables, NOT the event-level side_game_fee field.
+    """
+    # ── Side game lookup tables ──
+    # Prize pool portion (not taxable)
+    _SIDE_PRIZE = {
+        ("NET", "9"): 13, ("NET", "18"): 26,
+        ("GROSS", "9"): 13, ("GROSS", "18"): 26,
+        ("BOTH", "9"): 26, ("BOTH", "18"): 52,
+        ("NONE", "9"): 0, ("NONE", "18"): 0,
+    }
+    # Markup portion (taxable — goes to tgf_operating)
+    _SIDE_MARKUP = {
+        ("NET", "9"): 3, ("NET", "18"): 4,
+        ("GROSS", "9"): 3, ("GROSS", "18"): 4,
+        ("BOTH", "9"): 6, ("BOTH", "18"): 8,
+        ("NONE", "9"): 0, ("NONE", "18"): 0,
+    }
+    # Included game pots (not taxable — goes to prize_pool)
+    # 9-hole: $7 ($4 team net + $2 CTP + $1 HIO)
+    # 18-hole: $14 ($8 team net + $4 CTP + $2 HIO)
+
+    item_name = item.get("item_name", "")
+    holes = item.get("holes", "")
+    side_games = (item.get("side_games") or "NONE").strip().upper()
+
+    # Normalise side_games value
+    if side_games in ("NET", "GROSS", "BOTH", "NONE"):
+        pass
+    elif "BOTH" in side_games or ("NET" in side_games and "GROSS" in side_games):
+        side_games = "BOTH"
+    elif "NET" in side_games:
+        side_games = "NET"
+    elif "GROSS" in side_games:
+        side_games = "GROSS"
+    else:
+        side_games = "NONE"
+
+    # Look up event pricing
+    event = conn.execute(
+        "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+        (item_name,),
+    ).fetchone()
+
+    # Try aliases if no direct match
+    if not event:
+        alias = conn.execute(
+            "SELECT canonical_event_name FROM event_aliases WHERE alias_name = ? COLLATE NOCASE",
+            (item_name,),
+        ).fetchone()
+        if alias:
+            event = conn.execute(
+                "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+                (alias["canonical_event_name"],),
+            ).fetchone()
+
+    if not event:
+        return {
+            "player_count": 1, "course_payable": 0, "course_surcharge": 0,
+            "prize_pool": 0, "tgf_operating": 0, "_needs_course_cost": True,
+        }
+
+    event = dict(event)
+
+    # Determine if 9-hole or 18-hole
+    # Infer from holes field, or from event name (s9.x = 9-hole, s18.x = 18-hole)
+    if not holes:
+        if "s18." in item_name.lower() or "18" in (event.get("format") or ""):
+            holes = "18"
+        else:
+            holes = "9"
+    is_18 = "18" in str(holes)
+    hole_key = "18" if is_18 else "9"
+    is_combo = (event.get("format") or "").lower() == "combo"
+
+    if is_combo and is_18:
+        course_cost = event.get("course_cost_18") or event.get("course_cost")
+        tgf_markup = event.get("tgf_markup_18") or event.get("tgf_markup")
+    elif is_combo:
+        course_cost = event.get("course_cost_9") or event.get("course_cost")
+        tgf_markup = event.get("tgf_markup_9") or event.get("tgf_markup")
+    else:
+        course_cost = event.get("course_cost")
+        tgf_markup = event.get("tgf_markup")
+
+    surcharge = event.get("course_surcharge") or 0
+
+    if course_cost is None:
+        return {
+            "player_count": 1, "course_payable": 0, "course_surcharge": surcharge,
+            "prize_pool": 0, "tgf_operating": 0, "_needs_course_cost": True,
+        }
+
+    # Lookup side game allocations from tables
+    side_prize = _SIDE_PRIZE.get((side_games, hole_key), 0)
+    side_markup = _SIDE_MARKUP.get((side_games, hole_key), 0)
+    base_pots = 14.0 if is_18 else 7.0
+
+    return {
+        "player_count": 1,
+        "course_payable": round(course_cost, 2),
+        "course_surcharge": round(surcharge, 2),
+        "prize_pool": round(base_pots + side_prize, 2),
+        "tgf_operating": round((tgf_markup or 0) + side_markup, 2),
+        "_needs_course_cost": False,
+    }
+
+
+def _calc_membership_allocation(item: dict, conn: sqlite3.Connection) -> dict:
+    """Calculate allocation for a membership item (Task 7).
+
+    Membership pricing:
+    - returning_or_new = 'New': $44 taxable
+    - returning_or_new = 'Returning': $69 taxable
+    - 'Plus' memberships: $244 taxable
+    - Contest markup: $10 per contest enrolled
+    - Prize pool: $6 Monthly Points Race pool + contest prize pools
+    """
+    item_name = (item.get("item_name") or "").upper()
+    returning_or_new = (item.get("returning_or_new") or "").upper()
+    item_price = _parse_dollar(item.get("item_price"))
+
+    # Determine base membership type
+    if "PLUS" in item_name or item_price >= 200:
+        base_tgf = 244.0
+    elif "NEW" in returning_or_new or "1ST" in returning_or_new or "FIRST" in returning_or_new:
+        base_tgf = 44.0
+    else:
+        # Returning / default
+        base_tgf = 69.0
+
+    # Count contests — check for contest-related fields
+    contest_count = 0
+    for field in ("net_points_race", "gross_points_race", "city_match_play"):
+        val = (item.get(field) or "").strip().upper()
+        if val and val not in ("", "NO", "NONE", "N/A"):
+            contest_count += 1
+
+    contest_markup = contest_count * 10.0  # $10 per contest
+    contest_prize = contest_count * 20.0   # contest prize pool portion
+
+    # Monthly Points Race pool contribution
+    monthly_prize = 6.0
+
+    return {
+        "player_count": 1,
+        "course_payable": 0,
+        "course_surcharge": 0,
+        "prize_pool": round(monthly_prize + contest_prize, 2),
+        "tgf_operating": round(base_tgf + contest_markup, 2),
+        "_needs_course_cost": False,
+    }
+
+
+def get_acct_allocations(month: str | None = None, event: str | None = None,
+                         chapter: str | None = None,
+                         db_path: str | Path | None = None) -> dict:
+    """Return allocation records with totals grouped by bucket.
+
+    Args:
+        month: Filter by YYYY-MM (matches allocation_date)
+        event: Filter by event_name (partial match)
+        chapter: Filter by chapter
+    """
+    with _connect(db_path) as conn:
+        clauses, params = [], []
+        if month:
+            clauses.append("a.allocation_date LIKE ?")
+            params.append(f"{month}%")
+        if event:
+            clauses.append("a.event_name LIKE ?")
+            params.append(f"%{event}%")
+        if chapter:
+            clauses.append("a.chapter = ?")
+            params.append(chapter)
+
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+
+        rows = conn.execute(
+            f"""SELECT a.* FROM acct_allocations a{where}
+                ORDER BY a.allocation_date DESC, a.id DESC""",
+            params,
+        ).fetchall()
+
+        # Compute totals
+        totals = {
+            "course_payable": 0, "course_surcharge": 0, "prize_pool": 0,
+            "tgf_operating": 0, "godaddy_fee": 0, "tax_reserve": 0,
+            "total_collected": 0, "count": 0,
+        }
+        records = []
+        for r in rows:
+            d = dict(r)
+            records.append(d)
+            for k in ("course_payable", "course_surcharge", "prize_pool",
+                       "tgf_operating", "godaddy_fee", "tax_reserve", "total_collected"):
+                totals[k] = round(totals[k] + (d.get(k) or 0), 2)
+            totals["count"] += 1
+
+    totals["unallocated"] = round(
+        totals["total_collected"]
+        - totals["course_payable"] - totals["course_surcharge"]
+        - totals["prize_pool"] - totals["tgf_operating"]
+        - totals["godaddy_fee"] - totals["tax_reserve"], 2
+    )
+
+    return {"allocations": records, "totals": totals}

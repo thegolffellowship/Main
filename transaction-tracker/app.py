@@ -148,6 +148,8 @@ from email_parser.database import (
     get_acct_account_rules,
     set_acct_account_rule,
     get_all_acct_account_rules,
+    calculate_order_allocation,
+    get_acct_allocations,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -4475,6 +4477,60 @@ def api_acct_events_list():
         "event_date": e.get("event_date"), "course": e.get("course"),
         "chapter": e.get("chapter"),
     } for e in events])
+
+
+# ── Allocations ───────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/allocations")
+@require_role("admin")
+def api_acct_allocations():
+    """Return allocation records with totals grouped by bucket."""
+    return jsonify(get_acct_allocations(
+        month=request.args.get("month"),
+        event=request.args.get("event"),
+        chapter=request.args.get("chapter"),
+    ))
+
+
+@app.route("/api/accounting/allocations/calculate", methods=["POST"])
+@require_role("admin")
+def api_acct_calculate_allocation():
+    """Calculate allocation for a specific order."""
+    d = request.json or {}
+    order_id = d.get("order_id")
+    if not order_id:
+        return jsonify({"error": "order_id required"}), 400
+    try:
+        result = calculate_order_allocation(order_id)
+        if not result:
+            return jsonify({"error": f"No active items found for order {order_id}"}), 404
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/accounting/allocations/calculate-all", methods=["POST"])
+@require_role("admin")
+def api_acct_calculate_all_allocations():
+    """Calculate allocations for all orders that don't have allocations yet."""
+    from email_parser.database import _connect
+    with _connect() as conn:
+        order_ids = conn.execute(
+            """SELECT DISTINCT order_id FROM items
+               WHERE order_id IS NOT NULL AND order_id != ''
+                 AND COALESCE(transaction_status, 'active') = 'active'
+                 AND order_id NOT IN (SELECT DISTINCT order_id FROM acct_allocations)
+               ORDER BY order_date DESC"""
+        ).fetchall()
+    calculated = 0
+    errors = 0
+    for row in order_ids:
+        try:
+            calculate_order_allocation(row["order_id"])
+            calculated += 1
+        except Exception:
+            errors += 1
+    return jsonify({"calculated": calculated, "errors": errors, "total_orders": len(order_ids)})
 
 
 # ---------------------------------------------------------------------------
