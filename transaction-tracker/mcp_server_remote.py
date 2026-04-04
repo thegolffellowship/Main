@@ -366,6 +366,20 @@ def run_autofix() -> str:
     return json.dumps(_post("/api/audit/autofix-all"), indent=2)
 
 
+@mcp.tool()
+def reextract_order(order_id: str) -> str:
+    """Re-parse an order's original email to backfill coupon and other missing fields.
+
+    Fetches the original email from Microsoft Graph, re-runs AI extraction,
+    and updates coupon_code, coupon_amount, and other backfill fields on all
+    rows sharing this order_id.
+
+    Args:
+        order_id: The GoDaddy order ID (e.g. "R854482675")
+    """
+    return json.dumps(_post("/api/audit/reextract-order", {"order_id": order_id}), indent=2)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  ENTRYPOINT
 # ═══════════════════════════════════════════════════════════════════════
