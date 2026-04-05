@@ -1,5 +1,19 @@
-window.TGF_VERSION = "1.8.0";
+window.TGF_VERSION = "1.9.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "1.9.0",
+    date: "2026-04-05",
+    title: "Multi-Agent Architecture: Chief of Staff, Financial, Operations, Course Correspondent, Member Relations, Compliance",
+    changes: [
+      "Six specialist COO agents with dedicated system prompts and domain ownership",
+      "Agent routing in COO Chat — questions auto-routed to specialist by keyword, response always from Chief of Staff voice",
+      "Agent action log — every agent decision logged with timestamp, action type, description, outcome",
+      "Compliance Agent automated checks — sales tax reminders (15th-20th), IRS installment flags, pairings submission deadlines",
+      "Compliance checks run automatically before daily COO email at 7 AM CT",
+      "MCP tool: get_agent_action_log for querying agent activity",
+      "Agent registry API: GET /api/coo/agents, GET /api/coo/agent-log",
+    ],
+  },
   {
     version: "1.8.0",
     date: "2026-04-05",

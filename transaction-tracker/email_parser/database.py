@@ -1475,6 +1475,42 @@ def init_db(db_path: str | Path | None = None) -> None:
         if existing_coa["cnt"] == 0:
             _seed_chart_of_accounts(conn)
 
+        # ── COO Agent Registry & Action Log ──────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coo_agents (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name      TEXT UNIQUE NOT NULL,
+                agent_role      TEXT NOT NULL,
+                system_prompt   TEXT NOT NULL,
+                is_active       INTEGER DEFAULT 1,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_action_log (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name      TEXT NOT NULL,
+                action_type     TEXT NOT NULL,
+                description     TEXT NOT NULL,
+                source_email_uid TEXT,
+                related_item_id INTEGER,
+                outcome         TEXT,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_name ON agent_action_log(agent_name)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_date ON agent_action_log(created_at)")
+
+        # Seed COO agents on first run
+        existing_agents = conn.execute("SELECT COUNT(*) as cnt FROM coo_agents").fetchone()
+        if existing_agents["cnt"] == 0:
+            _seed_coo_agents(conn)
+
         # Repair: clear matched_item_id on RSVPs that point to wrong items.
         # Two cases:
         #   1. Points to non-event items (Customer Entry, RSVP Import, etc.)
@@ -8748,3 +8784,250 @@ def get_reconciliation_summary(month: str, db_path: str | Path | None = None) ->
         "period_closed": closing is not None,
         "closing": dict(closing) if closing else None,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COO Agent Registry & Action Log
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _seed_coo_agents(conn: sqlite3.Connection) -> None:
+    """Populate the six specialist COO agents."""
+    agents = [
+        ("Chief of Staff",
+         "Liaison with Kerry. Synthesizes input from all specialist agents.",
+         """You are the TGF Chief of Staff — Kerry's AI liaison. You synthesize input from all
+specialist agents (Financial, Operations, Course Correspondent, Member Relations, Compliance)
+into clear, actionable briefings. You prioritize action items, generate daily briefings,
+and respond to COO Chat. When a question falls outside your direct knowledge, you delegate
+to the appropriate specialist agent and synthesize their analysis into your response.
+Always speak in one consistent voice — direct, warm, and practical. Kerry is the founder
+and operator. He values straight talk and concrete next steps."""),
+
+        ("Financial Agent",
+         "Owns all money tracking: allocations, expenses, reconciliation, tax reserve.",
+         """You are the TGF Financial Agent. You own all money tracking:
+- acct_allocations: per-order dollar breakdown (course payable, prize pool, TGF operating, GoDaddy fees, tax reserve)
+- expense_transactions: Chase alerts, Venmo payments, receipts
+- Bank reconciliation: matching bank statements to Tracker records
+- Tax reserve: 8.25% of TGF operating revenue, tracked monthly
+- Prize pool obligations: funds held for future payouts
+- Course payables: fees owed to golf courses
+Answer "where is the money" questions with specific numbers. Flag when available cash is low."""),
+
+        ("Operations Agent",
+         "Owns events, registrations, rosters, breakeven calculations.",
+         """You are the TGF Operations Agent. You own:
+- Events: scheduling, course bookings, registration counts, breakeven calculations
+- Rosters: player registrations, RSVP status, no-shows
+- Venue logistics: start times, tee time intervals, shotgun vs lottery
+- Registration tracking: who's registered, who's RSVP-only, who hasn't paid
+Calculate breakeven as: course_cost × minimum_players. Flag events below breakeven
+with registration count warnings. Monitor upcoming events for operational readiness."""),
+
+        ("Course Correspondent Agent",
+         "Tracks relationships with each course coordinator.",
+         """You are the TGF Course Correspondent Agent. You track relationships with each golf course:
+- Unsigned contracts: flag courses without current agreements
+- Event confirmations: ensure upcoming events are confirmed with the course
+- Payment due dates: track when course fees are due (usually day-of or net-30)
+- Pairings submission: most courses need pairings 2-4 days before the event
+- Course coordinator contacts: maintain relationship context
+Flag anything requiring Kerry's direct response to a course contact."""),
+
+        ("Member Relations Agent",
+         "Tracks member communications, winnings, credits, follow-ups.",
+         """You are the TGF Member Relations Agent. You track:
+- Member communications: inquiries, complaints, requests
+- Winnings history: who won what at which event (via Venmo payouts)
+- Credits and refunds: which members have outstanding credits
+- Follow-ups needed: members who need a response or check-in
+- RSVP patterns: members who frequently no-show or cancel late
+- Membership renewals: tracking returning vs new vs expired members
+Prioritize member satisfaction and retention."""),
+
+        ("Compliance Agent",
+         "Owns sales tax, IRS installment tracking, filing deadlines.",
+         """You are the TGF Compliance Agent. You own:
+- Sales tax: Texas 8.25% on TGF operating revenue, filed monthly by the 20th
+- IRS installment agreement: tracking payment schedule and balance
+- 1099 threshold monitoring: flag any vendor/contractor paid $600+ in a year
+- Monthly filing deadlines: sales tax due by 20th, IRS installment timing
+- State compliance: Texas franchise tax, any other state obligations
+Alert proactively when deadlines are approaching. Generate tax reserve calculations."""),
+    ]
+    for name, role, prompt in agents:
+        conn.execute(
+            "INSERT INTO coo_agents (agent_name, agent_role, system_prompt) VALUES (?, ?, ?)",
+            (name, role, prompt),
+        )
+
+
+def get_coo_agents(db_path: str | Path | None = None) -> list[dict]:
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM coo_agents WHERE is_active = 1 ORDER BY id"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_coo_agent(agent_name: str, db_path: str | Path | None = None) -> dict | None:
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM coo_agents WHERE agent_name = ?", (agent_name,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def log_agent_action(agent_name: str, action_type: str, description: str,
+                     source_email_uid: str | None = None,
+                     related_item_id: int | None = None,
+                     outcome: str | None = None,
+                     db_path: str | Path | None = None) -> None:
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO agent_action_log
+               (agent_name, action_type, description, source_email_uid, related_item_id, outcome)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (agent_name, action_type, description, source_email_uid, related_item_id, outcome),
+        )
+        conn.commit()
+
+
+def get_agent_action_log(agent_name: str | None = None, date_from: str | None = None,
+                         date_to: str | None = None, limit: int = 50,
+                         db_path: str | Path | None = None) -> list[dict]:
+    clauses, params = [], []
+    if agent_name:
+        clauses.append("agent_name = ?"); params.append(agent_name)
+    if date_from:
+        clauses.append("created_at >= ?"); params.append(date_from)
+    if date_to:
+        clauses.append("created_at <= ?"); params.append(date_to + "T23:59:59")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM agent_action_log{where} ORDER BY created_at DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def route_to_agent(message: str) -> str:
+    """Route a user message to the appropriate specialist agent by keyword matching."""
+    msg_lower = message.lower()
+
+    financial_kw = ["money", "allocation", "expense", "balance", "tax", "reconcil",
+                    "revenue", "income", "godaddy fee", "prize pool", "course payable",
+                    "available to spend", "checking", "cash"]
+    operations_kw = ["event", "roster", "registration", "breakeven", "venue",
+                     "course cost", "tee time", "start time", "format"]
+    correspondent_kw = ["contract", "course coordinator", "pairings", "payment due",
+                        "confirmation", "pro shop", "course contact"]
+    member_kw = ["member", "credit", "winnings", "rsvp", "player", "handicap",
+                 "renewal", "no-show"]
+    compliance_kw = ["sales tax", "irs", "1099", "filing", "compliance",
+                     "franchise tax", "installment"]
+
+    for kw in compliance_kw:
+        if kw in msg_lower:
+            return "Compliance Agent"
+    for kw in correspondent_kw:
+        if kw in msg_lower:
+            return "Course Correspondent Agent"
+    for kw in financial_kw:
+        if kw in msg_lower:
+            return "Financial Agent"
+    for kw in operations_kw:
+        if kw in msg_lower:
+            return "Operations Agent"
+    for kw in member_kw:
+        if kw in msg_lower:
+            return "Member Relations Agent"
+
+    return "Chief of Staff"
+
+
+def run_compliance_checks(db_path: str | Path | None = None) -> list[dict]:
+    """Run daily compliance checks. Returns list of action items created."""
+    today = datetime.now()
+    day = today.day
+    month_str = today.strftime("%Y-%m")
+    created = []
+    pending_logs = []  # collect log entries to write after conn closes
+
+    with _connect(db_path) as conn:
+        # 1. Sales tax reminder: between 15th-20th of month
+        if 15 <= day <= 20:
+            due_date = today.strftime("%Y-%m-20")
+            existing = conn.execute(
+                "SELECT id FROM action_items WHERE subject LIKE ? AND status = 'open'",
+                (f"%sales tax due%{month_str}%",),
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    """INSERT INTO action_items
+                       (subject, from_name, from_email, summary, urgency, category, email_date, confidence)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (f"Monthly sales tax due {due_date}",
+                     "Compliance Agent", "system@tgf",
+                     f"Texas sales tax filing is due by {due_date}. Calculate TGF operating revenue for {month_str} and file.",
+                     "high", "payment", today.strftime("%Y-%m-%d"), 99),
+                )
+                created.append({"type": "sales_tax", "due": due_date})
+                pending_logs.append(("Compliance Agent", "compliance_check",
+                                     f"Created sales tax reminder for {due_date}"))
+
+        # 2. IRS installment check
+        irs_due = get_coo_manual_value(f"irs_due_{month_str}", db_path)
+        if irs_due and irs_due > 0:
+            existing = conn.execute(
+                "SELECT id FROM action_items WHERE subject LIKE ? AND status = 'open'",
+                (f"%IRS installment%{month_str}%",),
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    """INSERT INTO action_items
+                       (subject, from_name, from_email, summary, urgency, category, email_date, confidence)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (f"IRS installment due {month_str}",
+                     "Compliance Agent", "system@tgf",
+                     f"IRS installment payment of ${irs_due:,.2f} is due this month.",
+                     "high", "payment", today.strftime("%Y-%m-%d"), 99),
+                )
+                created.append({"type": "irs_installment", "amount": irs_due})
+
+        # 3. Upcoming event pairings (events within 4 days)
+        cutoff = (today + timedelta(days=4)).strftime("%Y-%m-%d")
+        today_str = today.strftime("%Y-%m-%d")
+        upcoming = conn.execute(
+            "SELECT id, item_name, event_date, course FROM events WHERE event_date BETWEEN ? AND ?",
+            (today_str, cutoff),
+        ).fetchall()
+
+        for ev in upcoming:
+            submit_by = (datetime.strptime(ev["event_date"], "%Y-%m-%d") - timedelta(days=2)).strftime("%Y-%m-%d")
+            existing = conn.execute(
+                "SELECT id FROM action_items WHERE subject LIKE ? AND status = 'open'",
+                (f"%pairings%{ev['item_name']}%",),
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    """INSERT INTO action_items
+                       (subject, from_name, from_email, summary, urgency, category, email_date, confidence)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (f"Submit pairings to {ev['course']} for {ev['item_name']}",
+                     "Course Correspondent Agent", "system@tgf",
+                     f"Submit pairings to {ev['course']} for {ev['item_name']} by {submit_by}. Event date: {ev['event_date']}.",
+                     "high", "course_correspondence", today.strftime("%Y-%m-%d"), 99),
+                )
+                created.append({"type": "pairings", "event": ev["item_name"], "submit_by": submit_by})
+                pending_logs.append(("Course Correspondent Agent", "compliance_check",
+                                     f"Created pairings reminder for {ev['item_name']}"))
+
+        conn.commit()
+
+    # Write logs after connection is released
+    for agent, action, desc in pending_logs:
+        log_agent_action(agent, action, desc, outcome="action_item_created", db_path=db_path)
+
+    return created

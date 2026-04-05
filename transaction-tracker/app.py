@@ -167,6 +167,8 @@ from email_parser.database import (
     run_bank_reconciliation,
     close_period,
     get_reconciliation_summary,
+    get_coo_agents,
+    get_agent_action_log,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -347,7 +349,18 @@ def check_inbox():
 
 
 def send_coo_daily_email():
-    """Send the daily COO briefing email."""
+    """Send the daily COO briefing email. Runs compliance checks first."""
+    from email_parser.database import run_compliance_checks, log_agent_action
+    try:
+        checks = run_compliance_checks()
+        if checks:
+            logger.info("Compliance checks created %d action items: %s", len(checks), checks)
+            log_agent_action("Compliance Agent", "daily_compliance_run",
+                             f"Created {len(checks)} items: {json.dumps(checks)}",
+                             outcome="completed")
+    except Exception:
+        logger.exception("Compliance checks failed (non-fatal)")
+
     coo_to = os.getenv("COO_EMAIL_TO")
     if not coo_to:
         logger.info("COO_EMAIL_TO not set — skipping daily email")
@@ -4896,7 +4909,8 @@ def api_coo_review_queue():
 @app.route("/api/coo/chat", methods=["POST"])
 @require_role("admin")
 def api_coo_chat():
-    """COO Chat — Claude-powered strategic advisor."""
+    """COO Chat — routes to specialist agent, responds as Chief of Staff."""
+    from email_parser.database import route_to_agent, get_coo_agent, log_agent_action
     d = request.json or {}
     messages = d.get("messages", [])
     context = d.get("context", {})
@@ -4908,23 +4922,23 @@ def api_coo_chat():
     if not api_key:
         return jsonify({"error": "ANTHROPIC_API_KEY not configured"}), 500
 
-    system_prompt = f"""You are the TGF COO Agent — an AI chief of staff for The Golf Fellowship,
-a golf community organization with chapters in San Antonio and Austin.
+    # Route the latest user message to a specialist agent
+    latest_msg = messages[-1].get("content", "") if messages else ""
+    routed_agent = route_to_agent(latest_msg)
 
-You have full context on:
-- Current action items and their status
-- Financial snapshot: account balances, obligations, tax reserve
-- Recent expense transactions and pending review items
-- Upcoming events and registration counts
+    # Get the specialist's system prompt
+    agent = get_coo_agent(routed_agent)
+    specialist_prompt = agent["system_prompt"] if agent else ""
 
-Your role is to:
-1. Answer questions about the current financial and operational state
-2. Give strategic advice on action items
-3. Flag risks and opportunities you observe
-4. Help Kerry prioritize his day
+    # Always respond as Chief of Staff, with specialist context
+    cos_agent = get_coo_agent("Chief of Staff")
+    cos_prompt = cos_agent["system_prompt"] if cos_agent else ""
 
-Be direct, warm, and practical. Kerry is the founder and operator.
-He values straight talk and concrete next steps over lengthy explanations.
+    system_prompt = f"""{cos_prompt}
+
+--- SPECIALIST CONTEXT ---
+For this question, the {routed_agent} provided analysis context:
+{specialist_prompt}
 
 CURRENT STATE:
 {json.dumps(context, indent=2)}"""
@@ -4937,9 +4951,16 @@ CURRENT STATE:
             system=system_prompt,
             messages=messages,
         )
+
+        # Log the routing decision
+        log_agent_action(routed_agent, "chat_routing",
+                         f"Routed question to {routed_agent}: {latest_msg[:100]}",
+                         outcome="response_generated")
+
         return jsonify({
             "role": "assistant",
             "content": resp.content[0].text,
+            "routed_to": routed_agent,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -4959,6 +4980,23 @@ def api_coo_send_daily_email():
         return jsonify({"sent": False, "preview": True, "subject": subject, "html": html_body, "to": coo_to})
     except Exception as e:
         return jsonify({"sent": False, "error": str(e)}), 500
+
+
+@app.route("/api/coo/agents")
+@require_role("admin")
+def api_coo_agents():
+    return jsonify(get_coo_agents())
+
+
+@app.route("/api/coo/agent-log")
+@require_role("admin")
+def api_coo_agent_log():
+    return jsonify(get_agent_action_log(
+        agent_name=request.args.get("agent_name"),
+        date_from=request.args.get("date_from"),
+        date_to=request.args.get("date_to"),
+        limit=request.args.get("limit", 50, type=int),
+    ))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
