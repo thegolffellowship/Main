@@ -150,13 +150,26 @@ from email_parser.database import (
     get_all_acct_account_rules,
     calculate_order_allocation,
     get_acct_allocations,
+    save_expense_transaction,
+    get_expense_transactions,
+    update_expense_transaction,
+    save_action_item,
+    get_action_items,
+    update_action_item,
+    get_pending_review_count,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
-    fetch_transaction_emails, fetch_email_by_id, send_mail_graph,
-    render_msg_template, send_bulk_emails,
+    fetch_transaction_emails, fetch_all_emails, fetch_email_by_id,
+    send_mail_graph, render_msg_template, send_bulk_emails,
 )
 from email_parser.parser import parse_email, parse_emails, _strip_html
+from email_parser.expense_parser import (
+    classify_email, parse_chase_alert, parse_venmo_payment,
+    parse_expense_receipt, parse_action_required,
+    match_event_from_memo, match_customer_from_name,
+    get_merchant_context,
+)
 from email_parser.report import send_daily_report
 from email_parser.rsvp_parser import fetch_rsvp_emails, parse_rsvp_emails
 
@@ -322,6 +335,172 @@ def check_inbox():
     logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
 
 
+def check_expense_inbox():
+    """Classify and extract data from non-order emails (Chase alerts, Venmo, receipts)."""
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    address = os.getenv("EMAIL_ADDRESS")
+
+    if not all([tenant_id, client_id, client_secret, address]):
+        return
+
+    try:
+        emails = fetch_all_emails(
+            tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
+            email_address=address, since_date=datetime.now() - timedelta(days=14),
+            max_emails=50,
+        )
+    except Exception:
+        logger.exception("Failed to fetch emails for expense classification")
+        return
+
+    if not emails:
+        return
+
+    # Skip already-processed emails (check both processed_emails and expense_transactions)
+    known_uids = get_known_email_uids()
+    conn = get_connection()
+    try:
+        expense_uids = {r["email_uid"] for r in conn.execute(
+            "SELECT email_uid FROM expense_transactions WHERE email_uid IS NOT NULL"
+        ).fetchall()}
+        action_uids = {r["email_uid"] for r in conn.execute(
+            "SELECT email_uid FROM action_items WHERE email_uid IS NOT NULL"
+        ).fetchall()}
+    finally:
+        conn.close()
+
+    all_known = known_uids | expense_uids | action_uids
+    new_emails = [e for e in emails if e.get("uid") not in all_known]
+
+    if not new_emails:
+        return
+
+    logger.info("Classifying %d new emails for expense processing", len(new_emails))
+    processed = 0
+    conn = get_connection()
+
+    for email_data in new_emails:
+        try:
+            body_text = _strip_html(email_data.get("html") or email_data.get("text", ""))
+            classification = classify_email(
+                email_data.get("subject", ""),
+                email_data.get("from", ""),
+                body_text,
+            )
+            email_type = classification["type"]
+            confidence = classification["confidence"]
+
+            if email_type == "godaddy_order" or email_type == "golf_genius_rsvp":
+                continue  # Handled by existing parsers
+
+            if email_type == "unknown":
+                continue
+
+            if email_type == "chase_transaction_alert":
+                merchant_ctx = None
+                extracted = parse_chase_alert(
+                    email_data.get("subject", ""),
+                    email_data.get("from", ""),
+                    body_text, merchant_ctx,
+                )
+                if extracted.get("confidence", 0) > 0:
+                    review_status = "approved" if extracted["confidence"] >= 95 else "pending"
+                    save_expense_transaction({
+                        "email_uid": email_data["uid"],
+                        "source_type": "chase_alert",
+                        "merchant": extracted.get("merchant"),
+                        "amount": extracted.get("amount"),
+                        "transaction_date": extracted.get("transaction_date"),
+                        "account_last4": extracted.get("account_last4"),
+                        "account_name": extracted.get("account_name"),
+                        "transaction_type": extracted.get("transaction_type", "expense"),
+                        "confidence": extracted["confidence"],
+                        "review_status": review_status,
+                        "raw_extract": json.dumps(extracted),
+                    })
+                    processed += 1
+
+            elif email_type == "venmo_payment":
+                extracted = parse_venmo_payment(
+                    email_data.get("subject", ""),
+                    email_data.get("from", ""),
+                    body_text,
+                )
+                if extracted.get("confidence", 0) > 0:
+                    event_name = match_event_from_memo(extracted.get("memo", ""), conn)
+                    customer_id = match_customer_from_name(extracted.get("recipient_name", ""), conn)
+                    review_status = "approved" if extracted["confidence"] >= 95 else "pending"
+                    save_expense_transaction({
+                        "email_uid": email_data["uid"],
+                        "source_type": "venmo",
+                        "merchant": extracted.get("recipient_name"),
+                        "amount": extracted.get("amount"),
+                        "transaction_date": extracted.get("transaction_date"),
+                        "transaction_type": extracted.get("transaction_type", "payout"),
+                        "event_name": event_name,
+                        "customer_id": customer_id,
+                        "confidence": extracted["confidence"],
+                        "review_status": review_status,
+                        "notes": extracted.get("memo"),
+                        "raw_extract": json.dumps(extracted),
+                    })
+                    processed += 1
+
+            elif email_type == "expense_receipt":
+                extracted = parse_expense_receipt(
+                    email_data.get("subject", ""),
+                    email_data.get("from", ""),
+                    body_text,
+                )
+                if extracted.get("confidence", 0) > 0:
+                    review_status = "approved" if extracted["confidence"] >= 95 else "pending"
+                    save_expense_transaction({
+                        "email_uid": email_data["uid"],
+                        "source_type": "receipt",
+                        "merchant": extracted.get("merchant"),
+                        "amount": extracted.get("amount"),
+                        "transaction_date": extracted.get("transaction_date"),
+                        "account_last4": extracted.get("account_last4"),
+                        "category": extracted.get("category"),
+                        "entity": extracted.get("entity", "TGF"),
+                        "confidence": extracted["confidence"],
+                        "review_status": review_status,
+                        "notes": extracted.get("description"),
+                        "raw_extract": json.dumps(extracted),
+                    })
+                    processed += 1
+
+            elif email_type == "action_required":
+                extracted = parse_action_required(
+                    email_data.get("subject", ""),
+                    email_data.get("from", ""),
+                    body_text,
+                )
+                if extracted.get("confidence", 0) > 0:
+                    save_action_item({
+                        "email_uid": email_data["uid"],
+                        "subject": extracted.get("subject", email_data.get("subject")),
+                        "from_name": extracted.get("from_name"),
+                        "from_email": extracted.get("from_email", email_data.get("from")),
+                        "summary": extracted.get("summary"),
+                        "urgency": extracted.get("urgency", "medium"),
+                        "category": extracted.get("category", "other"),
+                        "email_date": (email_data.get("date") or "")[:10],
+                        "confidence": extracted["confidence"],
+                    })
+                    processed += 1
+
+        except Exception:
+            logger.exception("Error processing email uid=%s for expense classification",
+                             email_data.get("uid"))
+
+    conn.close()
+    if processed:
+        logger.info("Expense email processing: %d items saved from %d emails", processed, len(new_emails))
+
+
 def check_rsvp_inbox():
     """Fetch new RSVP emails from Golf Genius, parse them, and save to DB."""
     rsvp_address = os.getenv("RSVP_EMAIL_ADDRESS")
@@ -472,6 +651,16 @@ def start_scheduler():
         )
         logger.info("RSVP scheduler: checking %s every %d minutes",
                      os.getenv("RSVP_EMAIL_ADDRESS"), interval)
+
+    # Expense email classifier — runs on same interval as inbox check
+    scheduler.add_job(
+        check_expense_inbox,
+        "interval",
+        minutes=interval,
+        id="expense_inbox_check",
+        replace_existing=True,
+    )
+    logger.info("Expense email classifier scheduled every %d minutes", interval)
 
     # Daily digest — runs at 6:00 AM US/Central by default
     report_hour = int(os.getenv("DAILY_REPORT_HOUR", "6"))
@@ -4445,6 +4634,72 @@ def api_acct_calculate_all_allocations():
         except Exception:
             errors += 1
     return jsonify({"calculated": calculated, "errors": errors, "total_orders": len(order_ids)})
+
+
+# ── Expense Transactions & Action Items ───────────────────────────────────
+
+@app.route("/api/accounting/expense-transactions")
+@require_role("admin")
+def api_expense_transactions():
+    return jsonify(get_expense_transactions(
+        date_from=request.args.get("date_from"),
+        date_to=request.args.get("date_to"),
+        source_type=request.args.get("source_type"),
+        review_status=request.args.get("review_status"),
+        limit=request.args.get("limit", 100, type=int),
+    ))
+
+
+@app.route("/api/accounting/expense-transactions/<int:tid>", methods=["PATCH"])
+@require_role("admin")
+def api_update_expense_transaction(tid):
+    d = request.json or {}
+    return jsonify(update_expense_transaction(tid, d))
+
+
+@app.route("/api/accounting/action-items")
+@require_role("admin")
+def api_action_items():
+    return jsonify(get_action_items(
+        status=request.args.get("status"),
+        category=request.args.get("category"),
+        limit=request.args.get("limit", 100, type=int),
+    ))
+
+
+@app.route("/api/accounting/action-items/<int:aid>", methods=["PATCH"])
+@require_role("admin")
+def api_update_action_item(aid):
+    d = request.json or {}
+    return jsonify(update_action_item(aid, d))
+
+
+@app.route("/api/accounting/pending-review")
+@require_role("admin")
+def api_pending_review():
+    return jsonify(get_pending_review_count())
+
+
+@app.route("/api/accounting/classify-email", methods=["POST"])
+@require_role("admin")
+def api_classify_email():
+    """Classify an email (for testing)."""
+    d = request.json or {}
+    result = classify_email(
+        d.get("subject", ""), d.get("from_addr", ""), d.get("body_text", ""),
+    )
+    return jsonify(result)
+
+
+@app.route("/api/accounting/check-expense-inbox", methods=["POST"])
+@require_role("admin")
+def api_check_expense_inbox():
+    """Manually trigger expense email processing."""
+    try:
+        check_expense_inbox()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------

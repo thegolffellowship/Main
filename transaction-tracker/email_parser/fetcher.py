@@ -171,6 +171,65 @@ def fetch_transaction_emails(
     return results
 
 
+def fetch_all_emails(
+    tenant_id: str,
+    client_id: str,
+    client_secret: str,
+    email_address: str,
+    since_date: datetime | None = None,
+    max_emails: int = 50,
+) -> list[dict]:
+    """Fetch ALL recent emails (not filtered by subject).
+
+    Used by the expense email classifier to process Chase alerts,
+    Venmo payments, receipts, etc.
+    """
+    if since_date is None:
+        since_date = datetime.now() - timedelta(days=30)
+
+    token = _get_graph_token(tenant_id, client_id, client_secret)
+    if not token:
+        raise RuntimeError("Could not acquire Graph API token")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    since_str = since_date.strftime("%Y-%m-%dT00:00:00Z")
+    base_url = f"{GRAPH_BASE}/users/{email_address}/messages"
+    params = {
+        "$filter": f"receivedDateTime ge {since_str}",
+        "$select": "id,subject,from,receivedDateTime,body,bodyPreview",
+        "$top": str(min(max_emails, 100)),
+        "$orderby": "receivedDateTime desc",
+    }
+
+    resp = _request_with_retry("get", base_url, headers=headers, params=params, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+
+    results = []
+    for msg in data.get("value", []):
+        from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
+        subject = msg.get("subject", "")
+        body = msg.get("body", {})
+        body_content = body.get("content", "")
+        content_type = body.get("contentType", "text")
+
+        results.append({
+            "uid": msg["id"],
+            "subject": subject,
+            "from": from_addr,
+            "date": msg.get("receivedDateTime"),
+            "text": body_content if content_type == "text" else "",
+            "html": body_content if content_type == "html" else "",
+        })
+
+    logger.info("Fetched %d total emails for classification from %s", len(results), email_address)
+    return results
+
+
 def fetch_email_by_id(
     tenant_id: str,
     client_id: str,
