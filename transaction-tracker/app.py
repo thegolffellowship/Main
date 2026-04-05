@@ -161,6 +161,14 @@ from email_parser.database import (
     get_coo_review_queue,
     get_all_coo_manual_values,
     set_coo_manual_value,
+    get_chart_of_accounts,
+    get_ledger_entries,
+    import_bank_statement,
+    run_bank_reconciliation,
+    close_period,
+    get_reconciliation_summary,
+    get_coo_agents,
+    get_agent_action_log,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -341,7 +349,18 @@ def check_inbox():
 
 
 def send_coo_daily_email():
-    """Send the daily COO briefing email."""
+    """Send the daily COO briefing email. Runs compliance checks first."""
+    from email_parser.database import run_compliance_checks, log_agent_action
+    try:
+        checks = run_compliance_checks()
+        if checks:
+            logger.info("Compliance checks created %d action items: %s", len(checks), checks)
+            log_agent_action("Compliance Agent", "daily_compliance_run",
+                             f"Created {len(checks)} items: {json.dumps(checks)}",
+                             outcome="completed")
+    except Exception:
+        logger.exception("Compliance checks failed (non-fatal)")
+
     coo_to = os.getenv("COO_EMAIL_TO")
     if not coo_to:
         logger.info("COO_EMAIL_TO not set — skipping daily email")
@@ -4890,7 +4909,8 @@ def api_coo_review_queue():
 @app.route("/api/coo/chat", methods=["POST"])
 @require_role("admin")
 def api_coo_chat():
-    """COO Chat — Claude-powered strategic advisor."""
+    """COO Chat — routes to specialist agent, responds as Chief of Staff."""
+    from email_parser.database import route_to_agent, get_coo_agent, log_agent_action
     d = request.json or {}
     messages = d.get("messages", [])
     context = d.get("context", {})
@@ -4902,23 +4922,23 @@ def api_coo_chat():
     if not api_key:
         return jsonify({"error": "ANTHROPIC_API_KEY not configured"}), 500
 
-    system_prompt = f"""You are the TGF COO Agent — an AI chief of staff for The Golf Fellowship,
-a golf community organization with chapters in San Antonio and Austin.
+    # Route the latest user message to a specialist agent
+    latest_msg = messages[-1].get("content", "") if messages else ""
+    routed_agent = route_to_agent(latest_msg)
 
-You have full context on:
-- Current action items and their status
-- Financial snapshot: account balances, obligations, tax reserve
-- Recent expense transactions and pending review items
-- Upcoming events and registration counts
+    # Get the specialist's system prompt
+    agent = get_coo_agent(routed_agent)
+    specialist_prompt = agent["system_prompt"] if agent else ""
 
-Your role is to:
-1. Answer questions about the current financial and operational state
-2. Give strategic advice on action items
-3. Flag risks and opportunities you observe
-4. Help Kerry prioritize his day
+    # Always respond as Chief of Staff, with specialist context
+    cos_agent = get_coo_agent("Chief of Staff")
+    cos_prompt = cos_agent["system_prompt"] if cos_agent else ""
 
-Be direct, warm, and practical. Kerry is the founder and operator.
-He values straight talk and concrete next steps over lengthy explanations.
+    system_prompt = f"""{cos_prompt}
+
+--- SPECIALIST CONTEXT ---
+For this question, the {routed_agent} provided analysis context:
+{specialist_prompt}
 
 CURRENT STATE:
 {json.dumps(context, indent=2)}"""
@@ -4931,9 +4951,16 @@ CURRENT STATE:
             system=system_prompt,
             messages=messages,
         )
+
+        # Log the routing decision
+        log_agent_action(routed_agent, "chat_routing",
+                         f"Routed question to {routed_agent}: {latest_msg[:100]}",
+                         outcome="response_generated")
+
         return jsonify({
             "role": "assistant",
             "content": resp.content[0].text,
+            "routed_to": routed_agent,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -4953,6 +4980,111 @@ def api_coo_send_daily_email():
         return jsonify({"sent": False, "preview": True, "subject": subject, "html": html_body, "to": coo_to})
     except Exception as e:
         return jsonify({"sent": False, "error": str(e)}), 500
+
+
+@app.route("/api/coo/agents")
+@require_role("admin")
+def api_coo_agents():
+    return jsonify(get_coo_agents())
+
+
+@app.route("/api/coo/agent-log")
+@require_role("admin")
+def api_coo_agent_log():
+    return jsonify(get_agent_action_log(
+        agent_name=request.args.get("agent_name"),
+        date_from=request.args.get("date_from"),
+        date_to=request.args.get("date_to"),
+        limit=request.args.get("limit", 50, type=int),
+    ))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Bank Reconciliation
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/accounting/chart-of-accounts")
+@require_role("admin")
+def api_chart_of_accounts():
+    return jsonify(get_chart_of_accounts())
+
+
+@app.route("/api/accounting/ledger")
+@require_role("admin")
+def api_ledger_entries():
+    return jsonify(get_ledger_entries(
+        account_code=request.args.get("account_code"),
+        date_from=request.args.get("date_from"),
+        date_to=request.args.get("date_to"),
+        reconciled=request.args.get("reconciled", type=int),
+    ))
+
+
+@app.route("/api/accounting/bank-import", methods=["POST"])
+@require_role("admin")
+def api_bank_import():
+    """Upload and import a bank statement CSV."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    csv_text = request.files["file"].read().decode("utf-8", errors="replace")
+    bank = request.form.get("bank", "Chase")
+    account_last4 = request.form.get("account_last4", "")
+    result = import_bank_statement(csv_text, bank, account_last4)
+    return jsonify(result)
+
+
+@app.route("/api/accounting/reconcile", methods=["POST"])
+@require_role("admin")
+def api_reconcile():
+    """Run auto-match on imported bank rows."""
+    d = request.json or {}
+    result = run_bank_reconciliation(
+        import_id=d.get("import_id"),
+        account_last4=d.get("account_last4"),
+        month=d.get("month"),
+    )
+    return jsonify(result)
+
+
+@app.route("/api/accounting/reconcile/match", methods=["POST"])
+@require_role("admin")
+def api_reconcile_match():
+    """Manually confirm a match between a bank row and a Tracker record."""
+    d = request.json or {}
+    bank_row_id = d.get("bank_row_id")
+    matched_source = d.get("matched_source")
+    matched_id = d.get("matched_id")
+    if not bank_row_id:
+        return jsonify({"error": "bank_row_id required"}), 400
+    from email_parser.database import _connect
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE bank_statement_rows
+               SET reconciled = 1, matched_source = ?, matched_id = ?
+               WHERE id = ?""",
+            (matched_source, matched_id, bank_row_id),
+        )
+        conn.commit()
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/accounting/reconciliation-summary")
+@require_role("admin")
+def api_reconciliation_summary():
+    month = request.args.get("month")
+    if not month:
+        return jsonify({"error": "month parameter required (YYYY-MM)"}), 400
+    return jsonify(get_reconciliation_summary(month))
+
+
+@app.route("/api/accounting/close-period", methods=["POST"])
+@require_role("admin")
+def api_close_period():
+    d = request.json or {}
+    period = d.get("period")
+    if not period:
+        return jsonify({"error": "period required (YYYY-MM)"}), 400
+    return jsonify(close_period(period))
 
 
 # ---------------------------------------------------------------------------

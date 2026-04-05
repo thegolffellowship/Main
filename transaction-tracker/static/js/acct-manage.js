@@ -397,3 +397,141 @@ function renderMonthlyReport(data) {
         </tr>`).join('')}</tbody>
     </table>`;
 }
+
+
+// ── Reconciliation Tab ──────────────────────────────────
+
+let _reconFilter = 'all';
+let _reconData = null;
+
+async function loadReconciliation() {
+    // Load chart of accounts
+    try {
+        const coa = await api('/chart-of-accounts');
+        renderChartOfAccounts(coa);
+    } catch (e) {}
+}
+
+function renderChartOfAccounts(coa) {
+    const el = $('#coa-table');
+    if (!coa.length) { el.innerHTML = '<p class="acct-empty">No accounts configured</p>'; return; }
+    const grouped = {};
+    for (const a of coa) {
+        if (!grouped[a.account_type]) grouped[a.account_type] = [];
+        grouped[a.account_type].push(a);
+    }
+    let html = '';
+    for (const [type, accounts] of Object.entries(grouped)) {
+        html += `<h4 style="margin:1rem 0 0.3rem; text-transform:capitalize; color:var(--text-muted); font-size:0.8rem;">${type}</h4>`;
+        html += '<table class="acct-table"><thead><tr><th>Code</th><th>Name</th><th>Schedule C</th></tr></thead><tbody>';
+        for (const a of accounts) {
+            html += `<tr><td style="font-weight:600;">${a.code}</td><td>${a.name}</td><td class="acct-muted">${a.schedule_c_line || '—'}</td></tr>`;
+        }
+        html += '</tbody></table>';
+    }
+    el.innerHTML = html;
+}
+
+async function importBankStatement() {
+    const fileInput = $('#recon-file');
+    if (!fileInput.files.length) { alert('Choose a CSV file'); return; }
+    const last4 = $('#recon-last4').value.trim();
+    if (!last4) { alert('Enter account last 4 digits'); return; }
+
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    fd.append('account_last4', last4);
+
+    try {
+        const res = await fetch('/api/accounting/bank-import', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        const el = $('#recon-import-result');
+        el.style.display = '';
+        el.innerHTML = `<div class="acct-csv-preview-info" style="margin:1rem 0;">
+            Imported <strong>${data.imported}</strong> rows (${data.skipped} skipped as duplicates).
+            Format: ${data.detected_format}. Import ID: ${data.import_id}
+        </div>`;
+    } catch (e) {
+        alert('Import error: ' + e.message);
+    }
+}
+
+async function runReconciliation() {
+    const month = $('#recon-month').value;
+    const last4 = $('#recon-last4').value.trim();
+    try {
+        const res = await fetch('/api/accounting/reconcile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ month: month || null, account_last4: last4 || null }),
+        });
+        _reconData = await res.json();
+        if (_reconData.error) { alert(_reconData.error); return; }
+        $('#recon-filter-bar').style.display = 'flex';
+        $('#recon-summary').textContent =
+            `${_reconData.matched} matched, ${_reconData.unmatched_bank} unmatched in bank, ${_reconData.unmatched_tracker} missing from bank`;
+        renderReconResults();
+    } catch (e) {
+        alert('Reconciliation error: ' + e.message);
+    }
+}
+
+function renderReconResults() {
+    if (!_reconData) return;
+    const el = $('#recon-results');
+    let rows = [];
+
+    if (_reconFilter === 'all' || _reconFilter === 'matched' || _reconFilter === 'unmatched_bank') {
+        for (const r of _reconData.bank_results) {
+            if (_reconFilter !== 'all' && r.match_status !== _reconFilter) continue;
+            rows.push(r);
+        }
+    }
+    if (_reconFilter === 'all' || _reconFilter === 'unmatched_tracker') {
+        for (const r of _reconData.tracker_unmatched) {
+            rows.push(r);
+        }
+    }
+
+    if (!rows.length) {
+        el.innerHTML = '<p class="acct-empty">No results for this filter</p>';
+        return;
+    }
+
+    el.innerHTML = `<table class="acct-table acct-table-full">
+        <thead><tr><th>Status</th><th>Date</th><th>Description</th><th class="text-right">Amount</th><th>Match</th></tr></thead>
+        <tbody>${rows.map(r => {
+            const status = r.match_status === 'matched' ? '<span style="color:var(--green);">&#10003; Matched</span>'
+                : r.match_status === 'unmatched_bank' ? '<span style="color:var(--red);">&#9888; In Bank Only</span>'
+                : '<span style="color:#d97706;">&#128308; Missing from Bank</span>';
+            const desc = r.description || '';
+            const amt = r.amount != null ? fmt(r.amount) : '—';
+            const match = r.matched_detail || '—';
+            const date = r.transaction_date || r.date || '';
+            return `<tr>
+                <td>${status}</td>
+                <td>${date}</td>
+                <td>${desc}</td>
+                <td class="text-right">${amt}</td>
+                <td class="acct-muted">${match}</td>
+            </tr>`;
+        }).join('')}</tbody></table>`;
+}
+
+async function closeMonth() {
+    const month = $('#recon-month').value;
+    if (!month) { alert('Select a month first'); return; }
+    if (!confirm(`Close period ${month}? This generates the month-end summary.`)) return;
+    try {
+        const res = await fetch('/api/accounting/close-period', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ period: month }),
+        });
+        const data = await res.json();
+        alert(`Period ${month} closed.\nIncome: ${fmt(data.total_income)}\nExpenses: ${fmt(data.total_expenses)}\nNet: ${fmt(data.net)}\nTax Reserve: ${fmt(data.tax_reserve)}\nUnreconciled: ${data.unreconciled}`);
+    } catch (e) {
+        alert('Close error: ' + e.message);
+    }
+}

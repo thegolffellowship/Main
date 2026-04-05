@@ -1392,6 +1392,125 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # ── Chart of Accounts & General Ledger ───────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chart_of_accounts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                code            TEXT UNIQUE NOT NULL,
+                name            TEXT NOT NULL,
+                account_type    TEXT NOT NULL
+                    CHECK(account_type IN ('income', 'expense', 'asset', 'liability', 'equity')),
+                schedule_c_line TEXT,
+                parent_code     TEXT,
+                is_active       INTEGER DEFAULT 1,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS general_ledger (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_date          TEXT NOT NULL,
+                description         TEXT NOT NULL,
+                account_code        TEXT NOT NULL REFERENCES chart_of_accounts(code),
+                debit               REAL DEFAULT 0,
+                credit              REAL DEFAULT 0,
+                source_type         TEXT,
+                source_id           INTEGER,
+                order_id            TEXT,
+                reconciled          INTEGER DEFAULT 0,
+                reconciled_date     TEXT,
+                reconciliation_id   INTEGER,
+                created_at          TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ledger_date ON general_ledger(entry_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ledger_account ON general_ledger(account_code)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ledger_reconciled ON general_ledger(reconciled)")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bank_statement_rows (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                import_id           TEXT NOT NULL,
+                bank                TEXT,
+                account_last4       TEXT,
+                transaction_date    TEXT,
+                description         TEXT,
+                amount              REAL,
+                balance             REAL,
+                transaction_type    TEXT,
+                matched_source      TEXT,
+                matched_id          INTEGER,
+                reconciled          INTEGER DEFAULT 0,
+                created_at          TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_rows_import ON bank_statement_rows(import_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_rows_date ON bank_statement_rows(transaction_date)")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS period_closings (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                period          TEXT NOT NULL,
+                closed_at       TEXT,
+                closed_by       TEXT,
+                total_income    REAL,
+                total_expenses  REAL,
+                net             REAL,
+                tax_reserve     REAL,
+                notes           TEXT
+            )
+            """
+        )
+
+        # Seed chart of accounts on first run
+        existing_coa = conn.execute("SELECT COUNT(*) as cnt FROM chart_of_accounts").fetchone()
+        if existing_coa["cnt"] == 0:
+            _seed_chart_of_accounts(conn)
+
+        # ── COO Agent Registry & Action Log ──────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coo_agents (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name      TEXT UNIQUE NOT NULL,
+                agent_role      TEXT NOT NULL,
+                system_prompt   TEXT NOT NULL,
+                is_active       INTEGER DEFAULT 1,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_action_log (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name      TEXT NOT NULL,
+                action_type     TEXT NOT NULL,
+                description     TEXT NOT NULL,
+                source_email_uid TEXT,
+                related_item_id INTEGER,
+                outcome         TEXT,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_name ON agent_action_log(agent_name)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_date ON agent_action_log(created_at)")
+
+        # Seed COO agents on first run
+        existing_agents = conn.execute("SELECT COUNT(*) as cnt FROM coo_agents").fetchone()
+        if existing_agents["cnt"] == 0:
+            _seed_coo_agents(conn)
+
         # Repair: clear matched_item_id on RSVPs that point to wrong items.
         # Two cases:
         #   1. Points to non-event items (Customer Entry, RSVP Import, etc.)
@@ -8299,3 +8418,616 @@ def get_coo_review_queue(db_path: str | Path | None = None) -> list[dict]:
     items = [dict(r) for r in expenses] + [dict(r) for r in actions]
     items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return items
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Chart of Accounts, General Ledger & Bank Reconciliation
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _seed_chart_of_accounts(conn: sqlite3.Connection) -> None:
+    """Populate standard chart of accounts with IRS Schedule C categories."""
+    accounts = [
+        # Assets
+        ("1000", "TGF Checking 0341", "asset", None),
+        ("1100", "TGF Money Market 8045", "asset", None),
+        ("1200", "Accounts Receivable", "asset", None),
+        # Liabilities
+        ("2000", "Sales Tax Payable", "liability", None),
+        ("2100", "Prize Pool Liability", "liability", None),
+        ("2200", "Course Payable", "liability", None),
+        # Income
+        ("4000", "Event Revenue", "income", "Line 1"),
+        ("4100", "Membership Revenue", "income", "Line 1"),
+        ("4200", "Season Contest Revenue", "income", "Line 1"),
+        ("4300", "Transaction Fee Income", "income", "Line 6"),
+        # Expenses
+        ("6000", "Course Fees", "expense", "Line 27a"),
+        ("6100", "Merchant/Processing Fees", "expense", "Line 10"),
+        ("6200", "Software Subscriptions", "expense", "Line 27a"),
+        ("6300", "Advertising & Marketing", "expense", "Line 8"),
+        ("6400", "Prize Payouts", "expense", "Line 27a"),
+        ("6500", "Printing & Supplies", "expense", "Line 22"),
+        ("6600", "Professional Services", "expense", "Line 17"),
+        ("6700", "Bank & Payment Fees", "expense", "Line 27a"),
+        ("6800", "Miscellaneous Expense", "expense", "Line 27a"),
+    ]
+    for code, name, atype, sched_line in accounts:
+        conn.execute(
+            "INSERT INTO chart_of_accounts (code, name, account_type, schedule_c_line) VALUES (?, ?, ?, ?)",
+            (code, name, atype, sched_line),
+        )
+
+
+def get_chart_of_accounts(db_path: str | Path | None = None) -> list[dict]:
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM chart_of_accounts WHERE is_active = 1 ORDER BY code"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_ledger_entries(account_code: str | None = None, date_from: str | None = None,
+                       date_to: str | None = None, reconciled: int | None = None,
+                       limit: int = 500, db_path: str | Path | None = None) -> list[dict]:
+    clauses, params = [], []
+    if account_code:
+        clauses.append("gl.account_code = ?"); params.append(account_code)
+    if date_from:
+        clauses.append("gl.entry_date >= ?"); params.append(date_from)
+    if date_to:
+        clauses.append("gl.entry_date <= ?"); params.append(date_to)
+    if reconciled is not None:
+        clauses.append("gl.reconciled = ?"); params.append(reconciled)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"""SELECT gl.*, coa.name as account_name, coa.account_type
+                FROM general_ledger gl
+                JOIN chart_of_accounts coa ON coa.code = gl.account_code
+                {where} ORDER BY gl.entry_date DESC, gl.id DESC LIMIT ?""",
+            params + [limit],
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def import_bank_statement(csv_text: str, bank: str, account_last4: str,
+                          db_path: str | Path | None = None) -> dict:
+    """Parse and import a bank statement CSV. Auto-detects Chase vs Frost format.
+    Returns {import_id, imported, skipped, rows}."""
+    import csv
+    import io
+    import uuid
+
+    reader = csv.reader(io.StringIO(csv_text))
+    all_rows = list(reader)
+    if not all_rows:
+        return {"import_id": None, "imported": 0, "skipped": 0, "rows": []}
+
+    header = [h.strip().lower() for h in all_rows[0]]
+    data_rows = all_rows[1:]
+    import_id = str(uuid.uuid4())[:12]
+
+    # Auto-detect format
+    if "posting date" in header:
+        # Chase format: Details, Posting Date, Description, Amount, Type, Balance, Check or Slip #
+        date_idx = header.index("posting date")
+        desc_idx = header.index("description") if "description" in header else 2
+        amount_idx = header.index("amount") if "amount" in header else 3
+        balance_idx = header.index("balance") if "balance" in header else None
+        type_idx = header.index("type") if "type" in header else None
+        detected = "Chase"
+    elif "date" in header:
+        date_idx = header.index("date")
+        desc_idx = next((i for i, h in enumerate(header) if "desc" in h or "memo" in h), 1)
+        amount_idx = next((i for i, h in enumerate(header) if "amount" in h or "debit" in h), 2)
+        balance_idx = next((i for i, h in enumerate(header) if "balance" in h), None)
+        type_idx = None
+        detected = "Frost"
+    else:
+        # Fallback: assume date=0, desc=1, amount=2
+        date_idx, desc_idx, amount_idx = 0, 1, 2
+        balance_idx, type_idx = None, None
+        detected = "Generic"
+
+    imported = 0
+    skipped = 0
+    preview_rows = []
+
+    with _connect(db_path) as conn:
+        for row in data_rows:
+            if not row or len(row) <= max(date_idx, desc_idx, amount_idx):
+                continue
+
+            raw_date = row[date_idx].strip()
+            parsed_date = _normalise_csv_date(raw_date) if raw_date else None
+            if not parsed_date:
+                continue
+
+            desc = row[desc_idx].strip()
+            raw_amount = row[amount_idx].strip().replace("$", "").replace(",", "")
+            raw_amount = raw_amount.replace("(", "-").replace(")", "")
+            try:
+                amount = float(raw_amount)
+            except ValueError:
+                continue
+
+            balance = None
+            if balance_idx is not None and balance_idx < len(row):
+                try:
+                    balance = float(row[balance_idx].strip().replace("$", "").replace(",", ""))
+                except ValueError:
+                    pass
+
+            txn_type = row[type_idx].strip() if type_idx and type_idx < len(row) else None
+
+            # Duplicate detection
+            existing = conn.execute(
+                """SELECT id FROM bank_statement_rows
+                   WHERE account_last4 = ? AND transaction_date = ?
+                     AND description = ? AND ABS(amount - ?) < 0.01""",
+                (account_last4, parsed_date, desc, amount),
+            ).fetchone()
+            if existing:
+                skipped += 1
+                continue
+
+            conn.execute(
+                """INSERT INTO bank_statement_rows
+                   (import_id, bank, account_last4, transaction_date, description,
+                    amount, balance, transaction_type)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (import_id, detected, account_last4, parsed_date, desc, amount, balance, txn_type),
+            )
+            imported += 1
+            preview_rows.append({
+                "date": parsed_date, "description": desc, "amount": amount,
+                "balance": balance, "type": txn_type,
+            })
+
+        conn.commit()
+
+    return {
+        "import_id": import_id, "imported": imported, "skipped": skipped,
+        "detected_format": detected, "rows": preview_rows[:50],
+    }
+
+
+def run_bank_reconciliation(import_id: str | None = None, account_last4: str | None = None,
+                            month: str | None = None,
+                            db_path: str | Path | None = None) -> dict:
+    """Auto-match bank statement rows against Tracker records.
+    Returns {matched, unmatched_bank, unmatched_tracker, results}."""
+    with _connect(db_path) as conn:
+        # Get bank rows to reconcile
+        clauses, params = ["reconciled = 0"], []
+        if import_id:
+            clauses.append("import_id = ?"); params.append(import_id)
+        if account_last4:
+            clauses.append("account_last4 = ?"); params.append(account_last4)
+        if month:
+            clauses.append("transaction_date LIKE ?"); params.append(f"{month}%")
+        where = " AND ".join(clauses)
+
+        bank_rows = conn.execute(
+            f"SELECT * FROM bank_statement_rows WHERE {where} ORDER BY transaction_date",
+            params,
+        ).fetchall()
+        bank_rows = [dict(r) for r in bank_rows]
+
+        matched = 0
+        results = []
+
+        for br in bank_rows:
+            amt = br["amount"]
+            dt = br["transaction_date"]
+            match_found = False
+
+            # Match against items (GoDaddy orders) — look at total_amount
+            if amt < 0:
+                # Bank debit — look for expense in items or expense_transactions
+                pass
+            else:
+                # Bank credit — look for GoDaddy order income
+                item = conn.execute(
+                    """SELECT id, order_id, customer, item_name, total_amount FROM items
+                       WHERE ABS(julianday(order_date) - julianday(?)) <= 2
+                         AND COALESCE(transaction_status, 'active') = 'active'
+                       ORDER BY ABS(julianday(order_date) - julianday(?))""",
+                    (dt, dt),
+                ).fetchall()
+                for it in item:
+                    it_amount = _parse_dollar(it["total_amount"])
+                    if abs(it_amount - amt) < 0.01:
+                        conn.execute(
+                            "UPDATE bank_statement_rows SET matched_source='items', matched_id=?, reconciled=1 WHERE id=?",
+                            (it["id"], br["id"]),
+                        )
+                        match_found = True
+                        matched += 1
+                        br["match_status"] = "matched"
+                        br["matched_source"] = "items"
+                        br["matched_detail"] = f"Order {it['order_id']} — {it['customer']}"
+                        break
+
+            if not match_found and amt < 0:
+                # Match against expense_transactions
+                exp = conn.execute(
+                    """SELECT id, merchant, amount FROM expense_transactions
+                       WHERE ABS(julianday(transaction_date) - julianday(?)) <= 2
+                         AND ABS(amount - ?) < 0.01
+                       ORDER BY ABS(julianday(transaction_date) - julianday(?))
+                       LIMIT 1""",
+                    (dt, abs(amt), dt),
+                ).fetchone()
+                if exp:
+                    conn.execute(
+                        "UPDATE bank_statement_rows SET matched_source='expense_transactions', matched_id=?, reconciled=1 WHERE id=?",
+                        (exp["id"], br["id"]),
+                    )
+                    match_found = True
+                    matched += 1
+                    br["match_status"] = "matched"
+                    br["matched_source"] = "expense_transactions"
+                    br["matched_detail"] = f"{exp['merchant']} — {_fmt_dollar(exp['amount'])}"
+
+            if not match_found:
+                br["match_status"] = "unmatched_bank"
+                br["matched_source"] = None
+                br["matched_detail"] = None
+
+            results.append(br)
+
+        conn.commit()
+
+        # Find Tracker records not in bank (for the same period)
+        unmatched_tracker = []
+        if month:
+            tracker_items = conn.execute(
+                """SELECT id, order_id, customer, item_name, total_amount, order_date FROM items
+                   WHERE order_date LIKE ? AND COALESCE(transaction_status, 'active') = 'active'
+                     AND id NOT IN (SELECT matched_id FROM bank_statement_rows WHERE matched_source='items' AND reconciled=1)
+                   ORDER BY order_date""",
+                (f"{month}%",),
+            ).fetchall()
+            for it in tracker_items:
+                unmatched_tracker.append({
+                    "match_status": "unmatched_tracker",
+                    "source": "items",
+                    "id": it["id"],
+                    "description": f"{it['customer']} — {it['item_name']}",
+                    "amount": _parse_dollar(it["total_amount"]),
+                    "date": it["order_date"],
+                })
+
+    return {
+        "matched": matched,
+        "unmatched_bank": len([r for r in results if r["match_status"] == "unmatched_bank"]),
+        "unmatched_tracker": len(unmatched_tracker),
+        "bank_results": results,
+        "tracker_unmatched": unmatched_tracker,
+    }
+
+
+def _fmt_dollar(n) -> str:
+    return f"${n:,.2f}" if n else "$0.00"
+
+
+def close_period(period: str, closed_by: str = "admin",
+                 db_path: str | Path | None = None) -> dict:
+    """Close a monthly period. Verifies all bank rows reconciled, generates summary."""
+    with _connect(db_path) as conn:
+        # Check for unreconciled bank rows
+        unreconciled = conn.execute(
+            "SELECT COUNT(*) as cnt FROM bank_statement_rows WHERE transaction_date LIKE ? AND reconciled = 0",
+            (f"{period}%",),
+        ).fetchone()["cnt"]
+
+        # Calculate period totals from allocations
+        income = conn.execute(
+            "SELECT COALESCE(SUM(tgf_operating), 0) as total FROM acct_allocations WHERE allocation_date LIKE ?",
+            (f"{period}%",),
+        ).fetchone()["total"]
+        expenses = conn.execute(
+            "SELECT COALESCE(SUM(course_payable + course_surcharge + godaddy_fee), 0) as total FROM acct_allocations WHERE allocation_date LIKE ?",
+            (f"{period}%",),
+        ).fetchone()["total"]
+        tax = conn.execute(
+            "SELECT COALESCE(SUM(tax_reserve), 0) as total FROM acct_allocations WHERE allocation_date LIKE ?",
+            (f"{period}%",),
+        ).fetchone()["total"]
+        net = round(income - expenses, 2)
+
+        conn.execute(
+            """INSERT INTO period_closings (period, closed_at, closed_by, total_income, total_expenses, net, tax_reserve, notes)
+               VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)""",
+            (period, closed_by, round(income, 2), round(expenses, 2), net, round(tax, 2),
+             f"{unreconciled} unreconciled rows" if unreconciled else "All reconciled"),
+        )
+        conn.commit()
+
+    return {
+        "period": period, "total_income": round(income, 2),
+        "total_expenses": round(expenses, 2), "net": net,
+        "tax_reserve": round(tax, 2), "unreconciled": unreconciled,
+    }
+
+
+def get_reconciliation_summary(month: str, db_path: str | Path | None = None) -> dict:
+    """Summary for MCP tool: matched/unmatched counts + dollar totals."""
+    with _connect(db_path) as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM bank_statement_rows WHERE transaction_date LIKE ?",
+            (f"{month}%",),
+        ).fetchone()["cnt"]
+        matched = conn.execute(
+            "SELECT COUNT(*) as cnt FROM bank_statement_rows WHERE transaction_date LIKE ? AND reconciled = 1",
+            (f"{month}%",),
+        ).fetchone()["cnt"]
+        unmatched = total - matched
+        matched_total = conn.execute(
+            "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM bank_statement_rows WHERE transaction_date LIKE ? AND reconciled = 1",
+            (f"{month}%",),
+        ).fetchone()["total"]
+        unmatched_total = conn.execute(
+            "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM bank_statement_rows WHERE transaction_date LIKE ? AND reconciled = 0",
+            (f"{month}%",),
+        ).fetchone()["total"]
+        closing = conn.execute(
+            "SELECT * FROM period_closings WHERE period = ?", (month,)
+        ).fetchone()
+
+    return {
+        "month": month,
+        "total_rows": total, "matched": matched, "unmatched": unmatched,
+        "matched_dollars": round(matched_total, 2),
+        "unmatched_dollars": round(unmatched_total, 2),
+        "period_closed": closing is not None,
+        "closing": dict(closing) if closing else None,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COO Agent Registry & Action Log
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _seed_coo_agents(conn: sqlite3.Connection) -> None:
+    """Populate the six specialist COO agents."""
+    agents = [
+        ("Chief of Staff",
+         "Liaison with Kerry. Synthesizes input from all specialist agents.",
+         """You are the TGF Chief of Staff — Kerry's AI liaison. You synthesize input from all
+specialist agents (Financial, Operations, Course Correspondent, Member Relations, Compliance)
+into clear, actionable briefings. You prioritize action items, generate daily briefings,
+and respond to COO Chat. When a question falls outside your direct knowledge, you delegate
+to the appropriate specialist agent and synthesize their analysis into your response.
+Always speak in one consistent voice — direct, warm, and practical. Kerry is the founder
+and operator. He values straight talk and concrete next steps."""),
+
+        ("Financial Agent",
+         "Owns all money tracking: allocations, expenses, reconciliation, tax reserve.",
+         """You are the TGF Financial Agent. You own all money tracking:
+- acct_allocations: per-order dollar breakdown (course payable, prize pool, TGF operating, GoDaddy fees, tax reserve)
+- expense_transactions: Chase alerts, Venmo payments, receipts
+- Bank reconciliation: matching bank statements to Tracker records
+- Tax reserve: 8.25% of TGF operating revenue, tracked monthly
+- Prize pool obligations: funds held for future payouts
+- Course payables: fees owed to golf courses
+Answer "where is the money" questions with specific numbers. Flag when available cash is low."""),
+
+        ("Operations Agent",
+         "Owns events, registrations, rosters, breakeven calculations.",
+         """You are the TGF Operations Agent. You own:
+- Events: scheduling, course bookings, registration counts, breakeven calculations
+- Rosters: player registrations, RSVP status, no-shows
+- Venue logistics: start times, tee time intervals, shotgun vs lottery
+- Registration tracking: who's registered, who's RSVP-only, who hasn't paid
+Calculate breakeven as: course_cost × minimum_players. Flag events below breakeven
+with registration count warnings. Monitor upcoming events for operational readiness."""),
+
+        ("Course Correspondent Agent",
+         "Tracks relationships with each course coordinator.",
+         """You are the TGF Course Correspondent Agent. You track relationships with each golf course:
+- Unsigned contracts: flag courses without current agreements
+- Event confirmations: ensure upcoming events are confirmed with the course
+- Payment due dates: track when course fees are due (usually day-of or net-30)
+- Pairings submission: most courses need pairings 2-4 days before the event
+- Course coordinator contacts: maintain relationship context
+Flag anything requiring Kerry's direct response to a course contact."""),
+
+        ("Member Relations Agent",
+         "Tracks member communications, winnings, credits, follow-ups.",
+         """You are the TGF Member Relations Agent. You track:
+- Member communications: inquiries, complaints, requests
+- Winnings history: who won what at which event (via Venmo payouts)
+- Credits and refunds: which members have outstanding credits
+- Follow-ups needed: members who need a response or check-in
+- RSVP patterns: members who frequently no-show or cancel late
+- Membership renewals: tracking returning vs new vs expired members
+Prioritize member satisfaction and retention."""),
+
+        ("Compliance Agent",
+         "Owns sales tax, IRS installment tracking, filing deadlines.",
+         """You are the TGF Compliance Agent. You own:
+- Sales tax: Texas 8.25% on TGF operating revenue, filed monthly by the 20th
+- IRS installment agreement: tracking payment schedule and balance
+- 1099 threshold monitoring: flag any vendor/contractor paid $600+ in a year
+- Monthly filing deadlines: sales tax due by 20th, IRS installment timing
+- State compliance: Texas franchise tax, any other state obligations
+Alert proactively when deadlines are approaching. Generate tax reserve calculations."""),
+    ]
+    for name, role, prompt in agents:
+        conn.execute(
+            "INSERT INTO coo_agents (agent_name, agent_role, system_prompt) VALUES (?, ?, ?)",
+            (name, role, prompt),
+        )
+
+
+def get_coo_agents(db_path: str | Path | None = None) -> list[dict]:
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM coo_agents WHERE is_active = 1 ORDER BY id"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_coo_agent(agent_name: str, db_path: str | Path | None = None) -> dict | None:
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM coo_agents WHERE agent_name = ?", (agent_name,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def log_agent_action(agent_name: str, action_type: str, description: str,
+                     source_email_uid: str | None = None,
+                     related_item_id: int | None = None,
+                     outcome: str | None = None,
+                     db_path: str | Path | None = None) -> None:
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO agent_action_log
+               (agent_name, action_type, description, source_email_uid, related_item_id, outcome)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (agent_name, action_type, description, source_email_uid, related_item_id, outcome),
+        )
+        conn.commit()
+
+
+def get_agent_action_log(agent_name: str | None = None, date_from: str | None = None,
+                         date_to: str | None = None, limit: int = 50,
+                         db_path: str | Path | None = None) -> list[dict]:
+    clauses, params = [], []
+    if agent_name:
+        clauses.append("agent_name = ?"); params.append(agent_name)
+    if date_from:
+        clauses.append("created_at >= ?"); params.append(date_from)
+    if date_to:
+        clauses.append("created_at <= ?"); params.append(date_to + "T23:59:59")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM agent_action_log{where} ORDER BY created_at DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def route_to_agent(message: str) -> str:
+    """Route a user message to the appropriate specialist agent by keyword matching."""
+    msg_lower = message.lower()
+
+    financial_kw = ["money", "allocation", "expense", "balance", "tax", "reconcil",
+                    "revenue", "income", "godaddy fee", "prize pool", "course payable",
+                    "available to spend", "checking", "cash"]
+    operations_kw = ["event", "roster", "registration", "breakeven", "venue",
+                     "course cost", "tee time", "start time", "format"]
+    correspondent_kw = ["contract", "course coordinator", "pairings", "payment due",
+                        "confirmation", "pro shop", "course contact"]
+    member_kw = ["member", "credit", "winnings", "rsvp", "player", "handicap",
+                 "renewal", "no-show"]
+    compliance_kw = ["sales tax", "irs", "1099", "filing", "compliance",
+                     "franchise tax", "installment"]
+
+    for kw in compliance_kw:
+        if kw in msg_lower:
+            return "Compliance Agent"
+    for kw in correspondent_kw:
+        if kw in msg_lower:
+            return "Course Correspondent Agent"
+    for kw in financial_kw:
+        if kw in msg_lower:
+            return "Financial Agent"
+    for kw in operations_kw:
+        if kw in msg_lower:
+            return "Operations Agent"
+    for kw in member_kw:
+        if kw in msg_lower:
+            return "Member Relations Agent"
+
+    return "Chief of Staff"
+
+
+def run_compliance_checks(db_path: str | Path | None = None) -> list[dict]:
+    """Run daily compliance checks. Returns list of action items created."""
+    today = datetime.now()
+    day = today.day
+    month_str = today.strftime("%Y-%m")
+    created = []
+    pending_logs = []  # collect log entries to write after conn closes
+
+    with _connect(db_path) as conn:
+        # 1. Sales tax reminder: between 15th-20th of month
+        if 15 <= day <= 20:
+            due_date = today.strftime("%Y-%m-20")
+            existing = conn.execute(
+                "SELECT id FROM action_items WHERE subject LIKE ? AND status = 'open'",
+                (f"%sales tax due%{month_str}%",),
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    """INSERT INTO action_items
+                       (subject, from_name, from_email, summary, urgency, category, email_date, confidence)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (f"Monthly sales tax due {due_date}",
+                     "Compliance Agent", "system@tgf",
+                     f"Texas sales tax filing is due by {due_date}. Calculate TGF operating revenue for {month_str} and file.",
+                     "high", "payment", today.strftime("%Y-%m-%d"), 99),
+                )
+                created.append({"type": "sales_tax", "due": due_date})
+                pending_logs.append(("Compliance Agent", "compliance_check",
+                                     f"Created sales tax reminder for {due_date}"))
+
+        # 2. IRS installment check
+        irs_due = get_coo_manual_value(f"irs_due_{month_str}", db_path)
+        if irs_due and irs_due > 0:
+            existing = conn.execute(
+                "SELECT id FROM action_items WHERE subject LIKE ? AND status = 'open'",
+                (f"%IRS installment%{month_str}%",),
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    """INSERT INTO action_items
+                       (subject, from_name, from_email, summary, urgency, category, email_date, confidence)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (f"IRS installment due {month_str}",
+                     "Compliance Agent", "system@tgf",
+                     f"IRS installment payment of ${irs_due:,.2f} is due this month.",
+                     "high", "payment", today.strftime("%Y-%m-%d"), 99),
+                )
+                created.append({"type": "irs_installment", "amount": irs_due})
+
+        # 3. Upcoming event pairings (events within 4 days)
+        cutoff = (today + timedelta(days=4)).strftime("%Y-%m-%d")
+        today_str = today.strftime("%Y-%m-%d")
+        upcoming = conn.execute(
+            "SELECT id, item_name, event_date, course FROM events WHERE event_date BETWEEN ? AND ?",
+            (today_str, cutoff),
+        ).fetchall()
+
+        for ev in upcoming:
+            submit_by = (datetime.strptime(ev["event_date"], "%Y-%m-%d") - timedelta(days=2)).strftime("%Y-%m-%d")
+            existing = conn.execute(
+                "SELECT id FROM action_items WHERE subject LIKE ? AND status = 'open'",
+                (f"%pairings%{ev['item_name']}%",),
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    """INSERT INTO action_items
+                       (subject, from_name, from_email, summary, urgency, category, email_date, confidence)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (f"Submit pairings to {ev['course']} for {ev['item_name']}",
+                     "Course Correspondent Agent", "system@tgf",
+                     f"Submit pairings to {ev['course']} for {ev['item_name']} by {submit_by}. Event date: {ev['event_date']}.",
+                     "high", "course_correspondence", today.strftime("%Y-%m-%d"), 99),
+                )
+                created.append({"type": "pairings", "event": ev["item_name"], "submit_by": submit_by})
+                pending_logs.append(("Course Correspondent Agent", "compliance_check",
+                                     f"Created pairings reminder for {ev['item_name']}"))
+
+        conn.commit()
+
+    # Write logs after connection is released
+    for agent, action, desc in pending_logs:
+        log_agent_action(agent, action, desc, outcome="action_item_created", db_path=db_path)
+
+    return created
