@@ -1,5 +1,18 @@
-window.TGF_VERSION = "1.6.0";
+window.TGF_VERSION = "1.7.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "1.7.0",
+    date: "2026-04-05",
+    title: "Daily Admin Email: Action Items, Financial Snapshot, Upcoming Events, COO Observations",
+    changes: [
+      "Daily COO briefing email at 7:00 AM CT to kerry@thegolffellowship.com",
+      "Email sections: action items, financial snapshot, upcoming events (14 days), AI observations",
+      "Manual trigger: POST /api/coo/send-daily-email for testing",
+      "Professional HTML styling with TGF navy header, mobile-friendly inline CSS",
+      "Deep links from email action items to /coo#action-[id]",
+      "AI-generated observations (2-3 short pattern/risk/opportunity insights per morning)",
+    ],
+  },
   {
     version: "1.6.0",
     date: "2026-04-05",
