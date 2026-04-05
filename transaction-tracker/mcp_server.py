@@ -508,6 +508,51 @@ def rematch_all_rsvps() -> str:
     return json.dumps({"status": "ok", **result})
 
 
+# ── Expense & Action Item Tools ──────────────────────────────────────
+
+@mcp.tool()
+def get_expense_transactions(date_from: str = "", date_to: str = "",
+                             source_type: str = "", review_status: str = "",
+                             limit: int = 50) -> str:
+    """Get expense transactions (Chase alerts, Venmo, receipts).
+
+    Args:
+        date_from: Start date YYYY-MM-DD
+        date_to: End date YYYY-MM-DD
+        source_type: Filter by source (chase_alert, venmo, receipt, manual)
+        review_status: Filter by status (pending, approved, corrected, ignored)
+        limit: Max results (default 50)
+    """
+    from email_parser.database import get_expense_transactions as _get
+    return json.dumps(_get(
+        date_from=date_from or None, date_to=date_to or None,
+        source_type=source_type or None, review_status=review_status or None,
+        limit=limit,
+    ), indent=2)
+
+
+@mcp.tool()
+def get_action_items(status: str = "", category: str = "", limit: int = 50) -> str:
+    """Get action items that need attention (contracts, inquiries, etc.).
+
+    Args:
+        status: Filter by status (open, in_progress, completed, dismissed)
+        category: Filter by category (contract, payment, member_inquiry, course_correspondence, other)
+        limit: Max results (default 50)
+    """
+    from email_parser.database import get_action_items as _get
+    return json.dumps(_get(
+        status=status or None, category=category or None, limit=limit,
+    ), indent=2)
+
+
+@mcp.tool()
+def get_pending_review_count() -> str:
+    """Get count of items needing review across all queues (expenses, actions, uncategorized accounting)."""
+    from email_parser.database import get_pending_review_count as _get
+    return json.dumps(_get(), indent=2)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  ENTRYPOINT
 # ═══════════════════════════════════════════════════════════════════════

@@ -404,6 +404,52 @@ def reextract_order(order_id: str) -> str:
     return json.dumps(_post("/api/audit/reextract-order", {"order_id": order_id}), indent=2)
 
 
+# ── Expense & Action Item Tools ──────────────────────────────────────
+
+@mcp.tool()
+def get_expense_transactions(date_from: str = "", date_to: str = "",
+                             source_type: str = "", review_status: str = "",
+                             limit: int = 50) -> str:
+    """Get expense transactions (Chase alerts, Venmo, receipts).
+
+    Args:
+        date_from: Start date YYYY-MM-DD
+        date_to: End date YYYY-MM-DD
+        source_type: Filter by source (chase_alert, venmo, receipt, manual)
+        review_status: Filter by status (pending, approved, corrected, ignored)
+        limit: Max results (default 50)
+    """
+    params = {}
+    if date_from: params["date_from"] = date_from
+    if date_to: params["date_to"] = date_to
+    if source_type: params["source_type"] = source_type
+    if review_status: params["review_status"] = review_status
+    params["limit"] = limit
+    return json.dumps(_get("/api/accounting/expense-transactions", params=params), indent=2)
+
+
+@mcp.tool()
+def get_action_items(status: str = "", category: str = "", limit: int = 50) -> str:
+    """Get action items that need attention.
+
+    Args:
+        status: Filter by status (open, in_progress, completed, dismissed)
+        category: Filter by category (contract, payment, member_inquiry, course_correspondence, other)
+        limit: Max results (default 50)
+    """
+    params = {}
+    if status: params["status"] = status
+    if category: params["category"] = category
+    params["limit"] = limit
+    return json.dumps(_get("/api/accounting/action-items", params=params), indent=2)
+
+
+@mcp.tool()
+def get_pending_review_count() -> str:
+    """Get count of items needing review across all queues."""
+    return json.dumps(_get("/api/accounting/pending-review"), indent=2)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  ENTRYPOINT
 # ═══════════════════════════════════════════════════════════════════════

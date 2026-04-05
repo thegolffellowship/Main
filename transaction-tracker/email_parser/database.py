@@ -1300,6 +1300,87 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_acct_alloc_date ON acct_allocations(allocation_date)"
         )
 
+        # ── Expense tracking tables ──────────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS expense_transactions (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_uid         TEXT UNIQUE,
+                source_type       TEXT,
+                merchant          TEXT,
+                amount            REAL,
+                transaction_date  TEXT,
+                account_last4     TEXT,
+                account_name      TEXT,
+                transaction_type  TEXT DEFAULT 'expense',
+                category          TEXT,
+                entity            TEXT DEFAULT 'TGF',
+                event_name        TEXT,
+                customer_id       INTEGER,
+                confidence        INTEGER DEFAULT 0,
+                review_status     TEXT DEFAULT 'pending'
+                    CHECK(review_status IN ('pending', 'approved', 'corrected', 'ignored')),
+                reviewed_at       TEXT,
+                reviewed_by       TEXT,
+                notes             TEXT,
+                raw_extract       TEXT,
+                created_at        TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expense_txn_date ON expense_transactions(transaction_date)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expense_txn_status ON expense_transactions(review_status)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expense_txn_source ON expense_transactions(source_type)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS action_items (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_uid         TEXT,
+                subject           TEXT,
+                from_name         TEXT,
+                from_email        TEXT,
+                summary           TEXT,
+                urgency           TEXT DEFAULT 'medium',
+                category          TEXT DEFAULT 'other',
+                email_date        TEXT,
+                status            TEXT DEFAULT 'open'
+                    CHECK(status IN ('open', 'in_progress', 'completed', 'dismissed')),
+                completed_at      TEXT,
+                completed_by      TEXT,
+                resolution_notes  TEXT,
+                confidence        INTEGER DEFAULT 0,
+                created_at        TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_action_items_status ON action_items(status)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS extraction_corrections (
+                id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                expense_transaction_id  INTEGER REFERENCES expense_transactions(id),
+                field_corrected         TEXT,
+                original_value          TEXT,
+                corrected_value         TEXT,
+                merchant                TEXT,
+                corrected_at            TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_corrections_merchant ON extraction_corrections(merchant)"
+        )
+
         # Repair: clear matched_item_id on RSVPs that point to wrong items.
         # Two cases:
         #   1. Points to non-event items (Customer Entry, RSVP Import, etc.)
@@ -7936,3 +8017,167 @@ def get_acct_allocations(month: str | None = None, event: str | None = None,
     )
 
     return {"allocations": records, "totals": totals}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Expense Transactions & Action Items CRUD
+# ═══════════════════════════════════════════════════════════════════════════
+
+def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> dict:
+    """Insert or update an expense transaction. Returns the saved record."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO expense_transactions
+               (email_uid, source_type, merchant, amount, transaction_date,
+                account_last4, account_name, transaction_type, category, entity,
+                event_name, customer_id, confidence, review_status, notes, raw_extract)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(email_uid) DO UPDATE SET
+                merchant=excluded.merchant, amount=excluded.amount,
+                transaction_date=excluded.transaction_date,
+                account_last4=excluded.account_last4, account_name=excluded.account_name,
+                transaction_type=excluded.transaction_type, category=excluded.category,
+                entity=excluded.entity, event_name=excluded.event_name,
+                customer_id=excluded.customer_id, confidence=excluded.confidence,
+                review_status=excluded.review_status, notes=excluded.notes,
+                raw_extract=excluded.raw_extract""",
+            (data.get("email_uid"), data.get("source_type"), data.get("merchant"),
+             data.get("amount"), data.get("transaction_date"),
+             data.get("account_last4"), data.get("account_name"),
+             data.get("transaction_type", "expense"), data.get("category"),
+             data.get("entity", "TGF"), data.get("event_name"),
+             data.get("customer_id"), data.get("confidence", 0),
+             data.get("review_status", "pending"), data.get("notes"),
+             data.get("raw_extract")),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM expense_transactions WHERE email_uid = ?",
+            (data.get("email_uid"),),
+        ).fetchone()
+    return dict(row) if row else data
+
+
+def get_expense_transactions(date_from: str | None = None, date_to: str | None = None,
+                             source_type: str | None = None,
+                             review_status: str | None = None, limit: int = 100,
+                             db_path: str | Path | None = None) -> list[dict]:
+    clauses, params = [], []
+    if date_from:
+        clauses.append("transaction_date >= ?"); params.append(date_from)
+    if date_to:
+        clauses.append("transaction_date <= ?"); params.append(date_to)
+    if source_type:
+        clauses.append("source_type = ?"); params.append(source_type)
+    if review_status:
+        clauses.append("review_status = ?"); params.append(review_status)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM expense_transactions{where} ORDER BY transaction_date DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_expense_transaction(txn_id: int, fields: dict,
+                               db_path: str | Path | None = None) -> dict:
+    """Update expense transaction and record corrections for learning."""
+    allowed = {"merchant", "amount", "transaction_date", "account_last4", "account_name",
+               "transaction_type", "category", "entity", "event_name", "customer_id",
+               "review_status", "reviewed_at", "reviewed_by", "notes"}
+    safe = {k: v for k, v in fields.items() if k in allowed}
+    if not safe:
+        return {}
+    with _connect(db_path) as conn:
+        original = conn.execute(
+            "SELECT * FROM expense_transactions WHERE id = ?", (txn_id,)
+        ).fetchone()
+        if original:
+            original = dict(original)
+            for field, new_val in safe.items():
+                old_val = original.get(field)
+                if old_val != new_val and field in ("category", "entity", "event_name"):
+                    conn.execute(
+                        """INSERT INTO extraction_corrections
+                           (expense_transaction_id, field_corrected, original_value,
+                            corrected_value, merchant) VALUES (?, ?, ?, ?, ?)""",
+                        (txn_id, field, str(old_val) if old_val else None,
+                         str(new_val) if new_val else None, original.get("merchant")),
+                    )
+        set_clause = ", ".join(f"{k} = ?" for k in safe)
+        conn.execute(f"UPDATE expense_transactions SET {set_clause} WHERE id = ?",
+                     (*safe.values(), txn_id))
+        conn.commit()
+        row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?", (txn_id,)).fetchone()
+    return dict(row) if row else {}
+
+
+def save_action_item(data: dict, db_path: str | Path | None = None) -> dict:
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            """INSERT INTO action_items
+               (email_uid, subject, from_name, from_email, summary, urgency,
+                category, email_date, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (data.get("email_uid"), data.get("subject"), data.get("from_name"),
+             data.get("from_email"), data.get("summary"), data.get("urgency", "medium"),
+             data.get("category", "other"), data.get("email_date"),
+             data.get("confidence", 0)),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM action_items WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return dict(row) if row else data
+
+
+def get_action_items(status: str | None = None, category: str | None = None,
+                     limit: int = 100, db_path: str | Path | None = None) -> list[dict]:
+    clauses, params = [], []
+    if status:
+        clauses.append("status = ?"); params.append(status)
+    if category:
+        clauses.append("category = ?"); params.append(category)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM action_items{where} ORDER BY created_at DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_action_item(item_id: int, fields: dict,
+                       db_path: str | Path | None = None) -> dict:
+    allowed = {"status", "completed_at", "completed_by", "resolution_notes"}
+    safe = {k: v for k, v in fields.items() if k in allowed}
+    if not safe:
+        return {}
+    set_clause = ", ".join(f"{k} = ?" for k in safe)
+    with _connect(db_path) as conn:
+        conn.execute(f"UPDATE action_items SET {set_clause} WHERE id = ?",
+                     (*safe.values(), item_id))
+        conn.commit()
+        row = conn.execute("SELECT * FROM action_items WHERE id = ?", (item_id,)).fetchone()
+    return dict(row) if row else {}
+
+
+def get_pending_review_count(db_path: str | Path | None = None) -> dict:
+    with _connect(db_path) as conn:
+        expense_pending = conn.execute(
+            "SELECT COUNT(*) as cnt FROM expense_transactions WHERE review_status = 'pending'"
+        ).fetchone()["cnt"]
+        action_open = conn.execute(
+            "SELECT COUNT(*) as cnt FROM action_items WHERE status = 'open'"
+        ).fetchone()["cnt"]
+        acct_uncat = conn.execute(
+            """SELECT COUNT(DISTINCT t.id) as cnt FROM acct_transactions t
+               WHERE t.type != 'transfer'
+                 AND t.id NOT IN (
+                     SELECT s.transaction_id FROM acct_splits s WHERE s.category_id IS NOT NULL
+                 )"""
+        ).fetchone()["cnt"]
+    return {
+        "expense_pending": expense_pending,
+        "action_open": action_open,
+        "acct_uncategorized": acct_uncat,
+        "total": expense_pending + action_open + acct_uncat,
+    }
