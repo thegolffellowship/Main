@@ -1381,6 +1381,17 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_corrections_merchant ON extraction_corrections(merchant)"
         )
 
+        # COO manual values — simple key-value store for account balances, debts
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coo_manual_values (
+                key        TEXT PRIMARY KEY,
+                value      REAL,
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
         # Repair: clear matched_item_id on RSVPs that point to wrong items.
         # Two cases:
         #   1. Points to non-event items (Customer Entry, RSVP Import, etc.)
@@ -8181,3 +8192,110 @@ def get_pending_review_count(db_path: str | Path | None = None) -> dict:
         "acct_uncategorized": acct_uncat,
         "total": expense_pending + action_open + acct_uncat,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COO Dashboard Helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+def get_coo_manual_value(key: str, db_path: str | Path | None = None) -> float | None:
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT value FROM coo_manual_values WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_coo_manual_value(key: str, value: float, db_path: str | Path | None = None) -> None:
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO coo_manual_values (key, value, updated_at) VALUES (?, ?, datetime('now')) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+            (key, value),
+        )
+        conn.commit()
+
+
+def get_all_coo_manual_values(db_path: str | Path | None = None) -> dict:
+    with _connect(db_path) as conn:
+        rows = conn.execute("SELECT key, value FROM coo_manual_values").fetchall()
+    return {r["key"]: r["value"] for r in rows}
+
+
+def get_coo_financial_snapshot(db_path: str | Path | None = None) -> dict:
+    """Build the complete financial snapshot for the COO dashboard."""
+    manual = get_all_coo_manual_values(db_path)
+    today = datetime.now().strftime("%Y-%m-%d")
+    month_prefix = datetime.now().strftime("%Y-%m")
+
+    with _connect(db_path) as conn:
+        # Prize pools owed (future events)
+        pp = conn.execute(
+            "SELECT COALESCE(SUM(prize_pool), 0) as total FROM acct_allocations WHERE allocation_date >= ?",
+            (today,),
+        ).fetchone()["total"]
+
+        # Course fees owed (future events)
+        cf = conn.execute(
+            "SELECT COALESCE(SUM(course_payable + course_surcharge), 0) as total FROM acct_allocations WHERE allocation_date >= ?",
+            (today,),
+        ).fetchone()["total"]
+
+        # Tax reserve MTD
+        tr = conn.execute(
+            "SELECT COALESCE(SUM(tax_reserve), 0) as total FROM acct_allocations WHERE allocation_date LIKE ?",
+            (f"{month_prefix}%",),
+        ).fetchone()["total"]
+
+    checking = manual.get("tgf_checking_0341", 0)
+    money_market = manual.get("tgf_money_market_8045", 0)
+    tgf_total = round(checking + money_market, 2)
+    available = round(tgf_total - pp - cf - tr, 2)
+
+    return {
+        "accounts": {
+            "tgf_checking_0341": round(checking, 2),
+            "tgf_money_market_8045": round(money_market, 2),
+            "tgf_total": tgf_total,
+        },
+        "obligations": {
+            "prize_pools_owed": round(pp, 2),
+            "course_fees_owed": round(cf, 2),
+            "tax_reserve_mtd": round(tr, 2),
+            "available_to_spend": available,
+        },
+        "debts": {
+            "irs_balance": manual.get("irs_balance", 0),
+            "grandparent_loan": manual.get("grandparent_loan", 0),
+            "chase_biz_7680": manual.get("chase_biz_7680", 0),
+            "chase_sapphire_6159": manual.get("chase_sapphire_6159", 0),
+            "total_obligations": round(
+                manual.get("irs_balance", 0) + manual.get("grandparent_loan", 0)
+                + manual.get("chase_biz_7680", 0) + manual.get("chase_sapphire_6159", 0), 2
+            ),
+        },
+    }
+
+
+def get_coo_review_queue(db_path: str | Path | None = None) -> list[dict]:
+    """Unified review queue: pending expenses + low-confidence action items."""
+    with _connect(db_path) as conn:
+        expenses = conn.execute(
+            """SELECT id, 'expense' as queue_type, source_type, merchant, amount,
+                      transaction_date, category, entity, event_name, confidence,
+                      review_status, notes, raw_extract, created_at
+               FROM expense_transactions WHERE review_status = 'pending'
+               ORDER BY created_at DESC LIMIT 50"""
+        ).fetchall()
+
+        actions = conn.execute(
+            """SELECT id, 'action' as queue_type, 'action_required' as source_type,
+                      subject as merchant, 0 as amount, email_date as transaction_date,
+                      category, '' as entity, '' as event_name, confidence,
+                      status as review_status, summary as notes, '' as raw_extract,
+                      created_at
+               FROM action_items WHERE confidence < 95 AND status = 'open'
+               ORDER BY created_at DESC LIMIT 50"""
+        ).fetchall()
+
+    items = [dict(r) for r in expenses] + [dict(r) for r in actions]
+    items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return items
