@@ -51,6 +51,7 @@ function refreshActiveTab() {
         case 'accounts': loadAccounts(); break;
         case 'categories': loadCategories(); break;
         case 'reports': loadReports(); break;
+        case 'reconciliation': loadReconciliation(); break;
     }
 }
 
@@ -155,6 +156,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Reports
     $('#report-type').addEventListener('change', loadReports);
     $('#report-period').addEventListener('change', loadReports);
+
+    // Reconciliation
+    if ($('#btn-recon-import')) {
+        $('#btn-recon-import').addEventListener('click', importBankStatement);
+        $('#btn-recon-run').addEventListener('click', runReconciliation);
+        $('#btn-close-month').addEventListener('click', closeMonth);
+        $$('#recon-filter-bar .coo-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                $$('#recon-filter-bar .coo-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                _reconFilter = btn.dataset.filter;
+                renderReconResults();
+            });
+        });
+    }
 
     // Close modals on overlay click
     $$('.modal-overlay').forEach(overlay => {

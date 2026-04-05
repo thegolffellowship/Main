@@ -18,7 +18,7 @@
         <div class="header-content">
             <h1>Accounting</h1>
             <p class="subtitle">Multi-Entity Money Management</p>
-            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.7.0</a>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.8.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -54,6 +54,7 @@
             <button class="acct-subtab" data-tab="accounts">Accounts</button>
             <button class="acct-subtab" data-tab="categories">Categories</button>
             <button class="acct-subtab" data-tab="reports">Reports</button>
+            <button class="acct-subtab" data-tab="reconciliation">Reconciliation</button>
         </div>
 
         <!-- ═══ DASHBOARD TAB ═══ -->
@@ -194,6 +195,47 @@
                 </select>
             </div>
             <div class="acct-report-content" id="report-content"></div>
+        </section>
+
+        <!-- ═══ RECONCILIATION TAB ═══ -->
+        <section class="acct-tab-panel" id="panel-reconciliation">
+            <!-- Upload -->
+            <div class="acct-toolbar">
+                <div class="acct-form-group">
+                    <label>Bank Statement CSV</label>
+                    <input type="file" id="recon-file" accept=".csv">
+                </div>
+                <div class="acct-form-group">
+                    <label>Account Last 4</label>
+                    <input type="text" id="recon-last4" maxlength="4" placeholder="0341" style="width:80px;">
+                </div>
+                <button class="btn btn-primary" id="btn-recon-import">Upload & Import</button>
+                <div style="margin-left:auto; display:flex; gap:0.5rem; align-items:center;">
+                    <label>Month</label>
+                    <input type="month" id="recon-month" style="padding:0.4rem;">
+                    <button class="btn btn-secondary" id="btn-recon-run">Run Reconciliation</button>
+                    <button class="btn btn-secondary" id="btn-close-month">Close Month</button>
+                </div>
+            </div>
+
+            <!-- Import result -->
+            <div id="recon-import-result" style="display:none;"></div>
+
+            <!-- Reconciliation results -->
+            <div class="acct-toolbar" id="recon-filter-bar" style="display:none;">
+                <button class="coo-pill active" data-filter="all">All</button>
+                <button class="coo-pill" data-filter="matched">Matched</button>
+                <button class="coo-pill" data-filter="unmatched_bank">Unmatched (Bank)</button>
+                <button class="coo-pill" data-filter="unmatched_tracker">Missing from Bank</button>
+                <span id="recon-summary" class="acct-muted" style="margin-left:auto;"></span>
+            </div>
+            <div id="recon-results"></div>
+
+            <!-- Chart of Accounts -->
+            <div class="acct-section" style="margin-top:2rem;">
+                <h3>Chart of Accounts</h3>
+                <div id="coa-table"></div>
+            </div>
         </section>
     </main>
 

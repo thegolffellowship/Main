@@ -161,6 +161,12 @@ from email_parser.database import (
     get_coo_review_queue,
     get_all_coo_manual_values,
     set_coo_manual_value,
+    get_chart_of_accounts,
+    get_ledger_entries,
+    import_bank_statement,
+    run_bank_reconciliation,
+    close_period,
+    get_reconciliation_summary,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -4953,6 +4959,94 @@ def api_coo_send_daily_email():
         return jsonify({"sent": False, "preview": True, "subject": subject, "html": html_body, "to": coo_to})
     except Exception as e:
         return jsonify({"sent": False, "error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Bank Reconciliation
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/accounting/chart-of-accounts")
+@require_role("admin")
+def api_chart_of_accounts():
+    return jsonify(get_chart_of_accounts())
+
+
+@app.route("/api/accounting/ledger")
+@require_role("admin")
+def api_ledger_entries():
+    return jsonify(get_ledger_entries(
+        account_code=request.args.get("account_code"),
+        date_from=request.args.get("date_from"),
+        date_to=request.args.get("date_to"),
+        reconciled=request.args.get("reconciled", type=int),
+    ))
+
+
+@app.route("/api/accounting/bank-import", methods=["POST"])
+@require_role("admin")
+def api_bank_import():
+    """Upload and import a bank statement CSV."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    csv_text = request.files["file"].read().decode("utf-8", errors="replace")
+    bank = request.form.get("bank", "Chase")
+    account_last4 = request.form.get("account_last4", "")
+    result = import_bank_statement(csv_text, bank, account_last4)
+    return jsonify(result)
+
+
+@app.route("/api/accounting/reconcile", methods=["POST"])
+@require_role("admin")
+def api_reconcile():
+    """Run auto-match on imported bank rows."""
+    d = request.json or {}
+    result = run_bank_reconciliation(
+        import_id=d.get("import_id"),
+        account_last4=d.get("account_last4"),
+        month=d.get("month"),
+    )
+    return jsonify(result)
+
+
+@app.route("/api/accounting/reconcile/match", methods=["POST"])
+@require_role("admin")
+def api_reconcile_match():
+    """Manually confirm a match between a bank row and a Tracker record."""
+    d = request.json or {}
+    bank_row_id = d.get("bank_row_id")
+    matched_source = d.get("matched_source")
+    matched_id = d.get("matched_id")
+    if not bank_row_id:
+        return jsonify({"error": "bank_row_id required"}), 400
+    from email_parser.database import _connect
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE bank_statement_rows
+               SET reconciled = 1, matched_source = ?, matched_id = ?
+               WHERE id = ?""",
+            (matched_source, matched_id, bank_row_id),
+        )
+        conn.commit()
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/accounting/reconciliation-summary")
+@require_role("admin")
+def api_reconciliation_summary():
+    month = request.args.get("month")
+    if not month:
+        return jsonify({"error": "month parameter required (YYYY-MM)"}), 400
+    return jsonify(get_reconciliation_summary(month))
+
+
+@app.route("/api/accounting/close-period", methods=["POST"])
+@require_role("admin")
+def api_close_period():
+    d = request.json or {}
+    period = d.get("period")
+    if not period:
+        return jsonify({"error": "period required (YYYY-MM)"}), 400
+    return jsonify(close_period(period))
 
 
 # ---------------------------------------------------------------------------

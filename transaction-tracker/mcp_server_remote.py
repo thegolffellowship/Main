@@ -450,6 +450,34 @@ def get_pending_review_count() -> str:
     return json.dumps(_get("/api/accounting/pending-review"), indent=2)
 
 
+# ── Reconciliation Tools ─────────────────────────────────────────────
+
+@mcp.tool()
+def get_reconciliation_summary(month: str) -> str:
+    """Get bank reconciliation summary for a month.
+
+    Args:
+        month: Month in YYYY-MM format (e.g. "2026-04")
+    """
+    return json.dumps(_get(f"/api/accounting/reconciliation-summary?month={month}"), indent=2)
+
+
+@mcp.tool()
+def get_ledger_entries(account_code: str = "", date_from: str = "", date_to: str = "") -> str:
+    """Get general ledger entries.
+
+    Args:
+        account_code: Filter by account code (e.g. "4000")
+        date_from: Start date YYYY-MM-DD
+        date_to: End date YYYY-MM-DD
+    """
+    params = {}
+    if account_code: params["account_code"] = account_code
+    if date_from: params["date_from"] = date_from
+    if date_to: params["date_to"] = date_to
+    return json.dumps(_get("/api/accounting/ledger", params=params), indent=2)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  ENTRYPOINT
 # ═══════════════════════════════════════════════════════════════════════

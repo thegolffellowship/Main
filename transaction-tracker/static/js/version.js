@@ -1,5 +1,22 @@
-window.TGF_VERSION = "1.7.0";
+window.TGF_VERSION = "1.8.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "1.8.0",
+    date: "2026-04-05",
+    title: "Bank Reconciliation: Chart of Accounts, General Ledger, CSV Import, Two-Way Matching, Month-End Close",
+    changes: [
+      "Chart of accounts with IRS Schedule C categories — income, expense, asset, liability accounts",
+      "General ledger table for double-entry bookkeeping journal entries",
+      "Bank statement CSV upload with auto-detect (Chase and Frost Bank formats)",
+      "Duplicate detection on bank import — skips rows already imported",
+      "Two-way auto-reconciliation — matches bank rows against items and expense_transactions by amount and date",
+      "Three reconciliation states: Matched, In Bank Only, Missing from Bank",
+      "Filter bar for reconciliation results: All / Matched / Unmatched / Missing",
+      "Month-end close — locks period, generates income/expense/net/tax summary",
+      "Reconciliation tab on Accounting page with chart of accounts display",
+      "MCP tools: get_reconciliation_summary, get_ledger_entries",
+    ],
+  },
   {
     version: "1.7.0",
     date: "2026-04-05",
