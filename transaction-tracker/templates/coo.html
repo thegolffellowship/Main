@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COO Dashboard — TGF Tracker</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TGF Tracker">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>COO Dashboard</h1>
+            <p class="subtitle">TGF Operations Command Center</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.6.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+
+    <main>
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/accounting">Accounting</a>
+            <a href="/coo" class="active">COO</a>
+            <a href="/database" class="admin-nav" style="display:none;">Database</a>
+        </nav>
+
+        <!-- ═══ SECTION 1: ACTION ITEMS ═══ -->
+        <section class="coo-section" id="section-actions">
+            <div class="coo-section-header">
+                <h2>Action Items</h2>
+                <div class="coo-filter-pills">
+                    <button class="coo-pill active" data-filter="open">Open</button>
+                    <button class="coo-pill" data-filter="in_progress">In Progress</button>
+                    <button class="coo-pill" data-filter="completed">Completed</button>
+                    <button class="coo-pill" data-filter="">All</button>
+                </div>
+            </div>
+            <div id="action-items-list" class="coo-checklist"></div>
+        </section>
+
+        <!-- ═══ SECTION 2: FINANCIAL SNAPSHOT ═══ -->
+        <section class="coo-section" id="section-financial">
+            <div class="coo-section-header">
+                <h2>Financial Snapshot</h2>
+                <span class="coo-updated" id="financial-updated"></span>
+            </div>
+
+            <!-- Account Balances -->
+            <div class="coo-fin-row">
+                <h3>Account Balances</h3>
+                <div class="coo-fin-grid" id="fin-accounts">
+                    <div class="coo-fin-card">
+                        <div class="coo-fin-label">TGF Checking 0341</div>
+                        <div class="coo-fin-value coo-editable" data-key="tgf_checking_0341" id="val-checking">$0.00</div>
+                    </div>
+                    <div class="coo-fin-card">
+                        <div class="coo-fin-label">TGF Money Market 8045</div>
+                        <div class="coo-fin-value coo-editable" data-key="tgf_money_market_8045" id="val-mm">$0.00</div>
+                    </div>
+                    <div class="coo-fin-card coo-fin-total">
+                        <div class="coo-fin-label">TGF Total</div>
+                        <div class="coo-fin-value" id="val-total">$0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Obligations -->
+            <div class="coo-fin-row">
+                <h3>Obligations</h3>
+                <div class="coo-fin-grid" id="fin-obligations">
+                    <div class="coo-fin-card">
+                        <div class="coo-fin-label">Prize Pools Owed</div>
+                        <div class="coo-fin-value" id="val-prizes">$0.00</div>
+                    </div>
+                    <div class="coo-fin-card">
+                        <div class="coo-fin-label">Course Fees Owed</div>
+                        <div class="coo-fin-value" id="val-course-fees">$0.00</div>
+                    </div>
+                    <div class="coo-fin-card">
+                        <div class="coo-fin-label">Tax Reserve MTD</div>
+                        <div class="coo-fin-value" id="val-tax">$0.00</div>
+                    </div>
+                    <div class="coo-fin-card coo-fin-highlight">
+                        <div class="coo-fin-label">Available to Spend</div>
+                        <div class="coo-fin-value" id="val-available">$0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Debt Tracker -->
+            <div class="coo-fin-row">
+                <h3>Debt Tracker</h3>
+                <div class="coo-fin-grid" id="fin-debts">
+                    <div class="coo-fin-card">
+                        <div class="coo-fin-label">IRS Balance</div>
+                        <div class="coo-fin-value coo-editable" data-key="irs_balance" id="val-irs">$0.00</div>
+                    </div>
+                    <div class="coo-fin-card">
+                        <div class="coo-fin-label">Grandparent Loan</div>
+                        <div class="coo-fin-value coo-editable" data-key="grandparent_loan" id="val-grandparent">$0.00</div>
+                    </div>
+                    <div class="coo-fin-card">
+                        <div class="coo-fin-label">Chase Biz 7680</div>
+                        <div class="coo-fin-value coo-editable" data-key="chase_biz_7680" id="val-chase-biz">$0.00</div>
+                    </div>
+                    <div class="coo-fin-card">
+                        <div class="coo-fin-label">Chase Sapphire 6159</div>
+                        <div class="coo-fin-value coo-editable" data-key="chase_sapphire_6159" id="val-chase-saph">$0.00</div>
+                    </div>
+                    <div class="coo-fin-card coo-fin-total">
+                        <div class="coo-fin-label">Total Obligations</div>
+                        <div class="coo-fin-value" id="val-debt-total">$0.00</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ SECTION 3: REVIEW QUEUE ═══ -->
+        <section class="coo-section" id="section-review">
+            <div class="coo-section-header">
+                <h2>Review Queue</h2>
+                <span class="coo-badge" id="review-count">0</span>
+            </div>
+            <div id="review-queue-coo" class="coo-review-list"></div>
+        </section>
+
+        <!-- ═══ SECTION 4: COO CHAT ═══ -->
+        <section class="coo-section" id="section-chat">
+            <div class="coo-section-header">
+                <h2>COO Chat</h2>
+            </div>
+            <div class="coo-chat-container">
+                <div class="coo-chat-messages" id="chat-messages">
+                    <div class="coo-chat-msg coo-chat-assistant">
+                        <div class="coo-chat-bubble">Hey Kerry. I'm your COO Agent. Ask me anything about TGF operations, finances, or action items. I have full context on your current state.</div>
+                    </div>
+                </div>
+                <div class="coo-chat-input-row">
+                    <input type="text" id="chat-input" class="coo-chat-input" placeholder="Ask the COO Agent..." autocomplete="off">
+                    <button class="btn btn-primary" id="btn-chat-send">Send</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Inline edit modal for manual values -->
+    <div class="modal-overlay" id="edit-value-modal" style="display:none;">
+        <div class="modal acct-modal acct-modal-sm">
+            <div class="modal-header">
+                <h2 id="edit-value-title">Edit Value</h2>
+                <button class="modal-close" id="edit-value-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-value-key">
+                <div class="acct-form-group">
+                    <label id="edit-value-label">Amount</label>
+                    <input type="number" id="edit-value-input" step="0.01" placeholder="0.00">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="edit-value-cancel">Cancel</button>
+                <button class="btn btn-primary" id="edit-value-save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/coo-dashboard.js"></script>
+    <script src="/static/js/chat-widget.js"></script>
+</body>
+</html>

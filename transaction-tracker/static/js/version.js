@@ -1,5 +1,20 @@
-window.TGF_VERSION = "1.5.0";
+window.TGF_VERSION = "1.6.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "1.6.0",
+    date: "2026-04-05",
+    title: "COO Dashboard: Action Items, Financial Snapshot, Review Queue, COO Chat",
+    changes: [
+      "New /coo page — COO Operations Command Center with four vertical sections",
+      "Action Items checklist — urgency badges, resolution workflow, AI advice integration",
+      "Financial Snapshot — account balances, obligations (prize pools, course fees, tax reserve), debt tracker",
+      "Available to Spend calculation — TGF Total minus all outstanding obligations",
+      "Editable manual values — click any balance or debt to update inline",
+      "Unified Review Queue — pending expense transactions + low-confidence action items in one view",
+      "COO Chat — Claude Sonnet-powered strategic advisor with full operational context",
+      "COO nav tab added to all pages",
+    ],
+  },
   {
     version: "1.5.0",
     date: "2026-04-04",

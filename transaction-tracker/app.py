@@ -157,6 +157,10 @@ from email_parser.database import (
     get_action_items,
     update_action_item,
     get_pending_review_count,
+    get_coo_financial_snapshot,
+    get_coo_review_queue,
+    get_all_coo_manual_values,
+    set_coo_manual_value,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -4784,6 +4788,105 @@ def api_check_expense_inbox():
     try:
         check_expense_inbox()
         return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COO Dashboard
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.route("/coo")
+def coo_page():
+    return render_template("coo.html")
+
+
+@app.route("/api/coo/action-items")
+@require_role("admin")
+def api_coo_action_items():
+    return jsonify(get_action_items(
+        status=request.args.get("status"),
+        category=request.args.get("category"),
+    ))
+
+
+@app.route("/api/coo/action-items/<int:aid>", methods=["PATCH"])
+@require_role("admin")
+def api_coo_update_action_item(aid):
+    d = request.json or {}
+    return jsonify(update_action_item(aid, d))
+
+
+@app.route("/api/coo/financial-snapshot")
+@require_role("admin")
+def api_coo_financial_snapshot():
+    return jsonify(get_coo_financial_snapshot())
+
+
+@app.route("/api/coo/manual-values", methods=["POST"])
+@require_role("admin")
+def api_coo_manual_values():
+    d = request.json or {}
+    if "key" not in d or "value" not in d:
+        return jsonify({"error": "key and value required"}), 400
+    set_coo_manual_value(d["key"], float(d["value"]))
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/coo/review-queue")
+@require_role("admin")
+def api_coo_review_queue():
+    return jsonify(get_coo_review_queue())
+
+
+@app.route("/api/coo/chat", methods=["POST"])
+@require_role("admin")
+def api_coo_chat():
+    """COO Chat — Claude-powered strategic advisor."""
+    d = request.json or {}
+    messages = d.get("messages", [])
+    context = d.get("context", {})
+
+    if not messages:
+        return jsonify({"error": "messages required"}), 400
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY not configured"}), 500
+
+    system_prompt = f"""You are the TGF COO Agent — an AI chief of staff for The Golf Fellowship,
+a golf community organization with chapters in San Antonio and Austin.
+
+You have full context on:
+- Current action items and their status
+- Financial snapshot: account balances, obligations, tax reserve
+- Recent expense transactions and pending review items
+- Upcoming events and registration counts
+
+Your role is to:
+1. Answer questions about the current financial and operational state
+2. Give strategic advice on action items
+3. Flag risks and opportunities you observe
+4. Help Kerry prioritize his day
+
+Be direct, warm, and practical. Kerry is the founder and operator.
+He values straight talk and concrete next steps over lengthy explanations.
+
+CURRENT STATE:
+{json.dumps(context, indent=2)}"""
+
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=1500,
+            system=system_prompt,
+            messages=messages,
+        )
+        return jsonify({
+            "role": "assistant",
+            "content": resp.content[0].text,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
