@@ -174,6 +174,7 @@ from email_parser.expense_parser import (
     match_event_from_memo, match_customer_from_name,
     get_merchant_context,
 )
+from email_parser.coo_email import build_coo_email_html
 from email_parser.report import send_daily_report
 from email_parser.rsvp_parser import fetch_rsvp_emails, parse_rsvp_emails
 
@@ -337,6 +338,39 @@ def check_inbox():
 
     _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(new_emails)} new emails ({len(emails)} total scanned)"
     logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
+
+
+def send_coo_daily_email():
+    """Send the daily COO briefing email."""
+    coo_to = os.getenv("COO_EMAIL_TO")
+    if not coo_to:
+        logger.info("COO_EMAIL_TO not set — skipping daily email")
+        return False
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        logger.warning("Azure AD / email not configured — skipping COO email")
+        return False
+
+    try:
+        subject, html_body = build_coo_email_html()
+        ok = send_mail_graph(
+            tenant_id=tenant_id, client_id=client_id,
+            client_secret=client_secret, from_address=from_address,
+            to_address=coo_to, subject=subject, html_body=html_body,
+        )
+        if ok:
+            logger.info("COO daily email sent to %s", coo_to)
+        else:
+            logger.error("COO daily email failed to send to %s", coo_to)
+        return ok
+    except Exception:
+        logger.exception("COO daily email error")
+        return False
 
 
 def check_expense_inbox():
@@ -665,6 +699,20 @@ def start_scheduler():
         replace_existing=True,
     )
     logger.info("Expense email classifier scheduled every %d minutes", interval)
+
+    # COO daily email — runs at 7:00 AM US/Central
+    coo_email_to = os.getenv("COO_EMAIL_TO")
+    if coo_email_to:
+        scheduler.add_job(
+            send_coo_daily_email,
+            "cron",
+            hour=7,
+            minute=0,
+            timezone="US/Central",
+            id="coo_daily_email",
+            replace_existing=True,
+        )
+        logger.info("COO daily email scheduled for 07:00 US/Central → %s", coo_email_to)
 
     # Daily digest — runs at 6:00 AM US/Central by default
     report_hour = int(os.getenv("DAILY_REPORT_HOUR", "6"))
@@ -4889,6 +4937,22 @@ CURRENT STATE:
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/coo/send-daily-email", methods=["POST"])
+@require_role("admin")
+def api_coo_send_daily_email():
+    """Manually trigger the COO daily email for testing."""
+    coo_to = os.getenv("COO_EMAIL_TO", "kerry@thegolffellowship.com")
+    ok = send_coo_daily_email()
+    if ok:
+        return jsonify({"sent": True, "to": coo_to})
+    # If Azure not configured, still return the HTML for preview
+    try:
+        subject, html_body = build_coo_email_html()
+        return jsonify({"sent": False, "preview": True, "subject": subject, "html": html_body, "to": coo_to})
+    except Exception as e:
+        return jsonify({"sent": False, "error": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------
