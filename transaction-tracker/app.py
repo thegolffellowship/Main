@@ -1483,7 +1483,7 @@ def api_re_extract_fields():
 
     BACKFILL_FIELDS = ["partner_request", "fellowship", "notes", "holes",
                        "address", "address2", "city", "state", "zip",
-                       "transaction_fees"]
+                       "transaction_fees", "coupon_code", "coupon_amount"]
     # Fields where re-extract should overwrite existing (possibly wrong) values
     OVERWRITE_FIELDS = {"item_name"}
 
@@ -1568,6 +1568,92 @@ def api_re_extract_fields():
         "skipped": skipped,
         "errors": errors,
     })
+
+
+@app.route("/api/audit/reextract-order", methods=["POST"])
+@require_role("admin")
+def api_reextract_order():
+    """Re-parse a single order's email to backfill coupon (or any missing) fields.
+
+    Accepts JSON body: {"order_id": "R854482675"}
+    Re-fetches the original email, re-runs AI extraction, and updates
+    coupon_code and coupon_amount (plus other backfill fields) on all rows
+    sharing that order_id.
+    """
+    data = request.get_json(force=True) or {}
+    order_id = data.get("order_id", "").strip()
+    if not order_id:
+        return jsonify({"error": "order_id is required"}), 400
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    email_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, email_address]):
+        return jsonify({"error": "Azure AD credentials not configured"}), 400
+
+    BACKFILL_FIELDS = ["coupon_code", "coupon_amount", "transaction_fees",
+                       "partner_request", "fellowship", "notes", "holes",
+                       "address", "address2", "city", "state", "zip"]
+
+    items = get_all_items()
+    order_items = [it for it in items if it.get("order_id") == order_id]
+    if not order_items:
+        return jsonify({"error": f"No items found for order_id={order_id}"}), 404
+
+    # All rows in an order share the same email_uid
+    uid = order_items[0].get("email_uid", "")
+    if not uid or uid.startswith("manual-"):
+        return jsonify({"error": "Order has no parseable email (manual entry)"}), 400
+
+    try:
+        email_data = fetch_email_by_id(
+            tenant_id, client_id, client_secret, email_address, uid
+        )
+        if not email_data:
+            return jsonify({"error": f"Could not fetch email {uid} from Graph API"}), 404
+
+        parsed_rows = parse_email(email_data)
+        if not parsed_rows:
+            return jsonify({"error": "AI extraction returned no results"}), 500
+
+        updated = 0
+        changes_detail = []
+        for it in order_items:
+            idx = it.get("item_index", 0) or 0
+            if idx < len(parsed_rows):
+                parsed = parsed_rows[idx]
+            else:
+                parsed = next(
+                    (p for p in parsed_rows
+                     if p.get("item_name") == it.get("item_name")),
+                    parsed_rows[0] if len(parsed_rows) == 1 else None,
+                )
+            if not parsed:
+                continue
+
+            changes = {}
+            for field in BACKFILL_FIELDS:
+                new_val = parsed.get(field)
+                if new_val and not it.get(field):
+                    changes[field] = new_val
+
+            if changes:
+                update_item(it["id"], changes)
+                updated += 1
+                changes_detail.append({"id": it["id"], "fields": changes})
+
+        return jsonify({
+            "status": "ok",
+            "order_id": order_id,
+            "items_in_order": len(order_items),
+            "items_updated": updated,
+            "changes": changes_detail,
+        })
+
+    except Exception as exc:
+        logger.exception("reextract-order failed for %s", order_id)
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/audit/retry-failed", methods=["POST"])

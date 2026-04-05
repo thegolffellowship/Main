@@ -233,6 +233,7 @@ ITEM_COLUMNS = [
     "first_name", "last_name", "middle_name", "suffix",
     "customer_email", "customer_phone",
     "order_id", "order_date", "order_time", "total_amount", "transaction_fees",
+    "coupon_code", "coupon_amount",
     "item_name", "item_price", "quantity",
     "chapter", "course", "handicap", "has_handicap",
     "side_games", "tee_choice",
@@ -359,6 +360,8 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("suffix", "TEXT"),
             ("archived", "INTEGER DEFAULT 0"),
             ("holes", "TEXT"),
+            ("coupon_code", "TEXT"),
+            ("coupon_amount", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")

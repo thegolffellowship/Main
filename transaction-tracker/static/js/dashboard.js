@@ -512,6 +512,8 @@ function renderMobileCard(row) {
         ["Price", row.item_price || "\u2014"],
         ["Total Amount", row.total_amount || "\u2014"],
         ["Transaction Fees", row.transaction_fees || "\u2014"],
+        ["Coupon Code", row.coupon_code || "\u2014"],
+        ["Coupon Amount", row.coupon_amount || "\u2014"],
         ["Handicap", row.handicap || "\u2014"],
         ["Status", row.user_status || "\u2014"],
         ["Holes", row.holes || "\u2014"],
@@ -1109,7 +1111,7 @@ function exportCSV() {
 
     const headers = [
         "Order Date", "Customer", "Email", "Phone",
-        "Item", "Price", "Transaction Fees", "Chapter", "Course",
+        "Item", "Price", "Transaction Fees", "Coupon Code", "Coupon Amount", "Chapter", "Course",
         "Handicap", "Has Handicap",
         "Holes", "Side Games", "Tee Choice", "Member Status", "Golf or Compete",
         "Post Game", "Returning/New", "Shirt Size", "Guest Name",
@@ -1120,7 +1122,7 @@ function exportCSV() {
 
     const fields = [
         "order_date", "customer", "customer_email", "customer_phone",
-        "item_name", "item_price", "transaction_fees", "chapter", "course",
+        "item_name", "item_price", "transaction_fees", "coupon_code", "coupon_amount", "chapter", "course",
         "handicap", "has_handicap",
         "holes", "side_games", "tee_choice", "user_status",
         "post_game", "returning_or_new", "shirt_size",
@@ -1229,7 +1231,7 @@ function onAuthReady() {
 // Edit Modal
 // ---------------------------------------------------------------------------
 const EDIT_FIELDS = [
-    "customer", "item_name", "item_price", "transaction_fees",
+    "customer", "item_name", "item_price", "transaction_fees", "coupon_code", "coupon_amount",
     "chapter", "course", "handicap", "has_handicap", "side_games",
     "tee_choice", "user_status",
     "partner_request", "fellowship", "notes",
