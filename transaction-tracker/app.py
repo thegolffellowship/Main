@@ -4996,6 +4996,7 @@ def api_expense_transactions():
         date_to=request.args.get("date_to"),
         source_type=request.args.get("source_type"),
         review_status=request.args.get("review_status"),
+        event_name=request.args.get("event_name"),
         limit=request.args.get("limit", 100, type=int),
     ))
 
