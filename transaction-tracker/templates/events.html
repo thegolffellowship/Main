@@ -1623,7 +1623,7 @@
             } else if (rsvp && rsvp.response === 'PLAYING') {
                 circleState = "playing";
                 circleSource = "auto";
-            } else if (rsvp && rsvp.response === 'NOT PLAYING') {
+            } else if (rsvp && rsvp.response === 'NOT PLAYING' && txStatus !== 'active') {
                 circleState = "not_playing";
                 circleSource = "auto";
             }
@@ -1636,7 +1636,7 @@
                 }
             }
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
-            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (manual)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? `Not Playing (${circleSource === "auto" ? "GG" : "manual"})` : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
             const circleHtml = `<span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" data-player-email="${escapeHtml(r.customer_email || '')}" title="${circleTitle}"></span>`;
             const sideGame = classifyGameType(r.side_games);
             const sideGameLabel = sideGame === "NO GAMES" ? "NONE" : sideGame;
@@ -2629,7 +2629,7 @@
             } else if (rsvp && rsvp.response === 'PLAYING') {
                 circleState = "playing";
                 circleSource = "auto";
-            } else if (rsvp && rsvp.response === 'NOT PLAYING') {
+            } else if (rsvp && rsvp.response === 'NOT PLAYING' && txStatus !== 'active') {
                 circleState = "not_playing";
                 circleSource = "auto";
             }
@@ -2642,7 +2642,7 @@
                 }
             }
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
-            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? "Not Playing (manual)" : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
+            const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? `Not Playing (${circleSource === "auto" ? "GG" : "manual"})` : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
             const isManualRow = (r.email_uid || "").startsWith("manual-");
             const isCompRow = (r.email_uid || "").startsWith("manual-comp");
             const hasExtraInfo = !!(r.partner_request || r.fellowship || r.notes);
