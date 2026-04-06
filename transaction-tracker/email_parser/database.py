@@ -630,6 +630,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass  # already exists
 
+        # Migration: add course cost breakdown JSON columns
+        for col in ["course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18"]:
+            try:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {col} TEXT")
+                logger.info("Added events.%s column", col)
+            except sqlite3.OperationalError:
+                pass  # already exists
+
         # RSVPs table — Golf Genius round signup confirmations
         conn.execute(
             """
@@ -2688,7 +2696,8 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
                 "side_game_fee_9", "side_game_fee_18",
                 "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18",
-                "course_surcharge"}
+                "course_surcharge",
+                "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
@@ -4250,6 +4259,9 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
                  side_game_fee_9: float = None, side_game_fee_18: float = None,
                  tgf_markup_final: float = None, tgf_markup_final_9: float = None,
                  tgf_markup_final_18: float = None, course_surcharge: float = 0,
+                 course_cost_breakdown: str = None,
+                 course_cost_breakdown_9: str = None,
+                 course_cost_breakdown_18: str = None,
                  db_path: str | Path | None = None) -> dict | None:
     """Manually create a new event. Returns the event dict or None if duplicate (case-insensitive)."""
     with _connect(db_path) as conn:
@@ -4261,8 +4273,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
             return None
         try:
             cursor = conn.execute(
-                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
-                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge),
+                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
+                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18),
             )
             conn.commit()
             new_id = cursor.lastrowid
@@ -8065,16 +8077,37 @@ def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
     is_combo = (event.get("format") or "").lower() == "combo"
 
     if is_combo and is_18:
-        course_cost = event.get("course_cost_18") or event.get("course_cost")
         tgf_markup = event.get("tgf_markup_18") or event.get("tgf_markup")
     elif is_combo:
-        course_cost = event.get("course_cost_9") or event.get("course_cost")
         tgf_markup = event.get("tgf_markup_9") or event.get("tgf_markup")
     else:
-        course_cost = event.get("course_cost")
         tgf_markup = event.get("tgf_markup")
 
-    surcharge = event.get("course_surcharge") or 0
+    # Determine course cost — prefer breakdown JSON if available
+    breakdown_col = ("course_cost_breakdown_18" if (is_combo and is_18) else
+                     "course_cost_breakdown_9" if is_combo else
+                     "course_cost_breakdown")
+    breakdown_json = event.get(breakdown_col)
+    if breakdown_json:
+        try:
+            breakdown = json.loads(breakdown_json)
+            course_cost = round(sum(
+                v["amount"] * (1 + v["tax_pct"] / 100)
+                for v in breakdown.values()
+            ), 2)
+            surcharge = 0  # absorbed into breakdown
+        except (json.JSONDecodeError, KeyError, TypeError):
+            course_cost = None
+            surcharge = event.get("course_surcharge") or 0
+    else:
+        # Legacy path — flat course_cost
+        if is_combo and is_18:
+            course_cost = event.get("course_cost_18") or event.get("course_cost")
+        elif is_combo:
+            course_cost = event.get("course_cost_9") or event.get("course_cost")
+        else:
+            course_cost = event.get("course_cost")
+        surcharge = event.get("course_surcharge") or 0
 
     if course_cost is None:
         return {

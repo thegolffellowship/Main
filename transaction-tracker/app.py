@@ -2400,6 +2400,9 @@ def api_create_event():
         tgf_markup_final=data.get("tgf_markup_final"),
         tgf_markup_final_9=data.get("tgf_markup_final_9"),
         tgf_markup_final_18=data.get("tgf_markup_final_18"),
+        course_cost_breakdown=data.get("course_cost_breakdown"),
+        course_cost_breakdown_9=data.get("course_cost_breakdown_9"),
+        course_cost_breakdown_18=data.get("course_cost_breakdown_18"),
     )
     if event:
         return jsonify({"status": "ok", "event": event}), 201
