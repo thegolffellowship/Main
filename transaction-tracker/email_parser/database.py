@@ -4459,6 +4459,10 @@ def add_payment_to_event(event_name: str, customer: str,
         elif "both" in (payment_item or "").lower():
             side_games = "BOTH"
 
+        # Handle Event Upgrade — update parent's holes from 9 to 18
+        if "upgrade" in (payment_item or "").lower():
+            conn.execute("UPDATE items SET holes = '18' WHERE id = ?", (parent_id,))
+
         new_values = {col: None for col in ITEM_COLUMNS}
         new_values["email_uid"] = uid
         new_values["item_index"] = 0
