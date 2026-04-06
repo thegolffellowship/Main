@@ -951,6 +951,49 @@ def api_update_item(item_id):
     return jsonify({"error": "not found or no valid fields"}), 404
 
 
+@app.route("/api/items/<int:item_id>/assign-guest", methods=["POST"])
+@require_role("manager")
+def api_assign_guest(item_id):
+    """Assign the actual guest player name to a GUEST registration.
+
+    When a member buys a guest registration, both items initially show the
+    buyer as the customer. This endpoint swaps the customer to the actual
+    guest and records the buyer in a 'Purchased by' note.
+    """
+    data = request.get_json(silent=True)
+    guest_name = (data.get("guest_name") or "").strip() if data else ""
+    if not guest_name:
+        return jsonify({"error": "guest_name is required."}), 400
+    err = validate_json_fields(data)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = get_connection()
+    try:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return jsonify({"error": "Item not found."}), 404
+        item = dict(item)
+        buyer = item["customer"] or ""
+
+        from email_parser.parser import _normalize_customer_name
+        normalized = _normalize_customer_name(guest_name)
+
+        changes = {
+            "customer": normalized,
+            "guest_name": normalized,
+            "notes": f"Purchased by {buyer}",
+            "customer_email": None,
+            "customer_phone": None,
+            "customer_id": None,
+        }
+        update_item(item_id, changes)
+
+        return jsonify({"status": "ok", "customer": normalized, "buyer": buyer})
+    finally:
+        conn.close()
+
+
 @app.route("/api/items/<int:item_id>", methods=["DELETE"])
 @require_role("admin")
 def api_delete_item(item_id):

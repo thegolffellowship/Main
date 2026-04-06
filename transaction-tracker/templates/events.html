@@ -1608,6 +1608,15 @@
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
             if (isComp || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
             else if (isManual && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
+            // GUEST tag: "Purchased by" badge if already swapped, or "Guest?" prompt if buyer is still the customer
+            if (_cleanStatus(r.user_status) === "GUEST") {
+                const pbMatch = (r.notes || "").match(/Purchased by (.+)/i);
+                if (pbMatch) {
+                    tag += ` <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Paid for by ${escapeHtml(pbMatch[1])}">Paid by ${escapeHtml(pbMatch[1])}</span>`;
+                } else {
+                    tag += ` <span class="status-tag btn-assign-guest" style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Click to enter the guest player's name">Guest?</span>`;
+                }
+            }
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             const manualOverride = isSynthetic
                 ? (r.customer_email && emailOverrides[(r.customer_email || "").toLowerCase()])
@@ -2672,6 +2681,15 @@
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
                     if (isCompRow || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
                     else if (isManualRow && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
+                    // GUEST tag: "Purchased by" badge if already swapped, or "Guest?" prompt if buyer is still the customer
+                    if (_cleanStatus(r.user_status) === "GUEST") {
+                        const pbMatch = (r.notes || "").match(/Purchased by (.+)/i);
+                        if (pbMatch) {
+                            tag += ` <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Paid for by ${escapeHtml(pbMatch[1])}">Paid by ${escapeHtml(pbMatch[1])}</span>`;
+                        } else {
+                            tag += ` <span class="status-tag btn-assign-guest" style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Click to enter the guest player's name">Guest?</span>`;
+                        }
+                    }
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
@@ -3284,6 +3302,34 @@
                     // Re-render the detail panel
                     rerenderDetail(container, ev);
                 } catch (err) { alert("Failed to remove player."); }
+            });
+        });
+
+        // Assign Guest name — "Guest?" tag click
+        container.querySelectorAll(".btn-assign-guest").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(btn.dataset.itemId);
+                const buyerName = btn.dataset.buyerName || "";
+                const guestName = prompt(
+                    `This GUEST registration is under "${buyerName}".\n\n` +
+                    `Enter the actual guest player's name:`
+                );
+                if (!guestName || !guestName.trim()) return;
+                try {
+                    const res = await fetch(`/api/items/${itemId}/assign-guest`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ guest_name: guestName.trim() }),
+                    });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        alert(data.error || "Failed to assign guest name.");
+                        return;
+                    }
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Failed to assign guest name."); }
             });
         });
 

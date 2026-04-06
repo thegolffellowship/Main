@@ -693,6 +693,24 @@ def _validate_parsed_items(rows: list[dict]) -> list[dict]:
                 "message": f"Item name \"{item_name}\" is suspiciously short — may be truncated.",
             })
 
+        # 3. GUEST item with no guest_name — admin needs to confirm who the guest is
+        status = (row.get("user_status") or "").upper()
+        if "GUEST" in status and not (row.get("guest_name") or "").strip():
+            customer = (row.get("customer") or "").strip()
+            row_warnings.append({
+                "code": "GUEST_NAME_MISSING",
+                "message": (
+                    f"GUEST registration for \"{customer}\" has no guest name. "
+                    f"The customer may be the buyer, not the actual guest. "
+                    f"Please confirm or update the guest player's name."
+                ),
+            })
+            logger.warning(
+                "Parse validation: GUEST item missing guest_name "
+                "(item_name=%s, customer=%s, order_id=%s)",
+                item_name, customer, row.get("order_id"),
+            )
+
         if row_warnings:
             row["_parse_warnings"] = row_warnings
             warnings.extend(row_warnings)
