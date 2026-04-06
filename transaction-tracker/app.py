@@ -2486,7 +2486,7 @@ def api_parse_warnings():
 
 @app.route("/api/action-items")
 @require_role("manager")
-def api_action_items():
+def api_notification_action_items():
     """Return pending action items for admin/manager review.
 
     Aggregates parse warnings and GUEST registrations needing guest names.
