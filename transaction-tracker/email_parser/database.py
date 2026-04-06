@@ -4452,15 +4452,17 @@ def add_payment_to_event(event_name: str, customer: str,
 
         # Determine side_games from payment_item
         side_games = ""
-        if "net" in (payment_item or "").lower():
-            side_games = "NET"
-        elif "gross" in (payment_item or "").lower():
-            side_games = "GROSS"
-        elif "both" in (payment_item or "").lower():
-            side_games = "BOTH"
+        is_upgrade = "upgrade" in (payment_item or "").lower()
+        if not is_upgrade:
+            if "net" in (payment_item or "").lower():
+                side_games = "NET"
+            elif "gross" in (payment_item or "").lower():
+                side_games = "GROSS"
+            elif "both" in (payment_item or "").lower():
+                side_games = "BOTH"
 
         # Handle Event Upgrade — update parent's holes from 9 to 18
-        if "upgrade" in (payment_item or "").lower():
+        if is_upgrade:
             conn.execute("UPDATE items SET holes = '18' WHERE id = ?", (parent_id,))
 
         new_values = {col: None for col in ITEM_COLUMNS}
@@ -4476,7 +4478,7 @@ def add_payment_to_event(event_name: str, customer: str,
         new_values["transaction_status"] = "active"
         new_values["merchant"] = f"Manual Entry ({payment_source})"
         new_values["item_price"] = payment_amount
-        new_values["side_games"] = side_games or payment_item
+        new_values["side_games"] = side_games if side_games else (payment_item if not is_upgrade else "")
         # Child payments do NOT carry holes, tee, status — only the parent has those
         new_values["notes"] = note or f"{payment_item} — {payment_amount} via {payment_source}"
         new_values["parent_item_id"] = parent_id
