@@ -9091,9 +9091,13 @@ def run_compliance_checks(db_path: str | Path | None = None) -> list[dict]:
 
         for ev in upcoming:
             submit_by = (datetime.strptime(ev["event_date"], "%Y-%m-%d") - timedelta(days=2)).strftime("%Y-%m-%d")
+            # Dedup: check by event name OR by course+date to catch near-duplicates
             existing = conn.execute(
-                "SELECT id FROM action_items WHERE subject LIKE ? AND status = 'open'",
-                (f"%pairings%{ev['item_name']}%",),
+                """SELECT id FROM action_items WHERE status = 'open'
+                   AND category = 'course_correspondence'
+                   AND (subject LIKE ? OR summary LIKE ?)""",
+                (f"%pairings%{ev['item_name']}%",
+                 f"%{ev['course']}%{ev['event_date']}%"),
             ).fetchone()
             if not existing:
                 conn.execute(
