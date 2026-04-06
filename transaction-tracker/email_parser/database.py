@@ -2731,13 +2731,33 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
 
 
 def delete_event(event_id: int, db_path: str | Path | None = None) -> bool:
-    """Delete an event by ID and clean up its aliases."""
+    """Delete an event by ID.
+
+    If transaction items still reference this event name, the name is
+    preserved as an alias (pointing to '_DELETED_') so that
+    sync_events_from_items() and seed_events() don't recreate it.
+    """
     with _connect(db_path) as conn:
-        # Get the event name so we can clean up aliases
         row = conn.execute("SELECT item_name FROM events WHERE id = ?", (event_id,)).fetchone()
         if row:
-            conn.execute("DELETE FROM event_aliases WHERE canonical_event_name = ?",
-                         (row["item_name"],))
+            event_name = row["item_name"]
+            # Re-point any aliases that targeted this event to _DELETED_
+            conn.execute(
+                "UPDATE event_aliases SET canonical_event_name = '_DELETED_' "
+                "WHERE canonical_event_name = ?",
+                (event_name,),
+            )
+            # If items still use this name, add it as an alias so sync skips it
+            has_items = conn.execute(
+                "SELECT 1 FROM items WHERE item_name = ? COLLATE NOCASE LIMIT 1",
+                (event_name,),
+            ).fetchone()
+            if has_items:
+                conn.execute(
+                    "INSERT OR IGNORE INTO event_aliases "
+                    "(alias_name, canonical_event_name) VALUES (?, '_DELETED_')",
+                    (event_name,),
+                )
         cursor = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
         conn.commit()
         return cursor.rowcount > 0
@@ -4254,20 +4274,32 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
 def seed_events(events: list[dict], db_path: str | Path | None = None) -> dict:
     """
     Batch-insert events. Each dict should have: item_name, event_date, course, chapter.
-    Skips duplicates (case-insensitive). Returns {"inserted": N, "skipped": N}.
+    Skips duplicates (case-insensitive) and aliased names. Returns {"inserted": N, "skipped": N}.
     """
     with _connect(db_path) as conn:
+        # Load aliases so we skip names that were merged into another event
+        alias_set = set()
+        try:
+            for r in conn.execute("SELECT alias_name FROM event_aliases").fetchall():
+                alias_set.add(r[0].lower())
+        except Exception:
+            pass  # table may not exist on first run
         inserted = 0
         skipped = 0
         for ev in events:
+            name = ev["item_name"]
+            # Skip if this name is an alias for another event (e.g. merged)
+            if name.lower() in alias_set:
+                skipped += 1
+                continue
             # Case-insensitive duplicate check
             existing = conn.execute(
                 "SELECT id FROM events WHERE LOWER(item_name) = LOWER(?)",
-                (ev["item_name"],)
+                (name,)
             ).fetchone()
             if existing:
                 skipped += 1
-                logger.debug("Duplicate event skipped during seed: %s", ev.get("item_name"))
+                logger.debug("Duplicate event skipped during seed: %s", name)
                 continue
             try:
                 conn.execute(
