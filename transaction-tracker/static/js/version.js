@@ -1,5 +1,27 @@
-window.TGF_VERSION = "1.9.0";
+window.TGF_VERSION = "2.0.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.0.0",
+    date: "2026-04-06",
+    title: "Guest Registration Handling, Action Items Banner, Event & Payment Fixes",
+    changes: [
+      "GUEST registration handling — parser auto-detects when a member buys for a guest and swaps customer name with 'Purchased by' note",
+      "Guest? prompt tag on GUEST items in multi-item orders where guest name is unknown — click to assign the guest's name",
+      "Action Items notification banner on Transactions + Events pages — aggregates parse warnings and guest items for admin/manager",
+      "Per-order Re-extract button on Audit page — re-parse a single order's email without running bulk re-extract",
+      "Re-extract now applies guest-swap (customer change) on GUEST items",
+      "Add Payment: Event Upgrade (9→18 holes) now updates parent item's holes to 18",
+      "Add Payment: Event Upgrade no longer incorrectly changes parent game type",
+      "Add Payment: duplicate players in dropdown fixed (child payment rows excluded)",
+      "Clickable game switching — NET ↔ GROSS toggle on event detail (no-cost swap only)",
+      "Fix: paid players no longer incorrectly marked red from old GG RSVP 'NOT PLAYING' status",
+      "Fix: Add Payment works for events with aliases (course changes)",
+      "Fix: deleted/merged events no longer re-appear after deploy (seed + sync now check aliases)",
+      "GUEST_NAME_MISSING parse warning — only fires for multi-item orders with no guest info",
+      "Parse warning dismiss/resolve now accessible to managers (was admin-only)",
+      "Improved AI prompt for extracting guest_name from Special Instructions",
+    ],
+  },
   {
     version: "1.9.0",
     date: "2026-04-05",

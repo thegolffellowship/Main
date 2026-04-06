@@ -329,6 +329,40 @@ computes a current handicap index using the official USGA WHS lookup table.
 
 ---
 
+### 9. Accounting (`/accounting`)
+
+Multi-entity financial tracking, bank reconciliation, and month-end close.
+
+**Features:**
+- **Multi-entity tracking** — TGF main + chapter accounts with balance management
+- **Chart of accounts** — IRS Schedule C categories (income, expense, asset, liability)
+- **General ledger** — Double-entry bookkeeping journal entries
+- **Expense transactions** — Categorized expense management with approval workflow
+- **Revenue auto-sync** — Automatic revenue entries from registration items
+- **Bank reconciliation** — CSV import (Chase, Frost Bank), two-way matching, three states (Matched/In Bank Only/Missing)
+- **Month-end close** — Locks period, generates income/expense/net/tax summary
+- **Action items** — Financial action items with urgency and resolution tracking
+
+---
+
+### 10. COO Dashboard (`/coo`)
+
+Operations Command Center with AI-powered strategic advisor.
+
+**Features:**
+- **Action Items** — Checklist with urgency badges, resolution workflow, AI advice
+- **Financial Snapshot** — Account balances, obligations (prize pools, course fees, tax reserve), debt tracker
+- **Available to Spend** — TGF total minus all outstanding obligations
+- **Editable manual values** — Click any balance or debt to update inline
+- **Review Queue** — Pending expense transactions + low-confidence action items
+- **COO Chat** — Claude Sonnet-powered strategic advisor with full operational context
+- **Daily Email** — 7:00 AM CT briefing with action items, financial snapshot, upcoming events, AI observations
+- **Multi-Agent Architecture** — Six specialist agents (Financial, Operations, Course Correspondent, Member Relations, Compliance, Chief of Staff)
+- **Agent routing** — Questions auto-routed to specialist by keyword
+- **Compliance checks** — Automated sales tax reminders, IRS flags, pairings deadlines
+
+---
+
 ## Database Schema
 
 ### `items` table (main transaction data)
@@ -1085,6 +1119,86 @@ The app is installable as a Progressive Web App:
 ---
 
 ## Version History
+
+### v2.0.0 — April 6, 2026 — "Guest Registration Handling, Action Items & Event Fixes"
+
+**Guest Registration Handling:**
+- Parser auto-detects multi-item orders where a member buys for a guest (`_promote_guest_customers()`)
+- Guest item customer swapped to actual guest name with "Purchased by" note
+- "Guest?" amber tag on GUEST items needing name assignment (multi-item orders only)
+- "Paid by" blue badge on GUEST items already resolved
+- `POST /api/items/:id/assign-guest` endpoint for inline guest name assignment
+- `POST /api/audit/fix-guest-customers` backfill endpoint for existing GUEST items
+- `GUEST_NAME_MISSING` parse warning (conservative: only multi-item orders with no guest info)
+- Improved AI prompt for extracting `guest_name` from Special Instructions
+
+**Action Items Notification Banner:**
+- Red action items banner on Transactions + Events pages for admin/manager
+- Aggregates parse warnings and GUEST items needing guest name assignment
+- `GET /api/action-items` unified endpoint
+- Inline "Assign Name" and "Dismiss" buttons
+- Parse warning dismiss/resolve now accessible to managers
+
+**Add Payment Improvements:**
+- Event Upgrade (9→18 holes) now updates parent item's holes field
+- Event Upgrade no longer incorrectly sets child row side_games (prevents false BOTH)
+- Duplicate players in dropdown fixed (child payment rows excluded)
+- Works for events with aliases (course changes) via alias-aware parent lookup
+
+**Clickable Game Switching:**
+- GAMES column clickable for NET/GROSS registrations (no-cost swap only)
+- Click toggles NET ↔ GROSS; BOTH and NONE not clickable (money change)
+
+**Per-Order Re-extract:**
+- "Re-extract This Order" button on Audit page email cards
+- Re-parses single order's email without bulk re-extract
+- Now applies guest-swap (customer change) on GUEST items
+
+**Event Deletion / Merge Persistence:**
+- Deleted events preserved as `_DELETED_` alias when items still reference them
+- `seed_events()` checks aliases before inserting (prevents re-creation on deploy)
+- Startup seed list updated (s9.4 Willow Springs → s9.4 The Quarry)
+
+**RSVP Status Fix:**
+- Paid (active) registrations no longer auto-marked red from old GG RSVP "NOT PLAYING" status
+- RSVP tooltip correctly shows "Not Playing (GG)" vs "Not Playing (manual)"
+
+### v1.9.0 — April 5, 2026 — "Multi-Agent Architecture"
+
+- Six specialist COO agents with dedicated system prompts and domain ownership
+- Agent routing in COO Chat — auto-routed by keyword, Chief of Staff voice
+- Agent action log with timestamp, action type, description, outcome
+- Compliance Agent automated checks (sales tax, IRS flags, pairings deadlines)
+- MCP tool: `get_agent_action_log`
+
+### v1.8.0 — April 5, 2026 — "Bank Reconciliation"
+
+- Chart of accounts with IRS Schedule C categories
+- General ledger for double-entry bookkeeping
+- Bank statement CSV upload (Chase, Frost Bank auto-detect)
+- Two-way auto-reconciliation matching bank rows against items/expenses
+- Month-end close with income/expense/net/tax summary
+
+### v1.7.0 — April 5, 2026 — "Daily Admin Email"
+
+- Daily COO briefing email at 7:00 AM CT
+- Sections: action items, financial snapshot, upcoming events (14 days), AI observations
+- Manual trigger: `POST /api/coo/send-daily-email`
+
+### v1.6.0 — April 5, 2026 — "COO Dashboard"
+
+- `/coo` page — Operations Command Center
+- Action Items checklist with urgency badges and resolution workflow
+- Financial Snapshot with obligations tracking and Available to Spend
+- Unified Review Queue for pending expenses + low-confidence items
+- COO Chat — Claude Sonnet-powered strategic advisor
+
+### v1.5.0 — April 4, 2026 — "Multi-Entity Accounting"
+
+- Accounting page (`/accounting`) for multi-entity financial tracking
+- Expense transaction management with categorization
+- Revenue auto-sync from registration items
+- Entity-level P&L and balance tracking
 
 ### v1.4.0 — March 30, 2026 — "Customer Identity, Matrix Persistence & Sticky Nav"
 
