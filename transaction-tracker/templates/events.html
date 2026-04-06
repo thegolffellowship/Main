@@ -340,12 +340,12 @@
             </div>
         </section>
 
-        <!-- Parse Warnings Banner (admin only) -->
+        <!-- Action Items Banner (admin/manager) -->
         <section id="parse-warning-banner" class="parse-warning-banner" style="display:none;">
             <div class="parse-warning-header">
                 <span class="parse-warning-icon">&#9888;</span>
-                <strong><span id="parse-warning-count">0</span> Parse Warning(s)</strong>
-                <span class="parse-warning-subtitle">Items that may have been parsed incorrectly — review and fix</span>
+                <strong><span id="parse-warning-count">0</span> Action Item(s)</strong>
+                <span class="parse-warning-subtitle">Items needing your attention — review and resolve</span>
                 <button class="parse-warning-toggle-btn" id="parse-warning-toggle-btn">Show &#9662;</button>
             </div>
             <div id="parse-warning-list" class="parse-warning-list" style="display:none;"></div>
@@ -5136,19 +5136,21 @@
     let parseWarnings = [];
 
     async function fetchParseWarnings() {
-        if (currentRole !== "admin") return;
+        if (currentRole !== "admin" && currentRole !== "manager") return;
         try {
-            const res = await fetch("/api/parse-warnings");
-            parseWarnings = await res.json();
+            const res = await fetch("/api/action-items");
+            if (!res.ok) return;
+            const allActions = await res.json();
+            parseWarnings = allActions;
             renderParseWarningBanner();
         } catch (err) {
-            console.error("Failed to fetch parse warnings:", err);
+            console.error("Failed to fetch action items:", err);
         }
     }
 
     function renderParseWarningBanner() {
         const banner = document.getElementById("parse-warning-banner");
-        if (!parseWarnings.length || currentRole !== "admin") {
+        if (!parseWarnings.length || (currentRole !== "admin" && currentRole !== "manager")) {
             banner.style.display = "none";
             return;
         }
@@ -5157,22 +5159,30 @@
 
         const list = document.getElementById("parse-warning-list");
         list.innerHTML = parseWarnings.map(w => {
-            const date = w.created_at ? w.created_at.split("T")[0] || w.created_at.split(" ")[0] : "";
+            const date = (w.created_at || "").split("T")[0] || (w.created_at || "").split(" ")[0] || "";
+            const isGuest = w.type === "guest_name_needed";
+            const icon = isGuest ? "&#128100;" : "&#9888;";
+            let actionBtns = "";
+            if (isGuest) {
+                actionBtns += `<button class="btn btn-primary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
+                        data-pw-assign-guest="${w.item_id}" data-buyer-name="${escapeHtml(w.customer || "")}">Assign Name</button>`;
+            }
+            if (w.pw_id) {
+                actionBtns += `<button class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
+                        data-pw-dismiss="${w.pw_id}">Dismiss</button>`;
+            }
             return `
             <div class="parse-warning-item">
                 <div class="parse-warning-item-info">
-                    <span class="parse-warning-item-name">${escapeHtml(w.item_name || "—")}</span>
+                    <span>${icon}</span>
+                    <span class="parse-warning-item-name">${escapeHtml(w.title || w.item_name || "—")}</span>
                     <span class="parse-warning-item-meta">
                         ${escapeHtml(w.customer || "—")} &middot;
-                        Order ${escapeHtml(w.order_id || "—")} &middot;
                         ${escapeHtml(date)} &middot;
                         <em>${escapeHtml(w.message)}</em>
                     </span>
                 </div>
-                <div class="parse-warning-item-actions">
-                    <button class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
-                            data-pw-dismiss="${w.id}">Dismiss</button>
-                </div>
+                <div class="parse-warning-item-actions">${actionBtns}</div>
             </div>`;
         }).join("");
 
@@ -5182,11 +5192,33 @@
                 const id = btn.dataset.pwDismiss;
                 try {
                     await fetch(`/api/parse-warnings/${id}/dismiss`, { method: "POST" });
-                    parseWarnings = parseWarnings.filter(w => String(w.id) !== String(id));
+                    parseWarnings = parseWarnings.filter(w => String(w.pw_id) !== String(id));
                     renderParseWarningBanner();
                 } catch (err) {
                     alert("Failed to dismiss warning.");
                 }
+            });
+        });
+
+        // Attach assign-guest handlers
+        list.querySelectorAll("[data-pw-assign-guest]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const itemId = btn.dataset.pwAssignGuest;
+                const buyer = btn.dataset.buyerName || "";
+                const name = prompt(`This GUEST registration is under "${buyer}".\n\nEnter the actual guest player's name:`);
+                if (!name || !name.trim()) return;
+                try {
+                    const res = await fetch(`/api/items/${itemId}/assign-guest`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ guest_name: name.trim() }),
+                    });
+                    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Failed."); return; }
+                    parseWarnings = parseWarnings.filter(w => w.id !== `guest-${itemId}`);
+                    renderParseWarningBanner();
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Failed to assign guest name."); }
             });
         });
 
