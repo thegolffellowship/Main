@@ -2738,8 +2738,10 @@
                     // Show effective game type (parent + children combined)
                     const effectiveType = getEffectiveGameType(r, registrants);
                     const displayGames = effectiveType === "NO GAMES" ? "NONE" : effectiveType;
-                    if (!r.parent_item_id && !isSynthetic && txStatus === "active") {
-                        html += `<td style="${style}"><span class="btn-cycle-games" data-item-id="${r.id}" data-current-games="${escapeHtml(r.side_games || "")}" style="cursor:pointer;" title="Click to change game type">${escapeHtml(displayGames)}</span></td>`;
+                    const canToggle = !r.parent_item_id && !isSynthetic && txStatus === "active"
+                        && (effectiveType === "NET" || effectiveType === "GROSS");
+                    if (canToggle) {
+                        html += `<td style="${style}"><span class="btn-cycle-games" data-item-id="${r.id}" data-current-games="${escapeHtml(r.side_games || "")}" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" title="Click to switch to ${effectiveType === 'NET' ? 'GROSS' : 'NET'}">${escapeHtml(displayGames)}</span></td>`;
                     } else {
                         html += `<td style="${style}">${escapeHtml(displayGames)}</td>`;
                     }
@@ -3367,21 +3369,20 @@
             });
         });
 
-        // Cycle game type (click GAMES cell to switch NET/GROSS/BOTH/NONE)
+        // Toggle game type between NET ↔ GROSS (no-cost swap only)
         container.querySelectorAll(".btn-cycle-games").forEach(span => {
             span.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const itemId = parseInt(span.dataset.itemId);
                 const current = classifyGameType(span.dataset.currentGames);
-                const cycle = ["NET", "GROSS", "BOTH", "NO GAMES"];
-                const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
-                const next = cycle[nextIdx];
-                const dbVal = next === "NO GAMES" ? "NONE" : next;
+                // Only allow toggling between NET and GROSS (no money change)
+                if (current !== "NET" && current !== "GROSS") return;
+                const next = current === "NET" ? "GROSS" : "NET";
                 try {
                     const res = await fetch(`/api/items/${itemId}`, {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ side_games: dbVal }),
+                        body: JSON.stringify({ side_games: next }),
                     });
                     if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Failed to update."); return; }
                     await fetchItems();
