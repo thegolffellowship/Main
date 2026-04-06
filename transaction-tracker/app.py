@@ -5054,6 +5054,7 @@ def api_check_expense_inbox():
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.route("/coo")
+@require_role("admin")
 def coo_page():
     return render_template("coo.html")
 

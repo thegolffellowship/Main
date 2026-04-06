@@ -305,6 +305,12 @@ async function saveEditValue() {
 // ── Init ─────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Block non-admin users
+    if (typeof currentRole !== "undefined" && currentRole && currentRole !== "admin") {
+        window.location.href = "/";
+        return;
+    }
+
     // Load all sections
     await Promise.all([
         loadActionItems(),

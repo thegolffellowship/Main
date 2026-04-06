@@ -199,7 +199,7 @@ When a new transaction arrives, the system resolves the customer in this order:
 
 ## Architecture
 
-- **Flask app** in `transaction-tracker/app.py` (~3900+ lines, 98 routes)
+- **Flask app** in `transaction-tracker/app.py` (~5300 lines, 197 routes)
 - **Email parsing** via Claude Sonnet in `email_parser/parser.py`
 - **Email fetching** via Microsoft Graph API in `email_parser/fetcher.py` — only processes emails with "New Order" subject lines; all processed email UIDs tracked in `processed_emails` table to prevent re-parsing
 - **SQLite DB** at `transaction-tracker/transactions.db` (local is empty; live data on Railway)
@@ -290,6 +290,53 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - WD players: complex logic based on which game components were credited
 - RSVP-only players: counted in PLAYERS total but as NONE (no games)
 
+### GUEST registration handling
+- When a member buys two items (one for themselves, one for a guest), the parser's
+  `_promote_guest_customers()` auto-swaps the GUEST item's customer to the actual
+  guest name (from `guest_name` field) and adds a "Purchased by <buyer>" note
+- **"Guest?" tag** — amber clickable tag on GUEST items in multi-item orders where
+  the guest name is unknown. Only appears when: same buyer has a peer item in the
+  same order AND no `guest_name` or `partner_request` is set
+- **"Paid by" badge** — blue badge on GUEST items where guest-swap has already occurred
+- **Assign guest endpoint**: `POST /api/items/:id/assign-guest` (manager+)
+- Detection is conservative: standalone GUEST registrations (guest signed up themselves)
+  are NOT flagged
+
+### Add Payment
+- Creates a child payment row linked to parent registration via `parent_item_id`
+- Child rows excluded from player counts, shown as indented "+PAY" sub-rows
+- Item types: NET Games, GROSS Games, BOTH Games, Event Upgrade (9→18 holes), Other
+- **Event Upgrade** updates the parent item's `holes` to "18" but does NOT affect games
+- Child payment `side_games` is empty for Event Upgrade (prevents false game merging)
+- Player dropdown filters out child payment rows to avoid duplicates
+- Supports event aliases (course changes) for parent lookup
+
+### Clickable game switching
+- GAMES column is clickable for active registrations with NET or GROSS games
+- Click toggles between NET ↔ GROSS (no-cost swap only)
+- BOTH and NONE are NOT clickable — those involve money changes
+- Uses `PATCH /api/items/:id` (admin only) to update `side_games`
+
+### Action Items banner
+- Red notification banner on Transactions and Events pages for admin/manager
+- Aggregates: parse warnings + GUEST items needing guest name assignment
+- `GET /api/action-items` endpoint returns combined list
+- Auto-expands on page load; items can be dismissed or acted on inline
+- Parse warning dismiss/resolve accessible to managers (was admin-only)
+
+### Per-order re-extract
+- Audit page email cards have "Re-extract This Order" button
+- Calls `POST /api/audit/reextract-order` with `{order_id: "R..."}`
+- Re-fetches original email from Graph API, re-runs AI extraction
+- Backfills missing fields AND applies guest-swap if parser detects GUEST items
+- Also available via browser console for immediate use
+
+### Event deletion / merge persistence
+- **Merge** creates an alias (source → target) so sync skips the old name
+- **Delete** now preserves the deleted name as an alias (→ `_DELETED_`) when
+  items still reference it, preventing `sync_events_from_items()` from recreating
+- `seed_events()` also checks aliases before inserting
+
 ## Side Games Matrix
 
 ### Persistence
@@ -322,7 +369,7 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 
 - `app.py` — routes, scheduler, webhook (~3900 lines)
 - `email_parser/parser.py` — AI extraction prompt and logic
-- `email_parser/database.py` — schema, CRUD, audit queries, customer matching (~3500 lines)
+- `email_parser/database.py` — schema, CRUD, audit queries, customer matching (~9000 lines)
 - `email_parser/fetcher.py` — Microsoft Graph email fetching
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
@@ -331,8 +378,10 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - `templates/customers.html` — Customer directory + roster import
 - `templates/handicaps.html` — Handicap management page
 - `templates/matrix.html` — Side games prize matrix
-- `templates/audit.html` — Email audit/QA (admin)
+- `templates/audit.html` — Email audit/QA (admin) + per-order re-extract
 - `templates/rsvps.html` — RSVP log
+- `templates/accounting.html` — Accounting: multi-entity tracking, bank reconciliation, month-end close
+- `templates/coo.html` — COO Dashboard: action items, financial snapshot, review queue, AI chat
 - `templates/database.html` — Admin database browser
 - `templates/changelog.html` — Version changelog
 - `static/js/dashboard.js` — Transactions page logic (largest JS file)
@@ -343,13 +392,13 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - `golf_genius_sync.py` — Golf Genius handicap sync via HTTP
 - `mcp_server.py` — MCP server (21 tools for Claude direct DB access)
 
-## Database Tables (20 total)
+## Database Tables (20+)
 
 `items`, `processed_emails`, `events`, `event_aliases`, `rsvps`, `rsvp_overrides`,
 `rsvp_email_overrides`, `customers`, `customer_emails`, `customer_aliases`,
 `handicap_rounds`, `handicap_player_links`, `handicap_settings`,
 `message_templates`, `message_log`, `feedback`, `parse_warnings`,
-`season_contests`, `app_settings`
+`season_contests`, `app_settings`, `action_items`
 
 Key tables not documented elsewhere in this file:
 - `app_settings` — persistent key-value store (matrix data, feature flags)

@@ -380,7 +380,7 @@
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
             <p class="subtitle">Audit & Feedback — Email verification and support feedback</p>
-            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v1.9.0</a>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -664,7 +664,7 @@
                         alert(data.error || "Re-extract failed.");
                     } else {
                         const msg = `Updated ${data.updated || 0} field(s)` + (data.changes ? `: ${data.changes.join(", ")}` : "");
-                        showToast ? showToast(msg) : alert(msg);
+                        alert(msg);
                     }
                 } catch (err) {
                     alert("Re-extract failed: " + err.message);
