@@ -1666,6 +1666,20 @@ def api_re_extract_fields():
                     if new_val and new_val != it.get(field):
                         changes[field] = new_val
 
+                # Guest-swap: if parser promoted the guest to customer,
+                # overwrite customer + guest_name on the existing item
+                parsed_customer = (parsed.get("customer") or "").strip()
+                current_customer = (it.get("customer") or "").strip()
+                parsed_notes = parsed.get("notes") or ""
+                if (parsed_customer and parsed_customer.lower() != current_customer.lower()
+                        and "Purchased by" in parsed_notes):
+                    changes["customer"] = parsed_customer
+                    changes["guest_name"] = parsed.get("guest_name") or parsed_customer
+                    changes["notes"] = parsed_notes
+                    changes["customer_email"] = None
+                    changes["customer_phone"] = None
+                    changes["customer_id"] = None
+
                 if changes:
                     update_item(it["id"], changes)
                     updated += 1
@@ -1753,10 +1767,24 @@ def api_reextract_order():
                 if new_val and not it.get(field):
                     changes[field] = new_val
 
+            # Guest-swap: if parser promoted the guest to customer,
+            # overwrite customer + guest_name on the existing item
+            parsed_customer = (parsed.get("customer") or "").strip()
+            current_customer = (it.get("customer") or "").strip()
+            parsed_notes = parsed.get("notes") or ""
+            if (parsed_customer and parsed_customer.lower() != current_customer.lower()
+                    and "Purchased by" in parsed_notes):
+                changes["customer"] = parsed_customer
+                changes["guest_name"] = parsed.get("guest_name") or parsed_customer
+                changes["notes"] = parsed_notes
+                changes["customer_email"] = None
+                changes["customer_phone"] = None
+                changes["customer_id"] = None
+
             if changes:
                 update_item(it["id"], changes)
                 updated += 1
-                changes_detail.append({"id": it["id"], "fields": changes})
+                changes_detail.append({"id": it["id"], "fields": list(changes.keys())})
 
         return jsonify({
             "status": "ok",
