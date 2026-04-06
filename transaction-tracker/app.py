@@ -1554,7 +1554,8 @@ def api_re_extract_fields():
 
     BACKFILL_FIELDS = ["partner_request", "fellowship", "notes", "holes",
                        "address", "address2", "city", "state", "zip",
-                       "transaction_fees", "coupon_code", "coupon_amount"]
+                       "transaction_fees", "coupon_code", "coupon_amount",
+                       "guest_name"]
     # Fields where re-extract should overwrite existing (possibly wrong) values
     OVERWRITE_FIELDS = {"item_name"}
 
@@ -1858,6 +1859,61 @@ def api_expand_quantities():
         "found_qty_items": len(qty_items),
         "created": created,
         "skipped": skipped,
+        "details": details,
+    })
+
+
+@app.route("/api/audit/fix-guest-customers", methods=["POST"])
+@require_role("admin")
+def api_fix_guest_customers():
+    """Fix GUEST items where the customer is still the buyer instead of the guest.
+
+    Finds items with user_status containing 'GUEST' and a non-empty guest_name
+    that differs from the current customer. Swaps the customer to the guest_name
+    and adds a 'Purchased by <buyer>' note.
+    """
+    from email_parser.parser import _normalize_customer_name
+
+    conn = get_connection()
+    try:
+        guests = conn.execute(
+            """SELECT id, customer, guest_name, notes
+               FROM items
+               WHERE user_status LIKE '%GUEST%'
+                 AND guest_name IS NOT NULL AND guest_name != ''
+                 AND COALESCE(transaction_status, 'active') = 'active'"""
+        ).fetchall()
+
+        fixed = 0
+        details = []
+
+        for row in guests:
+            row = dict(row)
+            guest = _normalize_customer_name(row["guest_name"])
+            buyer = (row["customer"] or "").strip()
+            if not guest or guest.lower() == buyer.lower():
+                continue
+
+            conn.execute(
+                """UPDATE items
+                   SET customer = ?, notes = ?,
+                       customer_email = NULL, customer_phone = NULL,
+                       address = NULL, address2 = NULL,
+                       city = NULL, state = NULL, zip = NULL,
+                       customer_id = NULL
+                   WHERE id = ?""",
+                (guest, f"Purchased by {buyer}", row["id"]),
+            )
+            fixed += 1
+            details.append(f"{buyer} → {guest} (id={row['id']})")
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify({
+        "status": "ok",
+        "fixed": fixed,
         "details": details,
     })
 
