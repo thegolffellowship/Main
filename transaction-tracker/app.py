@@ -2509,6 +2509,8 @@ def api_notification_action_items():
         })
 
     # 2. GUEST registrations needing guest name assignment
+    #    Only flag when: same buyer has another item in the same order (multi-item purchase)
+    #    AND no guest_name or partner_request is available to identify the guest.
     conn = get_connection()
     try:
         guests = conn.execute(
@@ -2517,6 +2519,15 @@ def api_notification_action_items():
                WHERE i.user_status LIKE '%GUEST%'
                  AND COALESCE(i.transaction_status, 'active') = 'active'
                  AND (i.notes IS NULL OR i.notes NOT LIKE '%Purchased by%')
+                 AND i.email_uid NOT LIKE 'manual-%'
+                 AND EXISTS (
+                     SELECT 1 FROM items peer
+                     WHERE peer.email_uid = i.email_uid
+                       AND peer.id != i.id
+                       AND peer.customer = i.customer COLLATE NOCASE
+                 )
+                 AND COALESCE(i.guest_name, '') = ''
+                 AND COALESCE(i.partner_request, '') = ''
                ORDER BY i.order_date DESC"""
         ).fetchall()
         for g in guests:
