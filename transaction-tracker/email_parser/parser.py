@@ -160,6 +160,12 @@ FIELD-SPECIFIC GUIDANCE:
   fellowship / gathering. Look for any field containing the word "Fellowship" \
   (e.g. "Fellowship After?", "Post-Game Fellowship", "POST-GAME FELLOWSHIP at \
   Course?", "Staying for fellowship?"). Normalise to "YES" or "NO".
+- "guest_name": When an item has user_status "GUEST", extract the actual \
+  guest player's name. Look for it in the "Special Instructions" section \
+  (e.g. "Guest: Tanner Chalfant 6.2 GHIN: 12697695" → "Tanner Chalfant"), \
+  or in the partner_request field of the MEMBER item in the same order \
+  (e.g. "Tanner Chalfant guest"). Use Title Case. Strip any handicap, \
+  GHIN numbers, or annotations — just the name.
 - "notes": Any freeform notes, comments, special requests, or special \
   instructions from the player. Look for "Notes", "Comments", \
   "Special Requests", "Special Instructions", "Additional Info", etc. \
@@ -239,7 +245,7 @@ Return this exact JSON structure:
       "notes": "<freeform notes, comments, special requests, or special instructions>",
       "returning_or_new": "<New or Returning — membership only>",
       "shirt_size": "<shirt size if mentioned>",
-      "guest_name": "<guest name if mentioned>",
+      "guest_name": "<guest player name — see guidance below>",
       "date_of_birth": "<YYYY-MM-DD date of birth if mentioned>",
       "net_points_race": "<YES or NO — membership or season contests>",
       "gross_points_race": "<YES or NO — membership or season contests>",
@@ -606,6 +612,44 @@ def _expand_quantity_rows(rows: list[dict]) -> list[dict]:
     return expanded
 
 
+def _promote_guest_customers(rows: list[dict]) -> list[dict]:
+    """Swap customer on GUEST items in multi-item orders to the actual guest.
+
+    When a buyer purchases two separate line items — one for themselves
+    (MEMBER) and one for a guest (GUEST) — both items get the buyer's
+    name as customer. This function detects GUEST items where a
+    ``guest_name`` is available and promotes the guest to customer,
+    adding a "Purchased by <buyer>" note.
+
+    Detection: item has user_status containing "GUEST" AND a non-empty
+    ``guest_name`` field, AND the current customer differs from the
+    guest_name (meaning the buyer's name is on the row, not the guest's).
+    """
+    for row in rows:
+        status = (row.get("user_status") or "").upper()
+        if "GUEST" not in status:
+            continue
+        guest = (row.get("guest_name") or "").strip()
+        if not guest:
+            continue
+        buyer = (row.get("customer") or "").strip()
+        # Only swap if the customer is still the buyer (not already the guest)
+        guest_norm = _normalize_customer_name(guest)
+        if not guest_norm or guest_norm.lower() == buyer.lower():
+            continue
+        row["customer"] = guest_norm
+        row["notes"] = f"Purchased by {buyer}"
+        # Clear buyer-specific fields — guest has different contact info
+        row["customer_email"] = None
+        row["customer_phone"] = None
+        row["address"] = None
+        row["address2"] = None
+        row["city"] = None
+        row["state"] = None
+        row["zip"] = None
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -749,6 +793,9 @@ def parse_email(email_data: dict) -> list[dict]:
 
     # Expand any items with quantity > 1 into separate per-player rows
     rows = _expand_quantity_rows(rows)
+
+    # Promote guest_name to customer on GUEST line items
+    rows = _promote_guest_customers(rows)
 
     # Validate parsed items and attach warnings for suspicious patterns
     rows = _validate_parsed_items(rows)
