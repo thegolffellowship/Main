@@ -4632,9 +4632,10 @@
         addPaymentEventName = eventName;
         document.getElementById("add-payment-event-info").innerHTML =
             `Payment for event: <strong>${escapeHtml(eventName)}</strong>`;
-        // Populate player dropdown from current registrants (active only)
+        // Populate player dropdown from current registrants (active only, exclude child payments)
         const regs = getRegistrants(eventName).filter(r =>
             !["credited", "refunded", "transferred", "wd", "rsvp_only", "gg_rsvp"].includes(r.transaction_status || "active")
+            && !r.parent_item_id
         );
         const sorted = [...regs].sort((a, b) => {
             const an = lastNameSortKey(a.customer || "");

@@ -619,6 +619,9 @@
                         ${itemsHtml}
                     </div>
                 </div>
+                ${comp.parsed_items.length && comp.parsed_items[0].order_id
+                    ? `<button class="btn btn-secondary btn-reextract-order" data-order-id="${escapeHtml(comp.parsed_items[0].order_id)}" style="margin-top:0.5rem; font-size:0.78rem; padding:0.3rem 0.8rem;">Re-extract This Order</button>`
+                    : ""}
             </div>
         </div>`;
     }
@@ -641,6 +644,36 @@
         } else {
             listEl.innerHTML = filtered.map(renderCard).join("");
         }
+
+        // Per-order re-extract buttons
+        listEl.querySelectorAll(".btn-reextract-order").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const orderId = btn.dataset.orderId;
+                if (!confirm(`Re-extract order ${orderId}? This will re-parse the original email and update fields.`)) return;
+                btn.disabled = true;
+                btn.textContent = "Re-extracting...";
+                try {
+                    const res = await fetch("/api/audit/reextract-order", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ order_id: orderId }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                        alert(data.error || "Re-extract failed.");
+                    } else {
+                        const msg = `Updated ${data.updated || 0} field(s)` + (data.changes ? `: ${data.changes.join(", ")}` : "");
+                        showToast ? showToast(msg) : alert(msg);
+                    }
+                } catch (err) {
+                    alert("Re-extract failed: " + err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = "Re-extract This Order";
+                }
+            });
+        });
     }
 
     async function runAudit() {
