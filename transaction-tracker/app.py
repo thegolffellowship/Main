@@ -951,6 +951,49 @@ def api_update_item(item_id):
     return jsonify({"error": "not found or no valid fields"}), 404
 
 
+@app.route("/api/items/<int:item_id>/assign-guest", methods=["POST"])
+@require_role("manager")
+def api_assign_guest(item_id):
+    """Assign the actual guest player name to a GUEST registration.
+
+    When a member buys a guest registration, both items initially show the
+    buyer as the customer. This endpoint swaps the customer to the actual
+    guest and records the buyer in a 'Purchased by' note.
+    """
+    data = request.get_json(silent=True)
+    guest_name = (data.get("guest_name") or "").strip() if data else ""
+    if not guest_name:
+        return jsonify({"error": "guest_name is required."}), 400
+    err = validate_json_fields(data)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = get_connection()
+    try:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return jsonify({"error": "Item not found."}), 404
+        item = dict(item)
+        buyer = item["customer"] or ""
+
+        from email_parser.parser import _normalize_customer_name
+        normalized = _normalize_customer_name(guest_name)
+
+        changes = {
+            "customer": normalized,
+            "guest_name": normalized,
+            "notes": f"Purchased by {buyer}",
+            "customer_email": None,
+            "customer_phone": None,
+            "customer_id": None,
+        }
+        update_item(item_id, changes)
+
+        return jsonify({"status": "ok", "customer": normalized, "buyer": buyer})
+    finally:
+        conn.close()
+
+
 @app.route("/api/items/<int:item_id>", methods=["DELETE"])
 @require_role("admin")
 def api_delete_item(item_id):
@@ -2441,19 +2484,71 @@ def api_parse_warnings():
     return jsonify(get_parse_warnings(status))
 
 
+@app.route("/api/action-items")
+@require_role("manager")
+def api_action_items():
+    """Return pending action items for admin/manager review.
+
+    Aggregates parse warnings and GUEST registrations needing guest names.
+    """
+    items = []
+
+    # 1. Parse warnings
+    for w in get_parse_warnings("open"):
+        items.append({
+            "type": "parse_warning",
+            "id": f"pw-{w['id']}",
+            "pw_id": w["id"],
+            "title": w.get("item_name") or "Unknown item",
+            "message": w.get("message", ""),
+            "customer": w.get("customer"),
+            "order_id": w.get("order_id"),
+            "item_id": w.get("item_id"),
+            "code": w.get("warning_code"),
+            "created_at": w.get("created_at"),
+        })
+
+    # 2. GUEST registrations needing guest name assignment
+    conn = get_connection()
+    try:
+        guests = conn.execute(
+            """SELECT i.id, i.customer, i.item_name, i.order_date, i.user_status, i.notes
+               FROM items i
+               WHERE i.user_status LIKE '%GUEST%'
+                 AND COALESCE(i.transaction_status, 'active') = 'active'
+                 AND (i.notes IS NULL OR i.notes NOT LIKE '%Purchased by%')
+               ORDER BY i.order_date DESC"""
+        ).fetchall()
+        for g in guests:
+            g = dict(g)
+            items.append({
+                "type": "guest_name_needed",
+                "id": f"guest-{g['id']}",
+                "item_id": g["id"],
+                "title": g.get("item_name") or "Unknown event",
+                "message": f"GUEST registration under \"{g['customer']}\" — confirm or enter the actual guest player's name.",
+                "customer": g.get("customer"),
+                "created_at": g.get("order_date"),
+            })
+    finally:
+        conn.close()
+
+    return jsonify(items)
+
+
 @app.route("/api/parse-warnings/<int:warning_id>/dismiss", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_dismiss_parse_warning(warning_id):
-    """Dismiss a parse warning. Admin only."""
+    """Dismiss a parse warning."""
     if dismiss_parse_warning(warning_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Warning not found."}), 404
 
 
 @app.route("/api/parse-warnings/<int:warning_id>/resolve", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_resolve_parse_warning(warning_id):
-    """Mark a parse warning as resolved. Admin only."""
+    """Mark a parse warning as resolved."""
     if resolve_parse_warning(warning_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Warning not found."}), 404

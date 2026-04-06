@@ -58,6 +58,17 @@
             <span id="config-alert-msg">Copy <code>.env.example</code> to <code>.env</code> and fill in your credentials.</span>
         </div>
 
+        <!-- Action Items Banner (admin/manager) -->
+        <section id="action-items-banner" style="display:none; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:0.6rem 1rem; margin-bottom:0.75rem;">
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <span style="font-size:1.2rem;">&#9888;</span>
+                <strong style="color:#991b1b;"><span id="action-items-count">0</span> Action Item(s)</strong>
+                <span style="font-size:0.82rem; color:#991b1b; flex:1;">Items needing your attention</span>
+                <button id="action-items-toggle" style="font-size:0.75rem; padding:0.2rem 0.65rem; border:1px solid #fca5a5; border-radius:4px; background:#fee2e2; color:#991b1b; cursor:pointer;">Show &#9662;</button>
+            </div>
+            <div id="action-items-list" style="display:none; padding:0.25rem 0 0.5rem;"></div>
+        </section>
+
         <!-- Stats cards -->
         <section class="stats-row" id="stats-row">
             <div class="stat-card">
@@ -307,5 +318,112 @@
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/chat-widget.js"></script>
     <script src="/static/js/dashboard.js"></script>
+    <script>
+    // Action Items Banner — fetches and renders pending items for admin/manager
+    (function() {
+        let actionItems = [];
+
+        async function fetchActionItems() {
+            if (typeof currentRole === "undefined" || (currentRole !== "admin" && currentRole !== "manager")) return;
+            try {
+                const res = await fetch("/api/action-items");
+                if (!res.ok) return;
+                actionItems = await res.json();
+                renderActionItems();
+            } catch (err) {
+                console.error("Failed to fetch action items:", err);
+            }
+        }
+
+        function renderActionItems() {
+            const banner = document.getElementById("action-items-banner");
+            if (!actionItems.length) { banner.style.display = "none"; return; }
+            banner.style.display = "";
+            document.getElementById("action-items-count").textContent = actionItems.length;
+
+            const list = document.getElementById("action-items-list");
+            list.innerHTML = actionItems.map(item => {
+                const date = (item.created_at || "").split("T")[0] || item.created_at || "";
+                const isGuest = item.type === "guest_name_needed";
+                const icon = isGuest ? "&#128100;" : "&#9888;";
+                let actionBtns = "";
+                if (isGuest) {
+                    actionBtns = `<button class="btn btn-primary" style="font-size:0.72rem; padding:0.25rem 0.65rem;" data-action-guest="${item.item_id}" data-buyer-name="${(item.customer || '').replace(/"/g, '&quot;')}">Assign Name</button>`;
+                }
+                if (item.pw_id) {
+                    actionBtns += `<button class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.65rem;" data-action-dismiss="${item.pw_id}">Dismiss</button>`;
+                }
+                return `
+                <div style="display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0; border-bottom:1px solid #fecaca; flex-wrap:wrap;">
+                    <span style="font-size:1rem;">${icon}</span>
+                    <div style="flex:1; min-width:200px;">
+                        <strong style="font-size:0.85rem; color:#991b1b;">${_escHtml(item.title)}</strong>
+                        <span style="font-size:0.78rem; color:#6b7280;"> &middot; ${_escHtml(item.customer || "")} &middot; ${_escHtml(date)}</span>
+                        <div style="font-size:0.78rem; color:#4b5563; font-style:italic;">${_escHtml(item.message)}</div>
+                    </div>
+                    <div style="display:flex; gap:0.3rem;">${actionBtns}</div>
+                </div>`;
+            }).join("");
+
+            // Attach handlers
+            list.querySelectorAll("[data-action-guest]").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    const itemId = btn.dataset.actionGuest;
+                    const buyer = btn.dataset.buyerName || "";
+                    const name = prompt(`This GUEST registration is under "${buyer}".\n\nEnter the actual guest player's name:`);
+                    if (!name || !name.trim()) return;
+                    try {
+                        const res = await fetch(`/api/items/${itemId}/assign-guest`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ guest_name: name.trim() }),
+                        });
+                        if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Failed."); return; }
+                        actionItems = actionItems.filter(a => a.id !== `guest-${itemId}`);
+                        renderActionItems();
+                    } catch (err) { alert("Failed to assign guest name."); }
+                });
+            });
+            list.querySelectorAll("[data-action-dismiss]").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    const pwId = btn.dataset.actionDismiss;
+                    try {
+                        await fetch(`/api/parse-warnings/${pwId}/dismiss`, { method: "POST" });
+                        actionItems = actionItems.filter(a => a.pw_id !== parseInt(pwId));
+                        renderActionItems();
+                    } catch (err) { alert("Failed to dismiss."); }
+                });
+            });
+
+            // Auto-expand
+            list.style.display = "";
+            document.getElementById("action-items-toggle").textContent = "Hide \u25B4";
+        }
+
+        function _escHtml(str) {
+            const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML;
+        }
+
+        // Toggle expand/collapse
+        document.getElementById("action-items-toggle").addEventListener("click", () => {
+            const list = document.getElementById("action-items-list");
+            const btn = document.getElementById("action-items-toggle");
+            if (list.style.display === "none") {
+                list.style.display = ""; btn.textContent = "Hide \u25B4";
+            } else {
+                list.style.display = "none"; btn.textContent = "Show \u25BE";
+            }
+        });
+
+        // Hook into auth — fetch after login
+        const _origOnAuthReady = window.onAuthReady;
+        window.onAuthReady = function() {
+            if (_origOnAuthReady) _origOnAuthReady();
+            fetchActionItems();
+        };
+        // Also try immediately in case auth already resolved
+        if (typeof currentRole !== "undefined" && currentRole) fetchActionItems();
+    })();
+    </script>
 </body>
 </html>

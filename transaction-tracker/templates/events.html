@@ -340,12 +340,12 @@
             </div>
         </section>
 
-        <!-- Parse Warnings Banner (admin only) -->
+        <!-- Action Items Banner (admin/manager) -->
         <section id="parse-warning-banner" class="parse-warning-banner" style="display:none;">
             <div class="parse-warning-header">
                 <span class="parse-warning-icon">&#9888;</span>
-                <strong><span id="parse-warning-count">0</span> Parse Warning(s)</strong>
-                <span class="parse-warning-subtitle">Items that may have been parsed incorrectly — review and fix</span>
+                <strong><span id="parse-warning-count">0</span> Action Item(s)</strong>
+                <span class="parse-warning-subtitle">Items needing your attention — review and resolve</span>
                 <button class="parse-warning-toggle-btn" id="parse-warning-toggle-btn">Show &#9662;</button>
             </div>
             <div id="parse-warning-list" class="parse-warning-list" style="display:none;"></div>
@@ -1608,6 +1608,15 @@
             else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
             if (isComp || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
             else if (isManual && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
+            // GUEST tag: "Purchased by" badge if already swapped, or "Guest?" prompt if buyer is still the customer
+            if (_cleanStatus(r.user_status) === "GUEST") {
+                const pbMatch = (r.notes || "").match(/Purchased by (.+)/i);
+                if (pbMatch) {
+                    tag += ` <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Paid for by ${escapeHtml(pbMatch[1])}">Paid by ${escapeHtml(pbMatch[1])}</span>`;
+                } else {
+                    tag += ` <span class="status-tag btn-assign-guest" style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Click to enter the guest player's name">Guest?</span>`;
+                }
+            }
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             const manualOverride = isSynthetic
                 ? (r.customer_email && emailOverrides[(r.customer_email || "").toLowerCase()])
@@ -2672,6 +2681,15 @@
                     else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
                     if (isCompRow || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
                     else if (isManualRow && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
+                    // GUEST tag: "Purchased by" badge if already swapped, or "Guest?" prompt if buyer is still the customer
+                    if (_cleanStatus(r.user_status) === "GUEST") {
+                        const pbMatch = (r.notes || "").match(/Purchased by (.+)/i);
+                        if (pbMatch) {
+                            tag += ` <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Paid for by ${escapeHtml(pbMatch[1])}">Paid by ${escapeHtml(pbMatch[1])}</span>`;
+                        } else {
+                            tag += ` <span class="status-tag btn-assign-guest" style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Click to enter the guest player's name">Guest?</span>`;
+                        }
+                    }
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
@@ -3284,6 +3302,34 @@
                     // Re-render the detail panel
                     rerenderDetail(container, ev);
                 } catch (err) { alert("Failed to remove player."); }
+            });
+        });
+
+        // Assign Guest name — "Guest?" tag click
+        container.querySelectorAll(".btn-assign-guest").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(btn.dataset.itemId);
+                const buyerName = btn.dataset.buyerName || "";
+                const guestName = prompt(
+                    `This GUEST registration is under "${buyerName}".\n\n` +
+                    `Enter the actual guest player's name:`
+                );
+                if (!guestName || !guestName.trim()) return;
+                try {
+                    const res = await fetch(`/api/items/${itemId}/assign-guest`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ guest_name: guestName.trim() }),
+                    });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        alert(data.error || "Failed to assign guest name.");
+                        return;
+                    }
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Failed to assign guest name."); }
             });
         });
 
@@ -5090,19 +5136,21 @@
     let parseWarnings = [];
 
     async function fetchParseWarnings() {
-        if (currentRole !== "admin") return;
+        if (currentRole !== "admin" && currentRole !== "manager") return;
         try {
-            const res = await fetch("/api/parse-warnings");
-            parseWarnings = await res.json();
+            const res = await fetch("/api/action-items");
+            if (!res.ok) return;
+            const allActions = await res.json();
+            parseWarnings = allActions;
             renderParseWarningBanner();
         } catch (err) {
-            console.error("Failed to fetch parse warnings:", err);
+            console.error("Failed to fetch action items:", err);
         }
     }
 
     function renderParseWarningBanner() {
         const banner = document.getElementById("parse-warning-banner");
-        if (!parseWarnings.length || currentRole !== "admin") {
+        if (!parseWarnings.length || (currentRole !== "admin" && currentRole !== "manager")) {
             banner.style.display = "none";
             return;
         }
@@ -5111,22 +5159,30 @@
 
         const list = document.getElementById("parse-warning-list");
         list.innerHTML = parseWarnings.map(w => {
-            const date = w.created_at ? w.created_at.split("T")[0] || w.created_at.split(" ")[0] : "";
+            const date = (w.created_at || "").split("T")[0] || (w.created_at || "").split(" ")[0] || "";
+            const isGuest = w.type === "guest_name_needed";
+            const icon = isGuest ? "&#128100;" : "&#9888;";
+            let actionBtns = "";
+            if (isGuest) {
+                actionBtns += `<button class="btn btn-primary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
+                        data-pw-assign-guest="${w.item_id}" data-buyer-name="${escapeHtml(w.customer || "")}">Assign Name</button>`;
+            }
+            if (w.pw_id) {
+                actionBtns += `<button class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
+                        data-pw-dismiss="${w.pw_id}">Dismiss</button>`;
+            }
             return `
             <div class="parse-warning-item">
                 <div class="parse-warning-item-info">
-                    <span class="parse-warning-item-name">${escapeHtml(w.item_name || "—")}</span>
+                    <span>${icon}</span>
+                    <span class="parse-warning-item-name">${escapeHtml(w.title || w.item_name || "—")}</span>
                     <span class="parse-warning-item-meta">
                         ${escapeHtml(w.customer || "—")} &middot;
-                        Order ${escapeHtml(w.order_id || "—")} &middot;
                         ${escapeHtml(date)} &middot;
                         <em>${escapeHtml(w.message)}</em>
                     </span>
                 </div>
-                <div class="parse-warning-item-actions">
-                    <button class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.65rem;"
-                            data-pw-dismiss="${w.id}">Dismiss</button>
-                </div>
+                <div class="parse-warning-item-actions">${actionBtns}</div>
             </div>`;
         }).join("");
 
@@ -5136,11 +5192,33 @@
                 const id = btn.dataset.pwDismiss;
                 try {
                     await fetch(`/api/parse-warnings/${id}/dismiss`, { method: "POST" });
-                    parseWarnings = parseWarnings.filter(w => String(w.id) !== String(id));
+                    parseWarnings = parseWarnings.filter(w => String(w.pw_id) !== String(id));
                     renderParseWarningBanner();
                 } catch (err) {
                     alert("Failed to dismiss warning.");
                 }
+            });
+        });
+
+        // Attach assign-guest handlers
+        list.querySelectorAll("[data-pw-assign-guest]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const itemId = btn.dataset.pwAssignGuest;
+                const buyer = btn.dataset.buyerName || "";
+                const name = prompt(`This GUEST registration is under "${buyer}".\n\nEnter the actual guest player's name:`);
+                if (!name || !name.trim()) return;
+                try {
+                    const res = await fetch(`/api/items/${itemId}/assign-guest`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ guest_name: name.trim() }),
+                    });
+                    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Failed."); return; }
+                    parseWarnings = parseWarnings.filter(w => w.id !== `guest-${itemId}`);
+                    renderParseWarningBanner();
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Failed to assign guest name."); }
             });
         });
 
