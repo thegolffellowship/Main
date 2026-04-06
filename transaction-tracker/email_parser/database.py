@@ -4393,13 +4393,23 @@ def add_payment_to_event(event_name: str, customer: str,
         event = dict(event) if event else {}
 
         # Find the parent item (the player's main registration)
+        # Also check event aliases — items may be stored under an old event name
+        alias_names = [
+            r[0] for r in conn.execute(
+                "SELECT alias_name FROM event_aliases WHERE canonical_event_name = ? COLLATE NOCASE",
+                (event_name,),
+            ).fetchall()
+        ]
+        all_names = [event_name] + alias_names
+        placeholders_names = ",".join(["?"] * len(all_names))
         parent = conn.execute(
-            """SELECT id, customer_email, customer_phone
-               FROM items WHERE item_name = ? COLLATE NOCASE AND customer = ? COLLATE NOCASE
+            f"""SELECT id, customer_email, customer_phone
+               FROM items WHERE item_name COLLATE NOCASE IN ({placeholders_names})
+               AND customer = ? COLLATE NOCASE
                AND COALESCE(transaction_status, 'active') = 'active'
                AND parent_item_id IS NULL
                ORDER BY id DESC LIMIT 1""",
-            (event_name, customer),
+            all_names + [customer],
         ).fetchone()
         if not parent:
             return None
