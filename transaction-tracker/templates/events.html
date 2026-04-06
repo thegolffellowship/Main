@@ -1307,6 +1307,7 @@
     let expandedEventId = null;
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
+    let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
     let eventSortField = "event_date";
     let eventSortDir = "asc";
     let eventSearchQuery = "";
@@ -1770,13 +1771,15 @@
                 let badgesHtml = '<div class="event-game-stats" style="margin-bottom:0.5rem;">';
                 badgesHtml += '<span class="view-toggle-group">';
                 const mobilePairingsView = pairingsOpenForEvent[ev.id];
-                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+                const mobileFinancialView = financialOpenForEvent[ev.id];
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
                 badgesHtml += `<span class="game-stat-badge ${mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
                 if (mobileHolesType) {
                     badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
                 }
+                badgesHtml += `<span class="game-stat-badge ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
                 badgesHtml += '</span>';
-                if (!mobileGamesView && !mobilePairingsView) {
+                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView) {
                     // 9/18 holes filter
                     const mHolesFilter = eventHolesFilter[ev.id] || null;
                     const mInactive = ["credited", "refunded", "transferred", "wd"];
@@ -1799,6 +1802,8 @@
 
                 if (mobilePairingsView) {
                     detailHtml = badgesHtml + '<div style="padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:0.95rem;"><strong>Feature Coming Soon!</strong></div>';
+                } else if (mobileFinancialView) {
+                    detailHtml = badgesHtml + renderFinancialPanel(ev, registrants);
                 } else if (mobileGamesView) {
                     detailHtml = badgesHtml + renderGamesPanel(ev);
                 } else {
@@ -2229,6 +2234,289 @@
         return Number(v) || 0;
     }
 
+    // ---- FINANCIAL PANEL ----
+    // Side game lookup tables (must match database.py _SIDE_PRIZE / _SIDE_MARKUP)
+    const SIDE_PRIZE = { "NET|9": 13, "NET|18": 26, "GROSS|9": 13, "GROSS|18": 26, "BOTH|9": 26, "BOTH|18": 52, "NONE|9": 0, "NONE|18": 0 };
+    const SIDE_MARKUP = { "NET|9": 3, "NET|18": 4, "GROSS|9": 3, "GROSS|18": 4, "BOTH|9": 6, "BOTH|18": 8, "NONE|9": 0, "NONE|18": 0 };
+    const INCLUDED_POTS = { "9": 7, "18": 14 };
+
+    function renderFinancialPanel(ev, registrants) {
+        const INACTIVE = ["credited", "refunded", "transferred"];
+        // Only parent items (no child payments) that are active or WD
+        const parentItems = registrants.filter(r => !r.parent_item_id);
+        const activeParents = parentItems.filter(r => !INACTIVE.includes(r.transaction_status));
+        // Child payments (Add Payment rows)
+        const childPayments = registrants.filter(r => r.parent_item_id && r.transaction_status === "active");
+
+        // Identify comps vs paying players
+        const compPlayers = activeParents.filter(r => (r.email_uid || "").startsWith("manual-comp") && r.transaction_status !== "wd");
+        const rsvpOnlyPlayers = activeParents.filter(r => r.transaction_status === "rsvp_only");
+        const paidPlayers = activeParents.filter(r =>
+            !(r.email_uid || "").startsWith("manual-comp")
+            && r.transaction_status !== "rsvp_only"
+            && r.transaction_status !== "wd"
+        );
+        const wdPlayers = activeParents.filter(r => r.transaction_status === "wd");
+
+        // Determine holes type and if combo
+        const isCombo = (ev.format || "").includes("Combo");
+        const defaultHoles = ev.format === "18 Holes" ? "18" : "9";
+
+        function getPlayerHoles(r) {
+            const h = String(r.holes || "");
+            if (h.includes("18")) return "18";
+            if (h.includes("9")) return "9";
+            return defaultHoles;
+        }
+
+        function normalizeSideGames(sg) {
+            sg = (sg || "NONE").trim().toUpperCase();
+            if (["NET", "GROSS", "BOTH", "NONE"].includes(sg)) return sg;
+            if (sg.includes("BOTH") || (sg.includes("NET") && sg.includes("GROSS"))) return "BOTH";
+            if (sg.includes("NET")) return "NET";
+            if (sg.includes("GROSS")) return "GROSS";
+            return "NONE";
+        }
+
+        // ── REVENUE: What we collect ──
+        let totalCollected = 0;
+        let paidPlayerRevenue = 0;
+        let childPaymentRevenue = 0;
+
+        paidPlayers.forEach(r => {
+            const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+            paidPlayerRevenue += price;
+            totalCollected += price;
+        });
+        childPayments.forEach(r => {
+            const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+            childPaymentRevenue += price;
+            totalCollected += price;
+        });
+
+        // ── EXPENSES: What we owe ──
+        // Course cost: ALL active players including comps (we pay the course for everyone)
+        const allActivePlayers = [...paidPlayers, ...compPlayers];
+        let totalCourseCost = 0;
+        let courseCost9Count = 0, courseCost18Count = 0;
+
+        allActivePlayers.forEach(r => {
+            const h = getPlayerHoles(r);
+            if (isCombo && h === "18") {
+                totalCourseCost += (ev.course_cost_18 || ev.course_cost || 0);
+                courseCost18Count++;
+            } else if (isCombo) {
+                totalCourseCost += (ev.course_cost_9 || ev.course_cost || 0);
+                courseCost9Count++;
+            } else {
+                totalCourseCost += (ev.course_cost || 0);
+                if (h === "18") courseCost18Count++; else courseCost9Count++;
+            }
+        });
+
+        // Side game prize pools: ALL active players including comps (everyone's in the pot)
+        let totalPrizePools = 0;
+        let totalIncludedPots = 0;
+        allActivePlayers.forEach(r => {
+            const h = getPlayerHoles(r);
+            const sg = normalizeSideGames(r.side_games);
+            totalPrizePools += (SIDE_PRIZE[sg + "|" + h] || 0);
+            totalIncludedPots += (INCLUDED_POTS[h] || 0);
+        });
+
+        // GoDaddy processing fees (estimated: 2.9% + $0.30 per paid transaction)
+        let totalProcessingFees = 0;
+        // Group by order_id to count unique orders
+        const orderIds = new Set();
+        paidPlayers.forEach(r => { if (r.order_id) orderIds.add(r.order_id); });
+        childPayments.forEach(r => { if (r.order_id) orderIds.add(r.order_id); });
+        totalProcessingFees = Math.round((totalCollected * 0.029 + orderIds.size * 0.30) * 100) / 100;
+
+        // ── TGF OPERATING (what we keep) ──
+        let totalTgfMarkup = 0;
+        let totalSideMarkup = 0;
+        paidPlayers.forEach(r => {
+            const h = getPlayerHoles(r);
+            const sg = normalizeSideGames(r.side_games);
+            if (isCombo && h === "18") {
+                totalTgfMarkup += (ev.tgf_markup_18 || ev.tgf_markup || 0);
+            } else if (isCombo) {
+                totalTgfMarkup += (ev.tgf_markup_9 || ev.tgf_markup || 0);
+            } else {
+                totalTgfMarkup += (ev.tgf_markup || 0);
+            }
+            totalSideMarkup += (SIDE_MARKUP[sg + "|" + h] || 0);
+        });
+
+        // ── COMP COST (the delta for comped players — what we eat) ──
+        let compCourseCost = 0;
+        let compPrizePools = 0;
+        let compIncludedPots = 0;
+        compPlayers.forEach(r => {
+            const h = getPlayerHoles(r);
+            const sg = normalizeSideGames(r.side_games);
+            if (isCombo && h === "18") {
+                compCourseCost += (ev.course_cost_18 || ev.course_cost || 0);
+            } else if (isCombo) {
+                compCourseCost += (ev.course_cost_9 || ev.course_cost || 0);
+            } else {
+                compCourseCost += (ev.course_cost || 0);
+            }
+            compPrizePools += (SIDE_PRIZE[sg + "|" + h] || 0);
+            compIncludedPots += (INCLUDED_POTS[h] || 0);
+        });
+        const totalCompCost = compCourseCost + compPrizePools + compIncludedPots;
+
+        // ── PROJECTED PROFIT ──
+        const totalExpenses = totalCourseCost + totalPrizePools + totalIncludedPots + totalProcessingFees;
+        const projectedProfit = totalCollected - totalExpenses;
+        const profitColor = projectedProfit >= 0 ? "#166534" : "#dc2626";
+
+        // ── BUILD HTML ──
+        let html = '<div style="padding:0.75rem 1rem;">';
+
+        // Summary cards row
+        html += `<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; margin-bottom:1rem;">`;
+        html += `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:0.6rem; text-align:center;">
+            <div style="font-size:0.7rem; color:#166534; font-weight:600;">REVENUE</div>
+            <div style="font-size:1.1rem; font-weight:700; color:#166534;">$${totalCollected.toFixed(2)}</div>
+        </div>`;
+        html += `<div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:0.6rem; text-align:center;">
+            <div style="font-size:0.7rem; color:#dc2626; font-weight:600;">EXPENSES</div>
+            <div style="font-size:1.1rem; font-weight:700; color:#dc2626;">$${totalExpenses.toFixed(2)}</div>
+        </div>`;
+        html += `<div style="background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:0.6rem; text-align:center;">
+            <div style="font-size:0.7rem; color:#92400e; font-weight:600;">COMP COST</div>
+            <div style="font-size:1.1rem; font-weight:700; color:#92400e;">$${totalCompCost.toFixed(2)}</div>
+        </div>`;
+        html += `<div style="background:${projectedProfit >= 0 ? '#f0fdf4' : '#fef2f2'}; border:1px solid ${projectedProfit >= 0 ? '#bbf7d0' : '#fecaca'}; border-radius:8px; padding:0.6rem; text-align:center;">
+            <div style="font-size:0.7rem; color:${profitColor}; font-weight:600;">PROJECTED PROFIT</div>
+            <div style="font-size:1.1rem; font-weight:700; color:${profitColor};">$${projectedProfit.toFixed(2)}</div>
+        </div>`;
+        html += `</div>`;
+
+        // ── REVENUE BREAKDOWN ──
+        html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">`;
+        html += `<div>`;
+        html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.5rem; color:#166534; border-bottom:2px solid #bbf7d0; padding-bottom:0.3rem;">Revenue (Collected)</h4>`;
+        html += `<div style="display:grid; grid-template-columns:1fr auto; gap:0.15rem 0.5rem; font-size:0.8rem;">`;
+        html += `<span>Paid Players (${paidPlayers.length})</span><span style="text-align:right;">$${paidPlayerRevenue.toFixed(2)}</span>`;
+        if (childPaymentRevenue > 0) {
+            html += `<span>Add-on Payments (${childPayments.length})</span><span style="text-align:right;">$${childPaymentRevenue.toFixed(2)}</span>`;
+        }
+        html += `<span style="font-weight:700; border-top:1px solid var(--border); padding-top:0.2rem;">Total Revenue</span><span style="font-weight:700; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${totalCollected.toFixed(2)}</span>`;
+        html += `</div>`;
+
+        // Player counts
+        html += `<div style="margin-top:0.6rem; font-size:0.75rem; color:var(--text-muted);">`;
+        html += `<div>Paying: <strong>${paidPlayers.length}</strong> | Comps: <strong>${compPlayers.length}</strong>`;
+        if (rsvpOnlyPlayers.length) html += ` | RSVP Only: <strong>${rsvpOnlyPlayers.length}</strong>`;
+        if (wdPlayers.length) html += ` | WD: <strong>${wdPlayers.length}</strong>`;
+        html += `</div>`;
+        html += `<div>Total Active: <strong>${allActivePlayers.length}</strong> (all owe course fees)</div>`;
+        html += `</div>`;
+        html += `</div>`;
+
+        // ── EXPENSE BREAKDOWN ──
+        html += `<div>`;
+        html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.5rem; color:#dc2626; border-bottom:2px solid #fecaca; padding-bottom:0.3rem;">Expenses (Projected)</h4>`;
+        html += `<div style="display:grid; grid-template-columns:1fr auto; gap:0.15rem 0.5rem; font-size:0.8rem;">`;
+        html += `<span>Course Fees (${allActivePlayers.length} players)</span><span style="text-align:right;">$${totalCourseCost.toFixed(2)}</span>`;
+        if (ev.course_cost_breakdown || ev.course_cost_breakdown_9 || ev.course_cost_breakdown_18) {
+            // Show breakdown detail
+            const bd = ev.course_cost_breakdown ? JSON.parse(ev.course_cost_breakdown) : (ev.course_cost_breakdown_9 ? JSON.parse(ev.course_cost_breakdown_9) : null);
+            if (bd) {
+                Object.entries(bd).forEach(([key, val]) => {
+                    if (val.amount > 0) {
+                        const label = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                        const perPlayer = val.amount * (1 + val.tax_pct / 100);
+                        html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">${label}</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${perPlayer.toFixed(2)} x ${allActivePlayers.length}</span>`;
+                    }
+                });
+            }
+        }
+        html += `<span>Included Game Pots</span><span style="text-align:right;">$${totalIncludedPots.toFixed(2)}</span>`;
+        html += `<span>Side Game Prize Pools</span><span style="text-align:right;">$${totalPrizePools.toFixed(2)}</span>`;
+        html += `<span>Processing Fees (est.)</span><span style="text-align:right;">$${totalProcessingFees.toFixed(2)}</span>`;
+        html += `<span style="font-weight:700; border-top:1px solid var(--border); padding-top:0.2rem;">Total Expenses</span><span style="font-weight:700; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${totalExpenses.toFixed(2)}</span>`;
+        html += `</div>`;
+        html += `</div>`;
+        html += `</div>`;
+
+        // ── COMP DETAIL ──
+        if (compPlayers.length > 0) {
+            html += `<div style="margin-top:1rem; padding:0.6rem; background:#fefce8; border:1px solid #fde68a; border-radius:8px;">`;
+            html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:#92400e;">Comp Players (${compPlayers.length}) — Cost to TGF</h4>`;
+            html += `<div style="font-size:0.78rem;">`;
+            html += `<table style="width:100%; border-collapse:collapse; font-size:0.78rem;">`;
+            html += `<tr style="border-bottom:1px solid #fde68a;"><th style="text-align:left; padding:0.2rem 0.4rem;">Player</th><th style="text-align:center; padding:0.2rem;">Holes</th><th style="text-align:center; padding:0.2rem;">Games</th><th style="text-align:right; padding:0.2rem 0.4rem;">Course</th><th style="text-align:right; padding:0.2rem 0.4rem;">Pots</th><th style="text-align:right; padding:0.2rem 0.4rem;">Total</th></tr>`;
+            compPlayers.forEach(r => {
+                const h = getPlayerHoles(r);
+                const sg = normalizeSideGames(r.side_games);
+                let cc;
+                if (isCombo && h === "18") cc = ev.course_cost_18 || ev.course_cost || 0;
+                else if (isCombo) cc = ev.course_cost_9 || ev.course_cost || 0;
+                else cc = ev.course_cost || 0;
+                const pots = (SIDE_PRIZE[sg + "|" + h] || 0) + (INCLUDED_POTS[h] || 0);
+                const total = cc + pots;
+                const name = displayName ? displayName(r.customer) : r.customer;
+                html += `<tr><td style="padding:0.2rem 0.4rem;">${escapeHtml(name)}</td><td style="text-align:center; padding:0.2rem;">${h}</td><td style="text-align:center; padding:0.2rem;">${sg}</td><td style="text-align:right; padding:0.2rem 0.4rem;">$${cc.toFixed(2)}</td><td style="text-align:right; padding:0.2rem 0.4rem;">$${pots.toFixed(2)}</td><td style="text-align:right; padding:0.2rem 0.4rem; font-weight:600;">$${total.toFixed(2)}</td></tr>`;
+            });
+            html += `<tr style="border-top:1px solid #92400e;"><td colspan="5" style="padding:0.2rem 0.4rem; font-weight:700;">Total Comp Cost</td><td style="text-align:right; padding:0.2rem 0.4rem; font-weight:700;">$${totalCompCost.toFixed(2)}</td></tr>`;
+            html += `</table>`;
+            html += `</div></div>`;
+        }
+
+        // ── ACTUAL EXPENSES (loaded async) ──
+        html += `<div id="financial-expenses-${ev.id}" style="margin-top:1rem;">`;
+        html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:var(--text-muted);">Actual Expenses</h4>`;
+        html += `<div style="font-size:0.78rem; color:var(--text-muted);">Loading...</div>`;
+        html += `</div>`;
+
+        // ── PROFIT SUMMARY BAR ──
+        html += `<div style="margin-top:1rem; padding:0.75rem; background:${projectedProfit >= 0 ? '#f0fdf4' : '#fef2f2'}; border:2px solid ${projectedProfit >= 0 ? '#166534' : '#dc2626'}; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">`;
+        html += `<span style="font-weight:700; font-size:0.9rem;">Projected Bottom Line</span>`;
+        html += `<span style="font-weight:700; font-size:1.2rem; color:${profitColor};">$${projectedProfit.toFixed(2)}</span>`;
+        html += `</div>`;
+
+        html += `</div>`;
+
+        // Async load actual expenses
+        setTimeout(() => loadEventExpenses(ev), 0);
+
+        return html;
+    }
+
+    async function loadEventExpenses(ev) {
+        const container = document.getElementById(`financial-expenses-${ev.id}`);
+        if (!container) return;
+        try {
+            const res = await fetch(`/api/accounting/expense-transactions?event_name=${encodeURIComponent(ev.item_name)}`);
+            if (!res.ok) throw new Error("Failed to load");
+            const expenses = await res.json();
+            if (!expenses || expenses.length === 0) {
+                container.innerHTML = `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:var(--text-muted);">Actual Expenses</h4>
+                    <div style="font-size:0.78rem; color:var(--text-muted);">No expense transactions recorded for this event.</div>`;
+                return;
+            }
+            let total = 0;
+            let html = `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:#dc2626;">Actual Expenses (${expenses.length})</h4>`;
+            html += `<table style="width:100%; border-collapse:collapse; font-size:0.78rem;">`;
+            html += `<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left; padding:0.2rem 0.4rem;">Merchant</th><th style="text-align:left; padding:0.2rem;">Date</th><th style="text-align:left; padding:0.2rem;">Source</th><th style="text-align:right; padding:0.2rem 0.4rem;">Amount</th></tr>`;
+            expenses.forEach(e => {
+                const amt = parseFloat(e.amount) || 0;
+                total += amt;
+                html += `<tr><td style="padding:0.2rem 0.4rem;">${escapeHtml(e.merchant || "Unknown")}</td><td style="padding:0.2rem;">${e.transaction_date || ""}</td><td style="padding:0.2rem;">${e.source_type || ""}</td><td style="text-align:right; padding:0.2rem 0.4rem;">$${amt.toFixed(2)}</td></tr>`;
+            });
+            html += `<tr style="border-top:1px solid var(--border);"><td colspan="3" style="padding:0.2rem 0.4rem; font-weight:700;">Total Actual</td><td style="text-align:right; padding:0.2rem 0.4rem; font-weight:700;">$${total.toFixed(2)}</td></tr>`;
+            html += `</table>`;
+            container.innerHTML = html;
+        } catch (err) {
+            container.innerHTML = `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:var(--text-muted);">Actual Expenses</h4>
+                <div style="font-size:0.78rem; color:var(--text-muted);">Unable to load expense data.</div>`;
+        }
+    }
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -2476,19 +2764,21 @@
         const holesType = extractHolesType(ev.item_name, ev.format);
         const gamesView = holesType && gamesOpenForEvent[ev.id];
 
-        // View toggle: PLAYERS / PAIRINGS / GAMES (connected toggle group)
+        // View toggle: PLAYERS / PAIRINGS / GAMES / FINANCIAL (connected toggle group)
         const pairingsView = pairingsOpenForEvent[ev.id];
+        const financialView = financialOpenForEvent[ev.id];
         let html = '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
-        html += `<span class="game-stat-badge ${!gamesView && !pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
         if (holesType) {
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
         }
+        html += `<span class="game-stat-badge ${financialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
-        if (!gamesView && !pairingsView) {
+        if (!gamesView && !pairingsView && !financialView) {
             // 9/18 holes filter toggle
             const holesFilter = eventHolesFilter[ev.id] || null;
             const holeInactive = ["credited", "refunded", "transferred", "wd"];
@@ -2533,6 +2823,12 @@
         // ---- PAIRINGS VIEW ----
         if (pairingsView) {
             html += '<div style="padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:0.95rem;"><strong>Feature Coming Soon!</strong></div>';
+            return html;
+        }
+
+        // ---- FINANCIAL VIEW ----
+        if (financialView) {
+            html += renderFinancialPanel(ev, registrants);
             return html;
         }
 
@@ -2988,6 +3284,7 @@
                 const val = badge.dataset.toggleGames;
                 gamesOpenForEvent[ev.id] = val === "1";
                 pairingsOpenForEvent[ev.id] = val === "2";
+                financialOpenForEvent[ev.id] = val === "3";
                 rerenderDetail(container, ev);
             });
         });

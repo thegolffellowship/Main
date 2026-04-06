@@ -8272,7 +8272,8 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
 
 def get_expense_transactions(date_from: str | None = None, date_to: str | None = None,
                              source_type: str | None = None,
-                             review_status: str | None = None, limit: int = 100,
+                             review_status: str | None = None,
+                             event_name: str | None = None, limit: int = 100,
                              db_path: str | Path | None = None) -> list[dict]:
     clauses, params = [], []
     if date_from:
@@ -8283,6 +8284,8 @@ def get_expense_transactions(date_from: str | None = None, date_to: str | None =
         clauses.append("source_type = ?"); params.append(source_type)
     if review_status:
         clauses.append("review_status = ?"); params.append(review_status)
+    if event_name:
+        clauses.append("event_name = ? COLLATE NOCASE"); params.append(event_name)
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with _connect(db_path) as conn:
         rows = conn.execute(
