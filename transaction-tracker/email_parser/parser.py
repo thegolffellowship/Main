@@ -693,23 +693,33 @@ def _validate_parsed_items(rows: list[dict]) -> list[dict]:
                 "message": f"Item name \"{item_name}\" is suspiciously short — may be truncated.",
             })
 
-        # 3. GUEST item with no guest_name — admin needs to confirm who the guest is
+        # 3. GUEST item in a multi-item order with no identifiable guest name
+        #    Only warn when the same buyer has another item in this batch (same email_uid)
+        #    AND there's no guest_name or partner_request to identify the guest.
         status = (row.get("user_status") or "").upper()
         if "GUEST" in status and not (row.get("guest_name") or "").strip():
-            customer = (row.get("customer") or "").strip()
-            row_warnings.append({
-                "code": "GUEST_NAME_MISSING",
-                "message": (
-                    f"GUEST registration for \"{customer}\" has no guest name. "
-                    f"The customer may be the buyer, not the actual guest. "
-                    f"Please confirm or update the guest player's name."
-                ),
-            })
-            logger.warning(
-                "Parse validation: GUEST item missing guest_name "
-                "(item_name=%s, customer=%s, order_id=%s)",
-                item_name, customer, row.get("order_id"),
+            email_uid = row.get("email_uid", "")
+            customer = (row.get("customer") or "").strip().lower()
+            has_peer = email_uid and not email_uid.startswith("manual-") and any(
+                r.get("email_uid") == email_uid and r is not row
+                and (r.get("customer") or "").strip().lower() == customer
+                for r in rows
             )
+            no_partner = not (row.get("partner_request") or "").strip()
+            if has_peer and no_partner:
+                row_warnings.append({
+                    "code": "GUEST_NAME_MISSING",
+                    "message": (
+                        f"GUEST registration for \"{row.get('customer', '')}\" has no guest name. "
+                        f"The customer may be the buyer, not the actual guest. "
+                        f"Please confirm or update the guest player's name."
+                    ),
+                })
+                logger.warning(
+                    "Parse validation: GUEST item missing guest_name "
+                    "(item_name=%s, customer=%s, order_id=%s)",
+                    item_name, row.get("customer"), row.get("order_id"),
+                )
 
         if row_warnings:
             row["_parse_warnings"] = row_warnings
