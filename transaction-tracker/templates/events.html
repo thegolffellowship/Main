@@ -2738,7 +2738,11 @@
                     // Show effective game type (parent + children combined)
                     const effectiveType = getEffectiveGameType(r, registrants);
                     const displayGames = effectiveType === "NO GAMES" ? "NONE" : effectiveType;
-                    html += `<td style="${style}">${escapeHtml(displayGames)}</td>`;
+                    if (!r.parent_item_id && !isSynthetic && txStatus === "active") {
+                        html += `<td style="${style}"><span class="btn-cycle-games" data-item-id="${r.id}" data-current-games="${escapeHtml(r.side_games || "")}" style="cursor:pointer;" title="Click to change game type">${escapeHtml(displayGames)}</span></td>`;
+                    } else {
+                        html += `<td style="${style}">${escapeHtml(displayGames)}</td>`;
+                    }
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
                 }
@@ -3360,6 +3364,29 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openAddPaymentModal(btn.dataset.eventName);
+            });
+        });
+
+        // Cycle game type (click GAMES cell to switch NET/GROSS/BOTH/NONE)
+        container.querySelectorAll(".btn-cycle-games").forEach(span => {
+            span.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(span.dataset.itemId);
+                const current = classifyGameType(span.dataset.currentGames);
+                const cycle = ["NET", "GROSS", "BOTH", "NO GAMES"];
+                const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
+                const next = cycle[nextIdx];
+                const dbVal = next === "NO GAMES" ? "NONE" : next;
+                try {
+                    const res = await fetch(`/api/items/${itemId}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ side_games: dbVal }),
+                    });
+                    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Failed to update."); return; }
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Failed to update game type."); }
             });
         });
 
