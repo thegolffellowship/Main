@@ -2659,6 +2659,7 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
             LEFT JOIN items i
                 ON (i.item_name = e.item_name COLLATE NOCASE OR i.item_name = ea.alias_name COLLATE NOCASE)
                 AND COALESCE(i.transaction_status, 'active') = 'active'
+                AND i.parent_item_id IS NULL
             GROUP BY e.id
             ORDER BY e.event_date DESC, e.id DESC
             """
