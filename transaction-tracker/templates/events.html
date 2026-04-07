@@ -3076,7 +3076,10 @@
             const children = childPayments.filter(c => String(c.parent_item_id) === String(r.id));
             children.forEach(child => {
                 const childSt = child.transaction_status || "active";
-                const childBg = (childSt === "credited" || childSt === "refunded") ? "#fef9ee" : "#f0fdf4";
+                const isRefundRow = (child.email_uid || "").startsWith("manual-refund") || (child.item_price || "").startsWith("-");
+                const childBg = (childSt === "credited" || childSt === "refunded") ? "#fef9ee" : (isRefundRow ? "#fef2f2" : "#f0fdf4");
+                const payLabel = isRefundRow ? "-PAY" : "+PAY";
+                const payColor = isRefundRow ? "#dc2626" : "#059669";
                 html += `<tr class="child-payment-row" style="background:${childBg};${childSt !== 'active' ? 'opacity:0.6;' : ''}">`;
                 DETAIL_COLUMNS.forEach(c => {
                     const vis = detailVisibleColumns[c.key] !== false;
@@ -3084,11 +3087,11 @@
                     if (c.key === "rsvp") {
                         html += `<td class="rsvp-col"></td>`;
                     } else if (c.key === "customer") {
-                        html += `<td style="${style}; padding-left:2rem;"><span style="color:#059669; font-size:0.65rem; font-weight:600; margin-right:0.25rem;">+PAY</span> ${escapeHtml(child.side_games || child.notes || "Payment")}</td>`;
+                        html += `<td style="${style}; padding-left:2rem;"><span style="color:${payColor}; font-size:0.65rem; font-weight:600; margin-right:0.25rem;">${payLabel}</span> ${escapeHtml(child.notes || child.side_games || "Payment")}</td>`;
                     } else if (c.key === "side_games") {
-                        html += `<td style="${style}; font-weight:600;">${escapeHtml(child.side_games || "\u2014")}</td>`;
+                        html += `<td style="${style}; font-weight:600;${isRefundRow ? ' color:#dc2626;' : ''}">${escapeHtml(isRefundRow ? (child.side_games || "\u2014") : (child.side_games || "\u2014"))}</td>`;
                     } else if (c.key === "item_price") {
-                        html += `<td style="${style}; font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(child.item_price || "\u2014")}</td>`;
+                        html += `<td style="${style}; font-weight:600; font-variant-numeric:tabular-nums;${isRefundRow ? ' color:#dc2626;' : ''}">${escapeHtml(child.item_price || "\u2014")}</td>`;
                     } else if (c.key === "order_date") {
                         html += `<td style="${style}">${escapeHtml(child.order_date || "\u2014")}</td>`;
                     } else if (c.key === "actions") {

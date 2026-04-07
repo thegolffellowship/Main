@@ -2653,7 +2653,10 @@ def api_refund_item(item_id):
 @app.route("/api/items/<int:item_id>/partial-refund", methods=["POST"])
 @require_role("admin")
 def api_partial_refund_item(item_id):
-    """Partially refund specific components (e.g., one side game) while keeping player active."""
+    """Partially refund specific components (e.g., one side game) while keeping player active.
+
+    Creates a -PAY child row showing the refund, and updates the parent's side_games.
+    """
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
     if method and method not in ("GoDaddy", "Venmo"):
@@ -2663,22 +2666,44 @@ def api_partial_refund_item(item_id):
     note = data.get("note", "")
     total = sum(refunded_components.values())
 
-    # Build credit note
-    comp_labels = ", ".join(f"{k.replace('_', ' ').title()} (${v:.2f})" for k, v in refunded_components.items())
-    refund_note = f"Partial refund via {method}: {comp_labels}" if method else f"Partial refund: {comp_labels}"
-    if note:
-        refund_note += f" — {note}"
+    # Build description
+    comp_labels = ", ".join(f"{k.replace('_', ' ').title()}" for k in refunded_components.keys())
+    refund_desc = f"Refund {comp_labels} via {method}" if method else f"Refund {comp_labels}"
 
-    updates = {"credit_note": refund_note, "credit_amount": f"${total:.2f}"}
+    # Update parent: change side_games
+    updates = {}
     if new_side_games:
         updates["side_games"] = new_side_games
-    if update_item(item_id, updates):
-        return jsonify({"status": "ok", "refunded": total})
-    return jsonify({"error": "Item not found."}), 400
-@require_role("admin")
-def api_transfer_item(item_id):
-    """Transfer an item to a different event."""
-    data = request.get_json(silent=True)
+    if updates:
+        update_item(item_id, updates)
+
+    # Create -PAY child row
+    import time as _time
+    from email_parser.database import _connect, ITEM_COLUMNS
+    uid = f"manual-refund-{int(_time.time() * 1000)}"
+    with _connect() as conn:
+        parent = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not parent:
+            return jsonify({"error": "Item not found."}), 404
+        parent = dict(parent)
+        conn.execute(
+            """INSERT INTO items (email_uid, merchant, customer, item_name, item_price,
+               side_games, notes, parent_item_id, transaction_status, order_date)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)""",
+            (uid, f"Refund ({method})" if method else "Partial Refund",
+             parent["customer"], parent["item_name"],
+             f"-${total:.2f}",
+             refund_desc,
+             note if note else refund_desc,
+             item_id,
+             datetime.now().strftime("%Y-%m-%d")),
+        )
+        conn.commit()
+
+    return jsonify({"status": "ok", "refunded": total})
+
+
+@app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
     if not data or not data.get("target_event"):
         return jsonify({"error": "target_event is required."}), 400
     new_item = transfer_item(item_id, data["target_event"], note=data.get("note", ""))
