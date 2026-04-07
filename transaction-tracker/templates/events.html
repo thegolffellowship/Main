@@ -2368,7 +2368,7 @@
         // ── COMP COST (the delta for comped players — what we eat) ──
         // Per-player shares from matrix totals
         const stats = computeGameStats(registrants, ev.item_name);
-        const perPlayerIncluded = stats.players > 0 ? totalIncludedPots / stats.players : 0;
+        const perPlayerIncluded = stats.players > 0 ? (gamePots.hio + gamePots.included) / stats.players : 0;
         const perPlayerNet = stats.net > 0 ? gamePots.net / stats.net : 0;
         const perPlayerGross = stats.gross > 0 ? gamePots.gross / stats.gross : 0;
         let compCourseCost = 0;
