@@ -402,7 +402,8 @@ def check_expense_inbox(force=False, days_back=14):
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET")
-    address = os.getenv("EMAIL_ADDRESS")
+    # Expense emails (Chase/Venmo) go to kerry@, not admin@
+    address = os.getenv("EXPENSE_EMAIL_ADDRESS") or os.getenv("RSVP_EMAIL_ADDRESS") or os.getenv("EMAIL_ADDRESS")
 
     if not all([tenant_id, client_id, client_secret, address]):
         return {"error": "Azure AD credentials not configured"}
@@ -5173,7 +5174,7 @@ def api_list_mail_folders():
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET")
-    address = os.getenv("EMAIL_ADDRESS")
+    address = os.getenv("EXPENSE_EMAIL_ADDRESS") or os.getenv("RSVP_EMAIL_ADDRESS") or os.getenv("EMAIL_ADDRESS")
     token = _get_graph_token(tenant_id, client_id, client_secret)
     if not token:
         return jsonify({"error": "Could not get token"}), 500
@@ -5215,7 +5216,7 @@ def api_expense_inbox_audit():
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET")
-    address = os.getenv("EMAIL_ADDRESS")
+    address = os.getenv("EXPENSE_EMAIL_ADDRESS") or os.getenv("RSVP_EMAIL_ADDRESS") or os.getenv("EMAIL_ADDRESS")
     if not all([tenant_id, client_id, client_secret, address]):
         return jsonify({"error": "Azure AD credentials not configured"}), 400
 
