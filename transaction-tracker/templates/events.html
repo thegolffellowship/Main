@@ -2087,8 +2087,8 @@
         if (sg === "BOTH" || (sg.includes("NET") && sg.includes("GROSS"))) return "BOTH";
         if (sg.includes("NET")) return "NET";
         if (sg.includes("GROSS")) return "GROSS";
-        // If there's a value but doesn't match known patterns, treat as a game
-        return "NET";
+        // Unrecognized text (e.g. payment notes) — not a game type
+        return "NO GAMES";
     }
 
     function getEventTotalPlayers(ev) {
@@ -2135,7 +2135,7 @@
     }
 
     function getEffectiveGameType(r, allRegs) {
-        // Combine parent's games with any child payment games
+        // Combine parent's games with any child payment games that are actual game add-ons
         const parentGames = classifyGameType(r.side_games);
         if (!r.id) return parentGames;
         const children = allRegs.filter(c => c.parent_item_id && String(c.parent_item_id) === String(r.id));
@@ -2143,7 +2143,10 @@
         let hasNet = parentGames === "NET" || parentGames === "BOTH";
         let hasGross = parentGames === "GROSS" || parentGames === "BOTH";
         children.forEach(c => {
+            // Only merge if child's side_games is an actual game type (NET/GROSS/BOTH)
+            // Skip non-game children like price adjustments, event upgrades, etc.
             const ct = classifyGameType(c.side_games);
+            if (ct === "NO GAMES") return;  // skip non-game child payments
             if (ct === "NET" || ct === "BOTH") hasNet = true;
             if (ct === "GROSS" || ct === "BOTH") hasGross = true;
         });
