@@ -171,6 +171,36 @@ def fetch_transaction_emails(
     return results
 
 
+def _find_mail_folders(headers: dict, email_address: str, target_names: list[str]) -> list[dict]:
+    """Recursively find mail folder IDs matching target folder names (case-insensitive)."""
+    targets_lower = [t.lower() for t in target_names]
+    found = []
+
+    def _scan(parent_id=None):
+        if parent_id:
+            url = f"{GRAPH_BASE}/users/{email_address}/mailFolders/{parent_id}/childFolders"
+        else:
+            url = f"{GRAPH_BASE}/users/{email_address}/mailFolders"
+        params = {"$top": "100"}
+        try:
+            resp = _request_with_retry("get", url, headers=headers, params=params, timeout=15)
+            if resp.status_code != 200:
+                return
+            for folder in resp.json().get("value", []):
+                name = folder.get("displayName", "")
+                fid = folder.get("id", "")
+                child_count = folder.get("childFolderCount", 0)
+                if name.lower() in targets_lower:
+                    found.append({"id": fid, "name": name})
+                if child_count > 0:
+                    _scan(fid)
+        except Exception:
+            logger.warning("Failed to list mail folders under %s", parent_id or "root")
+
+    _scan()
+    return found
+
+
 def fetch_all_emails(
     tenant_id: str,
     client_id: str,
@@ -178,11 +208,16 @@ def fetch_all_emails(
     email_address: str,
     since_date: datetime | None = None,
     max_emails: int = 50,
+    include_subfolders: list[str] | None = None,
 ) -> list[dict]:
     """Fetch ALL recent emails (not filtered by subject).
 
     Used by the expense email classifier to process Chase alerts,
     Venmo payments, receipts, etc.
+
+    Args:
+        include_subfolders: List of subfolder names to also scan (e.g., ["2025 Chase", "Payouts"]).
+                           These are searched recursively in the folder tree.
     """
     if since_date is None:
         since_date = datetime.now() - timedelta(days=30)
@@ -197,45 +232,69 @@ def fetch_all_emails(
     }
 
     since_str = since_date.strftime("%Y-%m-%dT00:00:00Z")
-    base_url = f"{GRAPH_BASE}/users/{email_address}/messages"
-    params = {
-        "$filter": f"receivedDateTime ge {since_str}",
-        "$select": "id,subject,from,receivedDateTime,body,bodyPreview",
-        "$top": str(min(max_emails, 200)),
-        "$orderby": "receivedDateTime desc",
-    }
+    base_filter = f"receivedDateTime ge {since_str}"
+    select = "id,subject,from,receivedDateTime,body,bodyPreview"
 
+    # Build list of folder URLs to scan: Inbox + any matching subfolders
+    folder_urls = [
+        (f"{GRAPH_BASE}/users/{email_address}/messages", "Inbox"),
+    ]
+    if include_subfolders:
+        matched = _find_mail_folders(headers, email_address, include_subfolders)
+        for f in matched:
+            folder_urls.append((
+                f"{GRAPH_BASE}/users/{email_address}/mailFolders/{f['id']}/messages",
+                f["name"],
+            ))
+        logger.info("Scanning %d folders: %s", len(folder_urls),
+                     ", ".join(name for _, name in folder_urls))
+
+    seen_uids = set()
     results = []
-    url = base_url
     remaining = max_emails
 
-    while url and remaining > 0:
-        resp = _request_with_retry("get", url, headers=headers, params=params, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
+    for folder_url, folder_name in folder_urls:
+        if remaining <= 0:
+            break
+        params = {
+            "$filter": base_filter,
+            "$select": select,
+            "$top": str(min(remaining, 200)),
+            "$orderby": "receivedDateTime desc",
+        }
+        url = folder_url
+        while url and remaining > 0:
+            resp = _request_with_retry("get", url, headers=headers, params=params, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
 
-        for msg in data.get("value", []):
-            if remaining <= 0:
-                break
-            from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
-            subject = msg.get("subject", "")
-            body = msg.get("body", {})
-            body_content = body.get("content", "")
-            content_type = body.get("contentType", "text")
+            for msg in data.get("value", []):
+                if remaining <= 0:
+                    break
+                uid = msg["id"]
+                if uid in seen_uids:
+                    continue  # skip duplicates across folders
+                seen_uids.add(uid)
+                from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
+                subject = msg.get("subject", "")
+                body = msg.get("body", {})
+                body_content = body.get("content", "")
+                content_type = body.get("contentType", "text")
 
-            results.append({
-                "uid": msg["id"],
-                "subject": subject,
-                "from": from_addr,
-                "date": msg.get("receivedDateTime"),
-                "text": body_content if content_type == "text" else "",
-                "html": body_content if content_type == "html" else "",
-            })
-            remaining -= 1
+                results.append({
+                    "uid": uid,
+                    "subject": subject,
+                    "from": from_addr,
+                    "date": msg.get("receivedDateTime"),
+                    "text": body_content if content_type == "text" else "",
+                    "html": body_content if content_type == "html" else "",
+                    "folder": folder_name,
+                })
+                remaining -= 1
 
-        # Follow pagination link if available and we need more
-        url = data.get("@odata.nextLink")
-        params = None  # nextLink includes params already
+            # Follow pagination link if available
+            url = data.get("@odata.nextLink")
+            params = None
 
     logger.info("Fetched %d total emails for classification from %s", len(results), email_address)
     return results
