@@ -676,9 +676,11 @@
                     const data = await res.json();
                     if (!res.ok) {
                         alert(data.error || "Re-extract failed.");
+                    } else if (data.items_updated === 0) {
+                        alert(`No fields needed updating (${data.parsed_count || 0} item(s) re-parsed, all values match).`);
                     } else {
-                        const msg = `Updated ${data.updated || 0} field(s)` + (data.changes ? `: ${data.changes.join(", ")}` : "");
-                        alert(msg);
+                        const details = (data.changes || []).map(c => `Item #${c.id}: ${c.fields.join(", ")}`).join("\n");
+                        alert(`Updated ${data.items_updated} item(s):\n${details}`);
                     }
                 } catch (err) {
                     alert("Re-extract failed: " + err.message);
