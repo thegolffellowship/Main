@@ -406,14 +406,14 @@ def check_expense_inbox():
         emails = fetch_all_emails(
             tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
             email_address=address, since_date=datetime.now() - timedelta(days=14),
-            max_emails=50,
+            max_emails=200,
         )
     except Exception:
         logger.exception("Failed to fetch emails for expense classification")
-        return
+        return {"error": "Failed to fetch emails"}
 
     if not emails:
-        return
+        return {"fetched": 0, "new": 0, "processed": 0}
 
     # Skip already-processed emails (check both processed_emails and expense_transactions)
     known_uids = get_known_email_uids()
@@ -556,6 +556,7 @@ def check_expense_inbox():
     conn.close()
     if processed:
         logger.info("Expense email processing: %d items saved from %d emails", processed, len(new_emails))
+    return {"fetched": len(emails), "new": len(new_emails), "processed": processed}
 
 
 def check_rsvp_inbox():
@@ -5138,9 +5139,10 @@ def api_classify_email():
 def api_check_expense_inbox():
     """Manually trigger expense email processing."""
     try:
-        check_expense_inbox()
-        return jsonify({"status": "ok"})
+        result = check_expense_inbox()
+        return jsonify({"status": "ok", "result": result})
     except Exception as e:
+        logger.exception("Manual expense inbox check failed")
         return jsonify({"error": str(e)}), 500
 
 
