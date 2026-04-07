@@ -479,6 +479,7 @@
                 <button class="filter-btn" data-filter="ok">Fully Parsed</button>
                 <button class="filter-btn" data-filter="incomplete">Incomplete</button>
                 <button class="filter-btn" data-filter="missing">Not Parsed</button>
+                <input type="text" id="audit-search" placeholder="Search orders..." style="margin-left:auto; padding:0.4rem 0.75rem; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; min-width:200px;">
             </section>
 
             <!-- Email cards -->
@@ -596,11 +597,14 @@
             ? `<ul class="parsed-items">${comp.parsed_items.map(renderParsedItem).join("")}</ul>`
             : `<div class="no-items-msg">No items were parsed from this email.</div>`;
 
+        // Extract unique customer names from parsed items for the header
+        const customerNames = [...new Set(comp.parsed_items.map(i => i.customer).filter(Boolean))].join(", ");
+
         return `
         <div class="email-card" data-status="${comp.status}">
             <div class="email-card-header" onclick="this.parentElement.classList.toggle('expanded')">
                 <div class="email-meta">
-                    <div class="email-subject">${escapeHtml(comp.subject)}</div>
+                    <div class="email-subject">${escapeHtml(comp.subject)}${customerNames ? ` &mdash; <strong>${escapeHtml(customerNames)}</strong>` : ""}</div>
                     <div class="email-from-date">
                         From: ${escapeHtml(comp.from)} &nbsp;|&nbsp; ${escapeHtml(comp.date ? new Date(comp.date).toLocaleDateString() : "")}
                         &nbsp;|&nbsp; ${comp.parsed_items.length} item(s) parsed
@@ -634,9 +638,19 @@
         document.getElementById("sum-incomplete").textContent = auditData.incomplete;
         document.getElementById("sum-missing").textContent = auditData.missing;
 
-        const filtered = currentFilter === "all"
+        const searchTerm = (document.getElementById("audit-search")?.value || "").toLowerCase().trim();
+        let filtered = currentFilter === "all"
             ? auditData.comparisons
             : auditData.comparisons.filter(c => c.status === currentFilter);
+        if (searchTerm) {
+            filtered = filtered.filter(c => {
+                const haystack = [
+                    c.subject, c.from, c.body_preview,
+                    ...c.parsed_items.map(i => [i.customer, i.item_name, i.order_id, i.customer_email].join(" "))
+                ].join(" ").toLowerCase();
+                return haystack.includes(searchTerm);
+            });
+        }
 
         const listEl = document.getElementById("email-list");
         if (!filtered.length) {
@@ -734,6 +748,9 @@
                 render();
             });
         });
+
+        // Search input
+        document.getElementById("audit-search").addEventListener("input", () => render());
 
         // Autofix all button
         let lastAutofixDetails = null;

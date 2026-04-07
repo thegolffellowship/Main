@@ -1724,6 +1724,8 @@ def api_reextract_order():
     BACKFILL_FIELDS = ["coupon_code", "coupon_amount", "transaction_fees",
                        "partner_request", "fellowship", "notes", "holes",
                        "address", "address2", "city", "state", "zip"]
+    # Fields where re-extract should overwrite even if existing value differs
+    FORCE_UPDATE_FIELDS = ["side_games", "holes"]
 
     items = get_all_items()
     order_items = [it for it in items if it.get("order_id") == order_id]
@@ -1765,6 +1767,12 @@ def api_reextract_order():
             for field in BACKFILL_FIELDS:
                 new_val = parsed.get(field)
                 if new_val and not it.get(field):
+                    changes[field] = new_val
+
+            # Force-update fields: overwrite if parsed value differs
+            for field in FORCE_UPDATE_FIELDS:
+                new_val = parsed.get(field)
+                if new_val and new_val != it.get(field):
                     changes[field] = new_val
 
             # Guest-swap: if parser promoted the guest to customer,
