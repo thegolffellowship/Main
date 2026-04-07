@@ -400,7 +400,7 @@ def check_expense_inbox():
     address = os.getenv("EMAIL_ADDRESS")
 
     if not all([tenant_id, client_id, client_secret, address]):
-        return
+        return {"error": "Azure AD credentials not configured"}
 
     try:
         emails = fetch_all_emails(
@@ -432,7 +432,8 @@ def check_expense_inbox():
     new_emails = [e for e in emails if e.get("uid") not in all_known]
 
     if not new_emails:
-        return
+        return {"fetched": len(emails), "new": 0, "processed": 0,
+                "note": f"All {len(emails)} fetched emails already processed"}
 
     logger.info("Classifying %d new emails for expense processing", len(new_emails))
     processed = 0
