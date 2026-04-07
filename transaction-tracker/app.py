@@ -392,8 +392,13 @@ def send_coo_daily_email():
         return False
 
 
-def check_expense_inbox():
-    """Classify and extract data from non-order emails (Chase alerts, Venmo, receipts)."""
+def check_expense_inbox(force=False, days_back=14):
+    """Classify and extract data from non-order emails (Chase alerts, Venmo, receipts).
+
+    Args:
+        force: If True, reprocess ALL emails (ignore already-processed check)
+        days_back: How many days of emails to fetch (default 14)
+    """
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET")
@@ -405,7 +410,7 @@ def check_expense_inbox():
     try:
         emails = fetch_all_emails(
             tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
-            email_address=address, since_date=datetime.now() - timedelta(days=14),
+            email_address=address, since_date=datetime.now() - timedelta(days=days_back),
             max_emails=200,
         )
     except Exception:
@@ -429,7 +434,11 @@ def check_expense_inbox():
         conn.close()
 
     all_known = known_uids | expense_uids | action_uids
-    new_emails = [e for e in emails if e.get("uid") not in all_known]
+    if force:
+        # In force mode, only skip order emails (processed_emails) — reprocess expense/action
+        new_emails = [e for e in emails if e.get("uid") not in known_uids]
+    else:
+        new_emails = [e for e in emails if e.get("uid") not in all_known]
 
     if not new_emails:
         return {"fetched": len(emails), "new": 0, "processed": 0,
@@ -5138,13 +5147,84 @@ def api_classify_email():
 @app.route("/api/accounting/check-expense-inbox", methods=["POST"])
 @require_role("admin")
 def api_check_expense_inbox():
-    """Manually trigger expense email processing."""
+    """Manually trigger expense email processing.
+
+    JSON body options:
+        force: true — reprocess all emails (skip dedup for expenses/actions)
+        days_back: 7 — how many days to look back (default 14)
+    """
+    data = request.get_json(silent=True) or {}
+    force = data.get("force", False)
+    days_back = data.get("days_back", 14)
     try:
-        result = check_expense_inbox()
+        result = check_expense_inbox(force=force, days_back=days_back)
         return jsonify({"status": "ok", "result": result})
     except Exception as e:
         logger.exception("Manual expense inbox check failed")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/accounting/expense-inbox-audit", methods=["POST"])
+@require_role("admin")
+def api_expense_inbox_audit():
+    """Preview what's in the inbox without processing — classify only.
+
+    Returns a list of emails with their classification and whether they were already processed.
+    JSON body: { days_back: 7 }
+    """
+    data = request.get_json(silent=True) or {}
+    days_back = data.get("days_back", 7)
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, address]):
+        return jsonify({"error": "Azure AD credentials not configured"}), 400
+
+    try:
+        emails = fetch_all_emails(
+            tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
+            email_address=address, since_date=datetime.now() - timedelta(days=days_back),
+            max_emails=200,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    known_uids = get_known_email_uids()
+    conn = get_connection()
+    try:
+        expense_uids = {r["email_uid"] for r in conn.execute(
+            "SELECT email_uid FROM expense_transactions WHERE email_uid IS NOT NULL"
+        ).fetchall()}
+        action_uids = {r["email_uid"] for r in conn.execute(
+            "SELECT email_uid FROM action_items WHERE email_uid IS NOT NULL"
+        ).fetchall()}
+    finally:
+        conn.close()
+
+    results = []
+    for e in emails:
+        uid = e.get("uid", "")
+        status = "new"
+        if uid in known_uids:
+            status = "order"
+        elif uid in expense_uids:
+            status = "expense_saved"
+        elif uid in action_uids:
+            status = "action_saved"
+        results.append({
+            "subject": e.get("subject", ""),
+            "from": e.get("from", ""),
+            "date": (e.get("date") or "")[:10],
+            "status": status,
+        })
+
+    counts = {"order": 0, "expense_saved": 0, "action_saved": 0, "new": 0}
+    for r in results:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+
+    return jsonify({"total": len(results), "counts": counts, "emails": results})
 
 
 # ═══════════════════════════════════════════════════════════════════════════
