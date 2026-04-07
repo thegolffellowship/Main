@@ -2679,10 +2679,27 @@ def api_partial_refund_item(item_id):
             return jsonify({"error": "Item not found."}), 404
         parent = dict(parent)
 
-        # Update parent: change side_games
-        if new_side_games:
+        # Compute new side_games from current DB value based on refunded components
+        current_sg = (parent.get("side_games") or "NONE").strip().upper()
+        refunding_net = "net_games" in refunded_components
+        refunding_gross = "gross_games" in refunded_components
+        computed_new_sg = current_sg
+        if current_sg == "BOTH":
+            if refunding_net and refunding_gross:
+                computed_new_sg = "NONE"
+            elif refunding_net:
+                computed_new_sg = "GROSS"
+            elif refunding_gross:
+                computed_new_sg = "NET"
+        elif current_sg == "NET" and refunding_net:
+            computed_new_sg = "NONE"
+        elif current_sg == "GROSS" and refunding_gross:
+            computed_new_sg = "NONE"
+
+        # Update parent side_games if changed
+        if computed_new_sg != current_sg:
             conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
-                         (new_side_games, item_id))
+                         (computed_new_sg, item_id))
 
         # Create -PAY child row
         conn.execute(
@@ -2699,7 +2716,7 @@ def api_partial_refund_item(item_id):
         )
         conn.commit()
 
-    return jsonify({"status": "ok", "refunded": total})
+    return jsonify({"status": "ok", "refunded": total, "new_side_games": computed_new_sg})
 
 
 @app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
