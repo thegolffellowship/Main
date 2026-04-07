@@ -4588,11 +4588,12 @@ def delete_manual_player(item_id: int, db_path: str | Path | None = None) -> boo
 
     Allowed for: manual entries (email_uid starts with 'manual-'),
     rsvp_only items, and gg_rsvp items.
+    If the item is a child payment (+PAY/-PAY), reverts parent state changes.
     Returns True if the row was deleted, False if not found or not allowed.
     """
     with _connect(db_path) as conn:
         item = conn.execute(
-            "SELECT email_uid, transaction_status FROM items WHERE id = ?", (item_id,)
+            "SELECT * FROM items WHERE id = ?", (item_id,)
         ).fetchone()
         if not item:
             return False
@@ -4603,6 +4604,47 @@ def delete_manual_player(item_id: int, db_path: str | Path | None = None) -> boo
         if not uid.startswith("manual-") and tx_status not in ("rsvp_only", "gg_rsvp"):
             logger.warning("Refused to delete paid item %d (uid=%s, status=%s)", item_id, uid, tx_status)
             return False
+
+        # If this is a child payment, revert parent state changes
+        parent_id = row.get("parent_item_id")
+        if parent_id:
+            parent = conn.execute("SELECT * FROM items WHERE id = ?", (parent_id,)).fetchone()
+            if parent:
+                parent = dict(parent)
+                is_refund = uid.startswith("manual-refund")
+                is_upgrade = "upgrade" in (row.get("notes") or row.get("side_games") or "").lower()
+
+                if is_refund:
+                    # Revert side_games: figure out what to restore
+                    # The refund description in notes tells us what was refunded
+                    notes = (row.get("notes") or "").lower()
+                    current_sg = (parent.get("side_games") or "NONE").upper()
+                    restored_sg = current_sg
+                    refunded_net = "net" in notes and "game" in notes
+                    refunded_gross = "gross" in notes and "game" in notes
+                    if refunded_net and refunded_gross:
+                        restored_sg = "BOTH"
+                    elif refunded_net:
+                        if current_sg == "GROSS":
+                            restored_sg = "BOTH"
+                        elif current_sg == "NONE":
+                            restored_sg = "NET"
+                    elif refunded_gross:
+                        if current_sg == "NET":
+                            restored_sg = "BOTH"
+                        elif current_sg == "NONE":
+                            restored_sg = "GROSS"
+                    if restored_sg != current_sg:
+                        conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
+                                     (restored_sg, parent_id))
+                        logger.info("Reverted parent %d side_games: %s → %s", parent_id, current_sg, restored_sg)
+
+                elif is_upgrade:
+                    # Revert holes: 18 → 9
+                    if parent.get("holes") == "18" or parent.get("holes") == 18:
+                        conn.execute("UPDATE items SET holes = '9' WHERE id = ?", (parent_id,))
+                        logger.info("Reverted parent %d holes: 18 → 9", parent_id)
+
         conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
         conn.commit()
         logger.info("Deleted player item %d (uid=%s, status=%s)", item_id, uid, tx_status)
