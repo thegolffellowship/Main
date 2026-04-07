@@ -2268,11 +2268,13 @@
         const gNet = matrix[String(netPC)];
         const gGross = matrix[String(grossPC)];
 
-        const includedPot = gEvent ? numVal(gEvent.eventTotalPot) : 0;
+        const eventTotalPot = gEvent ? numVal(gEvent.eventTotalPot) : 0;
+        const hio = (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") ? numVal(gEvent.holeInOne) : 0;
+        const includedPot = eventTotalPot - hio;  // Included games WITHOUT HIO
         const netPot = gNet ? numVal(gNet.netTotalPot) : 0;
         const grossPot = gGross ? numVal(gGross.grossTotalPot) : 0;
 
-        return { included: includedPot, net: netPot, gross: grossPot };
+        return { included: includedPot, hio: hio, net: netPot, gross: grossPot };
     }
 
     function renderFinancialPanel(ev, registrants) {
@@ -2351,8 +2353,7 @@
 
         // Game pots: use actual GAMES matrix (same data as GAMES tab)
         const gamePots = computeGamePotTotals(ev, registrants);
-        const totalIncludedPots = gamePots.included;
-        const totalPrizePools = gamePots.net + gamePots.gross;
+        const totalPrizeFund = gamePots.hio + gamePots.included + gamePots.net + gamePots.gross;
 
         // GoDaddy processing fees (estimated: 2.9% + $0.30 per paid transaction)
         let totalProcessingFees = 0;
@@ -2390,7 +2391,7 @@
         const totalCompCost = compCourseCost + compGameCost;
 
         // ── PROJECTED PROFIT ──
-        const totalExpenses = totalCourseCost + totalPrizePools + totalIncludedPots + totalProcessingFees;
+        const totalExpenses = totalCourseCost + totalPrizeFund + totalProcessingFees;
         const projectedProfit = totalCollected - totalExpenses;
         const profitColor = projectedProfit >= 0 ? "#166534" : "#dc2626";
 
@@ -2457,8 +2458,11 @@
                 });
             }
         }
-        html += `<span>Included Game Pots</span><span style="text-align:right;">$${totalIncludedPots.toFixed(2)}</span>`;
-        html += `<span>Side Game Prize Pools</span><span style="text-align:right;">$${totalPrizePools.toFixed(2)}</span>`;
+        html += `<span style="font-weight:600;">Prize Fund</span><span style="text-align:right; font-weight:600;">$${totalPrizeFund.toFixed(2)}</span>`;
+        if (gamePots.hio > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Hole-In-One Pot</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.hio.toFixed(2)}</span>`;
+        html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Included Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.included.toFixed(2)}</span>`;
+        if (gamePots.net > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Net Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.net.toFixed(2)}</span>`;
+        if (gamePots.gross > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Gross Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.gross.toFixed(2)}</span>`;
         html += `<span>Processing Fees (est.)</span><span style="text-align:right;">$${totalProcessingFees.toFixed(2)}</span>`;
         html += `<span style="font-weight:700; border-top:1px solid var(--border); padding-top:0.2rem;">Total Expenses</span><span style="font-weight:700; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${totalExpenses.toFixed(2)}</span>`;
         html += `</div>`;
