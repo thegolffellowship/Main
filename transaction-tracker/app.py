@@ -2704,6 +2704,10 @@ def api_partial_refund_item(item_id):
 
 
 @app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
+@require_role("admin")
+def api_transfer_item(item_id):
+    """Transfer an item to a different event."""
+    data = request.get_json(silent=True)
     if not data or not data.get("target_event"):
         return jsonify({"error": "target_event is required."}), 400
     new_item = transfer_item(item_id, data["target_event"], note=data.get("note", ""))
