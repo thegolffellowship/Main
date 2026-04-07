@@ -6729,7 +6729,7 @@
                 document.getElementById("ev-credit-transfer-fields").style.display = evCreditType === "transfer" ? "block" : "none";
                 document.getElementById("ev-credit-refund-fields").style.display = evCreditType === "refund" ? "block" : "none";
                 document.getElementById("ev-credit-partial-fields").style.display = evCreditType === "partial" ? "block" : "none";
-                const labels = { credit: "Apply Credit", transfer: "Transfer", refund: "Refund", partial: "Partial Refund" };
+                const labels = { credit: "Apply Credit", transfer: "Transfer", refund: "Refund", partial: "Submit" };
                 document.getElementById("ev-credit-submit").textContent = labels[evCreditType] || "Apply Credit";
                 if (evCreditType === "partial") buildPartialRefundComponents();
             });
