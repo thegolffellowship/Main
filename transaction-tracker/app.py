@@ -2670,22 +2670,21 @@ def api_partial_refund_item(item_id):
     comp_labels = ", ".join(f"{k.replace('_', ' ').title()}" for k in refunded_components.keys())
     refund_desc = f"Refund {comp_labels} via {method}" if method else f"Refund {comp_labels}"
 
-    # Update parent: change side_games
-    updates = {}
-    if new_side_games:
-        updates["side_games"] = new_side_games
-    if updates:
-        update_item(item_id, updates)
-
-    # Create -PAY child row
     import time as _time
-    from email_parser.database import _connect, ITEM_COLUMNS
+    from email_parser.database import _connect
     uid = f"manual-refund-{int(_time.time() * 1000)}"
     with _connect() as conn:
         parent = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
         if not parent:
             return jsonify({"error": "Item not found."}), 404
         parent = dict(parent)
+
+        # Update parent: change side_games
+        if new_side_games:
+            conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
+                         (new_side_games, item_id))
+
+        # Create -PAY child row
         conn.execute(
             """INSERT INTO items (email_uid, merchant, customer, item_name, item_price,
                side_games, notes, parent_item_id, transaction_status, order_date)
