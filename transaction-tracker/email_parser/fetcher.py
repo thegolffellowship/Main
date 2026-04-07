@@ -201,30 +201,41 @@ def fetch_all_emails(
     params = {
         "$filter": f"receivedDateTime ge {since_str}",
         "$select": "id,subject,from,receivedDateTime,body,bodyPreview",
-        "$top": str(min(max_emails, 100)),
+        "$top": str(min(max_emails, 200)),
         "$orderby": "receivedDateTime desc",
     }
 
-    resp = _request_with_retry("get", base_url, headers=headers, params=params, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
-
     results = []
-    for msg in data.get("value", []):
-        from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
-        subject = msg.get("subject", "")
-        body = msg.get("body", {})
-        body_content = body.get("content", "")
-        content_type = body.get("contentType", "text")
+    url = base_url
+    remaining = max_emails
 
-        results.append({
-            "uid": msg["id"],
-            "subject": subject,
-            "from": from_addr,
-            "date": msg.get("receivedDateTime"),
-            "text": body_content if content_type == "text" else "",
-            "html": body_content if content_type == "html" else "",
-        })
+    while url and remaining > 0:
+        resp = _request_with_retry("get", url, headers=headers, params=params, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+
+        for msg in data.get("value", []):
+            if remaining <= 0:
+                break
+            from_addr = msg.get("from", {}).get("emailAddress", {}).get("address", "")
+            subject = msg.get("subject", "")
+            body = msg.get("body", {})
+            body_content = body.get("content", "")
+            content_type = body.get("contentType", "text")
+
+            results.append({
+                "uid": msg["id"],
+                "subject": subject,
+                "from": from_addr,
+                "date": msg.get("receivedDateTime"),
+                "text": body_content if content_type == "text" else "",
+                "html": body_content if content_type == "html" else "",
+            })
+            remaining -= 1
+
+        # Follow pagination link if available and we need more
+        url = data.get("@odata.nextLink")
+        params = None  # nextLink includes params already
 
     logger.info("Fetched %d total emails for classification from %s", len(results), email_address)
     return results
