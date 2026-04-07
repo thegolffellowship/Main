@@ -5165,6 +5165,42 @@ def api_check_expense_inbox():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/accounting/mail-folders", methods=["GET"])
+@require_role("admin")
+def api_list_mail_folders():
+    """Debug: list all mail folders visible to Graph API."""
+    from email_parser.fetcher import _get_graph_token, _request_with_retry, GRAPH_BASE
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    address = os.getenv("EMAIL_ADDRESS")
+    token = _get_graph_token(tenant_id, client_id, client_secret)
+    if not token:
+        return jsonify({"error": "Could not get token"}), 500
+    headers = {"Authorization": f"Bearer {token}"}
+
+    def _list(parent_id=None, depth=0):
+        url = (f"{GRAPH_BASE}/users/{address}/mailFolders/{parent_id}/childFolders"
+               if parent_id else f"{GRAPH_BASE}/users/{address}/mailFolders")
+        try:
+            resp = _request_with_retry("get", url, headers=headers, params={"$top": "100"}, timeout=15)
+            if resp.status_code != 200:
+                return []
+            results = []
+            for f in resp.json().get("value", []):
+                entry = {"name": f["displayName"], "id": f["id"],
+                         "total": f.get("totalItemCount", 0), "depth": depth}
+                results.append(entry)
+                if f.get("childFolderCount", 0) > 0:
+                    results.extend(_list(f["id"], depth + 1))
+            return results
+        except Exception as e:
+            return [{"error": str(e)}]
+
+    folders = _list()
+    return jsonify({"folders": folders})
+
+
 @app.route("/api/accounting/expense-inbox-audit", methods=["POST"])
 @require_role("admin")
 def api_expense_inbox_audit():
