@@ -411,7 +411,8 @@ def check_expense_inbox(force=False, days_back=14):
         emails = fetch_all_emails(
             tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
             email_address=address, since_date=datetime.now() - timedelta(days=days_back),
-            max_emails=200,
+            max_emails=300,
+            include_subfolders=["2025 Chase", "2025 Venmo", "Payouts", "Invoices"],
         )
     except Exception:
         logger.exception("Failed to fetch emails for expense classification")
@@ -5186,7 +5187,8 @@ def api_expense_inbox_audit():
         emails = fetch_all_emails(
             tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
             email_address=address, since_date=datetime.now() - timedelta(days=days_back),
-            max_emails=200,
+            max_emails=300,
+            include_subfolders=["2025 Chase", "2025 Venmo", "Payouts", "Invoices"],
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
