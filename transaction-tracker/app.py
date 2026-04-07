@@ -2701,7 +2701,7 @@ def api_partial_refund_item(item_id):
             conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
                          (computed_new_sg, item_id))
 
-        # Create -PAY child row
+        # Create -PAY child row (description in notes, NOT side_games — to avoid game merging)
         conn.execute(
             """INSERT INTO items (email_uid, merchant, customer, item_name, item_price,
                side_games, notes, parent_item_id, transaction_status, order_date)
@@ -2709,8 +2709,8 @@ def api_partial_refund_item(item_id):
             (uid, f"Refund ({method})" if method else "Partial Refund",
              parent["customer"], parent["item_name"],
              f"-${total:.2f}",
-             refund_desc,
-             note if note else refund_desc,
+             None,
+             refund_desc + (f" — {note}" if note else ""),
              item_id,
              datetime.now().strftime("%Y-%m-%d")),
         )
