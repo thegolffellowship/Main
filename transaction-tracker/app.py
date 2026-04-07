@@ -2679,6 +2679,12 @@ def api_partial_refund_item(item_id):
             return jsonify({"error": "Item not found."}), 404
         parent = dict(parent)
 
+        # Snapshot parent's mutable fields BEFORE modifying
+        parent_snap = {}
+        for fld in ("side_games", "holes", "tee_choice", "user_status"):
+            if parent.get(fld) is not None:
+                parent_snap[fld] = parent[fld]
+
         # Compute new side_games from current DB value based on refunded components
         current_sg = (parent.get("side_games") or "NONE").strip().upper()
         refunding_net = "net_games" in refunded_components
@@ -2701,17 +2707,18 @@ def api_partial_refund_item(item_id):
             conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
                          (computed_new_sg, item_id))
 
-        # Create -PAY child row (description in notes, NOT side_games — to avoid game merging)
+        # Create -PAY child row with parent snapshot
         conn.execute(
             """INSERT INTO items (email_uid, merchant, customer, item_name, item_price,
-               side_games, notes, parent_item_id, transaction_status, order_date)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)""",
+               side_games, notes, parent_item_id, parent_snapshot, transaction_status, order_date)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)""",
             (uid, f"Refund ({method})" if method else "Partial Refund",
              parent["customer"], parent["item_name"],
              f"-${total:.2f}",
              None,
              refund_desc + (f" — {note}" if note else ""),
              item_id,
+             json.dumps(parent_snap) if parent_snap else None,
              datetime.now().strftime("%Y-%m-%d")),
         )
         conn.commit()

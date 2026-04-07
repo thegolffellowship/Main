@@ -247,6 +247,7 @@ ITEM_COLUMNS = [
     "transaction_status", "credit_note", "transferred_from_id", "transferred_to_id",
     "wd_reason", "wd_note", "wd_credits", "credit_amount",
     "parent_item_id",
+    "parent_snapshot",
     "customer_id",
 ]
 
@@ -627,6 +628,13 @@ def init_db(db_path: str | Path | None = None) -> None:
         try:
             conn.execute("ALTER TABLE events ADD COLUMN course_surcharge REAL DEFAULT 0")
             logger.info("Added events.course_surcharge column")
+        except sqlite3.OperationalError:
+            pass  # already exists
+
+        # Migration: add parent_snapshot column for child payment revert
+        try:
+            conn.execute("ALTER TABLE items ADD COLUMN parent_snapshot TEXT")
+            logger.info("Added items.parent_snapshot column")
         except sqlite3.OperationalError:
             pass  # already exists
 
@@ -4463,6 +4471,15 @@ def add_payment_to_event(event_name: str, customer: str,
 
         uid = f"manual-payment-{int(_time.time() * 1000)}"
 
+        # Snapshot parent's mutable fields BEFORE any modifications
+        parent_full = conn.execute("SELECT * FROM items WHERE id = ?", (parent_id,)).fetchone()
+        parent_snap = {}
+        if parent_full:
+            pf = dict(parent_full)
+            for fld in ("side_games", "holes", "tee_choice", "user_status"):
+                if pf.get(fld) is not None:
+                    parent_snap[fld] = pf[fld]
+
         # Determine side_games from payment_item
         side_games = ""
         is_upgrade = "upgrade" in (payment_item or "").lower()
@@ -4495,6 +4512,7 @@ def add_payment_to_event(event_name: str, customer: str,
         # Child payments do NOT carry holes, tee, status — only the parent has those
         new_values["notes"] = note or f"{payment_item} — {payment_amount} via {payment_source}"
         new_values["parent_item_id"] = parent_id
+        new_values["parent_snapshot"] = json.dumps(parent_snap) if parent_snap else None
 
         # Resolve or create customer_id from customers table
         new_values["customer_id"] = _resolve_or_create_customer(
@@ -4605,45 +4623,29 @@ def delete_manual_player(item_id: int, db_path: str | Path | None = None) -> boo
             logger.warning("Refused to delete paid item %d (uid=%s, status=%s)", item_id, uid, tx_status)
             return False
 
-        # If this is a child payment, revert parent state changes
+        # If this is a child payment, revert parent to snapshot state
         parent_id = row.get("parent_item_id")
         if parent_id:
-            parent = conn.execute("SELECT * FROM items WHERE id = ?", (parent_id,)).fetchone()
-            if parent:
-                parent = dict(parent)
-                is_refund = uid.startswith("manual-refund")
-                is_upgrade = "upgrade" in (row.get("notes") or row.get("side_games") or "").lower()
-
-                if is_refund:
-                    # Revert side_games: figure out what to restore
-                    # The refund description in notes tells us what was refunded
-                    notes = (row.get("notes") or "").lower()
-                    current_sg = (parent.get("side_games") or "NONE").upper()
-                    restored_sg = current_sg
-                    refunded_net = "net" in notes and "game" in notes
-                    refunded_gross = "gross" in notes and "game" in notes
-                    if refunded_net and refunded_gross:
-                        restored_sg = "BOTH"
-                    elif refunded_net:
-                        if current_sg == "GROSS":
-                            restored_sg = "BOTH"
-                        elif current_sg == "NONE":
-                            restored_sg = "NET"
-                    elif refunded_gross:
-                        if current_sg == "NET":
-                            restored_sg = "BOTH"
-                        elif current_sg == "NONE":
-                            restored_sg = "GROSS"
-                    if restored_sg != current_sg:
-                        conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
-                                     (restored_sg, parent_id))
-                        logger.info("Reverted parent %d side_games: %s → %s", parent_id, current_sg, restored_sg)
-
-                elif is_upgrade:
-                    # Revert holes: 18 → 9
-                    if parent.get("holes") == "18" or parent.get("holes") == 18:
-                        conn.execute("UPDATE items SET holes = '9' WHERE id = ?", (parent_id,))
-                        logger.info("Reverted parent %d holes: 18 → 9", parent_id)
+            snapshot_json = row.get("parent_snapshot")
+            if snapshot_json:
+                try:
+                    snapshot = json.loads(snapshot_json)
+                    if snapshot:
+                        set_parts = []
+                        vals = []
+                        for fld, val in snapshot.items():
+                            if fld in ITEM_COLUMNS:
+                                set_parts.append(f"{fld} = ?")
+                                vals.append(val)
+                        if set_parts:
+                            vals.append(parent_id)
+                            conn.execute(
+                                f"UPDATE items SET {', '.join(set_parts)} WHERE id = ?",
+                                vals,
+                            )
+                            logger.info("Reverted parent %d from snapshot: %s", parent_id, snapshot)
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning("Invalid parent_snapshot JSON on item %d", item_id)
 
         conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
         conn.commit()
