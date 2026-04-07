@@ -247,6 +247,7 @@ ITEM_COLUMNS = [
     "transaction_status", "credit_note", "transferred_from_id", "transferred_to_id",
     "wd_reason", "wd_note", "wd_credits", "credit_amount",
     "parent_item_id",
+    "parent_snapshot",
     "customer_id",
 ]
 
@@ -627,6 +628,13 @@ def init_db(db_path: str | Path | None = None) -> None:
         try:
             conn.execute("ALTER TABLE events ADD COLUMN course_surcharge REAL DEFAULT 0")
             logger.info("Added events.course_surcharge column")
+        except sqlite3.OperationalError:
+            pass  # already exists
+
+        # Migration: add parent_snapshot column for child payment revert
+        try:
+            conn.execute("ALTER TABLE items ADD COLUMN parent_snapshot TEXT")
+            logger.info("Added items.parent_snapshot column")
         except sqlite3.OperationalError:
             pass  # already exists
 
@@ -4463,6 +4471,15 @@ def add_payment_to_event(event_name: str, customer: str,
 
         uid = f"manual-payment-{int(_time.time() * 1000)}"
 
+        # Snapshot parent's mutable fields BEFORE any modifications
+        parent_full = conn.execute("SELECT * FROM items WHERE id = ?", (parent_id,)).fetchone()
+        parent_snap = {}
+        if parent_full:
+            pf = dict(parent_full)
+            for fld in ("side_games", "holes", "tee_choice", "user_status"):
+                if pf.get(fld) is not None:
+                    parent_snap[fld] = pf[fld]
+
         # Determine side_games from payment_item
         side_games = ""
         is_upgrade = "upgrade" in (payment_item or "").lower()
@@ -4495,6 +4512,7 @@ def add_payment_to_event(event_name: str, customer: str,
         # Child payments do NOT carry holes, tee, status — only the parent has those
         new_values["notes"] = note or f"{payment_item} — {payment_amount} via {payment_source}"
         new_values["parent_item_id"] = parent_id
+        new_values["parent_snapshot"] = json.dumps(parent_snap) if parent_snap else None
 
         # Resolve or create customer_id from customers table
         new_values["customer_id"] = _resolve_or_create_customer(
@@ -4588,11 +4606,12 @@ def delete_manual_player(item_id: int, db_path: str | Path | None = None) -> boo
 
     Allowed for: manual entries (email_uid starts with 'manual-'),
     rsvp_only items, and gg_rsvp items.
+    If the item is a child payment (+PAY/-PAY), reverts parent state changes.
     Returns True if the row was deleted, False if not found or not allowed.
     """
     with _connect(db_path) as conn:
         item = conn.execute(
-            "SELECT email_uid, transaction_status FROM items WHERE id = ?", (item_id,)
+            "SELECT * FROM items WHERE id = ?", (item_id,)
         ).fetchone()
         if not item:
             return False
@@ -4603,6 +4622,31 @@ def delete_manual_player(item_id: int, db_path: str | Path | None = None) -> boo
         if not uid.startswith("manual-") and tx_status not in ("rsvp_only", "gg_rsvp"):
             logger.warning("Refused to delete paid item %d (uid=%s, status=%s)", item_id, uid, tx_status)
             return False
+
+        # If this is a child payment, revert parent to snapshot state
+        parent_id = row.get("parent_item_id")
+        if parent_id:
+            snapshot_json = row.get("parent_snapshot")
+            if snapshot_json:
+                try:
+                    snapshot = json.loads(snapshot_json)
+                    if snapshot:
+                        set_parts = []
+                        vals = []
+                        for fld, val in snapshot.items():
+                            if fld in ITEM_COLUMNS:
+                                set_parts.append(f"{fld} = ?")
+                                vals.append(val)
+                        if set_parts:
+                            vals.append(parent_id)
+                            conn.execute(
+                                f"UPDATE items SET {', '.join(set_parts)} WHERE id = ?",
+                                vals,
+                            )
+                            logger.info("Reverted parent %d from snapshot: %s", parent_id, snapshot)
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning("Invalid parent_snapshot JSON on item %d", item_id)
+
         conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
         conn.commit()
         logger.info("Deleted player item %d (uid=%s, status=%s)", item_id, uid, tx_status)
