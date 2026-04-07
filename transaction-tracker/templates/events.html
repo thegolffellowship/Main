@@ -2252,10 +2252,28 @@
     }
 
     // ---- FINANCIAL PANEL ----
-    // Side game lookup tables (must match database.py _SIDE_PRIZE / _SIDE_MARKUP)
-    const SIDE_PRIZE = { "NET|9": 13, "NET|18": 26, "GROSS|9": 13, "GROSS|18": 26, "BOTH|9": 26, "BOTH|18": 52, "NONE|9": 0, "NONE|18": 0 };
-    const SIDE_MARKUP = { "NET|9": 3, "NET|18": 4, "GROSS|9": 3, "GROSS|18": 4, "BOTH|9": 6, "BOTH|18": 8, "NONE|9": 0, "NONE|18": 0 };
-    const INCLUDED_POTS = { "9": 7, "18": 14 };
+    function computeGamePotTotals(ev, registrants) {
+        // Use actual GAMES matrix to compute real pot totals (same as GAMES tab)
+        const holesType = extractHolesType(ev.item_name, ev.format);
+        if (!holesType) return { included: 0, net: 0, gross: 0 };
+        const matrix = holesType === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
+        if (!matrix) return { included: 0, net: 0, gross: 0 };
+
+        const stats = computeGameStats(registrants, ev.item_name);
+        const totalPC = stats.players;
+        const netPC = stats.net;
+        const grossPC = stats.gross;
+
+        const gEvent = matrix[String(totalPC)];
+        const gNet = matrix[String(netPC)];
+        const gGross = matrix[String(grossPC)];
+
+        const includedPot = gEvent ? numVal(gEvent.eventTotalPot) : 0;
+        const netPot = gNet ? numVal(gNet.netTotalPot) : 0;
+        const grossPot = gGross ? numVal(gGross.grossTotalPot) : 0;
+
+        return { included: includedPot, net: netPot, gross: grossPot };
+    }
 
     function renderFinancialPanel(ev, registrants) {
         const INACTIVE = ["credited", "refunded", "transferred"];
@@ -2331,15 +2349,10 @@
             }
         });
 
-        // Side game prize pools: ALL active players including comps (everyone's in the pot)
-        let totalPrizePools = 0;
-        let totalIncludedPots = 0;
-        allActivePlayers.forEach(r => {
-            const h = getPlayerHoles(r);
-            const sg = normalizeSideGames(r.side_games);
-            totalPrizePools += (SIDE_PRIZE[sg + "|" + h] || 0);
-            totalIncludedPots += (INCLUDED_POTS[h] || 0);
-        });
+        // Game pots: use actual GAMES matrix (same data as GAMES tab)
+        const gamePots = computeGamePotTotals(ev, registrants);
+        const totalIncludedPots = gamePots.included;
+        const totalPrizePools = gamePots.net + gamePots.gross;
 
         // GoDaddy processing fees (estimated: 2.9% + $0.30 per paid transaction)
         let totalProcessingFees = 0;
@@ -2349,26 +2362,16 @@
         childPayments.forEach(r => { if (r.order_id) orderIds.add(r.order_id); });
         totalProcessingFees = Math.round((totalCollected * 0.029 + orderIds.size * 0.30) * 100) / 100;
 
-        // ── TGF OPERATING (what we keep) ──
-        let totalTgfMarkup = 0;
-        let totalSideMarkup = 0;
-        paidPlayers.forEach(r => {
-            const h = getPlayerHoles(r);
-            const sg = normalizeSideGames(r.side_games);
-            if (isCombo && h === "18") {
-                totalTgfMarkup += (ev.tgf_markup_18 || ev.tgf_markup || 0);
-            } else if (isCombo) {
-                totalTgfMarkup += (ev.tgf_markup_9 || ev.tgf_markup || 0);
-            } else {
-                totalTgfMarkup += (ev.tgf_markup || 0);
-            }
-            totalSideMarkup += (SIDE_MARKUP[sg + "|" + h] || 0);
-        });
+        // (TGF operating margin is revenue - expenses; no separate calc needed)
 
         // ── COMP COST (the delta for comped players — what we eat) ──
+        // Per-player shares from matrix totals
+        const stats = computeGameStats(registrants, ev.item_name);
+        const perPlayerIncluded = stats.players > 0 ? totalIncludedPots / stats.players : 0;
+        const perPlayerNet = stats.net > 0 ? gamePots.net / stats.net : 0;
+        const perPlayerGross = stats.gross > 0 ? gamePots.gross / stats.gross : 0;
         let compCourseCost = 0;
-        let compPrizePools = 0;
-        let compIncludedPots = 0;
+        let compGameCost = 0;
         compPlayers.forEach(r => {
             const h = getPlayerHoles(r);
             const sg = normalizeSideGames(r.side_games);
@@ -2379,10 +2382,12 @@
             } else {
                 compCourseCost += (ev.course_cost || 0);
             }
-            compPrizePools += (SIDE_PRIZE[sg + "|" + h] || 0);
-            compIncludedPots += (INCLUDED_POTS[h] || 0);
+            compGameCost += perPlayerIncluded;
+            if (sg === "NET" || sg === "BOTH") compGameCost += perPlayerNet;
+            if (sg === "GROSS" || sg === "BOTH") compGameCost += perPlayerGross;
         });
-        const totalCompCost = compCourseCost + compPrizePools + compIncludedPots;
+        compGameCost = Math.round(compGameCost * 100) / 100;
+        const totalCompCost = compCourseCost + compGameCost;
 
         // ── PROJECTED PROFIT ──
         const totalExpenses = totalCourseCost + totalPrizePools + totalIncludedPots + totalProcessingFees;
@@ -2474,7 +2479,10 @@
                 if (isCombo && h === "18") cc = ev.course_cost_18 || ev.course_cost || 0;
                 else if (isCombo) cc = ev.course_cost_9 || ev.course_cost || 0;
                 else cc = ev.course_cost || 0;
-                const pots = (SIDE_PRIZE[sg + "|" + h] || 0) + (INCLUDED_POTS[h] || 0);
+                let pots = perPlayerIncluded;
+                if (sg === "NET" || sg === "BOTH") pots += perPlayerNet;
+                if (sg === "GROSS" || sg === "BOTH") pots += perPlayerGross;
+                pots = Math.round(pots * 100) / 100;
                 const total = cc + pots;
                 const name = displayName ? displayName(r.customer) : r.customer;
                 html += `<tr><td style="padding:0.2rem 0.4rem;">${escapeHtml(name)}</td><td style="text-align:center; padding:0.2rem;">${h}</td><td style="text-align:center; padding:0.2rem;">${sg}</td><td style="text-align:right; padding:0.2rem 0.4rem;">$${cc.toFixed(2)}</td><td style="text-align:right; padding:0.2rem 0.4rem;">$${pots.toFixed(2)}</td><td style="text-align:right; padding:0.2rem 0.4rem; font-weight:600;">$${total.toFixed(2)}</td></tr>`;
