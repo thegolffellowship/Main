@@ -1751,13 +1751,19 @@ def api_reextract_order():
         updated = 0
         changes_detail = []
         for it in order_items:
+            # Skip manual entries (Add Payment, comp, etc.)
+            uid = it.get("email_uid") or ""
+            if uid.startswith("manual-"):
+                continue
+
             idx = it.get("item_index", 0) or 0
             if idx < len(parsed_rows):
                 parsed = parsed_rows[idx]
             else:
+                # Fallback: match by item_name (case-insensitive)
                 parsed = next(
                     (p for p in parsed_rows
-                     if p.get("item_name") == it.get("item_name")),
+                     if (p.get("item_name") or "").lower() == (it.get("item_name") or "").lower()),
                     parsed_rows[0] if len(parsed_rows) == 1 else None,
                 )
             if not parsed:
@@ -1772,7 +1778,7 @@ def api_reextract_order():
             # Force-update fields: overwrite if parsed value differs
             for field in FORCE_UPDATE_FIELDS:
                 new_val = parsed.get(field)
-                if new_val and new_val != it.get(field):
+                if new_val and str(new_val).strip().upper() != str(it.get(field) or "").strip().upper():
                     changes[field] = new_val
 
             # Guest-swap: if parser promoted the guest to customer,
@@ -1800,6 +1806,7 @@ def api_reextract_order():
             "items_in_order": len(order_items),
             "items_updated": updated,
             "changes": changes_detail,
+            "parsed_count": len(parsed_rows),
         })
 
     except Exception as exc:
@@ -2643,7 +2650,31 @@ def api_refund_item(item_id):
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
 
 
-@app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
+@app.route("/api/items/<int:item_id>/partial-refund", methods=["POST"])
+@require_role("admin")
+def api_partial_refund_item(item_id):
+    """Partially refund specific components (e.g., one side game) while keeping player active."""
+    data = request.get_json(silent=True) or {}
+    method = data.get("method", "")
+    if method and method not in ("GoDaddy", "Venmo"):
+        return jsonify({"error": "Invalid refund method."}), 400
+    refunded_components = data.get("components", {})  # e.g. {"gross_games": 30}
+    new_side_games = data.get("new_side_games")  # e.g. "NET" (after removing GROSS)
+    note = data.get("note", "")
+    total = sum(refunded_components.values())
+
+    # Build credit note
+    comp_labels = ", ".join(f"{k.replace('_', ' ').title()} (${v:.2f})" for k, v in refunded_components.items())
+    refund_note = f"Partial refund via {method}: {comp_labels}" if method else f"Partial refund: {comp_labels}"
+    if note:
+        refund_note += f" — {note}"
+
+    updates = {"credit_note": refund_note, "credit_amount": f"${total:.2f}"}
+    if new_side_games:
+        updates["side_games"] = new_side_games
+    if update_item(item_id, updates):
+        return jsonify({"status": "ok", "refunded": total})
+    return jsonify({"error": "Item not found."}), 400
 @require_role("admin")
 def api_transfer_item(item_id):
     """Transfer an item to a different event."""

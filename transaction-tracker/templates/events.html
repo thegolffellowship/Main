@@ -601,6 +601,7 @@
                 <button class="ev-credit-type-btn credit-type-btn active" data-type="credit">Credit</button>
                 <button class="ev-credit-type-btn credit-type-btn" data-type="transfer">Transfer</button>
                 <button class="ev-credit-type-btn credit-type-btn" data-type="refund">Refund</button>
+                <button class="ev-credit-type-btn credit-type-btn" data-type="partial">Partial Refund</button>
             </div>
             <div class="credit-fields">
                 <div id="ev-credit-transfer-fields" style="display:none;">
@@ -618,6 +619,19 @@
                             <option value="Venmo">Venmo</option>
                         </select>
                     </label>
+                </div>
+                <div id="ev-credit-partial-fields" style="display:none;">
+                    <label>Refund Method
+                        <select id="ev-credit-partial-method" class="modal-input">
+                            <option value="">Select method...</option>
+                            <option value="GoDaddy">GoDaddy</option>
+                            <option value="Venmo">Venmo</option>
+                        </select>
+                    </label>
+                    <div style="margin-top:0.5rem; font-weight:600; font-size:0.85rem;">Select components to refund:</div>
+                    <div id="ev-credit-partial-items" style="display:flex; flex-direction:column; gap:0.35rem; margin-top:0.3rem;"></div>
+                    <div id="ev-credit-partial-total" style="margin-top:0.5rem; font-weight:700; font-size:0.9rem; border-top:2px solid var(--border); padding-top:0.4rem;">Refund Total: $0.00</div>
+                    <div id="ev-credit-partial-games-note" style="margin-top:0.3rem; font-size:0.78rem; color:var(--text-muted);"></div>
                 </div>
                 <label>Note (optional)
                     <input type="text" id="ev-credit-note" class="modal-input" placeholder="Reason for credit/transfer/refund...">
@@ -4212,6 +4226,7 @@
         document.querySelectorAll(".ev-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "credit"));
         document.getElementById("ev-credit-transfer-fields").style.display = "none";
         document.getElementById("ev-credit-refund-fields").style.display = "none";
+        document.getElementById("ev-credit-partial-fields").style.display = "none";
         document.getElementById("ev-credit-refund-method").value = "";
         document.getElementById("ev-credit-note").value = "";
         document.getElementById("ev-credit-submit").textContent = "Apply Credit";
@@ -4226,6 +4241,73 @@
     function closeEvCreditModal() {
         document.getElementById("ev-credit-overlay").style.display = "none";
         evCreditItemId = null;
+    }
+
+    function buildPartialRefundComponents() {
+        const item = allItems.find(r => r.id === evCreditItemId);
+        if (!item) return;
+        // Find the event this item belongs to
+        const ev = allEvents.find(e => {
+            const names = new Set([e.item_name.toLowerCase()]);
+            if (e.aliases) e.aliases.forEach(a => names.add(a.toLowerCase()));
+            return names.has((item.item_name || "").toLowerCase());
+        });
+        const eventName = ev ? ev.item_name : item.item_name;
+        const components = calculateWdComponents(item, eventName);
+        const container = document.getElementById("ev-credit-partial-items");
+        if (components && components.length) {
+            // Only show game-related components (not course fee, included games, markup)
+            const refundable = components.filter(c => ["net_games", "gross_games"].includes(c.key));
+            if (refundable.length === 0) {
+                container.innerHTML = '<div style="font-size:0.82rem; color:var(--text-muted);">No refundable game components found.</div>';
+                return;
+            }
+            container.innerHTML = refundable.map(c => `
+                <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem; padding:0.35rem 0.5rem; background:var(--bg-card); border:1px solid var(--border); border-radius:6px; cursor:pointer;">
+                    <input type="checkbox" class="partial-refund-cb" data-key="${c.key}" data-amount="${c.amount}" style="width:16px; height:16px;">
+                    <span style="flex:1; font-weight:500;">${escapeHtml(c.label)}</span>
+                    <span style="font-variant-numeric:tabular-nums; font-weight:600;">$${c.amount.toFixed(2)}</span>
+                </label>
+            `).join("");
+            container.querySelectorAll(".partial-refund-cb").forEach(cb => {
+                cb.addEventListener("change", updatePartialRefundTotal);
+            });
+        } else {
+            container.innerHTML = '<div style="font-size:0.82rem; color:var(--text-muted);">Unable to calculate component prices.</div>';
+        }
+        document.getElementById("ev-credit-partial-total").textContent = "Refund Total: $0.00";
+        document.getElementById("ev-credit-partial-games-note").textContent = "";
+    }
+
+    function updatePartialRefundTotal() {
+        let total = 0;
+        const checked = [];
+        document.querySelectorAll("#ev-credit-partial-items .partial-refund-cb:checked").forEach(cb => {
+            total += parseFloat(cb.dataset.amount) || 0;
+            checked.push(cb.dataset.key);
+        });
+        document.getElementById("ev-credit-partial-total").textContent = `Refund Total: $${total.toFixed(2)}`;
+        // Show what side_games will become
+        const item = allItems.find(r => r.id === evCreditItemId);
+        if (item) {
+            const currentGames = classifyGameType(item.side_games);
+            let newGames = currentGames;
+            if (currentGames === "BOTH") {
+                if (checked.includes("net_games") && checked.includes("gross_games")) newGames = "NONE";
+                else if (checked.includes("net_games")) newGames = "GROSS";
+                else if (checked.includes("gross_games")) newGames = "NET";
+            } else if (currentGames === "NET" && checked.includes("net_games")) {
+                newGames = "NONE";
+            } else if (currentGames === "GROSS" && checked.includes("gross_games")) {
+                newGames = "NONE";
+            }
+            if (newGames !== currentGames) {
+                document.getElementById("ev-credit-partial-games-note").innerHTML =
+                    `Games will change: <strong>${currentGames}</strong> → <strong>${newGames}</strong>`;
+            } else {
+                document.getElementById("ev-credit-partial-games-note").textContent = "";
+            }
+        }
     }
 
     async function submitEvCredit() {
@@ -4246,6 +4328,34 @@
                     body: JSON.stringify({ method, note }),
                 });
                 if (!res.ok) throw new Error((await res.json()).error || "Refund failed");
+            } else if (evCreditType === "partial") {
+                const method = document.getElementById("ev-credit-partial-method").value;
+                if (!method) { alert("Please select a refund method."); return; }
+                const components = {};
+                const checkedKeys = [];
+                document.querySelectorAll("#ev-credit-partial-items .partial-refund-cb:checked").forEach(cb => {
+                    components[cb.dataset.key] = parseFloat(cb.dataset.amount) || 0;
+                    checkedKeys.push(cb.dataset.key);
+                });
+                if (!Object.keys(components).length) { alert("Please select at least one component to refund."); return; }
+                // Compute new side_games
+                const item = allItems.find(r => r.id === evCreditItemId);
+                const currentGames = classifyGameType(item?.side_games);
+                let newGames = currentGames;
+                if (currentGames === "BOTH") {
+                    if (checkedKeys.includes("net_games") && checkedKeys.includes("gross_games")) newGames = "NONE";
+                    else if (checkedKeys.includes("net_games")) newGames = "GROSS";
+                    else if (checkedKeys.includes("gross_games")) newGames = "NET";
+                } else if (currentGames === "NET" && checkedKeys.includes("net_games")) {
+                    newGames = "NONE";
+                } else if (currentGames === "GROSS" && checkedKeys.includes("gross_games")) {
+                    newGames = "NONE";
+                }
+                const res = await fetch(`/api/items/${evCreditItemId}/partial-refund`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ method, components, new_side_games: newGames !== currentGames ? newGames : null, note }),
+                });
+                if (!res.ok) throw new Error((await res.json()).error || "Partial refund failed");
             } else {
                 const target = document.getElementById("ev-credit-target-event").value;
                 if (!target) { alert("Please select a target event."); return; }
@@ -6612,8 +6722,10 @@
                 document.querySelectorAll(".ev-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === evCreditType));
                 document.getElementById("ev-credit-transfer-fields").style.display = evCreditType === "transfer" ? "block" : "none";
                 document.getElementById("ev-credit-refund-fields").style.display = evCreditType === "refund" ? "block" : "none";
-                const labels = { credit: "Apply Credit", transfer: "Transfer", refund: "Refund" };
+                document.getElementById("ev-credit-partial-fields").style.display = evCreditType === "partial" ? "block" : "none";
+                const labels = { credit: "Apply Credit", transfer: "Transfer", refund: "Refund", partial: "Partial Refund" };
                 document.getElementById("ev-credit-submit").textContent = labels[evCreditType] || "Apply Credit";
+                if (evCreditType === "partial") buildPartialRefundComponents();
             });
         });
 
