@@ -2348,6 +2348,17 @@ def api_delete_alias(alias_id):
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/customers/winnings")
+@require_role("view-only")
+def api_customer_winnings():
+    """Get payout/winnings history for a customer."""
+    from email_parser.database import get_customer_winnings
+    name = request.args.get("customer_name", "").strip()
+    if not name:
+        return jsonify({"error": "customer_name required"}), 400
+    return jsonify(get_customer_winnings(name))
+
+
 @app.route("/api/customers/from-rsvp", methods=["POST"])
 @require_role("manager")
 def api_create_customer_from_rsvp():
@@ -5479,24 +5490,31 @@ def api_coo_chat():
     session = get_chat_session(session_id)
     messages = [{"role": m["role"], "content": m["content"]} for m in session.get("messages", [])]
 
-    # Build full business context from all tracker modules
-    full_context = build_coo_full_context()
+    try:
+        # Build full business context from all tracker modules
+        try:
+            full_context = build_coo_full_context()
+        except Exception:
+            full_context = "(Business intelligence temporarily unavailable)"
 
-    # Build master context — summaries of ALL past sessions
-    master_context = get_chat_master_context(exclude_session_id=session_id)
+        # Build master context — summaries of ALL past sessions
+        try:
+            master_context = get_chat_master_context(exclude_session_id=session_id)
+        except Exception:
+            master_context = ""
 
-    # Route the latest user message to a specialist agent
-    routed_agent = route_to_agent(user_message)
+        # Route the latest user message to a specialist agent
+        routed_agent = route_to_agent(user_message)
 
-    # Get the specialist's system prompt
-    agent = get_coo_agent(routed_agent)
-    specialist_prompt = agent["system_prompt"] if agent else ""
+        # Get the specialist's system prompt
+        agent = get_coo_agent(routed_agent)
+        specialist_prompt = agent["system_prompt"] if agent else ""
 
-    # Always respond as Chief of Staff, with specialist context
-    cos_agent = get_coo_agent("Chief of Staff")
-    cos_prompt = cos_agent["system_prompt"] if cos_agent else ""
+        # Always respond as Chief of Staff, with specialist context
+        cos_agent = get_coo_agent("Chief of Staff")
+        cos_prompt = cos_agent["system_prompt"] if cos_agent else ""
 
-    system_prompt = f"""{cos_prompt}
+        system_prompt = f"""{cos_prompt}
 
 --- SPECIALIST CONTEXT ---
 For this question, the {routed_agent} provided analysis context:
@@ -5507,13 +5525,12 @@ Live data from the TGF Transaction Tracker as of {datetime.now().strftime('%Y-%m
 
 {full_context}"""
 
-    if master_context:
-        system_prompt += f"""
+        if master_context:
+            system_prompt += f"""
 
 --- PERSISTENT MEMORY ---
 {master_context}"""
 
-    try:
         client = _anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
             model="claude-sonnet-4-5-20250929",
@@ -5550,7 +5567,7 @@ Live data from the TGF Transaction Tracker as of {datetime.now().strftime('%Y-%m
             "session_id": session_id,
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e), "session_id": session_id}), 500
 
 
 # ── COO Chat Session Management ────────────────────────────

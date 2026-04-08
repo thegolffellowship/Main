@@ -663,10 +663,25 @@
         return `
         <div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border);">
             <button type="button" class="cust-tab active" data-tab="transactions" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
+            <button type="button" class="cust-tab" data-tab="winnings" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Winnings</button>
+            <button type="button" class="cust-tab" data-tab="points" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Points</button>
             <button type="button" class="cust-tab" data-tab="info" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
         </div>
         <div class="cust-tab-content cust-tab-transactions">
             ${renderCustDetailMobile(customer)}
+        </div>
+        <div class="cust-tab-content cust-tab-winnings" style="display:none;">
+            <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}">
+                <div class="cust-winnings-wrapper" style="font-size:0.82rem;">
+                    <span style="color:var(--text-muted);">Loading winnings...</span>
+                </div>
+            </div>
+        </div>
+        <div class="cust-tab-content cust-tab-points" style="display:none;">
+            <div style="text-align:center; padding:2rem 1rem;">
+                <div style="font-size:1.5rem; color:var(--text-muted); margin-bottom:0.5rem;">Feature Coming Soon!</div>
+                <div style="font-size:0.85rem; color:var(--text-muted);">Season points tracking will be available here.</div>
+            </div>
         </div>
         <div class="cust-tab-content cust-tab-info" style="display:none;">
             <div class="mc-field-grid">
@@ -806,6 +821,19 @@
                             t.style.color = isActive ? "#2563eb" : "var(--text-muted)";
                         });
                         expandedCard.querySelector(".cust-tab-transactions").style.display = target === "transactions" ? "" : "none";
+                        const mWinnings = expandedCard.querySelector(".cust-tab-winnings");
+                        if (mWinnings) {
+                            mWinnings.style.display = target === "winnings" ? "" : "none";
+                            if (target === "winnings") {
+                                const wrapper = mWinnings.querySelector(".cust-winnings-wrapper");
+                                if (wrapper && wrapper.textContent.includes("Loading")) {
+                                    const custName = mWinnings.querySelector(".cust-winnings-container")?.dataset?.customerName;
+                                    if (custName) loadCustomerWinnings(custName, wrapper);
+                                }
+                            }
+                        }
+                        const mPoints = expandedCard.querySelector(".cust-tab-points");
+                        if (mPoints) mPoints.style.display = target === "points" ? "" : "none";
                         expandedCard.querySelector(".cust-tab-info").style.display = target === "info" ? "" : "none";
                     });
                 });
@@ -1148,9 +1176,11 @@
         // Tab bar — restore active tab from global state
         const _at = activeDetailTab;
         html += `<div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.75rem; border-bottom:2px solid var(--border);">
-            <button type="button" class="cust-tab ${_at === 'transactions' ? 'active' : ''}" data-tab="transactions" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'transactions' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'transactions' ? '#2563eb' : 'var(--text-muted)'};">Transactions</button>
-            <button type="button" class="cust-tab ${_at === 'scores' ? 'active' : ''}" data-tab="scores" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'scores' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'scores' ? '#2563eb' : 'var(--text-muted)'};">Scores</button>
-            <button type="button" class="cust-tab ${_at === 'info' ? 'active' : ''}" data-tab="info" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'info' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'info' ? '#2563eb' : 'var(--text-muted)'};">Info</button>
+            <button type="button" class="cust-tab ${_at === 'transactions' ? 'active' : ''}" data-tab="transactions" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'transactions' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'transactions' ? '#2563eb' : 'var(--text-muted)'};">Transactions</button>
+            <button type="button" class="cust-tab ${_at === 'scores' ? 'active' : ''}" data-tab="scores" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'scores' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'scores' ? '#2563eb' : 'var(--text-muted)'};">Scores</button>
+            <button type="button" class="cust-tab ${_at === 'winnings' ? 'active' : ''}" data-tab="winnings" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'winnings' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'winnings' ? '#2563eb' : 'var(--text-muted)'};">Winnings</button>
+            <button type="button" class="cust-tab ${_at === 'points' ? 'active' : ''}" data-tab="points" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'points' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'points' ? '#2563eb' : 'var(--text-muted)'};">Points</button>
+            <button type="button" class="cust-tab ${_at === 'info' ? 'active' : ''}" data-tab="info" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at === 'info' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at === 'info' ? '#2563eb' : 'var(--text-muted)'};">Info</button>
         </div>`;
 
         // Transactions tab content
@@ -1214,6 +1244,23 @@
         // Info tab content
         html += `<div class="cust-tab-content cust-tab-info" style="${_at !== 'info' ? 'display:none;' : ''}">${renderCustInfoPanel(customer)}</div>`;
 
+        // Winnings tab content (loaded async)
+        html += `<div class="cust-tab-content cust-tab-winnings" style="${_at !== 'winnings' ? 'display:none;' : ''}">
+            <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}">
+                <div class="cust-winnings-wrapper" style="font-size:0.82rem;">
+                    <span style="color:var(--text-muted);">Loading winnings...</span>
+                </div>
+            </div>
+        </div>`;
+
+        // Points tab content (Coming Soon placeholder)
+        html += `<div class="cust-tab-content cust-tab-points" style="${_at !== 'points' ? 'display:none;' : ''}">
+            <div style="text-align:center; padding:2rem 1rem;">
+                <div style="font-size:1.5rem; color:var(--text-muted); margin-bottom:0.5rem;">Feature Coming Soon!</div>
+                <div style="font-size:0.85rem; color:var(--text-muted);">Season points tracking will be available here.</div>
+            </div>
+        </div>`;
+
         return html;
     }
 
@@ -1272,6 +1319,49 @@
             wrapper.innerHTML = html;
         } catch (err) {
             wrapper.innerHTML = '<span style="color:#dc2626;">Failed to load scores.</span>';
+        }
+    }
+
+    async function loadCustomerWinnings(customerName, wrapper) {
+        try {
+            const res = await fetch(`/api/customers/winnings?customer_name=${encodeURIComponent(customerName)}`);
+            const data = await res.json();
+            if (!data.golfer_name) {
+                wrapper.innerHTML = '<span style="color:var(--text-muted);">No payout records found for this customer.</span>';
+                return;
+            }
+            if (!data.payouts || data.payouts.length === 0) {
+                wrapper.innerHTML = `<div style="margin-bottom:0.5rem;">Linked golfer: <strong>${escapeHtml(data.golfer_name)}</strong></div>
+                    <span style="color:var(--text-muted);">No payouts recorded yet.</span>`;
+                return;
+            }
+
+            let html = `<div style="margin-bottom:0.75rem; display:flex; align-items:baseline; gap:0.5rem;">
+                <span style="font-size:1.5rem; font-weight:700; color:#16a34a;">$${data.total_winnings.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                <span style="font-size:0.85rem; color:var(--text-muted);">total winnings</span>
+                <span style="font-size:0.85rem; color:var(--text-muted); margin-left:0.5rem;">(${data.payouts.length} payout${data.payouts.length !== 1 ? 's' : ''})</span>
+            </div>`;
+
+            html += '<table style="width:100%; border-collapse:collapse; font-size:0.78rem;">';
+            html += '<thead><tr style="border-bottom:1px solid var(--border);">';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:left;">Date</th>';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:left;">Event</th>';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:left;">Category</th>';
+            html += '<th style="padding:0.3rem 0.6rem; text-align:right;">Amount</th>';
+            html += '</tr></thead><tbody>';
+
+            data.payouts.forEach(p => {
+                html += `<tr style="border-bottom:1px solid var(--border);">`;
+                html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(p.event_date || '')}</td>`;
+                html += `<td style="padding:0.3rem 0.6rem;">${escapeHtml(p.event_name || '')}</td>`;
+                html += `<td style="padding:0.3rem 0.6rem;"><span style="background:#dbeafe; color:#1e40af; padding:0.1rem 0.4rem; border-radius:3px; font-size:0.72rem; font-weight:500;">${escapeHtml(p.category || '')}</span></td>`;
+                html += `<td style="padding:0.3rem 0.6rem; text-align:right; font-weight:600; color:#16a34a;">$${(p.amount || 0).toFixed(2)}</td>`;
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            wrapper.innerHTML = html;
+        } catch (err) {
+            wrapper.innerHTML = '<span style="color:#dc2626;">Failed to load winnings.</span>';
         }
     }
 
@@ -1336,6 +1426,21 @@
                     }
                 }
                 container.querySelector(".cust-tab-info").style.display = target === "info" ? "" : "none";
+                const winningsTab = container.querySelector(".cust-tab-winnings");
+                if (winningsTab) {
+                    winningsTab.style.display = target === "winnings" ? "" : "none";
+                    if (target === "winnings") {
+                        const wrapper = winningsTab.querySelector(".cust-winnings-wrapper");
+                        if (wrapper && wrapper.textContent.includes("Loading")) {
+                            const custName = winningsTab.querySelector(".cust-winnings-container")?.dataset?.customerName;
+                            if (custName) loadCustomerWinnings(custName, wrapper);
+                        }
+                    }
+                }
+                const pointsTab = container.querySelector(".cust-tab-points");
+                if (pointsTab) {
+                    pointsTab.style.display = target === "points" ? "" : "none";
+                }
             });
         });
 
@@ -1347,6 +1452,17 @@
                 if (wrapper && wrapper.textContent.includes("Loading")) {
                     const custName = scoresTab.querySelector(".cust-scores-container")?.dataset?.customerName;
                     if (custName) loadCustomerScores(custName, wrapper);
+                }
+            }
+        }
+        // Auto-load winnings if winnings tab is already active on re-render
+        if (activeDetailTab === "winnings") {
+            const winningsTab = container.querySelector(".cust-tab-winnings");
+            if (winningsTab) {
+                const wrapper = winningsTab.querySelector(".cust-winnings-wrapper");
+                if (wrapper && wrapper.textContent.includes("Loading")) {
+                    const custName = winningsTab.querySelector(".cust-winnings-container")?.dataset?.customerName;
+                    if (custName) loadCustomerWinnings(custName, wrapper);
                 }
             }
         }
@@ -1532,13 +1648,16 @@
 
         // Tab bar — restore active tab from global state
         const _at2 = activeDetailTab;
+        const _panelTxnActive = (_at2 === 'transactions' || _at2 === 'scores');
         panelHtml += `<div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.75rem; border-bottom:2px solid var(--border);">
-            <button type="button" class="cust-tab ${_at2 === 'transactions' || (_at2 === 'scores') ? 'active' : ''}" data-tab="transactions" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'transactions' || _at2 === 'scores' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'transactions' || _at2 === 'scores' ? '#2563eb' : 'var(--text-muted)'};">Transactions</button>
-            <button type="button" class="cust-tab ${_at2 === 'info' ? 'active' : ''}" data-tab="info" style="padding:0.35rem 1rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'info' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'info' ? '#2563eb' : 'var(--text-muted)'};">Info</button>
+            <button type="button" class="cust-tab ${_panelTxnActive ? 'active' : ''}" data-tab="transactions" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_panelTxnActive ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_panelTxnActive ? '#2563eb' : 'var(--text-muted)'};">Transactions</button>
+            <button type="button" class="cust-tab ${_at2 === 'winnings' ? 'active' : ''}" data-tab="winnings" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'winnings' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'winnings' ? '#2563eb' : 'var(--text-muted)'};">Winnings</button>
+            <button type="button" class="cust-tab ${_at2 === 'points' ? 'active' : ''}" data-tab="points" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'points' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'points' ? '#2563eb' : 'var(--text-muted)'};">Points</button>
+            <button type="button" class="cust-tab ${_at2 === 'info' ? 'active' : ''}" data-tab="info" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'info' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'info' ? '#2563eb' : 'var(--text-muted)'};">Info</button>
         </div>`;
 
         // Transactions tab
-        panelHtml += `<div class="cust-tab-content cust-tab-transactions" style="${_at2 === 'info' ? 'display:none;' : ''}">`;
+        panelHtml += `<div class="cust-tab-content cust-tab-transactions" style="${!_panelTxnActive ? 'display:none;' : ''}">`;
         panelHtml += '<table style="width:100%; border-collapse:collapse;"><thead><tr>';
         panelHtml += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
         panelHtml += '</tr></thead><tbody>';
@@ -1570,6 +1689,23 @@
 
         // Info tab
         panelHtml += `<div class="cust-tab-content cust-tab-info" style="${_at2 !== 'info' ? 'display:none;' : ''}">${renderCustInfoPanel(customer)}</div>`;
+
+        // Winnings tab (loaded async)
+        panelHtml += `<div class="cust-tab-content cust-tab-winnings" style="${_at2 !== 'winnings' ? 'display:none;' : ''}">
+            <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}">
+                <div class="cust-winnings-wrapper" style="font-size:0.82rem;">
+                    <span style="color:var(--text-muted);">Loading winnings...</span>
+                </div>
+            </div>
+        </div>`;
+
+        // Points tab (Coming Soon)
+        panelHtml += `<div class="cust-tab-content cust-tab-points" style="${_at2 !== 'points' ? 'display:none;' : ''}">
+            <div style="text-align:center; padding:2rem 1rem;">
+                <div style="font-size:1.5rem; color:var(--text-muted); margin-bottom:0.5rem;">Feature Coming Soon!</div>
+                <div style="font-size:0.85rem; color:var(--text-muted);">Season points tracking will be available here.</div>
+            </div>
+        </div>`;
 
         panelBody.innerHTML = panelHtml;
 

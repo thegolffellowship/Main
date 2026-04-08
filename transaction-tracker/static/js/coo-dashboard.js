@@ -2,7 +2,7 @@
    COO Dashboard — Operations Command Center
    ========================================================= */
 
-const COO = { actionFilter: 'open', chatMessages: [], context: {}, selectedItems: new Set(), chatSessionId: null, chatSessions: [] };
+const COO = { actionFilter: 'open', chatMessages: [], context: {}, selectedItems: new Set(), chatSessionId: null, chatSessions: [], collapsedGroups: new Set() };
 
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
@@ -75,17 +75,19 @@ function renderActionItems(items) {
     }
 
     // Render grouped by topic with collapsible headers
+    // Default all groups to collapsed; only open groups the user has explicitly opened
     el.innerHTML = sortedCats.map(cat => {
         const catItems = groups[cat];
         const actionableCount = catItems.filter(i => i.status !== 'completed' && i.status !== 'dismissed').length;
+        const isOpen = COO.collapsedGroups.has(cat); // tracks explicitly-opened groups
         return `<div class="coo-topic-group" data-category="${cat}">
             <div class="coo-topic-header">
-                <span class="coo-topic-toggle">&#9660;</span>
+                <span class="coo-topic-toggle">${isOpen ? '&#9660;' : '&#9654;'}</span>
                 <span class="coo-cat-badge">${cat}</span>
                 <span class="coo-topic-count">${catItems.length} item${catItems.length !== 1 ? 's' : ''}${actionableCount !== catItems.length ? ` (${actionableCount} actionable)` : ''}</span>
                 <button class="btn btn-secondary btn-sm coo-btn-dismiss-group" data-category="${cat}" style="margin-left:auto;font-size:0.7rem;padding:0.15rem 0.5rem;color:var(--text-muted);">Dismiss Group</button>
             </div>
-            <div class="coo-topic-items">${catItems.map(renderItem).join('')}</div>
+            <div class="coo-topic-items" style="${isOpen ? '' : 'display:none;'}">${catItems.map(renderItem).join('')}</div>
         </div>`;
     }).join('');
 
@@ -148,16 +150,24 @@ function renderActionItems(items) {
         });
     });
 
-    // Topic group collapse/expand
+    // Topic group collapse/expand — persist open/close state across re-renders
     el.querySelectorAll('.coo-topic-header').forEach(header => {
         header.addEventListener('click', (e) => {
             if (e.target.closest('.coo-btn-dismiss-group')) return;
             const group = header.closest('.coo-topic-group');
-            const items = group.querySelector('.coo-topic-items');
+            const cat = group.dataset.category;
+            const itemsEl = group.querySelector('.coo-topic-items');
             const toggle = header.querySelector('.coo-topic-toggle');
-            const collapsed = items.style.display === 'none';
-            items.style.display = collapsed ? '' : 'none';
-            toggle.innerHTML = collapsed ? '&#9660;' : '&#9654;';
+            const collapsed = itemsEl.style.display === 'none';
+            if (collapsed) {
+                COO.collapsedGroups.add(cat);
+                itemsEl.style.display = '';
+                toggle.innerHTML = '&#9660;';
+            } else {
+                COO.collapsedGroups.delete(cat);
+                itemsEl.style.display = 'none';
+                toggle.innerHTML = '&#9654;';
+            }
         });
     });
 
@@ -349,6 +359,7 @@ async function sendChatMessage() {
                 context: COO.context,
             },
         });
+        // Always capture session_id (even on error responses)
         if (resp.session_id) {
             COO.chatSessionId = resp.session_id;
         }
