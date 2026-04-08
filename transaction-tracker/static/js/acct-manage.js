@@ -535,3 +535,123 @@ async function closeMonth() {
         alert('Close error: ' + e.message);
     }
 }
+
+
+// ── Keyword Rules Tab ───────────────────────────────────
+
+async function loadKeywordRules() {
+    // Populate category/entity dropdowns from master data
+    const catSel = document.getElementById('kw-category');
+    const entSel = document.getElementById('kw-entity');
+    if (catSel && catSel.options.length <= 1) {
+        ACCT.categories.forEach(c => {
+            if (c.is_active) {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = `${c.name} (${c.type})`;
+                catSel.appendChild(opt);
+            }
+        });
+    }
+    if (entSel && entSel.options.length <= 1) {
+        ACCT.entities.forEach(e => {
+            const opt = document.createElement('option');
+            opt.value = e.id;
+            opt.textContent = e.short_name || e.name;
+            entSel.appendChild(opt);
+        });
+    }
+
+    // Wire up Add button (once)
+    const addBtn = document.getElementById('kw-add-btn');
+    if (addBtn && !addBtn._wired) {
+        addBtn._wired = true;
+        addBtn.addEventListener('click', addKeywordRule);
+    }
+
+    // Fetch and render rules
+    try {
+        const rules = await api('/keyword-rules');
+        renderKeywordRules(rules);
+    } catch (e) {
+        document.getElementById('kw-rules-table').innerHTML =
+            '<p style="color:var(--red);">Failed to load rules: ' + e.message + '</p>';
+    }
+}
+
+function renderKeywordRules(rules) {
+    const el = document.getElementById('kw-rules-table');
+    if (!rules.length) {
+        el.innerHTML = '<p style="color:var(--text-muted);font-size:0.88rem;">No keyword rules yet. Add one above to get started.</p>';
+        return;
+    }
+
+    const matchLabels = { contains: 'contains', starts_with: 'starts with', exact: 'exactly matches' };
+
+    let html = '<table style="width:100%;border-collapse:collapse;">';
+    html += '<thead><tr style="border-bottom:2px solid var(--border);">';
+    html += '<th style="text-align:left;padding:0.5rem;font-size:0.75rem;font-weight:600;color:var(--text-muted);">MATCH TYPE</th>';
+    html += '<th style="text-align:left;padding:0.5rem;font-size:0.75rem;font-weight:600;color:var(--text-muted);">KEYWORD</th>';
+    html += '<th style="text-align:left;padding:0.5rem;font-size:0.75rem;font-weight:600;color:var(--text-muted);">CATEGORY</th>';
+    html += '<th style="text-align:left;padding:0.5rem;font-size:0.75rem;font-weight:600;color:var(--text-muted);">ENTITY</th>';
+    html += '<th style="text-align:center;padding:0.5rem;font-size:0.75rem;font-weight:600;color:var(--text-muted);">ACTIVE</th>';
+    html += '<th style="text-align:right;padding:0.5rem;font-size:0.75rem;font-weight:600;color:var(--text-muted);">ACTIONS</th>';
+    html += '</tr></thead><tbody>';
+
+    rules.forEach(r => {
+        const activeColor = r.is_active ? '#059669' : '#9ca3af';
+        const activeLabel = r.is_active ? 'Active' : 'Disabled';
+        html += `<tr style="border-bottom:1px solid #f1f5f9;">`;
+        html += `<td style="padding:0.5rem;font-size:0.85rem;">${matchLabels[r.match_type] || r.match_type}</td>`;
+        html += `<td style="padding:0.5rem;font-size:0.85rem;font-weight:600;">"${r.keyword}"</td>`;
+        html += `<td style="padding:0.5rem;font-size:0.85rem;">${r.category_name || '—'}</td>`;
+        html += `<td style="padding:0.5rem;font-size:0.85rem;">${r.entity_name || 'Any'}</td>`;
+        html += `<td style="padding:0.5rem;text-align:center;"><span style="color:${activeColor};font-weight:600;font-size:0.8rem;cursor:pointer;" onclick="toggleKeywordRule(${r.id}, ${r.is_active ? 0 : 1})">${activeLabel}</span></td>`;
+        html += `<td style="padding:0.5rem;text-align:right;"><button class="btn btn-secondary" style="font-size:0.75rem;padding:0.2rem 0.5rem;color:var(--red);" onclick="deleteKeywordRule(${r.id})">Delete</button></td>`;
+        html += `</tr>`;
+    });
+
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+async function addKeywordRule() {
+    const keyword = document.getElementById('kw-keyword').value.trim();
+    if (!keyword) { alert('Enter a keyword'); return; }
+    const catId = document.getElementById('kw-category').value || null;
+    const entId = document.getElementById('kw-entity').value || null;
+    const matchType = document.getElementById('kw-match-type').value;
+
+    try {
+        await api('/keyword-rules', {
+            method: 'POST',
+            body: { keyword, match_type: matchType, category_id: catId ? parseInt(catId) : null, entity_id: entId ? parseInt(entId) : null },
+        });
+        document.getElementById('kw-keyword').value = '';
+        loadKeywordRules();
+    } catch (e) {
+        alert('Failed to add rule: ' + e.message);
+    }
+}
+
+async function toggleKeywordRule(ruleId, newState) {
+    try {
+        await api('/keyword-rules/' + ruleId, {
+            method: 'PATCH',
+            body: { is_active: newState },
+        });
+        loadKeywordRules();
+    } catch (e) {
+        alert('Failed to update: ' + e.message);
+    }
+}
+
+async function deleteKeywordRule(ruleId) {
+    if (!confirm('Delete this keyword rule?')) return;
+    try {
+        await api('/keyword-rules/' + ruleId, { method: 'DELETE' });
+        loadKeywordRules();
+    } catch (e) {
+        alert('Failed to delete: ' + e.message);
+    }
+}

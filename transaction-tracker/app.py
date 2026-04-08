@@ -170,6 +170,13 @@ from email_parser.database import (
     get_reconciliation_summary,
     get_coo_agents,
     get_agent_action_log,
+    batch_dismiss_action_items,
+    consolidate_action_items,
+    # Keyword rules
+    get_acct_keyword_rules,
+    create_acct_keyword_rule,
+    update_acct_keyword_rule,
+    delete_acct_keyword_rule,
     # TGF Payouts
     get_tgf_data,
     add_tgf_event,
@@ -177,6 +184,16 @@ from email_parser.database import (
     import_tgf_golfers,
     update_tgf_event,
     delete_tgf_event,
+    # COO Chat persistence
+    get_chat_sessions,
+    get_chat_session,
+    create_chat_session,
+    add_chat_message,
+    update_chat_session_title,
+    update_chat_session_summary,
+    get_chat_master_context,
+    build_coo_full_context,
+    delete_chat_session,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -5067,6 +5084,38 @@ def api_acct_set_rule(aid):
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/accounting/keyword-rules")
+@require_role("admin")
+def api_acct_keyword_rules():
+    return jsonify(get_acct_keyword_rules())
+
+
+@app.route("/api/accounting/keyword-rules", methods=["POST"])
+@require_role("admin")
+def api_acct_create_keyword_rule():
+    d = request.json or {}
+    if not d.get("keyword"):
+        return jsonify({"error": "keyword is required"}), 400
+    return jsonify(create_acct_keyword_rule(
+        keyword=d["keyword"],
+        match_type=d.get("match_type", "contains"),
+        category_id=d.get("category_id"),
+        entity_id=d.get("entity_id"),
+    ))
+
+
+@app.route("/api/accounting/keyword-rules/<int:rule_id>", methods=["PATCH"])
+@require_role("admin")
+def api_acct_update_keyword_rule(rule_id):
+    return jsonify(update_acct_keyword_rule(rule_id, request.json or {}))
+
+
+@app.route("/api/accounting/keyword-rules/<int:rule_id>", methods=["DELETE"])
+@require_role("admin")
+def api_acct_delete_keyword_rule(rule_id):
+    return jsonify(delete_acct_keyword_rule(rule_id))
+
+
 @app.route("/api/accounting/events-list")
 @require_role("admin")
 def api_acct_events_list():
@@ -5346,6 +5395,23 @@ def api_coo_update_action_item(aid):
     return jsonify(update_action_item(aid, d))
 
 
+@app.route("/api/coo/action-items/batch-dismiss", methods=["POST"])
+@require_role("admin")
+def api_coo_batch_dismiss():
+    d = request.json or {}
+    return jsonify(batch_dismiss_action_items(
+        item_ids=d.get("item_ids"),
+        category=d.get("category"),
+        status_filter=d.get("status_filter", "open"),
+    ))
+
+
+@app.route("/api/coo/action-items/consolidate", methods=["POST"])
+@require_role("admin")
+def api_coo_consolidate():
+    return jsonify(consolidate_action_items())
+
+
 @app.route("/api/coo/financial-snapshot")
 @require_role("admin")
 def api_coo_financial_snapshot():
@@ -5371,22 +5437,56 @@ def api_coo_review_queue():
 @app.route("/api/coo/chat", methods=["POST"])
 @require_role("admin")
 def api_coo_chat():
-    """COO Chat — routes to specialist agent, responds as Chief of Staff."""
+    """COO Chat — routes to specialist agent, responds as Chief of Staff.
+    Now persists all messages to coo_chat_sessions/coo_chat_messages so the AI
+    retains full conversation context across page reloads and sessions."""
     from email_parser.database import route_to_agent, get_coo_agent, log_agent_action
     d = request.json or {}
-    messages = d.get("messages", [])
+    user_message = d.get("message", "")
+    session_id = d.get("session_id")
     context = d.get("context", {})
 
-    if not messages:
-        return jsonify({"error": "messages required"}), 400
+    # Legacy support: if caller sends "messages" array instead of "message" string
+    if not user_message and d.get("messages"):
+        msgs = d["messages"]
+        user_message = msgs[-1].get("content", "") if msgs else ""
+
+    if not user_message:
+        return jsonify({"error": "message required"}), 400
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         return jsonify({"error": "ANTHROPIC_API_KEY not configured"}), 500
 
+    # Create or load session
+    if session_id:
+        session = get_chat_session(session_id)
+        if not session:
+            session = create_chat_session()
+    else:
+        session = create_chat_session()
+    session_id = session["id"]
+
+    # Save the user message
+    add_chat_message(session_id, "user", user_message)
+
+    # Auto-title the session from the first user message
+    if session.get("title") == "New Chat" and user_message:
+        short_title = user_message[:60] + ("..." if len(user_message) > 60 else "")
+        update_chat_session_title(session_id, short_title)
+
+    # Build message history from the DB (full session context for the AI)
+    session = get_chat_session(session_id)
+    messages = [{"role": m["role"], "content": m["content"]} for m in session.get("messages", [])]
+
+    # Build full business context from all tracker modules
+    full_context = build_coo_full_context()
+
+    # Build master context — summaries of ALL past sessions
+    master_context = get_chat_master_context(exclude_session_id=session_id)
+
     # Route the latest user message to a specialist agent
-    latest_msg = messages[-1].get("content", "") if messages else ""
-    routed_agent = route_to_agent(latest_msg)
+    routed_agent = route_to_agent(user_message)
 
     # Get the specialist's system prompt
     agent = get_coo_agent(routed_agent)
@@ -5402,8 +5502,16 @@ def api_coo_chat():
 For this question, the {routed_agent} provided analysis context:
 {specialist_prompt}
 
-CURRENT STATE:
-{json.dumps(context, indent=2)}"""
+--- FULL BUSINESS INTELLIGENCE ---
+Live data from the TGF Transaction Tracker as of {datetime.now().strftime('%Y-%m-%d %H:%M')}:
+
+{full_context}"""
+
+    if master_context:
+        system_prompt += f"""
+
+--- PERSISTENT MEMORY ---
+{master_context}"""
 
     try:
         client = _anthropic.Anthropic(api_key=api_key)
@@ -5414,18 +5522,69 @@ CURRENT STATE:
             messages=messages,
         )
 
+        assistant_content = resp.content[0].text
+
+        # Save the assistant response
+        add_chat_message(session_id, "assistant", assistant_content, routed_to=routed_agent)
+
+        # Auto-summarize the session after each exchange (lightweight — no extra AI call)
+        # Build summary from key topics discussed: all user messages, condensed
+        updated_session = get_chat_session(session_id)
+        user_msgs = [m["content"] for m in updated_session.get("messages", []) if m["role"] == "user"]
+        asst_msgs = [m["content"] for m in updated_session.get("messages", []) if m["role"] == "assistant"]
+        # Summary = first 3 user questions + last assistant key points
+        topics = "; ".join(msg[:80] for msg in user_msgs[:5])
+        last_answer = asst_msgs[-1][:150] if asst_msgs else ""
+        auto_summary = f"Topics: {topics}. Last response: {last_answer}"
+        update_chat_session_summary(session_id, auto_summary[:500])
+
         # Log the routing decision
         log_agent_action(routed_agent, "chat_routing",
-                         f"Routed question to {routed_agent}: {latest_msg[:100]}",
+                         f"Routed question to {routed_agent}: {user_message[:100]}",
                          outcome="response_generated")
 
         return jsonify({
             "role": "assistant",
-            "content": resp.content[0].text,
+            "content": assistant_content,
             "routed_to": routed_agent,
+            "session_id": session_id,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── COO Chat Session Management ────────────────────────────
+
+@app.route("/api/coo/chat-sessions", methods=["GET"])
+@require_role("admin")
+def api_coo_chat_sessions():
+    """List recent chat sessions."""
+    return jsonify(get_chat_sessions(limit=30))
+
+
+@app.route("/api/coo/chat-sessions", methods=["POST"])
+@require_role("admin")
+def api_coo_create_chat_session():
+    """Create a new chat session."""
+    d = request.json or {}
+    return jsonify(create_chat_session(title=d.get("title", "New Chat")))
+
+
+@app.route("/api/coo/chat-sessions/<int:sid>", methods=["GET"])
+@require_role("admin")
+def api_coo_get_chat_session(sid):
+    """Get a chat session with all messages."""
+    sess = get_chat_session(sid)
+    if not sess:
+        return jsonify({"error": "Session not found"}), 404
+    return jsonify(sess)
+
+
+@app.route("/api/coo/chat-sessions/<int:sid>", methods=["DELETE"])
+@require_role("admin")
+def api_coo_delete_chat_session(sid):
+    """Delete a chat session."""
+    return jsonify(delete_chat_session(sid))
 
 
 @app.route("/api/coo/send-daily-email", methods=["POST"])

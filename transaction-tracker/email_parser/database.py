@@ -1280,6 +1280,24 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # Keyword-based categorization rules (user-defined)
+        # e.g. "if description contains 'Winnings' → category 'Side Game Payouts', entity 'TGF'"
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_keyword_rules (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                keyword         TEXT NOT NULL,
+                match_type      TEXT NOT NULL DEFAULT 'contains',
+                category_id     INTEGER,
+                entity_id       INTEGER,
+                is_active       INTEGER DEFAULT 1,
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (category_id) REFERENCES acct_categories(id),
+                FOREIGN KEY (entity_id) REFERENCES acct_entities(id)
+            )
+            """
+        )
+
         # Allocation tracking — breaks down every GoDaddy order's dollars
         conn.execute(
             """
@@ -1521,6 +1539,36 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_name ON agent_action_log(agent_name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_date ON agent_action_log(created_at)")
+
+        # ── COO Chat Sessions ───────────────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coo_chat_sessions (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                title           TEXT DEFAULT 'New Chat',
+                summary         TEXT DEFAULT '',
+                created_at      TEXT DEFAULT (datetime('now')),
+                updated_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        # Migration: add summary column if missing
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(coo_chat_sessions)").fetchall()]
+        if "summary" not in cols:
+            conn.execute("ALTER TABLE coo_chat_sessions ADD COLUMN summary TEXT DEFAULT ''")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coo_chat_messages (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id      INTEGER NOT NULL REFERENCES coo_chat_sessions(id) ON DELETE CASCADE,
+                role            TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                routed_to       TEXT,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_msg_session ON coo_chat_messages(session_id)")
 
         # ── TGF Payouts ─────────────────────────────────────────────
         conn.execute(
@@ -6913,6 +6961,63 @@ def get_all_acct_account_rules(db_path: str | Path | None = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Keyword Categorization Rules
+# ---------------------------------------------------------------------------
+
+def get_acct_keyword_rules(db_path: str | Path | None = None) -> list[dict]:
+    """Return all keyword categorization rules with category/entity names."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT kr.*, c.name as category_name, e.short_name as entity_name
+               FROM acct_keyword_rules kr
+               LEFT JOIN acct_categories c ON c.id = kr.category_id
+               LEFT JOIN acct_entities e ON e.id = kr.entity_id
+               ORDER BY kr.keyword"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_acct_keyword_rule(keyword: str, match_type: str = "contains",
+                             category_id: int | None = None,
+                             entity_id: int | None = None,
+                             db_path: str | Path | None = None) -> dict:
+    """Create a new keyword rule."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO acct_keyword_rules (keyword, match_type, category_id, entity_id)
+               VALUES (?, ?, ?, ?)""",
+            (keyword.strip(), match_type, category_id, entity_id),
+        )
+        conn.commit()
+        return {"id": conn.execute("SELECT last_insert_rowid()").fetchone()[0]}
+
+
+def update_acct_keyword_rule(rule_id: int, data: dict,
+                             db_path: str | Path | None = None) -> dict:
+    """Update an existing keyword rule."""
+    fields, values = [], []
+    for key in ("keyword", "match_type", "category_id", "entity_id", "is_active"):
+        if key in data:
+            fields.append(f"{key} = ?")
+            values.append(data[key])
+    if not fields:
+        return {"error": "No fields to update"}
+    values.append(rule_id)
+    with _connect(db_path) as conn:
+        conn.execute(f"UPDATE acct_keyword_rules SET {', '.join(fields)} WHERE id = ?", values)
+        conn.commit()
+    return {"updated": True}
+
+
+def delete_acct_keyword_rule(rule_id: int, db_path: str | Path | None = None) -> dict:
+    """Delete a keyword rule."""
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM acct_keyword_rules WHERE id = ?", (rule_id,))
+        conn.commit()
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
 # Transactions (with splits)
 # ---------------------------------------------------------------------------
 
@@ -7846,9 +7951,12 @@ def auto_categorize_transactions(descriptions: list[str],
     Strategy:
     1. Exact vendor match from past categorisations (confidence: "high")
     2. Fuzzy vendor match — same vendor prefix (confidence: "medium")
-    3. Claude AI classification (confidence: "ai")
+    3. User-defined keyword rules (confidence: "rule")
+    4. Claude AI classification (confidence: "ai")
     """
     rules = _get_category_rules(db_path)
+    keyword_rules = get_acct_keyword_rules(db_path=db_path)
+    keyword_rules = [kr for kr in keyword_rules if kr.get("is_active")]
     categories = get_acct_categories(db_path=db_path)
     entities = get_all_acct_entities(db_path=db_path)
 
@@ -7899,7 +8007,33 @@ def auto_categorize_transactions(descriptions: list[str],
             })
             continue
 
-        # 3. Queue for AI
+        # 3. User-defined keyword rules
+        kw_match = None
+        for kr in keyword_rules:
+            kw = kr["keyword"].upper()
+            mt = kr.get("match_type", "contains")
+            if mt == "exact" and desc_upper == kw:
+                kw_match = kr
+                break
+            elif mt == "starts_with" and desc_upper.startswith(kw):
+                kw_match = kr
+                break
+            elif mt == "contains" and kw in desc_upper:
+                kw_match = kr
+                break
+        if kw_match:
+            results.append({
+                "description": desc,
+                "category_id": kw_match["category_id"],
+                "category_name": kw_match["category_name"],
+                "entity_id": kw_match["entity_id"],
+                "entity_name": kw_match["entity_name"],
+                "confidence": "rule",
+                "source": f"keyword rule: '{kw_match['keyword']}'",
+            })
+            continue
+
+        # 4. Queue for AI
         ai_batch.append((i, desc, txn_type))
         results.append(None)  # placeholder
 
@@ -7975,6 +8109,21 @@ def _ai_categorize_batch(items: list[tuple[str, str]],
     if account_context:
         acct_hint = f"\n\nACCOUNT CONTEXT:\n{account_context}"
 
+    # User-defined keyword rules for AI context
+    kw_rules_hint = ""
+    try:
+        kw_rules = get_acct_keyword_rules(db_path=db_path)
+        active_kw = [r for r in kw_rules if r.get("is_active")]
+        if active_kw:
+            kw_rules_hint = "\n\nUSER-DEFINED KEYWORD RULES (MUST follow these):\n" + "\n".join(
+                f"  - If description {r['match_type']} '{r['keyword']}' → "
+                f"category_id={r['category_id']} ({r['category_name'] or '?'})"
+                f"{', entity_id=' + str(r['entity_id']) + ' (' + (r['entity_name'] or '?') + ')' if r['entity_id'] else ''}"
+                for r in active_kw
+            )
+    except Exception:
+        pass
+
     txn_list = "\n".join(
         f"  {i+1}. [{ttype.upper()}] {desc}"
         for i, (desc, ttype) in enumerate(items)
@@ -7986,7 +8135,7 @@ Categorize each transaction and optionally link it to a TGF event.
 ENTITIES:
 {entity_list}
 
-{cat_list}{event_context}{acct_hint}
+{cat_list}{event_context}{acct_hint}{kw_rules_hint}
 
 TRANSACTIONS TO CATEGORIZE:
 {txn_list}
@@ -8561,14 +8710,44 @@ def update_expense_transaction(txn_id: int, fields: dict,
 
 
 def save_action_item(data: dict, db_path: str | Path | None = None) -> dict:
+    """Insert a new action item, skipping if a similar open item already exists.
+
+    Dedup checks (in order):
+    1. Same email_uid (if provided)
+    2. Same subject + category with status 'open' or 'in_progress'
+    """
     with _connect(db_path) as conn:
+        # Dedup: exact email_uid match
+        uid = data.get("email_uid")
+        if uid:
+            existing = conn.execute(
+                "SELECT id FROM action_items WHERE email_uid = ? LIMIT 1", (uid,)
+            ).fetchone()
+            if existing:
+                row = conn.execute("SELECT * FROM action_items WHERE id = ?", (existing["id"],)).fetchone()
+                return dict(row) if row else data
+
+        # Dedup: same subject + category still open
+        subject = (data.get("subject") or "").strip()
+        category = data.get("category", "other")
+        if subject:
+            existing = conn.execute(
+                """SELECT id FROM action_items
+                   WHERE subject = ? AND category = ? AND status IN ('open', 'in_progress')
+                   LIMIT 1""",
+                (subject, category),
+            ).fetchone()
+            if existing:
+                row = conn.execute("SELECT * FROM action_items WHERE id = ?", (existing["id"],)).fetchone()
+                return dict(row) if row else data
+
         cur = conn.execute(
             """INSERT INTO action_items
                (email_uid, subject, from_name, from_email, summary, urgency,
                 category, email_date, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (data.get("email_uid"), data.get("subject"), data.get("from_name"),
+            (uid, subject, data.get("from_name"),
              data.get("from_email"), data.get("summary"), data.get("urgency", "medium"),
-             data.get("category", "other"), data.get("email_date"),
+             category, data.get("email_date"),
              data.get("confidence", 0)),
         )
         conn.commit()
@@ -8577,7 +8756,7 @@ def save_action_item(data: dict, db_path: str | Path | None = None) -> dict:
 
 
 def get_action_items(status: str | None = None, category: str | None = None,
-                     limit: int = 100, db_path: str | Path | None = None) -> list[dict]:
+                     limit: int = 200, db_path: str | Path | None = None) -> list[dict]:
     clauses, params = [], []
     if status:
         clauses.append("status = ?"); params.append(status)
@@ -8605,6 +8784,107 @@ def update_action_item(item_id: int, fields: dict,
         conn.commit()
         row = conn.execute("SELECT * FROM action_items WHERE id = ?", (item_id,)).fetchone()
     return dict(row) if row else {}
+
+
+def batch_dismiss_action_items(item_ids: list[int] | None = None,
+                               category: str | None = None,
+                               status_filter: str = "open",
+                               db_path: str | Path | None = None) -> dict:
+    """Batch dismiss action items by IDs or by category.
+
+    If item_ids provided, dismisses those specific items.
+    If category provided (and no item_ids), dismisses all open items in that category.
+    """
+    with _connect(db_path) as conn:
+        if item_ids:
+            placeholders = ",".join("?" * len(item_ids))
+            count = conn.execute(
+                f"UPDATE action_items SET status = 'dismissed' WHERE id IN ({placeholders}) AND status = ?",
+                (*item_ids, status_filter),
+            ).rowcount
+        elif category:
+            count = conn.execute(
+                "UPDATE action_items SET status = 'dismissed' WHERE category = ? AND status = ?",
+                (category, status_filter),
+            ).rowcount
+        else:
+            count = conn.execute(
+                "UPDATE action_items SET status = 'dismissed' WHERE status = ?",
+                (status_filter,),
+            ).rowcount
+        conn.commit()
+    return {"dismissed": count}
+
+
+def consolidate_action_items(db_path: str | Path | None = None) -> dict:
+    """Find and dismiss duplicate/similar open action items.
+
+    Keeps the newest item in each group, dismisses older duplicates.
+    Groups by: same subject, or similar subject (first 40 chars + same category).
+    """
+    with _connect(db_path) as conn:
+        # Get all open items
+        items = conn.execute(
+            """SELECT id, subject, category, from_name, created_at
+               FROM action_items WHERE status = 'open'
+               ORDER BY created_at DESC"""
+        ).fetchall()
+
+        if not items:
+            return {"consolidated": 0, "groups": 0}
+
+        # Group by exact subject + category
+        groups = {}
+        for item in items:
+            key = ((item["subject"] or "").strip().lower(), (item["category"] or ""))
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(item)
+
+        # Also group by subject prefix (first 40 chars) + category for near-duplicates
+        prefix_groups = {}
+        for item in items:
+            subj = (item["subject"] or "").strip().lower()
+            prefix = subj[:40] if len(subj) > 40 else subj
+            key = (prefix, (item["category"] or ""))
+            if key not in prefix_groups:
+                prefix_groups[key] = []
+            prefix_groups[key].append(item)
+
+        # Merge prefix groups into main groups (prefer larger groups)
+        for key, members in prefix_groups.items():
+            if len(members) > 1:
+                # Check if any exact group already covers these
+                covered = False
+                for exact_key, exact_members in groups.items():
+                    if len(exact_members) > 1 and set(m["id"] for m in members) <= set(m["id"] for m in exact_members):
+                        covered = True
+                        break
+                if not covered:
+                    groups[key] = members
+
+        # Dismiss all but newest in each group with 2+ items
+        dismiss_ids = []
+        group_count = 0
+        for key, members in groups.items():
+            if len(members) > 1:
+                group_count += 1
+                # Keep first (newest — already sorted DESC by created_at)
+                for m in members[1:]:
+                    dismiss_ids.append(m["id"])
+
+        if dismiss_ids:
+            unique_ids = list(set(dismiss_ids))
+            placeholders = ",".join("?" * len(unique_ids))
+            conn.execute(
+                f"""UPDATE action_items SET status = 'dismissed',
+                    resolution_notes = 'Auto-consolidated (duplicate)'
+                    WHERE id IN ({placeholders})""",
+                unique_ids,
+            )
+            conn.commit()
+
+        return {"consolidated": len(set(dismiss_ids)), "groups": group_count}
 
 
 def get_pending_review_count(db_path: str | Path | None = None) -> dict:
@@ -8656,7 +8936,276 @@ def get_all_coo_manual_values(db_path: str | Path | None = None) -> dict:
     return {r["key"]: r["value"] for r in rows}
 
 
-def get_coo_financial_snapshot(db_path: str | Path | None = None) -> dict:
+def build_coo_full_context(db_path: str | Path | None = None) -> str:
+    """Build a comprehensive, token-efficient context string that gives the COO AI
+    full situational awareness across every module of the tracker.
+
+    This is the COO's 'morning briefing' — everything it needs to know about the
+    current state of the business, condensed into a format the AI can reason over."""
+    from datetime import datetime, timedelta
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    month_prefix = datetime.now().strftime("%Y-%m")
+    sections = []
+
+    with _connect(db_path) as conn:
+        # ── 1. FINANCIAL OVERVIEW ──────────────────────────────
+        fin = []
+        manual = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM coo_manual_values").fetchall()}
+        checking = manual.get("tgf_checking_0341", 0)
+        mm = manual.get("tgf_money_market_8045", 0)
+        total_cash = round(checking + mm, 2)
+
+        pp = conn.execute(
+            "SELECT COALESCE(SUM(prize_pool), 0) as t FROM acct_allocations WHERE allocation_date >= ?",
+            (today,)).fetchone()["t"]
+        cf = conn.execute(
+            "SELECT COALESCE(SUM(course_payable + course_surcharge), 0) as t FROM acct_allocations WHERE allocation_date >= ?",
+            (today,)).fetchone()["t"]
+        tr = conn.execute(
+            "SELECT COALESCE(SUM(tax_reserve), 0) as t FROM acct_allocations WHERE allocation_date LIKE ?",
+            (f"{month_prefix}%",)).fetchone()["t"]
+        available = round(total_cash - pp - cf - tr, 2)
+
+        irs = manual.get("irs_balance", 0)
+        gp_loan = manual.get("grandparent_loan", 0)
+        chase_biz = manual.get("chase_biz_7680", 0)
+        chase_saph = manual.get("chase_sapphire_6159", 0)
+        total_debt = round(irs + gp_loan + chase_biz + chase_saph, 2)
+
+        fin.append(f"Cash: ${total_cash:,.2f} (Checking: ${checking:,.2f}, Money Market: ${mm:,.2f})")
+        fin.append(f"Obligations: Prize Pools ${pp:,.2f}, Course Fees ${cf:,.2f}, Tax Reserve ${tr:,.2f}")
+        fin.append(f"Available to Spend: ${available:,.2f}")
+        fin.append(f"Debts: IRS ${irs:,.2f}, Grandparent Loan ${gp_loan:,.2f}, Chase Biz ${chase_biz:,.2f}, Chase Sapphire ${chase_saph:,.2f} (Total: ${total_debt:,.2f})")
+
+        # Monthly revenue trend (last 3 months)
+        try:
+            month_rows = conn.execute(
+                """SELECT strftime('%Y-%m', date) as month,
+                          SUM(CASE WHEN type='income' THEN amount ELSE 0 END) as income,
+                          SUM(CASE WHEN type='expense' THEN amount ELSE 0 END) as expenses
+                   FROM acct_transactions
+                   WHERE date >= date('now', '-3 months')
+                   GROUP BY month ORDER BY month DESC LIMIT 3"""
+            ).fetchall()
+            for mr in month_rows:
+                net = round((mr["income"] or 0) - (mr["expenses"] or 0), 2)
+                fin.append(f"  {mr['month']}: Income ${mr['income'] or 0:,.2f}, Expenses ${mr['expenses'] or 0:,.2f}, Net ${net:+,.2f}")
+        except Exception:
+            pass
+
+        sections.append("FINANCIAL STATUS\n" + "\n".join(fin))
+
+        # ── 2. EVENTS & OPERATIONS ─────────────────────────────
+        ops = []
+        upcoming = conn.execute(
+            """SELECT e.item_name, e.event_date, e.course_name,
+                      COUNT(DISTINCT CASE
+                          WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                          THEN i.id END) as playing
+               FROM events e
+               LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+               LEFT JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE
+                                     OR i.item_name = ea.alias_name COLLATE NOCASE)
+                   AND COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+               WHERE e.event_date >= ?
+               GROUP BY e.id ORDER BY e.event_date ASC LIMIT 10""",
+            (today,),
+        ).fetchall()
+
+        if upcoming:
+            ops.append(f"{len(upcoming)} upcoming events:")
+            for ev in upcoming:
+                ops.append(f"  {ev['event_date']} — {ev['item_name']} at {ev['course_name'] or '?'} ({ev['playing']} registered)")
+        else:
+            ops.append("No upcoming events")
+
+        # Recent past events (last 30 days) for context
+        recent_events = conn.execute(
+            """SELECT e.item_name, e.event_date,
+                      COUNT(DISTINCT CASE
+                          WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                          THEN i.id END) as played
+               FROM events e
+               LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+               LEFT JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE
+                                     OR i.item_name = ea.alias_name COLLATE NOCASE)
+                   AND COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+               WHERE e.event_date < ? AND e.event_date >= date(?, '-30 days')
+               GROUP BY e.id ORDER BY e.event_date DESC LIMIT 5""",
+            (today, today),
+        ).fetchall()
+        if recent_events:
+            ops.append(f"Recent events (last 30 days):")
+            for ev in recent_events:
+                ops.append(f"  {ev['event_date']} — {ev['item_name']} ({ev['played']} players)")
+
+        sections.append("EVENTS & OPERATIONS\n" + "\n".join(ops))
+
+        # ── 3. MEMBERS & CUSTOMERS ─────────────────────────────
+        mem = []
+        cust_total = conn.execute("SELECT COUNT(*) as c FROM customers").fetchone()["c"]
+        active_members = conn.execute(
+            "SELECT COUNT(*) as c FROM customers WHERE status = 'active'"
+        ).fetchone()["c"]
+
+        # Recent new customers (last 30 days)
+        new_custs = conn.execute(
+            """SELECT COUNT(*) as c FROM customers
+               WHERE created_at >= date('now', '-30 days')"""
+        ).fetchone()["c"]
+
+        mem.append(f"Total customers: {cust_total} ({active_members} active)")
+        mem.append(f"New customers (30d): {new_custs}")
+
+        # Top spenders this season
+        top_spenders = conn.execute(
+            """SELECT customer, COUNT(*) as events,
+                      SUM(CAST(REPLACE(REPLACE(item_price, '$', ''), ',', '') AS REAL)) as spent
+               FROM items
+               WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                 AND transaction_status = 'active'
+                 AND order_date >= date('now', '-6 months')
+               GROUP BY customer ORDER BY events DESC LIMIT 5"""
+        ).fetchall()
+        if top_spenders:
+            mem.append("Top players (6 months):")
+            for ts in top_spenders:
+                mem.append(f"  {ts['customer']}: {ts['events']} events, ${ts['spent'] or 0:,.0f}")
+
+        sections.append("MEMBERS & CUSTOMERS\n" + "\n".join(mem))
+
+        # ── 4. TRANSACTION ACTIVITY ────────────────────────────
+        txn = []
+        stats = conn.execute(
+            """SELECT COUNT(*) as total,
+                      COUNT(DISTINCT order_id) as orders,
+                      MIN(order_date) as earliest,
+                      MAX(order_date) as latest
+               FROM items
+               WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')"""
+        ).fetchone()
+        txn.append(f"Total: {stats['total']} items across {stats['orders']} orders ({stats['earliest']} to {stats['latest']})")
+
+        # Recent activity (7 days)
+        recent_txn = conn.execute(
+            """SELECT COUNT(*) as c,
+                      SUM(CAST(REPLACE(REPLACE(item_price, '$', ''), ',', '') AS REAL)) as total
+               FROM items
+               WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                 AND order_date >= date('now', '-7 days')"""
+        ).fetchone()
+        txn.append(f"Last 7 days: {recent_txn['c']} new items, ${recent_txn['total'] or 0:,.0f}")
+
+        sections.append("TRANSACTION ACTIVITY\n" + "\n".join(txn))
+
+        # ── 5. RSVPS ──────────────────────────────────────────
+        rsvp = []
+        r_total = conn.execute("SELECT COUNT(*) as c FROM rsvps").fetchone()["c"]
+        r_playing = conn.execute("SELECT COUNT(*) as c FROM rsvps WHERE response = 'PLAYING'").fetchone()["c"]
+        r_not = conn.execute("SELECT COUNT(*) as c FROM rsvps WHERE response = 'NOT PLAYING'").fetchone()["c"]
+        r_unmatched = conn.execute(
+            "SELECT COUNT(*) as c FROM rsvps WHERE matched_event IS NOT NULL AND matched_item_id IS NULL AND response = 'PLAYING'"
+        ).fetchone()["c"]
+        rsvp.append(f"Total RSVPs: {r_total} ({r_playing} playing, {r_not} not playing)")
+        if r_unmatched:
+            rsvp.append(f"Playing but no payment: {r_unmatched} (need follow-up)")
+        sections.append("RSVPS\n" + "\n".join(rsvp))
+
+        # ── 6. HANDICAPS ──────────────────────────────────────
+        hcp = []
+        player_count = conn.execute("SELECT COUNT(*) as c FROM handicap_players").fetchone()["c"]
+        round_count = conn.execute("SELECT COUNT(*) as c FROM handicap_rounds").fetchone()["c"]
+        recent_rounds = conn.execute(
+            "SELECT COUNT(*) as c FROM handicap_rounds WHERE date_played >= date('now', '-30 days')"
+        ).fetchone()["c"]
+        hcp.append(f"Players: {player_count}, Total rounds: {round_count}")
+        hcp.append(f"Rounds entered (30d): {recent_rounds}")
+        sections.append("HANDICAPS\n" + "\n".join(hcp))
+
+        # ── 7. ACCOUNTING & COMPLIANCE ─────────────────────────
+        acct = []
+        try:
+            acct_total = conn.execute(
+                "SELECT COUNT(*) as cnt FROM acct_transactions WHERE type != 'transfer'"
+            ).fetchone()["cnt"]
+            acct_catd = conn.execute(
+                """SELECT COUNT(DISTINCT t.id) as cnt FROM acct_transactions t
+                   JOIN acct_splits s ON s.transaction_id = t.id
+                   WHERE s.category_id IS NOT NULL AND t.type != 'transfer'"""
+            ).fetchone()["cnt"]
+            acct_uncat = acct_total - acct_catd
+            pct = round(acct_catd / acct_total * 100, 1) if acct_total else 100
+            acct.append(f"Transactions: {acct_total} total, {acct_catd} categorized ({pct}%), {acct_uncat} uncategorized")
+        except Exception:
+            acct.append("Accounting data not available")
+
+        # Pending reviews
+        try:
+            exp_pending = conn.execute(
+                "SELECT COUNT(*) as cnt FROM expense_transactions WHERE review_status = 'pending'"
+            ).fetchone()["cnt"]
+            if exp_pending:
+                acct.append(f"Expense reviews pending: {exp_pending}")
+        except Exception:
+            pass
+
+        sections.append("ACCOUNTING & COMPLIANCE\n" + "\n".join(acct))
+
+        # ── 8. ACTION ITEMS SUMMARY ────────────────────────────
+        ai_sec = []
+        ai_open = conn.execute("SELECT COUNT(*) as c FROM action_items WHERE status = 'open'").fetchone()["c"]
+        ai_prog = conn.execute("SELECT COUNT(*) as c FROM action_items WHERE status = 'in_progress'").fetchone()["c"]
+        ai_high = conn.execute("SELECT COUNT(*) as c FROM action_items WHERE status = 'open' AND urgency = 'high'").fetchone()["c"]
+        ai_sec.append(f"Open: {ai_open} ({ai_high} high urgency), In Progress: {ai_prog}")
+
+        # Category breakdown
+        cat_rows = conn.execute(
+            "SELECT category, COUNT(*) as c FROM action_items WHERE status = 'open' GROUP BY category ORDER BY c DESC LIMIT 5"
+        ).fetchall()
+        if cat_rows:
+            cats = ", ".join(f"{r['category']}: {r['c']}" for r in cat_rows)
+            ai_sec.append(f"By category: {cats}")
+
+        sections.append("ACTION ITEMS\n" + "\n".join(ai_sec))
+
+        # ── 9. TGF PAYOUTS ────────────────────────────────────
+        pay = []
+        try:
+            ev_count = conn.execute("SELECT COUNT(*) as c FROM tgf_events").fetchone()["c"]
+            golfer_count = conn.execute("SELECT COUNT(*) as c FROM tgf_golfers").fetchone()["c"]
+            total_paid = conn.execute("SELECT COALESCE(SUM(amount), 0) as t FROM tgf_payouts").fetchone()["t"]
+            pay.append(f"Events with payouts: {ev_count}, Golfers: {golfer_count}, Total paid: ${total_paid:,.2f}")
+
+            # Recent payout events
+            recent_pay = conn.execute(
+                """SELECT e.name, e.event_date, e.total_purse, COUNT(p.id) as payouts
+                   FROM tgf_events e LEFT JOIN tgf_payouts p ON p.event_id = e.id
+                   GROUP BY e.id ORDER BY e.event_date DESC LIMIT 3"""
+            ).fetchall()
+            for rp in recent_pay:
+                pay.append(f"  {rp['event_date']} — {rp['name']}: ${rp['total_purse'] or 0:,.0f} purse, {rp['payouts']} payouts")
+        except Exception:
+            pay.append("No payout data yet")
+
+        sections.append("TGF PAYOUTS\n" + "\n".join(pay))
+
+        # ── 10. SEASON CONTESTS ────────────────────────────────
+        sc = []
+        try:
+            enrollments = conn.execute(
+                "SELECT contest_type, COUNT(*) as c FROM season_contests GROUP BY contest_type"
+            ).fetchall()
+            if enrollments:
+                sc.append("Season contests: " + ", ".join(f"{r['contest_type']}: {r['c']} enrolled" for r in enrollments))
+            else:
+                sc.append("No season contest enrollments")
+        except Exception:
+            sc.append("Season contests not configured")
+
+        sections.append("SEASON CONTESTS\n" + "\n".join(sc))
+
+    return "\n\n".join(sections)
     """Build the complete financial snapshot for the COO dashboard."""
     manual = get_all_coo_manual_values(db_path)
     today = datetime.now().strftime("%Y-%m-%d")
@@ -9511,3 +10060,121 @@ def import_tgf_golfers(golfers: list[dict], db_path=None) -> dict:
                 added += 1
         conn.commit()
     return {"added": added, "updated": updated}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  COO CHAT SESSION PERSISTENCE
+# ═══════════════════════════════════════════════════════════════
+
+def get_chat_sessions(limit: int = 20, db_path=None) -> list[dict]:
+    """Return recent chat sessions (newest first)."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT s.*, COUNT(m.id) AS message_count
+               FROM coo_chat_sessions s
+               LEFT JOIN coo_chat_messages m ON m.session_id = s.id
+               GROUP BY s.id ORDER BY s.updated_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_chat_session(session_id: int, db_path=None) -> dict | None:
+    """Return a single session with all its messages."""
+    with _connect(db_path) as conn:
+        sess = conn.execute("SELECT * FROM coo_chat_sessions WHERE id = ?", (session_id,)).fetchone()
+        if not sess:
+            return None
+        msgs = conn.execute(
+            "SELECT * FROM coo_chat_messages WHERE session_id = ? ORDER BY created_at ASC",
+            (session_id,),
+        ).fetchall()
+        result = dict(sess)
+        result["messages"] = [dict(m) for m in msgs]
+        return result
+
+
+def create_chat_session(title: str = "New Chat", db_path=None) -> dict:
+    """Create a new chat session and return it."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO coo_chat_sessions (title) VALUES (?)", (title,)
+        )
+        conn.commit()
+        sess = conn.execute("SELECT * FROM coo_chat_sessions WHERE id = ?", (cur.lastrowid,)).fetchone()
+        result = dict(sess)
+        result["messages"] = []
+        return result
+
+
+def add_chat_message(session_id: int, role: str, content: str, routed_to: str | None = None, db_path=None) -> dict:
+    """Append a message to a chat session."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO coo_chat_messages (session_id, role, content, routed_to) VALUES (?, ?, ?, ?)",
+            (session_id, role, content, routed_to),
+        )
+        conn.execute(
+            "UPDATE coo_chat_sessions SET updated_at = datetime('now') WHERE id = ?",
+            (session_id,),
+        )
+        conn.commit()
+        msg = conn.execute("SELECT * FROM coo_chat_messages WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return dict(msg)
+
+
+def update_chat_session_title(session_id: int, title: str, db_path=None) -> dict:
+    """Rename a chat session."""
+    with _connect(db_path) as conn:
+        conn.execute("UPDATE coo_chat_sessions SET title = ? WHERE id = ?", (title, session_id))
+        conn.commit()
+        sess = conn.execute("SELECT * FROM coo_chat_sessions WHERE id = ?", (session_id,)).fetchone()
+        return dict(sess)
+
+
+def update_chat_session_summary(session_id: int, summary: str, db_path=None) -> dict:
+    """Update the running summary of a chat session."""
+    with _connect(db_path) as conn:
+        conn.execute("UPDATE coo_chat_sessions SET summary = ? WHERE id = ?", (summary, session_id))
+        conn.commit()
+        sess = conn.execute("SELECT * FROM coo_chat_sessions WHERE id = ?", (session_id,)).fetchone()
+        return dict(sess)
+
+
+def get_chat_master_context(exclude_session_id: int | None = None, db_path=None) -> str:
+    """Build a master context string from all past session summaries.
+    This gives the AI a 'table of contents' of all prior conversations,
+    so it can maintain context across sessions."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT id, title, summary, updated_at,
+                      (SELECT COUNT(*) FROM coo_chat_messages WHERE session_id = s.id) AS msg_count
+               FROM coo_chat_sessions s
+               WHERE summary != '' AND summary IS NOT NULL
+               ORDER BY updated_at DESC LIMIT 50""",
+        ).fetchall()
+    if not rows:
+        return ""
+
+    lines = ["MASTER CONVERSATION LOG — Table of Contents"]
+    lines.append("You have persistent memory of all past conversations with Kerry:")
+    lines.append("")
+    for r in rows:
+        if exclude_session_id and r["id"] == exclude_session_id:
+            continue
+        date = r["updated_at"] or "unknown"
+        lines.append(f"[Session #{r['id']}] {date} — \"{r['title']}\" ({r['msg_count']} messages)")
+        if r["summary"]:
+            lines.append(f"  Summary: {r['summary']}")
+        lines.append("")
+    lines.append("Reference these naturally when relevant. If Kerry asks about something discussed before, recall it.")
+    return "\n".join(lines)
+
+
+def delete_chat_session(session_id: int, db_path=None) -> dict:
+    """Delete a chat session and all its messages."""
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM coo_chat_messages WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM coo_chat_sessions WHERE id = ?", (session_id,))
+        conn.commit()
+    return {"deleted": session_id}

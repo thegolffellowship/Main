@@ -63,6 +63,7 @@ function refreshActiveTab() {
         case 'categories': loadCategories(); break;
         case 'reports': loadReports(); break;
         case 'reconciliation': loadReconciliation(); break;
+        case 'rules': loadKeywordRules(); break;
     }
 }
 

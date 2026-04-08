@@ -49,8 +49,14 @@
                     <button class="coo-pill active" data-filter="open">Open</button>
                     <button class="coo-pill" data-filter="in_progress">In Progress</button>
                     <button class="coo-pill" data-filter="completed">Completed</button>
+                    <button class="coo-pill" data-filter="dismissed">Dismissed</button>
                     <button class="coo-pill" data-filter="">All</button>
                 </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;" id="action-bulk-bar">
+                <button class="btn btn-secondary btn-sm" id="btn-consolidate" title="Find and dismiss duplicate/similar items">Consolidate Duplicates</button>
+                <button class="btn btn-secondary btn-sm" id="btn-dismiss-selected" style="display:none;" title="Dismiss selected items">Dismiss Selected (<span id="dismiss-count">0</span>)</button>
+                <button class="btn btn-secondary btn-sm" id="btn-dismiss-all" title="Dismiss all visible items" style="color:var(--red);">Dismiss All Visible</button>
             </div>
             <div id="action-items-list" class="coo-checklist"></div>
         </section>
@@ -145,16 +151,25 @@
         <section class="coo-section" id="section-chat">
             <div class="coo-section-header">
                 <h2>COO Chat</h2>
-            </div>
-            <div class="coo-chat-container">
-                <div class="coo-chat-messages" id="chat-messages">
-                    <div class="coo-chat-msg coo-chat-assistant">
-                        <div class="coo-chat-bubble">Hey Kerry. I'm your COO Agent. Ask me anything about TGF operations, finances, or action items. I have full context on your current state.</div>
-                    </div>
+                <div style="display:flex;gap:0.4rem;align-items:center;">
+                    <button class="btn btn-secondary btn-sm" id="btn-new-chat" title="Start a new conversation">+ New Chat</button>
+                    <button class="btn btn-secondary btn-sm" id="btn-delete-chat" title="Delete current session" style="color:var(--red);">Delete</button>
                 </div>
-                <div class="coo-chat-input-row">
-                    <input type="text" id="chat-input" class="coo-chat-input" placeholder="Ask the COO Agent..." autocomplete="off">
-                    <button class="btn btn-primary" id="btn-chat-send">Send</button>
+            </div>
+            <div class="coo-chat-layout">
+                <div class="coo-chat-sidebar" id="chat-session-list">
+                    <div class="coo-chat-no-sessions">No previous chats</div>
+                </div>
+                <div class="coo-chat-main">
+                    <div class="coo-chat-messages" id="chat-messages">
+                        <div class="coo-chat-msg coo-chat-assistant">
+                            <div class="coo-chat-bubble">Hey Kerry. I'm your COO Agent. Ask me anything about TGF operations, finances, or action items. I have full context on your current state.</div>
+                        </div>
+                    </div>
+                    <div class="coo-chat-input-row">
+                        <input type="text" id="chat-input" class="coo-chat-input" placeholder="Ask the COO Agent..." autocomplete="off">
+                        <button class="btn btn-primary" id="btn-chat-send">Send</button>
+                    </div>
                 </div>
             </div>
         </section>
