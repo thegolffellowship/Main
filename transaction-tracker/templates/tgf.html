@@ -222,7 +222,7 @@
                 </div>
             </div>
             <div class="tgf-main" id="events-main">
-                <div class="empty-state">
+                <div class="empty-state" id="events-empty">
                     <h3>Select an event</h3>
                     <p>Choose an event from the sidebar to view payouts</p>
                 </div>
@@ -365,9 +365,20 @@
                     <button class="sub-tab active" data-sub="payouts">Payouts</button>
                     <button class="sub-tab" data-sub="details">Details</button>
                 </div>
-                <div id="ev-payouts">${renderPayoutsTab(ev, golferList)}</div>
+                <div id="ev-payouts">
+                    ${renderPayoutsTab(ev, golferList)}
+                    <div id="import-payout-area" style="margin-top:1rem;">
+                        <div class="drop-zone" id="payout-drop-zone">
+                            <div style="font-size:1rem; font-weight:600; margin-bottom:0.3rem;">Import Payouts</div>
+                            <div style="font-size:0.82rem;">Paste screenshot (Ctrl+V), drag & drop, or click to upload</div>
+                            <input type="file" id="payout-file-input" accept="image/*" style="display:none;">
+                        </div>
+                        <div id="payout-preview" style="display:none;"></div>
+                    </div>
+                </div>
                 <div id="ev-details" style="display:none;">${renderDetailsTab(ev)}</div>
             `;
+            setupPayoutImport();
 
             // Sub-tab switching
             main.querySelectorAll(".sub-tab").forEach(btn => {
@@ -620,6 +631,162 @@
                     </div>
                 </div>
             `;
+        }
+
+        // ═══════════ SCREENSHOT PASTE / IMPORT ══════════════════
+
+        function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+        function setupPayoutImport() {
+            const dropZone = $("#payout-drop-zone");
+            const fileInput = $("#payout-file-input");
+            if (!dropZone) return;
+
+            dropZone.addEventListener("click", (e) => {
+                if (e.target === fileInput) return;
+                fileInput.click();
+            });
+
+            dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("dragover"); });
+            dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+            dropZone.addEventListener("drop", (e) => {
+                e.preventDefault();
+                dropZone.classList.remove("dragover");
+                const file = e.dataTransfer.files[0];
+                if (file && file.type.startsWith("image/")) processImage(file);
+            });
+
+            fileInput.addEventListener("change", () => {
+                if (fileInput.files[0]) processImage(fileInput.files[0]);
+                fileInput.value = "";
+            });
+        }
+
+        // Global paste — only fires when events tab is active and an event is selected
+        document.addEventListener("paste", (e) => {
+            const evSection = document.querySelector("#section-events");
+            if (!evSection || evSection.classList.contains("section-hidden")) return;
+            if (selectedEventIdx < 0 || selectedEventIdx >= DATA.events.length) return;
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (const item of items) {
+                if (item.type.startsWith("image/")) {
+                    const blob = item.getAsFile();
+                    if (blob) processImage(blob);
+                    return;
+                }
+            }
+        });
+
+        async function processImage(file) {
+            const dropZone = $("#payout-drop-zone");
+            const previewEl = $("#payout-preview");
+            if (!dropZone || !previewEl) return;
+
+            const ev = DATA.events[selectedEventIdx];
+            if (!ev) return;
+
+            previewEl.style.display = "";
+            previewEl.innerHTML = `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.75rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
+                <div style="width:20px;height:20px;border:3px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin 0.6s linear infinite;"></div>
+                <span style="font-size:0.85rem;font-weight:600;color:#1e40af;">Parsing screenshot with AI...</span>
+            </div>
+            <style>@keyframes spin { to { transform: rotate(360deg); } }</style>`;
+            dropZone.style.display = "none";
+
+            try {
+                const reader = new FileReader();
+                const base64 = await new Promise((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+                const res = await fetch("/api/tgf/parse-screenshot", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ image: base64, media_type: file.type }),
+                });
+                const parsed = await res.json();
+                if (!res.ok) throw new Error(parsed.error || "Parse failed");
+
+                const payouts = parsed.payouts || [];
+                const total = payouts.reduce((s, p) => s + (p.amount || 0), 0);
+
+                let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;">`;
+                html += `<h4 style="font-size:0.9rem;font-weight:700;margin:0 0 0.5rem;">
+                    Import ${payouts.length} payouts into <span style="color:var(--primary);">${escHtml(ev.code)}</span> — Total: $${total.toFixed(2)}
+                </h4>`;
+                html += `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:0.75rem;">`;
+                html += `<thead><tr style="border-bottom:1px solid var(--border);">
+                    <th style="text-align:left;padding:0.3rem 0.4rem;">Golfer</th>
+                    <th style="text-align:left;padding:0.3rem 0.4rem;">Category</th>
+                    <th style="text-align:left;padding:0.3rem 0.4rem;">Description</th>
+                    <th style="text-align:right;padding:0.3rem 0.4rem;">Amount</th>
+                </tr></thead><tbody>`;
+                payouts.forEach(p => {
+                    html += `<tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:0.3rem 0.4rem;">${escHtml(p.golferName)}</td>
+                        <td style="padding:0.3rem 0.4rem;">${catBadge(p.category)}</td>
+                        <td style="padding:0.3rem 0.4rem;color:var(--text-muted);">${escHtml(p.description || "")}</td>
+                        <td style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:var(--green);">$${(p.amount || 0).toFixed(2)}</td>
+                    </tr>`;
+                });
+                html += `</tbody></table>`;
+
+                html += `<div style="display:flex;gap:0.5rem;">`;
+                html += `<button class="btn btn-primary" id="payout-save-btn" style="font-size:0.82rem;padding:0.4rem 1rem;">Save Payouts</button>`;
+                html += `<button class="btn btn-secondary" id="payout-cancel-btn" style="font-size:0.82rem;padding:0.4rem 1rem;">Cancel</button>`;
+                html += `</div></div>`;
+                previewEl.innerHTML = html;
+
+                // Save — import payouts into the selected event
+                document.getElementById("payout-save-btn").addEventListener("click", async () => {
+                    const saveBtn = document.getElementById("payout-save-btn");
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = "Saving...";
+                    try {
+                        const saveRes = await fetch("/api/tgf", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                action: "import_payouts",
+                                event_id: ev.id,
+                                payouts: payouts,
+                            }),
+                        });
+                        const saveResult = await saveRes.json();
+                        if (saveResult.error) {
+                            alert("Error: " + saveResult.error);
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = "Save Payouts";
+                            return;
+                        }
+                        // Reload and re-render the same event
+                        const idx = selectedEventIdx;
+                        await loadData();
+                        selectedEventIdx = idx;
+                        renderEventsSidebar();
+                        renderEventMain();
+                    } catch (err) {
+                        alert("Save failed: " + err.message);
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = "Save Payouts";
+                    }
+                });
+
+                document.getElementById("payout-cancel-btn").addEventListener("click", () => {
+                    previewEl.style.display = "none";
+                    previewEl.innerHTML = "";
+                    dropZone.style.display = "";
+                });
+
+            } catch (err) {
+                previewEl.innerHTML = `<div style="padding:0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:0.85rem;color:#dc2626;">
+                    <strong>Parse failed:</strong> ${escHtml(err.message)}
+                    <button class="btn btn-secondary" onclick="this.closest('div').parentElement.style.display='none';document.getElementById('payout-drop-zone').style.display='';" style="margin-left:0.5rem;font-size:0.78rem;padding:0.2rem 0.5rem;">Try Again</button>
+                </div>`;
+            }
         }
 
         // ── Init ─────────────────────────────────────────────────
