@@ -10074,6 +10074,44 @@ def add_tgf_event(data: dict, db_path=None) -> dict:
         return {"event_id": event_id, "payouts_added": len(data.get("payouts", []))}
 
 
+def import_tgf_payouts(event_id: int, payouts: list, db_path=None) -> dict:
+    """Add payouts to an existing TGF event.
+
+    payouts: [{golferName, category, amount, description}]
+    Returns {payouts_added, event_id} or {error}.
+    """
+    if not payouts:
+        return {"error": "No payouts provided"}
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT id FROM tgf_events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return {"error": f"Event {event_id} not found"}
+
+        added = 0
+        for p in payouts:
+            golfer_id = _get_or_create_golfer(conn, p["golferName"])
+            conn.execute(
+                """INSERT INTO tgf_payouts (event_id, golfer_id, category, amount, description)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (event_id, golfer_id, p["category"], p["amount"], p.get("description", "")),
+            )
+            added += 1
+
+        # Update event aggregates
+        stats = conn.execute(
+            """SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as total,
+                      COUNT(DISTINCT golfer_id) as winners
+               FROM tgf_payouts WHERE event_id = ?""",
+            (event_id,),
+        ).fetchone()
+        conn.execute(
+            "UPDATE tgf_events SET total_purse = ?, winners_count = ?, payouts_count = ? WHERE id = ?",
+            (stats["total"], stats["winners"], stats["cnt"], event_id),
+        )
+        conn.commit()
+        return {"event_id": event_id, "payouts_added": added, "total_purse": stats["total"]}
+
+
 def update_tgf_event(event_id: int, data: dict, db_path=None) -> dict:
     """Update event metadata (not payouts)."""
     with _connect(db_path) as conn:

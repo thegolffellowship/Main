@@ -5760,6 +5760,11 @@ def api_tgf_action():
         return jsonify(add_tgf_event(d))
     elif action == "add_golfer":
         return jsonify(add_tgf_golfer(d))
+    elif action == "import_payouts":
+        from email_parser.database import import_tgf_payouts
+        if not d.get("event_id"):
+            return jsonify({"error": "event_id required"}), 400
+        return jsonify(import_tgf_payouts(d["event_id"], d.get("payouts", [])))
     elif action == "import_golfers":
         return jsonify(import_tgf_golfers(d.get("golfers", [])))
     elif action == "update_event":
