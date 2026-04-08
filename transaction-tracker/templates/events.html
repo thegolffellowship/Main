@@ -400,7 +400,7 @@
 
     <!-- Edit Event Modal -->
     <div id="edit-event-overlay" class="modal-overlay" style="display:none;">
-        <div class="modal edit-modal" style="max-width:620px;">
+        <div class="modal edit-modal" style="max-width:700px;">
             <div class="modal-header">
                 <h2>Edit Event</h2>
                 <button id="edit-event-close" class="modal-close">&times;</button>
@@ -554,29 +554,31 @@
 
                     <!-- Combo format pricing (9/18 Combo) -->
                     <div id="edit-pricing-combo" style="display:none;">
-                        <!-- 9-Hole Pricing -->
-                        <div style="margin-bottom:1rem; padding:0.75rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
-                            <label style="font-weight:700; font-size:0.85rem; display:block; margin-bottom:0.5rem; color:#166534;">9-Hole Pricing</label>
-                            <div id="edit-combo-9-calc"></div>
-                            <div class="edit-grid" style="grid-template-columns: 1fr 1fr; margin-top:0.5rem;">
-                                <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="edit-event-tgf_markup_9" class="modal-input" min="0" step="0.01" placeholder="8.00"></label>
-                                <label style="font-weight:600; font-size:0.82rem;">Side Game Fee ($)<input type="number" id="edit-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00"></label>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                            <!-- 9-Hole column -->
+                            <div style="padding:0.5rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
+                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#166534;">9-Hole Pricing</label>
+                                <div id="edit-combo-9-calc"></div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
+                                    <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="edit-event-tgf_markup_9" class="modal-input" min="0" step="0.01" placeholder="8.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                    <label style="font-weight:600; font-size:0.75rem;">Game Fee ($)<input type="number" id="edit-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                </div>
                             </div>
-                        </div>
-                        <!-- 18-Hole Pricing -->
-                        <div style="margin-bottom:1rem; padding:0.75rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
-                            <label style="font-weight:700; font-size:0.85rem; display:block; margin-bottom:0.5rem; color:#1e40af;">18-Hole Pricing</label>
-                            <div id="edit-combo-18-calc"></div>
-                            <div class="edit-grid" style="grid-template-columns: 1fr 1fr; margin-top:0.5rem;">
-                                <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="edit-event-tgf_markup_18" class="modal-input" min="0" step="0.01" placeholder="15.00"></label>
-                                <label style="font-weight:600; font-size:0.82rem;">Side Game Fee ($)<input type="number" id="edit-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00"></label>
+                            <!-- 18-Hole column -->
+                            <div style="padding:0.5rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
+                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#1e40af;">18-Hole Pricing</label>
+                                <div id="edit-combo-18-calc"></div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
+                                    <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="edit-event-tgf_markup_18" class="modal-input" min="0" step="0.01" placeholder="15.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                    <label style="font-weight:600; font-size:0.75rem;">Game Fee ($)<input type="number" id="edit-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                </div>
                             </div>
                         </div>
                         <!-- Shared transaction fee -->
-                        <div class="edit-grid" style="grid-template-columns: 1fr;">
-                            <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="edit-event-transaction_fee_pct_combo" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
+                        <div style="margin-top:0.5rem;">
+                            <label style="font-weight:600; font-size:0.78rem;">Transaction Fee (%)<input type="number" id="edit-event-transaction_fee_pct_combo" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                         </div>
-                        <div id="edit-pricing-preview-combo" style="margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
+                        <div id="edit-pricing-preview-combo" style="margin-top:0.5rem; padding:0.5rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.78rem;">
                             <div id="edit-pricing-summary-combo"></div>
                         </div>
                     </div>
@@ -917,7 +919,7 @@
 
     <!-- Add Event Modal -->
     <div id="add-event-overlay" class="modal-overlay" style="display:none;">
-        <div class="modal add-event-modal" style="max-width:620px;">
+        <div class="modal add-event-modal" style="max-width:700px;">
             <div class="modal-header">
                 <h2>Add Event</h2>
                 <button id="add-event-close" class="modal-close">&times;</button>
@@ -1062,26 +1064,31 @@
 
                     <!-- Combo format pricing -->
                     <div id="add-pricing-combo" style="display:none;">
-                        <div style="margin-bottom:1rem; padding:0.75rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
-                            <label style="font-weight:700; font-size:0.85rem; display:block; margin-bottom:0.5rem; color:#166534;">9-Hole Pricing</label>
-                            <div id="add-combo-9-calc"></div>
-                            <div class="edit-grid" style="grid-template-columns: 1fr 1fr; margin-top:0.5rem;">
-                                <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="add-event-tgf_markup_9" class="modal-input" min="0" step="0.01" placeholder="8.00"></label>
-                                <label style="font-weight:600; font-size:0.82rem;">Side Game Fee ($)<input type="number" id="add-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00"></label>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                            <!-- 9-Hole column -->
+                            <div style="padding:0.5rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
+                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#166534;">9-Hole Pricing</label>
+                                <div id="add-combo-9-calc"></div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
+                                    <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="add-event-tgf_markup_9" class="modal-input" min="0" step="0.01" placeholder="8.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                    <label style="font-weight:600; font-size:0.75rem;">Game Fee ($)<input type="number" id="add-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                </div>
+                            </div>
+                            <!-- 18-Hole column -->
+                            <div style="padding:0.5rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
+                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#1e40af;">18-Hole Pricing</label>
+                                <div id="add-combo-18-calc"></div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
+                                    <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="add-event-tgf_markup_18" class="modal-input" min="0" step="0.01" placeholder="15.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                    <label style="font-weight:600; font-size:0.75rem;">Game Fee ($)<input type="number" id="add-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                </div>
                             </div>
                         </div>
-                        <div style="margin-bottom:1rem; padding:0.75rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
-                            <label style="font-weight:700; font-size:0.85rem; display:block; margin-bottom:0.5rem; color:#1e40af;">18-Hole Pricing</label>
-                            <div id="add-combo-18-calc"></div>
-                            <div class="edit-grid" style="grid-template-columns: 1fr 1fr; margin-top:0.5rem;">
-                                <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="add-event-tgf_markup_18" class="modal-input" min="0" step="0.01" placeholder="15.00"></label>
-                                <label style="font-weight:600; font-size:0.82rem;">Side Game Fee ($)<input type="number" id="add-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00"></label>
-                            </div>
+                        <!-- Shared transaction fee -->
+                        <div style="margin-top:0.5rem;">
+                            <label style="font-weight:600; font-size:0.78rem;">Transaction Fee (%)<input type="number" id="add-event-transaction_fee_pct_combo" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                         </div>
-                        <div class="edit-grid" style="grid-template-columns: 1fr;">
-                            <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="add-event-transaction_fee_pct_combo" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
-                        </div>
-                        <div id="add-pricing-preview-combo" style="margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
+                        <div id="add-pricing-preview-combo" style="margin-top:0.5rem; padding:0.5rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.78rem;">
                             <div id="add-pricing-summary-combo"></div>
                         </div>
                     </div>
@@ -4746,26 +4753,53 @@
     function renderCostCalculator(containerId, prefix, breakdownData) {
         const container = document.getElementById(containerId);
         if (!container) return;
-        let html = `<div style="padding:0.6rem; background:#f9fafb; border:1px solid var(--border); border-radius:8px;">`;
-        html += `<label style="font-weight:700; font-size:0.82rem; display:block; margin-bottom:0.4rem;">Course Cost Calculator</label>`;
-        html += `<div style="display:grid; grid-template-columns: 1.2fr 1fr 0.8fr 0.8fr; gap:0.2rem 0.4rem; font-size:0.75rem; align-items:center;">`;
+        // Determine if we should auto-expand (non-green-fees items have data)
+        let hasDetailData = false;
+        if (breakdownData) {
+            COST_LINE_ITEMS.forEach(item => {
+                if (item.key !== "green_fees" && breakdownData[item.key] && breakdownData[item.key].amount) hasDetailData = true;
+            });
+        }
+        const expanded = hasDetailData;
+        const chevronId = `${prefix}-calc-chevron`;
+        const detailId = `${prefix}-calc-detail`;
+        const headerId = `${prefix}-calc-headers`;
+
+        let html = `<div style="padding:0.5rem; background:#f9fafb; border:1px solid var(--border); border-radius:8px;">`;
+        // Clickable header with chevron and inline total
+        html += `<div style="display:flex; align-items:center; cursor:pointer; user-select:none; gap:0.4rem;" onclick="toggleCalcExpand('${prefix}')">`;
+        html += `<span id="${chevronId}" style="font-size:0.65rem; transition:transform 0.15s; display:inline-block; ${expanded ? 'transform:rotate(90deg);' : ''}" >&#9654;</span>`;
+        html += `<span style="font-weight:700; font-size:0.78rem; flex:1;">Course Cost</span>`;
+        html += `<span id="${prefix}-calc-total" style="font-weight:700; font-size:0.82rem; color:var(--primary);">$0.00</span>`;
+        html += `</div>`;
+        // Grid for all line items
+        html += `<div style="margin-top:0.35rem;">`;
+        // Column headers (hidden when collapsed)
+        html += `<div id="${headerId}" style="display:${expanded ? 'grid' : 'none'}; grid-template-columns: 1.2fr 1fr 0.8fr 0.8fr; gap:0.15rem 0.3rem; font-size:0.7rem; align-items:center; margin-bottom:0.1rem;">`;
         html += `<span style="font-weight:600; color:var(--text-muted);">Item</span>`;
         html += `<span style="font-weight:600; color:var(--text-muted);">Amount ($)</span>`;
         html += `<span style="font-weight:600; color:var(--text-muted);">Tax (%)</span>`;
         html += `<span style="font-weight:600; color:var(--text-muted); text-align:right;">Total</span>`;
-        COST_LINE_ITEMS.forEach(item => {
+        html += `</div>`;
+        // Render all line items — green_fees always visible, others in collapsible div
+        COST_LINE_ITEMS.forEach((item, idx) => {
             const data = breakdownData && breakdownData[item.key];
             const amt = data ? data.amount : "";
             const tax = data ? data.tax_pct : item.defaultTax;
-            html += `<span style="font-size:0.78rem;">${item.label}</span>`;
-            html += `<input type="number" class="modal-input calc-amt" data-prefix="${prefix}" data-key="${item.key}" min="0" step="0.01" value="${amt !== "" && amt !== 0 ? amt : ""}" placeholder="0.00" style="font-size:0.78rem; padding:0.25rem 0.4rem;">`;
-            html += `<input type="number" class="modal-input calc-tax" data-prefix="${prefix}" data-key="${item.key}" min="0" max="100" step="0.01" value="${tax}" placeholder="8.25" style="font-size:0.78rem; padding:0.25rem 0.4rem;">`;
-            html += `<span class="calc-row-total" data-prefix="${prefix}" data-key="${item.key}" style="text-align:right; font-size:0.78rem; color:var(--text-muted);">$0.00</span>`;
+            const isFirst = idx === 0; // green_fees
+            if (!isFirst && idx === 1) {
+                html += `<div id="${detailId}" style="display:${expanded ? 'block' : 'none'};">`;
+            }
+            html += `<div style="display:grid; grid-template-columns: 1.2fr 1fr 0.8fr 0.8fr; gap:0.15rem 0.3rem; font-size:0.75rem; align-items:center;">`;
+            html += `<span ${isFirst ? `id="${prefix}-calc-first-label"` : ''} style="font-size:0.75rem; ${isFirst ? '' : 'color:var(--text-muted);'}">${isFirst && !expanded ? 'Amount' : item.label}</span>`;
+            html += `<input type="number" class="modal-input calc-amt" data-prefix="${prefix}" data-key="${item.key}" min="0" step="0.01" value="${amt !== "" && amt !== 0 ? amt : ""}" placeholder="0.00" style="font-size:0.75rem; padding:0.2rem 0.35rem;">`;
+            html += `<input type="number" class="modal-input calc-tax" data-prefix="${prefix}" data-key="${item.key}" min="0" max="100" step="0.01" value="${tax}" placeholder="8.25" style="font-size:0.75rem; padding:0.2rem 0.35rem;">`;
+            html += `<span class="calc-row-total" data-prefix="${prefix}" data-key="${item.key}" style="text-align:right; font-size:0.75rem; color:var(--text-muted);">$0.00</span>`;
+            html += `</div>`;
+            if (!isFirst && idx === COST_LINE_ITEMS.length - 1) {
+                html += `</div>`; // close detail div
+            }
         });
-        html += `</div>`;
-        html += `<div style="margin-top:0.4rem; padding-top:0.4rem; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">`;
-        html += `<span style="font-weight:700; font-size:0.82rem;">Course Cost / Player</span>`;
-        html += `<span id="${prefix}-calc-total" style="font-weight:700; font-size:0.9rem; color:var(--primary);">$0.00</span>`;
         html += `</div>`;
         html += `</div>`;
         container.innerHTML = html;
@@ -4774,6 +4808,20 @@
             input.addEventListener("input", () => updateCalcTotal(prefix));
         });
         updateCalcTotal(prefix);
+    }
+
+    function toggleCalcExpand(prefix) {
+        const chevron = document.getElementById(`${prefix}-calc-chevron`);
+        const detail = document.getElementById(`${prefix}-calc-detail`);
+        const headers = document.getElementById(`${prefix}-calc-headers`);
+        if (!chevron || !detail) return;
+        const isExpanding = detail.style.display === "none";
+        detail.style.display = isExpanding ? "block" : "none";
+        if (headers) headers.style.display = isExpanding ? "grid" : "none";
+        chevron.style.transform = isExpanding ? "rotate(90deg)" : "";
+        // Update first row label
+        const firstLabel = document.getElementById(`${prefix}-calc-first-label`);
+        if (firstLabel) firstLabel.textContent = isExpanding ? "Green Fees" : "Amount";
     }
 
     function getCalcTotal(prefix) {
@@ -4849,10 +4897,88 @@
         return { subtotal, actualCharge, roundingDiff, effectiveMarkup, txFee, playerTotal };
     }
 
+    // Guest surcharge: +$10 for 9 Holes and 9/18 Combo, +$15 for standalone 18 Holes
+    // 1st Timer: Guest markup - $25 (can go negative as a discount)
+    function getPlayerMarkups(memberMarkup, format) {
+        const guestExtra = (format === "18 Holes") ? 15 : 10;
+        return {
+            member: memberMarkup,
+            guest: memberMarkup + guestExtra,
+            firstTimer: memberMarkup + guestExtra - 25
+        };
+    }
+
+    // Card colors for player types (light-theme friendly)
+    const PLAYER_CARD_STYLES = {
+        member:    { bg: '#f0fdf4', border: '#16a34a', label: '#166534', text: '#166534' },
+        guest:     { bg: '#eff6ff', border: '#2563eb', label: '#1e40af', text: '#1e40af' },
+        firstTimer:{ bg: '#fefce8', border: '#a16207', label: '#854d0e', text: '#854d0e' },
+        na:        { bg: '#f3f4f6', border: '#d1d5db', label: '#9ca3af', text: '#9ca3af' }
+    };
+
+    function _priceCard(label, total, style, isNA) {
+        if (isNA) {
+            const s = PLAYER_CARD_STYLES.na;
+            return `<div style="text-align:center; padding:0.2rem 0.15rem; background:${s.bg}; border:1.5px solid ${s.border}; border-radius:4px;">
+                <div style="font-size:0.6rem; font-weight:600; color:${s.label};">${label}</div>
+                <div style="font-size:0.72rem; color:${s.text};">N/A</div>
+            </div>`;
+        }
+        return `<div style="text-align:center; padding:0.2rem 0.15rem; background:${style.bg}; border:1.5px solid ${style.border}; border-radius:4px;">
+            <div style="font-size:0.6rem; font-weight:600; color:${style.label};">${label}</div>
+            <div style="font-size:0.88rem; font-weight:700; color:${style.text};">$${Math.round(total)}</div>
+        </div>`;
+    }
+
+    function renderPlayerPricingGrid(cc, memberMarkup, sg, tf, format, opts) {
+        const markups = getPlayerMarkups(memberMarkup, format);
+        const memberOnly = !!(opts && opts.memberOnly);
+        const players = [
+            { key: 'member',     label: 'Member',    mu: markups.member },
+            { key: 'guest',      label: 'Guest',     mu: markups.guest },
+            { key: 'firstTimer', label: '1st Timer',  mu: markups.firstTimer }
+        ];
+        // Compute member base total to show increment in tier labels
+        const baseTotal = calcPricingLine(cc, markups.member, 0, tf).playerTotal;
+        const oneGameTotal = calcPricingLine(cc, markups.member, sg, tf).playerTotal;
+        const bothGamesTotal = calcPricingLine(cc, markups.member, sg * 2, tf).playerTotal;
+        const tiers = [
+            { label: 'Base Event Pricing', games: 0 },
+            { label: `With One Game (+$${Math.round(oneGameTotal - baseTotal)})`, games: 1 },
+            { label: `With Both Games (+$${Math.round(bothGamesTotal - baseTotal)})`, games: 2 }
+        ];
+        let html = '';
+        tiers.forEach(tier => {
+            html += `<div style="font-weight:700; font-size:0.72rem; margin-top:0.35rem; margin-bottom:0.15rem;">${tier.label}</div>`;
+            html += `<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.25rem;">`;
+            players.forEach(p => {
+                if (memberOnly && p.key !== 'member') {
+                    html += _priceCard(p.label, 0, null, true);
+                } else {
+                    const line = calcPricingLine(cc, p.mu, sg * tier.games, tf);
+                    html += _priceCard(p.label, line.playerTotal, PLAYER_CARD_STYLES[p.key], false);
+                }
+            });
+            html += `</div>`;
+        });
+        return html;
+    }
+
+    function renderBaseSummary(cc, mu, sg, tf) {
+        const p = calcPricingLine(cc, mu, sg, tf);
+        let html = `<div style="display:grid; grid-template-columns:auto 1fr; gap:0.1rem 0.5rem; font-size:0.75rem;">`;
+        html += `<span style="color:var(--text-muted);">Course Fees (w/ tax):</span><span style="text-align:right;">$${cc.toFixed(2)}</span>`;
+        html += `<span style="color:var(--text-muted);">Event Games:</span><span style="text-align:right;">$${sg.toFixed(2)}</span>`;
+        html += `<span style="color:var(--text-muted);">TGF Admin Fees:</span><span style="text-align:right;">$${mu.toFixed(2)}</span>`;
+        html += `</div>`;
+        return html;
+    }
+
     function updatePricingPreview(prefix) {
         // Check if we're in combo mode
         const formatEl = document.querySelector(`input[name="${prefix}-event-format"]:checked`);
-        const isCombo = formatEl && formatEl.value === "9/18 Combo";
+        const format = formatEl ? formatEl.value : "";
+        const isCombo = format === "9/18 Combo";
 
         if (prefix === "edit" && isCombo) {
             updateComboPricingPreview();
@@ -4873,19 +4999,48 @@
 
         const subtotal = cc + mu + sg;
         if (subtotal > 0) {
-            const p = calcPricingLine(cc, mu, sg, tf);
-            let html = `<div style="display:grid; grid-template-columns:auto 1fr; gap:0.2rem 0.75rem; font-size:0.82rem;">`;
-            html += `<span style="color:var(--text-muted);">Course Cost:</span><span>$${cc.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted);">TGF Markup:</span><span>$${mu.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted);">Side Game Fee:</span><span>$${sg.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted);">Subtotal:</span><span>$${p.subtotal.toFixed(2)}</span>`;
-            html += `<span style="font-weight:600;">Event Charge:</span><span style="font-weight:600;">$${p.actualCharge.toFixed(2)}</span>`;
-            if (p.roundingDiff > 0) {
-                html += `<span style="color:var(--text-muted); font-size:0.75rem;">Effective Markup:</span><span style="font-size:0.75rem; color:#6b7280;">$${p.effectiveMarkup.toFixed(2)} (incl. $${p.roundingDiff.toFixed(2)} rounding)</span>`;
+            let html = `<div style="font-weight:700; font-size:0.75rem; margin-bottom:0.2rem;">Base Calculations</div>`;
+            html += renderBaseSummary(cc, mu, sg, tf);
+            html += renderPlayerPricingGrid(cc, mu, sg, tf, format);
+            summaryEl.innerHTML = html;
+            previewEl.style.display = "block";
+        } else {
+            previewEl.style.display = "none";
+        }
+    }
+
+    function _updateComboPricingPreviewInner(prefix) {
+        const cc9 = getCalcTotal(prefix + "-combo-9");
+        const mu9 = parseFloat(document.getElementById(prefix + "-event-tgf_markup_9")?.value) || 0;
+        const sg9 = parseFloat(document.getElementById(prefix + "-event-side_game_fee_9")?.value) || 0;
+        const cc18 = getCalcTotal(prefix + "-combo-18");
+        const mu18 = parseFloat(document.getElementById(prefix + "-event-tgf_markup_18")?.value) || 0;
+        const sg18 = parseFloat(document.getElementById(prefix + "-event-side_game_fee_18")?.value) || 0;
+        const tf = parseFloat(document.getElementById(prefix + "-event-transaction_fee_pct_combo")?.value) || 0;
+        const previewEl = document.getElementById(prefix + "-pricing-preview-combo");
+        const summaryEl = document.getElementById(prefix + "-pricing-summary-combo");
+        if (!previewEl || !summaryEl) return;
+
+        const sub9 = cc9 + mu9 + sg9;
+        const sub18 = cc18 + mu18 + sg18;
+        if (sub9 > 0 || sub18 > 0) {
+            let html = '';
+            // 9-Hole section: full Member/Guest/1stTimer grid
+            if (sub9 > 0) {
+                html += `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:0.4rem; margin-bottom:0.4rem;">`;
+                html += `<div style="font-weight:700; font-size:0.72rem; color:#166534; margin-bottom:0.15rem;">9-Hole Pricing</div>`;
+                html += renderBaseSummary(cc9, mu9, sg9, tf);
+                html += renderPlayerPricingGrid(cc9, mu9, sg9, tf, "9/18 Combo");
+                html += `</div>`;
             }
-            html += `<span style="color:var(--text-muted); font-size:0.78rem;">Transaction Fee (${tf}%):</span><span style="font-size:0.78rem; color:#6b7280;">$${p.txFee.toFixed(2)}</span>`;
-            html += `<span style="font-weight:700; color:var(--primary);">Player Total:</span><span style="font-weight:700; color:var(--primary);">$${p.playerTotal.toFixed(2)}</span>`;
-            html += `</div>`;
+            // 18-Hole section: Member only (Guests/1st Timers can't play 18 in combo)
+            if (sub18 > 0) {
+                html += `<div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.4rem;">`;
+                html += `<div style="font-weight:700; font-size:0.72rem; color:#1e40af; margin-bottom:0.15rem;">18-Hole Pricing (Member Only)</div>`;
+                html += renderBaseSummary(cc18, mu18, sg18, tf);
+                html += renderPlayerPricingGrid(cc18, mu18, sg18, tf, "9/18 Combo", { memberOnly: true });
+                html += `</div>`;
+            }
             summaryEl.innerHTML = html;
             previewEl.style.display = "block";
         } else {
@@ -4894,76 +5049,11 @@
     }
 
     function updateComboPricingPreview() {
-        const cc9 = getCalcTotal("edit-combo-9");
-        const mu9 = parseFloat(document.getElementById("edit-event-tgf_markup_9").value) || 0;
-        const sg9 = parseFloat(document.getElementById("edit-event-side_game_fee_9").value) || 0;
-        const cc18 = getCalcTotal("edit-combo-18");
-        const mu18 = parseFloat(document.getElementById("edit-event-tgf_markup_18").value) || 0;
-        const sg18 = parseFloat(document.getElementById("edit-event-side_game_fee_18").value) || 0;
-        const tf = parseFloat(document.getElementById("edit-event-transaction_fee_pct_combo").value) || 0;
-        const previewEl = document.getElementById("edit-pricing-preview-combo");
-        const summaryEl = document.getElementById("edit-pricing-summary-combo");
-        if (!previewEl || !summaryEl) return;
-
-        const sub9 = cc9 + mu9 + sg9;
-        const sub18 = cc18 + mu18 + sg18;
-        if (sub9 > 0 || sub18 > 0) {
-            const p9 = calcPricingLine(cc9, mu9, sg9, tf);
-            const p18 = calcPricingLine(cc18, mu18, sg18, tf);
-            let html = `<div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:0.15rem 0.75rem; font-size:0.82rem;">`;
-            html += `<span></span><span style="font-weight:700; color:#166534; font-size:0.78rem;">9-HOLE</span><span style="font-weight:700; color:#1e40af; font-size:0.78rem;">18-HOLE</span>`;
-            html += `<span style="color:var(--text-muted);">Course Cost:</span><span>$${cc9.toFixed(2)}</span><span>$${cc18.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted);">TGF Markup:</span><span>$${mu9.toFixed(2)}</span><span>$${mu18.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted);">Side Game Fee:</span><span>$${sg9.toFixed(2)}</span><span>$${sg18.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted);">Subtotal:</span><span>$${p9.subtotal.toFixed(2)}</span><span>$${p18.subtotal.toFixed(2)}</span>`;
-            html += `<span style="font-weight:600;">Event Charge:</span><span style="font-weight:600;">$${p9.actualCharge.toFixed(2)}</span><span style="font-weight:600;">$${p18.actualCharge.toFixed(2)}</span>`;
-            if (p9.roundingDiff > 0 || p18.roundingDiff > 0) {
-                html += `<span style="color:var(--text-muted); font-size:0.75rem;">Eff. Markup:</span>`;
-                html += `<span style="font-size:0.75rem; color:#6b7280;">${p9.roundingDiff > 0 ? `$${p9.effectiveMarkup.toFixed(2)} (+$${p9.roundingDiff.toFixed(2)})` : `$${mu9.toFixed(2)}`}</span>`;
-                html += `<span style="font-size:0.75rem; color:#6b7280;">${p18.roundingDiff > 0 ? `$${p18.effectiveMarkup.toFixed(2)} (+$${p18.roundingDiff.toFixed(2)})` : `$${mu18.toFixed(2)}`}</span>`;
-            }
-            html += `<span style="color:var(--text-muted); font-size:0.78rem;">Tx Fee (${tf}%):</span><span style="font-size:0.78rem; color:#6b7280;">$${p9.txFee.toFixed(2)}</span><span style="font-size:0.78rem; color:#6b7280;">$${p18.txFee.toFixed(2)}</span>`;
-            html += `<span style="font-weight:700; color:var(--primary);">Player Total:</span><span style="font-weight:700; color:var(--primary);">$${p9.playerTotal.toFixed(2)}</span><span style="font-weight:700; color:var(--primary);">$${p18.playerTotal.toFixed(2)}</span>`;
-            html += `</div>`;
-            summaryEl.innerHTML = html;
-            previewEl.style.display = "block";
-        } else {
-            previewEl.style.display = "none";
-        }
+        _updateComboPricingPreviewInner("edit");
     }
 
     function updateAddComboPricingPreview() {
-        const cc9 = getCalcTotal("add-combo-9");
-        const mu9 = parseFloat(document.getElementById("add-event-tgf_markup_9")?.value) || 0;
-        const sg9 = parseFloat(document.getElementById("add-event-side_game_fee_9")?.value) || 0;
-        const cc18 = getCalcTotal("add-combo-18");
-        const mu18 = parseFloat(document.getElementById("add-event-tgf_markup_18")?.value) || 0;
-        const sg18 = parseFloat(document.getElementById("add-event-side_game_fee_18")?.value) || 0;
-        const tf = parseFloat(document.getElementById("add-event-transaction_fee_pct_combo")?.value) || 0;
-        const previewEl = document.getElementById("add-pricing-preview-combo");
-        const summaryEl = document.getElementById("add-pricing-summary-combo");
-        if (!previewEl || !summaryEl) return;
-
-        const sub9 = cc9 + mu9 + sg9;
-        const sub18 = cc18 + mu18 + sg18;
-        if (sub9 > 0 || sub18 > 0) {
-            const p9 = calcPricingLine(cc9, mu9, sg9, tf);
-            const p18 = calcPricingLine(cc18, mu18, sg18, tf);
-            let html = `<div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:0.15rem 0.75rem; font-size:0.82rem;">`;
-            html += `<span></span><span style="font-weight:700; color:#166534; font-size:0.78rem;">9-HOLE</span><span style="font-weight:700; color:#1e40af; font-size:0.78rem;">18-HOLE</span>`;
-            html += `<span style="color:var(--text-muted);">Course Cost:</span><span>$${cc9.toFixed(2)}</span><span>$${cc18.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted);">TGF Markup:</span><span>$${mu9.toFixed(2)}</span><span>$${mu18.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted);">Side Game Fee:</span><span>$${sg9.toFixed(2)}</span><span>$${sg18.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted);">Subtotal:</span><span>$${p9.subtotal.toFixed(2)}</span><span>$${p18.subtotal.toFixed(2)}</span>`;
-            html += `<span style="font-weight:600;">Event Charge:</span><span style="font-weight:600;">$${p9.actualCharge.toFixed(2)}</span><span style="font-weight:600;">$${p18.actualCharge.toFixed(2)}</span>`;
-            html += `<span style="color:var(--text-muted); font-size:0.78rem;">Tx Fee (${tf}%):</span><span style="font-size:0.78rem; color:#6b7280;">$${p9.txFee.toFixed(2)}</span><span style="font-size:0.78rem; color:#6b7280;">$${p18.txFee.toFixed(2)}</span>`;
-            html += `<span style="font-weight:700; color:var(--primary);">Player Total:</span><span style="font-weight:700; color:var(--primary);">$${p9.playerTotal.toFixed(2)}</span><span style="font-weight:700; color:var(--primary);">$${p18.playerTotal.toFixed(2)}</span>`;
-            html += `</div>`;
-            summaryEl.innerHTML = html;
-            previewEl.style.display = "block";
-        } else {
-            previewEl.style.display = "none";
-        }
+        _updateComboPricingPreviewInner("add");
     }
 
     // Live preview on pricing input change — single format (TGF markup, side game, tx fee)
@@ -5910,13 +6000,13 @@
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
         document.getElementById("edit-event-side_game_fee").value = ev.side_game_fee != null ? ev.side_game_fee : "";
-        document.getElementById("edit-event-transaction_fee_pct").value = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : "";
+        document.getElementById("edit-event-transaction_fee_pct").value = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : 3.5;
         // Pricing fields — combo format
         document.getElementById("edit-event-tgf_markup_9").value = ev.tgf_markup_9 != null ? ev.tgf_markup_9 : "";
         document.getElementById("edit-event-side_game_fee_9").value = ev.side_game_fee_9 != null ? ev.side_game_fee_9 : "";
         document.getElementById("edit-event-tgf_markup_18").value = ev.tgf_markup_18 != null ? ev.tgf_markup_18 : "";
         document.getElementById("edit-event-side_game_fee_18").value = ev.side_game_fee_18 != null ? ev.side_game_fee_18 : "";
-        document.getElementById("edit-event-transaction_fee_pct_combo").value = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : "";
+        document.getElementById("edit-event-transaction_fee_pct_combo").value = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : 3.5;
 
         // Render Course Cost Calculators
         const singleBreakdown = ev.course_cost_breakdown ? JSON.parse(ev.course_cost_breakdown) : null;
