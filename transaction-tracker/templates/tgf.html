@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — Payouts</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TGF Tracker">
+    <style>
+        /* ── TGF Payouts page styles ────────────────────────────── */
+        .tgf-layout { display: flex; gap: 0; min-height: calc(100vh - 130px); }
+        .tgf-sidebar {
+            width: 280px; min-width: 280px; background: var(--surface);
+            border-right: 1px solid var(--border); overflow-y: auto;
+            padding: 0; flex-shrink: 0;
+        }
+        .tgf-main { flex: 1; padding: 1.5rem 2rem; overflow-y: auto; }
+
+        .sidebar-title {
+            font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+            color: var(--text-muted); padding: 1rem 1rem 0.5rem; letter-spacing: 0.05em;
+        }
+        .sidebar-item {
+            padding: 0.6rem 1rem; cursor: pointer; border-left: 3px solid transparent;
+            transition: background 0.15s, border-color 0.15s;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .sidebar-item:hover { background: var(--row-hover); }
+        .sidebar-item.active { background: #eef2ff; border-left-color: var(--primary); }
+        .sidebar-item .name { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+        .sidebar-item .meta { font-size: 0.75rem; color: var(--text-muted); }
+        .sidebar-item .amount {
+            font-size: 0.85rem; font-weight: 700; color: var(--green);
+            white-space: nowrap;
+        }
+
+        /* Sub-tabs inside main area */
+        .sub-tabs {
+            display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem;
+        }
+        .sub-tab {
+            padding: 0.5rem 1.25rem; cursor: pointer; font-size: 0.85rem;
+            font-weight: 600; color: var(--text-muted); border-bottom: 2px solid transparent;
+            margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+            background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .sub-tab:hover { color: var(--text); }
+        .sub-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        /* Payout summary table */
+        .payout-table { width: 100%; border-collapse: collapse; }
+        .payout-table th {
+            text-align: left; font-size: 0.75rem; font-weight: 600;
+            color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;
+            padding: 0.5rem 0.75rem; border-bottom: 2px solid var(--border);
+        }
+        .payout-table th.right, .payout-table td.right { text-align: right; }
+        .payout-table td {
+            padding: 0.65rem 0.75rem; border-bottom: 1px solid #f1f5f9;
+            font-size: 0.9rem; vertical-align: middle;
+        }
+        .payout-table tbody tr { cursor: pointer; transition: background 0.1s; }
+        .payout-table tbody tr:hover { background: var(--row-hover); }
+        .payout-table tbody tr.expanded { background: #eef2ff; }
+        .payout-table .total-amount {
+            font-weight: 700; color: var(--green); font-variant-numeric: tabular-nums;
+        }
+
+        /* Expandable breakdown */
+        .breakdown-row { display: none; }
+        .breakdown-row.show { display: table-row; }
+        .breakdown-row td { padding: 0 !important; background: #f8fafc; }
+        .breakdown-inner { padding: 0.5rem 1rem 0.75rem 2.5rem; }
+        .breakdown-inner table { width: 100%; border-collapse: collapse; }
+        .breakdown-inner td {
+            padding: 0.3rem 0.5rem; font-size: 0.82rem; border: none; background: transparent;
+        }
+        .breakdown-inner .cat-badge {
+            display: inline-block; padding: 1px 8px; border-radius: 99px;
+            font-size: 0.72rem; font-weight: 600;
+        }
+        .cat-team_net        { background: #dbeafe; color: #1e40af; }
+        .cat-individual_net  { background: #dcfce7; color: #166534; }
+        .cat-individual_gross{ background: #fef3c7; color: #92400e; }
+        .cat-skins           { background: #fce7f3; color: #9d174d; }
+        .cat-closest_to_pin  { background: #e0e7ff; color: #4338ca; }
+        .cat-hole_in_one     { background: #fef08a; color: #854d0e; }
+        .cat-mvp             { background: #f3e8ff; color: #7c3aed; }
+        .cat-other           { background: #f1f5f9; color: #475569; }
+
+        /* Venmo button */
+        .venmo-btn {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 10px; border-radius: 99px; font-size: 0.75rem;
+            font-weight: 600; background: #008CFF; color: #fff;
+            text-decoration: none; border: none; cursor: pointer;
+            transition: background 0.15s;
+        }
+        .venmo-btn:hover { background: #006FCC; }
+        .venmo-btn svg { width: 14px; height: 14px; }
+
+        /* Event details card */
+        .detail-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        .detail-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1rem;
+        }
+        .detail-card .label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+        .detail-card .value { font-size: 1.1rem; font-weight: 700; margin-top: 0.25rem; }
+        .detail-card .value.money { color: var(--green); }
+
+        /* Golfer info tab */
+        .golfer-info-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem; margin-bottom: 1.5rem;
+        }
+
+        /* Golfer payout history */
+        .history-event { margin-bottom: 1rem; }
+        .history-event-header {
+            font-weight: 600; font-size: 0.9rem; padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border); display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        .history-event-header .event-total { color: var(--green); font-weight: 700; }
+
+        /* Screenshot drop zone */
+        .drop-zone {
+            border: 2px dashed var(--border); border-radius: var(--radius);
+            padding: 2rem; text-align: center; color: var(--text-muted);
+            transition: border-color 0.2s, background 0.2s; cursor: pointer;
+            margin-bottom: 1.5rem;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--primary); background: #eef2ff;
+        }
+
+        .empty-state {
+            text-align: center; padding: 3rem 1rem; color: var(--text-muted);
+        }
+        .empty-state h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+
+        /* Top-level tab toggle */
+        .top-tabs {
+            display: flex; gap: 0; margin-bottom: 0;
+            border-bottom: 2px solid var(--border); padding: 0 2rem;
+            background: var(--surface);
+        }
+        .top-tab {
+            padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem;
+            font-weight: 700; color: var(--text-muted); border-bottom: 3px solid transparent;
+            margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+            background: none; border-top: none; border-left: none; border-right: none;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .top-tab:hover { color: var(--text); }
+        .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .section-hidden { display: none !important; }
+
+        /* Rank column */
+        .rank-col { width: 30px; text-align: center; color: var(--text-muted); font-size: 0.8rem; }
+
+        @media (max-width: 768px) {
+            .tgf-layout { flex-direction: column; }
+            .tgf-sidebar { width: 100%; min-width: 100%; max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
+            .tgf-main { padding: 1rem; }
+            .detail-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Payouts & Winnings</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/tgf" class="active">Payouts</a>
+            <a href="/database" class="admin-nav" style="display:none;">Database</a>
+        </nav>
+
+        <!-- Top-level EVENTS / GOLFERS tabs -->
+        <div class="top-tabs">
+            <button class="top-tab active" data-top="events">Events</button>
+            <button class="top-tab" data-top="golfers">Golfers</button>
+        </div>
+
+        <!-- ═══════════ EVENTS SECTION ═══════════ -->
+        <div id="section-events" class="tgf-layout">
+            <div class="tgf-sidebar" id="events-sidebar">
+                <div class="sidebar-title">Events</div>
+                <div id="events-list">
+                    <div class="empty-state"><p>Loading...</p></div>
+                </div>
+            </div>
+            <div class="tgf-main" id="events-main">
+                <div class="empty-state">
+                    <h3>Select an event</h3>
+                    <p>Choose an event from the sidebar to view payouts</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════ GOLFERS SECTION ═══════════ -->
+        <div id="section-golfers" class="tgf-layout section-hidden">
+            <div class="tgf-sidebar" id="golfers-sidebar">
+                <div class="sidebar-title">Golfers</div>
+                <div id="golfers-list">
+                    <div class="empty-state"><p>Loading...</p></div>
+                </div>
+            </div>
+            <div class="tgf-main" id="golfers-main">
+                <div class="empty-state">
+                    <h3>Select a golfer</h3>
+                    <p>Choose a golfer from the sidebar to view their payout history</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/version.js"></script>
+    <script>
+    /* ═══════════════════════════════════════════════════════════
+       TGF Payouts — Client-side logic
+       ═══════════════════════════════════════════════════════════ */
+    (function() {
+        "use strict";
+
+        let DATA = { golfers: [], events: [], winnings: {} };
+        let selectedEventIdx = -1;
+        let selectedGolferId = -1;
+
+        const CATEGORY_LABELS = {
+            team_net: "Team Net",
+            individual_net: "Individual Net",
+            individual_gross: "Individual Gross",
+            skins: "Skins",
+            closest_to_pin: "Closest to Pin",
+            hole_in_one: "Hole in One",
+            mvp: "MVP",
+            other: "Other",
+        };
+
+        // ── Helpers ──────────────────────────────────────────────
+        const $ = s => document.querySelector(s);
+        const $$ = s => document.querySelectorAll(s);
+        const fmt = n => "$" + Number(n).toFixed(2);
+        const fmtDate = d => {
+            if (!d) return "";
+            const dt = new Date(d + "T12:00:00");
+            return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        };
+
+        function venmoLink(username, amount, eventCode, eventName) {
+            if (!username) return "";
+            const note = encodeURIComponent(`TGF ${eventCode} ${eventName}`);
+            return `https://venmo.com/${username}?txn=pay&amount=${amount.toFixed(2)}&note=${note}`;
+        }
+
+        function catBadge(cat) {
+            const label = CATEGORY_LABELS[cat] || cat;
+            return `<span class="cat-badge cat-${cat}">${label}</span>`;
+        }
+
+        // ── Data loading ─────────────────────────────────────────
+        async function loadData() {
+            try {
+                const resp = await fetch("/api/tgf");
+                DATA = await resp.json();
+                renderEventsSidebar();
+                renderGolfersSidebar();
+            } catch (e) {
+                console.error("Failed to load TGF data", e);
+            }
+        }
+
+        // ── Top tabs ─────────────────────────────────────────────
+        $$(".top-tab").forEach(btn => {
+            btn.addEventListener("click", () => {
+                $$(".top-tab").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                const target = btn.dataset.top;
+                $("#section-events").classList.toggle("section-hidden", target !== "events");
+                $("#section-golfers").classList.toggle("section-hidden", target !== "golfers");
+            });
+        });
+
+        // ═══════════ EVENTS TAB ══════════════════════════════════
+
+        function renderEventsSidebar() {
+            const el = $("#events-list");
+            if (!DATA.events.length) {
+                el.innerHTML = '<div class="empty-state"><p>No events yet</p></div>';
+                return;
+            }
+            el.innerHTML = DATA.events.map((ev, i) => `
+                <div class="sidebar-item${i === selectedEventIdx ? ' active' : ''}" data-eidx="${i}">
+                    <div>
+                        <div class="name">${ev.code}</div>
+                        <div class="meta">${fmtDate(ev.event_date)}</div>
+                    </div>
+                    <div class="amount">${fmt(ev.total_purse)}</div>
+                </div>
+            `).join("");
+
+            el.querySelectorAll(".sidebar-item").forEach(item => {
+                item.addEventListener("click", () => {
+                    selectedEventIdx = parseInt(item.dataset.eidx);
+                    renderEventsSidebar();
+                    renderEventMain();
+                });
+            });
+        }
+
+        function renderEventMain() {
+            const main = $("#events-main");
+            if (selectedEventIdx < 0 || selectedEventIdx >= DATA.events.length) {
+                main.innerHTML = '<div class="empty-state"><h3>Select an event</h3><p>Choose an event from the sidebar</p></div>';
+                return;
+            }
+            const ev = DATA.events[selectedEventIdx];
+
+            // Group payouts by golfer
+            const golferMap = {};
+            (ev.payouts || []).forEach(p => {
+                if (!golferMap[p.golfer_name]) {
+                    golferMap[p.golfer_name] = { name: p.golfer_name, golfer_id: p.golfer_id, total: 0, items: [] };
+                }
+                golferMap[p.golfer_name].total += p.amount;
+                golferMap[p.golfer_name].items.push(p);
+            });
+            const golferList = Object.values(golferMap).sort((a, b) => b.total - a.total);
+
+            main.innerHTML = `
+                <div class="sub-tabs">
+                    <button class="sub-tab active" data-sub="payouts">Payouts</button>
+                    <button class="sub-tab" data-sub="details">Details</button>
+                </div>
+                <div id="ev-payouts">${renderPayoutsTab(ev, golferList)}</div>
+                <div id="ev-details" style="display:none;">${renderDetailsTab(ev)}</div>
+            `;
+
+            // Sub-tab switching
+            main.querySelectorAll(".sub-tab").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    main.querySelectorAll(".sub-tab").forEach(b => b.classList.remove("active"));
+                    btn.classList.add("active");
+                    const t = btn.dataset.sub;
+                    main.querySelector("#ev-payouts").style.display = t === "payouts" ? "" : "none";
+                    main.querySelector("#ev-details").style.display = t === "details" ? "" : "none";
+                });
+            });
+
+            // Row expand/collapse
+            main.querySelectorAll("tr.golfer-row").forEach(row => {
+                row.addEventListener("click", () => {
+                    const bdr = main.querySelector(`.breakdown-row[data-gid="${row.dataset.gid}"]`);
+                    if (bdr) {
+                        const isOpen = bdr.classList.contains("show");
+                        // Close all
+                        main.querySelectorAll(".breakdown-row").forEach(r => r.classList.remove("show"));
+                        main.querySelectorAll("tr.golfer-row").forEach(r => r.classList.remove("expanded"));
+                        if (!isOpen) {
+                            bdr.classList.add("show");
+                            row.classList.add("expanded");
+                        }
+                    }
+                });
+            });
+        }
+
+        function renderPayoutsTab(ev, golferList) {
+            if (!golferList.length) {
+                return '<div class="empty-state"><p>No payouts recorded for this event</p></div>';
+            }
+
+            let rows = "";
+            golferList.forEach((g, idx) => {
+                // Look up venmo username
+                const winData = Object.values(DATA.winnings).find(w => w.id === g.golfer_id);
+                const venmo = winData ? winData.venmo_username : "";
+                const venmoHtml = venmo
+                    ? `<a class="venmo-btn" href="${venmoLink(venmo, g.total, ev.code, ev.name)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>
+                         Pay
+                       </a>`
+                    : "";
+
+                rows += `
+                    <tr class="golfer-row" data-gid="${g.golfer_id}">
+                        <td class="rank-col">${idx + 1}</td>
+                        <td>${g.name}</td>
+                        <td class="right">${g.items.length}</td>
+                        <td class="right total-amount">${fmt(g.total)}</td>
+                        <td class="right">${venmoHtml}</td>
+                    </tr>
+                    <tr class="breakdown-row" data-gid="${g.golfer_id}">
+                        <td colspan="5">
+                            <div class="breakdown-inner">
+                                <table>
+                                    ${g.items.map(p => `
+                                        <tr>
+                                            <td>${catBadge(p.category)}</td>
+                                            <td>${p.description || CATEGORY_LABELS[p.category] || p.category}</td>
+                                            <td class="right" style="font-weight:600;color:var(--green);">${fmt(p.amount)}</td>
+                                        </tr>
+                                    `).join("")}
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            return `
+                <h2 style="font-size:1.15rem;margin-bottom:1rem;">${ev.code} &mdash; Player Purse Summary</h2>
+                <table class="payout-table">
+                    <thead>
+                        <tr>
+                            <th class="rank-col">#</th>
+                            <th>Golfer</th>
+                            <th class="right">Games</th>
+                            <th class="right">Total</th>
+                            <th class="right" style="width:80px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function renderDetailsTab(ev) {
+            return `
+                <h2 style="font-size:1.15rem;margin-bottom:1rem;">Event Details</h2>
+                <div class="detail-grid">
+                    <div class="detail-card">
+                        <div class="label">Event Code</div>
+                        <div class="value">${ev.code}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">Date</div>
+                        <div class="value">${fmtDate(ev.event_date)}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">Course</div>
+                        <div class="value">${ev.course || "—"}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">Chapter</div>
+                        <div class="value">${ev.chapter || "—"}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">Total Purse</div>
+                        <div class="value money">${fmt(ev.total_purse)}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">Winners</div>
+                        <div class="value">${ev.winners_count}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">Individual Payouts</div>
+                        <div class="value">${ev.payouts_count}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ═══════════ GOLFERS TAB ═════════════════════════════════
+
+        function renderGolfersSidebar() {
+            const el = $("#golfers-list");
+            // Sort by all-time winnings descending
+            const sorted = Object.values(DATA.winnings).sort((a, b) => b.total_winnings - a.total_winnings);
+            if (!sorted.length) {
+                el.innerHTML = '<div class="empty-state"><p>No golfers yet</p></div>';
+                return;
+            }
+            el.innerHTML = sorted.map(g => `
+                <div class="sidebar-item${g.id === selectedGolferId ? ' active' : ''}" data-gid="${g.id}">
+                    <div>
+                        <div class="name">${g.name}</div>
+                        <div class="meta">${g.events_played} event${g.events_played !== 1 ? 's' : ''}</div>
+                    </div>
+                    <div class="amount">${fmt(g.total_winnings)}</div>
+                </div>
+            `).join("");
+
+            el.querySelectorAll(".sidebar-item").forEach(item => {
+                item.addEventListener("click", () => {
+                    selectedGolferId = parseInt(item.dataset.gid);
+                    renderGolfersSidebar();
+                    renderGolferMain();
+                });
+            });
+        }
+
+        function renderGolferMain() {
+            const main = $("#golfers-main");
+            const g = Object.values(DATA.winnings).find(w => w.id === selectedGolferId);
+            if (!g) {
+                main.innerHTML = '<div class="empty-state"><h3>Select a golfer</h3></div>';
+                return;
+            }
+
+            // Find all events with payouts for this golfer
+            const golferEvents = [];
+            DATA.events.forEach(ev => {
+                const myPayouts = (ev.payouts || []).filter(p => p.golfer_id === g.id);
+                if (myPayouts.length) {
+                    const evTotal = myPayouts.reduce((s, p) => s + p.amount, 0);
+                    golferEvents.push({ event: ev, payouts: myPayouts, total: evTotal });
+                }
+            });
+
+            main.innerHTML = `
+                <div class="sub-tabs">
+                    <button class="sub-tab active" data-sub="gpayouts">Payouts</button>
+                    <button class="sub-tab" data-sub="ginfo">Info</button>
+                </div>
+                <div id="golfer-payouts">${renderGolferPayouts(g, golferEvents)}</div>
+                <div id="golfer-info" style="display:none;">${renderGolferInfo(g)}</div>
+            `;
+
+            main.querySelectorAll(".sub-tab").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    main.querySelectorAll(".sub-tab").forEach(b => b.classList.remove("active"));
+                    btn.classList.add("active");
+                    const t = btn.dataset.sub;
+                    main.querySelector("#golfer-payouts").style.display = t === "gpayouts" ? "" : "none";
+                    main.querySelector("#golfer-info").style.display = t === "ginfo" ? "" : "none";
+                });
+            });
+        }
+
+        function renderGolferPayouts(g, golferEvents) {
+            if (!golferEvents.length) {
+                return '<div class="empty-state"><p>No payouts yet</p></div>';
+            }
+
+            let html = `<h2 style="font-size:1.15rem;margin-bottom:1rem;">${g.name} &mdash; All-Time Winnings: <span style="color:var(--green);">${fmt(g.total_winnings)}</span></h2>`;
+
+            golferEvents.forEach(ge => {
+                html += `
+                    <div class="history-event">
+                        <div class="history-event-header">
+                            <span>${ge.event.code} &mdash; ${fmtDate(ge.event.event_date)}</span>
+                            <span class="event-total">${fmt(ge.total)}</span>
+                        </div>
+                        <table class="payout-table" style="margin-bottom:0.5rem;">
+                            <tbody>
+                                ${ge.payouts.map(p => `
+                                    <tr style="cursor:default;">
+                                        <td>${catBadge(p.category)}</td>
+                                        <td>${p.description || CATEGORY_LABELS[p.category] || p.category}</td>
+                                        <td class="right total-amount">${fmt(p.amount)}</td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            });
+
+            return html;
+        }
+
+        function renderGolferInfo(g) {
+            const golfer = DATA.golfers.find(gl => gl.id === g.id) || {};
+            return `
+                <h2 style="font-size:1.15rem;margin-bottom:1rem;">Golfer Info</h2>
+                <div class="golfer-info-grid">
+                    <div class="detail-card">
+                        <div class="label">Name</div>
+                        <div class="value">${g.name}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">Chapter</div>
+                        <div class="value">${golfer.chapter || "—"}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">Venmo</div>
+                        <div class="value">${golfer.venmo_username ? "@" + golfer.venmo_username : "—"}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">All-Time Winnings</div>
+                        <div class="value money">${fmt(g.total_winnings)}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="label">Events Won</div>
+                        <div class="value">${g.events_played}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ── Init ─────────────────────────────────────────────────
+        document.addEventListener("DOMContentLoaded", () => {
+            loadData();
+            if (typeof initAuth === "function") initAuth();
+        });
+    })();
+    </script>
+</body>
+</html>
