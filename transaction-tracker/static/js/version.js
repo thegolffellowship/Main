@@ -1,5 +1,25 @@
-window.TGF_VERSION = "2.0.0";
+window.TGF_VERSION = "2.1.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.1.0",
+    date: "2026-04-08",
+    title: "Compact Event Pricing — Collapsible Calculators, Player Type Cards & Side-by-Side Combo",
+    changes: [
+      "Collapsible Course Cost Calculator — collapsed by default (green fees only), click to expand all 5 line items",
+      "9/18 Combo pricing displayed side-by-side: 9-Hole Calculator (green) + 18-Hole Calculator (blue)",
+      "Event Cost total shown at bottom of each calculator card = ceil(Course Cost) + Markup + Inc. Games",
+      "Calculator header shows rounded-up course cost (e.g., $68 not $67.11)",
+      "Colored pricing cards: Member (green), Guest (blue), 1st Timer (gold), N/A (gray)",
+      "Three tiers: Event Only, With One Game (+$16), With Both Games (+$32)",
+      "Guest markup auto-derived: Member + $10 (9h/combo) or +$15 (18h standalone)",
+      "1st Timer markup auto-derived: Guest − $25 (can go negative as discount)",
+      "Both Games = N/A for Guest and 1st Timer; combo 18-hole = Member only",
+      "Course cost rounds up FIRST before adding markup and game fees",
+      "Transaction fee defaults to 3.5% (pre-filled value, not just placeholder)",
+      "Renamed Side Game Fee → Inc. Games ($) to distinguish from per-game add-ons",
+      "Modal widened to 700px for side-by-side combo layout",
+    ],
+  },
   {
     version: "2.0.0",
     date: "2026-04-06",

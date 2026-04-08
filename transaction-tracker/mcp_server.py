@@ -157,8 +157,12 @@ def list_events(chapter: str = "", upcoming_only: bool = False) -> str:
         upcoming_only: If True, only return events where event_date >= today.
 
     Returns per event: item_name, event_date, course, chapter, course_cost,
-    course_cost_9, course_cost_18, tgf_markup, tgf_markup_9, tgf_markup_18,
-    side_game_fee, transaction_fee_pct, course_surcharge, registrations.
+    course_cost_9, course_cost_18, tgf_markup (Member rate), tgf_markup_9, tgf_markup_18,
+    side_game_fee (Inc. Games admin fee), transaction_fee_pct, course_surcharge, registrations.
+
+    Pricing notes: tgf_markup is the Member rate. Guest = Member + $10 (9h/combo) or +$15
+    (18h standalone). 1st Timer = Guest - $25. side_game_fee is the included games admin fee
+    (part of Event Only base price). Course cost rounds up to nearest dollar.
     """
     from datetime import date as _date
     events = get_all_events()
@@ -342,9 +346,9 @@ def create_new_event(
         event_date: Event date in YYYY-MM-DD format
         course: Golf course name
         chapter: Chapter/city where event is held
-        course_cost: Course/vendor cost per player
-        tgf_markup: TGF markup per player
-        side_game_fee: TGF side game admin fee per game
+        course_cost: Course/vendor cost per player (rounds up to nearest dollar in pricing calc)
+        tgf_markup: TGF markup per player (Member rate; Guest/1st Timer derived automatically)
+        side_game_fee: Included games admin fee (part of base Event Only price, labeled "Inc. Games" in UI)
         transaction_fee_pct: Transaction fee percentage (default 3.5)
     """
     ev = create_event(event_name, event_date or None, course or None, chapter or None,
@@ -361,7 +365,10 @@ def update_existing_event(event_id: int, fields: dict) -> str:
 
     Args:
         event_id: The event ID to update
-        fields: Dict of fields to update. Allowed: item_name, event_date, course, chapter, event_type, course_cost, tgf_markup, side_game_fee, transaction_fee_pct
+        fields: Dict of fields to update. Allowed: item_name, event_date, course, chapter,
+                event_type, course_cost, tgf_markup (Member rate), side_game_fee (Inc. Games),
+                transaction_fee_pct. For combo events also: course_cost_9, course_cost_18,
+                tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18.
     """
     ok = update_event(event_id, fields)
     if ok:

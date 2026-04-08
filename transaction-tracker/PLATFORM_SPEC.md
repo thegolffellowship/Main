@@ -133,9 +133,9 @@ transaction-tracker/
 | tee_time_count_18 | INTEGER | 18-hole tee time count (combo mode only) |
 | tee_direction | TEXT DEFAULT 'First Tee' | Tee time direction: First Tee / Last Tee |
 | tee_direction_18 | TEXT DEFAULT 'First Tee' | 18-hole tee direction (combo mode) |
-| course_cost | REAL | Course/vendor cost per player |
-| tgf_markup | REAL | TGF markup per player |
-| side_game_fee | REAL | TGF side game admin fee per game |
+| course_cost | REAL | Course/vendor cost per player (rounds up to nearest dollar) |
+| tgf_markup | REAL | TGF markup per player — Member rate (Guest/1st Timer derived) |
+| side_game_fee | REAL | Included games admin fee ("Inc. Games") — part of base Event Only price |
 | transaction_fee_pct | REAL DEFAULT 3.5 | Transaction processing fee percentage |
 | event_type | TEXT DEFAULT 'event' | |
 | created_at | TEXT | |
@@ -548,7 +548,7 @@ All pages use **vanilla JavaScript** (no frameworks). Each HTML template contain
 
 **Transactions** (`index.html` + `dashboard.js`): Most complex page. Column drag-to-reorder, inline cell editing via modal, category filter buttons (All/Upcoming/Past/Memberships), 24-column CSV export, "Check Now" button with real-time progress polling.
 
-**Events** (`events.html`): Expandable rows showing registrants per event. Add Player modal. Sync Events button auto-detects events from transaction item names. Edit Event modal with format (9/18/Combo), start type (Tee Times/Shotgun — independent per group in combo mode), start time, and tee time planning fields. **Tee Time Advisor** panel auto-populates when date + chapter are set: fetches sunset data via `/api/sunset`, shows last recommended tee times with traffic light indicators (green/yellow/red), and generates tee time sheets with per-slot finish estimates. Combo mode shows side-by-side tee sheets with independent start times, start types, and counts for 9-hole and 18-hole groups.
+**Events** (`events.html`): Expandable rows showing registrants per event. Add Player modal. Sync Events button auto-detects events from transaction item names. Edit Event modal with GENERAL and PRICING tabs. GENERAL: format (9/18/Combo), start type (Tee Times/Shotgun — independent per group in combo mode), start time, tee time planning fields. PRICING: collapsible Course Cost Calculator (collapsed=green fees only, expands to 5 line items), Markup ($), Inc. Games ($), Transaction Fee (%). For combo events, calculators and pricing inputs displayed **side-by-side** (9-Hole Calculator green, 18-Hole Calculator blue). Each calculator card shows "Event Cost" total = ceil(courseCost) + markup + incGames. Live-updating pricing summary with colored cards for Member/Guest/1st Timer × Event Only/With One Game (+$16)/With Both Games (+$32). Guest = Member markup +$10 (9h/combo) or +$15 (18h standalone); 1st Timer = Guest −$25. Both Games N/A for Guest/1st Timer; combo 18-hole = Member only. **Tee Time Advisor** panel auto-populates when date + chapter are set: fetches sunset data via `/api/sunset`, shows last recommended tee times with traffic light indicators (green/yellow/red), and generates tee time sheets with per-slot finish estimates. Combo mode shows side-by-side tee sheets with independent start times, start types, and counts for 9-hole and 18-hole groups.
 
 **Customers** (`customers.html`): List view with expandable inline detail rows (like Events). Card view with bottom detail panel. Derives status (MEMBER/GUEST/1st TIMER) and chapter (most frequent city) from transaction history. Email addresses are clickable mailto: links.
 
