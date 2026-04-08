@@ -1522,6 +1522,52 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_name ON agent_action_log(agent_name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_date ON agent_action_log(created_at)")
 
+        # ── TGF Payouts ─────────────────────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tgf_golfers (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                name            TEXT UNIQUE NOT NULL,
+                venmo_username  TEXT,
+                chapter         TEXT,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tgf_events (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                code            TEXT UNIQUE NOT NULL,
+                name            TEXT NOT NULL,
+                event_date      TEXT NOT NULL,
+                course          TEXT,
+                chapter         TEXT,
+                total_purse     REAL DEFAULT 0,
+                winners_count   INTEGER DEFAULT 0,
+                payouts_count   INTEGER DEFAULT 0,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tgf_payouts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id        INTEGER NOT NULL REFERENCES tgf_events(id) ON DELETE CASCADE,
+                golfer_id       INTEGER NOT NULL REFERENCES tgf_golfers(id),
+                category        TEXT NOT NULL,
+                amount          REAL NOT NULL,
+                description     TEXT,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_event ON tgf_payouts(event_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_golfer ON tgf_payouts(golfer_id)")
+
         # Seed COO agents on first run
         existing_agents = conn.execute("SELECT COUNT(*) as cnt FROM coo_agents").fetchone()
         if existing_agents["cnt"] == 0:
@@ -9306,3 +9352,162 @@ def run_compliance_checks(db_path: str | Path | None = None) -> list[dict]:
         log_agent_action(agent, action, desc, outcome="action_item_created", db_path=db_path)
 
     return created
+
+
+# ---------------------------------------------------------------------------
+# TGF Payouts
+# ---------------------------------------------------------------------------
+
+def _get_or_create_golfer(conn, name: str) -> int:
+    """Return golfer id, creating if needed."""
+    row = conn.execute("SELECT id FROM tgf_golfers WHERE name = ?", (name,)).fetchone()
+    if row:
+        return row["id"]
+    conn.execute("INSERT INTO tgf_golfers (name) VALUES (?)", (name,))
+    return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_tgf_data(db_path=None):
+    """Return all golfers and events with payouts."""
+    with _connect(db_path) as conn:
+        golfers = [dict(r) for r in conn.execute(
+            "SELECT * FROM tgf_golfers ORDER BY name"
+        ).fetchall()]
+
+        events = []
+        for ev in conn.execute("SELECT * FROM tgf_events ORDER BY event_date DESC").fetchall():
+            ev_dict = dict(ev)
+            payouts = [dict(p) for p in conn.execute(
+                """SELECT p.*, g.name as golfer_name
+                   FROM tgf_payouts p JOIN tgf_golfers g ON g.id = p.golfer_id
+                   WHERE p.event_id = ?
+                   ORDER BY p.amount DESC""",
+                (ev["id"],),
+            ).fetchall()]
+            ev_dict["payouts"] = payouts
+            events.append(ev_dict)
+
+        # Compute all-time winnings per golfer
+        winnings = {}
+        for row in conn.execute(
+            """SELECT g.id, g.name, g.venmo_username, g.chapter,
+                      COALESCE(SUM(p.amount), 0) as total_winnings,
+                      COUNT(DISTINCT p.event_id) as events_played
+               FROM tgf_golfers g
+               LEFT JOIN tgf_payouts p ON p.golfer_id = g.id
+               GROUP BY g.id
+               ORDER BY total_winnings DESC"""
+        ).fetchall():
+            winnings[row["id"]] = dict(row)
+
+        return {"golfers": golfers, "events": events, "winnings": winnings}
+
+
+def add_tgf_event(data: dict, db_path=None) -> dict:
+    """Add a new TGF event with payouts.
+
+    data: {code, name, event_date, course, chapter, total_purse, winners_count, payouts: [{golferName, category, amount, description}]}
+    """
+    with _connect(db_path) as conn:
+        # Check for duplicate
+        existing = conn.execute("SELECT id FROM tgf_events WHERE code = ?", (data["code"],)).fetchone()
+        if existing:
+            return {"error": f"Event {data['code']} already exists", "event_id": existing["id"]}
+
+        conn.execute(
+            """INSERT INTO tgf_events (code, name, event_date, course, chapter, total_purse, winners_count, payouts_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (data["code"], data["name"], data["event_date"], data.get("course", ""),
+             data.get("chapter", ""), data.get("total_purse", 0),
+             data.get("winners_count", 0), len(data.get("payouts", []))),
+        )
+        event_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        for p in data.get("payouts", []):
+            golfer_id = _get_or_create_golfer(conn, p["golferName"])
+            conn.execute(
+                """INSERT INTO tgf_payouts (event_id, golfer_id, category, amount, description)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (event_id, golfer_id, p["category"], p["amount"], p.get("description", "")),
+            )
+
+        conn.commit()
+        return {"event_id": event_id, "payouts_added": len(data.get("payouts", []))}
+
+
+def update_tgf_event(event_id: int, data: dict, db_path=None) -> dict:
+    """Update event metadata (not payouts)."""
+    with _connect(db_path) as conn:
+        fields = []
+        values = []
+        for key in ("name", "event_date", "course", "chapter", "total_purse", "winners_count"):
+            if key in data:
+                fields.append(f"{key} = ?")
+                values.append(data[key])
+        if not fields:
+            return {"error": "No fields to update"}
+        values.append(event_id)
+        conn.execute(f"UPDATE tgf_events SET {', '.join(fields)} WHERE id = ?", values)
+        conn.commit()
+        return {"updated": True}
+
+
+def delete_tgf_event(event_id: int, db_path=None) -> dict:
+    """Delete event and its payouts."""
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM tgf_payouts WHERE event_id = ?", (event_id,))
+        conn.execute("DELETE FROM tgf_events WHERE id = ?", (event_id,))
+        conn.commit()
+        return {"deleted": True}
+
+
+def add_tgf_golfer(data: dict, db_path=None) -> dict:
+    """Add or update a golfer."""
+    with _connect(db_path) as conn:
+        existing = conn.execute("SELECT id FROM tgf_golfers WHERE name = ?", (data["name"],)).fetchone()
+        if existing:
+            updates = []
+            vals = []
+            for key in ("venmo_username", "chapter"):
+                if key in data:
+                    updates.append(f"{key} = ?")
+                    vals.append(data[key])
+            if updates:
+                vals.append(existing["id"])
+                conn.execute(f"UPDATE tgf_golfers SET {', '.join(updates)} WHERE id = ?", vals)
+                conn.commit()
+            return {"golfer_id": existing["id"], "updated": True}
+        conn.execute(
+            "INSERT INTO tgf_golfers (name, venmo_username, chapter) VALUES (?, ?, ?)",
+            (data["name"], data.get("venmo_username", ""), data.get("chapter", "")),
+        )
+        conn.commit()
+        return {"golfer_id": conn.execute("SELECT last_insert_rowid()").fetchone()[0]}
+
+
+def import_tgf_golfers(golfers: list[dict], db_path=None) -> dict:
+    """Bulk import/update golfers. Each dict: {name, venmo_username?, chapter?}."""
+    added = 0
+    updated = 0
+    with _connect(db_path) as conn:
+        for g in golfers:
+            existing = conn.execute("SELECT id FROM tgf_golfers WHERE name = ?", (g["name"],)).fetchone()
+            if existing:
+                parts = []
+                vals = []
+                for key in ("venmo_username", "chapter"):
+                    if g.get(key):
+                        parts.append(f"{key} = ?")
+                        vals.append(g[key])
+                if parts:
+                    vals.append(existing["id"])
+                    conn.execute(f"UPDATE tgf_golfers SET {', '.join(parts)} WHERE id = ?", vals)
+                    updated += 1
+            else:
+                conn.execute(
+                    "INSERT INTO tgf_golfers (name, venmo_username, chapter) VALUES (?, ?, ?)",
+                    (g["name"], g.get("venmo_username", ""), g.get("chapter", "")),
+                )
+                added += 1
+        conn.commit()
+    return {"added": added, "updated": updated}

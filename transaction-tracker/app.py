@@ -170,6 +170,13 @@ from email_parser.database import (
     get_reconciliation_summary,
     get_coo_agents,
     get_agent_action_log,
+    # TGF Payouts
+    get_tgf_data,
+    add_tgf_event,
+    add_tgf_golfer,
+    import_tgf_golfers,
+    update_tgf_event,
+    delete_tgf_event,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -5543,6 +5550,101 @@ def api_close_period():
 
 
 # ---------------------------------------------------------------------------
+# TGF Payouts
+# ---------------------------------------------------------------------------
+
+@app.route("/tgf")
+def tgf_page():
+    return render_template("tgf.html")
+
+
+@app.route("/api/tgf")
+def api_tgf_data():
+    return jsonify(get_tgf_data())
+
+
+@app.route("/api/tgf", methods=["POST"])
+@require_role("manager")
+def api_tgf_action():
+    d = request.json or {}
+    action = d.get("action")
+    if action == "add_event":
+        return jsonify(add_tgf_event(d))
+    elif action == "add_golfer":
+        return jsonify(add_tgf_golfer(d))
+    elif action == "import_golfers":
+        return jsonify(import_tgf_golfers(d.get("golfers", [])))
+    elif action == "update_event":
+        return jsonify(update_tgf_event(d["event_id"], d))
+    elif action == "delete_event":
+        return jsonify(delete_tgf_event(d["event_id"]))
+    else:
+        return jsonify({"error": f"Unknown action: {action}"}), 400
+
+
+@app.route("/api/tgf/parse-screenshot", methods=["POST"])
+@require_role("manager")
+def api_tgf_parse_screenshot():
+    """Accept a base64 image, send to Claude vision, return parsed payouts JSON."""
+    d = request.json or {}
+    image_data = d.get("image")
+    if not image_data:
+        return jsonify({"error": "No image data provided"}), 400
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY not configured"}), 500
+
+    # Strip data URL prefix if present
+    if "," in image_data:
+        image_data = image_data.split(",", 1)[1]
+
+    media_type = d.get("media_type", "image/png")
+
+    client = _anthropic.Anthropic(api_key=api_key)
+    try:
+        resp = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": media_type, "data": image_data},
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "Parse this Golf Genius payout screenshot. Return ONLY valid JSON with:\n"
+                            "{\n"
+                            '  "event": {"code": "s9.X ...", "name": "Event Name", "date": "YYYY-MM-DD", "course": "Course Name"},\n'
+                            '  "payouts": [\n'
+                            '    {"golferName": "First Last", "category": "team_net|individual_net|individual_gross|skins|closest_to_pin|hole_in_one|mvp|other", "amount": 12.50, "description": "Game description"}\n'
+                            "  ]\n"
+                            "}\n\n"
+                            "Categories: team_net, individual_net, individual_gross, skins, closest_to_pin, hole_in_one, mvp, other.\n"
+                            "Extract every payout line. Amount should be a number (no $ sign).\n"
+                            "Return ONLY the JSON — no markdown, no explanation."
+                        ),
+                    },
+                ],
+            }],
+        )
+        text = resp.content[0].text.strip()
+        # Try to parse JSON from the response
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        parsed = json.loads(text)
+        return jsonify(parsed)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Failed to parse AI response as JSON", "raw": text}), 422
+    except Exception as e:
+        logger.exception("Screenshot parse failed")
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
 # App startup
 # ---------------------------------------------------------------------------
 init_db()
@@ -5569,6 +5671,47 @@ _SA_EVENTS = [
 _seed_result = seed_events(_SA_EVENTS)
 if _seed_result["inserted"]:
     logger.info("Seeded %d SA events", _seed_result["inserted"])
+
+# Seed TGF payout data — s9.4 The Quarry (April 7, 2026)
+_s94_result = add_tgf_event({
+    "code": "s9.4 The Quarry",
+    "name": "The Quarry",
+    "event_date": "2026-04-07",
+    "course": "The Quarry",
+    "chapter": "San Antonio",
+    "total_purse": 894.00,
+    "winners_count": 14,
+    "payouts": [
+        {"golferName": "Gilbert Ellis", "category": "mvp", "amount": 84.00, "description": "TGF MVP"},
+        {"golferName": "Gilbert Ellis", "category": "individual_net", "amount": 65.25, "description": "Individual Net"},
+        {"golferName": "Gilbert Ellis", "category": "other", "amount": 58.00, "description": "s9.4 MVP Net"},
+        {"golferName": "Gilbert Ellis", "category": "individual_gross", "amount": 21.00, "description": "Individual Gross"},
+        {"golferName": "Pat Youngs", "category": "skins", "amount": 37.80, "description": "Skins Gross"},
+        {"golferName": "Pat Youngs", "category": "closest_to_pin", "amount": 31.00, "description": "Closest to Pin #16"},
+        {"golferName": "Pat Youngs", "category": "individual_net", "amount": 26.10, "description": "Individual Net"},
+        {"golferName": "Pat Youngs", "category": "individual_gross", "amount": 21.00, "description": "Individual Gross"},
+        {"golferName": "Pat Youngs", "category": "team_net", "amount": 19.50, "description": "Team Net"},
+        {"golferName": "Jeff Young", "category": "skins", "amount": 56.70, "description": "Skins Gross"},
+        {"golferName": "Jeff Young", "category": "closest_to_pin", "amount": 31.00, "description": "Closest to Pin #12"},
+        {"golferName": "Jeff Young", "category": "team_net", "amount": 19.50, "description": "Team Net"},
+        {"golferName": "Roland Campos", "category": "individual_net", "amount": 65.25, "description": "Individual Net"},
+        {"golferName": "Roland Campos", "category": "individual_gross", "amount": 21.00, "description": "Individual Gross"},
+        {"golferName": "Roland Campos", "category": "team_net", "amount": 19.50, "description": "Team Net"},
+        {"golferName": "Jeff Rideout", "category": "skins", "amount": 47.25, "description": "Skins Gross"},
+        {"golferName": "Jeff Rideout", "category": "individual_gross", "amount": 21.00, "description": "Individual Gross"},
+        {"golferName": "Fred Wicker", "category": "skins", "amount": 47.25, "description": "Skins Gross"},
+        {"golferName": "Adam Baker", "category": "individual_net", "amount": 39.15, "description": "Individual Net"},
+        {"golferName": "Rob Callaway", "category": "individual_net", "amount": 39.15, "description": "Individual Net"},
+        {"golferName": "Joe Decker", "category": "individual_net", "amount": 26.10, "description": "Individual Net"},
+        {"golferName": "Jordan Bastin", "category": "team_net", "amount": 19.50, "description": "Team Net"},
+        {"golferName": "Eric Taft", "category": "team_net", "amount": 19.50, "description": "Team Net"},
+        {"golferName": "Steven Hunt", "category": "team_net", "amount": 19.50, "description": "Team Net"},
+        {"golferName": "Jeff Greenwell", "category": "team_net", "amount": 19.50, "description": "Team Net"},
+        {"golferName": "Brian Thompson", "category": "team_net", "amount": 19.50, "description": "Team Net"},
+    ],
+})
+if "event_id" in _s94_result and "error" not in _s94_result:
+    logger.info("Seeded TGF payout event s9.4 The Quarry (event_id=%d)", _s94_result["event_id"])
 
 # Only start the scheduler in one Gunicorn worker (or in dev mode).
 # Gunicorn's --preload flag shares module-level state, but with forked workers
