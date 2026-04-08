@@ -547,6 +547,10 @@
                             <label style="font-weight:600; font-size:0.82rem;">Inc. Games ($)<input type="number" id="edit-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="edit-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
                         </div>
+                        <div id="edit-single-event-total" style="margin-top:0.5rem; padding:0.4rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; text-align:center; display:none;">
+                            <span style="font-size:0.75rem; font-weight:600; color:var(--text-muted);">Member Event Cost</span>
+                            <span id="edit-single-event-total-val" style="font-size:1.1rem; font-weight:800; color:var(--primary); display:block;"></span>
+                        </div>
                         <div id="edit-pricing-preview" style="margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
                             <div id="edit-pricing-summary"></div>
                         </div>
@@ -563,6 +567,10 @@
                                     <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="edit-event-tgf_markup_9" class="modal-input" min="0" step="0.01" placeholder="8.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                     <label style="font-weight:600; font-size:0.75rem;">Inc. Games ($)<input type="number" id="edit-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                 </div>
+                                <div id="edit-combo-9-event-total" style="margin-top:0.35rem; padding-top:0.3rem; border-top:1px solid #bbf7d0; text-align:center; display:none;">
+                                    <span style="font-size:0.7rem; font-weight:600; color:#166534;">Event Cost</span>
+                                    <span id="edit-combo-9-event-total-val" style="font-size:1rem; font-weight:800; color:#166534; display:block;"></span>
+                                </div>
                             </div>
                             <!-- 18-Hole column -->
                             <div style="padding:0.5rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
@@ -571,6 +579,10 @@
                                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
                                     <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="edit-event-tgf_markup_18" class="modal-input" min="0" step="0.01" placeholder="15.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                     <label style="font-weight:600; font-size:0.75rem;">Inc. Games ($)<input type="number" id="edit-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                </div>
+                                <div id="edit-combo-18-event-total" style="margin-top:0.35rem; padding-top:0.3rem; border-top:1px solid #bfdbfe; text-align:center; display:none;">
+                                    <span style="font-size:0.7rem; font-weight:600; color:#1e40af;">Event Cost</span>
+                                    <span id="edit-combo-18-event-total-val" style="font-size:1rem; font-weight:800; color:#1e40af; display:block;"></span>
                                 </div>
                             </div>
                         </div>
@@ -1057,6 +1069,10 @@
                             <label style="font-weight:600; font-size:0.82rem;">Inc. Games ($)<input type="number" id="add-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="add-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
                         </div>
+                        <div id="add-single-event-total" style="margin-top:0.5rem; padding:0.4rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; text-align:center; display:none;">
+                            <span style="font-size:0.75rem; font-weight:600; color:var(--text-muted);">Member Event Cost</span>
+                            <span id="add-single-event-total-val" style="font-size:1.1rem; font-weight:800; color:var(--primary); display:block;"></span>
+                        </div>
                         <div id="add-pricing-preview" style="margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
                             <div id="add-pricing-summary"></div>
                         </div>
@@ -1073,6 +1089,10 @@
                                     <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="add-event-tgf_markup_9" class="modal-input" min="0" step="0.01" placeholder="8.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                     <label style="font-weight:600; font-size:0.75rem;">Inc. Games ($)<input type="number" id="add-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                 </div>
+                                <div id="add-combo-9-event-total" style="margin-top:0.35rem; padding-top:0.3rem; border-top:1px solid #bbf7d0; text-align:center; display:none;">
+                                    <span style="font-size:0.7rem; font-weight:600; color:#166534;">Event Cost</span>
+                                    <span id="add-combo-9-event-total-val" style="font-size:1rem; font-weight:800; color:#166534; display:block;"></span>
+                                </div>
                             </div>
                             <!-- 18-Hole column -->
                             <div style="padding:0.5rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
@@ -1081,6 +1101,10 @@
                                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
                                     <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="add-event-tgf_markup_18" class="modal-input" min="0" step="0.01" placeholder="15.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                     <label style="font-weight:600; font-size:0.75rem;">Inc. Games ($)<input type="number" id="add-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                </div>
+                                <div id="add-combo-18-event-total" style="margin-top:0.35rem; padding-top:0.3rem; border-top:1px solid #bfdbfe; text-align:center; display:none;">
+                                    <span style="font-size:0.7rem; font-weight:600; color:#1e40af;">Event Cost</span>
+                                    <span id="add-combo-18-event-total-val" style="font-size:1rem; font-weight:800; color:#1e40af; display:block;"></span>
                                 </div>
                             </div>
                         </div>
@@ -4876,6 +4900,21 @@
         }
     }
 
+    // ---- Update Event Cost total in calculator cards ----
+    function updateEventCostDisplay(containerId, valId, cc, mu, sg) {
+        const wrap = document.getElementById(containerId);
+        const valEl = document.getElementById(valId);
+        if (!wrap || !valEl) return;
+        const total = cc + mu + sg;
+        if (total > 0) {
+            const eventCost = Math.ceil(Math.ceil(cc) + mu + sg);
+            valEl.textContent = "$" + eventCost;
+            wrap.style.display = "";
+        } else {
+            wrap.style.display = "none";
+        }
+    }
+
     // ---- Pricing Defaults by Format ----
     const PRICING_DEFAULTS = {
         "9 Holes":    { tgf_markup: 8,  side_game_fee: 7 },
@@ -5000,6 +5039,9 @@
         const summaryEl = document.getElementById(prefix + "-pricing-summary");
         if (!previewEl || !summaryEl) return;
 
+        // Update event cost in calculator card
+        updateEventCostDisplay(prefix + "-single-event-total", prefix + "-single-event-total-val", cc, mu, sg);
+
         const subtotal = cc + mu + sg;
         if (subtotal > 0) {
             summaryEl.innerHTML = renderPlayerPricingGrid(cc, mu, sg, tf, format);
@@ -5020,6 +5062,10 @@
         const previewEl = document.getElementById(prefix + "-pricing-preview-combo");
         const summaryEl = document.getElementById(prefix + "-pricing-summary-combo");
         if (!previewEl || !summaryEl) return;
+
+        // Update event cost in calculator cards
+        updateEventCostDisplay(prefix + "-combo-9-event-total", prefix + "-combo-9-event-total-val", cc9, mu9, sg9);
+        updateEventCostDisplay(prefix + "-combo-18-event-total", prefix + "-combo-18-event-total-val", cc18, mu18, sg18);
 
         const sub9 = cc9 + mu9 + sg9;
         const sub18 = cc18 + mu18 + sg18;
