@@ -152,6 +152,7 @@ from email_parser.database import (
     get_acct_allocations,
     save_expense_transaction,
     get_expense_transactions,
+    get_unified_transactions,
     update_expense_transaction,
     save_action_item,
     get_action_items,
@@ -180,6 +181,7 @@ from email_parser.expense_parser import (
     classify_email, parse_chase_alert, parse_venmo_payment,
     parse_expense_receipt, parse_action_required,
     match_event_from_memo, match_customer_from_name,
+    match_event_from_customer,
     get_merchant_context,
 )
 from email_parser.coo_email import build_coo_email_html
@@ -475,11 +477,23 @@ def check_expense_inbox(force=False, days_back=14):
                     body_text, merchant_ctx,
                 )
                 if extracted.get("confidence", 0) > 0:
-                    review_status = "approved" if extracted["confidence"] >= 95 else "pending"
+                    merchant_name = (extracted.get("merchant") or "").strip()
+                    # Auto-ignore Chase Credit Card Statement notifications
+                    # (monthly statement alerts, not actual transactions)
+                    if merchant_name.upper() in (
+                        "CHASE CREDIT CARD STATEMENT",
+                        "CREDIT CARD STATEMENT",
+                        "CHASE CREDIT CRD AUTOPAY",
+                    ):
+                        review_status = "ignored"
+                        notes = "Auto-ignored: monthly statement notification"
+                    else:
+                        review_status = "approved" if extracted["confidence"] >= 95 else "pending"
+                        notes = None
                     save_expense_transaction({
                         "email_uid": email_data["uid"],
                         "source_type": "chase_alert",
-                        "merchant": extracted.get("merchant"),
+                        "merchant": merchant_name,
                         "amount": extracted.get("amount"),
                         "transaction_date": extracted.get("transaction_date"),
                         "account_last4": extracted.get("account_last4"),
@@ -487,6 +501,7 @@ def check_expense_inbox(force=False, days_back=14):
                         "transaction_type": extracted.get("transaction_type", "expense"),
                         "confidence": extracted["confidence"],
                         "review_status": review_status,
+                        "notes": notes,
                         "raw_extract": json.dumps(extracted),
                     })
                     processed += 1
@@ -500,6 +515,9 @@ def check_expense_inbox(force=False, days_back=14):
                 if extracted.get("confidence", 0) > 0:
                     event_name = match_event_from_memo(extracted.get("memo", ""), conn)
                     customer_id = match_customer_from_name(extracted.get("recipient_name", ""), conn)
+                    # Fallback: if no event from memo but customer was found, check their registrations
+                    if not event_name and customer_id:
+                        event_name = match_event_from_customer(customer_id, conn)
                     review_status = "approved" if extracted["confidence"] >= 95 else "pending"
                     save_expense_transaction({
                         "email_uid": email_data["uid"],
@@ -4712,6 +4730,24 @@ def api_acct_transactions():
     ))
 
 
+@app.route("/api/accounting/transactions/unified")
+@require_role("admin")
+def api_acct_unified_transactions():
+    return jsonify(get_unified_transactions(
+        entity_id=request.args.get("entity_id", type=int),
+        account_id=request.args.get("account_id", type=int),
+        category_id=request.args.get("category_id", type=int),
+        start_date=request.args.get("start_date"),
+        end_date=request.args.get("end_date"),
+        search=request.args.get("search"),
+        txn_type=request.args.get("type"),
+        source=request.args.get("source"),
+        review_status=request.args.get("review_status"),
+        limit=request.args.get("limit", 200, type=int),
+        offset=request.args.get("offset", 0, type=int),
+    ))
+
+
 @app.route("/api/accounting/transactions/<int:tid>")
 @require_role("admin")
 def api_acct_transaction(tid):
@@ -5103,6 +5139,17 @@ def api_expense_transactions():
         event_name=request.args.get("event_name"),
         limit=request.args.get("limit", 100, type=int),
     ))
+
+
+@app.route("/api/accounting/expense-transactions/<int:tid>")
+@require_role("admin")
+def api_get_expense_transaction(tid):
+    from email_parser.database import _connect
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?", (tid,)).fetchone()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(dict(row))
 
 
 @app.route("/api/accounting/expense-transactions/<int:tid>", methods=["PATCH"])

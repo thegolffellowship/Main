@@ -14,6 +14,17 @@ async function reloadMasterData() {
     ACCT.events = events;
     renderEntityPills();
     populateDropdowns();
+
+    // Show pending review count badge on Transactions tab
+    try {
+        const review = await api('/pending-review');
+        const txnTab = document.querySelector('.acct-subtab[data-tab="transactions"]');
+        if (txnTab && review.expense_pending > 0) {
+            txnTab.innerHTML = `Transactions <span class="acct-pending-badge">${review.expense_pending}</span>`;
+        } else if (txnTab) {
+            txnTab.textContent = 'Transactions';
+        }
+    } catch (_) { /* ignore */ }
 }
 
 function renderEntityPills() {
@@ -86,6 +97,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         $('#transfer-row').style.display = $('#txn-type').value === 'transfer' ? '' : 'none';
     });
 
+    // Expense review modal
+    $('#expense-modal-close').addEventListener('click', closeExpenseModal);
+    $('#expense-modal-cancel').addEventListener('click', closeExpenseModal);
+    $('#expense-btn-approve').addEventListener('click', () => saveExpenseReview('approve'));
+    $('#expense-btn-ignore').addEventListener('click', () => saveExpenseReview('ignore'));
+
     // Receipt upload
     $('#btn-upload-receipt').addEventListener('click', () => $('#receipt-file').click());
     $('#receipt-file').addEventListener('change', async () => {
@@ -139,7 +156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         clearTimeout(_searchTimer);
         _searchTimer = setTimeout(() => { ACCT.txnPage = 0; loadTransactions(); }, 300);
     });
-    ['#txn-filter-type', '#txn-filter-account', '#txn-filter-category'].forEach(sel => {
+    ['#txn-filter-type', '#txn-filter-account', '#txn-filter-category', '#txn-filter-source', '#txn-filter-review'].forEach(sel => {
         $(sel).addEventListener('change', () => { ACCT.txnPage = 0; loadTransactions(); });
     });
 

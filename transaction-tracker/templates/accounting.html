@@ -150,6 +150,20 @@
                 <select id="txn-filter-category" class="acct-select">
                     <option value="">All Categories</option>
                 </select>
+                <select id="txn-filter-source" class="acct-select">
+                    <option value="">All Sources</option>
+                    <option value="manual">Manual & CSV</option>
+                    <option value="chase_alert">Chase Alerts</option>
+                    <option value="venmo">Venmo</option>
+                    <option value="receipt">Receipts</option>
+                </select>
+                <select id="txn-filter-review" class="acct-select">
+                    <option value="">All Statuses</option>
+                    <option value="pending">Pending Review</option>
+                    <option value="approved">Approved</option>
+                    <option value="corrected">Corrected</option>
+                    <option value="ignored">Ignored</option>
+                </select>
                 <button class="btn btn-secondary" id="btn-import-csv" title="Import bank statement CSV">
                     Import CSV
                 </button>
@@ -322,6 +336,85 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="txn-modal-cancel">Cancel</button>
                 <button class="btn btn-primary" id="txn-modal-save">Save Transaction</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ EXPENSE REVIEW MODAL ═══ -->
+    <div class="modal-overlay" id="expense-review-modal" style="display:none;">
+        <div class="modal acct-modal">
+            <div class="modal-header">
+                <h2>Review Expense Transaction</h2>
+                <button class="modal-close" id="expense-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="expense-review-id">
+                <!-- Read-only info -->
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Source</label>
+                        <div class="acct-readonly-field" id="expense-source"></div>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Date</label>
+                        <div class="acct-readonly-field" id="expense-date"></div>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Confidence</label>
+                        <div class="acct-readonly-field" id="expense-confidence"></div>
+                    </div>
+                </div>
+                <div class="acct-form-row">
+                    <div class="acct-form-group acct-form-grow">
+                        <label>Merchant / Description</label>
+                        <div class="acct-readonly-field" id="expense-merchant"></div>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Amount</label>
+                        <div class="acct-readonly-field" id="expense-amount"></div>
+                    </div>
+                </div>
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Account</label>
+                        <div class="acct-readonly-field" id="expense-account"></div>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Status</label>
+                        <div class="acct-readonly-field" id="expense-status"></div>
+                    </div>
+                </div>
+                <hr style="margin: 1rem 0; border-color: var(--border);">
+                <!-- Editable fields -->
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Entity</label>
+                        <select id="expense-entity" class="acct-select">
+                            <option value="">— None —</option>
+                        </select>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Category</label>
+                        <select id="expense-category" class="acct-select">
+                            <option value="">— None —</option>
+                        </select>
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Event</label>
+                        <select id="expense-event" class="acct-select">
+                            <option value="">No Event</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="acct-form-group">
+                    <label>Notes</label>
+                    <textarea id="expense-notes" rows="2" placeholder="Optional notes..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer" style="gap: 0.5rem;">
+                <button class="btn btn-secondary" id="expense-modal-cancel">Cancel</button>
+                <button class="btn" id="expense-btn-ignore" style="background:#6b7280;color:#fff;" title="Dismiss this transaction">Ignore</button>
+                <button class="btn btn-primary" id="expense-btn-approve" title="Approve as-is or with corrections">Approve</button>
             </div>
         </div>
     </div>

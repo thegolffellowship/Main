@@ -6951,6 +6951,148 @@ def get_acct_transactions(entity_id: int | None = None, account_id: int | None =
     return {"transactions": txns, "total": total, "limit": limit, "offset": offset}
 
 
+def get_unified_transactions(entity_id: int | None = None, account_id: int | None = None,
+                             category_id: int | None = None,
+                             start_date: str | None = None, end_date: str | None = None,
+                             search: str | None = None, txn_type: str | None = None,
+                             source: str | None = None, review_status: str | None = None,
+                             limit: int = 200, offset: int = 0,
+                             db_path: str | Path | None = None) -> dict:
+    """Return both acct_transactions and expense_transactions in a unified list.
+
+    Expense transactions are mapped to a compatible shape with synthetic splits.
+    Results are interleaved by date descending with correct pagination.
+    """
+    with _connect(db_path) as conn:
+        # --- Build entity short_name→color lookup ---
+        entity_rows = conn.execute(
+            "SELECT short_name, color FROM acct_entities WHERE is_active = 1"
+        ).fetchall()
+        entity_colors = {r["short_name"]: r["color"] for r in entity_rows}
+
+        # --- Determine which sources to include ---
+        include_acct = source in (None, "", "manual")
+        include_expense = source not in ("manual",)
+        # If source is a specific expense type, only include expense
+        if source in ("chase_alert", "venmo", "receipt"):
+            include_acct = False
+            include_expense = True
+
+        # --- Accounting transactions ---
+        acct_txns = []
+        acct_total = 0
+        if include_acct:
+            # Only include acct txns if review_status filter is not set
+            # (acct txns don't have review_status)
+            if not review_status:
+                result = get_acct_transactions(
+                    entity_id=entity_id, account_id=account_id,
+                    category_id=category_id, start_date=start_date,
+                    end_date=end_date, search=search, txn_type=txn_type,
+                    limit=limit + offset,  # fetch enough for merge
+                    offset=0, db_path=db_path,
+                )
+                for t in result["transactions"]:
+                    t["_is_expense"] = False
+                    t["review_status"] = None
+                    t["expense_id"] = None
+                    if not t.get("source"):
+                        t["source"] = "manual"
+                acct_txns = result["transactions"]
+                acct_total = result["total"]
+
+        # --- Expense transactions ---
+        exp_txns = []
+        exp_total = 0
+        if include_expense:
+            exp_clauses, exp_params = [], []
+            if start_date:
+                exp_clauses.append("et.transaction_date >= ?")
+                exp_params.append(start_date)
+            if end_date:
+                exp_clauses.append("et.transaction_date <= ?")
+                exp_params.append(end_date)
+            if source in ("chase_alert", "venmo", "receipt"):
+                exp_clauses.append("et.source_type = ?")
+                exp_params.append(source)
+            if review_status:
+                exp_clauses.append("et.review_status = ?")
+                exp_params.append(review_status)
+            if entity_id is not None:
+                # Map entity_id to short_name for text matching
+                ent_row = conn.execute(
+                    "SELECT short_name FROM acct_entities WHERE id = ?", (entity_id,)
+                ).fetchone()
+                if ent_row:
+                    exp_clauses.append("et.entity = ? COLLATE NOCASE")
+                    exp_params.append(ent_row["short_name"])
+            if search:
+                exp_clauses.append("(et.merchant LIKE ? OR et.notes LIKE ?)")
+                exp_params.extend([f"%{search}%", f"%{search}%"])
+            if txn_type:
+                exp_clauses.append("et.transaction_type = ?")
+                exp_params.append(txn_type)
+
+            exp_where = (" WHERE " + " AND ".join(exp_clauses)) if exp_clauses else ""
+
+            # Count
+            exp_total = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM expense_transactions et{exp_where}",
+                exp_params,
+            ).fetchone()["cnt"]
+
+            # Fetch all matching (expense table is small)
+            exp_rows = conn.execute(
+                f"""SELECT et.* FROM expense_transactions et{exp_where}
+                    ORDER BY et.transaction_date DESC, et.id DESC""",
+                exp_params,
+            ).fetchall()
+
+            for r in exp_rows:
+                r = dict(r)
+                ent_name = r.get("entity") or "?"
+                exp_txns.append({
+                    "id": f"exp_{r['id']}",
+                    "date": r.get("transaction_date"),
+                    "description": r.get("merchant") or "(unknown)",
+                    "total_amount": r.get("amount") or 0,
+                    "type": r.get("transaction_type") or "expense",
+                    "account_id": None,
+                    "account_name": r.get("account_name") or (
+                        f"...{r['account_last4']}" if r.get("account_last4") else None
+                    ),
+                    "transfer_to_account_id": None,
+                    "notes": r.get("notes"),
+                    "receipt_path": None,
+                    "source": r.get("source_type"),
+                    "source_ref": r.get("email_uid"),
+                    "is_reconciled": 0,
+                    "created_at": r.get("created_at"),
+                    "updated_at": None,
+                    "review_status": r.get("review_status"),
+                    "expense_id": r["id"],
+                    "confidence": r.get("confidence"),
+                    "customer_id": r.get("customer_id"),
+                    "splits": [{
+                        "entity_name": ent_name,
+                        "entity_color": entity_colors.get(ent_name, "#6b7280"),
+                        "category_name": r.get("category"),
+                        "event_name": r.get("event_name"),
+                        "amount": r.get("amount") or 0,
+                    }],
+                    "tags": [],
+                    "_is_expense": True,
+                })
+
+        # --- Merge and paginate ---
+        combined = acct_txns + exp_txns
+        combined.sort(key=lambda t: (t.get("date") or "", t.get("id") or ""), reverse=True)
+        total = acct_total + exp_total
+        page = combined[offset:offset + limit]
+
+    return {"transactions": page, "total": total, "limit": limit, "offset": offset}
+
+
 def get_acct_transaction(txn_id: int, db_path: str | Path | None = None) -> dict | None:
     with _connect(db_path) as conn:
         row = conn.execute(

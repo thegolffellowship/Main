@@ -8,17 +8,25 @@ async function loadTransactions() {
         account_id: $('#txn-filter-account').value || null,
         category_id: $('#txn-filter-category').value || null,
         type: $('#txn-filter-type').value || null,
+        source: $('#txn-filter-source').value || null,
+        review_status: $('#txn-filter-review').value || null,
         search: $('#txn-search').value || null,
         limit: ACCT.txnLimit,
         offset: ACCT.txnPage * ACCT.txnLimit,
     });
     try {
-        const data = await api('/transactions' + qs);
+        const data = await api('/transactions/unified' + qs);
         renderTransactionList(data.transactions, data.total);
     } catch (e) {
         console.error('Transaction load error:', e);
     }
 }
+
+const _SOURCE_LABELS = {
+    chase_alert: 'Chase Alert',
+    venmo: 'Venmo',
+    receipt: 'Receipt',
+};
 
 function renderTransactionList(txns, total) {
     const el = $('#txn-list');
@@ -35,37 +43,67 @@ function renderTransactionList(txns, total) {
             <th></th>
         </tr></thead>
         <tbody>${txns.map(t => {
+            const isExp = t._is_expense;
             const splitBadges = t.splits.map(s =>
                 `<span class="acct-split-badge" style="border-color:${s.entity_color || '#6b7280'}">
                     <strong>${s.entity_name || '?'}</strong> ${s.category_name || ''}${s.event_name ? ' <em>' + s.event_name + '</em>' : ''} ${fmt(s.amount)}
                 </span>`
             ).join(' ');
-            return `<tr class="acct-txn-row" data-id="${t.id}">
-                <td>${t.date}</td>
+
+            // Source badge for email-parsed transactions
+            const srcLabel = _SOURCE_LABELS[t.source];
+            const sourceBadge = srcLabel
+                ? `<span class="acct-source-badge acct-source-${t.source}">${srcLabel}</span>`
+                : '';
+
+            // Review status indicator for expense transactions
+            let reviewBadge = '';
+            if (isExp && t.review_status === 'pending') {
+                reviewBadge = '<span class="acct-review-badge acct-review-pending" title="Needs Review">Pending</span>';
+            } else if (isExp && t.review_status === 'ignored') {
+                reviewBadge = '<span class="acct-review-badge acct-review-ignored" title="Ignored">Ignored</span>';
+            }
+
+            const rowClass = isExp
+                ? `acct-txn-row acct-txn-expense${t.review_status === 'ignored' ? ' acct-txn-ignored' : ''}`
+                : 'acct-txn-row';
+            const rowData = isExp
+                ? `data-id="${t.id}" data-expense-id="${t.expense_id}"`
+                : `data-id="${t.id}"`;
+
+            return `<tr class="${rowClass}" ${rowData}>
+                <td>${t.date || ''}</td>
                 <td>
-                    ${t.description}
-                    ${t.is_reconciled ? '<span class="acct-reconciled" title="Reconciled">&#10003;</span>' : ''}
-                    ${t.tags.map(tg => `<span class="acct-tag-chip" style="background:${tg.color}">${tg.name}</span>`).join('')}
+                    ${t.description || ''}
+                    ${sourceBadge}
+                    ${reviewBadge}
+                    ${!isExp && t.is_reconciled ? '<span class="acct-reconciled" title="Reconciled">&#10003;</span>' : ''}
+                    ${(t.tags || []).map(tg => `<span class="acct-tag-chip" style="background:${tg.color}">${tg.name}</span>`).join('')}
                 </td>
                 <td class="acct-split-cell">${splitBadges}</td>
                 <td class="text-right ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</td>
                 <td><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></td>
                 <td>${t.account_name || '—'}</td>
                 <td>
-                    <button class="btn-icon-sm acct-btn-del" data-id="${t.id}" title="Delete">&times;</button>
+                    ${isExp ? '' : `<button class="btn-icon-sm acct-btn-del" data-id="${t.id}" title="Delete">&times;</button>`}
                 </td>
             </tr>`;
         }).join('')}</tbody></table>`;
 
-    // Click row to edit
+    // Click row to edit (or review for expense transactions)
     el.querySelectorAll('.acct-txn-row').forEach(row => {
         row.addEventListener('click', (e) => {
             if (e.target.closest('.acct-btn-del')) return;
-            openEditTransaction(parseInt(row.dataset.id));
+            const expId = row.dataset.expenseId;
+            if (expId) {
+                openExpenseReview(parseInt(expId));
+            } else {
+                openEditTransaction(parseInt(row.dataset.id));
+            }
         });
     });
 
-    // Delete buttons
+    // Delete buttons (only for acct transactions)
     el.querySelectorAll('.acct-btn-del').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -327,3 +365,83 @@ function renderTagChips(selectedIds) {
 }
 
 function collectTagIds() { return [..._selectedTagIds]; }
+
+// ── Expense Review Modal ────────────────────────────────
+
+async function openExpenseReview(expenseId) {
+    try {
+        const exp = await api('/expense-transactions/' + expenseId);
+        $('#expense-review-id').value = exp.id;
+
+        // Read-only fields
+        const srcLabel = _SOURCE_LABELS[exp.source_type] || exp.source_type || '—';
+        $('#expense-source').innerHTML = `<span class="acct-source-badge acct-source-${exp.source_type || ''}">${srcLabel}</span>`;
+        $('#expense-date').textContent = exp.transaction_date || '—';
+        $('#expense-confidence').textContent = exp.confidence != null ? exp.confidence + '%' : '—';
+        $('#expense-merchant').textContent = exp.merchant || '(unknown)';
+        $('#expense-amount').textContent = fmt(exp.amount);
+        $('#expense-account').textContent = exp.account_name || (exp.account_last4 ? '...' + exp.account_last4 : '—');
+        $('#expense-status').textContent = (exp.review_status || 'pending').toUpperCase();
+
+        // Editable: Entity dropdown (text-based, match to acct_entities)
+        const entOpts = '<option value="">— None —</option>' +
+            ACCT.entities.map(e => `<option value="${e.short_name}" ${
+                (exp.entity || '').toUpperCase() === e.short_name.toUpperCase() ? 'selected' : ''
+            }>${e.short_name}</option>`).join('');
+        $('#expense-entity').innerHTML = entOpts;
+
+        // Editable: Category dropdown (text-based)
+        const catOpts = '<option value="">— None —</option>' +
+            ACCT.categories.filter(c => c.type === 'expense').map(c => `<option value="${c.name}" ${
+                (exp.category || '').toUpperCase() === c.name.toUpperCase() ? 'selected' : ''
+            }>${c.name}</option>`).join('');
+        $('#expense-category').innerHTML = catOpts;
+
+        // Editable: Event dropdown
+        const evOpts = '<option value="">No Event</option>' +
+            ACCT.events.map(ev => `<option value="${ev.item_name}" ${
+                exp.event_name === ev.item_name ? 'selected' : ''
+            }>${ev.item_name}${ev.event_date ? ' (' + ev.event_date + ')' : ''}</option>`).join('');
+        $('#expense-event').innerHTML = evOpts;
+
+        // Notes
+        $('#expense-notes').value = exp.notes || '';
+
+        $('#expense-review-modal').style.display = 'flex';
+    } catch (e) {
+        alert('Error loading expense: ' + e.message);
+    }
+}
+
+async function saveExpenseReview(action) {
+    const expId = $('#expense-review-id').value;
+    if (!expId) return;
+
+    const fields = {
+        entity: $('#expense-entity').value || null,
+        category: $('#expense-category').value || null,
+        event_name: $('#expense-event').value || null,
+        notes: $('#expense-notes').value.trim() || null,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: 'admin',
+    };
+
+    if (action === 'approve') {
+        // If any field was changed from original, mark as corrected
+        fields.review_status = 'approved';
+    } else if (action === 'ignore') {
+        fields.review_status = 'ignored';
+    }
+
+    try {
+        await api('/expense-transactions/' + expId, { method: 'PATCH', body: fields });
+        closeExpenseModal();
+        refreshActiveTab();
+    } catch (e) {
+        alert('Error saving: ' + e.message);
+    }
+}
+
+function closeExpenseModal() {
+    $('#expense-review-modal').style.display = 'none';
+}
