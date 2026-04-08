@@ -9013,6 +9013,10 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                           COUNT(DISTINCT CASE
                               WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
                               THEN i.id END) as playing,
+                          COUNT(DISTINCT CASE
+                              WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                                   AND i.holes = '18'
+                              THEN i.id END) as playing_18,
                           COALESCE(SUM(CASE
                               WHEN i.transaction_status = 'active' AND i.merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
                               THEN CAST(REPLACE(REPLACE(i.item_price, '$', ''), ',', '') AS REAL) ELSE 0 END), 0) as revenue
@@ -9021,6 +9025,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                    LEFT JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE
                                          OR i.item_name = ea.alias_name COLLATE NOCASE)
                        AND COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                       AND i.parent_item_id IS NULL
                    WHERE e.event_date >= ?
                    GROUP BY e.id, e.item_name, e.event_date, e.course
                    ORDER BY e.event_date ASC LIMIT 10""",
@@ -9031,28 +9036,34 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 ops.append(f"{len(upcoming)} upcoming events:")
                 for ev in upcoming:
                     rev = ev['revenue'] or 0
-                    line = f"  {ev['event_date']} — {ev['item_name']} at {ev['course'] or '?'} ({ev['playing']} registered, ${rev:,.0f} revenue)"
-                    # Append pricing breakdown if available
+                    total = ev['playing'] or 0
+                    p18 = ev['playing_18'] or 0
+                    p9 = total - p18
+                    player_desc = f"{total} registered"
+                    if total and p18:
+                        player_desc = f"{total} registered ({p9} nine-hole, {p18} eighteen-hole)"
+                    line = f"  {ev['event_date']} — {ev['item_name']} at {ev['course'] or '?'} ({player_desc}, ${rev:,.0f} revenue)"
+                    # Pricing breakdown
                     pricing_parts = []
-                    cc = ev['course_cost'] or ev['course_cost_9']
-                    if cc:
-                        pricing_parts.append(f"course ${cc:.0f}")
-                    cc18 = ev['course_cost_18']
-                    if cc18 and cc18 != cc:
-                        pricing_parts.append(f"course-18 ${cc18:.0f}")
-                    mk = ev['tgf_markup'] or ev['tgf_markup_9']
-                    if mk:
-                        pricing_parts.append(f"markup ${mk:.2f}")
-                    mk18 = ev['tgf_markup_18']
-                    if mk18 and mk18 != mk:
-                        pricing_parts.append(f"markup-18 ${mk18:.2f}")
-                    sg = ev['side_game_fee'] or ev['side_game_fee_9']
-                    if sg:
-                        pricing_parts.append(f"side-games ${sg:.2f}")
-                    sg18 = ev['side_game_fee_18']
-                    if sg18 and sg18 != sg:
-                        pricing_parts.append(f"side-games-18 ${sg18:.2f}")
-                    surcharge = ev['course_surcharge']
+                    cc9 = ev['course_cost'] or ev['course_cost_9'] or 0
+                    cc18 = ev['course_cost_18'] or 0
+                    if cc9:
+                        pricing_parts.append(f"course-9h ${cc9:.0f}")
+                    if cc18 and cc18 != cc9:
+                        pricing_parts.append(f"course-18h ${cc18:.0f}")
+                    mk9 = ev['tgf_markup'] or ev['tgf_markup_9'] or 0
+                    mk18 = ev['tgf_markup_18'] or 0
+                    if mk9:
+                        pricing_parts.append(f"markup-9h ${mk9:.2f}")
+                    if mk18 and mk18 != mk9:
+                        pricing_parts.append(f"markup-18h ${mk18:.2f}")
+                    sg9 = ev['side_game_fee'] or ev['side_game_fee_9'] or 0
+                    sg18 = ev['side_game_fee_18'] or 0
+                    if sg9:
+                        pricing_parts.append(f"side-games-9h ${sg9:.2f}")
+                    if sg18 and sg18 != sg9:
+                        pricing_parts.append(f"side-games-18h ${sg18:.2f}")
+                    surcharge = ev['course_surcharge'] or 0
                     if surcharge:
                         pricing_parts.append(f"surcharge ${surcharge:.2f}")
                     txn_pct = ev['transaction_fee_pct']
@@ -9060,13 +9071,13 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                         pricing_parts.append(f"txn-fee {txn_pct}%")
                     if pricing_parts:
                         line += f" [pricing: {', '.join(pricing_parts)}]"
-                    elif ev['playing'] and rev:
-                        line += f" [avg ${rev / ev['playing']:,.0f}/player, pricing not configured]"
-                    # Breakeven calculation
-                    if cc and ev['playing']:
-                        total_course = cc * ev['playing']
-                        net = rev - total_course
-                        line += f" [breakeven: {total_course / (rev / ev['playing']) if rev else 0:.0f} players, net: ${net:,.0f}]"
+                    elif total and rev:
+                        line += f" [avg ${rev / total:,.0f}/player, pricing not configured]"
+                    # Profitability calculation using 9/18 split
+                    if (cc9 or cc18) and total:
+                        total_course = (cc9 * p9) + (cc18 * p18)
+                        gross_profit = rev - total_course
+                        line += f" [course-cost: ${total_course:,.0f}, gross-profit: ${gross_profit:,.0f}]"
                     ops.append(line)
             else:
                 ops.append("No upcoming events")
@@ -9095,12 +9106,13 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
             recent_events = conn.execute(
                 """SELECT e.item_name, e.event_date, e.course,
                           e.course_cost, e.course_cost_9, e.course_cost_18,
-                          e.tgf_markup, e.tgf_markup_9, e.tgf_markup_18,
-                          e.side_game_fee, e.side_game_fee_9, e.side_game_fee_18,
-                          e.course_surcharge,
                           COUNT(DISTINCT CASE
                               WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
                               THEN i.id END) as played,
+                          COUNT(DISTINCT CASE
+                              WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                                   AND i.holes = '18'
+                              THEN i.id END) as played_18,
                           COALESCE(SUM(CASE
                               WHEN i.transaction_status = 'active' AND i.merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
                               THEN CAST(REPLACE(REPLACE(i.item_price, '$', ''), ',', '') AS REAL) ELSE 0 END), 0) as revenue
@@ -9109,6 +9121,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                    LEFT JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE
                                          OR i.item_name = ea.alias_name COLLATE NOCASE)
                        AND COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                       AND i.parent_item_id IS NULL
                    WHERE e.event_date < ? AND e.event_date >= date(?, '-30 days')
                    GROUP BY e.id, e.item_name, e.event_date
                    ORDER BY e.event_date DESC LIMIT 5""",
@@ -9118,13 +9131,20 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 ops.append(f"Recent events (last 30 days):")
                 for ev in recent_events:
                     rev = ev['revenue'] or 0
-                    cc = ev['course_cost'] or ev['course_cost_9'] or 0
-                    total_cost = cc * ev['played'] if cc else 0
-                    net = rev - total_cost
+                    total = ev['played'] or 0
+                    p18 = ev['played_18'] or 0
+                    p9 = total - p18
+                    cc9 = ev['course_cost'] or ev['course_cost_9'] or 0
+                    cc18 = ev['course_cost_18'] or 0
+                    total_cost = (cc9 * p9) + (cc18 * p18) if (cc9 or cc18) else 0
+                    gross_profit = rev - total_cost
+                    player_desc = f"{total} players"
+                    if total and p18:
+                        player_desc = f"{total} players ({p9} nine-hole, {p18} eighteen-hole)"
                     pricing_note = ""
-                    if cc and ev['played']:
-                        pricing_note = f", course-cost ${cc:.0f}/player, net ${net:,.0f}"
-                    ops.append(f"  {ev['event_date']} — {ev['item_name']} ({ev['played']} players, ${rev:,.0f} revenue{pricing_note})")
+                    if total_cost:
+                        pricing_note = f", course-cost ${total_cost:,.0f}, gross-profit ${gross_profit:,.0f}"
+                    ops.append(f"  {ev['event_date']} — {ev['item_name']} ({player_desc}, ${rev:,.0f} revenue{pricing_note})")
         except Exception as e:
             logger.warning("build_coo_full_context: Events section error: %s", e)
             ops.append("Event data not available")
@@ -9155,7 +9175,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
         except Exception:
             pass
 
-        # TGF payout data (tournament prizes)
+        # TGF payout data (tournament prizes) + full profitability
         try:
             tgf_events = conn.execute(
                 """SELECT te.code, te.event_date, te.course, te.total_purse,
@@ -9182,8 +9202,60 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                     ops.append(f"  Latest payout breakdown ({latest['code']}):")
                     for c in cats:
                         ops.append(f"    {c['category']}: {c['cnt']} payouts, ${c['total']:,.2f}")
-        except Exception:
-            pass
+
+            # Full profitability summary: revenue - course cost - prize pool = net
+            profit_rows = conn.execute(
+                """SELECT e.item_name, e.event_date, e.course,
+                          e.course_cost, e.course_cost_9, e.course_cost_18,
+                          COUNT(DISTINCT CASE
+                              WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                              THEN i.id END) as players,
+                          COUNT(DISTINCT CASE
+                              WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                                   AND i.holes = '18'
+                              THEN i.id END) as players_18,
+                          COALESCE(SUM(CASE
+                              WHEN i.transaction_status = 'active' AND i.merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                              THEN CAST(REPLACE(REPLACE(i.item_price, '$', ''), ',', '') AS REAL) ELSE 0 END), 0) as revenue,
+                          COALESCE(te.total_purse, 0) as prize_pool
+                   FROM events e
+                   LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+                   LEFT JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE
+                                         OR i.item_name = ea.alias_name COLLATE NOCASE)
+                       AND COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                       AND i.parent_item_id IS NULL
+                   LEFT JOIN tgf_events te ON te.event_date = e.event_date
+                       AND (te.course = e.course COLLATE NOCASE OR te.code LIKE '%' || REPLACE(e.course, 'The ', '') || '%')
+                   WHERE e.event_date < ? AND e.event_date >= date(?, '-60 days')
+                   GROUP BY e.id, e.item_name, e.event_date
+                   HAVING players > 0
+                   ORDER BY e.event_date DESC LIMIT 8""",
+                (today, today),
+            ).fetchall()
+            if profit_rows:
+                ops.append("EVENT PROFITABILITY (last 60 days — revenue - course cost - prizes = net):")
+                for pr in profit_rows:
+                    rev = pr['revenue'] or 0
+                    total = pr['players'] or 0
+                    p18 = pr['players_18'] or 0
+                    p9 = total - p18
+                    cc9 = pr['course_cost'] or pr['course_cost_9'] or 0
+                    cc18 = pr['course_cost_18'] or 0
+                    course_total = (cc9 * p9) + (cc18 * p18)
+                    prizes = pr['prize_pool'] or 0
+                    net = rev - course_total - prizes
+                    parts = [f"{total} players"]
+                    if p18:
+                        parts[0] = f"{total} players ({p9}×9h, {p18}×18h)"
+                    parts.append(f"${rev:,.0f} revenue")
+                    if course_total:
+                        parts.append(f"${course_total:,.0f} course")
+                    if prizes:
+                        parts.append(f"${prizes:,.0f} prizes")
+                    parts.append(f"${net:,.0f} net")
+                    ops.append(f"  {pr['event_date']} — {pr['item_name']}: {', '.join(parts)}")
+        except Exception as e:
+            logger.warning("build_coo_full_context: TGF/profitability section error: %s", e)
 
         sections.append("EVENTS & OPERATIONS\n" + "\n".join(ops))
 
