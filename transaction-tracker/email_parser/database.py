@@ -8936,7 +8936,276 @@ def get_all_coo_manual_values(db_path: str | Path | None = None) -> dict:
     return {r["key"]: r["value"] for r in rows}
 
 
-def get_coo_financial_snapshot(db_path: str | Path | None = None) -> dict:
+def build_coo_full_context(db_path: str | Path | None = None) -> str:
+    """Build a comprehensive, token-efficient context string that gives the COO AI
+    full situational awareness across every module of the tracker.
+
+    This is the COO's 'morning briefing' — everything it needs to know about the
+    current state of the business, condensed into a format the AI can reason over."""
+    from datetime import datetime, timedelta
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    month_prefix = datetime.now().strftime("%Y-%m")
+    sections = []
+
+    with _connect(db_path) as conn:
+        # ── 1. FINANCIAL OVERVIEW ──────────────────────────────
+        fin = []
+        manual = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM coo_manual_values").fetchall()}
+        checking = manual.get("tgf_checking_0341", 0)
+        mm = manual.get("tgf_money_market_8045", 0)
+        total_cash = round(checking + mm, 2)
+
+        pp = conn.execute(
+            "SELECT COALESCE(SUM(prize_pool), 0) as t FROM acct_allocations WHERE allocation_date >= ?",
+            (today,)).fetchone()["t"]
+        cf = conn.execute(
+            "SELECT COALESCE(SUM(course_payable + course_surcharge), 0) as t FROM acct_allocations WHERE allocation_date >= ?",
+            (today,)).fetchone()["t"]
+        tr = conn.execute(
+            "SELECT COALESCE(SUM(tax_reserve), 0) as t FROM acct_allocations WHERE allocation_date LIKE ?",
+            (f"{month_prefix}%",)).fetchone()["t"]
+        available = round(total_cash - pp - cf - tr, 2)
+
+        irs = manual.get("irs_balance", 0)
+        gp_loan = manual.get("grandparent_loan", 0)
+        chase_biz = manual.get("chase_biz_7680", 0)
+        chase_saph = manual.get("chase_sapphire_6159", 0)
+        total_debt = round(irs + gp_loan + chase_biz + chase_saph, 2)
+
+        fin.append(f"Cash: ${total_cash:,.2f} (Checking: ${checking:,.2f}, Money Market: ${mm:,.2f})")
+        fin.append(f"Obligations: Prize Pools ${pp:,.2f}, Course Fees ${cf:,.2f}, Tax Reserve ${tr:,.2f}")
+        fin.append(f"Available to Spend: ${available:,.2f}")
+        fin.append(f"Debts: IRS ${irs:,.2f}, Grandparent Loan ${gp_loan:,.2f}, Chase Biz ${chase_biz:,.2f}, Chase Sapphire ${chase_saph:,.2f} (Total: ${total_debt:,.2f})")
+
+        # Monthly revenue trend (last 3 months)
+        try:
+            month_rows = conn.execute(
+                """SELECT strftime('%Y-%m', date) as month,
+                          SUM(CASE WHEN type='income' THEN amount ELSE 0 END) as income,
+                          SUM(CASE WHEN type='expense' THEN amount ELSE 0 END) as expenses
+                   FROM acct_transactions
+                   WHERE date >= date('now', '-3 months')
+                   GROUP BY month ORDER BY month DESC LIMIT 3"""
+            ).fetchall()
+            for mr in month_rows:
+                net = round((mr["income"] or 0) - (mr["expenses"] or 0), 2)
+                fin.append(f"  {mr['month']}: Income ${mr['income'] or 0:,.2f}, Expenses ${mr['expenses'] or 0:,.2f}, Net ${net:+,.2f}")
+        except Exception:
+            pass
+
+        sections.append("FINANCIAL STATUS\n" + "\n".join(fin))
+
+        # ── 2. EVENTS & OPERATIONS ─────────────────────────────
+        ops = []
+        upcoming = conn.execute(
+            """SELECT e.item_name, e.event_date, e.course_name,
+                      COUNT(DISTINCT CASE
+                          WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                          THEN i.id END) as playing
+               FROM events e
+               LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+               LEFT JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE
+                                     OR i.item_name = ea.alias_name COLLATE NOCASE)
+                   AND COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+               WHERE e.event_date >= ?
+               GROUP BY e.id ORDER BY e.event_date ASC LIMIT 10""",
+            (today,),
+        ).fetchall()
+
+        if upcoming:
+            ops.append(f"{len(upcoming)} upcoming events:")
+            for ev in upcoming:
+                ops.append(f"  {ev['event_date']} — {ev['item_name']} at {ev['course_name'] or '?'} ({ev['playing']} registered)")
+        else:
+            ops.append("No upcoming events")
+
+        # Recent past events (last 30 days) for context
+        recent_events = conn.execute(
+            """SELECT e.item_name, e.event_date,
+                      COUNT(DISTINCT CASE
+                          WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+                          THEN i.id END) as played
+               FROM events e
+               LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+               LEFT JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE
+                                     OR i.item_name = ea.alias_name COLLATE NOCASE)
+                   AND COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
+               WHERE e.event_date < ? AND e.event_date >= date(?, '-30 days')
+               GROUP BY e.id ORDER BY e.event_date DESC LIMIT 5""",
+            (today, today),
+        ).fetchall()
+        if recent_events:
+            ops.append(f"Recent events (last 30 days):")
+            for ev in recent_events:
+                ops.append(f"  {ev['event_date']} — {ev['item_name']} ({ev['played']} players)")
+
+        sections.append("EVENTS & OPERATIONS\n" + "\n".join(ops))
+
+        # ── 3. MEMBERS & CUSTOMERS ─────────────────────────────
+        mem = []
+        cust_total = conn.execute("SELECT COUNT(*) as c FROM customers").fetchone()["c"]
+        active_members = conn.execute(
+            "SELECT COUNT(*) as c FROM customers WHERE status = 'active'"
+        ).fetchone()["c"]
+
+        # Recent new customers (last 30 days)
+        new_custs = conn.execute(
+            """SELECT COUNT(*) as c FROM customers
+               WHERE created_at >= date('now', '-30 days')"""
+        ).fetchone()["c"]
+
+        mem.append(f"Total customers: {cust_total} ({active_members} active)")
+        mem.append(f"New customers (30d): {new_custs}")
+
+        # Top spenders this season
+        top_spenders = conn.execute(
+            """SELECT customer, COUNT(*) as events,
+                      SUM(CAST(REPLACE(REPLACE(item_price, '$', ''), ',', '') AS REAL)) as spent
+               FROM items
+               WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                 AND transaction_status = 'active'
+                 AND order_date >= date('now', '-6 months')
+               GROUP BY customer ORDER BY events DESC LIMIT 5"""
+        ).fetchall()
+        if top_spenders:
+            mem.append("Top players (6 months):")
+            for ts in top_spenders:
+                mem.append(f"  {ts['customer']}: {ts['events']} events, ${ts['spent'] or 0:,.0f}")
+
+        sections.append("MEMBERS & CUSTOMERS\n" + "\n".join(mem))
+
+        # ── 4. TRANSACTION ACTIVITY ────────────────────────────
+        txn = []
+        stats = conn.execute(
+            """SELECT COUNT(*) as total,
+                      COUNT(DISTINCT order_id) as orders,
+                      MIN(order_date) as earliest,
+                      MAX(order_date) as latest
+               FROM items
+               WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')"""
+        ).fetchone()
+        txn.append(f"Total: {stats['total']} items across {stats['orders']} orders ({stats['earliest']} to {stats['latest']})")
+
+        # Recent activity (7 days)
+        recent_txn = conn.execute(
+            """SELECT COUNT(*) as c,
+                      SUM(CAST(REPLACE(REPLACE(item_price, '$', ''), ',', '') AS REAL)) as total
+               FROM items
+               WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                 AND order_date >= date('now', '-7 days')"""
+        ).fetchone()
+        txn.append(f"Last 7 days: {recent_txn['c']} new items, ${recent_txn['total'] or 0:,.0f}")
+
+        sections.append("TRANSACTION ACTIVITY\n" + "\n".join(txn))
+
+        # ── 5. RSVPS ──────────────────────────────────────────
+        rsvp = []
+        r_total = conn.execute("SELECT COUNT(*) as c FROM rsvps").fetchone()["c"]
+        r_playing = conn.execute("SELECT COUNT(*) as c FROM rsvps WHERE response = 'PLAYING'").fetchone()["c"]
+        r_not = conn.execute("SELECT COUNT(*) as c FROM rsvps WHERE response = 'NOT PLAYING'").fetchone()["c"]
+        r_unmatched = conn.execute(
+            "SELECT COUNT(*) as c FROM rsvps WHERE matched_event IS NOT NULL AND matched_item_id IS NULL AND response = 'PLAYING'"
+        ).fetchone()["c"]
+        rsvp.append(f"Total RSVPs: {r_total} ({r_playing} playing, {r_not} not playing)")
+        if r_unmatched:
+            rsvp.append(f"Playing but no payment: {r_unmatched} (need follow-up)")
+        sections.append("RSVPS\n" + "\n".join(rsvp))
+
+        # ── 6. HANDICAPS ──────────────────────────────────────
+        hcp = []
+        player_count = conn.execute("SELECT COUNT(*) as c FROM handicap_players").fetchone()["c"]
+        round_count = conn.execute("SELECT COUNT(*) as c FROM handicap_rounds").fetchone()["c"]
+        recent_rounds = conn.execute(
+            "SELECT COUNT(*) as c FROM handicap_rounds WHERE date_played >= date('now', '-30 days')"
+        ).fetchone()["c"]
+        hcp.append(f"Players: {player_count}, Total rounds: {round_count}")
+        hcp.append(f"Rounds entered (30d): {recent_rounds}")
+        sections.append("HANDICAPS\n" + "\n".join(hcp))
+
+        # ── 7. ACCOUNTING & COMPLIANCE ─────────────────────────
+        acct = []
+        try:
+            acct_total = conn.execute(
+                "SELECT COUNT(*) as cnt FROM acct_transactions WHERE type != 'transfer'"
+            ).fetchone()["cnt"]
+            acct_catd = conn.execute(
+                """SELECT COUNT(DISTINCT t.id) as cnt FROM acct_transactions t
+                   JOIN acct_splits s ON s.transaction_id = t.id
+                   WHERE s.category_id IS NOT NULL AND t.type != 'transfer'"""
+            ).fetchone()["cnt"]
+            acct_uncat = acct_total - acct_catd
+            pct = round(acct_catd / acct_total * 100, 1) if acct_total else 100
+            acct.append(f"Transactions: {acct_total} total, {acct_catd} categorized ({pct}%), {acct_uncat} uncategorized")
+        except Exception:
+            acct.append("Accounting data not available")
+
+        # Pending reviews
+        try:
+            exp_pending = conn.execute(
+                "SELECT COUNT(*) as cnt FROM expense_transactions WHERE review_status = 'pending'"
+            ).fetchone()["cnt"]
+            if exp_pending:
+                acct.append(f"Expense reviews pending: {exp_pending}")
+        except Exception:
+            pass
+
+        sections.append("ACCOUNTING & COMPLIANCE\n" + "\n".join(acct))
+
+        # ── 8. ACTION ITEMS SUMMARY ────────────────────────────
+        ai_sec = []
+        ai_open = conn.execute("SELECT COUNT(*) as c FROM action_items WHERE status = 'open'").fetchone()["c"]
+        ai_prog = conn.execute("SELECT COUNT(*) as c FROM action_items WHERE status = 'in_progress'").fetchone()["c"]
+        ai_high = conn.execute("SELECT COUNT(*) as c FROM action_items WHERE status = 'open' AND urgency = 'high'").fetchone()["c"]
+        ai_sec.append(f"Open: {ai_open} ({ai_high} high urgency), In Progress: {ai_prog}")
+
+        # Category breakdown
+        cat_rows = conn.execute(
+            "SELECT category, COUNT(*) as c FROM action_items WHERE status = 'open' GROUP BY category ORDER BY c DESC LIMIT 5"
+        ).fetchall()
+        if cat_rows:
+            cats = ", ".join(f"{r['category']}: {r['c']}" for r in cat_rows)
+            ai_sec.append(f"By category: {cats}")
+
+        sections.append("ACTION ITEMS\n" + "\n".join(ai_sec))
+
+        # ── 9. TGF PAYOUTS ────────────────────────────────────
+        pay = []
+        try:
+            ev_count = conn.execute("SELECT COUNT(*) as c FROM tgf_events").fetchone()["c"]
+            golfer_count = conn.execute("SELECT COUNT(*) as c FROM tgf_golfers").fetchone()["c"]
+            total_paid = conn.execute("SELECT COALESCE(SUM(amount), 0) as t FROM tgf_payouts").fetchone()["t"]
+            pay.append(f"Events with payouts: {ev_count}, Golfers: {golfer_count}, Total paid: ${total_paid:,.2f}")
+
+            # Recent payout events
+            recent_pay = conn.execute(
+                """SELECT e.name, e.event_date, e.total_purse, COUNT(p.id) as payouts
+                   FROM tgf_events e LEFT JOIN tgf_payouts p ON p.event_id = e.id
+                   GROUP BY e.id ORDER BY e.event_date DESC LIMIT 3"""
+            ).fetchall()
+            for rp in recent_pay:
+                pay.append(f"  {rp['event_date']} — {rp['name']}: ${rp['total_purse'] or 0:,.0f} purse, {rp['payouts']} payouts")
+        except Exception:
+            pay.append("No payout data yet")
+
+        sections.append("TGF PAYOUTS\n" + "\n".join(pay))
+
+        # ── 10. SEASON CONTESTS ────────────────────────────────
+        sc = []
+        try:
+            enrollments = conn.execute(
+                "SELECT contest_type, COUNT(*) as c FROM season_contests GROUP BY contest_type"
+            ).fetchall()
+            if enrollments:
+                sc.append("Season contests: " + ", ".join(f"{r['contest_type']}: {r['c']} enrolled" for r in enrollments))
+            else:
+                sc.append("No season contest enrollments")
+        except Exception:
+            sc.append("Season contests not configured")
+
+        sections.append("SEASON CONTESTS\n" + "\n".join(sc))
+
+    return "\n\n".join(sections)
     """Build the complete financial snapshot for the COO dashboard."""
     manual = get_all_coo_manual_values(db_path)
     today = datetime.now().strftime("%Y-%m-%d")

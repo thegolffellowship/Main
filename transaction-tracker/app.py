@@ -192,6 +192,7 @@ from email_parser.database import (
     update_chat_session_title,
     update_chat_session_summary,
     get_chat_master_context,
+    build_coo_full_context,
     delete_chat_session,
 )
 from email_parser.database import DB_PATH, get_connection
@@ -5478,6 +5479,9 @@ def api_coo_chat():
     session = get_chat_session(session_id)
     messages = [{"role": m["role"], "content": m["content"]} for m in session.get("messages", [])]
 
+    # Build full business context from all tracker modules
+    full_context = build_coo_full_context()
+
     # Build master context — summaries of ALL past sessions
     master_context = get_chat_master_context(exclude_session_id=session_id)
 
@@ -5498,8 +5502,10 @@ def api_coo_chat():
 For this question, the {routed_agent} provided analysis context:
 {specialist_prompt}
 
-CURRENT STATE:
-{json.dumps(context, indent=2)}"""
+--- FULL BUSINESS INTELLIGENCE ---
+Live data from the TGF Transaction Tracker as of {datetime.now().strftime('%Y-%m-%d %H:%M')}:
+
+{full_context}"""
 
     if master_context:
         system_prompt += f"""
