@@ -9004,7 +9004,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
         ops = []
         try:
             upcoming = conn.execute(
-                """SELECT e.item_name, e.event_date, e.course_name,
+                """SELECT e.item_name, e.event_date, e.course,
                           COUNT(DISTINCT CASE
                               WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
                               THEN i.id END) as playing,
@@ -9017,7 +9017,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                                          OR i.item_name = ea.alias_name COLLATE NOCASE)
                        AND COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
                    WHERE e.event_date >= ?
-                   GROUP BY e.id, e.item_name, e.event_date, e.course_name
+                   GROUP BY e.id, e.item_name, e.event_date, e.course
                    ORDER BY e.event_date ASC LIMIT 10""",
                 (today,),
             ).fetchall()
@@ -9026,7 +9026,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 ops.append(f"{len(upcoming)} upcoming events:")
                 for ev in upcoming:
                     rev = ev['revenue'] or 0
-                    ops.append(f"  {ev['event_date']} — {ev['item_name']} at {ev['course_name'] or '?'} ({ev['playing']} registered, ${rev:,.0f} revenue)")
+                    ops.append(f"  {ev['event_date']} — {ev['item_name']} at {ev['course'] or '?'} ({ev['playing']} registered, ${rev:,.0f} revenue)")
             else:
                 ops.append("No upcoming events")
 
