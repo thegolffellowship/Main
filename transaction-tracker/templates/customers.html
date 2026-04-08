@@ -1670,9 +1670,10 @@
 
         // Tab bar — restore active tab from global state
         const _at2 = activeDetailTab;
-        const _panelTxnActive = (_at2 === 'transactions' || _at2 === 'scores');
+        const _panelTxnActive = (_at2 === 'transactions');
         panelHtml += `<div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.75rem; border-bottom:2px solid var(--border);">
             <button type="button" class="cust-tab ${_panelTxnActive ? 'active' : ''}" data-tab="transactions" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_panelTxnActive ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_panelTxnActive ? '#2563eb' : 'var(--text-muted)'};">Transactions</button>
+            <button type="button" class="cust-tab ${_at2 === 'scores' ? 'active' : ''}" data-tab="scores" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'scores' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'scores' ? '#2563eb' : 'var(--text-muted)'};">Scores</button>
             <button type="button" class="cust-tab ${_at2 === 'winnings' ? 'active' : ''}" data-tab="winnings" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'winnings' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'winnings' ? '#2563eb' : 'var(--text-muted)'};">Winnings</button>
             <button type="button" class="cust-tab ${_at2 === 'points' ? 'active' : ''}" data-tab="points" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'points' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'points' ? '#2563eb' : 'var(--text-muted)'};">Points</button>
             <button type="button" class="cust-tab ${_at2 === 'info' ? 'active' : ''}" data-tab="info" style="padding:0.35rem 0.7rem; font-size:0.82rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_at2 === 'info' ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_at2 === 'info' ? '#2563eb' : 'var(--text-muted)'};">Info</button>
@@ -1708,6 +1709,23 @@
                 </tr>`;
             });
         panelHtml += '</tbody></table></div>';
+
+        // Scores tab (loaded async)
+        panelHtml += `<div class="cust-tab-content cust-tab-scores" style="${_at2 !== 'scores' ? 'display:none;' : ''}">
+            <div class="cust-scores-container" data-customer-name="${escapeHtml(customer.name)}">
+                ${customer.handicapIndex !== null
+                    ? '<div style="margin-bottom:0.75rem; display:flex; align-items:baseline; gap:0.5rem;">' +
+                      '<span style="font-size:1.5rem; font-weight:700; color:' + (customer.handicapIndex < 0 ? '#16a34a' : '#2563eb') + ';">' + (customer.handicapIndex < 0 ? '+' + Math.abs(customer.handicapIndex).toFixed(1) : customer.handicapIndex.toFixed(1)) + '</span>' +
+                      '<span style="font-size:0.9rem; color:#94a3b8; font-weight:500;">N</span>' +
+                      '<span style="font-size:1.1rem; color:#64748b;"> / ' + (customer.handicapIndex < 0 ? '+' + Math.abs(customer.handicapIndex * 2).toFixed(1) : (customer.handicapIndex * 2).toFixed(1)) + '</span>' +
+                      '<span style="font-size:0.82rem; color:var(--text-muted);">(9-hole / 18-hole)</span>' +
+                      '</div>'
+                    : '<div style="margin-bottom:0.75rem; font-size:0.82rem; color:var(--text-muted);">No handicap data linked</div>'}
+                <div class="cust-scores-table-wrapper" style="font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Loading scores...</span>
+                </div>
+            </div>
+        </div>`;
 
         // Info tab
         panelHtml += `<div class="cust-tab-content cust-tab-info" style="${_at2 !== 'info' ? 'display:none;' : ''}">${renderCustInfoPanel(customer)}</div>`;
