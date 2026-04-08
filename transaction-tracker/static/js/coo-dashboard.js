@@ -2,7 +2,7 @@
    COO Dashboard — Operations Command Center
    ========================================================= */
 
-const COO = { actionFilter: 'open', chatMessages: [], context: {}, selectedItems: new Set() };
+const COO = { actionFilter: 'open', chatMessages: [], context: {}, selectedItems: new Set(), chatSessionId: null, chatSessions: [] };
 
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
@@ -335,8 +335,6 @@ async function sendChatMessage() {
     const text = input.value.trim();
     if (!text) return;
 
-    // Add user message
-    COO.chatMessages.push({ role: 'user', content: text });
     appendChatBubble('user', text);
     input.value = '';
     input.disabled = true;
@@ -346,16 +344,21 @@ async function sendChatMessage() {
         const resp = await api('/chat', {
             method: 'POST',
             body: {
-                messages: COO.chatMessages,
+                message: text,
+                session_id: COO.chatSessionId,
                 context: COO.context,
             },
         });
+        if (resp.session_id) {
+            COO.chatSessionId = resp.session_id;
+        }
         if (resp.content) {
-            COO.chatMessages.push({ role: 'assistant', content: resp.content });
             appendChatBubble('assistant', resp.content);
         } else if (resp.error) {
             appendChatBubble('assistant', `Error: ${resp.error}`);
         }
+        // Refresh session list sidebar
+        loadChatSessions();
     } catch (e) {
         appendChatBubble('assistant', `Chat error: ${e.message}`);
     }
@@ -363,6 +366,75 @@ async function sendChatMessage() {
     input.disabled = false;
     $('#btn-chat-send').disabled = false;
     input.focus();
+}
+
+// ── Chat Session Management ─────────────────────────────────
+
+async function loadChatSessions() {
+    try {
+        const sessions = await api('/chat-sessions');
+        COO.chatSessions = sessions;
+        renderChatSessionList(sessions);
+    } catch (e) { /* silent */ }
+}
+
+function renderChatSessionList(sessions) {
+    const el = document.getElementById('chat-session-list');
+    if (!el) return;
+    if (!sessions.length) {
+        el.innerHTML = '<div class="coo-chat-no-sessions">No previous chats</div>';
+        return;
+    }
+    el.innerHTML = sessions.map(s => {
+        const active = s.id === COO.chatSessionId ? 'coo-session-active' : '';
+        const date = s.updated_at ? new Date(s.updated_at + 'Z').toLocaleDateString() : '';
+        const count = s.message_count || 0;
+        return `<div class="coo-session-item ${active}" data-sid="${s.id}">
+            <div class="coo-session-title">${(s.title || 'New Chat').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            <div class="coo-session-meta">${date} · ${count} msg${count !== 1 ? 's' : ''}</div>
+        </div>`;
+    }).join('');
+
+    el.querySelectorAll('.coo-session-item').forEach(item => {
+        item.addEventListener('click', () => loadChatSession(parseInt(item.dataset.sid)));
+    });
+}
+
+async function loadChatSession(sessionId) {
+    try {
+        const session = await api(`/chat-sessions/${sessionId}`);
+        COO.chatSessionId = session.id;
+        const container = $('#chat-messages');
+        // Clear and rebuild from DB messages
+        container.innerHTML = `<div class="coo-chat-msg coo-chat-assistant">
+            <div class="coo-chat-bubble">Hey Kerry. I'm your COO Agent. Ask me anything about TGF operations, finances, or action items. I have full context on your current state.</div>
+        </div>`;
+        (session.messages || []).forEach(m => {
+            appendChatBubble(m.role, m.content);
+        });
+        // Update active state in sidebar
+        renderChatSessionList(COO.chatSessions);
+    } catch (e) {
+        console.error('Failed to load session:', e);
+    }
+}
+
+async function startNewChat() {
+    COO.chatSessionId = null;
+    const container = $('#chat-messages');
+    container.innerHTML = `<div class="coo-chat-msg coo-chat-assistant">
+        <div class="coo-chat-bubble">Hey Kerry. I'm your COO Agent. Ask me anything about TGF operations, finances, or action items. I have full context on your current state.</div>
+    </div>`;
+    renderChatSessionList(COO.chatSessions);
+    $('#chat-input').focus();
+}
+
+async function deleteCurrentChat() {
+    if (!COO.chatSessionId) return;
+    if (!confirm('Delete this chat session?')) return;
+    await api(`/chat-sessions/${COO.chatSessionId}`, { method: 'DELETE' });
+    await startNewChat();
+    loadChatSessions();
 }
 
 function appendChatBubble(role, text) {
@@ -411,7 +483,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadActionItems(),
         loadFinancialSnapshot(),
         loadReviewQueue(),
+        loadChatSessions(),
     ]);
+
+    // Auto-load most recent session if one exists
+    if (COO.chatSessions.length > 0) {
+        const latest = COO.chatSessions[0];
+        if (latest.message_count > 0) {
+            await loadChatSession(latest.id);
+        }
+    }
 
     // Build context for chat
     try {
@@ -459,6 +540,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             sendChatMessage();
         }
     });
+    const btnNewChat = document.getElementById('btn-new-chat');
+    if (btnNewChat) btnNewChat.addEventListener('click', startNewChat);
+    const btnDelChat = document.getElementById('btn-delete-chat');
+    if (btnDelChat) btnDelChat.addEventListener('click', deleteCurrentChat);
 
     // ── Bulk Action Buttons ────────────────────────────────
     // Consolidate Duplicates

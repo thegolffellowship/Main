@@ -1540,6 +1540,36 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_name ON agent_action_log(agent_name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_date ON agent_action_log(created_at)")
 
+        # ── COO Chat Sessions ───────────────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coo_chat_sessions (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                title           TEXT DEFAULT 'New Chat',
+                summary         TEXT DEFAULT '',
+                created_at      TEXT DEFAULT (datetime('now')),
+                updated_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        # Migration: add summary column if missing
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(coo_chat_sessions)").fetchall()]
+        if "summary" not in cols:
+            conn.execute("ALTER TABLE coo_chat_sessions ADD COLUMN summary TEXT DEFAULT ''")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coo_chat_messages (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id      INTEGER NOT NULL REFERENCES coo_chat_sessions(id) ON DELETE CASCADE,
+                role            TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                routed_to       TEXT,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_msg_session ON coo_chat_messages(session_id)")
+
         # ── TGF Payouts ─────────────────────────────────────────────
         conn.execute(
             """
@@ -9761,3 +9791,121 @@ def import_tgf_golfers(golfers: list[dict], db_path=None) -> dict:
                 added += 1
         conn.commit()
     return {"added": added, "updated": updated}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  COO CHAT SESSION PERSISTENCE
+# ═══════════════════════════════════════════════════════════════
+
+def get_chat_sessions(limit: int = 20, db_path=None) -> list[dict]:
+    """Return recent chat sessions (newest first)."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT s.*, COUNT(m.id) AS message_count
+               FROM coo_chat_sessions s
+               LEFT JOIN coo_chat_messages m ON m.session_id = s.id
+               GROUP BY s.id ORDER BY s.updated_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_chat_session(session_id: int, db_path=None) -> dict | None:
+    """Return a single session with all its messages."""
+    with _connect(db_path) as conn:
+        sess = conn.execute("SELECT * FROM coo_chat_sessions WHERE id = ?", (session_id,)).fetchone()
+        if not sess:
+            return None
+        msgs = conn.execute(
+            "SELECT * FROM coo_chat_messages WHERE session_id = ? ORDER BY created_at ASC",
+            (session_id,),
+        ).fetchall()
+        result = dict(sess)
+        result["messages"] = [dict(m) for m in msgs]
+        return result
+
+
+def create_chat_session(title: str = "New Chat", db_path=None) -> dict:
+    """Create a new chat session and return it."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO coo_chat_sessions (title) VALUES (?)", (title,)
+        )
+        conn.commit()
+        sess = conn.execute("SELECT * FROM coo_chat_sessions WHERE id = ?", (cur.lastrowid,)).fetchone()
+        result = dict(sess)
+        result["messages"] = []
+        return result
+
+
+def add_chat_message(session_id: int, role: str, content: str, routed_to: str | None = None, db_path=None) -> dict:
+    """Append a message to a chat session."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO coo_chat_messages (session_id, role, content, routed_to) VALUES (?, ?, ?, ?)",
+            (session_id, role, content, routed_to),
+        )
+        conn.execute(
+            "UPDATE coo_chat_sessions SET updated_at = datetime('now') WHERE id = ?",
+            (session_id,),
+        )
+        conn.commit()
+        msg = conn.execute("SELECT * FROM coo_chat_messages WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return dict(msg)
+
+
+def update_chat_session_title(session_id: int, title: str, db_path=None) -> dict:
+    """Rename a chat session."""
+    with _connect(db_path) as conn:
+        conn.execute("UPDATE coo_chat_sessions SET title = ? WHERE id = ?", (title, session_id))
+        conn.commit()
+        sess = conn.execute("SELECT * FROM coo_chat_sessions WHERE id = ?", (session_id,)).fetchone()
+        return dict(sess)
+
+
+def update_chat_session_summary(session_id: int, summary: str, db_path=None) -> dict:
+    """Update the running summary of a chat session."""
+    with _connect(db_path) as conn:
+        conn.execute("UPDATE coo_chat_sessions SET summary = ? WHERE id = ?", (summary, session_id))
+        conn.commit()
+        sess = conn.execute("SELECT * FROM coo_chat_sessions WHERE id = ?", (session_id,)).fetchone()
+        return dict(sess)
+
+
+def get_chat_master_context(exclude_session_id: int | None = None, db_path=None) -> str:
+    """Build a master context string from all past session summaries.
+    This gives the AI a 'table of contents' of all prior conversations,
+    so it can maintain context across sessions."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT id, title, summary, updated_at,
+                      (SELECT COUNT(*) FROM coo_chat_messages WHERE session_id = s.id) AS msg_count
+               FROM coo_chat_sessions s
+               WHERE summary != '' AND summary IS NOT NULL
+               ORDER BY updated_at DESC LIMIT 50""",
+        ).fetchall()
+    if not rows:
+        return ""
+
+    lines = ["MASTER CONVERSATION LOG — Table of Contents"]
+    lines.append("You have persistent memory of all past conversations with Kerry:")
+    lines.append("")
+    for r in rows:
+        if exclude_session_id and r["id"] == exclude_session_id:
+            continue
+        date = r["updated_at"] or "unknown"
+        lines.append(f"[Session #{r['id']}] {date} — \"{r['title']}\" ({r['msg_count']} messages)")
+        if r["summary"]:
+            lines.append(f"  Summary: {r['summary']}")
+        lines.append("")
+    lines.append("Reference these naturally when relevant. If Kerry asks about something discussed before, recall it.")
+    return "\n".join(lines)
+
+
+def delete_chat_session(session_id: int, db_path=None) -> dict:
+    """Delete a chat session and all its messages."""
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM coo_chat_messages WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM coo_chat_sessions WHERE id = ?", (session_id,))
+        conn.commit()
+    return {"deleted": session_id}
