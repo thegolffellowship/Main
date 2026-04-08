@@ -8994,7 +8994,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                     fin.append(f"  {mr['month']}: Income ${mr['income'] or 0:,.2f}, Expenses ${mr['expenses'] or 0:,.2f}, Net ${net:+,.2f}")
             except Exception:
                 pass
-        except Exception:
+        except Exception as e:
+            logger.warning("build_coo_full_context: Financial section error: %s", e)
             fin.append("Financial data not available")
 
         sections.append("FINANCIAL STATUS\n" + "\n".join(fin))
@@ -9006,7 +9007,10 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 """SELECT e.item_name, e.event_date, e.course_name,
                           COUNT(DISTINCT CASE
                               WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
-                              THEN i.id END) as playing
+                              THEN i.id END) as playing,
+                          COALESCE(SUM(CASE
+                              WHEN i.transaction_status = 'active' AND i.merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                              THEN CAST(REPLACE(REPLACE(i.item_price, '$', ''), ',', '') AS REAL) ELSE 0 END), 0) as revenue
                    FROM events e
                    LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
                    LEFT JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE
@@ -9021,16 +9025,40 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
             if upcoming:
                 ops.append(f"{len(upcoming)} upcoming events:")
                 for ev in upcoming:
-                    ops.append(f"  {ev['event_date']} — {ev['item_name']} at {ev['course_name'] or '?'} ({ev['playing']} registered)")
+                    rev = ev['revenue'] or 0
+                    ops.append(f"  {ev['event_date']} — {ev['item_name']} at {ev['course_name'] or '?'} ({ev['playing']} registered, ${rev:,.0f} revenue)")
             else:
                 ops.append("No upcoming events")
+
+            # RSVP data per upcoming event
+            try:
+                rsvp_counts = conn.execute(
+                    """SELECT matched_event, response, COUNT(*) as cnt
+                       FROM rsvps WHERE matched_event IS NOT NULL
+                       GROUP BY matched_event, response"""
+                ).fetchall()
+                rsvp_map = {}
+                for r in rsvp_counts:
+                    ev_name = r["matched_event"]
+                    if ev_name not in rsvp_map:
+                        rsvp_map[ev_name] = {"PLAYING": 0, "NOT PLAYING": 0}
+                    rsvp_map[ev_name][r["response"]] = r["cnt"]
+                if rsvp_map:
+                    ops.append("RSVP breakdown:")
+                    for ev_name, counts in list(rsvp_map.items())[:8]:
+                        ops.append(f"  {ev_name}: {counts.get('PLAYING', 0)} playing, {counts.get('NOT PLAYING', 0)} not playing")
+            except Exception:
+                pass
 
             # Recent past events (last 30 days) for context
             recent_events = conn.execute(
                 """SELECT e.item_name, e.event_date,
                           COUNT(DISTINCT CASE
                               WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
-                              THEN i.id END) as played
+                              THEN i.id END) as played,
+                          COALESCE(SUM(CASE
+                              WHEN i.transaction_status = 'active' AND i.merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                              THEN CAST(REPLACE(REPLACE(i.item_price, '$', ''), ',', '') AS REAL) ELSE 0 END), 0) as revenue
                    FROM events e
                    LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
                    LEFT JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE
@@ -9044,9 +9072,37 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
             if recent_events:
                 ops.append(f"Recent events (last 30 days):")
                 for ev in recent_events:
-                    ops.append(f"  {ev['event_date']} — {ev['item_name']} ({ev['played']} players)")
-        except Exception:
+                    rev = ev['revenue'] or 0
+                    ops.append(f"  {ev['event_date']} — {ev['item_name']} ({ev['played']} players, ${rev:,.0f} revenue)")
+        except Exception as e:
+            logger.warning("build_coo_full_context: Events section error: %s", e)
             ops.append("Event data not available")
+
+        # Event cost allocations (for profitability analysis)
+        try:
+            alloc_rows = conn.execute(
+                """SELECT event_name,
+                          SUM(course_payable + course_surcharge) as total_course_cost,
+                          SUM(prize_pool) as total_prize_pool,
+                          SUM(tgf_operating) as total_tgf_operating,
+                          SUM(total_collected) as total_collected,
+                          COUNT(*) as player_allocs
+                   FROM acct_allocations
+                   WHERE allocation_date >= ?
+                   GROUP BY event_name ORDER BY allocation_date ASC""",
+                (today,),
+            ).fetchall()
+            if alloc_rows:
+                ops.append("Event cost allocations (upcoming):")
+                for a in alloc_rows:
+                    course = a["total_course_cost"] or 0
+                    prize = a["total_prize_pool"] or 0
+                    collected = a["total_collected"] or 0
+                    operating = a["total_tgf_operating"] or 0
+                    profit = collected - course - prize
+                    ops.append(f"  {a['event_name']}: {a['player_allocs']} players, ${collected:,.0f} collected, ${course:,.0f} course cost, ${prize:,.0f} prizes, ${operating:,.0f} TGF operating (net: ${profit:,.0f})")
+        except Exception:
+            pass
 
         sections.append("EVENTS & OPERATIONS\n" + "\n".join(ops))
 
@@ -9081,7 +9137,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 mem.append("Top players (6 months):")
                 for ts in top_spenders:
                     mem.append(f"  {ts['customer']}: {ts['events']} events, ${ts['spent'] or 0:,.0f}")
-        except Exception:
+        except Exception as e:
+            logger.warning("build_coo_full_context: Customers section error: %s", e)
             mem.append("Customer data not available")
 
         sections.append("MEMBERS & CUSTOMERS\n" + "\n".join(mem))
@@ -9108,7 +9165,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                      AND order_date >= date('now', '-7 days')"""
             ).fetchone()
             txn.append(f"Last 7 days: {recent_txn['c']} new items, ${recent_txn['total'] or 0:,.0f}")
-        except Exception:
+        except Exception as e:
+            logger.warning("build_coo_full_context: Transactions section error: %s", e)
             txn.append("Transaction data not available")
 
         sections.append("TRANSACTION ACTIVITY\n" + "\n".join(txn))
@@ -9125,7 +9183,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
             rsvp.append(f"Total RSVPs: {r_total} ({r_playing} playing, {r_not} not playing)")
             if r_unmatched:
                 rsvp.append(f"Playing but no payment: {r_unmatched} (need follow-up)")
-        except Exception:
+        except Exception as e:
+            logger.warning("build_coo_full_context: RSVPs section error: %s", e)
             rsvp.append("RSVP data not available")
         sections.append("RSVPS\n" + "\n".join(rsvp))
 
@@ -9139,7 +9198,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
             ).fetchone()["c"]
             hcp.append(f"Players: {player_count}, Total rounds: {round_count}")
             hcp.append(f"Rounds entered (30d): {recent_rounds}")
-        except Exception:
+        except Exception as e:
+            logger.warning("build_coo_full_context: Handicaps section error: %s", e)
             hcp.append("Handicap data not available")
         sections.append("HANDICAPS\n" + "\n".join(hcp))
 
@@ -9157,7 +9217,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
             acct_uncat = acct_total - acct_catd
             pct = round(acct_catd / acct_total * 100, 1) if acct_total else 100
             acct.append(f"Transactions: {acct_total} total, {acct_catd} categorized ({pct}%), {acct_uncat} uncategorized")
-        except Exception:
+        except Exception as e:
+            logger.warning("build_coo_full_context: Accounting section error: %s", e)
             acct.append("Accounting data not available")
 
         # Pending reviews
@@ -9187,7 +9248,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
             if cat_rows:
                 cats = ", ".join(f"{r['category']}: {r['c']}" for r in cat_rows)
                 ai_sec.append(f"By category: {cats}")
-        except Exception:
+        except Exception as e:
+            logger.warning("build_coo_full_context: Action items section error: %s", e)
             ai_sec.append("Action items data not available")
 
         sections.append("ACTION ITEMS\n" + "\n".join(ai_sec))
@@ -9208,7 +9270,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
             ).fetchall()
             for rp in recent_pay:
                 pay.append(f"  {rp['event_date']} — {rp['name']}: ${rp['total_purse'] or 0:,.0f} purse, {rp['payouts']} payouts")
-        except Exception:
+        except Exception as e:
+            logger.warning("build_coo_full_context: Payouts section error: %s", e)
             pay.append("No payout data yet")
 
         sections.append("TGF PAYOUTS\n" + "\n".join(pay))
@@ -9223,7 +9286,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 sc.append("Season contests: " + ", ".join(f"{r['contest_type']}: {r['c']} enrolled" for r in enrollments))
             else:
                 sc.append("No season contest enrollments")
-        except Exception:
+        except Exception as e:
+            logger.warning("build_coo_full_context: Season contests section error: %s", e)
             sc.append("Season contests not configured")
 
         sections.append("SEASON CONTESTS\n" + "\n".join(sc))

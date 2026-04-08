@@ -661,14 +661,25 @@
         ).join("");
 
         return `
-        <div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border);">
-            <button type="button" class="cust-tab active" data-tab="transactions" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb;">Transactions</button>
-            <button type="button" class="cust-tab" data-tab="winnings" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Winnings</button>
-            <button type="button" class="cust-tab" data-tab="points" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Points</button>
-            <button type="button" class="cust-tab" data-tab="info" style="flex:1; padding:0.35rem 0; font-size:0.78rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted);">Info</button>
+        <div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border); overflow-x:auto;">
+            <button type="button" class="cust-tab active" data-tab="transactions" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb; white-space:nowrap;">Transactions</button>
+            <button type="button" class="cust-tab" data-tab="scores" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted); white-space:nowrap;">Scores</button>
+            <button type="button" class="cust-tab" data-tab="winnings" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted); white-space:nowrap;">Winnings</button>
+            <button type="button" class="cust-tab" data-tab="points" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted); white-space:nowrap;">Points</button>
+            <button type="button" class="cust-tab" data-tab="info" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted); white-space:nowrap;">Info</button>
         </div>
         <div class="cust-tab-content cust-tab-transactions">
             ${renderCustDetailMobile(customer)}
+        </div>
+        <div class="cust-tab-content cust-tab-scores" style="display:none;">
+            <div class="cust-scores-container" data-customer-name="${escapeHtml(customer.name)}">
+                ${customer.handicapIndex !== null
+                    ? '<div style="margin-bottom:0.5rem; font-size:1.1rem; font-weight:700; color:#2563eb;">' + (customer.handicapIndex < 0 ? '+' + Math.abs(customer.handicapIndex).toFixed(1) : customer.handicapIndex.toFixed(1)) + ' N</div>'
+                    : '<div style="margin-bottom:0.5rem; font-size:0.82rem; color:var(--text-muted);">No handicap data linked</div>'}
+                <div class="cust-scores-table-wrapper" style="font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Loading scores...</span>
+                </div>
+            </div>
         </div>
         <div class="cust-tab-content cust-tab-winnings" style="display:none;">
             <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}">
@@ -821,6 +832,17 @@
                             t.style.color = isActive ? "#2563eb" : "var(--text-muted)";
                         });
                         expandedCard.querySelector(".cust-tab-transactions").style.display = target === "transactions" ? "" : "none";
+                        const mScores = expandedCard.querySelector(".cust-tab-scores");
+                        if (mScores) {
+                            mScores.style.display = target === "scores" ? "" : "none";
+                            if (target === "scores") {
+                                const wrapper = mScores.querySelector(".cust-scores-table-wrapper");
+                                if (wrapper && wrapper.textContent.includes("Loading")) {
+                                    const custName = mScores.querySelector(".cust-scores-container")?.dataset?.customerName;
+                                    if (custName) loadCustomerScores(custName, wrapper);
+                                }
+                            }
+                        }
                         const mWinnings = expandedCard.querySelector(".cust-tab-winnings");
                         if (mWinnings) {
                             mWinnings.style.display = target === "winnings" ? "" : "none";

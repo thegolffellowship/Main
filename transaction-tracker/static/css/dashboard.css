@@ -2319,9 +2319,16 @@ div.mobile-card.row-rsvp-only {
 }
 .coo-session-item {
     padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--border);
-    cursor: pointer; transition: background 0.12s;
+    cursor: pointer; transition: background 0.12s; position: relative;
 }
 .coo-session-item:hover { background: var(--row-hover); }
+.coo-session-item:hover .coo-session-rename { opacity: 1; }
+.coo-session-rename {
+    position: absolute; top: 0.35rem; right: 0.3rem; background: none; border: none;
+    cursor: pointer; font-size: 0.7rem; color: var(--text-muted); opacity: 0;
+    transition: opacity 0.15s; padding: 0.1rem 0.25rem; line-height: 1;
+}
+.coo-session-rename:hover { color: var(--primary); }
 .coo-session-active { background: #eff6ff; border-left: 3px solid var(--primary); }
 .coo-session-title {
     font-size: 0.75rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis;
