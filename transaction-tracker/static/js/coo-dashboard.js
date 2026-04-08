@@ -403,11 +403,28 @@ function renderChatSessionList(sessions) {
         return `<div class="coo-session-item ${active}" data-sid="${s.id}">
             <div class="coo-session-title">${(s.title || 'New Chat').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
             <div class="coo-session-meta">${date} · ${count} msg${count !== 1 ? 's' : ''}</div>
+            <button class="coo-session-rename" data-sid="${s.id}" title="Rename">&#9998;</button>
         </div>`;
     }).join('');
 
     el.querySelectorAll('.coo-session-item').forEach(item => {
-        item.addEventListener('click', () => loadChatSession(parseInt(item.dataset.sid)));
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('.coo-session-rename')) return;
+            loadChatSession(parseInt(item.dataset.sid));
+        });
+    });
+    el.querySelectorAll('.coo-session-rename').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const sid = parseInt(btn.dataset.sid);
+            const session = COO.chatSessions.find(s => s.id === sid);
+            const newTitle = prompt('Rename chat session:', session?.title || 'New Chat');
+            if (newTitle && newTitle.trim()) {
+                await api(`/chat-sessions/${sid}`, { method: 'PATCH', body: { title: newTitle.trim() } });
+                if (session) session.title = newTitle.trim();
+                renderChatSessionList(COO.chatSessions);
+            }
+        });
     });
 }
 

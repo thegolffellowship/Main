@@ -5604,6 +5604,18 @@ def api_coo_delete_chat_session(sid):
     return jsonify(delete_chat_session(sid))
 
 
+@app.route("/api/coo/chat-sessions/<int:sid>", methods=["PATCH"])
+@require_role("admin")
+def api_coo_rename_chat_session(sid):
+    """Rename a chat session."""
+    d = request.json or {}
+    title = d.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    update_chat_session_title(sid, title)
+    return jsonify({"status": "ok", "title": title})
+
+
 @app.route("/api/coo/send-daily-email", methods=["POST"])
 @require_role("admin")
 def api_coo_send_daily_email():
