@@ -439,9 +439,9 @@ Operations Command Center with AI-powered strategic advisor.
 | start_time_18 | TEXT | 18-hole start time (combo mode only) |
 | start_type_18 | TEXT | 18-hole start type (combo mode only) |
 | tee_time_count_18 | INTEGER | 18-hole tee time count (combo mode only) |
-| course_cost | REAL | Course/vendor cost per player |
-| tgf_markup | REAL | TGF markup per player (default: $8 for 9 holes, $15 for 18 holes) |
-| side_game_fee | REAL | TGF side game admin fee per game (default: $3 for 9 holes, $4 for 18 holes) |
+| course_cost | REAL | Course/vendor cost per player (rounds up to nearest dollar) |
+| tgf_markup | REAL | TGF markup per player — Member rate (Guest = +$10/+$15, 1st Timer = Guest−$25) |
+| side_game_fee | REAL | Included games admin fee ("Inc. Games") — part of base Event Only price |
 | transaction_fee_pct | REAL | Transaction processing fee percentage (default: 3.5%) |
 | event_type | TEXT | Default 'event' |
 | created_at | TEXT | |
@@ -1120,6 +1120,23 @@ The app is installable as a Progressive Web App:
 
 ## Version History
 
+### v2.1.0 — April 8, 2026 — "Compact Event Pricing"
+
+**Edit/Add Event modal redesign (Pricing tab):**
+- Collapsible Course Cost Calculator — collapsed by default (shows green fees only), expands to show all 5 line items. Auto-expands if non-green-fees items have saved data
+- 9/18 Combo pricing sections displayed **side-by-side** instead of stacked vertically (modal widened to 700px)
+- "Event Cost" total displayed at bottom of each calculator card = ceil(Course Cost) + Markup + Inc. Games
+- Calculator header shows **rounded-up** course cost (e.g., "$68" not "$67.11")
+- Colored pricing cards: Member (green), Guest (blue), 1st Timer (gold), N/A (gray)
+- Three tiers: Event Only, With One Game (+$16), With Both Games (+$32)
+- "With Both Games" is N/A for Guest and 1st Timer
+- Player type markups auto-derived: Guest = Member + $10 (9h/combo) or +$15 (18h standalone); 1st Timer = Guest − $25
+- Combo 18-hole shows Member only (Guests/1st Timers cannot play 18 in combo)
+- Combo pricing summary displayed side-by-side matching calculator layout
+- Transaction fee defaults to 3.5% (pre-filled value, not just placeholder)
+- Renamed "Side Game Fee" → "Inc. Games ($)" to distinguish from per-game add-ons
+- Course cost rounds up FIRST before adding markup and game fees
+
 ### v2.0.0 — April 6, 2026 — "Guest Registration Handling, Action Items & Event Fixes"
 
 **Guest Registration Handling:**
@@ -1393,39 +1410,69 @@ All transactions flowing in and out of TGF need to be accounted for — every do
 
 ## Event Pricing
 
-Each event can have per-event pricing configured in the Add/Edit Event modals. This replaces the previously hardcoded markup values and provides transparency into how player totals break down.
+Each event can have per-event pricing configured in the Add/Edit Event modals. The pricing tab features a compact, collapsible Course Cost Calculator and live-updating pricing cards showing player totals by type and game tier.
 
 ### Pricing Components
 
 | Component | Field | Default | Description |
 |-----------|-------|---------|-------------|
-| **Course Cost** | `course_cost` | (calculated) | What the course/vendor charges TGF per player. Pass-through, not taxable. |
-| **TGF Markup** | `tgf_markup` | $8 (9 holes) / $15 (18 holes) | TGF's per-player admin fee. Taxable. |
-| **Side Game Fee** | `side_game_fee` | $3 (9 holes) / $4 (18 holes) | TGF markup on top of each side game pot entry. Taxable. |
-| **Transaction Fee** | `transaction_fee_pct` | 3.5% | Payment processor fee (MySimpleStore/Stripe). Applied to the subtotal. |
+| **Course Cost** | `course_cost` | (calculated) | What the course/vendor charges TGF per player. Computed via Course Cost Calculator (Green Fees + Cart Fees + Range Balls + Printing + Other, each with configurable tax %). **Rounds up** to the nearest whole dollar before adding other fees. |
+| **TGF Markup** | `tgf_markup` | $8 (9 holes) / $15 (18 holes) | TGF's per-player admin fee. This is the **Member** markup; Guest and 1st Timer markups are derived automatically (see Player Type Pricing below). |
+| **Inc. Games** | `side_game_fee` | $7 (9 holes) / $7 (18-hole combo) / $15 (18-hole standalone) | Included games admin fee — charged to all players as part of the base Event Only price. Labeled "Inc. Games ($)" in the UI. |
+| **Transaction Fee** | `transaction_fee_pct` | 3.5% | Payment processor fee (MySimpleStore/Stripe). Applied to the event charge at checkout. |
 
-### How Player Price Breaks Down
+### Player Type Pricing
+
+The TGF Markup field sets the **Member** rate. Guest and 1st Timer markups are auto-derived:
+
+| Player Type | 9 Holes / Combo | 18 Holes (standalone) |
+|-------------|-----------------|----------------------|
+| **Member** | Markup as entered | Markup as entered |
+| **Guest** | Member + $10 | Member + $15 |
+| **1st Timer** | Guest − $25 | Guest − $25 |
+
+1st Timer markup can go negative (acts as a discount off course cost). For **9/18 Combo events**, Guests and 1st Timers can only play the 9-hole option — the 18-hole column shows "N/A" for non-members.
+
+### How Event Price Breaks Down
 
 ```
-Player Total = Course Cost + TGF Markup + Side Game Fees + Transaction Fee
+Event Charge = ceil(Course Cost) + TGF Markup + Inc. Games
+Player Total = Event Charge + Transaction Fee
 
-Example (18-hole event, BOTH side games):
-  Course cost:      $65.00
-  TGF markup:       $15.00
-  NET game fee:      $4.00 (TGF markup) + $12.50 (pot contribution) = $16.50
-  GROSS game fee:    $4.00 (TGF markup) + $12.50 (pot contribution) = $16.50
-  Subtotal:        $113.00
-  Transaction fee:   $3.96 (3.5%)
-  Total:           $116.96
+Example (9-hole combo event, Member, Event Only):
+  Course cost:       $67.11  →  $68  (rounds up)
+  TGF markup:        $8.00
+  Inc. Games:        $7.00
+  Event Charge:      $83.00
+  Transaction fee:   $2.91  (3.5% of $83)
+  Player Total:      $85.91
 ```
+
+### Game Add-On Tiers
+
+Each event shows three pricing tiers with colored cards for Member / Guest / 1st Timer:
+
+| Tier | Cost | Notes |
+|------|------|-------|
+| **Event Only** | Event Charge | Base price including Inc. Games |
+| **With One Game (+$16)** | Event Charge + $16 | One additional NET or GROSS game |
+| **With Both Games (+$32)** | Event Charge + $32 | Both NET and GROSS games |
+
+The per-game add-on is $16 (defined as `PER_GAME_ADDON` constant in events.html). "With Both Games" is **N/A** for Guest and 1st Timer.
+
+### Course Cost Calculator
+
+The Course Cost Calculator is **collapsible** — collapsed by default showing only a single "Amount / Tax / Total" row (mapped to Green Fees). Click the chevron to expand and see all 5 line items: Green Fees, Cart Fees, Range Balls, Printing, Other. Auto-expands if non-green-fees items have saved data. The header shows the **rounded-up** course cost (e.g., "$68" not "$67.11").
+
+For 9/18 Combo events, the calculator and pricing inputs are displayed **side-by-side** in two columns: 9-Hole Calculator (green) and 18-Hole Calculator (blue). Each shows an "Event Cost" total at the bottom = ceil(Course Cost) + Markup + Inc. Games, matching the Member Event Only card.
 
 ### Relationship to Overall Totals
 
-For any event transaction: **Total collected − TGF markups − Side game fees − Transaction fees ≈ Course cost**. This is the formula the WD (withdrawal) credit calculation uses — when per-event pricing is set, it uses the exact values; otherwise it reverse-calculates from the player's item price.
+For any event transaction: **Total collected − TGF markups − Inc. Games − Transaction fees ≈ Course cost**. This is the formula the WD (withdrawal) credit calculation uses — when per-event pricing is set, it uses the exact values; otherwise it reverse-calculates from the player's item price.
 
 ### Where Pricing Appears
 
-- **Add/Edit Event modals** — Configure all four pricing fields with live preview
+- **Add/Edit Event modals (Pricing tab)** — Collapsible Course Cost Calculator, Markup, Inc. Games, Transaction Fee inputs with live-updating pricing cards showing Member/Guest/1st Timer × Event Only/+1 Game/+Both Games
 - **Event detail view** — Pricing summary line below game stat badges
 - **WD modal** — Credit components use per-event pricing when available
 

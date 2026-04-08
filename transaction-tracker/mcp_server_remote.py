@@ -146,8 +146,12 @@ def list_events(chapter: str = "", upcoming_only: bool = False) -> str:
         upcoming_only: If True, only return events where event_date >= today.
 
     Returns per event: item_name, event_date, course, chapter, course_cost,
-    course_cost_9, course_cost_18, tgf_markup, tgf_markup_9, tgf_markup_18,
-    side_game_fee, transaction_fee_pct, course_surcharge, registrations.
+    course_cost_9, course_cost_18, tgf_markup (Member rate), tgf_markup_9, tgf_markup_18,
+    side_game_fee (Inc. Games admin fee), transaction_fee_pct, course_surcharge, registrations.
+
+    Pricing notes: tgf_markup is the Member rate. Guest = Member + $10 (9h/combo) or +$15
+    (18h standalone). 1st Timer = Guest - $25. side_game_fee is the included games admin fee
+    (part of Event Only base price). Course cost rounds up to nearest dollar.
     """
     from datetime import date as _date
     events = _get("/api/events")

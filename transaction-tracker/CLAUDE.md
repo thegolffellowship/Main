@@ -337,6 +337,72 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
   items still reference it, preventing `sync_events_from_items()` from recreating
 - `seed_events()` also checks aliases before inserting
 
+## Event Pricing Architecture
+
+### Edit/Add Event Modal — Pricing Tab
+
+The Pricing tab has a **compact layout** with collapsible calculators and live-updating pricing cards.
+
+**For 9/18 Combo events:**
+- Two side-by-side columns: "9-Hole Calculator" (green) and "18-Hole Calculator" (blue)
+- Each column has: collapsible Course Cost Calculator, Markup ($), Inc. Games ($)
+- "Event Cost" total at bottom of each card = `ceil(courseCost) + markup + incGames`
+- Shared Transaction Fee (%) input below
+- Side-by-side pricing summary with colored cards below
+
+**Course Cost Calculator** (collapsible):
+- Collapsed (default): header + green fees row only + rounded total in header
+- Expanded: all 5 items (Green Fees, Cart Fees, Range Balls, Printing, Other)
+- Header shows `Math.ceil(total)` (rounded-up course cost)
+- Auto-expands if non-green-fees items have saved data
+
+### Pricing Calculation Flow
+
+```
+roundedCC     = Math.ceil(courseCost)
+eventCharge   = roundedCC + markup + incGames + gameAddon
+actualCharge  = Math.ceil(eventCharge)       // whole dollar rounding
+txFee         = round(actualCharge × txPct) / 100
+playerTotal   = actualCharge + txFee
+```
+
+Key function: `calcPricingLine(cc, mu, sg, tf)` in `events.html`
+
+### Player Type Markup Rules
+
+The Markup ($) input = **Member** markup. Guest and 1st Timer are auto-derived:
+- **Guest** = Member + $10 (9 Holes and 9/18 Combo) or + $15 (18 Holes standalone)
+- **1st Timer** = Guest − $25 (can go negative as discount)
+- Determined by `getPlayerMarkups(memberMarkup, format)` function
+- For combo events: Guests/1st Timers can ONLY play 9-hole (18-hole shows N/A)
+
+### Game Add-On Tiers
+
+- **Event Only**: base price (includes Inc. Games fee)
+- **With One Game (+$16)**: adds `PER_GAME_ADDON` ($16 constant)
+- **With Both Games (+$32)**: adds `PER_GAME_ADDON × 2`
+- Both Games = N/A for Guest and 1st Timer
+
+### Pricing Summary Cards
+
+Cards use `_priceCard()` function with `PLAYER_CARD_STYLES` colors:
+- Member: green (#f0fdf4 bg, #16a34a border)
+- Guest: blue (#eff6ff bg, #2563eb border)
+- 1st Timer: gold (#fefce8 bg, #a16207 border)
+- N/A: gray (#f3f4f6 bg, #d1d5db border)
+
+Cards display the **event charge** (whole dollars, before tx fee).
+
+### Field Name Mapping
+
+| UI Label | DB Field | Notes |
+|----------|----------|-------|
+| Markup ($) | `tgf_markup` / `tgf_markup_9` / `tgf_markup_18` | Member rate |
+| Inc. Games ($) | `side_game_fee` / `side_game_fee_9` / `side_game_fee_18` | Included games admin fee |
+| Transaction Fee (%) | `transaction_fee_pct` | Default 3.5% |
+| Course Cost | `course_cost` / `course_cost_9` / `course_cost_18` | From calculator |
+| Course Cost Breakdown | `course_cost_breakdown` / `_9` / `_18` | JSON of 5 line items |
+
 ## Side Games Matrix
 
 ### Persistence
