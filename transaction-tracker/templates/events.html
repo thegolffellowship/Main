@@ -554,7 +554,7 @@
 
                     <!-- Combo format pricing (9/18 Combo) -->
                     <div id="edit-pricing-combo" style="display:none;">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; align-items:start;">
                             <!-- 9-Hole column -->
                             <div style="padding:0.5rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
                                 <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#166534;">9-Hole Pricing</label>
@@ -1064,7 +1064,7 @@
 
                     <!-- Combo format pricing -->
                     <div id="add-pricing-combo" style="display:none;">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; align-items:start;">
                             <!-- 9-Hole column -->
                             <div style="padding:0.5rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
                                 <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#166534;">9-Hole Pricing</label>
@@ -4775,7 +4775,7 @@
         // Grid for all line items
         html += `<div style="margin-top:0.35rem;">`;
         // Column headers (hidden when collapsed)
-        html += `<div id="${headerId}" style="display:${expanded ? 'grid' : 'none'}; grid-template-columns: 1.2fr 1fr 0.8fr 0.8fr; gap:0.15rem 0.3rem; font-size:0.7rem; align-items:center; margin-bottom:0.1rem;">`;
+        html += `<div id="${headerId}" style="display:${expanded ? 'grid' : 'none'}; grid-template-columns: 1.1fr 1fr 1fr 0.7fr; gap:0.15rem 0.3rem; font-size:0.7rem; align-items:center; margin-bottom:0.1rem;">`;
         html += `<span style="font-weight:600; color:var(--text-muted);">Item</span>`;
         html += `<span style="font-weight:600; color:var(--text-muted);">Amount ($)</span>`;
         html += `<span style="font-weight:600; color:var(--text-muted);">Tax (%)</span>`;
@@ -4790,7 +4790,7 @@
             if (!isFirst && idx === 1) {
                 html += `<div id="${detailId}" style="display:${expanded ? 'block' : 'none'};">`;
             }
-            html += `<div style="display:grid; grid-template-columns: 1.2fr 1fr 0.8fr 0.8fr; gap:0.15rem 0.3rem; font-size:0.75rem; align-items:center;">`;
+            html += `<div style="display:grid; grid-template-columns: 1.1fr 1fr 1fr 0.7fr; gap:0.15rem 0.3rem; font-size:0.75rem; align-items:center;">`;
             html += `<span ${isFirst ? `id="${prefix}-calc-first-label"` : ''} style="font-size:0.75rem; ${isFirst ? '' : 'color:var(--text-muted);'}">${isFirst && !expanded ? 'Amount' : item.label}</span>`;
             html += `<input type="number" class="modal-input calc-amt" data-prefix="${prefix}" data-key="${item.key}" min="0" step="0.01" value="${amt !== "" && amt !== 0 ? amt : ""}" placeholder="0.00" style="font-size:0.75rem; padding:0.2rem 0.35rem;">`;
             html += `<input type="number" class="modal-input calc-tax" data-prefix="${prefix}" data-key="${item.key}" min="0" max="100" step="0.01" value="${tax}" placeholder="8.25" style="font-size:0.75rem; padding:0.2rem 0.35rem;">`;
@@ -4887,14 +4887,16 @@
     };
 
     // ---- Pricing Calculation (single format) ----
+    // Course cost rounds up first, then add markup + game fees
     function calcPricingLine(cc, mu, sg, tf) {
-        const subtotal = cc + mu + sg;
-        const actualCharge = Math.ceil(subtotal);
-        const roundingDiff = actualCharge - subtotal;
+        const roundedCC = Math.ceil(cc);
+        const eventCharge = roundedCC + mu + sg;
+        const actualCharge = Math.ceil(eventCharge);
+        const roundingDiff = actualCharge - eventCharge;
         const effectiveMarkup = mu + roundingDiff;
         const txFee = Math.round(actualCharge * tf) / 100;
         const playerTotal = actualCharge + txFee;
-        return { subtotal, actualCharge, roundingDiff, effectiveMarkup, txFee, playerTotal };
+        return { roundedCC, eventCharge, actualCharge, roundingDiff, effectiveMarkup, txFee, playerTotal };
     }
 
     // Guest surcharge: +$10 for 9 Holes and 9/18 Combo, +$15 for standalone 18 Holes
@@ -4916,7 +4918,7 @@
         na:        { bg: '#f3f4f6', border: '#d1d5db', label: '#9ca3af', text: '#9ca3af' }
     };
 
-    function _priceCard(label, total, style, isNA) {
+    function _priceCard(label, eventCharge, style, isNA) {
         if (isNA) {
             const s = PLAYER_CARD_STYLES.na;
             return `<div style="text-align:center; padding:0.2rem 0.15rem; background:${s.bg}; border:1.5px solid ${s.border}; border-radius:4px;">
@@ -4926,7 +4928,7 @@
         }
         return `<div style="text-align:center; padding:0.2rem 0.15rem; background:${style.bg}; border:1.5px solid ${style.border}; border-radius:4px;">
             <div style="font-size:0.6rem; font-weight:600; color:${style.label};">${label}</div>
-            <div style="font-size:0.88rem; font-weight:700; color:${style.text};">$${Math.round(total)}</div>
+            <div style="font-size:0.88rem; font-weight:700; color:${style.text};">$${eventCharge}</div>
         </div>`;
     }
 
@@ -4938,25 +4940,28 @@
             { key: 'guest',      label: 'Guest',     mu: markups.guest },
             { key: 'firstTimer', label: '1st Timer',  mu: markups.firstTimer }
         ];
-        // Compute member base total to show increment in tier labels
-        const baseTotal = calcPricingLine(cc, markups.member, 0, tf).playerTotal;
-        const oneGameTotal = calcPricingLine(cc, markups.member, sg, tf).playerTotal;
-        const bothGamesTotal = calcPricingLine(cc, markups.member, sg * 2, tf).playerTotal;
+        // Compute member event charge diffs for tier labels
+        const baseCharge = calcPricingLine(cc, markups.member, 0, tf).actualCharge;
+        const oneGameCharge = calcPricingLine(cc, markups.member, sg, tf).actualCharge;
+        const bothGamesCharge = calcPricingLine(cc, markups.member, sg * 2, tf).actualCharge;
         const tiers = [
-            { label: 'Base Event Pricing', games: 0 },
-            { label: `With One Game (+$${Math.round(oneGameTotal - baseTotal)})`, games: 1 },
-            { label: `With Both Games (+$${Math.round(bothGamesTotal - baseTotal)})`, games: 2 }
+            { label: 'Event Only', games: 0, guestNA: false, ftNA: false },
+            { label: `With One Game (+$${oneGameCharge - baseCharge})`, games: 1, guestNA: false, ftNA: false },
+            { label: `With Both Games (+$${bothGamesCharge - baseCharge})`, games: 2, guestNA: true, ftNA: true }
         ];
         let html = '';
         tiers.forEach(tier => {
             html += `<div style="font-weight:700; font-size:0.72rem; margin-top:0.35rem; margin-bottom:0.15rem;">${tier.label}</div>`;
             html += `<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.25rem;">`;
             players.forEach(p => {
-                if (memberOnly && p.key !== 'member') {
+                const isNA = (memberOnly && p.key !== 'member')
+                    || (tier.guestNA && p.key === 'guest')
+                    || (tier.ftNA && p.key === 'firstTimer');
+                if (isNA) {
                     html += _priceCard(p.label, 0, null, true);
                 } else {
                     const line = calcPricingLine(cc, p.mu, sg * tier.games, tf);
-                    html += _priceCard(p.label, line.playerTotal, PLAYER_CARD_STYLES[p.key], false);
+                    html += _priceCard(p.label, line.actualCharge, PLAYER_CARD_STYLES[p.key], false);
                 }
             });
             html += `</div>`;
@@ -4965,11 +4970,12 @@
     }
 
     function renderBaseSummary(cc, mu, sg, tf) {
-        const p = calcPricingLine(cc, mu, sg, tf);
+        const roundedCC = Math.ceil(cc);
         let html = `<div style="display:grid; grid-template-columns:auto 1fr; gap:0.1rem 0.5rem; font-size:0.75rem;">`;
-        html += `<span style="color:var(--text-muted);">Course Fees (w/ tax):</span><span style="text-align:right;">$${cc.toFixed(2)}</span>`;
-        html += `<span style="color:var(--text-muted);">Event Games:</span><span style="text-align:right;">$${sg.toFixed(2)}</span>`;
-        html += `<span style="color:var(--text-muted);">TGF Admin Fees:</span><span style="text-align:right;">$${mu.toFixed(2)}</span>`;
+        html += `<span style="color:var(--text-muted);">Course Fees (w/ tax):</span><span style="text-align:right;">$${cc.toFixed(2)} → $${roundedCC}</span>`;
+        html += `<span style="color:var(--text-muted);">TGF Markup:</span><span style="text-align:right;">$${mu.toFixed(2)}</span>`;
+        html += `<span style="color:var(--text-muted);">Game Fee (per game):</span><span style="text-align:right;">$${sg.toFixed(2)}</span>`;
+        html += `<span style="color:var(--text-muted);">Tx Fee:</span><span style="text-align:right;">${tf}%</span>`;
         html += `</div>`;
         return html;
     }
