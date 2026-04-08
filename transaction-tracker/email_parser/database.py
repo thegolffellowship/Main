@@ -9044,34 +9044,37 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
 
         # ── 3. MEMBERS & CUSTOMERS ─────────────────────────────
         mem = []
-        cust_total = conn.execute("SELECT COUNT(*) as c FROM customers").fetchone()["c"]
-        active_members = conn.execute(
-            "SELECT COUNT(*) as c FROM customers WHERE status = 'active'"
-        ).fetchone()["c"]
+        try:
+            cust_total = conn.execute("SELECT COUNT(*) as c FROM customers").fetchone()["c"]
+            active_members = conn.execute(
+                "SELECT COUNT(*) as c FROM customers WHERE account_status = 'active'"
+            ).fetchone()["c"]
 
-        # Recent new customers (last 30 days)
-        new_custs = conn.execute(
-            """SELECT COUNT(*) as c FROM customers
-               WHERE created_at >= date('now', '-30 days')"""
-        ).fetchone()["c"]
+            # Recent new customers (last 30 days)
+            new_custs = conn.execute(
+                """SELECT COUNT(*) as c FROM customers
+                   WHERE created_at >= date('now', '-30 days')"""
+            ).fetchone()["c"]
 
-        mem.append(f"Total customers: {cust_total} ({active_members} active)")
-        mem.append(f"New customers (30d): {new_custs}")
+            mem.append(f"Total customers: {cust_total} ({active_members} active)")
+            mem.append(f"New customers (30d): {new_custs}")
 
-        # Top spenders this season
-        top_spenders = conn.execute(
-            """SELECT customer, COUNT(*) as events,
-                      SUM(CAST(REPLACE(REPLACE(item_price, '$', ''), ',', '') AS REAL)) as spent
-               FROM items
-               WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
-                 AND transaction_status = 'active'
-                 AND order_date >= date('now', '-6 months')
-               GROUP BY customer ORDER BY events DESC LIMIT 5"""
-        ).fetchall()
-        if top_spenders:
-            mem.append("Top players (6 months):")
-            for ts in top_spenders:
-                mem.append(f"  {ts['customer']}: {ts['events']} events, ${ts['spent'] or 0:,.0f}")
+            # Top spenders this season
+            top_spenders = conn.execute(
+                """SELECT customer, COUNT(*) as events,
+                          SUM(CAST(REPLACE(REPLACE(item_price, '$', ''), ',', '') AS REAL)) as spent
+                   FROM items
+                   WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                     AND transaction_status = 'active'
+                     AND order_date >= date('now', '-6 months')
+                   GROUP BY customer ORDER BY events DESC LIMIT 5"""
+            ).fetchall()
+            if top_spenders:
+                mem.append("Top players (6 months):")
+                for ts in top_spenders:
+                    mem.append(f"  {ts['customer']}: {ts['events']} events, ${ts['spent'] or 0:,.0f}")
+        except Exception:
+            mem.append("Customer data not available")
 
         sections.append("MEMBERS & CUSTOMERS\n" + "\n".join(mem))
 
@@ -9114,13 +9117,16 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
 
         # ── 6. HANDICAPS ──────────────────────────────────────
         hcp = []
-        player_count = conn.execute("SELECT COUNT(*) as c FROM handicap_players").fetchone()["c"]
-        round_count = conn.execute("SELECT COUNT(*) as c FROM handicap_rounds").fetchone()["c"]
-        recent_rounds = conn.execute(
-            "SELECT COUNT(*) as c FROM handicap_rounds WHERE date_played >= date('now', '-30 days')"
-        ).fetchone()["c"]
-        hcp.append(f"Players: {player_count}, Total rounds: {round_count}")
-        hcp.append(f"Rounds entered (30d): {recent_rounds}")
+        try:
+            player_count = conn.execute("SELECT COUNT(DISTINCT player_name) as c FROM handicap_rounds").fetchone()["c"]
+            round_count = conn.execute("SELECT COUNT(*) as c FROM handicap_rounds").fetchone()["c"]
+            recent_rounds = conn.execute(
+                "SELECT COUNT(*) as c FROM handicap_rounds WHERE round_date >= date('now', '-30 days')"
+            ).fetchone()["c"]
+            hcp.append(f"Players: {player_count}, Total rounds: {round_count}")
+            hcp.append(f"Rounds entered (30d): {recent_rounds}")
+        except Exception:
+            hcp.append("Handicap data not available")
         sections.append("HANDICAPS\n" + "\n".join(hcp))
 
         # ── 7. ACCOUNTING & COMPLIANCE ─────────────────────────
@@ -9206,6 +9212,9 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
         sections.append("SEASON CONTESTS\n" + "\n".join(sc))
 
     return "\n\n".join(sections)
+
+
+def get_coo_financial_snapshot(db_path: str | Path | None = None) -> dict:
     """Build the complete financial snapshot for the COO dashboard."""
     manual = get_all_coo_manual_values(db_path)
     today = datetime.now().strftime("%Y-%m-%d")
