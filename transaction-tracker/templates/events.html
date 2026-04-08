@@ -544,7 +544,7 @@
                         <div id="edit-single-calc"></div>
                         <div class="edit-grid" style="grid-template-columns: 1fr 1fr; margin-top:0.75rem;">
                             <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="edit-event-tgf_markup" class="modal-input" min="0" step="0.01" placeholder="e.g., 15.00"></label>
-                            <label style="font-weight:600; font-size:0.82rem;">Side Game Fee ($)<input type="number" id="edit-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
+                            <label style="font-weight:600; font-size:0.82rem;">Inc. Games ($)<input type="number" id="edit-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="edit-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
                         </div>
                         <div id="edit-pricing-preview" style="margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
@@ -557,20 +557,20 @@
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; align-items:start;">
                             <!-- 9-Hole column -->
                             <div style="padding:0.5rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
-                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#166534;">9-Hole Pricing</label>
+                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#166534;">9-Hole Calculator</label>
                                 <div id="edit-combo-9-calc"></div>
                                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
                                     <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="edit-event-tgf_markup_9" class="modal-input" min="0" step="0.01" placeholder="8.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
-                                    <label style="font-weight:600; font-size:0.75rem;">Game Fee ($)<input type="number" id="edit-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                    <label style="font-weight:600; font-size:0.75rem;">Inc. Games ($)<input type="number" id="edit-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                 </div>
                             </div>
                             <!-- 18-Hole column -->
                             <div style="padding:0.5rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
-                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#1e40af;">18-Hole Pricing</label>
+                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#1e40af;">18-Hole Calculator</label>
                                 <div id="edit-combo-18-calc"></div>
                                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
                                     <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="edit-event-tgf_markup_18" class="modal-input" min="0" step="0.01" placeholder="15.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
-                                    <label style="font-weight:600; font-size:0.75rem;">Game Fee ($)<input type="number" id="edit-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                    <label style="font-weight:600; font-size:0.75rem;">Inc. Games ($)<input type="number" id="edit-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                 </div>
                             </div>
                         </div>
@@ -1054,7 +1054,7 @@
                         <div id="add-single-calc"></div>
                         <div class="edit-grid" style="grid-template-columns: 1fr 1fr; margin-top:0.75rem;">
                             <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="add-event-tgf_markup" class="modal-input" min="0" step="0.01" placeholder="e.g., 15.00"></label>
-                            <label style="font-weight:600; font-size:0.82rem;">Side Game Fee ($)<input type="number" id="add-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
+                            <label style="font-weight:600; font-size:0.82rem;">Inc. Games ($)<input type="number" id="add-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="add-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
                         </div>
                         <div id="add-pricing-preview" style="margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
@@ -1067,20 +1067,20 @@
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; align-items:start;">
                             <!-- 9-Hole column -->
                             <div style="padding:0.5rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
-                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#166534;">9-Hole Pricing</label>
+                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#166534;">9-Hole Calculator</label>
                                 <div id="add-combo-9-calc"></div>
                                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
                                     <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="add-event-tgf_markup_9" class="modal-input" min="0" step="0.01" placeholder="8.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
-                                    <label style="font-weight:600; font-size:0.75rem;">Game Fee ($)<input type="number" id="add-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                    <label style="font-weight:600; font-size:0.75rem;">Inc. Games ($)<input type="number" id="add-event-side_game_fee_9" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                 </div>
                             </div>
                             <!-- 18-Hole column -->
                             <div style="padding:0.5rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
-                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#1e40af;">18-Hole Pricing</label>
+                                <label style="font-weight:700; font-size:0.8rem; display:block; margin-bottom:0.35rem; color:#1e40af;">18-Hole Calculator</label>
                                 <div id="add-combo-18-calc"></div>
                                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem; margin-top:0.35rem;">
                                     <label style="font-weight:600; font-size:0.75rem;">Markup ($)<input type="number" id="add-event-tgf_markup_18" class="modal-input" min="0" step="0.01" placeholder="15.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
-                                    <label style="font-weight:600; font-size:0.75rem;">Game Fee ($)<input type="number" id="add-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
+                                    <label style="font-weight:600; font-size:0.75rem;">Inc. Games ($)<input type="number" id="add-event-side_game_fee_18" class="modal-input" min="0" step="0.01" placeholder="7.00" style="font-size:0.78rem; padding:0.2rem 0.35rem;"></label>
                                 </div>
                             </div>
                         </div>
@@ -4865,7 +4865,7 @@
         });
         total = Math.round(total * 100) / 100;
         const totalEl = document.getElementById(prefix + "-calc-total");
-        if (totalEl) totalEl.textContent = "$" + total.toFixed(2);
+        if (totalEl) totalEl.textContent = "$" + Math.ceil(total);
         // Trigger pricing preview update
         if (prefix.startsWith("edit-")) {
             if (prefix.includes("combo")) updateComboPricingPreview();
@@ -4918,65 +4918,62 @@
         na:        { bg: '#f3f4f6', border: '#d1d5db', label: '#9ca3af', text: '#9ca3af' }
     };
 
-    function _priceCard(label, eventCharge, style, isNA) {
+    function _priceCard(label, eventCharge, style, isNA, labelSize, priceSize) {
+        const ls = labelSize || '0.6rem';
+        const ps = priceSize || '0.88rem';
         if (isNA) {
             const s = PLAYER_CARD_STYLES.na;
-            return `<div style="text-align:center; padding:0.2rem 0.15rem; background:${s.bg}; border:1.5px solid ${s.border}; border-radius:4px;">
-                <div style="font-size:0.6rem; font-weight:600; color:${s.label};">${label}</div>
+            return `<div style="text-align:center; padding:0.15rem 0.1rem; background:${s.bg}; border:1.5px solid ${s.border}; border-radius:4px;">
+                <div style="font-size:${ls}; font-weight:600; color:${s.label};">${label}</div>
                 <div style="font-size:0.72rem; color:${s.text};">N/A</div>
             </div>`;
         }
-        return `<div style="text-align:center; padding:0.2rem 0.15rem; background:${style.bg}; border:1.5px solid ${style.border}; border-radius:4px;">
-            <div style="font-size:0.6rem; font-weight:600; color:${style.label};">${label}</div>
-            <div style="font-size:0.88rem; font-weight:700; color:${style.text};">$${eventCharge}</div>
+        return `<div style="text-align:center; padding:0.15rem 0.1rem; background:${style.bg}; border:1.5px solid ${style.border}; border-radius:4px;">
+            <div style="font-size:${ls}; font-weight:600; color:${style.label};">${label}</div>
+            <div style="font-size:${ps}; font-weight:700; color:${style.text};">$${eventCharge}</div>
         </div>`;
     }
+
+    // Per-game add-on cost (added for With One Game / With Both Games tiers)
+    const PER_GAME_ADDON = 16;
 
     function renderPlayerPricingGrid(cc, memberMarkup, sg, tf, format, opts) {
         const markups = getPlayerMarkups(memberMarkup, format);
         const memberOnly = !!(opts && opts.memberOnly);
+        const compact = !!(opts && opts.compact);
+        const addon = PER_GAME_ADDON;
         const players = [
             { key: 'member',     label: 'Member',    mu: markups.member },
             { key: 'guest',      label: 'Guest',     mu: markups.guest },
             { key: 'firstTimer', label: '1st Timer',  mu: markups.firstTimer }
         ];
-        // Compute member event charge diffs for tier labels
-        const baseCharge = calcPricingLine(cc, markups.member, 0, tf).actualCharge;
-        const oneGameCharge = calcPricingLine(cc, markups.member, sg, tf).actualCharge;
-        const bothGamesCharge = calcPricingLine(cc, markups.member, sg * 2, tf).actualCharge;
+        // Event Only includes Inc. Games (sg) in base
+        // Game tiers add PER_GAME_ADDON on top
         const tiers = [
-            { label: 'Event Only', games: 0, guestNA: false, ftNA: false },
-            { label: `With One Game (+$${oneGameCharge - baseCharge})`, games: 1, guestNA: false, ftNA: false },
-            { label: `With Both Games (+$${bothGamesCharge - baseCharge})`, games: 2, guestNA: true, ftNA: true }
+            { label: 'Event Only', addon: 0, guestNA: false, ftNA: false },
+            { label: `With One Game (+$${addon})`, addon: addon, guestNA: false, ftNA: false },
+            { label: `With Both Games (+$${addon * 2})`, addon: addon * 2, guestNA: true, ftNA: true }
         ];
+        const cardSize = compact ? '0.6rem' : '0.72rem';
+        const priceSize = compact ? '0.78rem' : '0.88rem';
         let html = '';
         tiers.forEach(tier => {
-            html += `<div style="font-weight:700; font-size:0.72rem; margin-top:0.35rem; margin-bottom:0.15rem;">${tier.label}</div>`;
-            html += `<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.25rem;">`;
+            html += `<div style="font-weight:700; font-size:${compact ? '0.65rem' : '0.72rem'}; margin-top:0.3rem; margin-bottom:0.1rem;">${tier.label}</div>`;
+            html += `<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.2rem;">`;
             players.forEach(p => {
                 const isNA = (memberOnly && p.key !== 'member')
                     || (tier.guestNA && p.key === 'guest')
                     || (tier.ftNA && p.key === 'firstTimer');
                 if (isNA) {
-                    html += _priceCard(p.label, 0, null, true);
+                    html += _priceCard(p.label, 0, null, true, cardSize, priceSize);
                 } else {
-                    const line = calcPricingLine(cc, p.mu, sg * tier.games, tf);
-                    html += _priceCard(p.label, line.actualCharge, PLAYER_CARD_STYLES[p.key], false);
+                    // Event Only = ceil(cc) + mu + sg; game tiers add addon on top
+                    const line = calcPricingLine(cc, p.mu, sg + tier.addon, tf);
+                    html += _priceCard(p.label, line.actualCharge, PLAYER_CARD_STYLES[p.key], false, cardSize, priceSize);
                 }
             });
             html += `</div>`;
         });
-        return html;
-    }
-
-    function renderBaseSummary(cc, mu, sg, tf) {
-        const roundedCC = Math.ceil(cc);
-        let html = `<div style="display:grid; grid-template-columns:auto 1fr; gap:0.1rem 0.5rem; font-size:0.75rem;">`;
-        html += `<span style="color:var(--text-muted);">Course Fees (w/ tax):</span><span style="text-align:right;">$${cc.toFixed(2)} → $${roundedCC}</span>`;
-        html += `<span style="color:var(--text-muted);">TGF Markup:</span><span style="text-align:right;">$${mu.toFixed(2)}</span>`;
-        html += `<span style="color:var(--text-muted);">Game Fee (per game):</span><span style="text-align:right;">$${sg.toFixed(2)}</span>`;
-        html += `<span style="color:var(--text-muted);">Tx Fee:</span><span style="text-align:right;">${tf}%</span>`;
-        html += `</div>`;
         return html;
     }
 
@@ -5005,10 +5002,7 @@
 
         const subtotal = cc + mu + sg;
         if (subtotal > 0) {
-            let html = `<div style="font-weight:700; font-size:0.75rem; margin-bottom:0.2rem;">Base Calculations</div>`;
-            html += renderBaseSummary(cc, mu, sg, tf);
-            html += renderPlayerPricingGrid(cc, mu, sg, tf, format);
-            summaryEl.innerHTML = html;
+            summaryEl.innerHTML = renderPlayerPricingGrid(cc, mu, sg, tf, format);
             previewEl.style.display = "block";
         } else {
             previewEl.style.display = "none";
@@ -5030,23 +5024,26 @@
         const sub9 = cc9 + mu9 + sg9;
         const sub18 = cc18 + mu18 + sg18;
         if (sub9 > 0 || sub18 > 0) {
-            let html = '';
-            // 9-Hole section: full Member/Guest/1stTimer grid
+            let html = `<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; align-items:start;">`;
+            // 9-Hole column
+            html += `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:0.35rem;">`;
+            html += `<div style="font-weight:700; font-size:0.72rem; color:#166534; margin-bottom:0.1rem;">9-Hole Pricing</div>`;
             if (sub9 > 0) {
-                html += `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:0.4rem; margin-bottom:0.4rem;">`;
-                html += `<div style="font-weight:700; font-size:0.72rem; color:#166534; margin-bottom:0.15rem;">9-Hole Pricing</div>`;
-                html += renderBaseSummary(cc9, mu9, sg9, tf);
-                html += renderPlayerPricingGrid(cc9, mu9, sg9, tf, "9/18 Combo");
-                html += `</div>`;
+                html += renderPlayerPricingGrid(cc9, mu9, sg9, tf, "9/18 Combo", { compact: true });
+            } else {
+                html += `<div style="font-size:0.72rem; color:var(--text-muted); padding:0.5rem 0; text-align:center;">Enter pricing above</div>`;
             }
-            // 18-Hole section: Member only (Guests/1st Timers can't play 18 in combo)
+            html += `</div>`;
+            // 18-Hole column
+            html += `<div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.35rem;">`;
+            html += `<div style="font-weight:700; font-size:0.72rem; color:#1e40af; margin-bottom:0.1rem;">18-Hole Pricing</div>`;
             if (sub18 > 0) {
-                html += `<div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.4rem;">`;
-                html += `<div style="font-weight:700; font-size:0.72rem; color:#1e40af; margin-bottom:0.15rem;">18-Hole Pricing (Member Only)</div>`;
-                html += renderBaseSummary(cc18, mu18, sg18, tf);
-                html += renderPlayerPricingGrid(cc18, mu18, sg18, tf, "9/18 Combo", { memberOnly: true });
-                html += `</div>`;
+                html += renderPlayerPricingGrid(cc18, mu18, sg18, tf, "9/18 Combo", { memberOnly: true, compact: true });
+            } else {
+                html += `<div style="font-size:0.72rem; color:var(--text-muted); padding:0.5rem 0; text-align:center;">Enter pricing above</div>`;
             }
+            html += `</div>`;
+            html += `</div>`;
             summaryEl.innerHTML = html;
             previewEl.style.display = "block";
         } else {
