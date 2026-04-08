@@ -2254,6 +2254,17 @@ div.mobile-card.row-rsvp-only {
 .coo-resolve-input { width: 100%; padding: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.82rem; resize: vertical; }
 .coo-resolve-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
 
+/* ---- Topic Groups ---- */
+.coo-topic-group { margin-bottom: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.coo-topic-header {
+    display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem;
+    background: var(--row-hover); cursor: pointer; user-select: none;
+}
+.coo-topic-header:hover { background: var(--border); }
+.coo-topic-toggle { font-size: 0.7rem; color: var(--text-muted); width: 1rem; text-align: center; }
+.coo-topic-count { font-size: 0.75rem; color: var(--text-muted); }
+.coo-topic-items { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.5rem; }
+
 /* ---- Financial Snapshot ---- */
 .coo-fin-row { margin-bottom: 1.25rem; }
 .coo-fin-row h3 { font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; margin-bottom: 0.5rem; }

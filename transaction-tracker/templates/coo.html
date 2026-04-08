@@ -49,8 +49,14 @@
                     <button class="coo-pill active" data-filter="open">Open</button>
                     <button class="coo-pill" data-filter="in_progress">In Progress</button>
                     <button class="coo-pill" data-filter="completed">Completed</button>
+                    <button class="coo-pill" data-filter="dismissed">Dismissed</button>
                     <button class="coo-pill" data-filter="">All</button>
                 </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;" id="action-bulk-bar">
+                <button class="btn btn-secondary btn-sm" id="btn-consolidate" title="Find and dismiss duplicate/similar items">Consolidate Duplicates</button>
+                <button class="btn btn-secondary btn-sm" id="btn-dismiss-selected" style="display:none;" title="Dismiss selected items">Dismiss Selected (<span id="dismiss-count">0</span>)</button>
+                <button class="btn btn-secondary btn-sm" id="btn-dismiss-all" title="Dismiss all visible items" style="color:var(--red);">Dismiss All Visible</button>
             </div>
             <div id="action-items-list" class="coo-checklist"></div>
         </section>

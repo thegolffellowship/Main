@@ -8680,14 +8680,44 @@ def update_expense_transaction(txn_id: int, fields: dict,
 
 
 def save_action_item(data: dict, db_path: str | Path | None = None) -> dict:
+    """Insert a new action item, skipping if a similar open item already exists.
+
+    Dedup checks (in order):
+    1. Same email_uid (if provided)
+    2. Same subject + category with status 'open' or 'in_progress'
+    """
     with _connect(db_path) as conn:
+        # Dedup: exact email_uid match
+        uid = data.get("email_uid")
+        if uid:
+            existing = conn.execute(
+                "SELECT id FROM action_items WHERE email_uid = ? LIMIT 1", (uid,)
+            ).fetchone()
+            if existing:
+                row = conn.execute("SELECT * FROM action_items WHERE id = ?", (existing["id"],)).fetchone()
+                return dict(row) if row else data
+
+        # Dedup: same subject + category still open
+        subject = (data.get("subject") or "").strip()
+        category = data.get("category", "other")
+        if subject:
+            existing = conn.execute(
+                """SELECT id FROM action_items
+                   WHERE subject = ? AND category = ? AND status IN ('open', 'in_progress')
+                   LIMIT 1""",
+                (subject, category),
+            ).fetchone()
+            if existing:
+                row = conn.execute("SELECT * FROM action_items WHERE id = ?", (existing["id"],)).fetchone()
+                return dict(row) if row else data
+
         cur = conn.execute(
             """INSERT INTO action_items
                (email_uid, subject, from_name, from_email, summary, urgency,
                 category, email_date, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (data.get("email_uid"), data.get("subject"), data.get("from_name"),
+            (uid, subject, data.get("from_name"),
              data.get("from_email"), data.get("summary"), data.get("urgency", "medium"),
-             data.get("category", "other"), data.get("email_date"),
+             category, data.get("email_date"),
              data.get("confidence", 0)),
         )
         conn.commit()
@@ -8696,7 +8726,7 @@ def save_action_item(data: dict, db_path: str | Path | None = None) -> dict:
 
 
 def get_action_items(status: str | None = None, category: str | None = None,
-                     limit: int = 100, db_path: str | Path | None = None) -> list[dict]:
+                     limit: int = 200, db_path: str | Path | None = None) -> list[dict]:
     clauses, params = [], []
     if status:
         clauses.append("status = ?"); params.append(status)
@@ -8724,6 +8754,107 @@ def update_action_item(item_id: int, fields: dict,
         conn.commit()
         row = conn.execute("SELECT * FROM action_items WHERE id = ?", (item_id,)).fetchone()
     return dict(row) if row else {}
+
+
+def batch_dismiss_action_items(item_ids: list[int] | None = None,
+                               category: str | None = None,
+                               status_filter: str = "open",
+                               db_path: str | Path | None = None) -> dict:
+    """Batch dismiss action items by IDs or by category.
+
+    If item_ids provided, dismisses those specific items.
+    If category provided (and no item_ids), dismisses all open items in that category.
+    """
+    with _connect(db_path) as conn:
+        if item_ids:
+            placeholders = ",".join("?" * len(item_ids))
+            count = conn.execute(
+                f"UPDATE action_items SET status = 'dismissed' WHERE id IN ({placeholders}) AND status = ?",
+                (*item_ids, status_filter),
+            ).rowcount
+        elif category:
+            count = conn.execute(
+                "UPDATE action_items SET status = 'dismissed' WHERE category = ? AND status = ?",
+                (category, status_filter),
+            ).rowcount
+        else:
+            count = conn.execute(
+                "UPDATE action_items SET status = 'dismissed' WHERE status = ?",
+                (status_filter,),
+            ).rowcount
+        conn.commit()
+    return {"dismissed": count}
+
+
+def consolidate_action_items(db_path: str | Path | None = None) -> dict:
+    """Find and dismiss duplicate/similar open action items.
+
+    Keeps the newest item in each group, dismisses older duplicates.
+    Groups by: same subject, or similar subject (first 40 chars + same category).
+    """
+    with _connect(db_path) as conn:
+        # Get all open items
+        items = conn.execute(
+            """SELECT id, subject, category, from_name, created_at
+               FROM action_items WHERE status = 'open'
+               ORDER BY created_at DESC"""
+        ).fetchall()
+
+        if not items:
+            return {"consolidated": 0, "groups": 0}
+
+        # Group by exact subject + category
+        groups = {}
+        for item in items:
+            key = ((item["subject"] or "").strip().lower(), (item["category"] or ""))
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(item)
+
+        # Also group by subject prefix (first 40 chars) + category for near-duplicates
+        prefix_groups = {}
+        for item in items:
+            subj = (item["subject"] or "").strip().lower()
+            prefix = subj[:40] if len(subj) > 40 else subj
+            key = (prefix, (item["category"] or ""))
+            if key not in prefix_groups:
+                prefix_groups[key] = []
+            prefix_groups[key].append(item)
+
+        # Merge prefix groups into main groups (prefer larger groups)
+        for key, members in prefix_groups.items():
+            if len(members) > 1:
+                # Check if any exact group already covers these
+                covered = False
+                for exact_key, exact_members in groups.items():
+                    if len(exact_members) > 1 and set(m["id"] for m in members) <= set(m["id"] for m in exact_members):
+                        covered = True
+                        break
+                if not covered:
+                    groups[key] = members
+
+        # Dismiss all but newest in each group with 2+ items
+        dismiss_ids = []
+        group_count = 0
+        for key, members in groups.items():
+            if len(members) > 1:
+                group_count += 1
+                # Keep first (newest — already sorted DESC by created_at)
+                for m in members[1:]:
+                    dismiss_ids.append(m["id"])
+
+        if dismiss_ids:
+            unique_ids = list(set(dismiss_ids))
+            placeholders = ",".join("?" * len(unique_ids))
+            conn.execute(
+                f"""UPDATE action_items SET status = 'dismissed',
+                    resolution_notes = 'Auto-consolidated (duplicate)'
+                    WHERE id IN ({placeholders})""",
+                unique_ids,
+            )
+            conn.commit()
+
+        return {"consolidated": len(set(dismiss_ids)), "groups": group_count}
 
 
 def get_pending_review_count(db_path: str | Path | None = None) -> dict:

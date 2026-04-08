@@ -170,6 +170,8 @@ from email_parser.database import (
     get_reconciliation_summary,
     get_coo_agents,
     get_agent_action_log,
+    batch_dismiss_action_items,
+    consolidate_action_items,
     # Keyword rules
     get_acct_keyword_rules,
     create_acct_keyword_rule,
@@ -5381,6 +5383,23 @@ def api_coo_action_items():
 def api_coo_update_action_item(aid):
     d = request.json or {}
     return jsonify(update_action_item(aid, d))
+
+
+@app.route("/api/coo/action-items/batch-dismiss", methods=["POST"])
+@require_role("admin")
+def api_coo_batch_dismiss():
+    d = request.json or {}
+    return jsonify(batch_dismiss_action_items(
+        item_ids=d.get("item_ids"),
+        category=d.get("category"),
+        status_filter=d.get("status_filter", "open"),
+    ))
+
+
+@app.route("/api/coo/action-items/consolidate", methods=["POST"])
+@require_role("admin")
+def api_coo_consolidate():
+    return jsonify(consolidate_action_items())
 
 
 @app.route("/api/coo/financial-snapshot")

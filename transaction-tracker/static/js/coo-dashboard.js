@@ -2,7 +2,7 @@
    COO Dashboard — Operations Command Center
    ========================================================= */
 
-const COO = { actionFilter: 'open', chatMessages: [], context: {} };
+const COO = { actionFilter: 'open', chatMessages: [], context: {}, selectedItems: new Set() };
 
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
@@ -28,44 +28,94 @@ async function loadActionItems() {
 
 function renderActionItems(items) {
     const el = $('#action-items-list');
+    COO.selectedItems.clear();
+    updateDismissSelectedBtn();
+
     if (!items.length) {
         el.innerHTML = '<p class="coo-empty">No action items</p>';
         return;
     }
-    el.innerHTML = items.map(item => {
+
+    // Group items by category (topic)
+    const groups = {};
+    items.forEach(item => {
+        const cat = item.category || 'other';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(item);
+    });
+
+    // Sort groups: most items first
+    const sortedCats = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
+
+    function renderItem(item) {
         const urgencyIcon = item.urgency === 'high' ? '\ud83d\udfe5' : item.urgency === 'medium' ? '\ud83d\udfe8' : '\u26aa';
-        const checked = item.status === 'completed' ? 'checked' : '';
-        const completedClass = item.status === 'completed' ? 'coo-item-done' : '';
+        const isCompleted = item.status === 'completed';
+        const isDismissed = item.status === 'dismissed';
+        const completedClass = isCompleted ? 'coo-item-done' : isDismissed ? 'coo-item-done' : '';
+        const isActionable = !isCompleted && !isDismissed;
         return `<div class="coo-action-item ${completedClass}" data-id="${item.id}">
             <div class="coo-action-top">
-                <input type="checkbox" class="coo-checkbox" data-id="${item.id}" ${checked}>
+                ${isActionable ? `<input type="checkbox" class="coo-select-cb" data-id="${item.id}" title="Select for batch action">` : ''}
                 <span class="coo-urgency">${urgencyIcon}</span>
-                <span class="coo-cat-badge">${item.category || 'other'}</span>
                 <span class="coo-action-date">${item.email_date || ''}</span>
                 <span class="coo-action-from">${item.from_name || ''}</span>
+                ${isActionable ? `<button class="btn btn-secondary btn-sm coo-btn-dismiss" data-id="${item.id}" style="margin-left:auto;font-size:0.7rem;padding:0.15rem 0.5rem;color:var(--text-muted);">Dismiss</button>` : ''}
+                ${isDismissed ? '<span style="margin-left:auto;font-size:0.7rem;color:var(--text-muted);font-style:italic;">dismissed</span>' : ''}
             </div>
             <div class="coo-action-summary">${item.summary || item.subject || ''}</div>
-            ${item.status === 'completed' && item.resolution_notes ? `<div class="coo-resolution">${item.resolution_notes}</div>` : ''}
-            <div class="coo-action-resolve" id="resolve-${item.id}" style="display:none;">
+            ${item.resolution_notes ? `<div class="coo-resolution">${item.resolution_notes}</div>` : ''}
+            ${isActionable ? `<div class="coo-action-resolve" id="resolve-${item.id}" style="display:none;">
                 <textarea class="coo-resolve-input" placeholder="Resolution notes..." rows="2"></textarea>
                 <div class="coo-resolve-actions">
                     <button class="btn btn-primary btn-sm coo-btn-complete" data-id="${item.id}">Mark Complete</button>
                     <button class="btn btn-secondary btn-sm coo-btn-advice" data-id="${item.id}">Get AI Advice</button>
                 </div>
+            </div>` : ''}
+        </div>`;
+    }
+
+    // Render grouped by topic with collapsible headers
+    el.innerHTML = sortedCats.map(cat => {
+        const catItems = groups[cat];
+        const actionableCount = catItems.filter(i => i.status !== 'completed' && i.status !== 'dismissed').length;
+        return `<div class="coo-topic-group" data-category="${cat}">
+            <div class="coo-topic-header">
+                <span class="coo-topic-toggle">&#9660;</span>
+                <span class="coo-cat-badge">${cat}</span>
+                <span class="coo-topic-count">${catItems.length} item${catItems.length !== 1 ? 's' : ''}${actionableCount !== catItems.length ? ` (${actionableCount} actionable)` : ''}</span>
+                <button class="btn btn-secondary btn-sm coo-btn-dismiss-group" data-category="${cat}" style="margin-left:auto;font-size:0.7rem;padding:0.15rem 0.5rem;color:var(--text-muted);">Dismiss Group</button>
             </div>
+            <div class="coo-topic-items">${catItems.map(renderItem).join('')}</div>
         </div>`;
     }).join('');
 
-    // Checkbox click → show resolve form
-    el.querySelectorAll('.coo-checkbox').forEach(cb => {
-        cb.addEventListener('change', (e) => {
-            const id = cb.dataset.id;
-            const resolveEl = $(`#resolve-${id}`);
-            if (cb.checked && resolveEl) {
-                resolveEl.style.display = '';
-            } else if (resolveEl) {
-                resolveEl.style.display = 'none';
+    // Select checkbox → track for batch actions
+    el.querySelectorAll('.coo-select-cb').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const id = parseInt(cb.dataset.id);
+            if (cb.checked) {
+                COO.selectedItems.add(id);
+            } else {
+                COO.selectedItems.delete(id);
             }
+            updateDismissSelectedBtn();
+            // Also show resolve form when checked
+            const resolveEl = $(`#resolve-${id}`);
+            if (cb.checked && resolveEl) resolveEl.style.display = '';
+            else if (resolveEl) resolveEl.style.display = 'none';
+        });
+    });
+
+    // Individual dismiss
+    el.querySelectorAll('.coo-btn-dismiss').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.id;
+            await api(`/action-items/${id}`, {
+                method: 'PATCH',
+                body: { status: 'dismissed' },
+            });
+            loadActionItems();
         });
     });
 
@@ -97,6 +147,51 @@ function renderActionItems(items) {
             document.getElementById('section-chat').scrollIntoView({ behavior: 'smooth' });
         });
     });
+
+    // Topic group collapse/expand
+    el.querySelectorAll('.coo-topic-header').forEach(header => {
+        header.addEventListener('click', (e) => {
+            if (e.target.closest('.coo-btn-dismiss-group')) return;
+            const group = header.closest('.coo-topic-group');
+            const items = group.querySelector('.coo-topic-items');
+            const toggle = header.querySelector('.coo-topic-toggle');
+            const collapsed = items.style.display === 'none';
+            items.style.display = collapsed ? '' : 'none';
+            toggle.innerHTML = collapsed ? '&#9660;' : '&#9654;';
+        });
+    });
+
+    // Dismiss entire topic group
+    el.querySelectorAll('.coo-btn-dismiss-group').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const cat = btn.dataset.category;
+            if (!confirm(`Dismiss all "${cat}" items?`)) return;
+            btn.disabled = true;
+            const groupItems = items.filter(i => (i.category || 'other') === cat && i.status !== 'completed' && i.status !== 'dismissed');
+            const ids = groupItems.map(i => i.id);
+            if (ids.length) {
+                await api('/action-items/batch-dismiss', {
+                    method: 'POST',
+                    body: { item_ids: ids },
+                });
+                loadActionItems();
+            }
+            btn.disabled = false;
+        });
+    });
+}
+
+function updateDismissSelectedBtn() {
+    const btn = document.getElementById('btn-dismiss-selected');
+    const count = document.getElementById('dismiss-count');
+    if (!btn) return;
+    if (COO.selectedItems.size > 0) {
+        btn.style.display = '';
+        if (count) count.textContent = COO.selectedItems.size;
+    } else {
+        btn.style.display = 'none';
+    }
 }
 
 // ── Financial Snapshot (Section 2) ──────────────────────
@@ -364,6 +459,70 @@ document.addEventListener('DOMContentLoaded', async () => {
             sendChatMessage();
         }
     });
+
+    // ── Bulk Action Buttons ────────────────────────────────
+    // Consolidate Duplicates
+    const btnConsolidate = document.getElementById('btn-consolidate');
+    if (btnConsolidate) {
+        btnConsolidate.addEventListener('click', async () => {
+            btnConsolidate.disabled = true;
+            btnConsolidate.textContent = 'Consolidating…';
+            try {
+                const res = await api('/action-items/consolidate', { method: 'POST' });
+                const msg = res.consolidated
+                    ? `Consolidated ${res.consolidated} duplicate(s) across ${res.groups} group(s).`
+                    : 'No duplicates found.';
+                alert(msg);
+                loadActionItems();
+            } catch (e) {
+                alert('Error consolidating: ' + e.message);
+            }
+            btnConsolidate.disabled = false;
+            btnConsolidate.textContent = 'Consolidate Duplicates';
+        });
+    }
+
+    // Dismiss Selected
+    const btnDismissSelected = document.getElementById('btn-dismiss-selected');
+    if (btnDismissSelected) {
+        btnDismissSelected.addEventListener('click', async () => {
+            if (!COO.selectedItems.size) return;
+            if (!confirm(`Dismiss ${COO.selectedItems.size} selected item(s)?`)) return;
+            btnDismissSelected.disabled = true;
+            try {
+                await api('/action-items/batch-dismiss', {
+                    method: 'POST',
+                    body: { item_ids: [...COO.selectedItems] },
+                });
+                COO.selectedItems.clear();
+                updateDismissSelectedBtn();
+                loadActionItems();
+            } catch (e) {
+                alert('Error dismissing: ' + e.message);
+            }
+            btnDismissSelected.disabled = false;
+        });
+    }
+
+    // Dismiss All Visible
+    const btnDismissAll = document.getElementById('btn-dismiss-all');
+    if (btnDismissAll) {
+        btnDismissAll.addEventListener('click', async () => {
+            const filterLabel = COO.actionFilter || 'all';
+            if (!confirm(`Dismiss ALL visible "${filterLabel}" items?`)) return;
+            btnDismissAll.disabled = true;
+            try {
+                await api('/action-items/batch-dismiss', {
+                    method: 'POST',
+                    body: { status_filter: COO.actionFilter || '' },
+                });
+                loadActionItems();
+            } catch (e) {
+                alert('Error dismissing: ' + e.message);
+            }
+            btnDismissAll.disabled = false;
+        });
+    }
 
     // Modal overlay click
     $$('.modal-overlay').forEach(ov => {
