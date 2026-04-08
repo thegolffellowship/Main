@@ -1323,6 +1323,8 @@
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
+    let payoutsOpenForEvent = {};  // keyed by event id → true if payouts panel is open
+    let tgfPayoutData = { golfers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
     let eventSortField = "event_date";
     let eventSortDir = "asc";
     let eventSearchQuery = "";
@@ -2547,6 +2549,289 @@
         }
     }
 
+    // ═══════════ PAYOUTS PANEL (per-event) ════════════════════════════
+    const PAYOUT_CAT_LABELS = {
+        team_net: "Team Net", individual_net: "Individual Net", individual_gross: "Individual Gross",
+        skins: "Skins", closest_to_pin: "Closest to Pin", hole_in_one: "Hole in One", mvp: "MVP", other: "Other",
+    };
+    const PAYOUT_CAT_COLORS = {
+        team_net: "#dbeafe;color:#1e40af", individual_net: "#dcfce7;color:#166534",
+        individual_gross: "#fef3c7;color:#92400e", skins: "#fce7f3;color:#9d174d",
+        closest_to_pin: "#e0e7ff;color:#4338ca", hole_in_one: "#fef08a;color:#854d0e",
+        mvp: "#f3e8ff;color:#7c3aed", other: "#f1f5f9;color:#475569",
+    };
+    function payoutCatBadge(cat) {
+        const label = PAYOUT_CAT_LABELS[cat] || cat;
+        const c = PAYOUT_CAT_COLORS[cat] || "#f1f5f9;color:#475569";
+        return `<span style="display:inline-block;padding:1px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:${c};">${escapeHtml(label)}</span>`;
+    }
+
+    function renderPayoutsPanel(ev, registrants) {
+        // Find TGF event matching this event's item_name (code)
+        const tgfEvent = tgfPayoutData.events.find(e => e.code === ev.item_name);
+
+        let html = '<div style="padding:0.75rem 0;">';
+
+        // ── Screenshot paste / upload zone ──
+        html += `<div id="payout-drop-zone-${ev.id}" style="border:2px dashed var(--border);border-radius:8px;padding:1.25rem;text-align:center;color:var(--text-muted);cursor:pointer;margin-bottom:1rem;transition:border-color 0.2s,background 0.2s;" tabindex="0">`;
+        html += `<div style="font-size:0.85rem;font-weight:600;">Paste Screenshot (Ctrl+V) or Click to Upload</div>`;
+        html += `<div style="font-size:0.75rem;margin-top:0.25rem;">Golf Genius payout screenshot &rarr; AI auto-extracts payout data</div>`;
+        html += `<input type="file" id="payout-file-${ev.id}" accept="image/*" style="display:none;">`;
+        html += `</div>`;
+        html += `<div id="payout-preview-${ev.id}" style="display:none;margin-bottom:1rem;"></div>`;
+
+        if (!tgfEvent || !tgfEvent.payouts || tgfEvent.payouts.length === 0) {
+            html += `<div style="text-align:center;padding:2rem;color:var(--text-muted);">`;
+            html += `<div style="font-size:0.95rem;font-weight:600;">No payouts recorded</div>`;
+            html += `<div style="font-size:0.82rem;margin-top:0.25rem;">Paste a Golf Genius payout screenshot above to import results</div>`;
+            html += `</div></div>`;
+            return html;
+        }
+
+        // ── Event summary bar ──
+        html += `<div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">`;
+        html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.5rem 1rem;"><span style="font-size:0.7rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;">Total Purse</span><div style="font-size:1.1rem;font-weight:700;color:#059669;">$${tgfEvent.total_purse.toFixed(2)}</div></div>`;
+        html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.5rem 1rem;"><span style="font-size:0.7rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;">Winners</span><div style="font-size:1.1rem;font-weight:700;">${tgfEvent.winners_count}</div></div>`;
+        html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.5rem 1rem;"><span style="font-size:0.7rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;">Payouts</span><div style="font-size:1.1rem;font-weight:700;">${tgfEvent.payouts.length}</div></div>`;
+        html += `</div>`;
+
+        // ── Group payouts by golfer ──
+        const golferMap = {};
+        tgfEvent.payouts.forEach(p => {
+            if (!golferMap[p.golfer_name]) {
+                golferMap[p.golfer_name] = { name: p.golfer_name, golfer_id: p.golfer_id, total: 0, items: [] };
+            }
+            golferMap[p.golfer_name].total += p.amount;
+            golferMap[p.golfer_name].items.push(p);
+        });
+        const golferList = Object.values(golferMap).sort((a, b) => b.total - a.total);
+
+        // ── Cross-reference with registrants for confirmation ──
+        const registrantNames = new Set(registrants.map(r => (r.customer || "").toLowerCase()));
+
+        // ── Payout table ──
+        html += `<table style="width:100%;border-collapse:collapse;">`;
+        html += `<thead><tr style="border-bottom:2px solid var(--border);">`;
+        html += `<th style="text-align:left;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;width:30px;">#</th>`;
+        html += `<th style="text-align:left;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Golfer</th>`;
+        html += `<th style="text-align:center;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Registered</th>`;
+        html += `<th style="text-align:right;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Games</th>`;
+        html += `<th style="text-align:right;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;">Total</th>`;
+        html += `<th style="text-align:right;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:0.4rem 0.5rem;width:70px;"></th>`;
+        html += `</tr></thead><tbody>`;
+
+        golferList.forEach((g, idx) => {
+            const isRegistered = registrantNames.has(g.name.toLowerCase());
+            const regIcon = isRegistered
+                ? '<span title="Registered" style="color:#059669;font-weight:700;">&#10003;</span>'
+                : '<span title="Not found in registrations" style="color:#dc2626;font-weight:700;">&#10007;</span>';
+
+            // Venmo link
+            const winData = Object.values(tgfPayoutData.winnings).find(w => w.id === g.golfer_id);
+            const venmo = winData ? winData.venmo_username : "";
+            const venmoHtml = venmo
+                ? `<a href="https://venmo.com/${venmo}?txn=pay&amount=${g.total.toFixed(2)}&note=${encodeURIComponent('TGF ' + ev.item_name)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#008CFF;color:#fff;text-decoration:none;" onclick="event.stopPropagation();"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>Pay</a>`
+                : '';
+
+            html += `<tr class="payout-golfer-row" data-payout-gid="${g.golfer_id}" style="cursor:pointer;transition:background 0.1s;border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background=''">`;
+            html += `<td style="padding:0.5rem;text-align:center;color:var(--text-muted);font-size:0.8rem;">${idx + 1}</td>`;
+            html += `<td style="padding:0.5rem;font-weight:600;font-size:0.88rem;">${escapeHtml(g.name)}</td>`;
+            html += `<td style="padding:0.5rem;text-align:center;">${regIcon}</td>`;
+            html += `<td style="padding:0.5rem;text-align:right;font-size:0.85rem;">${g.items.length}</td>`;
+            html += `<td style="padding:0.5rem;text-align:right;font-weight:700;color:#059669;font-variant-numeric:tabular-nums;">$${g.total.toFixed(2)}</td>`;
+            html += `<td style="padding:0.5rem;text-align:right;">${venmoHtml}</td>`;
+            html += `</tr>`;
+
+            // Expandable breakdown row
+            html += `<tr class="payout-breakdown-row" data-payout-for="${g.golfer_id}" style="display:none;">`;
+            html += `<td colspan="6" style="padding:0;background:#f8fafc;"><div style="padding:0.4rem 1rem 0.6rem 2.5rem;">`;
+            html += `<table style="width:100%;border-collapse:collapse;">`;
+            g.items.forEach(p => {
+                html += `<tr><td style="padding:0.25rem 0.4rem;font-size:0.82rem;">${payoutCatBadge(p.category)}</td>`;
+                html += `<td style="padding:0.25rem 0.4rem;font-size:0.82rem;">${escapeHtml(p.description || PAYOUT_CAT_LABELS[p.category] || p.category)}</td>`;
+                html += `<td style="padding:0.25rem 0.4rem;text-align:right;font-weight:600;color:#059669;font-size:0.82rem;">$${p.amount.toFixed(2)}</td></tr>`;
+            });
+            html += `</table></div></td></tr>`;
+        });
+
+        html += `</tbody></table>`;
+
+        // ── Financial cross-reference: Prize Fund from GAMES matrix vs actual payouts ──
+        const gamePots = computeGamePotTotals(ev, registrants);
+        const totalPrizeFund = gamePots.hio + gamePots.included + gamePots.net + gamePots.gross;
+        if (totalPrizeFund > 0) {
+            const diff = totalPrizeFund - tgfEvent.total_purse;
+            const diffColor = Math.abs(diff) < 0.01 ? '#059669' : (diff > 0 ? '#d97706' : '#dc2626');
+            html += `<div style="margin-top:1rem;padding:0.75rem;background:#f8fafc;border:1px solid var(--border);border-radius:8px;">`;
+            html += `<h4 style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin:0 0 0.5rem;">Prize Fund Reconciliation</h4>`;
+            html += `<div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:0.85rem;">`;
+            html += `<div><span style="color:var(--text-muted);">GAMES Matrix Prize Fund:</span> <strong>$${totalPrizeFund.toFixed(2)}</strong></div>`;
+            html += `<div><span style="color:var(--text-muted);">Actual Payouts:</span> <strong>$${tgfEvent.total_purse.toFixed(2)}</strong></div>`;
+            html += `<div><span style="color:var(--text-muted);">Difference:</span> <strong style="color:${diffColor};">$${diff.toFixed(2)}</strong></div>`;
+            html += `</div></div>`;
+        }
+
+        html += '</div>';
+        return html;
+    }
+
+    function attachPayoutsHandlers(container, ev) {
+        // Row expand/collapse
+        container.querySelectorAll(".payout-golfer-row").forEach(row => {
+            row.addEventListener("click", () => {
+                const gid = row.dataset.payoutGid;
+                const bdr = container.querySelector(`.payout-breakdown-row[data-payout-for="${gid}"]`);
+                if (!bdr) return;
+                const isOpen = bdr.style.display !== "none";
+                // Close all
+                container.querySelectorAll(".payout-breakdown-row").forEach(r => r.style.display = "none");
+                container.querySelectorAll(".payout-golfer-row").forEach(r => r.style.background = "");
+                if (!isOpen) {
+                    bdr.style.display = "";
+                    row.style.background = "#eef2ff";
+                }
+            });
+        });
+
+        // Screenshot drop zone: paste + file upload
+        const dropZone = container.querySelector(`#payout-drop-zone-${ev.id}`);
+        const fileInput = container.querySelector(`#payout-file-${ev.id}`);
+        const previewEl = container.querySelector(`#payout-preview-${ev.id}`);
+        if (!dropZone || !fileInput) return;
+
+        dropZone.addEventListener("click", () => fileInput.click());
+        dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.style.borderColor = "var(--primary)"; dropZone.style.background = "#eef2ff"; });
+        dropZone.addEventListener("dragleave", () => { dropZone.style.borderColor = ""; dropZone.style.background = ""; });
+        dropZone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = ""; dropZone.style.background = "";
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith("image/")) processPayoutImage(file, ev, previewEl, dropZone);
+        });
+        fileInput.addEventListener("change", () => {
+            if (fileInput.files[0]) processPayoutImage(fileInput.files[0], ev, previewEl, dropZone);
+        });
+
+        // Ctrl+V paste handler (scoped to when payouts panel is visible)
+        const pasteHandler = (e) => {
+            if (!payoutsOpenForEvent[ev.id]) return;
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (const item of items) {
+                if (item.type.startsWith("image/")) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    if (blob) processPayoutImage(blob, ev, previewEl, dropZone);
+                    return;
+                }
+            }
+        };
+        document.addEventListener("paste", pasteHandler);
+    }
+
+    async function processPayoutImage(file, ev, previewEl, dropZone) {
+        previewEl.style.display = "";
+        previewEl.innerHTML = `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.75rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
+            <div class="spinner" style="width:20px;height:20px;border:3px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin 0.6s linear infinite;"></div>
+            <span style="font-size:0.85rem;font-weight:600;color:#1e40af;">Parsing screenshot with AI...</span>
+        </div>
+        <style>@keyframes spin { to { transform: rotate(360deg); } }</style>`;
+        dropZone.style.display = "none";
+
+        try {
+            const reader = new FileReader();
+            const base64 = await new Promise((resolve, reject) => {
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+
+            const res = await fetch("/api/tgf/parse-screenshot", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: base64, media_type: file.type }),
+            });
+            const parsed = await res.json();
+            if (!res.ok) throw new Error(parsed.error || "Parse failed");
+
+            // Show preview
+            const payouts = parsed.payouts || [];
+            let total = payouts.reduce((s, p) => s + (p.amount || 0), 0);
+            let previewHtml = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;">`;
+            previewHtml += `<h4 style="font-size:0.85rem;font-weight:700;margin:0 0 0.5rem;">Parsed ${payouts.length} payouts — Total: $${total.toFixed(2)}</h4>`;
+            previewHtml += `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:0.75rem;">`;
+            payouts.forEach(p => {
+                previewHtml += `<tr><td style="padding:0.2rem 0.4rem;">${escapeHtml(p.golferName)}</td><td style="padding:0.2rem;">${payoutCatBadge(p.category)}</td><td style="padding:0.2rem;">${escapeHtml(p.description || "")}</td><td style="text-align:right;padding:0.2rem 0.4rem;font-weight:600;">$${(p.amount || 0).toFixed(2)}</td></tr>`;
+            });
+            previewHtml += `</table>`;
+            previewHtml += `<div style="display:flex;gap:0.5rem;">`;
+            previewHtml += `<button class="btn btn-primary" id="payout-save-${ev.id}" style="font-size:0.82rem;padding:0.4rem 1rem;">Save Payouts</button>`;
+            previewHtml += `<button class="btn btn-secondary" id="payout-cancel-${ev.id}" style="font-size:0.82rem;padding:0.4rem 1rem;">Cancel</button>`;
+            previewHtml += `</div></div>`;
+            previewEl.innerHTML = previewHtml;
+
+            // Save handler
+            document.getElementById(`payout-save-${ev.id}`).addEventListener("click", async () => {
+                const eventInfo = parsed.event || {};
+                const saveData = {
+                    action: "add_event",
+                    code: ev.item_name,
+                    name: eventInfo.name || ev.item_name,
+                    event_date: ev.event_date || eventInfo.date || "",
+                    course: ev.course || eventInfo.course || "",
+                    chapter: ev.chapter || "",
+                    total_purse: total,
+                    winners_count: new Set(payouts.map(p => p.golferName)).size,
+                    payouts: payouts,
+                };
+                try {
+                    const saveRes = await fetch("/api/tgf", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(saveData),
+                    });
+                    const saveResult = await saveRes.json();
+                    if (saveResult.error) {
+                        alert("Error: " + saveResult.error);
+                        return;
+                    }
+                    // Refresh TGF data and re-render
+                    await fetchTgfPayoutData();
+                    payoutsOpenForEvent[ev.id] = true;
+                    const detailContainer = document.getElementById(`detail-content-${ev.id}`);
+                    if (detailContainer) {
+                        detailContainer.innerHTML = renderDetailContent(ev);
+                        attachDetailHandlers(detailContainer, ev);
+                    }
+                } catch (err) {
+                    alert("Save failed: " + err.message);
+                }
+            });
+
+            // Cancel handler
+            document.getElementById(`payout-cancel-${ev.id}`).addEventListener("click", () => {
+                previewEl.style.display = "none";
+                previewEl.innerHTML = "";
+                dropZone.style.display = "";
+            });
+
+        } catch (err) {
+            previewEl.innerHTML = `<div style="padding:0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:0.85rem;color:#dc2626;">
+                <strong>Parse failed:</strong> ${escapeHtml(err.message)}
+                <button class="btn btn-secondary" onclick="this.closest('div').parentElement.style.display='none';document.getElementById('payout-drop-zone-${ev.id}').style.display='';" style="margin-left:0.5rem;font-size:0.78rem;padding:0.2rem 0.5rem;">Try Again</button>
+            </div>`;
+        }
+    }
+
+    async function fetchTgfPayoutData() {
+        try {
+            const res = await fetch("/api/tgf");
+            if (res.ok) tgfPayoutData = await res.json();
+        } catch (err) {
+            console.warn("Failed to load TGF payout data:", err);
+        }
+    }
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -2794,21 +3079,23 @@
         const holesType = extractHolesType(ev.item_name, ev.format);
         const gamesView = holesType && gamesOpenForEvent[ev.id];
 
-        // View toggle: PLAYERS / PAIRINGS / GAMES / FINANCIAL (connected toggle group)
+        // View toggle: PLAYERS / PAIRINGS / GAMES / FINANCIAL / PAYOUTS (connected toggle group)
         const pairingsView = pairingsOpenForEvent[ev.id];
         const financialView = financialOpenForEvent[ev.id];
+        const payoutsView = payoutsOpenForEvent[ev.id];
         let html = '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
-        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
         if (holesType) {
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
         }
         html += `<span class="game-stat-badge ${financialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
+        html += `<span class="game-stat-badge ${payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
-        if (!gamesView && !pairingsView && !financialView) {
+        if (!gamesView && !pairingsView && !financialView && !payoutsView) {
             // 9/18 holes filter toggle
             const holesFilter = eventHolesFilter[ev.id] || null;
             const holeInactive = ["credited", "refunded", "transferred", "wd"];
@@ -2859,6 +3146,12 @@
         // ---- FINANCIAL VIEW ----
         if (financialView) {
             html += renderFinancialPanel(ev, registrants);
+            return html;
+        }
+
+        // ---- PAYOUTS VIEW ----
+        if (payoutsView) {
+            html += renderPayoutsPanel(ev, registrants);
             return html;
         }
 
@@ -3310,6 +3603,11 @@
             });
         });
 
+        // PAYOUTS panel handlers (expand rows, screenshot paste)
+        if (payoutsOpenForEvent[ev.id]) {
+            attachPayoutsHandlers(container, ev);
+        }
+
         // PLAYERS / PAIRINGS / GAMES view toggle
         container.querySelectorAll("[data-toggle-games]").forEach(badge => {
             badge.addEventListener("click", (e) => {
@@ -3318,6 +3616,7 @@
                 gamesOpenForEvent[ev.id] = val === "1";
                 pairingsOpenForEvent[ev.id] = val === "2";
                 financialOpenForEvent[ev.id] = val === "3";
+                payoutsOpenForEvent[ev.id] = val === "4";
                 rerenderDetail(container, ev);
             });
         });
@@ -6868,8 +7167,8 @@
             }
         });
 
-        // Fetch items and handicap data first, then sync events and fetch
-        await Promise.all([fetchItems(), fetchHandicapIndexMap()]);
+        // Fetch items, handicap data, and TGF payout data, then sync events
+        await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData()]);
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
         fetchParseWarnings();
         fetchOrphanedItems();
@@ -6886,7 +7185,7 @@
                     return el && el.style.display === "flex";
                 });
                 if (!anyModalOpen) {
-                    await Promise.all([fetchItems(), fetchHandicapIndexMap()]);
+                    await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData()]);
                     await fetchEvents();
                     fetchParseWarnings();
                     fetchOrphanedItems();
