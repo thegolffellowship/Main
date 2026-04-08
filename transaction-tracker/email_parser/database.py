@@ -9005,6 +9005,11 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
         try:
             upcoming = conn.execute(
                 """SELECT e.item_name, e.event_date, e.course,
+                          e.course_cost, e.course_cost_9, e.course_cost_18,
+                          e.tgf_markup, e.tgf_markup_9, e.tgf_markup_18,
+                          e.side_game_fee, e.side_game_fee_9, e.side_game_fee_18,
+                          e.transaction_fee_pct, e.course_surcharge,
+                          e.tgf_markup_final, e.tgf_markup_final_9, e.tgf_markup_final_18,
                           COUNT(DISTINCT CASE
                               WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
                               THEN i.id END) as playing,
@@ -9026,7 +9031,43 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 ops.append(f"{len(upcoming)} upcoming events:")
                 for ev in upcoming:
                     rev = ev['revenue'] or 0
-                    ops.append(f"  {ev['event_date']} — {ev['item_name']} at {ev['course'] or '?'} ({ev['playing']} registered, ${rev:,.0f} revenue)")
+                    line = f"  {ev['event_date']} — {ev['item_name']} at {ev['course'] or '?'} ({ev['playing']} registered, ${rev:,.0f} revenue)"
+                    # Append pricing breakdown if available
+                    pricing_parts = []
+                    cc = ev['course_cost'] or ev['course_cost_9']
+                    if cc:
+                        pricing_parts.append(f"course ${cc:.0f}")
+                    cc18 = ev['course_cost_18']
+                    if cc18 and cc18 != cc:
+                        pricing_parts.append(f"course-18 ${cc18:.0f}")
+                    mk = ev['tgf_markup'] or ev['tgf_markup_9']
+                    if mk:
+                        pricing_parts.append(f"markup ${mk:.2f}")
+                    mk18 = ev['tgf_markup_18']
+                    if mk18 and mk18 != mk:
+                        pricing_parts.append(f"markup-18 ${mk18:.2f}")
+                    sg = ev['side_game_fee'] or ev['side_game_fee_9']
+                    if sg:
+                        pricing_parts.append(f"side-games ${sg:.2f}")
+                    sg18 = ev['side_game_fee_18']
+                    if sg18 and sg18 != sg:
+                        pricing_parts.append(f"side-games-18 ${sg18:.2f}")
+                    surcharge = ev['course_surcharge']
+                    if surcharge:
+                        pricing_parts.append(f"surcharge ${surcharge:.2f}")
+                    txn_pct = ev['transaction_fee_pct']
+                    if txn_pct and txn_pct != 3.5:
+                        pricing_parts.append(f"txn-fee {txn_pct}%")
+                    if pricing_parts:
+                        line += f" [pricing: {', '.join(pricing_parts)}]"
+                    elif ev['playing'] and rev:
+                        line += f" [avg ${rev / ev['playing']:,.0f}/player, pricing not configured]"
+                    # Breakeven calculation
+                    if cc and ev['playing']:
+                        total_course = cc * ev['playing']
+                        net = rev - total_course
+                        line += f" [breakeven: {total_course / (rev / ev['playing']) if rev else 0:.0f} players, net: ${net:,.0f}]"
+                    ops.append(line)
             else:
                 ops.append("No upcoming events")
 
@@ -9052,7 +9093,11 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
 
             # Recent past events (last 30 days) for context
             recent_events = conn.execute(
-                """SELECT e.item_name, e.event_date,
+                """SELECT e.item_name, e.event_date, e.course,
+                          e.course_cost, e.course_cost_9, e.course_cost_18,
+                          e.tgf_markup, e.tgf_markup_9, e.tgf_markup_18,
+                          e.side_game_fee, e.side_game_fee_9, e.side_game_fee_18,
+                          e.course_surcharge,
                           COUNT(DISTINCT CASE
                               WHEN COALESCE(i.transaction_status, 'active') IN ('active','rsvp_only')
                               THEN i.id END) as played,
@@ -9073,7 +9118,13 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 ops.append(f"Recent events (last 30 days):")
                 for ev in recent_events:
                     rev = ev['revenue'] or 0
-                    ops.append(f"  {ev['event_date']} — {ev['item_name']} ({ev['played']} players, ${rev:,.0f} revenue)")
+                    cc = ev['course_cost'] or ev['course_cost_9'] or 0
+                    total_cost = cc * ev['played'] if cc else 0
+                    net = rev - total_cost
+                    pricing_note = ""
+                    if cc and ev['played']:
+                        pricing_note = f", course-cost ${cc:.0f}/player, net ${net:,.0f}"
+                    ops.append(f"  {ev['event_date']} — {ev['item_name']} ({ev['played']} players, ${rev:,.0f} revenue{pricing_note})")
         except Exception as e:
             logger.warning("build_coo_full_context: Events section error: %s", e)
             ops.append("Event data not available")
@@ -9101,6 +9152,36 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                     operating = a["total_tgf_operating"] or 0
                     profit = collected - course - prize
                     ops.append(f"  {a['event_name']}: {a['player_allocs']} players, ${collected:,.0f} collected, ${course:,.0f} course cost, ${prize:,.0f} prizes, ${operating:,.0f} TGF operating (net: ${profit:,.0f})")
+        except Exception:
+            pass
+
+        # TGF payout data (tournament prizes)
+        try:
+            tgf_events = conn.execute(
+                """SELECT te.code, te.event_date, te.course, te.total_purse,
+                          te.winners_count, te.payouts_count
+                   FROM tgf_events te
+                   ORDER BY te.event_date DESC LIMIT 8"""
+            ).fetchall()
+            if tgf_events:
+                ops.append("TGF Event Payouts (prize pools):")
+                for te in tgf_events:
+                    purse = te['total_purse'] or 0
+                    ops.append(f"  {te['event_date']} — {te['code']} at {te['course'] or '?'}: ${purse:,.0f} purse, {te['winners_count']} winners, {te['payouts_count']} payouts")
+                # Category breakdown for most recent event
+                latest = tgf_events[0]
+                cats = conn.execute(
+                    """SELECT p.category, COUNT(*) as cnt, SUM(p.amount) as total
+                       FROM tgf_payouts p
+                       JOIN tgf_events te ON te.id = p.event_id
+                       WHERE te.code = ?
+                       GROUP BY p.category ORDER BY total DESC""",
+                    (latest['code'],),
+                ).fetchall()
+                if cats:
+                    ops.append(f"  Latest payout breakdown ({latest['code']}):")
+                    for c in cats:
+                        ops.append(f"    {c['category']}: {c['cnt']} payouts, ${c['total']:,.2f}")
         except Exception:
             pass
 
