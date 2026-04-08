@@ -368,6 +368,24 @@ def match_customer_from_name(name: str, conn) -> int | None:
     return None
 
 
+def match_event_from_customer(customer_id: int, conn) -> str | None:
+    """Find most recent event for a customer from their registrations.
+
+    Used as a fallback for Venmo payments when memo-based matching fails
+    but the customer was identified by name.
+    """
+    if not customer_id:
+        return None
+    row = conn.execute(
+        """SELECT i.item_name FROM items i
+           JOIN events e ON e.item_name = i.item_name
+           WHERE i.customer_id = ? AND i.transaction_status = 'active'
+           ORDER BY e.event_date DESC LIMIT 1""",
+        (customer_id,),
+    ).fetchone()
+    return row["item_name"] if row else None
+
+
 # ---------------------------------------------------------------------------
 # Merchant Learning Context
 # ---------------------------------------------------------------------------

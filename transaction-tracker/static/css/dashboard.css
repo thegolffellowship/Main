@@ -2011,6 +2011,42 @@ div.mobile-card.row-rsvp-only {
     border: 1px solid; border-radius: var(--radius); font-size: 0.7rem; white-space: nowrap;
 }
 
+/* ---- Source Badges (email-parsed transactions) ---- */
+.acct-source-badge {
+    display: inline-block; padding: 0.1rem 0.4rem; border-radius: var(--radius);
+    font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+    margin-left: 0.35rem; vertical-align: middle;
+}
+.acct-source-chase_alert { background: #dbeafe; color: #1e40af; }
+.acct-source-venmo { background: #ccfbf1; color: #0f766e; }
+.acct-source-receipt { background: #f3e8ff; color: #7c3aed; }
+
+/* ---- Review Status Badges ---- */
+.acct-review-badge {
+    display: inline-block; padding: 0.1rem 0.4rem; border-radius: var(--radius);
+    font-size: 0.65rem; font-weight: 600; margin-left: 0.25rem; vertical-align: middle;
+}
+.acct-review-pending { background: #fef3c7; color: #92400e; }
+.acct-review-ignored { background: #f3f4f6; color: #6b7280; }
+
+/* ---- Expense transaction row styling ---- */
+.acct-txn-expense { background: rgba(59, 130, 246, 0.03); }
+.acct-txn-ignored { opacity: 0.55; }
+
+/* ---- Pending badge on tab ---- */
+.acct-pending-badge {
+    display: inline-block; min-width: 1.1rem; height: 1.1rem; line-height: 1.1rem;
+    padding: 0 0.3rem; border-radius: 999px; background: #ef4444; color: #fff;
+    font-size: 0.65rem; font-weight: 700; text-align: center; margin-left: 0.3rem;
+    vertical-align: middle;
+}
+
+/* ---- Expense review modal readonly fields ---- */
+.acct-readonly-field {
+    padding: 0.4rem 0.5rem; background: var(--bg-alt, #f9fafb); border: 1px solid var(--border);
+    border-radius: var(--radius); font-size: 0.85rem; min-height: 1.75rem;
+}
+
 /* ---- Tags ---- */
 .acct-tag-chip {
     display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px;
