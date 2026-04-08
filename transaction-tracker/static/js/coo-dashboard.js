@@ -473,7 +473,29 @@ function appendChatBubble(role, text) {
         .replace(/\n/g, '<br>');
     const div = document.createElement('div');
     div.className = `coo-chat-msg coo-chat-${role}`;
-    div.innerHTML = `<div class="coo-chat-bubble">${html}</div>`;
+    let bubbleHtml = `<div class="coo-chat-bubble">${html}</div>`;
+    if (role === 'assistant') {
+        bubbleHtml += `<button class="coo-copy-btn" title="Copy to clipboard">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+        </button>`;
+    }
+    div.innerHTML = bubbleHtml;
+    if (role === 'assistant') {
+        const copyBtn = div.querySelector('.coo-copy-btn');
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(text).then(() => {
+                copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                copyBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+                    copyBtn.classList.remove('copied');
+                }, 1500);
+            });
+        });
+    }
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
 }
