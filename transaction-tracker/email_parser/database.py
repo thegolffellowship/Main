@@ -1280,6 +1280,24 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # Keyword-based categorization rules (user-defined)
+        # e.g. "if description contains 'Winnings' → category 'Side Game Payouts', entity 'TGF'"
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS acct_keyword_rules (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                keyword         TEXT NOT NULL,
+                match_type      TEXT NOT NULL DEFAULT 'contains',
+                category_id     INTEGER,
+                entity_id       INTEGER,
+                is_active       INTEGER DEFAULT 1,
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (category_id) REFERENCES acct_categories(id),
+                FOREIGN KEY (entity_id) REFERENCES acct_entities(id)
+            )
+            """
+        )
+
         # Allocation tracking — breaks down every GoDaddy order's dollars
         conn.execute(
             """
@@ -6913,6 +6931,63 @@ def get_all_acct_account_rules(db_path: str | Path | None = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Keyword Categorization Rules
+# ---------------------------------------------------------------------------
+
+def get_acct_keyword_rules(db_path: str | Path | None = None) -> list[dict]:
+    """Return all keyword categorization rules with category/entity names."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT kr.*, c.name as category_name, e.short_name as entity_name
+               FROM acct_keyword_rules kr
+               LEFT JOIN acct_categories c ON c.id = kr.category_id
+               LEFT JOIN acct_entities e ON e.id = kr.entity_id
+               ORDER BY kr.keyword"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_acct_keyword_rule(keyword: str, match_type: str = "contains",
+                             category_id: int | None = None,
+                             entity_id: int | None = None,
+                             db_path: str | Path | None = None) -> dict:
+    """Create a new keyword rule."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO acct_keyword_rules (keyword, match_type, category_id, entity_id)
+               VALUES (?, ?, ?, ?)""",
+            (keyword.strip(), match_type, category_id, entity_id),
+        )
+        conn.commit()
+        return {"id": conn.execute("SELECT last_insert_rowid()").fetchone()[0]}
+
+
+def update_acct_keyword_rule(rule_id: int, data: dict,
+                             db_path: str | Path | None = None) -> dict:
+    """Update an existing keyword rule."""
+    fields, values = [], []
+    for key in ("keyword", "match_type", "category_id", "entity_id", "is_active"):
+        if key in data:
+            fields.append(f"{key} = ?")
+            values.append(data[key])
+    if not fields:
+        return {"error": "No fields to update"}
+    values.append(rule_id)
+    with _connect(db_path) as conn:
+        conn.execute(f"UPDATE acct_keyword_rules SET {', '.join(fields)} WHERE id = ?", values)
+        conn.commit()
+    return {"updated": True}
+
+
+def delete_acct_keyword_rule(rule_id: int, db_path: str | Path | None = None) -> dict:
+    """Delete a keyword rule."""
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM acct_keyword_rules WHERE id = ?", (rule_id,))
+        conn.commit()
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
 # Transactions (with splits)
 # ---------------------------------------------------------------------------
 
@@ -7846,9 +7921,12 @@ def auto_categorize_transactions(descriptions: list[str],
     Strategy:
     1. Exact vendor match from past categorisations (confidence: "high")
     2. Fuzzy vendor match — same vendor prefix (confidence: "medium")
-    3. Claude AI classification (confidence: "ai")
+    3. User-defined keyword rules (confidence: "rule")
+    4. Claude AI classification (confidence: "ai")
     """
     rules = _get_category_rules(db_path)
+    keyword_rules = get_acct_keyword_rules(db_path=db_path)
+    keyword_rules = [kr for kr in keyword_rules if kr.get("is_active")]
     categories = get_acct_categories(db_path=db_path)
     entities = get_all_acct_entities(db_path=db_path)
 
@@ -7899,7 +7977,33 @@ def auto_categorize_transactions(descriptions: list[str],
             })
             continue
 
-        # 3. Queue for AI
+        # 3. User-defined keyword rules
+        kw_match = None
+        for kr in keyword_rules:
+            kw = kr["keyword"].upper()
+            mt = kr.get("match_type", "contains")
+            if mt == "exact" and desc_upper == kw:
+                kw_match = kr
+                break
+            elif mt == "starts_with" and desc_upper.startswith(kw):
+                kw_match = kr
+                break
+            elif mt == "contains" and kw in desc_upper:
+                kw_match = kr
+                break
+        if kw_match:
+            results.append({
+                "description": desc,
+                "category_id": kw_match["category_id"],
+                "category_name": kw_match["category_name"],
+                "entity_id": kw_match["entity_id"],
+                "entity_name": kw_match["entity_name"],
+                "confidence": "rule",
+                "source": f"keyword rule: '{kw_match['keyword']}'",
+            })
+            continue
+
+        # 4. Queue for AI
         ai_batch.append((i, desc, txn_type))
         results.append(None)  # placeholder
 
@@ -7975,6 +8079,21 @@ def _ai_categorize_batch(items: list[tuple[str, str]],
     if account_context:
         acct_hint = f"\n\nACCOUNT CONTEXT:\n{account_context}"
 
+    # User-defined keyword rules for AI context
+    kw_rules_hint = ""
+    try:
+        kw_rules = get_acct_keyword_rules(db_path=db_path)
+        active_kw = [r for r in kw_rules if r.get("is_active")]
+        if active_kw:
+            kw_rules_hint = "\n\nUSER-DEFINED KEYWORD RULES (MUST follow these):\n" + "\n".join(
+                f"  - If description {r['match_type']} '{r['keyword']}' → "
+                f"category_id={r['category_id']} ({r['category_name'] or '?'})"
+                f"{', entity_id=' + str(r['entity_id']) + ' (' + (r['entity_name'] or '?') + ')' if r['entity_id'] else ''}"
+                for r in active_kw
+            )
+    except Exception:
+        pass
+
     txn_list = "\n".join(
         f"  {i+1}. [{ttype.upper()}] {desc}"
         for i, (desc, ttype) in enumerate(items)
@@ -7986,7 +8105,7 @@ Categorize each transaction and optionally link it to a TGF event.
 ENTITIES:
 {entity_list}
 
-{cat_list}{event_context}{acct_hint}
+{cat_list}{event_context}{acct_hint}{kw_rules_hint}
 
 TRANSACTIONS TO CATEGORIZE:
 {txn_list}

@@ -170,6 +170,11 @@ from email_parser.database import (
     get_reconciliation_summary,
     get_coo_agents,
     get_agent_action_log,
+    # Keyword rules
+    get_acct_keyword_rules,
+    create_acct_keyword_rule,
+    update_acct_keyword_rule,
+    delete_acct_keyword_rule,
     # TGF Payouts
     get_tgf_data,
     add_tgf_event,
@@ -5065,6 +5070,38 @@ def api_acct_set_rule(aid):
         return jsonify({"error": "rule_type and rule_value required"}), 400
     set_acct_account_rule(aid, d["rule_type"], d["rule_value"])
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/accounting/keyword-rules")
+@require_role("admin")
+def api_acct_keyword_rules():
+    return jsonify(get_acct_keyword_rules())
+
+
+@app.route("/api/accounting/keyword-rules", methods=["POST"])
+@require_role("admin")
+def api_acct_create_keyword_rule():
+    d = request.json or {}
+    if not d.get("keyword"):
+        return jsonify({"error": "keyword is required"}), 400
+    return jsonify(create_acct_keyword_rule(
+        keyword=d["keyword"],
+        match_type=d.get("match_type", "contains"),
+        category_id=d.get("category_id"),
+        entity_id=d.get("entity_id"),
+    ))
+
+
+@app.route("/api/accounting/keyword-rules/<int:rule_id>", methods=["PATCH"])
+@require_role("admin")
+def api_acct_update_keyword_rule(rule_id):
+    return jsonify(update_acct_keyword_rule(rule_id, request.json or {}))
+
+
+@app.route("/api/accounting/keyword-rules/<int:rule_id>", methods=["DELETE"])
+@require_role("admin")
+def api_acct_delete_keyword_rule(rule_id):
+    return jsonify(delete_acct_keyword_rule(rule_id))
 
 
 @app.route("/api/accounting/events-list")
