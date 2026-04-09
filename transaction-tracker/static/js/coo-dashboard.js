@@ -519,6 +519,127 @@ async function saveEditValue() {
     loadFinancialSnapshot();
 }
 
+// ── Widget System (collapse + drag-to-reorder + localStorage) ──
+
+const WIDGET_ORDER_KEY = 'coo_widget_order';
+const WIDGET_COLLAPSE_KEY = 'coo_widget_collapsed';
+
+function getWidgetOrder() {
+    try { return JSON.parse(localStorage.getItem(WIDGET_ORDER_KEY)) || null; } catch { return null; }
+}
+function saveWidgetOrder() {
+    const container = document.getElementById('coo-widgets-container');
+    if (!container) return;
+    const order = [...container.querySelectorAll('.coo-widget')].map(w => w.dataset.widget);
+    localStorage.setItem(WIDGET_ORDER_KEY, JSON.stringify(order));
+}
+function getCollapsedWidgets() {
+    try { return new Set(JSON.parse(localStorage.getItem(WIDGET_COLLAPSE_KEY)) || []); } catch { return new Set(); }
+}
+function saveCollapsedWidgets(collapsed) {
+    localStorage.setItem(WIDGET_COLLAPSE_KEY, JSON.stringify([...collapsed]));
+}
+
+function restoreWidgetOrder() {
+    const order = getWidgetOrder();
+    if (!order) return;
+    const container = document.getElementById('coo-widgets-container');
+    if (!container) return;
+    const widgets = {};
+    container.querySelectorAll('.coo-widget').forEach(w => { widgets[w.dataset.widget] = w; });
+    order.forEach(key => {
+        if (widgets[key]) container.appendChild(widgets[key]);
+    });
+}
+
+function restoreCollapseStates() {
+    const collapsed = getCollapsedWidgets();
+    collapsed.forEach(key => {
+        const section = document.querySelector(`.coo-widget[data-widget="${key}"]`);
+        if (!section) return;
+        const body = section.querySelector('.coo-widget-body');
+        const btn = section.querySelector('.coo-collapse-btn');
+        if (body) body.classList.add('collapsed');
+        if (btn) btn.classList.add('collapsed');
+    });
+}
+
+function initCollapseButtons() {
+    $$('.coo-collapse-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const widget = btn.dataset.widget;
+            const section = document.querySelector(`.coo-widget[data-widget="${widget}"]`);
+            if (!section) return;
+            const body = section.querySelector('.coo-widget-body');
+            if (!body) return;
+            const isCollapsed = body.classList.toggle('collapsed');
+            btn.classList.toggle('collapsed', isCollapsed);
+            const collapsed = getCollapsedWidgets();
+            if (isCollapsed) collapsed.add(widget); else collapsed.delete(widget);
+            saveCollapsedWidgets(collapsed);
+        });
+    });
+}
+
+function initDragReorder() {
+    const container = document.getElementById('coo-widgets-container');
+    if (!container) return;
+    let draggedEl = null;
+
+    container.querySelectorAll('.coo-widget').forEach(widget => {
+        const handle = widget.querySelector('.coo-drag-handle');
+        if (!handle) return;
+
+        widget.setAttribute('draggable', 'true');
+
+        // Only allow drag from the handle
+        handle.addEventListener('mousedown', () => { widget._handleHeld = true; });
+        document.addEventListener('mouseup', () => { widget._handleHeld = false; });
+
+        widget.addEventListener('dragstart', (e) => {
+            if (!widget._handleHeld) { e.preventDefault(); return; }
+            draggedEl = widget;
+            widget.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', widget.dataset.widget);
+        });
+
+        widget.addEventListener('dragend', () => {
+            widget.classList.remove('dragging');
+            container.querySelectorAll('.coo-widget').forEach(w => w.classList.remove('drag-over'));
+            draggedEl = null;
+            saveWidgetOrder();
+        });
+
+        widget.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (widget !== draggedEl) {
+                container.querySelectorAll('.coo-widget').forEach(w => w.classList.remove('drag-over'));
+                widget.classList.add('drag-over');
+            }
+        });
+
+        widget.addEventListener('dragleave', () => {
+            widget.classList.remove('drag-over');
+        });
+
+        widget.addEventListener('drop', (e) => {
+            e.preventDefault();
+            widget.classList.remove('drag-over');
+            if (!draggedEl || draggedEl === widget) return;
+            const allWidgets = [...container.querySelectorAll('.coo-widget')];
+            const dragIdx = allWidgets.indexOf(draggedEl);
+            const dropIdx = allWidgets.indexOf(widget);
+            if (dragIdx < dropIdx) {
+                container.insertBefore(draggedEl, widget.nextSibling);
+            } else {
+                container.insertBefore(draggedEl, widget);
+            }
+        });
+    });
+}
+
 // ── Init ─────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -527,6 +648,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = "/";
         return;
     }
+
+    // Restore widget order & collapse states, init interactivity
+    restoreWidgetOrder();
+    restoreCollapseStates();
+    initCollapseButtons();
+    initDragReorder();
 
     // Load all sections
     await Promise.all([

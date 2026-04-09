@@ -199,14 +199,19 @@ When a new transaction arrives, the system resolves the customer in this order:
 
 ## Architecture
 
-- **Flask app** in `transaction-tracker/app.py` (~5300 lines, 197 routes)
+- **Flask app** in `transaction-tracker/app.py` (~5900 lines, 200+ routes)
 - **Email parsing** via Claude Sonnet in `email_parser/parser.py`
 - **Email fetching** via Microsoft Graph API in `email_parser/fetcher.py` — only processes emails with "New Order" subject lines; all processed email UIDs tracked in `processed_emails` table to prevent re-parsing
 - **SQLite DB** at `transaction-tracker/transactions.db` (local is empty; live data on Railway)
+- **Database layer** in `email_parser/database.py` (~10000+ lines) — schema, CRUD, allocations, COO context
 - **Scheduler** checks inbox every 15 minutes via APScheduler
 - **Dashboard** at `/` with search, filter, sort, CSV export
+- **COO AI** — Claude-powered business intelligence chat with 6 specialist agents
+- **TGF Payouts** — tournament payout tracking with screenshot import via Claude Vision
 - **Golf Genius sync** via direct HTTP requests in `golf_genius_sync.py` (rewritten from Playwright)
 - **MCP Server** in `mcp_server.py` — 21 tools for Claude direct DB access
+- **Auth** — PIN-based with roles: `admin`, `manager`, `view-only`; `@require_role()` decorator
+- **`initAuth()`** must be called on every page for nav link visibility (DATABASE link, etc.)
 
 ## Transactions Page — Key Behaviors
 
@@ -435,22 +440,24 @@ Cards display the **event charge** (whole dollars, before tx fee).
 
 - `app.py` — routes, scheduler, webhook (~3900 lines)
 - `email_parser/parser.py` — AI extraction prompt and logic
-- `email_parser/database.py` — schema, CRUD, audit queries, customer matching (~9000 lines)
+- `email_parser/database.py` — schema, CRUD, audit queries, customer matching, COO context (~10000+ lines)
 - `email_parser/fetcher.py` — Microsoft Graph email fetching
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
 - `templates/index.html` — Transactions dashboard
-- `templates/events.html` — Events management + Tee Time Advisor
-- `templates/customers.html` — Customer directory + roster import
+- `templates/events.html` — Events management + Tee Time Advisor + Financial tab
+- `templates/customers.html` — Customer directory + roster import + 5-tab detail (Transactions, Scores, Winnings, Points, Info)
 - `templates/handicaps.html` — Handicap management page
 - `templates/matrix.html` — Side games prize matrix
 - `templates/audit.html` — Email audit/QA (admin) + per-order re-extract
 - `templates/rsvps.html` — RSVP log
 - `templates/accounting.html` — Accounting: multi-entity tracking, bank reconciliation, month-end close
 - `templates/coo.html` — COO Dashboard: action items, financial snapshot, review queue, AI chat
+- `templates/tgf.html` — TGF Payouts: events, golfers, screenshot import
 - `templates/database.html` — Admin database browser
 - `templates/changelog.html` — Version changelog
 - `static/js/dashboard.js` — Transactions page logic (largest JS file)
+- `static/js/coo-dashboard.js` — COO Dashboard logic: chat, agents, editable values, action items
 - `static/js/auth.js` — PIN auth + role management + sticky nav offsets
 - `static/js/games-matrix.js` — Prize matrix data (9-hole & 18-hole, 2-64 players)
 - `static/js/version.js` — Version number + changelog data
@@ -458,18 +465,202 @@ Cards display the **event charge** (whole dollars, before tx fee).
 - `golf_genius_sync.py` — Golf Genius handicap sync via HTTP
 - `mcp_server.py` — MCP server (21 tools for Claude direct DB access)
 
-## Database Tables (20+)
+## COO Dashboard & AI Chat
+
+### Architecture
+- **COO page** at `/coo` — dashboard with action items, financial snapshot, and AI chat
+- **AI Chat** uses Anthropic Claude API (`claude-sonnet-4-5-20250929`) with full business context
+- **Agent routing** — `route_to_agent()` maps user questions to specialist agents (Financial,
+  Operations, Course Correspondent, Member Relations, Compliance)
+- **Chief of Staff** is the primary voice — always responds, with specialist context injected
+- **Chat sessions** persist in `coo_chat_sessions` / `coo_chat_messages` tables
+- **Master context** — summaries of all past sessions injected as "persistent memory"
+
+### COO Agent System (`coo_agents` table)
+Six specialist agents seeded on first run via `_seed_coo_agents()`:
+1. **Chief of Staff** — primary voice, synthesizes all specialist input
+2. **Financial Agent** — allocations, expenses, reconciliation, tax reserve
+3. **Operations Agent** — events, registrations, rosters, breakeven
+4. **Course Correspondent Agent** — course relationships, contracts, confirmations
+5. **Member Relations Agent** — member communications, winnings, credits
+6. **Compliance Agent** — sales tax, IRS installments, filing deadlines
+
+Prompt updates: Use `_seed_coo_agents()` for new installs. For existing DBs, add a
+migration check in `init_db()` (see "vigilant analyst" check pattern).
+
+### `build_coo_full_context()` — Live Business Intelligence
+Located in `database.py`, generates a text briefing from 10 modules for the AI.
+All sections wrapped in try/except with `logger.warning()` logging.
+
+**Section 2 — Events & Operations (key data):**
+- **Upcoming events:** player counts (9/18 split), revenue (includes add-on payments),
+  pricing structure (course_cost, markup, side_game_fee for 9h and 18h variants)
+- **Player counts:** `parent_item_id IS NULL` filter in COUNT expression only —
+  ensures child payment items excluded from player count but included in revenue SUM
+- **Recent events:** last 30 days with player/revenue data
+- **RSVP breakdown:** per-event playing vs not-playing counts
+- **Cost allocations:** from `acct_allocations` table — course_payable, prize_pool,
+  godaddy_fee, tgf_operating, total_collected (penny-accurate)
+- **TGF payouts:** tournament prize pools with category breakdowns
+- **Full profitability:** from allocations table, formula:
+  `Net = Revenue - Course Fees - Prize Fund - Processing Fees`
+
+### Event Pricing Data Model
+The `events` table has extensive pricing columns:
+- `course_cost` / `course_cost_9` / `course_cost_18` — post-tax course fee per player
+- `tgf_markup` / `tgf_markup_9` / `tgf_markup_18` — TGF margin per player
+- `side_game_fee` / `side_game_fee_9` / `side_game_fee_18` — side games fee
+- `transaction_fee_pct` REAL DEFAULT 3.5 — blanket fee charged to players
+- `course_surcharge` — per-player surcharge (e.g., $1 ACGT printing)
+- `course_cost_breakdown` / `_9` / `_18` — JSON with tax-inclusive line items
+
+**Course cost calculation:**
+- Base amount × (1 + tax_pct/100) = post-tax cost (e.g., $39 × 1.0825 = $42.22)
+- Player-facing price rounds up to nearest dollar ($43)
+- `acct_allocations.course_payable` stores the exact post-tax amount (not rounded)
+
+**Processing fee (GoDaddy merchant fee):**
+- Actual formula: `order_total × 2.7% + $0.30` per order
+- Stored in `acct_allocations.godaddy_fee` per player
+- The 3.5% `transaction_fee_pct` is the blanket fee charged to players —
+  the difference between 3.5% revenue and actual 2.7%+$0.30 cost is TGF margin
+
+### COO Chat UI Features
+- **Copy button** — clipboard icon on hover for all AI responses (coo-dashboard.js)
+- **Chat session rename** — pencil icon on hover in sidebar, calls `PATCH /api/coo/chat-sessions/<id>`
+- **Session management** — new chat, delete, load previous sessions
+- **Collapse state** — `COO.collapsedGroups` Set tracks which topic groups are open/closed
+- **Dismiss persistence** — dismissed action items survive re-renders
+
+### Key COO endpoints
+- `POST /api/coo/chat` — send message, get AI response
+- `GET /api/coo/chat-sessions` — list all sessions
+- `GET /api/coo/chat-sessions/<id>` — load session with messages
+- `PATCH /api/coo/chat-sessions/<id>` — rename session
+- `DELETE /api/coo/chat-sessions/<id>` — delete session
+- `GET /api/coo/agents` — list active agents
+
+## TGF Payouts Page
+
+### Architecture
+- **Page** at `/tgf` — two top-level tabs: EVENTS and GOLFERS
+- **Data** from `tgf_events`, `tgf_golfers`, `tgf_payouts` tables
+- **API:** `GET /api/tgf` returns all events with payouts + golfer winnings
+
+### Events Tab
+- Sidebar lists events by date with total purse amounts
+- Main area shows payouts table grouped by golfer (sorted by total descending)
+- Expandable rows show category breakdowns (team_net, individual_net, skins, etc.)
+- Venmo pay links generated for golfers with venmo_username set
+
+### Screenshot Paste / Import
+- **Drop zone** appears below the payouts table when an event is selected
+- **Three input methods:** Ctrl+V paste, drag & drop, click to upload
+- **AI parsing:** `POST /api/tgf/parse-screenshot` sends image to Claude Vision
+  (`claude-sonnet-4-20250514`), returns JSON with golfer names, categories, amounts
+- **Preview table** shows parsed payouts with Save/Cancel buttons
+- **Save** calls `POST /api/tgf` with `action: "import_payouts"` — adds payouts to
+  the currently selected event (does NOT create a new event)
+- **Backend:** `import_tgf_payouts(event_id, payouts)` inserts payouts, updates event
+  aggregates (total_purse, winners_count, payouts_count)
+- **Paste only fires** when events tab is active AND an event is selected
+
+### Golfer name resolution
+- `_get_or_create_golfer(conn, name)` — finds or creates golfer by exact name match
+- Golfers linked to payouts via `tgf_payouts.golfer_id`
+
+### Category types
+`team_net`, `individual_net`, `individual_gross`, `skins`, `closest_to_pin`,
+`hole_in_one`, `mvp`, `other`
+
+### Key TGF endpoints
+- `GET /api/tgf` — all data (events + payouts + golfer winnings)
+- `POST /api/tgf` — actions: `add_event`, `import_payouts`, `add_golfer`,
+  `import_golfers`, `update_event`, `delete_event`
+- `POST /api/tgf/parse-screenshot` — AI screenshot parsing (manager+ role)
+
+## Customers Page — Tab System
+
+### Three rendering paths (IMPORTANT)
+The Customers page has 3 separate rendering paths that must be kept in sync:
+1. **Inline expanded card** (desktop list view, click to expand) — ~line 1150 in customers.html
+2. **Detail panel** (`selectCustomer()`, used in Cards view) — ~line 1674
+3. **Mobile card view** (responsive layout) — ~line 663
+
+### Five tabs on all views
+Each rendering path has 5 tabs: **Transactions**, **Scores**, **Winnings**, **Points**, **Info**
+
+- **Transactions** — customer's purchase history with click-to-navigate to `/` page
+- **Scores** — handicap data loaded via `/api/handicaps/players`, shows index + round history
+- **Winnings** — TGF payout history loaded via `/api/customers/winnings`
+- **Points** — placeholder for future points system
+- **Info** — customer metadata (email, phone, chapter, GHIN, status)
+
+### Customer winnings API
+- `GET /api/customers/winnings?customer_name=<name>` — returns payout history
+- `get_customer_winnings()` uses multi-step name matching:
+  exact → case-insensitive → alias → name reversal
+- Returns `{golfer_name, total_winnings, payouts: [{event_name, date, category, amount}]}`
+
+## Financial Accuracy — COO Profitability Calculations
+
+### The correct profitability formula
+```
+Net Profit = Revenue - Course Fees - Prize Fund - Processing Fees
+```
+
+### Data sources for each component
+| Component | Source | Notes |
+|-----------|--------|-------|
+| Revenue | SUM of `item_price` from items (parents + children) | Includes add-on payments |
+| Course Fees | SUM of `course_payable + course_surcharge` from `acct_allocations` | Exact post-tax, per-player |
+| Prize Fund | SUM of `prize_pool` from `acct_allocations` | Projected prizes owed |
+| Processing Fees | SUM of `godaddy_fee` from `acct_allocations` | Actual: `order_total × 2.7% + $0.30` |
+
+### Common data accuracy pitfalls
+- **Player count inflation:** Child payment items (`parent_item_id IS NOT NULL`) must be
+  excluded from player counts but included in revenue sums
+- **Course cost rounding:** DB stores exact post-tax amount ($42.22), player-facing price
+  rounds up ($43). Use `acct_allocations.course_payable` for calculations, not events table
+- **Prize fund vs TGF payouts:** `acct_allocations.prize_pool` = projected prizes (matches
+  Financial tab). `tgf_payouts` = actual recorded payouts. These may differ.
+- **Processing fees:** The 3.5% `transaction_fee_pct` is what players pay. The actual cost
+  is 2.7% + $0.30 (stored in `acct_allocations.godaddy_fee`). The difference is TGF margin.
+
+### `acct_allocations` table — per-player cost breakdown
+Each row represents one player's cost allocation for one event:
+- `course_payable` REAL — exact course fee (post-tax, not rounded)
+- `course_surcharge` REAL — per-player surcharge
+- `prize_pool` REAL — player's contribution to prize fund
+- `tgf_operating` REAL — TGF's operating margin
+- `godaddy_fee` REAL — actual GoDaddy merchant fee share
+- `tax_reserve` REAL — sales tax reserve (8.25% of tgf_operating)
+- `total_collected` REAL — total revenue collected from this player
+
+## Database Tables (30+)
 
 `items`, `processed_emails`, `events`, `event_aliases`, `rsvps`, `rsvp_overrides`,
 `rsvp_email_overrides`, `customers`, `customer_emails`, `customer_aliases`,
 `handicap_rounds`, `handicap_player_links`, `handicap_settings`,
 `message_templates`, `message_log`, `feedback`, `parse_warnings`,
-`season_contests`, `app_settings`, `action_items`
+`season_contests`, `app_settings`, `action_items`,
+`acct_allocations`, `acct_transactions`, `bank_statement_rows`, `period_closings`,
+`coo_agents`, `coo_chat_sessions`, `coo_chat_messages`, `coo_manual_values`,
+`agent_action_log`, `tgf_events`, `tgf_golfers`, `tgf_payouts`
 
 Key tables not documented elsewhere in this file:
 - `app_settings` — persistent key-value store (matrix data, feature flags)
 - `season_contests` — contest enrollment tracking (NET/GROSS points race, city match play)
 - `parse_warnings` — flagged items with potential parsing errors (open/dismissed/resolved)
+- `acct_allocations` — per-player event cost breakdown (course, prizes, fees, operating margin)
+- `acct_transactions` — income/expense ledger with entity tracking
+- `bank_statement_rows` — imported bank statement data for reconciliation
+- `coo_agents` — AI agent definitions with system prompts (6 specialists)
+- `coo_chat_sessions` / `coo_chat_messages` — persistent AI chat history
+- `coo_manual_values` — manually entered financial values (account balances, debts)
+- `tgf_events` — tournament events with purse totals
+- `tgf_golfers` — golfer records with Venmo usernames
+- `tgf_payouts` — individual prize payouts linked to events and golfers
 
 ## Git Merge & PR Best Practices
 
