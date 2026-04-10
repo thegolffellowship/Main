@@ -53,10 +53,12 @@ function renderActionItems(items) {
         const isDismissed = item.status === 'dismissed';
         const completedClass = isCompleted ? 'coo-item-done' : isDismissed ? 'coo-item-done' : '';
         const isActionable = !isCompleted && !isDismissed;
+        const lowConf = item.confidence != null && item.confidence < 95;
         return `<div class="coo-action-item ${completedClass}" data-id="${item.id}">
             <div class="coo-action-top">
                 ${isActionable ? `<input type="checkbox" class="coo-select-cb" data-id="${item.id}" title="Select for batch action">` : ''}
                 <span class="coo-urgency">${urgencyIcon}</span>
+                ${lowConf ? `<span class="coo-low-confidence" title="AI confidence: ${item.confidence}%">Low confidence</span>` : ''}
                 <span class="coo-action-date">${item.email_date || ''}</span>
                 <span class="coo-action-from">${item.from_name || ''}</span>
                 ${isActionable ? `<button class="btn btn-secondary btn-sm coo-btn-dismiss" data-id="${item.id}" style="margin-left:auto;font-size:0.7rem;padding:0.15rem 0.5rem;color:var(--text-muted);">Dismiss</button>` : ''}
@@ -232,113 +234,7 @@ async function loadFinancialSnapshot() {
     $('#val-debt-total').textContent = fmt(data.debts.total_obligations);
 }
 
-// ── Review Queue (Section 3) ────────────────────────────
-
-async function loadReviewQueue() {
-    const items = await api('/review-queue');
-    $('#review-count').textContent = items.length;
-    COO.context.pending_review = items.length;
-    renderReviewQueue(items);
-}
-
-function renderReviewQueue(items) {
-    const el = $('#review-queue-coo');
-    if (!items.length) {
-        el.innerHTML = '<p class="coo-empty">All clear! Nothing to review.</p>';
-        return;
-    }
-    el.innerHTML = items.map(item => {
-        const typeBadge = {
-            'chase_alert': 'Chase', 'venmo': 'Venmo', 'receipt': 'Receipt',
-            'action_required': 'Action',
-        }[item.source_type] || item.source_type;
-        const typeClass = `coo-source-${item.source_type || 'other'}`;
-        return `<div class="coo-review-item" data-id="${item.id}" data-type="${item.queue_type}">
-            <div class="coo-review-top">
-                <span class="coo-source-badge ${typeClass}">${typeBadge}</span>
-                <span class="coo-review-merchant">${item.merchant || '—'}</span>
-                ${item.amount ? `<span class="coo-review-amount">${fmt(item.amount)}</span>` : ''}
-                <span class="coo-review-date">${item.transaction_date || ''}</span>
-                <span class="coo-confidence" title="AI confidence">${item.confidence || 0}%</span>
-            </div>
-            ${item.notes ? `<div class="coo-review-notes">${item.notes}</div>` : ''}
-            <div class="coo-review-actions">
-                <select class="coo-review-category" data-id="${item.id}" data-type="${item.queue_type}">
-                    <option value="">Category...</option>
-                    <option ${item.category === 'AI Services' ? 'selected' : ''}>AI Services</option>
-                    <option ${item.category === 'Automation Software' ? 'selected' : ''}>Automation Software</option>
-                    <option ${item.category === 'Hosting' ? 'selected' : ''}>Hosting</option>
-                    <option ${item.category === 'Platform Fees' ? 'selected' : ''}>Platform Fees</option>
-                    <option ${item.category === 'Golf Course Fees' ? 'selected' : ''}>Golf Course Fees</option>
-                    <option ${item.category === 'Event Supplies' ? 'selected' : ''}>Event Supplies</option>
-                    <option ${item.category === 'contract' ? 'selected' : ''}>Contract</option>
-                    <option ${item.category === 'payment' ? 'selected' : ''}>Payment</option>
-                    <option ${item.category === 'member_inquiry' ? 'selected' : ''}>Member Inquiry</option>
-                </select>
-                <select class="coo-review-entity" data-id="${item.id}" data-type="${item.queue_type}">
-                    <option value="TGF" ${item.entity === 'TGF' ? 'selected' : ''}>TGF</option>
-                    <option value="Personal" ${item.entity === 'Personal' ? 'selected' : ''}>Personal</option>
-                    <option value="Horizon" ${item.entity === 'Horizon' ? 'selected' : ''}>Horizon</option>
-                </select>
-                <button class="btn btn-primary btn-sm coo-btn-approve" data-id="${item.id}" data-type="${item.queue_type}">Approve</button>
-                <button class="btn btn-secondary btn-sm coo-btn-ignore" data-id="${item.id}" data-type="${item.queue_type}">Ignore</button>
-            </div>
-        </div>`;
-    }).join('');
-
-    // Approve button
-    el.querySelectorAll('.coo-btn-approve').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            const type = btn.dataset.type;
-            const row = btn.closest('.coo-review-item');
-            const cat = row.querySelector('.coo-review-category').value;
-            const entity = row.querySelector('.coo-review-entity').value;
-
-            if (type === 'expense') {
-                await fetch(`/api/accounting/expense-transactions/${id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        review_status: 'approved',
-                        reviewed_at: new Date().toISOString(),
-                        category: cat || undefined,
-                        entity: entity || undefined,
-                    }),
-                });
-            } else {
-                await api(`/action-items/${id}`, {
-                    method: 'PATCH',
-                    body: { status: 'open' },
-                });
-            }
-            loadReviewQueue();
-        });
-    });
-
-    // Ignore button
-    el.querySelectorAll('.coo-btn-ignore').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            const type = btn.dataset.type;
-            if (type === 'expense') {
-                await fetch(`/api/accounting/expense-transactions/${id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ review_status: 'ignored' }),
-                });
-            } else {
-                await api(`/action-items/${id}`, {
-                    method: 'PATCH',
-                    body: { status: 'dismissed' },
-                });
-            }
-            loadReviewQueue();
-        });
-    });
-}
-
-// ── COO Chat (Section 4) ────────────────────────────────
+// ── COO Chat (Section 3) ────────────────────────────────
 
 async function sendChatMessage() {
     const input = $('#chat-input');
@@ -659,7 +555,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await Promise.all([
         loadActionItems(),
         loadFinancialSnapshot(),
-        loadReviewQueue(),
         loadChatSessions(),
     ]);
 
