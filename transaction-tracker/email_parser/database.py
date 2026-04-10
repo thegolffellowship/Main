@@ -733,6 +733,16 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_event_aliases_canonical ON event_aliases(canonical_event_name)"
         )
 
+        # MVP unlinks — events explicitly excluded from same-day TGF MVP combining
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS event_mvp_unlinks (
+                event_name  TEXT PRIMARY KEY,
+                unlinked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
         # Parse warnings — flagged items that may have been parsed incorrectly
         conn.execute(
             """
@@ -2788,6 +2798,33 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
         return {"inserted": inserted, "skipped_non_event": skipped_non_event,
                 "skipped_aliased": skipped_aliased, "total_items_scanned": len(items),
                 "suspicious_names": suspicious_names}
+
+
+def get_mvp_unlinked_events(db_path: str | Path | None = None) -> list[str]:
+    """Return list of event names that have been explicitly unlinked from
+    same-day TGF MVP combining."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT event_name FROM event_mvp_unlinks"
+        ).fetchall()
+    return [r["event_name"] for r in rows]
+
+
+def set_mvp_unlink(event_name: str, unlink: bool = True,
+                   db_path: str | Path | None = None) -> None:
+    """Insert or delete an event from the MVP unlinks table."""
+    with _connect(db_path) as conn:
+        if unlink:
+            conn.execute(
+                "INSERT OR IGNORE INTO event_mvp_unlinks (event_name) VALUES (?)",
+                (event_name,),
+            )
+        else:
+            conn.execute(
+                "DELETE FROM event_mvp_unlinks WHERE event_name = ?",
+                (event_name,),
+            )
+        conn.commit()
 
 
 def get_all_events(db_path: str | Path | None = None) -> list[dict]:

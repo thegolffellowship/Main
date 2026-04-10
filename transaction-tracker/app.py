@@ -184,6 +184,9 @@ from email_parser.database import (
     import_tgf_golfers,
     update_tgf_event,
     delete_tgf_event,
+    # MVP linking
+    get_mvp_unlinked_events,
+    set_mvp_unlink,
     # COO Chat persistence
     get_chat_sessions,
     get_chat_session,
@@ -2531,6 +2534,35 @@ def api_merge_events():
     if result:
         return jsonify({"status": "ok", **result})
     return jsonify({"error": "Source or target event not found."}), 404
+
+
+@app.route("/api/events/mvp-unlinks")
+@require_role("manager")
+def api_mvp_unlinks():
+    """Return list of event names explicitly unlinked from same-day TGF MVP combining."""
+    return jsonify(get_mvp_unlinked_events())
+
+
+@app.route("/api/events/mvp-unlink", methods=["POST"])
+@require_role("admin")
+def api_mvp_unlink():
+    """Unlink an event from same-day TGF MVP combining."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("event_name"):
+        return jsonify({"error": "event_name required"}), 400
+    set_mvp_unlink(data["event_name"], unlink=True)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/events/mvp-relink", methods=["POST"])
+@require_role("admin")
+def api_mvp_relink():
+    """Re-link a previously unlinked event for same-day TGF MVP combining."""
+    data = request.get_json(silent=True)
+    if not data or not data.get("event_name"):
+        return jsonify({"error": "event_name required"}), 400
+    set_mvp_unlink(data["event_name"], unlink=False)
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/events/orphaned-items")
