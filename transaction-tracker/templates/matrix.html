@@ -203,13 +203,16 @@
             <a href="/events">Events</a>
             <a href="/customers">Customers</a>
             <a href="/rsvps">RSVP Log</a>
-            <a href="/matrix" class="active">Matrix</a>
-            <a href="/audit">Audit Log</a>
             <a href="/handicaps">Handicaps</a>
-            <a href="/accounting">Accounting</a>
-            <a href="/coo">COO</a>
             <a href="/tgf">Payouts</a>
-            <a href="/database" class="admin-nav" style="display:none;">Database</a>
+            <a href="/coo" class="active">Admin</a>
+        </nav>
+        <nav class="admin-subnav">
+            <a href="/coo">COO</a>
+            <a href="/accounting">Accounting</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix" class="active">Matrix</a>
+            <a href="/database">Database</a>
         </nav>
 
         <div class="matrix-controls">
@@ -260,14 +263,16 @@
         let rangeMax = 20;
         let pendingChanges = {};  // { "holes:playerCount:fieldKey": newValue }
 
-        // Compute sticky offset for matrix controls (below header + nav)
+        // Compute sticky offset for matrix controls (below header + nav + admin subnav)
         function setControlsOffset() {
             const hdr = document.querySelector("header");
             const nav = document.querySelector(".tab-nav");
+            const sub = document.querySelector(".admin-subnav");
             const ctrl = document.querySelector(".matrix-controls");
             const hdrH = hdr ? hdr.offsetHeight : 0;
             const navH = nav ? nav.offsetHeight : 0;
-            if (ctrl) ctrl.style.top = (hdrH + navH) + "px";
+            const subH = sub ? sub.offsetHeight : 0;
+            if (ctrl) ctrl.style.top = (hdrH + navH + subH) + "px";
         }
         setControlsOffset();
         window.addEventListener("load", setControlsOffset);

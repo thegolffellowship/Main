@@ -410,6 +410,23 @@ footer {
     border-bottom-color: var(--primary);
 }
 
+/* ---- Admin Sub-Navigation ---- */
+.admin-subnav {
+    display: flex; gap: 0; background: var(--surface); border-bottom: 2px solid var(--border);
+    padding: 0 1rem; position: sticky; z-index: 97;
+    margin-bottom: 1.5rem;
+}
+.tab-nav + .admin-subnav { margin-top: -1.5rem; }
+.admin-subnav a {
+    padding: 0.55rem 1.1rem; border: none; background: none; cursor: pointer;
+    font-size: 0.8rem; font-weight: 500; color: var(--text-muted);
+    text-decoration: none; text-transform: uppercase; letter-spacing: 0.03em;
+    border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s;
+    white-space: nowrap;
+}
+.admin-subnav a:hover { color: var(--text); }
+.admin-subnav a.active { color: var(--primary); border-bottom-color: var(--primary); }
+
 /* ---- Transaction deep-link highlight ---- */
 tr.txn-highlight {
     background: #fef08a !important;

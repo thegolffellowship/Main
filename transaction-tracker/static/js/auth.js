@@ -108,12 +108,9 @@ function updateRoleUI() {
 }
 
 function updateNavForRole() {
-    // Hide admin-only tabs for non-admin roles
-    document.querySelectorAll(".tab-nav a").forEach(link => {
-        const href = link.getAttribute("href");
-        if (href === "/audit" || href === "/matrix" || href === "/database" || href === "/coo") {
-            link.style.display = (currentRole === "admin") ? "" : "none";
-        }
+    // Show/hide the Admin tab for admin role
+    document.querySelectorAll(".tab-nav a.admin-nav").forEach(link => {
+        link.style.display = (currentRole === "admin") ? "" : "none";
     });
 }
 
@@ -145,6 +142,10 @@ function _setStickyOffsets() {
     const nav = document.querySelector(".tab-nav");
     if (hdr && nav) {
         nav.style.top = hdr.offsetHeight + "px";
+    }
+    const adminSub = document.querySelector(".admin-subnav");
+    if (hdr && nav && adminSub) {
+        adminSub.style.top = (hdr.offsetHeight + nav.offsetHeight) + "px";
     }
 }
 // Run immediately, on DOM ready, on load, and on resize
