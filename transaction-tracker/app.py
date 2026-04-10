@@ -4435,9 +4435,10 @@ def api_handicap_export_csv():
     import io as _io, csv as _csv
     buf = _io.StringIO()
     writer = _csv.writer(buf)
-    writer.writerow(["Email", "Handicap Index", "Player Name"])
+    writer.writerow(["Last", "First", "Suffix", "Chapter", "Handicap Index", "Email"])
     for row in data["rows"]:
-        writer.writerow([row["email"], row["handicap_index"], row["player_name"]])
+        writer.writerow([row["last_name"], row["first_name"], row["suffix"],
+                         row["chapter"], row["handicap_index"], row["email"]])
 
     chapter_slug = chapter.lower().replace(" ", "_") if chapter else "all"
     filename = f"tgf_handicaps_{chapter_slug}_{datetime.now().strftime('%Y%m%d')}.csv"

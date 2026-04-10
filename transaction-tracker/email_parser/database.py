@@ -6279,7 +6279,28 @@ def get_handicap_export_data(chapter: str | None = None,
                            AND i2.chapter IS NOT NULL AND TRIM(i2.chapter) != ''
                          ORDER BY i2.id DESC LIMIT 1),
                         ''
-                      ) AS chapter
+                      ) AS chapter,
+                      COALESCE(
+                        (SELECT i3.last_name FROM items i3
+                         WHERE LOWER(i3.customer) = LOWER(l.customer_name)
+                           AND i3.last_name IS NOT NULL AND TRIM(i3.last_name) != ''
+                         ORDER BY i3.id DESC LIMIT 1),
+                        ''
+                      ) AS last_name,
+                      COALESCE(
+                        (SELECT i4.first_name FROM items i4
+                         WHERE LOWER(i4.customer) = LOWER(l.customer_name)
+                           AND i4.first_name IS NOT NULL AND TRIM(i4.first_name) != ''
+                         ORDER BY i4.id DESC LIMIT 1),
+                        ''
+                      ) AS first_name,
+                      COALESCE(
+                        (SELECT i5.suffix FROM items i5
+                         WHERE LOWER(i5.customer) = LOWER(l.customer_name)
+                           AND i5.suffix IS NOT NULL AND TRIM(i5.suffix) != ''
+                         ORDER BY i5.id DESC LIMIT 1),
+                        ''
+                      ) AS suffix
                FROM handicap_player_links l
                WHERE l.customer_name IS NOT NULL""",
         ).fetchall()
@@ -6311,6 +6332,9 @@ def get_handicap_export_data(chapter: str | None = None,
                 "email": (lnk["customer_email"] or "").strip().lower(),
                 "chapter": lnk["chapter"] or "",
                 "all_chapters": customer_chapters.get(cname_lower, set()),
+                "last_name": (lnk["last_name"] or "").strip(),
+                "first_name": (lnk["first_name"] or "").strip(),
+                "suffix": (lnk["suffix"] or "").strip(),
             }
 
     # Check if ANY linked player has chapter data; if not, skip chapter filtering
@@ -6360,6 +6384,9 @@ def get_handicap_export_data(chapter: str | None = None,
             "handicap_index_9": idx_9,   # kept for reference / display
             "handicap_index": idx_18,    # value written to CSV / sent to GG
             "chapter": info["chapter"],
+            "last_name": info["last_name"],
+            "first_name": info["first_name"],
+            "suffix": info["suffix"],
         })
 
     # Sort by player name
