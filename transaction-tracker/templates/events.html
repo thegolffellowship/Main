@@ -3077,9 +3077,15 @@
                 const skinsMwpVal = numVal(gGross.skinsTotal) / skinsFlights;
                 grossMWP += skinsMwpVal;
                 html += `<tr><td><strong>${skinsLabel}</strong></td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
-                if (gGross.skins && gGross.skins.length) {
-                    const skinDetail = gGross.skins.map((v, i) => `${i+1}=${fmt$(v)}`).join(", ");
-                    html += `<tr class="games-row-sub"><td class="games-indent" colspan="4">Per skin: ${skinDetail}</td>${empty4}</tr>`;
+                // Compute per-skin values on-the-fly: skinsTotal / skinsFlights / N
+                const st = numVal(gGross.skinsTotal);
+                const sf = skinsFlights;
+                if (st && sf) {
+                    const skinDetail = [];
+                    for (let i = 0; i < 9; i++) {
+                        skinDetail.push(`${i+1}=${fmt$(Math.round(st / sf / (i+1) * 100) / 100)}`);
+                    }
+                    html += `<tr class="games-row-sub"><td class="games-indent" colspan="4">Per skin: ${skinDetail.join(", ")}</td>${empty4}</tr>`;
                 }
             } else {
                 html += `<tr class="games-row-disabled"><td>${skinsLabel}</td><td colspan="${C-1}">No Game</td></tr>`;
