@@ -19,6 +19,9 @@ async function loadDashboard() {
         // AI Bookkeeper banner
         renderBookkeeperBanner(aiStats);
 
+        // Pending expenses (bank alerts, Venmo, receipts)
+        loadPendingExpenses();
+
         // Summary cards
         $('#card-income').textContent = fmt(summary.total_income);
         $('#card-expenses').textContent = fmt(summary.total_expenses);
@@ -213,6 +216,83 @@ function renderReviewQueue(txns) {
         row.addEventListener('click', (e) => {
             if (e.target.tagName === 'SELECT') return;
             openEditTransaction(parseInt(row.dataset.id));
+        });
+    });
+}
+
+
+// ── Pending Expenses (bank alerts, Venmo, receipts) ─────
+
+async function loadPendingExpenses() {
+    try {
+        const items = await api('/expense-transactions?review_status=pending&limit=50');
+        const container = $('#pending-expenses');
+        if (!items.length) {
+            container.style.display = 'none';
+            return;
+        }
+        container.style.display = '';
+        $('#pending-expense-count').textContent = items.length;
+        renderPendingExpenses(items);
+    } catch (e) {
+        console.error('Pending expenses error:', e);
+    }
+}
+
+function renderPendingExpenses(items) {
+    const el = $('#pending-expense-list');
+    const sourceLabels = {
+        'chase_alert': 'Chase', 'venmo': 'Venmo', 'receipt': 'Receipt',
+    };
+    el.innerHTML = items.map(item => {
+        const badge = sourceLabels[item.source_type] || item.source_type || 'Other';
+        const badgeClass = `coo-source-${item.source_type || 'other'}`;
+        return `<div class="coo-review-item" data-id="${item.id}">
+            <div class="coo-review-top">
+                <span class="coo-source-badge ${badgeClass}">${badge}</span>
+                <span class="coo-review-merchant">${item.merchant || '—'}</span>
+                ${item.amount ? `<span class="coo-review-amount">${fmt(item.amount)}</span>` : ''}
+                <span class="coo-review-date">${item.transaction_date || ''}</span>
+                <span class="coo-confidence" title="AI confidence">${item.confidence || 0}%</span>
+            </div>
+            ${item.notes ? `<div class="coo-review-notes">${item.notes}</div>` : ''}
+            <div class="coo-review-actions">
+                <select class="coo-review-entity" data-id="${item.id}">
+                    <option value="TGF" ${item.entity === 'TGF' ? 'selected' : ''}>TGF</option>
+                    <option value="Personal" ${item.entity === 'Personal' ? 'selected' : ''}>Personal</option>
+                    <option value="Horizon" ${item.entity === 'Horizon' ? 'selected' : ''}>Horizon</option>
+                </select>
+                <button class="btn btn-primary btn-sm pending-btn-approve" data-id="${item.id}">Approve</button>
+                <button class="btn btn-secondary btn-sm pending-btn-ignore" data-id="${item.id}">Ignore</button>
+            </div>
+        </div>`;
+    }).join('');
+
+    el.querySelectorAll('.pending-btn-approve').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            const row = btn.closest('.coo-review-item');
+            const entity = row.querySelector('.coo-review-entity').value;
+            await api('/expense-transactions/' + id, {
+                method: 'PATCH',
+                body: {
+                    review_status: 'approved',
+                    reviewed_at: new Date().toISOString(),
+                    entity: entity || undefined,
+                },
+            });
+            loadPendingExpenses();
+        });
+    });
+
+    el.querySelectorAll('.pending-btn-ignore').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            await api('/expense-transactions/' + id, {
+                method: 'PATCH',
+                body: { review_status: 'ignored' },
+            });
+            loadPendingExpenses();
         });
     });
 }
