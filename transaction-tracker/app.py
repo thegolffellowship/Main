@@ -4647,7 +4647,9 @@ def api_auth_logout():
 
 @app.route("/accounting")
 def accounting_page():
-    """Multi-entity accounting dashboard."""
+    """Multi-entity accounting dashboard (admin only)."""
+    if session.get("role") != "admin":
+        return render_template("index.html")
     return render_template("accounting.html")
 
 
