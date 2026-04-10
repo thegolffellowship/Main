@@ -263,6 +263,36 @@
         let rangeMax = 20;
         let pendingChanges = {};  // { "holes:playerCount:fieldKey": newValue }
 
+        // Compute skins value: skinsTotal / skinsFlights / numSkins
+        // Returns rounded to 2 decimal places, or null if inputs are missing
+        function computeSkinValue(matrix, pc, skinIndex, pendingChanges, currentHoles) {
+            const entry = matrix[String(pc)];
+            if (!entry) return null;
+            const totalKey = `${currentHoles}:${pc}:skinsTotal`;
+            const flightsKey = `${currentHoles}:${pc}:skinsFlights`;
+            const total = (totalKey in pendingChanges) ? pendingChanges[totalKey] : entry.skinsTotal;
+            const flights = (flightsKey in pendingChanges) ? pendingChanges[flightsKey] : entry.skinsFlights;
+            if (!total || !flights) return null;
+            const numSkins = skinIndex + 1;
+            return Math.round((total / flights / numSkins) * 100) / 100;
+        }
+
+        // When skinsTotal or skinsFlights changes, inject computed skins.0–8 into pendingChanges
+        function recalcSkinsForPc(matrix, pc) {
+            const entry = matrix[String(pc)];
+            if (!entry) return;
+            for (let i = 0; i < 9; i++) {
+                const val = computeSkinValue(matrix, pc, i, pendingChanges, currentHoles);
+                const changeKey = `${currentHoles}:${pc}:skins.${i}`;
+                const origVal = (entry.skins && entry.skins[i] !== undefined) ? entry.skins[i] : null;
+                if (val === origVal || (val == null && origVal == null)) {
+                    delete pendingChanges[changeKey];
+                } else {
+                    pendingChanges[changeKey] = val;
+                }
+            }
+        }
+
         // Compute sticky offset for matrix controls (below header + nav + admin subnav)
         function setControlsOffset() {
             const hdr = document.querySelector("header");
@@ -343,9 +373,9 @@
             rows.push({ label: "Skins Total", key: "skinsTotal" });
             rows.push({ label: "  Skins Type", key: "skinsType", cls: "sub-row", editable: false, computed: "skinsType" });
             rows.push({ label: "  Skins Flights", key: "skinsFlights", cls: "sub-row" });
-            // Skins per-skin values
+            // Skins per-skin values (auto-calculated: skinsTotal / skinsFlights / N)
             for (let i = 0; i < 9; i++) {
-                rows.push({ label: `  ${i+1} Skin${i>0?"s":""}`, key: `skins.${i}`, cls: "sub-row" });
+                rows.push({ label: `  ${i+1} Skin${i>0?"s":""}`, key: `skins.${i}`, cls: "sub-row", editable: false, computed: "skins", skinsIndex: i });
             }
             rows.push({ label: "Individual Gross", key: "individualGross" });
             rows.push({ label: "  1st Place", key: "grossLow1st", cls: "sub-row" });
@@ -429,6 +459,18 @@
                     bodyHtml += `</tr>`;
                     return;
                 }
+                // Computed Skins per-skin rows (auto-calc: skinsTotal / skinsFlights / N)
+                if (rd.computed === "skins") {
+                    const rowCls2 = rd.cls || "";
+                    bodyHtml += `<tr class="${rowCls2}"><td class="row-label">${rd.label}</td>`;
+                    playerCounts.forEach(pc => {
+                        const val = computeSkinValue(matrix, pc, rd.skinsIndex, pendingChanges, currentHoles);
+                        const { text, cls } = formatCell(val, pc, rd.key);
+                        bodyHtml += `<td class="${cls}">${text}</td>`;
+                    });
+                    bodyHtml += `</tr>`;
+                    return;
+                }
                 const rowCls = rd.cls || "";
                 bodyHtml += `<tr class="${rowCls}"><td class="row-label">${rd.label}</td>`;
                 playerCounts.forEach(pc => {
@@ -495,6 +537,10 @@
                     delete pendingChanges[changeKey];
                 } else {
                     pendingChanges[changeKey] = newVal;
+                }
+                // Auto-recalculate skins when skinsTotal or skinsFlights changes
+                if (key === "skinsTotal" || key === "skinsFlights") {
+                    recalcSkinsForPc(getMatrix(), pc);
                 }
                 render();
             }

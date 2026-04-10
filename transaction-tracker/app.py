@@ -1550,6 +1550,26 @@ def api_matrix_save():
             else:
                 entry[field_key] = new_val
 
+        # Recalculate skins values for any entry where skinsTotal or skinsFlights changed
+        for change_key in changes:
+            parts = change_key.split(":", 2)
+            if len(parts) != 3:
+                continue
+            holes, pc, field_key = parts
+            if field_key in ("skinsTotal", "skinsFlights"):
+                m = matrix9 if holes == "9" else matrix18
+                entry = m.get(pc)
+                if entry:
+                    st = entry.get("skinsTotal") or 0
+                    sf = entry.get("skinsFlights") or 0
+                    if st and sf:
+                        if "skins" not in entry:
+                            entry["skins"] = [None] * 9
+                        while len(entry["skins"]) < 9:
+                            entry["skins"].append(None)
+                        for i in range(9):
+                            entry["skins"][i] = round(st / sf / (i + 1), 2)
+
         # Persist to database (survives Railway redeploys)
         set_app_setting("games_matrix_9", json.dumps(matrix9))
         set_app_setting("games_matrix_18", json.dumps(matrix18))
