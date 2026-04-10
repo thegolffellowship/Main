@@ -6390,7 +6390,7 @@ def get_handicap_export_data(chapter: str | None = None,
         })
 
     # Sort by player name
-    rows.sort(key=lambda r: r["player_name"].lower())
+    rows.sort(key=lambda r: (r["last_name"].lower(), r["first_name"].lower()))
 
     return {
         "rows": rows,
