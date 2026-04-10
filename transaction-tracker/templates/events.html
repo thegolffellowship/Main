@@ -2984,6 +2984,7 @@
         // ── NET GAMES section (based on net player count) ──
         html += `<tr class="games-section-row"><td colspan="${C}">NET GAMES (${netPC} players)</td></tr>`;
         let netMWP = 0;
+        let linkedMvpExtra = 0;  // extra pot from linked same-day TGF MVP events
 
         if (gNet && netPC >= 2) {
             const netFlights = gNet.netFlights ? parseInt(gNet.netFlights) : 1;
@@ -3029,6 +3030,7 @@
                     if (mvpInfo) {
                         // Combined TGF MVP — linked same-day events
                         netMWP += mvpInfo.combinedPot;
+                        linkedMvpExtra = mvpInfo.combinedPot - mvpInfo.thisEventTgfMVP;
                         html += `<tr><td><strong>TGF MVP</strong> <span style="font-size:0.8em;color:#6366f1;" title="Combined with same-day events">&#x1F517;</span></td><td>${fmt$(mvpInfo.combinedPot)}</td><td>${fmt$(mvpInfo.combinedPot)}</td><td></td>${empty4}</tr>`;
                         html += `<tr class="games-row-sub"><td class="games-indent">${ev.course || ev.item_name}</td><td>${fmt$(mvpInfo.thisEventTgfMVP)}</td><td></td><td></td>${empty4}</tr>`;
                         mvpInfo.linked.forEach(le => {
@@ -3047,7 +3049,8 @@
             } else {
                 if (gNet.mvp) { netMWP += numVal(gNet.mvp); html += `<tr><td>MVP</td><td>${fmt$(gNet.mvp)}</td><td>${fmt$(gNet.mvp)}</td><td></td>${empty4}</tr>`; }
             }
-            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(gNet.netTotalPot) || "—"}</td><td>${fmt$(netMWP)}</td><td></td>${empty4}</tr>`;
+            const netSubtotalPot = numVal(gNet.netTotalPot) + linkedMvpExtra;
+            html += `<tr class="games-row-total"><td>Subtotal</td><td>${fmt$(netSubtotalPot)}</td><td>${fmt$(netMWP)}</td><td></td>${empty4}</tr>`;
         } else {
             html += `<tr class="games-row-disabled"><td colspan="${C}">Not enough net players (${netPC})</td></tr>`;
         }
@@ -3093,7 +3096,7 @@
         // Grand total row inside the table, aligned under Pot and MWP columns
         const hioExclude = (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") ? numVal(gEvent.holeInOne) : 0;
         const eventTotal = (gEvent && totalPC >= 4) ? ((Number(gEvent.eventTotalPot) || 0) - hioExclude) : 0;
-        const netTotal = (gNet && netPC >= 2) ? (Number(gNet.netTotalPot) || 0) : 0;
+        const netTotal = (gNet && netPC >= 2) ? (Number(gNet.netTotalPot) || 0) + linkedMvpExtra : 0;
         const grossTotal = (gGross && grossPC >= 2) ? (Number(gGross.grossTotalPot) || 0) : 0;
         const totalMWP = inclMWP + netMWP + grossMWP;
         html += `<tfoot><tr class="games-grand-total-row"><td>TOTAL</td><td>${fmt$(eventTotal + netTotal + grossTotal)}</td><td>${fmt$(totalMWP)}</td><td></td>${empty4}</tr></tfoot>`;
