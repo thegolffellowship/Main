@@ -1352,6 +1352,7 @@
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
     let payoutsOpenForEvent = {};  // keyed by event id → true if payouts panel is open
     let tgfPayoutData = { golfers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
+    let mvpUnlinks = new Set();  // event names unlinked from same-day TGF MVP combining
     let eventSortField = "event_date";
     let eventSortDir = "asc";
     let eventSearchQuery = "";
@@ -1544,12 +1545,23 @@
             const [evRes] = await Promise.all([
                 fetch("/api/events"),
                 fetchAllRsvps(),
+                fetchMvpUnlinks(),
             ]);
             allEvents = await evRes.json();
             renderEvents();
         } catch (err) {
             console.error("Failed to fetch events:", err);
         }
+    }
+
+    async function fetchMvpUnlinks() {
+        try {
+            const r = await fetch("/api/events/mvp-unlinks");
+            if (r.ok) {
+                const list = await r.json();
+                mvpUnlinks = new Set(list);
+            }
+        } catch (e) { /* silent */ }
     }
 
     function getRegistrants(eventName) {
@@ -2859,6 +2871,51 @@
         }
     }
 
+    /**
+     * Find same-day events linked for TGF MVP combining.
+     * Returns { linked: [{event_name, course, tgfMVP, netPC}], combinedPot, thisEventTgfMVP }
+     * or null if no linked events or this event is unlinked.
+     */
+    function getMvpLinkedEvents(ev) {
+        if (!ev.event_date || mvpUnlinks.has(ev.item_name)) return null;
+        const holes = extractHolesType(ev.item_name, ev.format);
+        if (holes === 18) return null; // only 9-hole and 9/18 combo
+
+        const matrix = window.GAMES_MATRIX_9;
+        if (!matrix) return null;
+
+        // This event's TGF MVP
+        const thisRegs = getRegistrants(ev.item_name);
+        const thisStats = computeGameStats(thisRegs, ev.item_name);
+        const thisNetPC = thisStats.net;
+        const thisEntry = matrix[String(thisNetPC)];
+        const thisEventTgfMVP = (thisEntry && thisEntry.tgfMVP && thisEntry.tgfMVP !== "NO_GAME")
+            ? numVal(thisEntry.tgfMVP) : 0;
+
+        // Find other same-day events (not unlinked, not this event, with 9-hole or combo format)
+        const linked = [];
+        allEvents.forEach(other => {
+            if (other.item_name === ev.item_name) return;
+            if (other.event_date !== ev.event_date) return;
+            if (mvpUnlinks.has(other.item_name)) return;
+            const otherHoles = extractHolesType(other.item_name, other.format);
+            if (otherHoles === 18) return; // skip standalone 18-hole events
+            const otherRegs = getRegistrants(other.item_name);
+            const otherStats = computeGameStats(otherRegs, other.item_name);
+            const otherNetPC = otherStats.net;
+            const otherEntry = matrix[String(otherNetPC)];
+            const otherTgfMVP = (otherEntry && otherEntry.tgfMVP && otherEntry.tgfMVP !== "NO_GAME")
+                ? numVal(otherEntry.tgfMVP) : 0;
+            if (otherTgfMVP > 0) {
+                linked.push({ event_name: other.item_name, course: other.course || other.item_name, tgfMVP: otherTgfMVP, netPC: otherNetPC });
+            }
+        });
+
+        if (linked.length === 0) return null;
+        const combinedPot = thisEventTgfMVP + linked.reduce((sum, l) => sum + l.tgfMVP, 0);
+        return { linked, combinedPot, thisEventTgfMVP };
+    }
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -2967,7 +3024,26 @@
 
             if (holes === 9) {
                 if (gNet.cityMVP) { netMWP += numVal(gNet.cityMVP); html += `<tr><td>City MVP</td><td>${fmt$(gNet.cityMVP)}</td><td>${fmt$(gNet.cityMVP)}</td><td></td>${empty4}</tr>`; }
-                if (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME") { netMWP += numVal(gNet.tgfMVP); html += `<tr><td>TGF MVP</td><td>${fmt$(gNet.tgfMVP)}</td><td>${fmt$(gNet.tgfMVP)}</td><td></td>${empty4}</tr>`; }
+                if (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME") {
+                    const mvpInfo = getMvpLinkedEvents(ev);
+                    if (mvpInfo) {
+                        // Combined TGF MVP — linked same-day events
+                        netMWP += mvpInfo.combinedPot;
+                        html += `<tr><td><strong>TGF MVP</strong> <span style="font-size:0.8em;color:#6366f1;" title="Combined with same-day events">&#x1F517;</span></td><td>${fmt$(mvpInfo.combinedPot)}</td><td>${fmt$(mvpInfo.combinedPot)}</td><td></td>${empty4}</tr>`;
+                        html += `<tr class="games-row-sub"><td class="games-indent">${ev.course || ev.item_name}</td><td>${fmt$(mvpInfo.thisEventTgfMVP)}</td><td></td><td></td>${empty4}</tr>`;
+                        mvpInfo.linked.forEach(le => {
+                            const unlinkBtn = currentRole === 'admin' ? ` <span class="mvp-unlink-btn" data-event="${le.event_name}" title="Unlink from combined TGF MVP" style="cursor:pointer;color:#dc2626;font-size:0.75em;">&#x2716;</span>` : '';
+                            html += `<tr class="games-row-sub"><td class="games-indent">${le.course || le.event_name}${unlinkBtn}</td><td>${fmt$(le.tgfMVP)}</td><td></td><td></td>${empty4}</tr>`;
+                        });
+                    } else {
+                        // Standalone TGF MVP
+                        netMWP += numVal(gNet.tgfMVP);
+                        // Check if this event was unlinked but has same-day events
+                        const hasSameDayEvents = mvpUnlinks.has(ev.item_name) && ev.event_date && allEvents.some(o => o.item_name !== ev.item_name && o.event_date === ev.event_date && !mvpUnlinks.has(o.item_name));
+                        const relinkBtn = (hasSameDayEvents && currentRole === 'admin') ? ` <span class="mvp-relink-btn" data-event="${ev.item_name}" title="Re-link to combined TGF MVP" style="cursor:pointer;color:#6366f1;font-size:0.8em;">&#x1F517;</span>` : '';
+                        html += `<tr><td>TGF MVP${relinkBtn}</td><td>${fmt$(gNet.tgfMVP)}</td><td>${fmt$(gNet.tgfMVP)}</td><td></td>${empty4}</tr>`;
+                    }
+                }
             } else {
                 if (gNet.mvp) { netMWP += numVal(gNet.mvp); html += `<tr><td>MVP</td><td>${fmt$(gNet.mvp)}</td><td>${fmt$(gNet.mvp)}</td><td></td>${empty4}</tr>`; }
             }
@@ -4015,6 +4091,46 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openAddPaymentModal(btn.dataset.eventName);
+            });
+        });
+
+        // MVP unlink — remove event from combined TGF MVP
+        container.querySelectorAll(".mvp-unlink-btn").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const eventName = btn.dataset.event;
+                if (!confirm(`Unlink "${eventName}" from combined TGF MVP?\n\nThis event's TGF MVP will show independently.`)) return;
+                try {
+                    const resp = await fetch("/api/events/mvp-unlink", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ event_name: eventName }),
+                    });
+                    if (resp.ok) {
+                        mvpUnlinks.add(eventName);
+                        rerenderDetail(container, ev);
+                    }
+                } catch (err) { alert("Failed to unlink: " + err.message); }
+            });
+        });
+
+        // MVP relink — restore event to combined TGF MVP
+        container.querySelectorAll(".mvp-relink-btn").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const eventName = btn.dataset.event;
+                if (!confirm(`Re-link "${eventName}" to combined TGF MVP with same-day events?`)) return;
+                try {
+                    const resp = await fetch("/api/events/mvp-relink", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ event_name: eventName }),
+                    });
+                    if (resp.ok) {
+                        mvpUnlinks.delete(eventName);
+                        rerenderDetail(container, ev);
+                    }
+                } catch (err) { alert("Failed to re-link: " + err.message); }
             });
         });
 
