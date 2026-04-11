@@ -4917,26 +4917,46 @@
         const eventName = ev ? ev.item_name : item.item_name;
         const components = calculateWdComponents(item, eventName);
         const container = document.getElementById("ev-credit-partial-items");
+        let hasGameComponents = false;
         if (components && components.length) {
             // Only show game-related components (not course fee, included games, markup)
             const refundable = components.filter(c => ["net_games", "gross_games"].includes(c.key));
-            if (refundable.length === 0) {
-                container.innerHTML = '<div style="font-size:0.82rem; color:var(--text-muted);">No refundable game components found.</div>';
-                return;
+            if (refundable.length > 0) {
+                hasGameComponents = true;
+                container.innerHTML = refundable.map(c => `
+                    <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem; padding:0.35rem 0.5rem; background:var(--bg-card); border:1px solid var(--border); border-radius:6px; cursor:pointer;">
+                        <input type="checkbox" class="partial-refund-cb" data-key="${c.key}" data-amount="${c.amount}" style="width:16px; height:16px;">
+                        <span style="flex:1; font-weight:500;">${escapeHtml(c.label)}</span>
+                        <span style="font-variant-numeric:tabular-nums; font-weight:600;">$${c.amount.toFixed(2)}</span>
+                    </label>
+                `).join("");
+                container.querySelectorAll(".partial-refund-cb").forEach(cb => {
+                    cb.addEventListener("change", updatePartialRefundTotal);
+                });
             }
-            container.innerHTML = refundable.map(c => `
-                <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem; padding:0.35rem 0.5rem; background:var(--bg-card); border:1px solid var(--border); border-radius:6px; cursor:pointer;">
-                    <input type="checkbox" class="partial-refund-cb" data-key="${c.key}" data-amount="${c.amount}" style="width:16px; height:16px;">
-                    <span style="flex:1; font-weight:500;">${escapeHtml(c.label)}</span>
-                    <span style="font-variant-numeric:tabular-nums; font-weight:600;">$${c.amount.toFixed(2)}</span>
-                </label>
-            `).join("");
-            container.querySelectorAll(".partial-refund-cb").forEach(cb => {
-                cb.addEventListener("change", updatePartialRefundTotal);
-            });
-        } else {
-            container.innerHTML = '<div style="font-size:0.82rem; color:var(--text-muted);">Unable to calculate component prices.</div>';
         }
+        // Always show custom amount input (for credit overpayments, arbitrary partial refunds)
+        const itemPrice = parseFloat((item.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+        const customHtml = `
+            <div style="margin-top:${hasGameComponents ? '0.75rem; border-top:1px solid var(--border); padding-top:0.75rem;' : '0'}">
+                <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem;">
+                    <span style="font-weight:600;">Custom Amount</span>
+                </label>
+                <div style="display:flex; align-items:center; gap:0.5rem; margin-top:0.35rem;">
+                    <span style="font-size:1rem; font-weight:600;">$</span>
+                    <input type="number" id="partial-refund-custom-amount" min="0" max="${itemPrice}" step="0.01" value=""
+                        placeholder="Enter refund amount"
+                        style="flex:1; padding:0.4rem 0.5rem; border:1px solid var(--border); border-radius:6px; font-size:0.9rem;">
+                </div>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">Max: $${itemPrice.toFixed(2)}</div>
+            </div>
+        `;
+        if (!hasGameComponents) {
+            container.innerHTML = customHtml;
+        } else {
+            container.innerHTML += customHtml;
+        }
+        document.getElementById("partial-refund-custom-amount").addEventListener("input", updatePartialRefundTotal);
         document.getElementById("ev-credit-partial-total").textContent = "Refund Total: $0.00";
         document.getElementById("ev-credit-partial-games-note").textContent = "";
     }
@@ -4948,6 +4968,10 @@
             total += parseFloat(cb.dataset.amount) || 0;
             checked.push(cb.dataset.key);
         });
+        // Add custom amount if entered
+        const customInput = document.getElementById("partial-refund-custom-amount");
+        const customAmt = customInput ? (parseFloat(customInput.value) || 0) : 0;
+        total += customAmt;
         document.getElementById("ev-credit-partial-total").textContent = `Refund Total: $${total.toFixed(2)}`;
         // Show what side_games will become
         const item = allItems.find(r => r.id === evCreditItemId);
@@ -4999,7 +5023,13 @@
                     components[cb.dataset.key] = parseFloat(cb.dataset.amount) || 0;
                     checkedKeys.push(cb.dataset.key);
                 });
-                if (!Object.keys(components).length) { alert("Please select at least one component to refund."); return; }
+                // Include custom amount if entered
+                const customInput = document.getElementById("partial-refund-custom-amount");
+                const customAmt = customInput ? (parseFloat(customInput.value) || 0) : 0;
+                if (customAmt > 0) {
+                    components["custom_refund"] = customAmt;
+                }
+                if (!Object.keys(components).length) { alert("Please select a component or enter a custom amount to refund."); return; }
                 // Compute new side_games
                 const item = allItems.find(r => r.id === evCreditItemId);
                 const currentGames = classifyGameType(item?.side_games);
