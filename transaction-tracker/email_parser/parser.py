@@ -190,7 +190,15 @@ FIELD-SPECIFIC GUIDANCE:
   Discard any yardage information (e.g. "6300-6800y").
 - "holes": For events that offer 9 or 18 holes, extract just the number: \
   "9" or "18". Look for "9 or 18 HOLES?" field. If not present, use null.
-- "item_price": The PER-UNIT price for this item (e.g. "$57.00"). \
+- "item_price": The PER-UNIT price ACTUALLY CHARGED for this item. \
+  CRITICAL: Do NOT use the dollar amount from the "MEMBER STATUS" line \
+  (e.g. "MEMBER = $88") — that is only the base membership rate and does NOT \
+  include side game add-ons. Instead, determine item_price from these sources \
+  in priority order: \
+  1. The Subtotal line (e.g. "Subtotal: $148.00") — this is the item price before fees \
+  2. The dollar amount next to the SKU code (e.g. "SKU: 26-s18-4-M-B $148.00") \
+  3. Order Total minus Transaction Fees as a fallback \
+  The "MEMBER = $88" line should ONLY be used for user_status extraction, never for price. \
   If the email shows "$57.00 x 2  $114.00", the item_price is "$57.00" \
   (the single-unit price), NOT the extended total.
 - "quantity": The number of units purchased for this line item. Default 1. \
