@@ -2375,23 +2375,43 @@
 
         // ── EXPENSES: What we owe ──
         // Course cost: ALL active players including comps (we pay the course for everyone)
+        // Issue #242 fix: aggregate pre-tax × count, then apply tax (avoids rounding drift)
         const allActivePlayers = [...paidPlayers, ...compPlayers];
         let totalCourseCost = 0;
         let courseCost9Count = 0, courseCost18Count = 0;
 
+        // Count players per hole type
         allActivePlayers.forEach(r => {
             const h = getPlayerHoles(r);
-            if (isCombo && h === "18") {
-                totalCourseCost += (ev.course_cost_18 || ev.course_cost || 0);
-                courseCost18Count++;
-            } else if (isCombo) {
-                totalCourseCost += (ev.course_cost_9 || ev.course_cost || 0);
-                courseCost9Count++;
-            } else {
-                totalCourseCost += (ev.course_cost || 0);
-                if (h === "18") courseCost18Count++; else courseCost9Count++;
-            }
+            if (h === "18") courseCost18Count++; else courseCost9Count++;
         });
+
+        // Calculate aggregate course cost using breakdown (pre-tax × count × tax)
+        function calcAggregateCost(breakdownJson, fallbackCost, count) {
+            if (!count) return 0;
+            if (breakdownJson) {
+                try {
+                    const bd = JSON.parse(breakdownJson);
+                    let total = 0;
+                    Object.values(bd).forEach(v => {
+                        const base = v.amount * count;
+                        total += base + base * (v.tax_pct / 100);
+                    });
+                    return total;
+                } catch(e) { /* fall through */ }
+            }
+            return (fallbackCost || 0) * count;
+        }
+
+        if (isCombo) {
+            totalCourseCost += calcAggregateCost(ev.course_cost_breakdown_9, ev.course_cost_9 || ev.course_cost, courseCost9Count);
+            totalCourseCost += calcAggregateCost(ev.course_cost_breakdown_18, ev.course_cost_18 || ev.course_cost, courseCost18Count);
+        } else {
+            totalCourseCost += calcAggregateCost(ev.course_cost_breakdown, ev.course_cost, courseCost9Count + courseCost18Count);
+        }
+        // Add surcharge
+        totalCourseCost += (ev.course_surcharge || 0) * allActivePlayers.length;
+        totalCourseCost = Math.round(totalCourseCost * 100) / 100;
 
         // Game pots: use actual GAMES matrix (same data as GAMES tab)
         const gamePots = computeGamePotTotals(ev, registrants);
@@ -2555,6 +2575,133 @@
         // Async load actual expenses
         setTimeout(() => loadEventExpenses(ev), 0);
 
+        // Wrap in container and async load server-side verified data
+        const containerId = `financial-panel-${ev.id}`;
+        const badge = `<span style="display:inline-block; font-size:0.65rem; padding:0.1rem 0.4rem; border-radius:4px; background:#fef3c7; color:#92400e; font-weight:600; margin-left:0.5rem; vertical-align:middle;">ESTIMATED</span>`;
+        html = `<div id="${containerId}">${html}</div>`;
+        setTimeout(() => loadServerFinancials(ev, registrants, containerId), 50);
+
+        return html;
+    }
+
+    async function loadServerFinancials(ev, registrants, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        try {
+            const res = await fetch(`/api/events/${encodeURIComponent(ev.item_name)}/financial-summary`, {
+                headers: { "X-Auth-PIN": sessionStorage.getItem("auth_pin") || "" }
+            });
+            if (!res.ok) return; // keep client-side fallback
+            const data = await res.json();
+            if (!data.has_allocation_data || data.allocation_coverage_pct < 50) return;
+
+            // Overlay server-rendered financial panel
+            const serverHtml = renderFinancialPanelServer(data, ev, registrants);
+            if (serverHtml) container.innerHTML = serverHtml;
+        } catch (e) {
+            // Client-side fallback already rendered, nothing to do
+        }
+    }
+
+    function renderFinancialPanelServer(data, ev, registrants) {
+        const rev = data.revenue;
+        const exp = data.expenses;
+        const contra = data.contra_revenue;
+        const pc = data.player_counts;
+        const netRev = data.net_revenue;
+        const profit = data.projected_profit;
+        const profitColor = profit >= 0 ? "#166534" : "#dc2626";
+        const coveragePct = data.allocation_coverage_pct;
+
+        // Still compute game pots client-side (matrix data not available server-side)
+        const gamePots = computeGamePotTotals(ev, registrants);
+        const totalPrizeFund = gamePots.hio + gamePots.included + gamePots.net + gamePots.gross;
+        // Use server prize fund if available, otherwise fallback to client
+        const prizeFund = exp.prize_fund > 0 ? exp.prize_fund : totalPrizeFund;
+        // Recalc total expenses and profit with potentially better prize fund
+        const totalExpenses = exp.course_fees + prizeFund + exp.processing_fees;
+        const adjProfit = netRev - totalExpenses;
+        const adjProfitColor = adjProfit >= 0 ? "#166534" : "#dc2626";
+
+        const badge = `<span style="display:inline-block; font-size:0.65rem; padding:0.1rem 0.4rem; border-radius:4px; background:#dcfce7; color:#166534; font-weight:600; margin-left:0.5rem; vertical-align:middle;">VERIFIED (${coveragePct}%)</span>`;
+
+        let html = '<div style="padding:0.75rem 1rem;">';
+
+        // Summary cards row
+        html += `<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; margin-bottom:1rem;">`;
+        html += `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:0.6rem; text-align:center;">
+            <div style="font-size:0.7rem; color:#166534; font-weight:600;">NET REVENUE ${badge}</div>
+            <div style="font-size:1.1rem; font-weight:700; color:#166534;">$${netRev.toFixed(2)}</div>
+        </div>`;
+        html += `<div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:0.6rem; text-align:center;">
+            <div style="font-size:0.7rem; color:#dc2626; font-weight:600;">EXPENSES</div>
+            <div style="font-size:1.1rem; font-weight:700; color:#dc2626;">$${totalExpenses.toFixed(2)}</div>
+        </div>`;
+        html += `<div style="background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:0.6rem; text-align:center;">
+            <div style="font-size:0.7rem; color:#92400e; font-weight:600;">CONTRA-REVENUE</div>
+            <div style="font-size:1.1rem; font-weight:700; color:#92400e;">$${contra.total.toFixed(2)}</div>
+        </div>`;
+        html += `<div style="background:${adjProfit >= 0 ? '#f0fdf4' : '#fef2f2'}; border:1px solid ${adjProfit >= 0 ? '#bbf7d0' : '#fecaca'}; border-radius:8px; padding:0.6rem; text-align:center;">
+            <div style="font-size:0.7rem; color:${adjProfitColor}; font-weight:600;">PROJECTED PROFIT</div>
+            <div style="font-size:1.1rem; font-weight:700; color:${adjProfitColor};">$${adjProfit.toFixed(2)}</div>
+        </div>`;
+        html += `</div>`;
+
+        // Revenue / Expense breakdown
+        html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">`;
+
+        // Revenue
+        html += `<div>`;
+        html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.5rem; color:#166534; border-bottom:2px solid #bbf7d0; padding-bottom:0.3rem;">Revenue (Collected)</h4>`;
+        html += `<div style="display:grid; grid-template-columns:1fr auto; gap:0.15rem 0.5rem; font-size:0.8rem;">`;
+        if (rev.godaddy > 0) html += `<span>GoDaddy Payments</span><span style="text-align:right;">$${rev.godaddy.toFixed(2)}</span>`;
+        if (rev.external_payments > 0) html += `<span style="color:#2563eb;">External Payments (Venmo/Cash)</span><span style="text-align:right; color:#2563eb;">$${rev.external_payments.toFixed(2)}</span>`;
+        if (rev.credit_transfers_in > 0) html += `<span style="color:#7c3aed;">Credit Transfers In</span><span style="text-align:right; color:#7c3aed;">$${rev.credit_transfers_in.toFixed(2)}</span>`;
+        if (rev.add_on_payments > 0) html += `<span>Add-on Payments</span><span style="text-align:right;">$${rev.add_on_payments.toFixed(2)}</span>`;
+        html += `<span style="font-weight:700; border-top:1px solid var(--border); padding-top:0.2rem;">Gross Revenue</span><span style="font-weight:700; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${rev.total.toFixed(2)}</span>`;
+        if (contra.total > 0) {
+            if (contra.credit_transfers_out > 0) html += `<span style="color:#dc2626;">Credit Transfers Out</span><span style="text-align:right; color:#dc2626;">-$${contra.credit_transfers_out.toFixed(2)}</span>`;
+            if (contra.refunds > 0) html += `<span style="color:#dc2626;">Refunds</span><span style="text-align:right; color:#dc2626;">-$${contra.refunds.toFixed(2)}</span>`;
+            html += `<span style="font-weight:700; color:#166534;">Net Revenue</span><span style="font-weight:700; text-align:right; color:#166534;">$${netRev.toFixed(2)}</span>`;
+        }
+        html += `</div>`;
+        html += `<div style="margin-top:0.6rem; font-size:0.75rem; color:var(--text-muted);">`;
+        html += `<div>Paying: <strong>${pc.paid}</strong> | Comps: <strong>${pc.comp}</strong>`;
+        if (pc.rsvp) html += ` | RSVP: <strong>${pc.rsvp}</strong>`;
+        if (pc.wd) html += ` | WD: <strong>${pc.wd}</strong>`;
+        html += `</div>`;
+        html += `<div>Total Active: <strong>${pc.total_active}</strong></div>`;
+        html += `</div></div>`;
+
+        // Expenses
+        html += `<div>`;
+        html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.5rem; color:#dc2626; border-bottom:2px solid #fecaca; padding-bottom:0.3rem;">Expenses (Projected)</h4>`;
+        html += `<div style="display:grid; grid-template-columns:1fr auto; gap:0.15rem 0.5rem; font-size:0.8rem;">`;
+        html += `<span>Course Fees (${pc.total_active} players)</span><span style="text-align:right;">$${exp.course_fees.toFixed(2)}</span>`;
+        html += `<span style="font-weight:600;">Prize Fund</span><span style="text-align:right; font-weight:600;">$${prizeFund.toFixed(2)}</span>`;
+        if (gamePots.hio > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Hole-In-One Pot</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.hio.toFixed(2)}</span>`;
+        html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Included Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.included.toFixed(2)}</span>`;
+        if (gamePots.net > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Net Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.net.toFixed(2)}</span>`;
+        if (gamePots.gross > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Gross Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.gross.toFixed(2)}</span>`;
+        html += `<span>Processing Fees</span><span style="text-align:right;">$${exp.processing_fees.toFixed(2)}</span>`;
+        html += `<span style="font-weight:700; border-top:1px solid var(--border); padding-top:0.2rem;">Total Expenses</span><span style="font-weight:700; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${totalExpenses.toFixed(2)}</span>`;
+        html += `</div></div>`;
+        html += `</div>`;
+
+        // Profit summary bar
+        html += `<div style="margin-top:1rem; padding:0.75rem; background:${adjProfit >= 0 ? '#f0fdf4' : '#fef2f2'}; border:2px solid ${adjProfit >= 0 ? '#166534' : '#dc2626'}; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">`;
+        html += `<span style="font-weight:700; font-size:0.9rem;">Projected Bottom Line</span>`;
+        html += `<span style="font-weight:700; font-size:1.2rem; color:${adjProfitColor};">$${adjProfit.toFixed(2)}</span>`;
+        html += `</div>`;
+
+        // Actual expenses container (async loaded)
+        html += `<div id="financial-expenses-${ev.id}" style="margin-top:1rem;">`;
+        html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:var(--text-muted);">Actual Expenses</h4>`;
+        html += `<div style="font-size:0.78rem; color:var(--text-muted);">Loading...</div>`;
+        html += `</div>`;
+
+        html += `</div>`;
+        setTimeout(() => loadEventExpenses(ev), 0);
         return html;
     }
 
