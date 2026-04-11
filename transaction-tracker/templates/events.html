@@ -2361,9 +2361,25 @@
         let totalCollected = 0;
         let paidPlayerRevenue = 0;
         let childPaymentRevenue = 0;
+        let creditTransferRevenue = 0;
+        let creditTransferCount = 0;
 
         paidPlayers.forEach(r => {
             const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+            // Credit transfer items have transferred_from_id and "$0.00 (credit)" price
+            if (r.transferred_from_id && price === 0) {
+                // Look up original item across ALL items (it's in a different event)
+                const origItem = allItems.find(i => i.id === r.transferred_from_id);
+                if (origItem) {
+                    const origPrice = parseFloat((origItem.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+                    if (origPrice > 0) {
+                        creditTransferRevenue += origPrice;
+                        totalCollected += origPrice;
+                        creditTransferCount++;
+                        return;
+                    }
+                }
+            }
             paidPlayerRevenue += price;
             totalCollected += price;
         });
@@ -2463,7 +2479,7 @@
         // Summary cards row
         html += `<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; margin-bottom:1rem;">`;
         html += `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:0.6rem; text-align:center;">
-            <div style="font-size:0.7rem; color:#166534; font-weight:600;">REVENUE</div>
+            <div style="font-size:0.7rem; color:#166534; font-weight:600;">REVENUE <span style="font-size:0.55rem; padding:0.05rem 0.3rem; border-radius:3px; background:#fef3c7; color:#92400e;">EST</span></div>
             <div style="font-size:1.1rem; font-weight:700; color:#166534;">$${totalCollected.toFixed(2)}</div>
         </div>`;
         html += `<div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:0.6rem; text-align:center;">
@@ -2485,7 +2501,10 @@
         html += `<div>`;
         html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.5rem; color:#166534; border-bottom:2px solid #bbf7d0; padding-bottom:0.3rem;">Revenue (Collected)</h4>`;
         html += `<div style="display:grid; grid-template-columns:1fr auto; gap:0.15rem 0.5rem; font-size:0.8rem;">`;
-        html += `<span>Paid Players (${paidPlayers.length})</span><span style="text-align:right;">$${paidPlayerRevenue.toFixed(2)}</span>`;
+        html += `<span>Paid Players (${paidPlayers.length - creditTransferCount})</span><span style="text-align:right;">$${paidPlayerRevenue.toFixed(2)}</span>`;
+        if (creditTransferRevenue > 0) {
+            html += `<span style="color:#7c3aed;">Credit Transfers In (${creditTransferCount})</span><span style="text-align:right; color:#7c3aed;">$${creditTransferRevenue.toFixed(2)}</span>`;
+        }
         if (childPaymentRevenue > 0) {
             html += `<span>Add-on Payments (${childPayments.length})</span><span style="text-align:right;">$${childPaymentRevenue.toFixed(2)}</span>`;
         }
@@ -2588,10 +2607,8 @@
         const container = document.getElementById(containerId);
         if (!container) return;
         try {
-            const res = await fetch(`/api/events/${encodeURIComponent(ev.item_name)}/financial-summary`, {
-                headers: { "X-Auth-PIN": sessionStorage.getItem("auth_pin") || "" }
-            });
-            if (!res.ok) return; // keep client-side fallback
+            const res = await fetch(`/api/events/${encodeURIComponent(ev.item_name)}/financial-summary`);
+            if (!res.ok) return; // keep client-side fallback (auth required — manager+)
             const data = await res.json();
             if (!data.has_allocation_data || data.allocation_coverage_pct < 50) return;
 
