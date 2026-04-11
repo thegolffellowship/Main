@@ -1805,7 +1805,7 @@ def api_reextract_order():
                        "partner_request", "fellowship", "notes", "holes",
                        "address", "address2", "city", "state", "zip"]
     # Fields where re-extract should overwrite even if existing value differs
-    FORCE_UPDATE_FIELDS = ["side_games", "holes"]
+    FORCE_UPDATE_FIELDS = ["side_games", "holes", "item_price"]
 
     items = get_all_items()
     order_items = [it for it in items if it.get("order_id") == order_id]
