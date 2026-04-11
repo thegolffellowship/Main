@@ -4408,11 +4408,12 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
         )
 
         # Create new item at target event
+        orig_price = orig.get("item_price") or "$0.00"
         new_values = {col: orig.get(col) for col in ITEM_COLUMNS}
         new_values["item_name"] = target_event_name
         new_values["course"] = target_event.get("course") or orig.get("course")
         new_values["chapter"] = target_event.get("chapter") or orig.get("chapter")
-        new_values["item_price"] = "$0.00 (credit)"
+        new_values["item_price"] = f"{orig_price} (credit)"
         new_values["email_uid"] = f"transfer-{item_id}"
         new_values["item_index"] = 0
         new_values["order_date"] = orig.get("order_date") or ""
@@ -9336,9 +9337,31 @@ def backfill_financial_entries(db_path: str | Path | None = None) -> dict:
     4. Refunds (refunded items without accounting entries)
     """
     results = {"external_payments": 0, "credit_transfers": 0,
-               "add_on_payments": 0, "refunds": 0, "errors": 0}
+               "add_on_payments": 0, "refunds": 0, "transfer_prices_fixed": 0, "errors": 0}
 
     with _connect(db_path) as conn:
+        # ── 0. Fix transfer items that still show "$0.00 (credit)" ──
+        zero_transfers = conn.execute(
+            """SELECT i.id, i.transferred_from_id, orig.item_price as orig_price
+               FROM items i
+               JOIN items orig ON orig.id = i.transferred_from_id
+               WHERE i.transferred_from_id IS NOT NULL
+               AND i.item_price = '$0.00 (credit)'
+               AND orig.item_price IS NOT NULL
+               AND orig.item_price != '$0.00'"""
+        ).fetchall()
+        for row in zero_transfers:
+            try:
+                orig_price = row["orig_price"]
+                conn.execute(
+                    "UPDATE items SET item_price = ? WHERE id = ?",
+                    (f"{orig_price} (credit)", row["id"]),
+                )
+                results["transfer_prices_fixed"] += 1
+            except Exception:
+                logger.warning("Backfill: failed to fix transfer price for item %s", row["id"], exc_info=True)
+                results["errors"] += 1
+
         # ── 1. External payments ──
         ext_items = conn.execute(
             """SELECT i.* FROM items i

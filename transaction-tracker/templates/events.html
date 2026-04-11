@@ -2365,22 +2365,24 @@
         let creditTransferCount = 0;
 
         paidPlayers.forEach(r => {
-            const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
-            // Credit transfer items have transferred_from_id and "$0.00 (credit)" price
-            if (r.transferred_from_id && price === 0) {
-                // Look up original item across ALL items (it's in a different event)
+            let price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+            const isTransfer = !!r.transferred_from_id;
+
+            // Credit transfer items: price is now stored (e.g. "$102.00 (credit)")
+            // Fallback for old "$0.00 (credit)" items: look up original
+            if (isTransfer && price === 0) {
                 const origItem = allItems.find(i => i.id === r.transferred_from_id);
                 if (origItem) {
-                    const origPrice = parseFloat((origItem.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
-                    if (origPrice > 0) {
-                        creditTransferRevenue += origPrice;
-                        totalCollected += origPrice;
-                        creditTransferCount++;
-                        return;
-                    }
+                    price = parseFloat((origItem.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
                 }
             }
-            paidPlayerRevenue += price;
+
+            if (isTransfer && price > 0) {
+                creditTransferRevenue += price;
+                creditTransferCount++;
+            } else {
+                paidPlayerRevenue += price;
+            }
             totalCollected += price;
         });
         childPayments.forEach(r => {
