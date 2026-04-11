@@ -150,6 +150,8 @@ from email_parser.database import (
     get_all_acct_account_rules,
     calculate_order_allocation,
     get_acct_allocations,
+    get_event_financial_summary,
+    backfill_financial_entries,
     save_expense_transaction,
     get_expense_transactions,
     get_unified_transactions,
@@ -5246,6 +5248,29 @@ def api_acct_calculate_all_allocations():
         except Exception:
             errors += 1
     return jsonify({"calculated": calculated, "errors": errors, "total_orders": len(order_ids)})
+
+
+# ── Event Financial Summary (Unified Financial Model, Issue #242) ─────────
+
+@app.route("/api/events/<event_name>/financial-summary")
+@require_role("manager")
+def api_event_financial_summary(event_name):
+    """Return unified financial summary for an event from the accounting system."""
+    try:
+        return jsonify(get_event_financial_summary(event_name))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/accounting/backfill", methods=["POST"])
+@require_role("admin")
+def api_backfill_financials():
+    """Backfill accounting entries for existing items missing them (Issue #242)."""
+    try:
+        result = backfill_financial_entries()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── Expense Transactions & Action Items ───────────────────────────────────
