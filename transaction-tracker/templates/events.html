@@ -1717,7 +1717,7 @@
                 actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
             } else if (isComp) {
                 actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
-            } else if (txStatus === "active" && !r.transferred_from_id) {
+            } else if (txStatus === "active") {
                 actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                 actionBtn += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
                 if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
@@ -2435,13 +2435,26 @@
         const gamePots = computeGamePotTotals(ev, registrants);
         const totalPrizeFund = gamePots.hio + gamePots.included + gamePots.net + gamePots.gross;
 
-        // GoDaddy processing fees (estimated: 2.9% + $0.30 per paid transaction)
+        // GoDaddy processing fees (actual: 2.7% + $0.30 per order)
+        // Only applies to GoDaddy revenue — not Venmo/cash/credit transfers
         let totalProcessingFees = 0;
-        // Group by order_id to count unique orders
+        let godaddyRevenue = 0;
         const orderIds = new Set();
-        paidPlayers.forEach(r => { if (r.order_id) orderIds.add(r.order_id); });
-        childPayments.forEach(r => { if (r.order_id) orderIds.add(r.order_id); });
-        totalProcessingFees = Math.round((totalCollected * 0.029 + orderIds.size * 0.30) * 100) / 100;
+        paidPlayers.forEach(r => {
+            if (r.order_id && !r.transferred_from_id && !(r.merchant || "").startsWith("Paid Separately")) {
+                const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+                godaddyRevenue += price;
+                orderIds.add(r.order_id);
+            }
+        });
+        childPayments.forEach(r => {
+            if (r.order_id && !(r.merchant || "").includes("Manual Entry")) {
+                const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+                godaddyRevenue += price;
+                orderIds.add(r.order_id);
+            }
+        });
+        totalProcessingFees = Math.round((godaddyRevenue * 0.027 + orderIds.size * 0.30) * 100) / 100;
 
         // (TGF operating margin is revenue - expenses; no separate calc needed)
 
@@ -3617,7 +3630,7 @@
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isCompRow) {
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
-                    } else if (txStatus === "active" && !r.transferred_from_id) {
+                    } else if (txStatus === "active") {
                         btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                         btns += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
                         if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
