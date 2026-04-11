@@ -615,62 +615,94 @@ Each rendering path has 5 tabs: **Transactions**, **Scores**, **Winnings**, **Po
 
 ## Unified Financial Model (Issue #242)
 
-The accounting module (`acct_transactions` + `acct_allocations`) is the **single source of
-truth** for all event financials. Every financial event creates accounting entries:
+### Architecture: Two layers (client-side today, accounting bridge planned)
 
-| Event | What Happens |
-|-------|-------------|
-| GoDaddy payment received | `acct_allocations` row via `calculate_order_allocation()` |
-| Venmo/cash/external payment | `acct_allocations` row + `acct_transactions` entry via `_create_allocation_for_item()` |
-| Credit transfer (player A→B) | Contra-revenue on source event + revenue on target event (both `acct_transactions`), allocation at target |
+The Events Financial tab currently calculates P&L **client-side in JavaScript** from raw
+items data on every page load. The accounting module (`acct_transactions` + `acct_allocations`)
+has infrastructure for being the source of truth but is **not yet fully connected**. New
+operations (transfers, refunds, external payments) DO create accounting entries, but the
+Financial tab reads from items, not accounting tables.
+
+### Financial tab P&L model (client-side, renderFinancialPanel)
+
+```
+INCOME
+  Paid Players (item_price from GoDaddy items)
+  Credit Transfers In (original price from transferred items)
+  Add-on Payments (positive child items only)
+  ─────────────────────────────────
+  Subtotal
+  + Transaction Fees (actual parsed value from each GoDaddy email, NOT calculated)
+  = Gross Revenue
+  - GoDaddy Merchant Fees (2.7% + $0.30 PER ORDER, calculated per-order)
+  - Refunds (negative child items = contra-revenue)
+  ─────────────────────────────────
+  = NET INCOME
+
+EXPENSES
+  Course Fees (aggregate: base × count × tax — no per-player rounding)
+  Prize Fund (from GAMES matrix: HIO + Included + NET + GROSS)
+  ─────────────────────────────────
+  = TOTAL EXPENSES
+
+PROJECTED PROFIT = Net Income - Total Expenses
+```
+
+### Critical: Transaction fees vs GoDaddy merchant fees
+- **Transaction fees (3.5%)** are intentionally collected revenue from players, parsed from
+  each GoDaddy email invoice and stored in `items.transaction_fees`. They are NOT calculated —
+  the actual value from the email is used. These offset the GoDaddy merchant fees.
+- **GoDaddy merchant fees (2.7% + $0.30)** are calculated PER INDIVIDUAL GoDaddy ORDER
+  on the order total (item_price + transaction_fee). This is a deduction from income, not
+  an expense. Each order's fee should eventually be stored as a DB line item.
+- **Refunds** are contra-revenue (deducted from Income), not expenses. They appear as
+  negative child payment items (e.g., -$29 partial refund via Zelle).
+
+### Parser: item_price extraction
+- `item_price` must come from the **Subtotal** or **SKU line** in the GoDaddy email,
+  NEVER from the "MEMBER STATUS: MEMBER = $XX" line (that's just the base membership rate
+  and excludes side game add-ons). See parser.py extraction prompt.
+- `transaction_fees` is parsed directly from the "Transaction Fees 3.5%: $X.XX" line.
+- Re-extract force-updates `item_price`, `side_games`, and `holes` (FORCE_UPDATE_FIELDS).
+
+### Operations that create accounting entries
+| Operation | What Happens |
+|-----------|-------------|
+| Credit transfer (player A→B) | Contra-revenue `acct_transactions` on source + revenue on target, allocation at target with actual credit amount |
 | Refund issued | Expense `acct_transactions` entry |
-| Add-on payment (child item) | `acct_allocations` row + `acct_transactions` entry |
-| Reverse any of the above | Corresponding accounting entries are deleted |
+| External payment (Venmo/cash) | `acct_allocations` + `acct_transactions` via `_create_allocation_for_item()` |
+| Add-on payment (child item) | `acct_allocations` + `acct_transactions` entry |
+| Reverse any of the above | Corresponding accounting entries deleted |
+
+### What is NOT yet connected (planned bridge)
+- GoDaddy orders do NOT create `acct_transactions` entries (only `acct_allocations`)
+- GoDaddy merchant fees are NOT stored as individual DB line items per order
+- Transaction fees are parsed but NOT flowing into `acct_transactions`
+- The server-side `get_event_financial_summary()` exists but hasn't been updated to
+  match the current Income/Expenses model
+- The Financial tab reads raw items, not accounting tables
+- The Accounting page (`/accounting`) doesn't show per-event P&L
+- Backfill for existing orders needs to be run
 
 ### Key functions
 - `_create_allocation_for_item(item, conn, payment_method, ...)` — creates allocation for
   non-GoDaddy items using synthetic `order_id` (prefixes: `EXT-`, `XFER-`, `MANUAL-PAY-`, `COMP-`)
-- `get_event_financial_summary(event_name)` — aggregates from `acct_allocations` + `acct_transactions`
-  to produce the authoritative financial picture for one event
+- `get_event_financial_summary(event_name)` — server-side aggregation (needs update)
 - `_calc_aggregate_course_cost(event, items, conn)` — correct aggregate rounding (base × count × tax)
 - `backfill_financial_entries()` — retrofits existing data with missing allocations/transactions
+- `transfer_item()` — stores actual credit amount on transferred item (not $0.00)
 
-### Events Financial tab — Hybrid rendering
-- **Client-side fallback** renders immediately from raw items (shows "ESTIMATED" badge)
-- **Server-side overlay** async loads from `/api/events/{name}/financial-summary`
-- If allocation coverage ≥ 50%, overlays with "VERIFIED (X%)" server-rendered view
-- Server view shows new revenue lines: External Payments, Credit Transfers In/Out, Refunds
-- `renderFinancialPanelServer()` and `loadServerFinancials()` in events.html
+### Credit/transfer/refund actions
+- Credit transfer items now show Credit, WD, and Refund buttons (same as regular items)
+- Partial refund supports custom dollar amount input (for credit overpayments like $29)
+- Refund methods: GoDaddy, Venmo, Zelle
+- Transfer items carry the original price (e.g., "$102.00 (credit)") not "$0.00 (credit)"
 
-### Financial accuracy — profitability formula
-```
-Net Revenue = Gross Revenue - Contra-Revenue (transfers out + refunds)
-Net Profit  = Net Revenue - Course Fees - Prize Fund - Processing Fees
-```
-
-### Data sources for each component
-| Component | Source | Notes |
-|-----------|--------|-------|
-| Gross Revenue | SUM of `total_collected` from `acct_allocations` | GoDaddy + external + transfers + add-ons |
-| Contra-Revenue | SUM from `acct_transactions` (type=expense, source=credit_transfer or refund) | Credit transfers out + refunds |
-| Course Fees | Aggregate from event breakdown or `acct_allocations` | Uses corrected rounding formula |
-| Prize Fund | SUM of `prize_pool` from `acct_allocations` | Projected prizes owed |
-| Processing Fees | SUM of `godaddy_fee` from `acct_allocations` | Actual: `order_total × 2.7% + $0.30` |
-
-### Common data accuracy pitfalls
-- **Player count inflation:** Child payment items (`parent_item_id IS NOT NULL`) must be
-  excluded from player counts but included in revenue sums
-- **Course cost rounding:** Use aggregate formula (base × count × tax), not per-player
-  post-tax × count. See "Course cost rounding fix" in Event Pricing section.
-- **Prize fund vs TGF payouts:** `acct_allocations.prize_pool` = projected prizes (matches
-  Financial tab). `tgf_payouts` = actual recorded payouts. These may differ.
-- **Processing fees:** The 3.5% `transaction_fee_pct` is what players pay. The actual cost
-  is 2.7% + $0.30 (stored in `acct_allocations.godaddy_fee`). The difference is TGF margin.
-- **External payments:** Venmo/cash payments now create allocations (synthetic `order_id = EXT-{item_id}`).
-  Before backfill, older external payments may lack allocations.
-- **Credit transfers:** Revenue follows the money — contra-revenue on source event,
-  revenue on target event. The transferred player's `$0.00 (credit)` item gets an
-  allocation with `total_collected` = original price via `XFER-{item_id}` order_id.
+### Course fee rounding fix
+- **Per-player allocations** store individual post-tax amounts (individually correct)
+- **Aggregate calculations** (Financial tab) use corrected formula:
+  `base_rate × player_count × (1 + tax_rate)` — totals first, tax second
+- Example: $54 × 32 × 1.0825 = $1,870.56 (correct) vs $58.46 × 32 = $1,870.72 (old drift)
 
 ### `acct_allocations` table — per-player cost breakdown
 Each row represents one player's cost allocation for one event:
