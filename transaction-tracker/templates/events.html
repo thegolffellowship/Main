@@ -2397,9 +2397,9 @@
             }
             subtotal += price;
 
-            // Transaction fees: 3.5% collected from GoDaddy players
+            // Transaction fees: use actual parsed value from email, not calculated
             if (isGodaddy && price > 0) {
-                const txFee = parseFloat((r.transaction_fees || "0").replace(/[^0-9.-]/g, "")) || Math.round(price * txFeePct * 100) / 100;
+                const txFee = parseFloat((r.transaction_fees || "0").replace(/[^0-9.-]/g, "")) || 0;
                 totalTransactionFees += txFee;
                 // Track order total for GoDaddy fee calc (per-order)
                 const orderTotal = price + txFee;
@@ -2541,7 +2541,7 @@
             html += `<span>Add-on Payments</span><span style="text-align:right;">$${childPaymentRevenue.toFixed(2)}</span>`;
         }
         html += `<span style="font-weight:600; border-top:1px solid var(--border); padding-top:0.2rem;">Subtotal</span><span style="font-weight:600; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${subtotal.toFixed(2)}</span>`;
-        html += `<span>Transaction Fees (${(txFeePct * 100).toFixed(1)}%)</span><span style="text-align:right;">$${totalTransactionFees.toFixed(2)}</span>`;
+        html += `<span>Transaction Fees</span><span style="text-align:right;">$${totalTransactionFees.toFixed(2)}</span>`;
         html += `<span style="font-weight:600;">Gross Revenue</span><span style="font-weight:600; text-align:right;">$${grossRevenue.toFixed(2)}</span>`;
         html += `<span style="color:#dc2626;">GoDaddy Fees (${Object.keys(orderTotals).length} orders)</span><span style="text-align:right; color:#dc2626;">-$${totalGodaddyFees.toFixed(2)}</span>`;
         if (refundTotal > 0) {
