@@ -2359,19 +2359,29 @@
             return "NONE";
         }
 
-        // ── REVENUE: What we collect ──
-        let totalCollected = 0;
+        // ── INCOME: What we collect ──
+        let subtotal = 0;         // base rates (item_price)
         let paidPlayerRevenue = 0;
-        let childPaymentRevenue = 0;
+        let childPaymentRevenue = 0;  // positive add-ons only
+        let refundTotal = 0;      // negative child payments (contra-revenue)
+        let refundCount = 0;
         let creditTransferRevenue = 0;
         let creditTransferCount = 0;
+        let totalTransactionFees = 0; // 3.5% tx fees collected from players
+        let totalGodaddyFees = 0;     // 2.7% + $0.30 per GoDaddy order
+
+        // Track per-order totals for GoDaddy fee calculation
+        const orderTotals = {};  // order_id → total amount (item_price + tx_fee)
+        const txFeePct = (ev.transaction_fee_pct || 3.5) / 100;
 
         paidPlayers.forEach(r => {
             let price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
             const isTransfer = !!r.transferred_from_id;
+            const isGodaddy = r.order_id && !isTransfer
+                && !(r.merchant || "").startsWith("Paid Separately")
+                && !(r.merchant || "").startsWith("Manual Entry");
 
             // Credit transfer items: price is now stored (e.g. "$102.00 (credit)")
-            // Fallback for old "$0.00 (credit)" items: look up original
             if (isTransfer && price === 0) {
                 const origItem = allItems.find(i => i.id === r.transferred_from_id);
                 if (origItem) {
@@ -2385,13 +2395,41 @@
             } else {
                 paidPlayerRevenue += price;
             }
-            totalCollected += price;
+            subtotal += price;
+
+            // Transaction fees: 3.5% collected from GoDaddy players
+            if (isGodaddy && price > 0) {
+                const txFee = parseFloat((r.transaction_fees || "0").replace(/[^0-9.-]/g, "")) || Math.round(price * txFeePct * 100) / 100;
+                totalTransactionFees += txFee;
+                // Track order total for GoDaddy fee calc (per-order)
+                const orderTotal = price + txFee;
+                if (r.order_id) {
+                    orderTotals[r.order_id] = (orderTotals[r.order_id] || 0) + orderTotal;
+                }
+            }
         });
         childPayments.forEach(r => {
             const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
-            childPaymentRevenue += price;
-            totalCollected += price;
+            if (price < 0) {
+                // Negative child = refund (contra-revenue)
+                refundTotal += Math.abs(price);
+                refundCount++;
+            } else if (price > 0) {
+                childPaymentRevenue += price;
+                subtotal += price;
+            }
         });
+
+        // GoDaddy merchant fees: 2.7% + $0.30 PER ORDER on the order total
+        Object.values(orderTotals).forEach(orderTotal => {
+            totalGodaddyFees += orderTotal * 0.027 + 0.30;
+        });
+        totalGodaddyFees = Math.round(totalGodaddyFees * 100) / 100;
+
+        // Gross revenue = subtotal + tx fees
+        const grossRevenue = Math.round((subtotal + totalTransactionFees) * 100) / 100;
+        // Net income = gross - GoDaddy fees - refunds
+        const netIncome = Math.round((grossRevenue - totalGodaddyFees - refundTotal) * 100) / 100;
 
         // ── EXPENSES: What we owe ──
         // Course cost: ALL active players including comps (we pay the course for everyone)
@@ -2437,29 +2475,6 @@
         const gamePots = computeGamePotTotals(ev, registrants);
         const totalPrizeFund = gamePots.hio + gamePots.included + gamePots.net + gamePots.gross;
 
-        // GoDaddy processing fees (actual: 2.7% + $0.30 per order)
-        // Only applies to GoDaddy revenue — not Venmo/cash/credit transfers
-        let totalProcessingFees = 0;
-        let godaddyRevenue = 0;
-        const orderIds = new Set();
-        paidPlayers.forEach(r => {
-            if (r.order_id && !r.transferred_from_id && !(r.merchant || "").startsWith("Paid Separately")) {
-                const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
-                godaddyRevenue += price;
-                orderIds.add(r.order_id);
-            }
-        });
-        childPayments.forEach(r => {
-            if (r.order_id && !(r.merchant || "").includes("Manual Entry")) {
-                const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
-                godaddyRevenue += price;
-                orderIds.add(r.order_id);
-            }
-        });
-        totalProcessingFees = Math.round((godaddyRevenue * 0.027 + orderIds.size * 0.30) * 100) / 100;
-
-        // (TGF operating margin is revenue - expenses; no separate calc needed)
-
         // ── COMP COST (the delta for comped players — what we eat) ──
         // Per-player shares from matrix totals
         const stats = computeGameStats(registrants, ev.item_name);
@@ -2486,8 +2501,8 @@
         const totalCompCost = compCourseCost + compGameCost;
 
         // ── PROJECTED PROFIT ──
-        const totalExpenses = totalCourseCost + totalPrizeFund + totalProcessingFees;
-        const projectedProfit = totalCollected - totalExpenses;
+        const totalExpenses = totalCourseCost + totalPrizeFund;
+        const projectedProfit = netIncome - totalExpenses;
         const profitColor = projectedProfit >= 0 ? "#166534" : "#dc2626";
 
         // ── BUILD HTML ──
@@ -2496,8 +2511,8 @@
         // Summary cards row
         html += `<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; margin-bottom:1rem;">`;
         html += `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:0.6rem; text-align:center;">
-            <div style="font-size:0.7rem; color:#166534; font-weight:600;">REVENUE <span style="font-size:0.55rem; padding:0.05rem 0.3rem; border-radius:3px; background:#fef3c7; color:#92400e;">EST</span></div>
-            <div style="font-size:1.1rem; font-weight:700; color:#166534;">$${totalCollected.toFixed(2)}</div>
+            <div style="font-size:0.7rem; color:#166534; font-weight:600;">NET INCOME <span style="font-size:0.55rem; padding:0.05rem 0.3rem; border-radius:3px; background:#fef3c7; color:#92400e;">EST</span></div>
+            <div style="font-size:1.1rem; font-weight:700; color:#166534;">$${netIncome.toFixed(2)}</div>
         </div>`;
         html += `<div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:0.6rem; text-align:center;">
             <div style="font-size:0.7rem; color:#dc2626; font-weight:600;">EXPENSES</div>
@@ -2516,16 +2531,23 @@
         // ── REVENUE BREAKDOWN ──
         html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">`;
         html += `<div>`;
-        html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.5rem; color:#166534; border-bottom:2px solid #bbf7d0; padding-bottom:0.3rem;">Revenue (Collected)</h4>`;
+        html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.5rem; color:#166534; border-bottom:2px solid #bbf7d0; padding-bottom:0.3rem;">Income</h4>`;
         html += `<div style="display:grid; grid-template-columns:1fr auto; gap:0.15rem 0.5rem; font-size:0.8rem;">`;
         html += `<span>Paid Players (${paidPlayers.length - creditTransferCount})</span><span style="text-align:right;">$${paidPlayerRevenue.toFixed(2)}</span>`;
         if (creditTransferRevenue > 0) {
             html += `<span style="color:#7c3aed;">Credit Transfers In (${creditTransferCount})</span><span style="text-align:right; color:#7c3aed;">$${creditTransferRevenue.toFixed(2)}</span>`;
         }
         if (childPaymentRevenue > 0) {
-            html += `<span>Add-on Payments (${childPayments.length})</span><span style="text-align:right;">$${childPaymentRevenue.toFixed(2)}</span>`;
+            html += `<span>Add-on Payments</span><span style="text-align:right;">$${childPaymentRevenue.toFixed(2)}</span>`;
         }
-        html += `<span style="font-weight:700; border-top:1px solid var(--border); padding-top:0.2rem;">Total Revenue</span><span style="font-weight:700; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${totalCollected.toFixed(2)}</span>`;
+        html += `<span style="font-weight:600; border-top:1px solid var(--border); padding-top:0.2rem;">Subtotal</span><span style="font-weight:600; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${subtotal.toFixed(2)}</span>`;
+        html += `<span>Transaction Fees (${(txFeePct * 100).toFixed(1)}%)</span><span style="text-align:right;">$${totalTransactionFees.toFixed(2)}</span>`;
+        html += `<span style="font-weight:600;">Gross Revenue</span><span style="font-weight:600; text-align:right;">$${grossRevenue.toFixed(2)}</span>`;
+        html += `<span style="color:#dc2626;">GoDaddy Fees (${Object.keys(orderTotals).length} orders)</span><span style="text-align:right; color:#dc2626;">-$${totalGodaddyFees.toFixed(2)}</span>`;
+        if (refundTotal > 0) {
+            html += `<span style="color:#dc2626;">Refunds (${refundCount})</span><span style="text-align:right; color:#dc2626;">-$${refundTotal.toFixed(2)}</span>`;
+        }
+        html += `<span style="font-weight:700; border-top:2px solid #166534; padding-top:0.3rem; color:#166534;">Net Income</span><span style="font-weight:700; text-align:right; border-top:2px solid #166534; padding-top:0.3rem; color:#166534;">$${netIncome.toFixed(2)}</span>`;
         html += `</div>`;
 
         // Player counts
@@ -2561,7 +2583,6 @@
         html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Included Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.included.toFixed(2)}</span>`;
         if (gamePots.net > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Net Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.net.toFixed(2)}</span>`;
         if (gamePots.gross > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Gross Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.gross.toFixed(2)}</span>`;
-        html += `<span>Processing Fees (est.)</span><span style="text-align:right;">$${totalProcessingFees.toFixed(2)}</span>`;
         html += `<span style="font-weight:700; border-top:1px solid var(--border); padding-top:0.2rem;">Total Expenses</span><span style="font-weight:700; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${totalExpenses.toFixed(2)}</span>`;
         html += `</div>`;
         html += `</div>`;
