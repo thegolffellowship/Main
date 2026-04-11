@@ -1211,37 +1211,48 @@ The app is installable as a Progressive Web App:
 
 ### v2.2.0 — April 11, 2026 — "Unified Financial Model"
 
-**Accounting as the single source of truth (Issue #242):**
-- Credit transfers now create contra-revenue on source event + revenue on target event in `acct_transactions`, plus allocation at target event
-- External payments (Venmo/cash/Zelle) via "Add Player — Paid Separately" now create `acct_allocations` rows + `acct_transactions` entries
-- Add-on payments (child items via "Add Payment") now create allocations with synthetic order IDs
-- Refunds now create expense entries in `acct_transactions`
-- Reversing any operation cleans up the corresponding accounting entries
-- New `acct_allocations` columns: `payment_method` (godaddy/venmo/cash/etc.) and `acct_transaction_id` (FK to accounting ledger)
-- Synthetic order IDs for non-GoDaddy items: `EXT-{id}`, `XFER-{id}`, `MANUAL-PAY-{id}`, `COMP-{id}`
+**Financial tab P&L restructure (Issue #242):**
+- Complete Income/Expenses model matching verified manual audit
+- INCOME: Subtotal + Transaction Fees (from email) - GoDaddy Fees (per order) - Refunds = Net Income
+- EXPENSES: Course Fees + Prize Fund only (no processing fees — they're on income side)
+- Profit = Net Income - Total Expenses
+- Verified against manual spreadsheet audit of s18.4 Landa Park (32 players): profit ~$312
+
+**Transaction fee handling:**
+- Transaction fees (3.5%) are collected revenue from players, parsed from each GoDaddy email
+- Stored in `items.transaction_fees` — actual values from invoices, NOT calculated
+- GoDaddy merchant fees (2.7% + $0.30) calculated PER ORDER on order total
+- Refunds shown as contra-revenue (deducted from Income), not expenses
+
+**Parser fix — item_price extraction:**
+- Parser was grabbing "$88" from "MEMBER STATUS: MEMBER = $88" instead of "$148" from Subtotal
+- Fixed extraction prompt to prioritize Subtotal/SKU line over membership rate description
+- `item_price` added to FORCE_UPDATE_FIELDS so re-extract actually updates it
+- Zelle added as refund method option (frontend + backend)
+
+**Credit transfer improvements:**
+- Transfer items now store actual credit amount (e.g. "$102.00 (credit)" not "$0.00 (credit)")
+- Credit/WD/Refund buttons enabled on transfer items (were previously hidden)
+- Partial refund supports custom dollar amount input for credit overpayments
+- Backfill fixes existing "$0.00 (credit)" items with original prices
+
+**Accounting entries on operations:**
+- Credit transfers create contra-revenue on source + revenue on target in `acct_transactions`
+- External payments (Venmo/cash/Zelle) create `acct_allocations` + `acct_transactions`
+- Add-on payments create allocations with synthetic order IDs
+- Refunds create `acct_transactions` entries; reversals clean them up
+- New `acct_allocations` columns: `payment_method`, `acct_transaction_id`
 - New accounting categories: Credit Transfer In/Out, External Payment, Player Refunds
 
 **Course fee rounding fix:**
-- Aggregate calculation now uses `base × count × (1 + tax)` instead of `per_player_post_tax × count`
-- Eliminates rounding drift (e.g., $1,870.40 correct vs $1,870.72 old for 32 players)
-- Fix applied in both server-side (`_calc_aggregate_course_cost()`) and client-side fallback
+- Aggregate: `base × count × (1 + tax)` instead of `per_player_post_tax × count`
+- Example: $54 × 32 × 1.0825 = $1,870.56 (correct) vs $58.46 × 32 = $1,870.72 (old)
 
-**Events Financial tab — hybrid rendering:**
-- Client-side renders immediately with "ESTIMATED" badge (fallback)
-- Async loads server data from `GET /api/events/{name}/financial-summary`
-- Overlays "VERIFIED (X%)" server-rendered view when allocation coverage ≥ 50%
-- New revenue lines: External Payments, Credit Transfers In/Out, Refunds
-- New functions: `renderFinancialPanelServer()`, `loadServerFinancials()`
-
-**New API endpoints:**
-- `GET /api/events/<name>/financial-summary` — unified financial summary from accounting system
-- `POST /api/accounting/backfill` — retrofit existing data with missing allocations/transactions
-
-**New database functions:**
-- `_create_allocation_for_item()` — standardized allocation creation for non-GoDaddy items
-- `get_event_financial_summary()` — aggregates from allocations + transactions per event
-- `_calc_aggregate_course_cost()` — correct aggregate course cost with rounding fix
-- `backfill_financial_entries()` — idempotent backfill for external payments, transfers, add-ons, refunds
+**Not yet connected (planned):**
+- Financial tab is client-side JavaScript — not yet reading from accounting tables
+- GoDaddy orders don't create `acct_transactions` entries (only allocations)
+- GoDaddy merchant fees not stored as individual DB line items per order
+- Server-side `get_event_financial_summary()` needs update to match new P&L model
 
 ### v2.1.0 — April 8, 2026 — "Compact Event Pricing"
 
