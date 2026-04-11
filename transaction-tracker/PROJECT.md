@@ -189,6 +189,15 @@ Shows all events with registration details. Events are auto-created from transac
 - **Tee Time Advisor** — Auto-populates when date + chapter are set; fetches sunset data, shows last recommended tee times with traffic light indicators (green/yellow/red), generates tee time sheets with per-slot finish estimates
 - **Format support** — 9 Holes, 18 Holes, 9/18 Combo with independent start types (Tee Times/Shotgun) and start times per group in combo mode
 - **Tee time planning** — Configurable tee time count, interval; combo mode has separate counts for 9-hole and 18-hole groups with side-by-side tee sheets
+- **Financial tab** — Per-event financial breakdown with hybrid server/client rendering:
+  - Revenue: GoDaddy payments, external payments (Venmo/cash), credit transfers in, add-on payments
+  - Contra-revenue: credit transfers out, refunds
+  - Expenses: course fees (aggregate-corrected rounding), prize fund (from games matrix), processing fees
+  - Comp cost: course + game pots absorbed for comped players
+  - Projected profit with summary cards
+  - **ESTIMATED badge** — client-side calculation from raw items (fallback)
+  - **VERIFIED badge** — server-side calculation from `acct_allocations` + `acct_transactions` (authoritative)
+  - Async loads from `GET /api/events/{name}/financial-summary`
 
 ### 3. Customers Page (`/customers`)
 
@@ -342,6 +351,13 @@ Multi-entity financial tracking, bank reconciliation, and month-end close.
 - **Bank reconciliation** — CSV import (Chase, Frost Bank), two-way matching, three states (Matched/In Bank Only/Missing)
 - **Month-end close** — Locks period, generates income/expense/net/tax summary
 - **Action items** — Financial action items with urgency and resolution tracking
+- **Unified financial model (Issue #242)** — Accounting is the single source of truth:
+  - Credit transfers create contra-revenue on source event + revenue on target event
+  - External payments (Venmo/cash) create `acct_allocations` rows + `acct_transactions` entries
+  - Refunds create expense entries in `acct_transactions`
+  - Add-on payments create allocations with synthetic order IDs
+  - `POST /api/accounting/backfill` retrofits existing data with missing entries
+  - Events Financial tab reads from accounting system with VERIFIED/ESTIMATED badges
 
 ---
 
@@ -651,6 +667,67 @@ Operations Command Center with AI-powered strategic advisor.
 
 **Constraint:** UNIQUE(email_uid, warning_code, item_name)
 
+### `acct_allocations` table (per-player cost breakdown)
+
+Each row represents one player's cost allocation for one event.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| order_id | TEXT NOT NULL | GoDaddy order ID or synthetic (`EXT-{id}`, `XFER-{id}`, `MANUAL-PAY-{id}`, `COMP-{id}`) |
+| item_id | INTEGER | FK to `items(id)` |
+| event_name | TEXT | Event item name |
+| chapter | TEXT | TGF chapter |
+| allocation_date | TEXT | Date of the transaction |
+| player_count | INTEGER | Default 1 |
+| course_payable | REAL | Exact post-tax course fee |
+| course_surcharge | REAL | Per-player surcharge |
+| prize_pool | REAL | Player's contribution to prize fund |
+| tgf_operating | REAL | TGF's operating margin |
+| godaddy_fee | REAL | Actual merchant fee share (2.7% + $0.30); 0 for non-GoDaddy |
+| tax_reserve | REAL | Sales tax reserve (8.25% of tgf_operating) |
+| total_collected | REAL | Total revenue collected from this player |
+| allocation_status | TEXT | `pending` / `complete` / `needs_course_cost` |
+| payment_method | TEXT | `godaddy` / `venmo` / `cash` / `zelle` / `check` / `credit_transfer` / `comp` |
+| acct_transaction_id | INTEGER | FK to `acct_transactions(id)` — links to accounting ledger |
+| notes | TEXT | |
+| created_at | TEXT | |
+
+**Constraint:** UNIQUE(order_id, item_id)
+
+### `acct_transactions` table (accounting ledger)
+
+Income/expense/transfer entries — the accounting system's general ledger.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| date | TEXT NOT NULL | Transaction date |
+| description | TEXT NOT NULL | Human-readable description |
+| total_amount | REAL NOT NULL | Absolute amount |
+| type | TEXT NOT NULL | `income` / `expense` / `transfer` |
+| account_id | INTEGER | FK to `acct_accounts(id)` |
+| transfer_to_account_id | INTEGER | FK for inter-account transfers |
+| notes | TEXT | |
+| receipt_path | TEXT | |
+| source | TEXT | `manual`, `godaddy_allocation`, `external_payment`, `credit_transfer`, `refund`, `add_payment` |
+| source_ref | TEXT | Unique reference (e.g., `xfer-{id}-out`, `refund-{id}`, `ext-{id}`) for idempotency |
+| is_reconciled | INTEGER | 0 or 1 |
+| created_at | TEXT | |
+| updated_at | TEXT | |
+
+### `acct_splits` table (multi-entity transaction splits)
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| transaction_id | INTEGER NOT NULL | FK to `acct_transactions(id)` ON DELETE CASCADE |
+| entity_id | INTEGER NOT NULL | FK to `acct_entities(id)` |
+| category_id | INTEGER | FK to `acct_categories(id)` |
+| amount | REAL NOT NULL | |
+| memo | TEXT | |
+| event_id | INTEGER | FK to `events(id)` — links accounting entries to events |
+
 ---
 
 ## API Endpoints
@@ -708,6 +785,7 @@ Operations Command Center with AI-powered strategic advisor.
 | `/api/events/aliases` | GET | — | All event name aliases |
 | `/api/events/delete-manual-player/<id>` | DELETE | — | Remove manually-added player |
 | `/api/events/seed` | POST | Admin | Batch-create events from JSON array |
+| `/api/events/<name>/financial-summary` | GET | Manager | Unified financial summary for an event (from accounting system) |
 | `/api/sunset` | GET | — | Sunset data for tee time advisor (params: `date`, `chapter`). Returns sunset, civil twilight, 24h times. DST-aware. |
 
 ### RSVPs
@@ -868,6 +946,17 @@ Operations Command Center with AI-powered strategic advisor.
 |----------|--------|------|-------------|
 | `/admin/backup` | GET | Admin | Download SQLite database file |
 | `/api/health` | GET | — | App health check (scheduler status, DB connectivity) |
+
+### Accounting & Financial (Admin/Manager)
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/events/<name>/financial-summary` | GET | Manager | Unified financial summary for one event from the accounting system |
+| `/api/accounting/allocations` | GET | Admin | Allocation records with totals grouped by bucket |
+| `/api/accounting/allocations/calculate` | POST | Admin | Calculate allocation for a specific order |
+| `/api/accounting/allocations/calculate-all` | POST | Admin | Batch-calculate allocations for all unallocated orders |
+| `/api/accounting/backfill` | POST | Admin | Backfill accounting entries for existing external payments, transfers, add-ons, refunds |
+| `/api/accounting/expense-transactions` | GET | Admin | Expense transactions (filterable by date, source, status, event) |
 
 ---
 
@@ -1119,6 +1208,40 @@ The app is installable as a Progressive Web App:
 ---
 
 ## Version History
+
+### v2.2.0 — April 11, 2026 — "Unified Financial Model"
+
+**Accounting as the single source of truth (Issue #242):**
+- Credit transfers now create contra-revenue on source event + revenue on target event in `acct_transactions`, plus allocation at target event
+- External payments (Venmo/cash/Zelle) via "Add Player — Paid Separately" now create `acct_allocations` rows + `acct_transactions` entries
+- Add-on payments (child items via "Add Payment") now create allocations with synthetic order IDs
+- Refunds now create expense entries in `acct_transactions`
+- Reversing any operation cleans up the corresponding accounting entries
+- New `acct_allocations` columns: `payment_method` (godaddy/venmo/cash/etc.) and `acct_transaction_id` (FK to accounting ledger)
+- Synthetic order IDs for non-GoDaddy items: `EXT-{id}`, `XFER-{id}`, `MANUAL-PAY-{id}`, `COMP-{id}`
+- New accounting categories: Credit Transfer In/Out, External Payment, Player Refunds
+
+**Course fee rounding fix:**
+- Aggregate calculation now uses `base × count × (1 + tax)` instead of `per_player_post_tax × count`
+- Eliminates rounding drift (e.g., $1,870.40 correct vs $1,870.72 old for 32 players)
+- Fix applied in both server-side (`_calc_aggregate_course_cost()`) and client-side fallback
+
+**Events Financial tab — hybrid rendering:**
+- Client-side renders immediately with "ESTIMATED" badge (fallback)
+- Async loads server data from `GET /api/events/{name}/financial-summary`
+- Overlays "VERIFIED (X%)" server-rendered view when allocation coverage ≥ 50%
+- New revenue lines: External Payments, Credit Transfers In/Out, Refunds
+- New functions: `renderFinancialPanelServer()`, `loadServerFinancials()`
+
+**New API endpoints:**
+- `GET /api/events/<name>/financial-summary` — unified financial summary from accounting system
+- `POST /api/accounting/backfill` — retrofit existing data with missing allocations/transactions
+
+**New database functions:**
+- `_create_allocation_for_item()` — standardized allocation creation for non-GoDaddy items
+- `get_event_financial_summary()` — aggregates from allocations + transactions per event
+- `_calc_aggregate_course_cost()` — correct aggregate course cost with rounding fix
+- `backfill_financial_entries()` — idempotent backfill for external payments, transfers, add-ons, refunds
 
 ### v2.1.0 — April 8, 2026 — "Compact Event Pricing"
 

@@ -357,8 +357,10 @@ curl -X POST https://your-domain.com/api/connector/ingest \
 | POST | `/api/report/send-now` | None | Trigger daily report email |
 | POST | `/api/auth/login` | None | Authenticate with PIN |
 | GET | `/admin/backup` | Admin | Download SQLite database file |
+| GET | `/api/events/<name>/financial-summary` | Manager | Unified financial summary for an event |
+| POST | `/api/accounting/backfill` | Admin | Backfill accounting entries for existing data |
 
-See `PROJECT.md` for the full API reference (98 endpoints).
+See `PROJECT.md` for the full API reference (100+ endpoints).
 
 ---
 
