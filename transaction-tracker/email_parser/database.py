@@ -2117,7 +2117,7 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                                     ).fetchone()
                                     order_item_count = max(cnt_row["cnt"], 1) if cnt_row else 1
                                 merchant_fee = round(
-                                    total_amount * 0.027 + 0.30 / order_item_count, 2
+                                    (total_amount * 0.027 + 0.30) / order_item_count, 2
                                 )
                                 _write_acct_entry(
                                     conn,
