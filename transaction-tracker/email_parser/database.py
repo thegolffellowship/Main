@@ -2276,11 +2276,7 @@ def get_item_stats(db_path: str | Path | None = None) -> dict:
 
         total_spent = 0.0
         for r in price_rows:
-            try:
-                val = (r["item_price"] or "").replace("$", "").replace(",", "")
-                total_spent += float(val)
-            except (ValueError, AttributeError):
-                pass
+            total_spent += _parse_dollar(r["item_price"])
 
         return {
             "total_items": row["total_items"],
@@ -3232,15 +3228,9 @@ def scan_price_games_mismatches(db_path: str | Path | None = None) -> dict:
         results["scanned"] = len(items)
 
         for item in items:
-            raw_price = (item["item_price"] or "").replace("$", "").replace(",", "").split("(")[0].strip()
-            raw_total = (item["total_amount"] or "").replace("$", "").replace(",", "").strip()
-            raw_fees = (item["transaction_fees"] or "0").replace("$", "").replace(",", "").strip()
-            try:
-                price = float(raw_price)
-                total = float(raw_total)
-                fees = float(raw_fees) if raw_fees else 0
-            except (ValueError, TypeError):
-                continue
+            price = _parse_dollar(item["item_price"])
+            total = _parse_dollar(item["total_amount"])
+            fees = _parse_dollar(item["transaction_fees"])
 
             if price <= 0 or total <= 0:
                 continue
@@ -8938,17 +8928,28 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
     return results
 
 
-def _parse_dollar(val) -> float:
-    """Parse dollar amount from text like '$158.00' or '158.00'."""
+def _parse_dollar(val, default: float = 0.0) -> float:
+    """Safely parse a dollar amount string to float.
+
+    Handles: "$148.00", "$1,234.00", "$0.00 (comp)", "$102.00 (credit)",
+    None, "", "0", integers, floats. Always returns a float. Never raises.
+    """
     if val is None:
-        return 0.0
+        return default
     if isinstance(val, (int, float)):
         return float(val)
-    cleaned = str(val).strip().replace("$", "").replace(",", "")
+    # Strip everything except digits, dot, and minus sign
+    cleaned = re.sub(r'[^\d.\-]', '', str(val))
+    if not cleaned or cleaned == '.':
+        return default
     try:
         return float(cleaned)
-    except ValueError:
-        return 0.0
+    except (ValueError, TypeError):
+        return default
+
+
+# Public alias
+parse_dollar = _parse_dollar
 
 
 def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
@@ -9304,6 +9305,39 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
         items_with_alloc = sum(1 for i in items_needing_alloc if i["id"] in allocated_item_ids)
         coverage = round(items_with_alloc / len(items_needing_alloc) * 100, 1) if items_needing_alloc else 0
 
+    # ── Revenue sanity check: cross-check item_price vs total_amount - fees ──
+    revenue_discrepancy = None
+    calc_a = 0.0  # Sum of item_price (existing calculation)
+    calc_b = 0.0  # Sum of (total_amount - transaction_fees) — independent check
+    for i in all_items:
+        if (i.get("transaction_status") or "active") != "active":
+            continue
+        if i.get("parent_item_id"):
+            continue
+        if (i.get("email_uid") or "").startswith("manual-comp"):
+            continue
+        price = _parse_dollar(i.get("item_price"))
+        calc_a += price
+        # Independent check using order total - fees (only for GoDaddy orders)
+        total_amt = _parse_dollar(i.get("total_amount"))
+        tx_fees = _parse_dollar(i.get("transaction_fees"))
+        if total_amt > 0:
+            calc_b += round(total_amt - tx_fees, 2)
+        elif i.get("transferred_from_id") or (i.get("merchant") or "").startswith("Paid Separately"):
+            # Non-GoDaddy items: use item_price for both (no cross-check possible)
+            calc_b += price
+
+    calc_a = round(calc_a, 2)
+    calc_b = round(calc_b, 2)
+    gap = round(calc_a - calc_b, 2)
+    if abs(gap) > 1.0:
+        revenue_discrepancy = {
+            "item_price_total": calc_a,
+            "order_total_crosscheck": calc_b,
+            "gap": gap,
+            "direction": "item_price is higher" if gap > 0 else "item_price is lower",
+        }
+
     return {
         "event_name": event_name,
         "revenue": {
@@ -9337,6 +9371,7 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
         },
         "has_allocation_data": len(allocs) > 0,
         "allocation_coverage_pct": coverage,
+        "revenue_discrepancy": revenue_discrepancy,
     }
 
 
