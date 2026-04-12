@@ -152,6 +152,7 @@ from email_parser.database import (
     get_acct_allocations,
     get_event_financial_summary,
     backfill_financial_entries,
+    backfill_acct_transactions,
     scan_price_games_mismatches,
     save_expense_transaction,
     get_expense_transactions,
@@ -2869,7 +2870,7 @@ def api_partial_refund_item(item_id):
                          (computed_new_sg, item_id))
 
         # Create -PAY child row with parent snapshot
-        conn.execute(
+        cur = conn.execute(
             """INSERT INTO items (email_uid, merchant, customer, item_name, item_price,
                side_games, notes, parent_item_id, parent_snapshot, transaction_status, order_date)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)""",
@@ -2882,6 +2883,31 @@ def api_partial_refund_item(item_id):
              json.dumps(parent_snap) if parent_snap else None,
              datetime.now().strftime("%Y-%m-%d")),
         )
+        new_child_id = cur.lastrowid
+
+        # ── Accounting: flat entry for partial refund ──
+        try:
+            from email_parser.database import _write_acct_entry
+            refund_source = method.lower().replace(" ", "_") if method else "manual"
+            refund_account = "Venmo" if "venmo" in (method or "").lower() else "TGF Checking"
+            _write_acct_entry(
+                conn,
+                item_id=new_child_id,
+                event_name=parent["item_name"],
+                customer=parent["customer"],
+                order_id=parent.get("order_id", ""),
+                entry_type="expense",
+                category="refund",
+                source=refund_source,
+                amount=float(total),
+                description=f"Partial refund ({method}): {parent['customer']} — {parent['item_name']}",
+                account=refund_account,
+                source_ref=f"partial-refund-{new_child_id}",
+                date=datetime.now().strftime("%Y-%m-%d"),
+            )
+        except Exception:
+            logger.warning("Failed to create accounting entry for partial refund %d", item_id, exc_info=True)
+
         conn.commit()
 
     return jsonify({"status": "ok", "refunded": total, "new_side_games": computed_new_sg})
@@ -5314,6 +5340,63 @@ def api_backfill_financials():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/accounting/backfill-acct-transactions", methods=["POST"])
+@require_role("admin")
+def api_backfill_acct_transactions():
+    """Backfill flat acct_transactions entries for all 2026 items."""
+    try:
+        result = backfill_acct_transactions()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/accounting/verify-event/<event_name>")
+@require_role("manager")
+def api_verify_event_accounting(event_name):
+    """Verify acct_transactions totals for an event."""
+    from email_parser.database import _connect
+    try:
+        with _connect() as conn:
+            rows = conn.execute(
+                """SELECT entry_type, category, source,
+                          COUNT(*) as count,
+                          COALESCE(SUM(amount), 0) as total
+                   FROM acct_transactions
+                   WHERE event_name = ? COLLATE NOCASE
+                   AND COALESCE(status, 'active') = 'active'
+                   AND entry_type IS NOT NULL
+                   GROUP BY entry_type, category, source
+                   ORDER BY entry_type, category""",
+                (event_name,),
+            ).fetchall()
+            breakdown = [dict(r) for r in rows]
+
+            income = sum(r["total"] for r in breakdown if r["entry_type"] == "income")
+            fees = sum(r["total"] for r in breakdown if r["entry_type"] == "expense" and r["category"] == "processing_fee")
+            refunds = sum(r["total"] for r in breakdown if r["entry_type"] == "expense" and r["category"] == "refund")
+            contra = sum(r["total"] for r in breakdown if r["entry_type"] == "contra")
+            net = round(income - fees - refunds - contra, 2)
+
+            summary = get_event_financial_summary(event_name)
+
+            return jsonify({
+                "event_name": event_name,
+                "acct_transactions_breakdown": breakdown,
+                "totals": {
+                    "income": round(income, 2),
+                    "processing_fees": round(fees, 2),
+                    "refunds": round(refunds, 2),
+                    "contra": round(contra, 2),
+                    "net": net,
+                },
+                "financial_summary": summary,
+                "accounting_verified": summary.get("accounting_verified", False),
+            })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/audit/scan-price-mismatches", methods=["POST"])
 @require_role("admin")
 def api_scan_price_mismatches():
@@ -5973,6 +6056,46 @@ def api_tgf_parse_screenshot():
 # App startup
 # ---------------------------------------------------------------------------
 init_db()
+
+# ── Run acct_transactions backfill once if unfilled entries exist ──
+try:
+    from email_parser.database import _connect as _startup_connect
+    with _startup_connect() as _conn:
+        _acct_count = _conn.execute(
+            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE entry_type IS NOT NULL"
+        ).fetchone()["cnt"]
+    if _acct_count == 0:
+        _bf_result = backfill_acct_transactions()
+        logger.info("Startup backfill: %s", _bf_result)
+    else:
+        logger.info("Accounting entries already exist (%d), skipping startup backfill", _acct_count)
+
+    # ── Verify s18.4 LANDA PARK numbers ──
+    try:
+        with _startup_connect() as _vconn:
+            _landa = _vconn.execute(
+                """SELECT entry_type, category, COALESCE(SUM(amount), 0) as total
+                   FROM acct_transactions
+                   WHERE event_name = 's18.4 LANDA PARK'
+                   AND COALESCE(status, 'active') = 'active'
+                   AND entry_type IS NOT NULL
+                   GROUP BY entry_type, category""",
+            ).fetchall()
+            if _landa:
+                _landa_income = sum(r["total"] for r in _landa if r["entry_type"] == "income")
+                _landa_fees = sum(r["total"] for r in _landa if r["entry_type"] == "expense" and r["category"] == "processing_fee")
+                _landa_refunds = sum(r["total"] for r in _landa if r["entry_type"] == "expense" and r["category"] == "refund")
+                _landa_net = round(_landa_income - _landa_fees - _landa_refunds, 2)
+                logger.info(
+                    "LANDA PARK verification: income=$%.2f, processing_fees=$%.2f, refunds=$%.2f, net=$%.2f",
+                    _landa_income, _landa_fees, _landa_refunds, _landa_net,
+                )
+                for r in _landa:
+                    logger.info("  %s/%s: $%.2f", r["entry_type"], r["category"], r["total"])
+    except Exception:
+        logger.warning("LANDA PARK verification query failed", exc_info=True)
+except Exception:
+    logger.warning("Startup backfill failed", exc_info=True)
 
 # Seed upcoming San Antonio events (idempotent — skips existing)
 _SA_EVENTS = [

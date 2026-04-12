@@ -674,15 +674,21 @@ PROJECTED PROFIT = Net Income - Total Expenses
 | Add-on payment (child item) | `acct_allocations` + `acct_transactions` entry |
 | Reverse any of the above | Corresponding accounting entries deleted |
 
-### What is NOT yet connected (planned bridge)
-- GoDaddy orders do NOT create `acct_transactions` entries (only `acct_allocations`)
-- GoDaddy merchant fees are NOT stored as individual DB line items per order
-- Transaction fees are parsed but NOT flowing into `acct_transactions`
-- The server-side `get_event_financial_summary()` exists but hasn't been updated to
-  match the current Income/Expenses model
-- The Financial tab reads raw items, not accounting tables
-- The Accounting page (`/accounting`) doesn't show per-event P&L
-- Backfill for existing orders needs to be run
+### Single Source of Truth — `acct_transactions` (flat ledger)
+Every financial event now writes a flat entry to `acct_transactions` with these new columns:
+`item_id`, `event_name`, `customer`, `order_id`, `entry_type`, `category`, `amount`, `account`, `status`, `reconciled_batch_id`
+
+**Entry types:** `income`, `expense`, `contra`, `liability`
+**Categories:** `registration`, `processing_fee`, `comp`, `addon`, `refund`, `credit_issued`, `transfer_in`, `transfer_out`
+**Sources:** `godaddy`, `venmo`, `zelle`, `cash`, `manual`
+
+The `_write_acct_entry()` helper is the single function all hooks call. Uses `source_ref` for idempotency.
+
+`get_event_financial_summary()` now reads from flat `acct_transactions` first (verified path) and falls back to allocation-based calculation. The Financial tab shows:
+- **✅ Accounting (verified)** — when flat entries exist for the event
+- **⚠️ Calculated (estimated)** — when falling back to raw items
+
+`backfill_acct_transactions()` runs once at startup if no flat entries exist. Processes all 2026 items in order_date ascending.
 
 ### Key functions
 - `_create_allocation_for_item(item, conn, payment_method, ...)` — creates allocation for
