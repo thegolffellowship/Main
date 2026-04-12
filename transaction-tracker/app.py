@@ -6171,7 +6171,7 @@ try:
                 _landa_income = sum(r["total"] for r in _landa if r["entry_type"] == "income")
                 _landa_fees = sum(r["total"] for r in _landa if r["entry_type"] == "expense" and r["category"] == "processing_fee")
                 _landa_refunds = sum(r["total"] for r in _landa if r["entry_type"] == "expense" and r["category"] == "refund")
-                # Also get tx fees from items (collected revenue)
+                # Also get tx fees from items (collected revenue — GoDaddy orders only, no transfers)
                 from email_parser.database import _parse_dollar
                 _tx_fee_rows = _vconn.execute(
                     """SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(transaction_fees, '$', ''), ',', '') AS REAL)), 0) as total
@@ -6179,6 +6179,7 @@ try:
                        WHERE item_name = 's18.4 LANDA PARK'
                        AND COALESCE(transaction_status, 'active') = 'active'
                        AND parent_item_id IS NULL
+                       AND transferred_from_id IS NULL
                        AND email_uid NOT LIKE 'manual-comp%'"""
                 ).fetchone()
                 _tx_fees = round(_tx_fee_rows["total"], 2) if _tx_fee_rows else 0

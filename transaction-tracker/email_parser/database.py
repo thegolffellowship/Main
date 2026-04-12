@@ -9416,13 +9416,16 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             addon_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "addon" and e.get("source") == "godaddy"), 2)
 
             # Add transaction fees collected from players (parsed from GoDaddy emails)
-            # These are revenue — offset against merchant fees to get net
+            # These are revenue — offset against merchant fees to get net.
+            # Only real GoDaddy orders (no transfers, comps, or child payments)
             tx_fee_total = 0.0
             for item in all_items:
                 if item.get("transaction_status") in ("credited", "refunded", "transferred"):
                     continue
                 if item.get("parent_item_id"):
                     continue
+                if item.get("transferred_from_id"):
+                    continue  # transfer targets didn't generate a GoDaddy charge
                 if (item.get("email_uid") or "").startswith("manual-comp"):
                     continue
                 tf = _parse_dollar(item.get("transaction_fees"))
