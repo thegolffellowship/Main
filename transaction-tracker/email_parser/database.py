@@ -2081,8 +2081,8 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                         new_item_id = cursor.lastrowid
                         item_price = _parse_dollar(row.get("item_price"))
                         merchant = row.get("merchant") or ""
-                        # Only create entries for real GoDaddy orders (not manual, not roster import)
-                        if item_price > 0 and merchant and not merchant.startswith(("Manual", "Paid Separately", "Roster", "Customer Entry", "RSVP")):
+                        # Only create entries for real GoDaddy orders (not manual, not roster, not transfer targets)
+                        if item_price > 0 and merchant and not merchant.startswith(("Manual", "Paid Separately", "Roster", "Customer Entry", "RSVP")) and not row.get("transferred_from_id"):
                             event_name = row.get("item_name") or ""
                             customer_name = row.get("customer") or ""
                             order_id_val = row.get("order_id") or ""
@@ -9900,6 +9900,7 @@ def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
 
     with _connect(db_path) as conn:
         # ── 1. GoDaddy orders — income + processing fee entries ──
+        # Exclude transfer targets (transferred_from_id set) — those get transfer_in entries instead
         gd_items = conn.execute(
             """SELECT * FROM items
                WHERE order_date >= '2026-01-01'
@@ -9912,6 +9913,7 @@ def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
                AND merchant NOT LIKE 'Refund%'
                AND COALESCE(transaction_status, 'active') NOT IN ('rsvp_only')
                AND parent_item_id IS NULL
+               AND transferred_from_id IS NULL
                AND id NOT IN (SELECT item_id FROM acct_transactions WHERE item_id IS NOT NULL AND entry_type = 'income' AND category = 'registration')
                ORDER BY order_date ASC""",
         ).fetchall()
@@ -9954,7 +9956,7 @@ def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
                         ).fetchone()
                         order_item_count = max(cnt_row["cnt"], 1) if cnt_row else 1
                     merchant_fee = round(
-                        total_amount * 0.027 + 0.30 / order_item_count, 2
+                        (total_amount * 0.027 + 0.30) / order_item_count, 2
                     )
                     _write_acct_entry(
                         conn,
