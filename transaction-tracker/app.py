@@ -6068,7 +6068,20 @@ try:
         _bf_result = backfill_acct_transactions()
         logger.info("Startup backfill: %s", _bf_result)
     else:
-        logger.info("Accounting entries already exist (%d), skipping startup backfill", _acct_count)
+        # Check if old entries need merchant fee fix (description says "processing fee" not "merchant fee")
+        with _startup_connect() as _fix_conn:
+            _old_fees = _fix_conn.execute(
+                "SELECT COUNT(*) as cnt FROM acct_transactions WHERE category = 'processing_fee' AND description LIKE '%processing fee%'"
+            ).fetchone()["cnt"]
+        if _old_fees > 0:
+            logger.info("Detected %d old processing fee entries — re-running backfill with merchant fee formula", _old_fees)
+            with _startup_connect() as _fix_conn:
+                _fix_conn.execute("DELETE FROM acct_transactions WHERE entry_type IS NOT NULL")
+                _fix_conn.commit()
+            _bf_result = backfill_acct_transactions()
+            logger.info("Re-backfill result: %s", _bf_result)
+        else:
+            logger.info("Accounting entries already exist (%d), skipping startup backfill", _acct_count)
 
     # ── Verify s18.4 LANDA PARK numbers ──
     try:
@@ -6085,10 +6098,21 @@ try:
                 _landa_income = sum(r["total"] for r in _landa if r["entry_type"] == "income")
                 _landa_fees = sum(r["total"] for r in _landa if r["entry_type"] == "expense" and r["category"] == "processing_fee")
                 _landa_refunds = sum(r["total"] for r in _landa if r["entry_type"] == "expense" and r["category"] == "refund")
-                _landa_net = round(_landa_income - _landa_fees - _landa_refunds, 2)
+                # Also get tx fees from items (collected revenue)
+                from email_parser.database import _parse_dollar
+                _tx_fee_rows = _vconn.execute(
+                    """SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(transaction_fees, '$', ''), ',', '') AS REAL)), 0) as total
+                       FROM items
+                       WHERE item_name = 's18.4 LANDA PARK'
+                       AND COALESCE(transaction_status, 'active') = 'active'
+                       AND parent_item_id IS NULL
+                       AND email_uid NOT LIKE 'manual-comp%'"""
+                ).fetchone()
+                _tx_fees = round(_tx_fee_rows["total"], 2) if _tx_fee_rows else 0
+                _landa_net = round(_landa_income + _tx_fees - _landa_fees - _landa_refunds, 2)
                 logger.info(
-                    "LANDA PARK verification: income=$%.2f, processing_fees=$%.2f, refunds=$%.2f, net=$%.2f",
-                    _landa_income, _landa_fees, _landa_refunds, _landa_net,
+                    "LANDA PARK verification: income=$%.2f, tx_fees=$%.2f, merchant_fees=$%.2f, refunds=$%.2f, net=$%.2f",
+                    _landa_income, _tx_fees, _landa_fees, _landa_refunds, _landa_net,
                 )
                 for r in _landa:
                     logger.info("  %s/%s: $%.2f", r["entry_type"], r["category"], r["total"])

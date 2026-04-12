@@ -2080,7 +2080,6 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                     try:
                         new_item_id = cursor.lastrowid
                         item_price = _parse_dollar(row.get("item_price"))
-                        tx_fees = _parse_dollar(row.get("transaction_fees"))
                         merchant = row.get("merchant") or ""
                         # Only create entries for real GoDaddy orders (not manual, not roster import)
                         if item_price > 0 and merchant and not merchant.startswith(("Manual", "Paid Separately", "Roster", "Customer Entry", "RSVP")):
@@ -2106,8 +2105,20 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                                 date=order_date,
                             )
 
-                            # EXPENSE entry for processing fee (if > 0)
-                            if tx_fees > 0:
+                            # EXPENSE entry for GoDaddy merchant fee (2.7% + $0.30 per order)
+                            total_amount = _parse_dollar(row.get("total_amount"))
+                            if total_amount > 0:
+                                # Count items in this order to split $0.30 fixed fee
+                                order_item_count = 1
+                                if order_id_val:
+                                    cnt_row = conn.execute(
+                                        "SELECT COUNT(*) as cnt FROM items WHERE order_id = ?",
+                                        (order_id_val,),
+                                    ).fetchone()
+                                    order_item_count = max(cnt_row["cnt"], 1) if cnt_row else 1
+                                merchant_fee = round(
+                                    total_amount * 0.027 + 0.30 / order_item_count, 2
+                                )
                                 _write_acct_entry(
                                     conn,
                                     item_id=new_item_id,
@@ -2117,8 +2128,8 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                                     entry_type="expense",
                                     category="processing_fee",
                                     source="godaddy",
-                                    amount=tx_fees,
-                                    description=f"GoDaddy processing fee: {customer_name} — {event_name}",
+                                    amount=merchant_fee,
+                                    description=f"GoDaddy merchant fee: {customer_name} — {event_name}",
                                     account="TGF Checking",
                                     source_ref=f"godaddy-fee-{new_item_id}",
                                     date=order_date,
@@ -9403,7 +9414,23 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             external_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "addon" and e.get("source") not in ("godaddy",)), 2)
             xfer_in_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "transfer_in"), 2)
             addon_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "addon" and e.get("source") == "godaddy"), 2)
-            total_revenue = round(godaddy_revenue + external_revenue + xfer_in_revenue + addon_revenue, 2)
+
+            # Add transaction fees collected from players (parsed from GoDaddy emails)
+            # These are revenue — offset against merchant fees to get net
+            tx_fee_total = 0.0
+            for item in all_items:
+                if item.get("transaction_status") in ("credited", "refunded", "transferred"):
+                    continue
+                if item.get("parent_item_id"):
+                    continue
+                if (item.get("email_uid") or "").startswith("manual-comp"):
+                    continue
+                tf = _parse_dollar(item.get("transaction_fees"))
+                if tf > 0:
+                    tx_fee_total += tf
+            tx_fee_total = round(tx_fee_total, 2)
+
+            total_revenue = round(godaddy_revenue + external_revenue + xfer_in_revenue + addon_revenue + tx_fee_total, 2)
 
             # ── Contra-revenue ──
             contra_entries = [e for e in acct_entries if e["entry_type"] == "contra"]
@@ -9414,7 +9441,7 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             refund_total = round(sum(e["amount"] for e in expense_entries if e.get("category") == "refund"), 2)
             total_processing = round(sum(e["amount"] for e in expense_entries if e.get("category") == "processing_fee"), 2)
 
-            contra_total = round(xfer_out + refund_total, 2)
+            contra_total = round(xfer_out + refund_total + total_processing, 2)
             net_revenue = round(total_revenue - contra_total, 2)
 
             # Course fees and prize fund still from allocations (best source)
@@ -9915,20 +9942,31 @@ def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
                 )
                 results["godaddy_income"] += 1
 
-                # Processing fee entry
-                tx_fees = _parse_dollar(item.get("transaction_fees"))
-                if tx_fees > 0:
+                # Processing fee entry — GoDaddy merchant fee (2.7% + $0.30 per order)
+                total_amount = _parse_dollar(item.get("total_amount"))
+                if total_amount > 0:
+                    order_id_val = item.get("order_id") or ""
+                    order_item_count = 1
+                    if order_id_val:
+                        cnt_row = conn.execute(
+                            "SELECT COUNT(*) as cnt FROM items WHERE order_id = ?",
+                            (order_id_val,),
+                        ).fetchone()
+                        order_item_count = max(cnt_row["cnt"], 1) if cnt_row else 1
+                    merchant_fee = round(
+                        total_amount * 0.027 + 0.30 / order_item_count, 2
+                    )
                     _write_acct_entry(
                         conn,
                         item_id=item["id"],
                         event_name=item.get("item_name", ""),
                         customer=item.get("customer", ""),
-                        order_id=item.get("order_id", ""),
+                        order_id=order_id_val,
                         entry_type="expense",
                         category="processing_fee",
                         source="godaddy",
-                        amount=tx_fees,
-                        description=f"GoDaddy processing fee: {item.get('customer', '')} — {item.get('item_name', '')}",
+                        amount=merchant_fee,
+                        description=f"GoDaddy merchant fee: {item.get('customer', '')} — {item.get('item_name', '')}",
                         account="TGF Checking",
                         source_ref=f"godaddy-fee-{item['id']}",
                         date=item.get("order_date") or "",
