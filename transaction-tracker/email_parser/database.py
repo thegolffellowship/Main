@@ -246,6 +246,20 @@ def _backfill_name_parts(conn: sqlite3.Connection) -> None:
                    attempts = attempts + 1, last_attempt = datetime('now')""",
                 (name,),
             )
+            # On 3rd failure, create a parse warning so admin sees it
+            attempt_row = conn.execute(
+                "SELECT attempts FROM name_parse_failures WHERE customer_name = ?",
+                (name,),
+            ).fetchone()
+            if attempt_row and attempt_row["attempts"] >= MAX_ATTEMPTS:
+                conn.execute(
+                    """INSERT OR IGNORE INTO parse_warnings
+                       (email_uid, order_id, customer, item_name, warning_code, message)
+                       VALUES (?, NULL, ?, NULL, ?, ?)""",
+                    (f"name-parse-{name}", name, "name_parse_failed",
+                     f"Customer name \"{name}\" could not be parsed into first/last "
+                     f"after {MAX_ATTEMPTS} attempts. Please edit manually."),
+                )
 
     conn.commit()
     logger.info("Backfilled name parts for %d customers", len(names_to_parse))
