@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cash Flow — TGF Tracker</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <style>
+        .cf-table { width:100%; border-collapse:collapse; font-size:0.82rem; margin-top:1rem; }
+        .cf-table th, .cf-table td { padding:0.5rem 0.7rem; text-align:right; border-bottom:1px solid var(--border); }
+        .cf-table th { font-weight:600; background:var(--card-bg); position:sticky; top:0; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.03em; }
+        .cf-table th:first-child, .cf-table td:first-child { text-align:left; }
+        .cf-table .amt { font-variant-numeric:tabular-nums; }
+        .cf-table .warning-row { background:#fef2f2; }
+        .cf-table .warning-row td { color:#dc2626; }
+        .cf-table .positive { color:#166534; } .cf-table .negative { color:#dc2626; }
+        .cf-summary { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:1rem; margin-bottom:1.5rem; }
+        .cf-card { background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:1rem; text-align:center; }
+        .cf-card .label { font-size:0.72rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; }
+        .cf-card .value { font-size:1.3rem; font-weight:700; margin-top:0.3rem; }
+        .toolbar { display:flex; gap:0.5rem; align-items:center; margin-bottom:1rem; }
+        .toolbar select { padding:0.35rem 0.5rem; border:1px solid var(--border); border-radius:6px; font-size:0.8rem; }
+        .btn { padding:0.4rem 0.8rem; border:none; border-radius:6px; cursor:pointer; font-size:0.8rem; font-weight:600; }
+        .btn-secondary { background:#e5e7eb; color:#374151; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>Cash Flow</h1>
+            <p class="subtitle">90-Day Rolling View</p>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+
+    <main>
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/tgf">Payouts</a>
+            <a href="/coo" class="active">Admin</a>
+        </nav>
+        <nav class="admin-subnav">
+            <a href="/coo">COO</a>
+            <a href="/accounting">Accounting</a>
+            <a href="/accounting/reconcile">Reconcile</a>
+            <a href="/accounting/cashflow" class="active">Cash Flow</a>
+            <a href="/audit">Audit Log</a>
+        </nav>
+
+        <div class="toolbar">
+            <select id="weeks-select" onchange="loadCashflow()">
+                <option value="13" selected>13 Weeks (90 days)</option>
+                <option value="8">8 Weeks (60 days)</option>
+                <option value="26">26 Weeks (6 months)</option>
+            </select>
+        </div>
+
+        <div class="cf-summary" id="cf-summary"></div>
+        <div id="cf-table-container"><div style="color:var(--text-muted); font-size:0.85rem;">Loading cash flow data...</div></div>
+    </main>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/version.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof initAuth === 'function') initAuth();
+        loadCashflow();
+    });
+
+    async function loadCashflow() {
+        const weeks = document.getElementById('weeks-select').value;
+        try {
+            const res = await fetch(`/api/reconciliation/cashflow?weeks=${weeks}`);
+            const data = await res.json();
+
+            // Summary cards
+            const totalExpected = data.reduce((s, w) => s + w.expected_income, 0);
+            const totalConfirmed = data.reduce((s, w) => s + w.confirmed_income, 0);
+            const totalProjExp = data.reduce((s, w) => s + w.projected_expenses, 0);
+            const finalBalance = data.length ? data[data.length - 1].running_balance : 0;
+            const warningWeeks = data.filter(w => w.warning).length;
+
+            document.getElementById('cf-summary').innerHTML = `
+                <div class="cf-card">
+                    <div class="label">Expected Income</div>
+                    <div class="value" style="color:#166534;">$${totalExpected.toFixed(2)}</div>
+                </div>
+                <div class="cf-card">
+                    <div class="label">Confirmed (Banked)</div>
+                    <div class="value" style="color:#2563eb;">$${totalConfirmed.toFixed(2)}</div>
+                </div>
+                <div class="cf-card">
+                    <div class="label">Projected Expenses</div>
+                    <div class="value" style="color:#dc2626;">$${totalProjExp.toFixed(2)}</div>
+                </div>
+                <div class="cf-card">
+                    <div class="label">Running Balance</div>
+                    <div class="value" style="color:${finalBalance >= 0 ? '#166534' : '#dc2626'};">$${finalBalance.toFixed(2)}</div>
+                </div>
+                ${warningWeeks ? `<div class="cf-card" style="border-color:#fecaca; background:#fef2f2;">
+                    <div class="label" style="color:#dc2626;">Cash Gaps</div>
+                    <div class="value" style="color:#dc2626;">${warningWeeks} week${warningWeeks > 1 ? 's' : ''}</div>
+                </div>` : ''}
+            `;
+
+            // Table
+            let html = `<table class="cf-table">
+                <thead><tr>
+                    <th>Week Ending</th>
+                    <th>Expected Income</th>
+                    <th>Confirmed Income</th>
+                    <th>Projected Expenses</th>
+                    <th>Actual Expenses</th>
+                    <th>Net</th>
+                    <th>Running Balance</th>
+                </tr></thead><tbody>`;
+
+            data.forEach(w => {
+                const cls = w.warning ? ' class="warning-row"' : '';
+                html += `<tr${cls}>
+                    <td>${w.week_ending}</td>
+                    <td class="amt">$${w.expected_income.toFixed(2)}</td>
+                    <td class="amt">$${w.confirmed_income.toFixed(2)}</td>
+                    <td class="amt">$${w.projected_expenses.toFixed(2)}</td>
+                    <td class="amt">$${w.actual_expenses.toFixed(2)}</td>
+                    <td class="amt ${w.net >= 0 ? 'positive' : 'negative'}">$${w.net.toFixed(2)}</td>
+                    <td class="amt ${w.running_balance >= 0 ? 'positive' : 'negative'}">$${w.running_balance.toFixed(2)}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('cf-table-container').innerHTML = html;
+        } catch(e) {
+            document.getElementById('cf-table-container').innerHTML = `<div style="color:#dc2626;">Failed to load: ${e}</div>`;
+        }
+    }
+    </script>
+</body>
+</html>

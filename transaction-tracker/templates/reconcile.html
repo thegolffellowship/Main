@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconciliation — TGF Tracker</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <style>
+        .recon-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:1rem; }
+        .recon-tab { padding:0.6rem 1.2rem; cursor:pointer; border:none; background:none; font-size:0.85rem; font-weight:600; color:var(--text-muted); border-bottom:2px solid transparent; margin-bottom:-2px; }
+        .recon-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+        .recon-panel { display:none; } .recon-panel.active { display:block; }
+        .acct-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:1rem; margin-bottom:1.5rem; }
+        .acct-card { background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:1rem; }
+        .acct-card h3 { margin:0 0 0.5rem; font-size:0.95rem; }
+        .acct-card .stat { display:flex; justify-content:space-between; font-size:0.82rem; padding:0.15rem 0; }
+        .acct-card .stat-label { color:var(--text-muted); }
+        .acct-card .variance-ok { color:#16a34a; font-weight:700; }
+        .acct-card .variance-warn { color:#dc2626; font-weight:700; }
+        .match-layout { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+        .match-col { background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:1rem; max-height:70vh; overflow-y:auto; }
+        .match-col h3 { margin:0 0 0.8rem; font-size:0.9rem; position:sticky; top:0; background:var(--card-bg); padding:0.3rem 0; z-index:1; }
+        .match-row { padding:0.5rem; border-bottom:1px solid var(--border); cursor:pointer; font-size:0.8rem; display:grid; grid-template-columns:80px 1fr auto; gap:0.5rem; align-items:center; }
+        .match-row:hover { background:var(--hover-bg, #f0f9ff); }
+        .match-row.selected { background:#dbeafe; border-left:3px solid #2563eb; }
+        .match-row .amt { font-weight:600; text-align:right; }
+        .match-row .desc { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:0.3rem; }
+        .dot-matched { background:#16a34a; } .dot-partial { background:#f59e0b; } .dot-unmatched { background:#ef4444; }
+        .btn { padding:0.4rem 0.8rem; border:none; border-radius:6px; cursor:pointer; font-size:0.8rem; font-weight:600; }
+        .btn-primary { background:#2563eb; color:#fff; } .btn-primary:hover { background:#1d4ed8; }
+        .btn-secondary { background:#e5e7eb; color:#374151; }
+        .btn-danger { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+        .toolbar { display:flex; gap:0.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap; }
+        .toolbar select, .toolbar input { padding:0.35rem 0.5rem; border:1px solid var(--border); border-radius:6px; font-size:0.8rem; }
+        .upload-zone { border:2px dashed var(--border); border-radius:10px; padding:2rem; text-align:center; cursor:pointer; margin:1rem 0; }
+        .upload-zone:hover { border-color:#2563eb; background:#f0f9ff; }
+        .monthly-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+        .monthly-table th, .monthly-table td { padding:0.4rem 0.6rem; text-align:left; border-bottom:1px solid var(--border); }
+        .monthly-table th { font-weight:600; background:var(--card-bg); position:sticky; top:0; }
+        .monthly-table .amt { text-align:right; font-variant-numeric:tabular-nums; }
+        .monthly-table .total-row { font-weight:700; border-top:2px solid var(--border); }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>Bank Reconciliation</h1>
+            <p class="subtitle">Match deposits to accounting entries</p>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+
+    <main>
+        <nav class="tab-nav">
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/tgf">Payouts</a>
+            <a href="/coo" class="active">Admin</a>
+        </nav>
+        <nav class="admin-subnav">
+            <a href="/coo">COO</a>
+            <a href="/accounting">Accounting</a>
+            <a href="/accounting/reconcile" class="active">Reconcile</a>
+            <a href="/accounting/cashflow">Cash Flow</a>
+            <a href="/audit">Audit Log</a>
+        </nav>
+
+        <div class="recon-tabs">
+            <button class="recon-tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Account Dashboard</button>
+            <button class="recon-tab" data-tab="match" onclick="switchTab('match')">Match Queue</button>
+            <button class="recon-tab" data-tab="monthly" onclick="switchTab('monthly')">Monthly Summary</button>
+        </div>
+
+        <!-- ═══ DASHBOARD TAB ═══ -->
+        <section class="recon-panel active" id="panel-dashboard">
+            <div class="acct-cards" id="dashboard-cards">
+                <div style="color:var(--text-muted); font-size:0.85rem;">Loading accounts...</div>
+            </div>
+
+            <h3 style="margin:1.5rem 0 0.5rem; font-size:0.9rem;">Import Bank Statement</h3>
+            <div class="toolbar">
+                <select id="import-account">
+                    <option value="">Select account...</option>
+                </select>
+                <label class="btn btn-primary" style="margin:0;">
+                    Upload CSV/PDF
+                    <input type="file" id="import-file" accept=".csv,.pdf" style="display:none;" onchange="handleImport()">
+                </label>
+            </div>
+            <div id="import-result" style="display:none; margin-top:0.5rem; padding:0.8rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; font-size:0.82rem;"></div>
+        </section>
+
+        <!-- ═══ MATCH QUEUE TAB ═══ -->
+        <section class="recon-panel" id="panel-match">
+            <div class="toolbar">
+                <select id="match-account-filter" onchange="loadMatchQueue()">
+                    <option value="">All accounts</option>
+                </select>
+                <input type="month" id="match-month-filter" onchange="loadMatchQueue()">
+                <button class="btn btn-primary" onclick="runAutoMatch()">Auto-match All</button>
+                <button class="btn btn-secondary" id="btn-manual-match" onclick="confirmManualMatch()" disabled>Match Selected</button>
+            </div>
+            <div class="match-layout">
+                <div class="match-col">
+                    <h3>Bank Deposits (Unmatched)</h3>
+                    <div id="deposit-list"><div style="color:var(--text-muted); font-size:0.82rem;">Select an account or click Auto-match...</div></div>
+                </div>
+                <div class="match-col">
+                    <h3>Accounting Entries (Unreconciled)</h3>
+                    <div id="txn-list"><div style="color:var(--text-muted); font-size:0.82rem;">Click a deposit to see potential matches...</div></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ MONTHLY SUMMARY TAB ═══ -->
+        <section class="recon-panel" id="panel-monthly">
+            <div class="toolbar">
+                <input type="month" id="monthly-selector" onchange="loadMonthlySummary()">
+                <button class="btn btn-secondary" onclick="exportMonthlyCSV()">Export CSV</button>
+            </div>
+            <div id="monthly-content"><div style="color:var(--text-muted); font-size:0.85rem;">Select a month to view summary...</div></div>
+        </section>
+    </main>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/version.js"></script>
+    <script>
+    let accounts = [];
+    let selectedDeposit = null;
+    let selectedTxn = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof initAuth === 'function') initAuth();
+        loadDashboard();
+        // Default month to current
+        const now = new Date();
+        const mm = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+        document.getElementById('match-month-filter').value = mm;
+        document.getElementById('monthly-selector').value = mm;
+    });
+
+    function switchTab(tab) {
+        document.querySelectorAll('.recon-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.recon-panel').forEach(p => p.classList.remove('active'));
+        document.querySelector(`.recon-tab[data-tab="${tab}"]`).classList.add('active');
+        document.getElementById(`panel-${tab}`).classList.add('active');
+        if (tab === 'match') loadMatchQueue();
+        if (tab === 'monthly') loadMonthlySummary();
+    }
+
+    async function loadDashboard() {
+        try {
+            const [dashRes, acctRes] = await Promise.all([
+                fetch('/api/reconciliation/dashboard'),
+                fetch('/api/reconciliation/accounts'),
+            ]);
+            const dash = await dashRes.json();
+            accounts = await acctRes.json();
+
+            // Populate account selectors
+            ['import-account', 'match-account-filter'].forEach(id => {
+                const sel = document.getElementById(id);
+                const first = sel.options[0];
+                sel.innerHTML = '';
+                sel.appendChild(first);
+                accounts.forEach(a => {
+                    const opt = document.createElement('option');
+                    opt.value = a.id;
+                    opt.textContent = `${a.name} (${a.account_type})`;
+                    sel.appendChild(opt);
+                });
+            });
+
+            // Render dashboard cards
+            const container = document.getElementById('dashboard-cards');
+            if (!dash.accounts || dash.accounts.length === 0) {
+                container.innerHTML = '<div style="color:var(--text-muted);">No bank accounts configured.</div>';
+                return;
+            }
+            container.innerHTML = dash.accounts.map(a => `
+                <div class="acct-card">
+                    <h3>${esc(a.name)} <span style="font-size:0.7rem; color:var(--text-muted);">${a.account_type}</span></h3>
+                    <div class="stat"><span class="stat-label">Last Import</span><span>${a.last_import ? a.last_import.split('T')[0] : 'Never'}</span></div>
+                    <div class="stat"><span class="stat-label">Book Balance</span><span>$${a.book_balance.toFixed(2)}</span></div>
+                    <div class="stat"><span class="stat-label">Bank Balance</span><span>$${a.bank_balance.toFixed(2)}</span></div>
+                    <div class="stat"><span class="stat-label">Variance</span><span class="${a.variance === 0 ? 'variance-ok' : 'variance-warn'}">${a.variance === 0 ? 'Square' : '$' + a.variance.toFixed(2)}</span></div>
+                    <div class="stat"><span class="stat-label">Unmatched</span><span>${a.unmatched_count}</span></div>
+                    ${a.partial_count ? `<div class="stat"><span class="stat-label">Partial</span><span style="color:#f59e0b;">${a.partial_count}</span></div>` : ''}
+                </div>
+            `).join('');
+        } catch(e) { console.error('Dashboard load failed:', e); }
+    }
+
+    async function handleImport() {
+        const fileInput = document.getElementById('import-file');
+        const accountId = document.getElementById('import-account').value;
+        if (!fileInput.files.length) return;
+        if (!accountId) { alert('Select an account first'); return; }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('account_id', accountId);
+
+        const resultDiv = document.getElementById('import-result');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = 'Importing...';
+
+        try {
+            const res = await fetch('/api/reconciliation/import', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.error) { resultDiv.innerHTML = `<span style="color:#dc2626;">${esc(data.error)}</span>`; return; }
+            let html = `<strong>Imported ${data.imported} deposits</strong> (${data.skipped} duplicates skipped) — Format: ${data.format}`;
+            if (data.auto_match) {
+                const m = data.auto_match;
+                html += `<br>Auto-matched: <strong>${m.auto_matched}</strong> | Partial: ${m.partial} | Unmatched: ${m.unmatched}`;
+            }
+            resultDiv.innerHTML = html;
+            loadDashboard();
+        } catch(e) { resultDiv.innerHTML = `<span style="color:#dc2626;">Import failed: ${e}</span>`; }
+        fileInput.value = '';
+    }
+
+    async function loadMatchQueue() {
+        const accountId = document.getElementById('match-account-filter').value;
+        const month = document.getElementById('match-month-filter').value;
+        const qs = new URLSearchParams();
+        if (accountId) qs.set('account_id', accountId);
+        if (month) qs.set('month', month);
+        qs.set('status', 'unmatched');
+
+        try {
+            const [depRes, txnRes] = await Promise.all([
+                fetch(`/api/reconciliation/deposits?${qs}`),
+                fetch(`/api/reconciliation/unreconciled?${new URLSearchParams({account: accountId ? accounts.find(a=>a.id==accountId)?.name||'' : '', month: month||''})}`),
+            ]);
+            const deposits = await depRes.json();
+            const txns = await txnRes.json();
+
+            const depDiv = document.getElementById('deposit-list');
+            if (!deposits.length) { depDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No unmatched deposits found.</div>'; }
+            else {
+                depDiv.innerHTML = deposits.map(d => `
+                    <div class="match-row" onclick="selectDeposit(${d.id}, ${d.amount}, '${d.deposit_date}')" data-id="${d.id}">
+                        <span>${d.deposit_date}</span>
+                        <span class="desc"><span class="status-dot dot-${d.status}"></span>${esc(d.description || '')}</span>
+                        <span class="amt">$${d.amount.toFixed(2)}</span>
+                    </div>
+                `).join('');
+            }
+
+            const txnDiv = document.getElementById('txn-list');
+            if (!txns.length) { txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No unreconciled transactions.</div>'; }
+            else {
+                txnDiv.innerHTML = txns.map(t => `
+                    <div class="match-row" onclick="selectTxn(${t.id})" data-id="${t.id}">
+                        <span>${t.date || ''}</span>
+                        <span class="desc">${esc(t.customer || '')} — ${esc(t.event_name || '')} (${t.category})</span>
+                        <span class="amt">$${(t.amount||0).toFixed(2)}</span>
+                    </div>
+                `).join('');
+            }
+        } catch(e) { console.error('Match queue load failed:', e); }
+    }
+
+    function selectDeposit(id, amount, date) {
+        selectedDeposit = id;
+        document.querySelectorAll('#deposit-list .match-row').forEach(r => r.classList.remove('selected'));
+        const row = document.querySelector(`#deposit-list .match-row[data-id="${id}"]`);
+        if (row) row.classList.add('selected');
+        // Highlight potential txn matches (similar amount)
+        document.querySelectorAll('#txn-list .match-row').forEach(r => {
+            const amt = parseFloat(r.querySelector('.amt').textContent.replace('$',''));
+            if (Math.abs(amt - amount) < 5) r.style.background = '#fef9c3';
+            else r.style.background = '';
+        });
+        updateMatchButton();
+    }
+
+    function selectTxn(id) {
+        selectedTxn = id;
+        document.querySelectorAll('#txn-list .match-row').forEach(r => r.classList.remove('selected'));
+        const row = document.querySelector(`#txn-list .match-row[data-id="${id}"]`);
+        if (row) row.classList.add('selected');
+        updateMatchButton();
+    }
+
+    function updateMatchButton() {
+        document.getElementById('btn-manual-match').disabled = !(selectedDeposit && selectedTxn);
+    }
+
+    async function confirmManualMatch() {
+        if (!selectedDeposit || !selectedTxn) return;
+        try {
+            await fetch('/api/reconciliation/match', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ bank_deposit_id: selectedDeposit, acct_transaction_id: selectedTxn }),
+            });
+            selectedDeposit = null; selectedTxn = null;
+            loadMatchQueue();
+            loadDashboard();
+        } catch(e) { alert('Match failed: ' + e); }
+    }
+
+    async function runAutoMatch() {
+        const accountId = document.getElementById('match-account-filter').value;
+        try {
+            const res = await fetch('/api/reconciliation/auto-match', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ account_id: accountId || null }),
+            });
+            const data = await res.json();
+            alert(`Auto-matched: ${data.auto_matched} | Partial: ${data.partial} | Unmatched: ${data.unmatched}`);
+            loadMatchQueue();
+            loadDashboard();
+        } catch(e) { alert('Auto-match failed: ' + e); }
+    }
+
+    async function loadMonthlySummary() {
+        const month = document.getElementById('monthly-selector').value;
+        if (!month) return;
+        try {
+            const res = await fetch(`/api/reconciliation/monthly?month=${month}`);
+            const data = await res.json();
+            const container = document.getElementById('monthly-content');
+
+            let html = `<div style="margin-bottom:1rem; font-size:0.85rem;">
+                <strong>Reconciliation:</strong> ${data.reconciled_transactions} of ${data.total_transactions} transactions (${data.reconciliation_pct}%)
+            </div>`;
+
+            html += '<table class="monthly-table"><thead><tr><th>Category</th><th class="amt">Count</th><th class="amt">Amount</th></tr></thead><tbody>';
+            html += '<tr><td colspan="3" style="font-weight:700; background:#f0fdf4; color:#166534;">INCOME</td></tr>';
+            let totalIncome = 0;
+            (data.income || []).forEach(r => {
+                totalIncome += r.total;
+                html += `<tr><td style="padding-left:1.5rem;">${esc(r.category || 'other')}</td><td class="amt">${r.cnt}</td><td class="amt">$${r.total.toFixed(2)}</td></tr>`;
+            });
+            html += `<tr class="total-row"><td>Total Income</td><td></td><td class="amt">$${totalIncome.toFixed(2)}</td></tr>`;
+
+            html += '<tr><td colspan="3" style="font-weight:700; background:#fef2f2; color:#dc2626;">EXPENSES / CONTRA</td></tr>';
+            let totalExp = 0;
+            (data.expenses || []).forEach(r => {
+                totalExp += r.total;
+                html += `<tr><td style="padding-left:1.5rem;">${esc(r.category || 'other')}</td><td class="amt">${r.cnt}</td><td class="amt">$${r.total.toFixed(2)}</td></tr>`;
+            });
+            html += `<tr class="total-row"><td>Total Expenses</td><td></td><td class="amt">$${totalExp.toFixed(2)}</td></tr>`;
+
+            const net = totalIncome - totalExp;
+            html += `<tr class="total-row" style="font-size:0.95rem;"><td>Net</td><td></td><td class="amt" style="color:${net>=0?'#166534':'#dc2626'};">$${net.toFixed(2)}</td></tr>`;
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        } catch(e) { console.error('Monthly load failed:', e); }
+    }
+
+    function exportMonthlyCSV() {
+        const month = document.getElementById('monthly-selector').value;
+        if (!month) { alert('Select a month first'); return; }
+        // Simple CSV export from the table
+        const table = document.querySelector('#monthly-content .monthly-table');
+        if (!table) return;
+        let csv = '';
+        table.querySelectorAll('tr').forEach(row => {
+            const cells = [...row.querySelectorAll('th, td')].map(c => `"${c.textContent.trim()}"`);
+            csv += cells.join(',') + '\n';
+        });
+        const blob = new Blob([csv], {type: 'text/csv'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `reconciliation-${month}.csv`;
+        a.click();
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    </script>
+</body>
+</html>

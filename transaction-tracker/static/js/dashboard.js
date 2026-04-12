@@ -450,10 +450,19 @@ function cellForChildPayment(key, row) {
     return `<span style="font-size:0.78rem;color:#6b7280;">\u2014</span>`;
 }
 
+function _reconDot(row) {
+    const s = row.transaction_status || "active";
+    const uid = row.email_uid || "";
+    if (uid.startsWith("manual-comp") || s === "rsvp_only") return '<span title="No bank match expected" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-right:4px;vertical-align:middle;"></span>';
+    if (s === "refunded" || s === "credited" || s === "transferred") return '<span title="Inactive" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-right:4px;vertical-align:middle;"></span>';
+    // Active items: yellow = awaiting bank match (default for now; green/red set via reconciliation data if available)
+    return '<span title="Awaiting bank match" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#fbbf24;margin-right:4px;vertical-align:middle;"></span>';
+}
+
 function cellForColumn(key, row) {
     if (key === "order_date") {
         const display = formatOrderDateTime(row);
-        return `<span class="cell-value" data-field="order_date" data-id="${row.id}" data-original="${row.order_date || ""}">${display}</span>`;
+        return `${_reconDot(row)}<span class="cell-value" data-field="order_date" data-id="${row.id}" data-original="${row.order_date || ""}">${display}</span>`;
     }
     if (key === "customer") return linkedCell(row.customer, "customer", row.id);
     if (key === "item_name") return linkedCell(row.item_name, "item_name", row.id) + statusTag(row);

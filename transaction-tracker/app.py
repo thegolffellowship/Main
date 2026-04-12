@@ -172,6 +172,18 @@ from email_parser.database import (
     run_bank_reconciliation,
     close_period,
     get_reconciliation_summary,
+    # Bank deposit reconciliation (new)
+    get_bank_accounts,
+    import_bank_deposits,
+    run_deposit_auto_match,
+    manual_match_deposit,
+    unmatch_deposit,
+    get_bank_deposits,
+    get_unreconciled_transactions,
+    get_reconciliation_dashboard,
+    get_monthly_reconciliation,
+    get_event_reconciliation_status,
+    get_cashflow_data,
     get_coo_agents,
     get_agent_action_log,
     batch_dismiss_action_items,
@@ -5950,6 +5962,119 @@ def api_close_period():
     if not period:
         return jsonify({"error": "period required (YYYY-MM)"}), 400
     return jsonify(close_period(period))
+
+
+# ── Bank Deposit Reconciliation Routes ──────────────────────────────────
+
+@app.route("/accounting/reconcile")
+@require_role("admin")
+def page_reconcile():
+    return render_template("reconcile.html")
+
+
+@app.route("/accounting/cashflow")
+@require_role("admin")
+def page_cashflow():
+    return render_template("cashflow.html")
+
+
+@app.route("/api/reconciliation/accounts")
+@require_role("admin")
+def api_recon_accounts():
+    return jsonify(get_bank_accounts())
+
+
+@app.route("/api/reconciliation/dashboard")
+@require_role("admin")
+def api_recon_dashboard():
+    return jsonify(get_reconciliation_dashboard())
+
+
+@app.route("/api/reconciliation/import", methods=["POST"])
+@require_role("admin")
+def api_recon_import():
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    f = request.files["file"]
+    account_id = request.form.get("account_id", type=int)
+    if not account_id:
+        return jsonify({"error": "account_id required"}), 400
+    file_bytes = f.read()
+    result = import_bank_deposits(file_bytes, f.filename or "upload.csv", account_id)
+    # Auto-match after import
+    if result.get("imported", 0) > 0:
+        match_result = run_deposit_auto_match(account_id)
+        result["auto_match"] = match_result
+    return jsonify(result)
+
+
+@app.route("/api/reconciliation/auto-match", methods=["POST"])
+@require_role("admin")
+def api_recon_auto_match():
+    d = request.json or {}
+    account_id = d.get("account_id")
+    return jsonify(run_deposit_auto_match(account_id))
+
+
+@app.route("/api/reconciliation/match", methods=["POST"])
+@require_role("admin")
+def api_recon_match():
+    d = request.json or {}
+    bank_deposit_id = d.get("bank_deposit_id")
+    acct_transaction_id = d.get("acct_transaction_id")
+    if not bank_deposit_id or not acct_transaction_id:
+        return jsonify({"error": "bank_deposit_id and acct_transaction_id required"}), 400
+    return jsonify(manual_match_deposit(bank_deposit_id, acct_transaction_id))
+
+
+@app.route("/api/reconciliation/unmatch", methods=["POST"])
+@require_role("admin")
+def api_recon_unmatch():
+    d = request.json or {}
+    bank_deposit_id = d.get("bank_deposit_id")
+    acct_transaction_id = d.get("acct_transaction_id")
+    if not bank_deposit_id:
+        return jsonify({"error": "bank_deposit_id required"}), 400
+    return jsonify(unmatch_deposit(bank_deposit_id, acct_transaction_id))
+
+
+@app.route("/api/reconciliation/deposits")
+@require_role("admin")
+def api_recon_deposits():
+    account_id = request.args.get("account_id", type=int)
+    status = request.args.get("status")
+    month = request.args.get("month")
+    return jsonify(get_bank_deposits(account_id, status, month))
+
+
+@app.route("/api/reconciliation/unreconciled")
+@require_role("admin")
+def api_recon_unreconciled():
+    account = request.args.get("account")
+    month = request.args.get("month")
+    return jsonify(get_unreconciled_transactions(account, month))
+
+
+@app.route("/api/reconciliation/monthly")
+@require_role("admin")
+def api_recon_monthly():
+    month = request.args.get("month")
+    if not month:
+        return jsonify({"error": "month required (YYYY-MM)"}), 400
+    return jsonify(get_monthly_reconciliation(month))
+
+
+@app.route("/api/reconciliation/event/<event_name>")
+@require_role("manager")
+def api_recon_event(event_name):
+    return jsonify(get_event_reconciliation_status(event_name))
+
+
+@app.route("/api/reconciliation/cashflow")
+@require_role("admin")
+def api_cashflow():
+    weeks = request.args.get("weeks", 13, type=int)
+    return jsonify(get_cashflow_data(weeks))
 
 
 # ---------------------------------------------------------------------------

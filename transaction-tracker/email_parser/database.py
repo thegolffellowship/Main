@@ -6,6 +6,7 @@ Dedicated columns for Golf Fellowship fields (chapter, handicap, side_games, etc
 so they can be filtered and sorted directly from the dashboard.
 """
 
+import io
 import json
 import math
 import os
@@ -1406,6 +1407,70 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
             """
         )
+
+        # ── Bank reconciliation tables ──
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bank_accounts (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                name         TEXT NOT NULL UNIQUE,
+                account_type TEXT NOT NULL
+                    CHECK(account_type IN ('checking', 'venmo', 'credit_card', 'cash')),
+                is_active    INTEGER DEFAULT 1,
+                created_at   TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bank_deposits (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id      INTEGER NOT NULL,
+                deposit_date    TEXT NOT NULL,
+                amount          REAL NOT NULL,
+                description     TEXT,
+                source          TEXT,
+                status          TEXT DEFAULT 'unmatched'
+                    CHECK(status IN ('unmatched', 'partial', 'matched')),
+                import_batch_id TEXT,
+                raw_data        TEXT,
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (account_id) REFERENCES bank_accounts(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_dep_date ON bank_deposits(deposit_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_dep_status ON bank_deposits(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_dep_batch ON bank_deposits(import_batch_id)")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reconciliation_matches (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                bank_deposit_id     INTEGER NOT NULL,
+                acct_transaction_id INTEGER NOT NULL,
+                match_type          TEXT NOT NULL
+                    CHECK(match_type IN ('auto', 'manual')),
+                match_confidence    REAL,
+                created_at          TEXT DEFAULT (datetime('now')),
+                UNIQUE(bank_deposit_id, acct_transaction_id),
+                FOREIGN KEY (bank_deposit_id) REFERENCES bank_deposits(id),
+                FOREIGN KEY (acct_transaction_id) REFERENCES acct_transactions(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_recon_deposit ON reconciliation_matches(bank_deposit_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_recon_txn ON reconciliation_matches(acct_transaction_id)")
+
+        # Seed default bank accounts
+        for acct_name, acct_type in [("TGF Checking", "checking"), ("Venmo", "venmo")]:
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO bank_accounts (name, account_type) VALUES (?, ?)",
+                    (acct_name, acct_type),
+                )
+            except sqlite3.IntegrityError:
+                pass
 
         # Seed chart of accounts on first run
         existing_coa = conn.execute("SELECT COUNT(*) as cnt FROM chart_of_accounts").fetchone()
@@ -11529,6 +11594,810 @@ def get_reconciliation_summary(month: str, db_path: str | Path | None = None) ->
         "period_closed": closing is not None,
         "closing": dict(closing) if closing else None,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Bank Deposit Import & Reconciliation (new tables)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def get_bank_accounts(db_path: str | Path | None = None) -> list[dict]:
+    """Return all bank accounts."""
+    with _connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM bank_accounts ORDER BY name").fetchall()
+        return [dict(r) for r in rows]
+
+
+def import_bank_deposits(file_bytes: bytes, filename: str, account_id: int,
+                         db_path: str | Path | None = None) -> dict:
+    """Import bank statement file (Chase CSV, Venmo CSV, or PDF).
+
+    Returns {import_batch_id, imported, skipped, format, rows_preview}.
+    """
+    import csv
+    import hashlib
+    import io
+
+    batch_id = f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{hashlib.md5(file_bytes).hexdigest()[:8]}"
+    text = file_bytes.decode("utf-8", errors="replace")
+    lower_name = filename.lower()
+
+    if lower_name.endswith(".pdf"):
+        return _import_pdf_deposits(file_bytes, batch_id, account_id, db_path)
+
+    # CSV parsing
+    reader = csv.reader(io.StringIO(text))
+    all_rows = list(reader)
+    if len(all_rows) < 2:
+        return {"import_batch_id": batch_id, "imported": 0, "skipped": 0,
+                "format": "empty", "rows_preview": []}
+
+    header = [h.strip().lower() for h in all_rows[0]]
+    data_rows = all_rows[1:]
+
+    # Auto-detect format
+    if "posting date" in header:
+        return _import_chase_csv(data_rows, header, batch_id, account_id, db_path)
+    elif any("datetime" in h for h in header) or any("funding" in h for h in header):
+        return _import_venmo_csv(data_rows, header, batch_id, account_id, db_path)
+    else:
+        # Generic CSV: try date/description/amount columns
+        return _import_generic_csv(data_rows, header, batch_id, account_id, db_path)
+
+
+def _import_chase_csv(data_rows, header, batch_id, account_id, db_path):
+    """Chase CSV: Details, Posting Date, Description, Amount, Type, Balance, Check or Slip #"""
+    date_idx = header.index("posting date")
+    desc_idx = header.index("description") if "description" in header else 2
+    amount_idx = header.index("amount") if "amount" in header else 3
+
+    imported, skipped = 0, 0
+    preview = []
+
+    with _connect(db_path) as conn:
+        for row in data_rows:
+            if not row or len(row) <= max(date_idx, desc_idx, amount_idx):
+                continue
+            raw_date = row[date_idx].strip()
+            parsed_date = _normalise_csv_date(raw_date) if raw_date else None
+            if not parsed_date:
+                continue
+
+            amount = _parse_dollar(row[amount_idx])
+            if amount <= 0:
+                continue  # Only import credits (deposits)
+
+            desc = row[desc_idx].strip()
+            source = "godaddy" if "GODADDY" in desc.upper() else "other"
+
+            # Idempotency: batch + date + amount
+            existing = conn.execute(
+                """SELECT id FROM bank_deposits
+                   WHERE account_id = ? AND deposit_date = ? AND ABS(amount - ?) < 0.01
+                   AND description = ?""",
+                (account_id, parsed_date, amount, desc),
+            ).fetchone()
+            if existing:
+                skipped += 1
+                continue
+
+            conn.execute(
+                """INSERT INTO bank_deposits
+                   (account_id, deposit_date, amount, description, source, import_batch_id, raw_data)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (account_id, parsed_date, amount, desc, source, batch_id,
+                 ",".join(row)),
+            )
+            imported += 1
+            if len(preview) < 50:
+                preview.append({"date": parsed_date, "description": desc,
+                                "amount": amount, "source": source})
+
+        conn.commit()
+
+    return {"import_batch_id": batch_id, "imported": imported, "skipped": skipped,
+            "format": "Chase", "rows_preview": preview}
+
+
+def _import_venmo_csv(data_rows, header, batch_id, account_id, db_path):
+    """Venmo CSV: ID, Datetime, Type, Status, Note, From, To, Amount (total), ..."""
+    status_idx = next((i for i, h in enumerate(header) if "status" in h), 3)
+    note_idx = next((i for i, h in enumerate(header) if "note" in h), 4)
+    from_idx = next((i for i, h in enumerate(header) if h.strip() == "from"), 5)
+    amount_idx = next((i for i, h in enumerate(header) if "amount" in h), 7)
+    datetime_idx = next((i for i, h in enumerate(header) if "datetime" in h), 1)
+
+    imported, skipped = 0, 0
+    preview = []
+
+    with _connect(db_path) as conn:
+        for row in data_rows:
+            if not row or len(row) <= max(status_idx, amount_idx):
+                continue
+
+            status = row[status_idx].strip() if status_idx < len(row) else ""
+            if status.lower() != "complete":
+                continue
+
+            amount = _parse_dollar(row[amount_idx] if amount_idx < len(row) else "0")
+            if amount <= 0:
+                continue  # Only import positive (received money)
+
+            raw_dt = row[datetime_idx].strip() if datetime_idx < len(row) else ""
+            parsed_date = _normalise_csv_date(raw_dt.split("T")[0] if "T" in raw_dt else raw_dt)
+            if not parsed_date:
+                continue
+
+            note = row[note_idx].strip() if note_idx < len(row) else ""
+            from_name = row[from_idx].strip() if from_idx < len(row) else ""
+            desc = f"{from_name}: {note}" if from_name else note
+
+            existing = conn.execute(
+                """SELECT id FROM bank_deposits
+                   WHERE account_id = ? AND deposit_date = ? AND ABS(amount - ?) < 0.01
+                   AND description = ?""",
+                (account_id, parsed_date, amount, desc),
+            ).fetchone()
+            if existing:
+                skipped += 1
+                continue
+
+            conn.execute(
+                """INSERT INTO bank_deposits
+                   (account_id, deposit_date, amount, description, source, import_batch_id, raw_data)
+                   VALUES (?, ?, ?, ?, 'venmo', ?, ?)""",
+                (account_id, parsed_date, amount, desc, batch_id, ",".join(row)),
+            )
+            imported += 1
+            if len(preview) < 50:
+                preview.append({"date": parsed_date, "description": desc,
+                                "amount": amount, "source": "venmo"})
+
+        conn.commit()
+
+    return {"import_batch_id": batch_id, "imported": imported, "skipped": skipped,
+            "format": "Venmo", "rows_preview": preview}
+
+
+def _import_generic_csv(data_rows, header, batch_id, account_id, db_path):
+    """Fallback for unknown CSV formats."""
+    date_idx = next((i for i, h in enumerate(header) if "date" in h), 0)
+    desc_idx = next((i for i, h in enumerate(header) if "desc" in h or "memo" in h), 1)
+    amount_idx = next((i for i, h in enumerate(header) if "amount" in h or "credit" in h), 2)
+
+    imported, skipped = 0, 0
+    preview = []
+
+    with _connect(db_path) as conn:
+        for row in data_rows:
+            if not row or len(row) <= max(date_idx, desc_idx, amount_idx):
+                continue
+            raw_date = row[date_idx].strip()
+            parsed_date = _normalise_csv_date(raw_date) if raw_date else None
+            if not parsed_date:
+                continue
+
+            amount = _parse_dollar(row[amount_idx])
+            if amount <= 0:
+                continue
+
+            desc = row[desc_idx].strip()
+            existing = conn.execute(
+                """SELECT id FROM bank_deposits
+                   WHERE account_id = ? AND deposit_date = ? AND ABS(amount - ?) < 0.01
+                   AND description = ?""",
+                (account_id, parsed_date, amount, desc),
+            ).fetchone()
+            if existing:
+                skipped += 1
+                continue
+
+            conn.execute(
+                """INSERT INTO bank_deposits
+                   (account_id, deposit_date, amount, description, source, import_batch_id, raw_data)
+                   VALUES (?, ?, ?, ?, 'other', ?, ?)""",
+                (account_id, parsed_date, amount, desc, batch_id, ",".join(row)),
+            )
+            imported += 1
+            if len(preview) < 50:
+                preview.append({"date": parsed_date, "description": desc,
+                                "amount": amount, "source": "other"})
+
+        conn.commit()
+
+    return {"import_batch_id": batch_id, "imported": imported, "skipped": skipped,
+            "format": "Generic", "rows_preview": preview}
+
+
+def _import_pdf_deposits(file_bytes, batch_id, account_id, db_path):
+    """Extract deposits from a PDF bank statement using pdfplumber + Claude AI."""
+    try:
+        import pdfplumber
+    except ImportError:
+        return {"import_batch_id": batch_id, "imported": 0, "skipped": 0,
+                "format": "PDF", "error": "pdfplumber not installed",
+                "rows_preview": []}
+
+    text_pages = []
+    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+        for page in pdf.pages:
+            text_pages.append(page.extract_text() or "")
+    full_text = "\n---PAGE BREAK---\n".join(text_pages)
+
+    if not full_text.strip():
+        return {"import_batch_id": batch_id, "imported": 0, "skipped": 0,
+                "format": "PDF", "error": "No text extracted from PDF",
+                "rows_preview": []}
+
+    # Use Claude to parse transaction rows
+    try:
+        client = _anthropic.Anthropic()
+        resp = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": (
+                "Parse this bank statement text into a JSON array of deposit transactions. "
+                "Only include CREDITS/DEPOSITS (positive amounts). Return ONLY valid JSON:\n"
+                '[{"date": "YYYY-MM-DD", "description": "...", "amount": 123.45}]\n\n'
+                f"Bank statement text:\n{full_text[:8000]}"
+            )}],
+        )
+        raw = resp.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        parsed_rows = json.loads(raw)
+    except Exception as e:
+        return {"import_batch_id": batch_id, "imported": 0, "skipped": 0,
+                "format": "PDF", "error": f"AI parsing failed: {e}",
+                "rows_preview": []}
+
+    imported, skipped = 0, 0
+    preview = []
+
+    with _connect(db_path) as conn:
+        for pr in parsed_rows:
+            deposit_date = pr.get("date", "")
+            amount = _parse_dollar(pr.get("amount"))
+            desc = pr.get("description", "")
+            if not deposit_date or amount <= 0:
+                continue
+
+            existing = conn.execute(
+                """SELECT id FROM bank_deposits
+                   WHERE account_id = ? AND deposit_date = ? AND ABS(amount - ?) < 0.01
+                   AND description = ?""",
+                (account_id, deposit_date, amount, desc),
+            ).fetchone()
+            if existing:
+                skipped += 1
+                continue
+
+            source = "godaddy" if "GODADDY" in desc.upper() else "other"
+            conn.execute(
+                """INSERT INTO bank_deposits
+                   (account_id, deposit_date, amount, description, source, import_batch_id)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (account_id, deposit_date, amount, desc, source, batch_id),
+            )
+            imported += 1
+            if len(preview) < 50:
+                preview.append({"date": deposit_date, "description": desc,
+                                "amount": amount, "source": source})
+
+        conn.commit()
+
+    return {"import_batch_id": batch_id, "imported": imported, "skipped": skipped,
+            "format": "PDF (AI-parsed)", "rows_preview": preview}
+
+
+def run_deposit_auto_match(account_id: int | None = None,
+                           db_path: str | Path | None = None) -> dict:
+    """Auto-match bank_deposits to acct_transactions.
+
+    GoDaddy batches: match by date ± 2 days, sum comparison.
+    Venmo: match by amount + customer name in description.
+    Other: match by amount + date ± 1 day, flag for manual.
+
+    Returns {auto_matched, partial, unmatched, details}.
+    """
+    results = {"auto_matched": 0, "partial": 0, "unmatched": 0, "details": []}
+
+    with _connect(db_path) as conn:
+        where = "d.status != 'matched'"
+        params = []
+        if account_id:
+            where += " AND d.account_id = ?"
+            params.append(account_id)
+
+        deposits = conn.execute(
+            f"""SELECT d.*, ba.account_type
+                FROM bank_deposits d
+                JOIN bank_accounts ba ON ba.id = d.account_id
+                WHERE {where}
+                ORDER BY d.deposit_date""",
+            params,
+        ).fetchall()
+        deposits = [dict(d) for d in deposits]
+
+        for dep in deposits:
+            dep_id = dep["id"]
+            dep_date = dep["deposit_date"]
+            dep_amt = dep["amount"]
+            dep_desc = (dep["description"] or "").upper()
+            dep_source = dep.get("source", "")
+            acct_type = dep.get("account_type", "")
+
+            matched_txn_ids = []
+            confidence = 0.0
+            detail = ""
+
+            if dep_source == "godaddy" or "GODADDY" in dep_desc:
+                # GoDaddy batch: find income transactions within ± 2 days
+                candidates = conn.execute(
+                    """SELECT id, amount, date, customer, event_name, order_id
+                       FROM acct_transactions
+                       WHERE entry_type = 'income' AND source = 'godaddy'
+                       AND COALESCE(status, 'active') = 'active'
+                       AND ABS(julianday(date) - julianday(?)) <= 2
+                       AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
+                       ORDER BY date""",
+                    (dep_date,),
+                ).fetchall()
+                candidates = [dict(c) for c in candidates]
+
+                if candidates:
+                    # Sum candidate amounts and compare to deposit
+                    # GoDaddy deposits = sum(total_amount) - merchant_fee per order
+                    # For simplicity, match on total income minus estimated fees
+                    total_income = sum(c["amount"] for c in candidates)
+                    # Estimate deposit: income collected + tx fees - merchant fees
+                    # Deposit ≈ total_amount per order (item_price + tx_fee - nothing, GoDaddy deposits full amount then takes fee)
+                    # Actually GoDaddy deposits: total_amount - merchant_fee
+                    # Try direct amount match first
+                    gap = abs(total_income - dep_amt)
+
+                    if gap < 1.00:
+                        matched_txn_ids = [c["id"] for c in candidates]
+                        confidence = 0.95
+                        detail = f"Batch match: {len(candidates)} txns, gap ${gap:.2f}"
+                    elif gap < 5.00:
+                        matched_txn_ids = [c["id"] for c in candidates]
+                        confidence = 0.70
+                        detail = f"Partial batch: {len(candidates)} txns, gap ${gap:.2f}"
+                    else:
+                        # Try individual order matching by amount
+                        for c in candidates:
+                            if abs(c["amount"] - dep_amt) < 1.00:
+                                matched_txn_ids = [c["id"]]
+                                confidence = 0.90
+                                detail = f"Single order: {c['customer']} ${c['amount']:.2f}"
+                                break
+
+            elif acct_type == "venmo" or dep_source == "venmo":
+                # Venmo: match by exact amount + customer name
+                candidates = conn.execute(
+                    """SELECT id, amount, date, customer, event_name
+                       FROM acct_transactions
+                       WHERE entry_type = 'income'
+                       AND source IN ('venmo', 'cash', 'zelle')
+                       AND COALESCE(status, 'active') = 'active'
+                       AND ABS(amount - ?) < 0.01
+                       AND ABS(julianday(date) - julianday(?)) <= 1
+                       AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)""",
+                    (dep_amt, dep_date),
+                ).fetchall()
+                candidates = [dict(c) for c in candidates]
+
+                for c in candidates:
+                    cust_upper = (c.get("customer") or "").upper()
+                    if cust_upper and cust_upper in dep_desc:
+                        matched_txn_ids = [c["id"]]
+                        confidence = 0.95
+                        detail = f"Venmo name match: {c['customer']}"
+                        break
+                if not matched_txn_ids and len(candidates) == 1:
+                    matched_txn_ids = [candidates[0]["id"]]
+                    confidence = 0.70
+                    detail = f"Venmo amount match (no name): {candidates[0]['customer']}"
+
+            else:
+                # Zelle/other: match by amount + date ± 1 day, always flag
+                candidates = conn.execute(
+                    """SELECT id, amount, date, customer, event_name
+                       FROM acct_transactions
+                       WHERE entry_type = 'income'
+                       AND COALESCE(status, 'active') = 'active'
+                       AND ABS(amount - ?) < 0.01
+                       AND ABS(julianday(date) - julianday(?)) <= 1
+                       AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)""",
+                    (dep_amt, dep_date),
+                ).fetchall()
+                candidates = [dict(c) for c in candidates]
+                if candidates:
+                    matched_txn_ids = [candidates[0]["id"]]
+                    confidence = 0.60
+                    detail = f"Amount+date match: {candidates[0]['customer']} (needs manual confirm)"
+
+            # Create matches and update status
+            if matched_txn_ids:
+                for txn_id in matched_txn_ids:
+                    try:
+                        conn.execute(
+                            """INSERT OR IGNORE INTO reconciliation_matches
+                               (bank_deposit_id, acct_transaction_id, match_type, match_confidence)
+                               VALUES (?, ?, 'auto', ?)""",
+                            (dep_id, txn_id, confidence),
+                        )
+                    except sqlite3.IntegrityError:
+                        pass
+
+                new_status = "matched" if confidence >= 0.85 else "partial"
+                conn.execute(
+                    "UPDATE bank_deposits SET status = ? WHERE id = ?",
+                    (new_status, dep_id),
+                )
+
+                # Mark matched acct_transactions as reconciled
+                if new_status == "matched":
+                    for txn_id in matched_txn_ids:
+                        conn.execute(
+                            "UPDATE acct_transactions SET status = 'reconciled' WHERE id = ?",
+                            (txn_id,),
+                        )
+
+                if new_status == "matched":
+                    results["auto_matched"] += 1
+                else:
+                    results["partial"] += 1
+                results["details"].append({
+                    "deposit_id": dep_id, "date": dep_date, "amount": dep_amt,
+                    "status": new_status, "confidence": confidence,
+                    "matched_txns": len(matched_txn_ids), "detail": detail,
+                })
+            else:
+                results["unmatched"] += 1
+
+        conn.commit()
+
+    return results
+
+
+def manual_match_deposit(bank_deposit_id: int, acct_transaction_id: int,
+                         db_path: str | Path | None = None) -> dict:
+    """Manually match a bank deposit to an acct_transaction."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT OR IGNORE INTO reconciliation_matches
+               (bank_deposit_id, acct_transaction_id, match_type, match_confidence)
+               VALUES (?, ?, 'manual', 1.0)""",
+            (bank_deposit_id, acct_transaction_id),
+        )
+        # Check if all matches for this deposit are confirmed
+        conn.execute(
+            "UPDATE bank_deposits SET status = 'matched' WHERE id = ?",
+            (bank_deposit_id,),
+        )
+        conn.execute(
+            "UPDATE acct_transactions SET status = 'reconciled' WHERE id = ?",
+            (acct_transaction_id,),
+        )
+        conn.commit()
+    return {"status": "ok"}
+
+
+def unmatch_deposit(bank_deposit_id: int, acct_transaction_id: int | None = None,
+                    db_path: str | Path | None = None) -> dict:
+    """Remove a reconciliation match. If acct_transaction_id is None, remove all matches."""
+    with _connect(db_path) as conn:
+        if acct_transaction_id:
+            conn.execute(
+                "DELETE FROM reconciliation_matches WHERE bank_deposit_id = ? AND acct_transaction_id = ?",
+                (bank_deposit_id, acct_transaction_id),
+            )
+            conn.execute(
+                "UPDATE acct_transactions SET status = 'active' WHERE id = ?",
+                (acct_transaction_id,),
+            )
+        else:
+            txn_ids = [r[0] for r in conn.execute(
+                "SELECT acct_transaction_id FROM reconciliation_matches WHERE bank_deposit_id = ?",
+                (bank_deposit_id,),
+            ).fetchall()]
+            conn.execute(
+                "DELETE FROM reconciliation_matches WHERE bank_deposit_id = ?",
+                (bank_deposit_id,),
+            )
+            for tid in txn_ids:
+                conn.execute(
+                    "UPDATE acct_transactions SET status = 'active' WHERE id = ?", (tid,),
+                )
+
+        # Reset deposit status
+        remaining = conn.execute(
+            "SELECT COUNT(*) as cnt FROM reconciliation_matches WHERE bank_deposit_id = ?",
+            (bank_deposit_id,),
+        ).fetchone()["cnt"]
+        new_status = "matched" if remaining > 0 else "unmatched"
+        conn.execute(
+            "UPDATE bank_deposits SET status = ? WHERE id = ?",
+            (new_status, bank_deposit_id),
+        )
+        conn.commit()
+    return {"status": "ok"}
+
+
+def get_bank_deposits(account_id: int | None = None, status: str | None = None,
+                      month: str | None = None,
+                      db_path: str | Path | None = None) -> list[dict]:
+    """Return bank deposits with match info."""
+    with _connect(db_path) as conn:
+        clauses, params = [], []
+        if account_id:
+            clauses.append("d.account_id = ?"); params.append(account_id)
+        if status:
+            clauses.append("d.status = ?"); params.append(status)
+        if month:
+            clauses.append("d.deposit_date LIKE ?"); params.append(f"{month}%")
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+        rows = conn.execute(
+            f"""SELECT d.*, ba.name as account_name, ba.account_type,
+                       GROUP_CONCAT(rm.acct_transaction_id) as matched_txn_ids,
+                       GROUP_CONCAT(rm.match_confidence) as match_confidences
+                FROM bank_deposits d
+                JOIN bank_accounts ba ON ba.id = d.account_id
+                LEFT JOIN reconciliation_matches rm ON rm.bank_deposit_id = d.id
+                {where}
+                GROUP BY d.id
+                ORDER BY d.deposit_date DESC""",
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_unreconciled_transactions(account: str | None = None, month: str | None = None,
+                                  db_path: str | Path | None = None) -> list[dict]:
+    """Return acct_transactions not yet matched to any bank deposit."""
+    with _connect(db_path) as conn:
+        clauses = [
+            "t.entry_type IS NOT NULL",
+            "t.entry_type = 'income'",
+            "COALESCE(t.status, 'active') = 'active'",
+            "t.id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)",
+        ]
+        params = []
+        if account:
+            clauses.append("t.account = ?"); params.append(account)
+        if month:
+            clauses.append("t.date LIKE ?"); params.append(f"{month}%")
+        where = " AND ".join(clauses)
+        rows = conn.execute(
+            f"""SELECT t.* FROM acct_transactions t
+                WHERE {where}
+                ORDER BY t.date DESC""",
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_reconciliation_dashboard(db_path: str | Path | None = None) -> dict:
+    """Summary data for the reconciliation dashboard cards."""
+    with _connect(db_path) as conn:
+        accounts = conn.execute(
+            "SELECT * FROM bank_accounts WHERE is_active = 1 ORDER BY name"
+        ).fetchall()
+        result = []
+        for acct in accounts:
+            acct = dict(acct)
+            aid = acct["id"]
+
+            last_import = conn.execute(
+                "SELECT MAX(created_at) as last_import FROM bank_deposits WHERE account_id = ?",
+                (aid,),
+            ).fetchone()
+
+            book_balance = conn.execute(
+                """SELECT COALESCE(SUM(t.amount), 0) as total
+                   FROM acct_transactions t
+                   JOIN reconciliation_matches rm ON rm.acct_transaction_id = t.id
+                   JOIN bank_deposits d ON d.id = rm.bank_deposit_id AND d.account_id = ?""",
+                (aid,),
+            ).fetchone()["total"]
+
+            bank_balance = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM bank_deposits WHERE account_id = ? AND status = 'matched'",
+                (aid,),
+            ).fetchone()["total"]
+
+            unmatched_count = conn.execute(
+                "SELECT COUNT(*) as cnt FROM bank_deposits WHERE account_id = ? AND status = 'unmatched'",
+                (aid,),
+            ).fetchone()["cnt"]
+
+            partial_count = conn.execute(
+                "SELECT COUNT(*) as cnt FROM bank_deposits WHERE account_id = ? AND status = 'partial'",
+                (aid,),
+            ).fetchone()["cnt"]
+
+            acct["last_import"] = last_import["last_import"] if last_import else None
+            acct["book_balance"] = round(book_balance, 2)
+            acct["bank_balance"] = round(bank_balance, 2)
+            acct["variance"] = round(bank_balance - book_balance, 2)
+            acct["unmatched_count"] = unmatched_count
+            acct["partial_count"] = partial_count
+            result.append(acct)
+
+        return {"accounts": result}
+
+
+def get_monthly_reconciliation(month: str, db_path: str | Path | None = None) -> dict:
+    """Monthly summary for the reconciliation reports tab."""
+    with _connect(db_path) as conn:
+        # Income by category from acct_transactions
+        income_rows = conn.execute(
+            """SELECT category, COALESCE(SUM(amount), 0) as total, COUNT(*) as cnt
+               FROM acct_transactions
+               WHERE entry_type = 'income' AND date LIKE ?
+               AND COALESCE(status, 'active') != 'reversed'
+               AND entry_type IS NOT NULL
+               GROUP BY category""",
+            (f"{month}%",),
+        ).fetchall()
+
+        # Expenses by category
+        expense_rows = conn.execute(
+            """SELECT category, COALESCE(SUM(amount), 0) as total, COUNT(*) as cnt
+               FROM acct_transactions
+               WHERE entry_type IN ('expense', 'contra') AND date LIKE ?
+               AND COALESCE(status, 'active') != 'reversed'
+               AND entry_type IS NOT NULL
+               GROUP BY category""",
+            (f"{month}%",),
+        ).fetchall()
+
+        # Reconciliation stats
+        total_txns = conn.execute(
+            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE date LIKE ? AND entry_type IS NOT NULL AND COALESCE(status, 'active') != 'reversed'",
+            (f"{month}%",),
+        ).fetchone()["cnt"]
+
+        reconciled_txns = conn.execute(
+            """SELECT COUNT(DISTINCT rm.acct_transaction_id) as cnt
+               FROM reconciliation_matches rm
+               JOIN acct_transactions t ON t.id = rm.acct_transaction_id
+               WHERE t.date LIKE ?""",
+            (f"{month}%",),
+        ).fetchone()["cnt"]
+
+        return {
+            "month": month,
+            "income": [dict(r) for r in income_rows],
+            "expenses": [dict(r) for r in expense_rows],
+            "total_transactions": total_txns,
+            "reconciled_transactions": reconciled_txns,
+            "reconciliation_pct": round(reconciled_txns / total_txns * 100, 1) if total_txns else 0,
+        }
+
+
+def get_event_reconciliation_status(event_name: str,
+                                    db_path: str | Path | None = None) -> dict:
+    """Reconciliation status for a specific event (for Financial tab indicator)."""
+    with _connect(db_path) as conn:
+        alias_names = [
+            r[0] for r in conn.execute(
+                "SELECT alias_name FROM event_aliases WHERE canonical_event_name = ? COLLATE NOCASE",
+                (event_name,),
+            ).fetchall()
+        ]
+        all_names = [event_name] + alias_names
+        placeholders = ",".join(["?"] * len(all_names))
+
+        total = conn.execute(
+            f"""SELECT COUNT(*) as cnt FROM acct_transactions
+                WHERE event_name COLLATE NOCASE IN ({placeholders})
+                AND entry_type = 'income'
+                AND COALESCE(status, 'active') != 'reversed'
+                AND entry_type IS NOT NULL""",
+            all_names,
+        ).fetchone()["cnt"]
+
+        reconciled = conn.execute(
+            f"""SELECT COUNT(DISTINCT rm.acct_transaction_id) as cnt
+                FROM reconciliation_matches rm
+                JOIN acct_transactions t ON t.id = rm.acct_transaction_id
+                WHERE t.event_name COLLATE NOCASE IN ({placeholders})
+                AND t.entry_type = 'income'""",
+            all_names,
+        ).fetchone()["cnt"]
+
+        matched_amt = conn.execute(
+            f"""SELECT COALESCE(SUM(t.amount), 0) as total
+                FROM reconciliation_matches rm
+                JOIN acct_transactions t ON t.id = rm.acct_transaction_id
+                WHERE t.event_name COLLATE NOCASE IN ({placeholders})
+                AND t.entry_type = 'income'""",
+            all_names,
+        ).fetchone()["total"]
+
+        return {
+            "total_transactions": total,
+            "reconciled_transactions": reconciled,
+            "matched_amount": round(matched_amt, 2),
+        }
+
+
+def get_cashflow_data(weeks: int = 13, db_path: str | Path | None = None) -> list[dict]:
+    """Return weekly cash flow data for the rolling view (default 13 weeks = ~90 days)."""
+    from datetime import date as _date
+
+    today = _date.today()
+    # Start from the beginning of the current week (Monday)
+    start = today - timedelta(days=today.weekday())
+    # Go back 'weeks' weeks
+    start = start - timedelta(weeks=weeks - 1)
+
+    result = []
+
+    with _connect(db_path) as conn:
+        running_balance = 0.0
+
+        for w in range(weeks):
+            week_start = start + timedelta(weeks=w)
+            week_end = week_start + timedelta(days=6)
+            ws = week_start.strftime("%Y-%m-%d")
+            we = week_end.strftime("%Y-%m-%d")
+
+            # Expected income (all income entries in this week)
+            expected = conn.execute(
+                """SELECT COALESCE(SUM(amount), 0) as total FROM acct_transactions
+                   WHERE entry_type = 'income' AND date BETWEEN ? AND ?
+                   AND COALESCE(status, 'active') != 'reversed'
+                   AND entry_type IS NOT NULL""",
+                (ws, we),
+            ).fetchone()["total"]
+
+            # Confirmed income (reconciled to bank)
+            confirmed = conn.execute(
+                """SELECT COALESCE(SUM(t.amount), 0) as total
+                   FROM acct_transactions t
+                   JOIN reconciliation_matches rm ON rm.acct_transaction_id = t.id
+                   WHERE t.entry_type = 'income' AND t.date BETWEEN ? AND ?""",
+                (ws, we),
+            ).fetchone()["total"]
+
+            # Projected expenses (processing fees + refunds + contra)
+            proj_expenses = conn.execute(
+                """SELECT COALESCE(SUM(amount), 0) as total FROM acct_transactions
+                   WHERE entry_type IN ('expense', 'contra') AND date BETWEEN ? AND ?
+                   AND COALESCE(status, 'active') != 'reversed'
+                   AND entry_type IS NOT NULL""",
+                (ws, we),
+            ).fetchone()["total"]
+
+            # Actual expenses (reconciled outflows)
+            actual_expenses = conn.execute(
+                """SELECT COALESCE(SUM(t.amount), 0) as total
+                   FROM acct_transactions t
+                   JOIN reconciliation_matches rm ON rm.acct_transaction_id = t.id
+                   WHERE t.entry_type IN ('expense', 'contra') AND t.date BETWEEN ? AND ?""",
+                (ws, we),
+            ).fetchone()["total"]
+
+            net = round(expected - proj_expenses, 2)
+            running_balance += net
+
+            result.append({
+                "week_ending": we,
+                "expected_income": round(expected, 2),
+                "confirmed_income": round(confirmed, 2),
+                "projected_expenses": round(proj_expenses, 2),
+                "actual_expenses": round(actual_expenses, 2),
+                "net": net,
+                "running_balance": round(running_balance, 2),
+                "warning": proj_expenses > confirmed and confirmed > 0,
+            })
+
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════
