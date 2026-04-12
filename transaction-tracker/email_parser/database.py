@@ -3203,6 +3203,87 @@ def resolve_parse_warning(warning_id: int,
         return cursor.rowcount > 0
 
 
+def scan_price_games_mismatches(db_path: str | Path | None = None) -> dict:
+    """Scan all existing items for item_price vs total_amount mismatches.
+
+    For each GoDaddy item, compares item_price against (total_amount - transaction_fees).
+    If they don't match (> $1 tolerance), the parser likely grabbed a description price
+    instead of the actual charged amount. Works for ALL events and pricing tiers.
+
+    Creates parse_warnings for any mismatches found. Returns a summary dict.
+    """
+    results = {"scanned": 0, "warnings_created": 0, "already_warned": 0, "details": []}
+
+    with _connect(db_path) as conn:
+        items = conn.execute(
+            """SELECT id, email_uid, order_id, customer, item_name,
+                      item_price, total_amount, transaction_fees
+               FROM items
+               WHERE COALESCE(transaction_status, 'active') = 'active'
+               AND parent_item_id IS NULL
+               AND item_price IS NOT NULL
+               AND total_amount IS NOT NULL
+               AND merchant NOT IN ('Manual Entry', 'RSVP Only', 'Roster Import',
+                                     'Customer Entry', 'RSVP Import', 'RSVP Email Link')
+               AND email_uid NOT LIKE 'manual-%'
+               AND email_uid NOT LIKE 'transfer-%'"""
+        ).fetchall()
+
+        results["scanned"] = len(items)
+
+        for item in items:
+            raw_price = (item["item_price"] or "").replace("$", "").replace(",", "").split("(")[0].strip()
+            raw_total = (item["total_amount"] or "").replace("$", "").replace(",", "").strip()
+            raw_fees = (item["transaction_fees"] or "0").replace("$", "").replace(",", "").strip()
+            try:
+                price = float(raw_price)
+                total = float(raw_total)
+                fees = float(raw_fees) if raw_fees else 0
+            except (ValueError, TypeError):
+                continue
+
+            if price <= 0 or total <= 0:
+                continue
+
+            expected_price = round(total - fees, 2)
+            if abs(price - expected_price) <= 1.0:
+                continue  # within tolerance
+
+            # Check if warning already exists
+            existing = conn.execute(
+                "SELECT id FROM parse_warnings WHERE email_uid = ? AND warning_code = ? AND item_name = ?",
+                (item["email_uid"], "price_total_mismatch", item["item_name"]),
+            ).fetchone()
+
+            if existing:
+                results["already_warned"] += 1
+                continue
+
+            msg = (f"item_price=${price:.2f} does not match "
+                   f"total_amount=${total:.2f} - transaction_fees=${fees:.2f} = "
+                   f"${expected_price:.2f}. Parser may have grabbed a description "
+                   f"price instead of the actual charged amount. "
+                   f"Order: {item['order_id'] or '?'}")
+
+            conn.execute(
+                """INSERT OR IGNORE INTO parse_warnings
+                   (email_uid, order_id, customer, item_name, warning_code, message)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (item["email_uid"], item["order_id"], item["customer"],
+                 item["item_name"], "price_total_mismatch", msg),
+            )
+            results["warnings_created"] += 1
+            results["details"].append({
+                "id": item["id"], "customer": item["customer"],
+                "item_name": item["item_name"], "item_price": price,
+                "expected": expected_price, "order_id": item["order_id"],
+            })
+
+        conn.commit()
+
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Customer Merge
 # ---------------------------------------------------------------------------

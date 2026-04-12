@@ -729,6 +729,39 @@ def _validate_parsed_items(rows: list[dict]) -> list[dict]:
                     item_name, row.get("customer"), row.get("order_id"),
                 )
 
+        # 4. item_price doesn't match total_amount - transaction_fees
+        #    (parser grabbed "MEMBER = $88" instead of Subtotal $148)
+        #    Works for ALL events and pricing tiers — no hardcoded rates.
+        raw_price = (row.get("item_price") or "").replace("$", "").replace(",", "").strip()
+        raw_total = (row.get("total_amount") or "").replace("$", "").replace(",", "").strip()
+        raw_fees = (row.get("transaction_fees") or "").replace("$", "").replace(",", "").strip()
+        try:
+            price = float(raw_price) if raw_price else 0
+            total = float(raw_total) if raw_total else 0
+            fees = float(raw_fees) if raw_fees else 0
+        except (ValueError, TypeError):
+            price, total, fees = 0, 0, 0
+
+        if price > 0 and total > 0 and fees >= 0:
+            expected_price = round(total - fees, 2)
+            # Allow $1 tolerance for rounding differences
+            if abs(price - expected_price) > 1.0:
+                row_warnings.append({
+                    "code": "price_total_mismatch",
+                    "message": (
+                        f"item_price=${price:.2f} does not match "
+                        f"total_amount=${total:.2f} - transaction_fees=${fees:.2f} = "
+                        f"${expected_price:.2f}. Parser may have grabbed a description "
+                        f"price instead of the actual charged amount. "
+                        f"Order: {row.get('order_id', '?')}"
+                    ),
+                })
+                logger.warning(
+                    "Parse validation: price_total_mismatch — price=$%.2f vs "
+                    "expected=$%.2f (order_id=%s, customer=%s)",
+                    price, expected_price, row.get("order_id"), row.get("customer"),
+                )
+
         if row_warnings:
             row["_parse_warnings"] = row_warnings
             warnings.extend(row_warnings)
