@@ -846,8 +846,48 @@ def start_scheduler():
     else:
         logger.info("Golf Genius sync not scheduled — GOLF_GENIUS_EMAIL/PASSWORD not set")
 
+    # Weekly cleanup: prune old processed_emails records (>90 days)
+    scheduler.add_job(
+        prune_processed_emails,
+        "cron",
+        day_of_week="sun",
+        hour=3,
+        minute=0,
+        timezone="US/Central",
+        id="prune_processed_emails",
+        replace_existing=True,
+    )
+    logger.info("Processed emails pruning scheduled Sundays at 03:00 US/Central")
+
+    # Run one-time startup prune
+    try:
+        pruned = prune_processed_emails()
+        logger.info("Startup prune: deleted %d processed_emails older than 90 days", pruned)
+    except Exception:
+        logger.exception("Startup prune failed (non-fatal)")
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
+
+
+def prune_processed_emails(days=90):
+    """Delete processed_emails records older than N days.
+
+    These records only exist to prevent re-parsing the same email. After 90 days
+    the email is long gone from the inbox anyway, so the record is dead weight.
+    Returns the number of rows deleted.
+    """
+    from email_parser.database import _connect
+    with _connect() as conn:
+        cursor = conn.execute(
+            "DELETE FROM processed_emails WHERE processed_at < datetime('now', ?)",
+            (f"-{days} days",),
+        )
+        conn.commit()
+        deleted = cursor.rowcount
+    if deleted:
+        logger.info("Pruned %d processed_emails older than %d days", deleted, days)
+    return deleted
 
 
 def send_auto_payment_reminders():
