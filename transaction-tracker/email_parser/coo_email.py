@@ -20,6 +20,7 @@ from email_parser.database import (
     get_coo_financial_snapshot,
     get_pending_review_count,
     get_all_events,
+    _connect,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,9 +65,23 @@ def build_coo_email_html() -> tuple[str, str]:
     ]
     upcoming.sort(key=lambda e: e.get("event_date", ""))
 
+    # Parse warnings
+    try:
+        with _connect() as conn:
+            new_warnings = conn.execute(
+                "SELECT COUNT(*) as cnt FROM parse_warnings WHERE status = 'open' AND created_at >= datetime('now', '-24 hours')"
+            ).fetchone()["cnt"]
+            total_warnings = conn.execute(
+                "SELECT COUNT(*) as cnt FROM parse_warnings WHERE status = 'open'"
+            ).fetchone()["cnt"]
+    except Exception:
+        new_warnings, total_warnings = 0, 0
+
     # Subject
     action_count = len(action_items)
     subject = f"TGF Daily Briefing \u2014 {day_str} | {action_count} Action Item{'s' if action_count != 1 else ''}"
+    if new_warnings > 0:
+        subject = f"\u26a0\ufe0f {subject} ({new_warnings} new parse warning{'s' if new_warnings != 1 else ''})"
 
     # ── Build HTML ──
     html = f"""<!DOCTYPE html>
@@ -105,6 +120,28 @@ def build_coo_email_html() -> tuple[str, str]:
   </div>
   <div style="font-size:14px;line-height:1.5;">{summary}</div>
   <div style="margin-top:6px;"><a href="{link}" style="font-size:12px;color:#2563eb;text-decoration:none;">View in COO Dashboard &rarr;</a></div>
+</div>"""
+    html += _section_end()
+
+    # ── Section 1b: Parse Warnings ──
+    html += _section_header("\U0001f50d Parse Warnings")
+    if total_warnings == 0:
+        html += _info_box("\u2705 No open warnings")
+    else:
+        warn_border = _RED if new_warnings > 0 else _AMBER
+        html += f"""
+<div style="padding:12px 16px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;border-left:4px solid {warn_border};">
+  <table width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td style="font-size:13px;color:{_GRAY};">New (last 24h)</td>
+    <td style="font-size:16px;font-weight:700;text-align:right;color:{_RED if new_warnings > 0 else _GRAY};">{new_warnings}</td>
+  </tr>
+  <tr>
+    <td style="font-size:13px;color:{_GRAY};padding-top:4px;">Total open</td>
+    <td style="font-size:16px;font-weight:700;text-align:right;padding-top:4px;">{total_warnings}</td>
+  </tr>
+  </table>
+  <div style="margin-top:8px;"><a href="{_BASE_URL}/admin" style="font-size:12px;color:#2563eb;text-decoration:none;">View Audit Log &rarr;</a></div>
 </div>"""
     html += _section_end()
 
