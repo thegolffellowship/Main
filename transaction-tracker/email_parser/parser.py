@@ -729,6 +729,35 @@ def _validate_parsed_items(rows: list[dict]) -> list[dict]:
                     item_name, row.get("customer"), row.get("order_id"),
                 )
 
+        # 4. Side games selected but item_price may equal base rate only
+        #    (parser grabbed "MEMBER = $88" instead of Subtotal $148)
+        side_games = (row.get("side_games") or "").strip().upper()
+        if side_games in ("NET", "GROSS", "BOTH"):
+            raw_price = (row.get("item_price") or "").replace("$", "").replace(",", "").strip()
+            try:
+                price = float(raw_price)
+            except (ValueError, TypeError):
+                price = 0
+            if price > 0:
+                # Known base rates that never include side game add-ons
+                # These are the standard member/1st-timer rates WITHOUT games
+                _BASE_RATES_NO_GAMES = {73, 88, 102}
+                if price in _BASE_RATES_NO_GAMES:
+                    row_warnings.append({
+                        "code": "price_games_mismatch",
+                        "message": (
+                            f"Player selected {side_games} games but item_price=${price:.2f} "
+                            f"matches a base rate with no add-ons. Expected higher amount if "
+                            f"games were added. Likely parsed from 'MEMBER = ${price:.0f}' "
+                            f"instead of the Subtotal line. Order: {row.get('order_id', '?')}"
+                        ),
+                    })
+                    logger.warning(
+                        "Parse validation: price_games_mismatch — %s games but price=$%.2f "
+                        "(order_id=%s, customer=%s)",
+                        side_games, price, row.get("order_id"), row.get("customer"),
+                    )
+
         if row_warnings:
             row["_parse_warnings"] = row_warnings
             warnings.extend(row_warnings)

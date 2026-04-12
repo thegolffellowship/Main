@@ -152,6 +152,7 @@ from email_parser.database import (
     get_acct_allocations,
     get_event_financial_summary,
     backfill_financial_entries,
+    scan_price_games_mismatches,
     save_expense_transaction,
     get_expense_transactions,
     get_unified_transactions,
@@ -5268,6 +5269,17 @@ def api_backfill_financials():
     """Backfill accounting entries for existing items missing them (Issue #242)."""
     try:
         result = backfill_financial_entries()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/audit/scan-price-mismatches", methods=["POST"])
+@require_role("admin")
+def api_scan_price_mismatches():
+    """Scan all items for side_games / item_price mismatches and create parse warnings."""
+    try:
+        result = scan_price_games_mismatches()
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

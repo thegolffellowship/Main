@@ -3203,6 +3203,74 @@ def resolve_parse_warning(warning_id: int,
         return cursor.rowcount > 0
 
 
+def scan_price_games_mismatches(db_path: str | Path | None = None) -> dict:
+    """Scan all existing items for side_games / item_price mismatches.
+
+    Finds active items where a player selected NET/GROSS/BOTH games but
+    the item_price matches a known base rate (no add-ons), indicating the
+    parser likely grabbed the membership tier price instead of the actual
+    charged amount.
+
+    Creates parse_warnings for any mismatches found. Returns a summary dict.
+    """
+    # Known base rates that never include side game add-ons
+    _BASE_RATES = {73.0, 88.0, 102.0}
+
+    results = {"scanned": 0, "warnings_created": 0, "already_warned": 0}
+
+    with _connect(db_path) as conn:
+        items = conn.execute(
+            """SELECT id, email_uid, order_id, customer, item_name, item_price, side_games
+               FROM items
+               WHERE COALESCE(transaction_status, 'active') = 'active'
+               AND side_games IS NOT NULL
+               AND UPPER(TRIM(side_games)) IN ('NET', 'GROSS', 'BOTH')
+               AND parent_item_id IS NULL"""
+        ).fetchall()
+
+        results["scanned"] = len(items)
+
+        for item in items:
+            raw = (item["item_price"] or "").replace("$", "").replace(",", "").strip()
+            # Handle "(credit)" suffix
+            raw = raw.split("(")[0].strip()
+            try:
+                price = float(raw)
+            except (ValueError, TypeError):
+                continue
+
+            if price not in _BASE_RATES:
+                continue
+
+            side_games = item["side_games"].strip().upper()
+
+            # Check if warning already exists
+            existing = conn.execute(
+                "SELECT id FROM parse_warnings WHERE email_uid = ? AND warning_code = ? AND item_name = ?",
+                (item["email_uid"], "price_games_mismatch", item["item_name"]),
+            ).fetchone()
+
+            if existing:
+                results["already_warned"] += 1
+                continue
+
+            conn.execute(
+                """INSERT OR IGNORE INTO parse_warnings
+                   (email_uid, order_id, customer, item_name, warning_code, message)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (item["email_uid"], item["order_id"], item["customer"],
+                 item["item_name"], "price_games_mismatch",
+                 f"Player selected {side_games} games but item_price=${price:.2f} "
+                 f"matches a base rate with no add-ons. Expected higher amount if "
+                 f"games were added. Order: {item['order_id'] or '?'}"),
+            )
+            results["warnings_created"] += 1
+
+        conn.commit()
+
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Customer Merge
 # ---------------------------------------------------------------------------
