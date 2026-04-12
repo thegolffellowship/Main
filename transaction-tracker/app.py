@@ -6068,13 +6068,16 @@ try:
         _bf_result = backfill_acct_transactions()
         logger.info("Startup backfill: %s", _bf_result)
     else:
-        # Check if old entries need merchant fee fix (description says "processing fee" not "merchant fee")
+        # Check if transfer target items were double-counted as registration income
         with _startup_connect() as _fix_conn:
-            _old_fees = _fix_conn.execute(
-                "SELECT COUNT(*) as cnt FROM acct_transactions WHERE category = 'processing_fee' AND description LIKE '%processing fee%'"
+            _bad_xfer = _fix_conn.execute(
+                """SELECT COUNT(*) as cnt FROM acct_transactions t
+                   JOIN items i ON i.id = t.item_id
+                   WHERE t.entry_type = 'income' AND t.category = 'registration'
+                   AND i.transferred_from_id IS NOT NULL"""
             ).fetchone()["cnt"]
-        if _old_fees > 0:
-            logger.info("Detected %d old processing fee entries — re-running backfill with merchant fee formula", _old_fees)
+        if _bad_xfer > 0:
+            logger.info("Detected %d transfer items double-counted as registrations — rebuilding", _bad_xfer)
             with _startup_connect() as _fix_conn:
                 _fix_conn.execute("DELETE FROM acct_transactions WHERE entry_type IS NOT NULL")
                 _fix_conn.commit()
