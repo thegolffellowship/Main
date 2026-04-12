@@ -188,8 +188,12 @@ def _parse_names_fallback(names: list[str]) -> list[dict]:
 
 
 def _backfill_name_parts(conn: sqlite3.Connection) -> None:
-    """One-time backfill: parse existing customer names into first/last parts."""
-    # Only process rows that have a customer but no first_name yet
+    """Backfill: parse customer names into first/last parts.
+
+    Skips customers that have failed 3+ times (tracked in name_parse_failures).
+    """
+    MAX_ATTEMPTS = 3
+
     rows = conn.execute(
         """SELECT DISTINCT customer FROM items
            WHERE customer IS NOT NULL AND customer != ''
@@ -200,20 +204,51 @@ def _backfill_name_parts(conn: sqlite3.Connection) -> None:
         return
 
     names = [r["customer"] for r in rows]
-    logger.info("Backfilling name parts for %d customers", len(names))
 
-    parsed = parse_names_ai(names)
+    # Filter out customers that have hit the retry cap
+    try:
+        failed = {r["customer_name"] for r in conn.execute(
+            "SELECT customer_name FROM name_parse_failures WHERE attempts >= ?",
+            (MAX_ATTEMPTS,),
+        ).fetchall()}
+    except sqlite3.OperationalError:
+        failed = set()  # table may not exist yet on first run
 
-    for name, parts in zip(names, parsed):
-        conn.execute(
-            """UPDATE items SET first_name = ?, last_name = ?, middle_name = ?, suffix = ?
-               WHERE customer = ? COLLATE NOCASE
-                 AND (first_name IS NULL OR first_name = '')""",
-            (parts.get("first_name"), parts.get("last_name"),
-             parts.get("middle_name"), parts.get("suffix"), name),
-        )
+    names_to_parse = [n for n in names if n not in failed]
+    skipped = len(names) - len(names_to_parse)
+
+    if skipped:
+        logger.info("Skipping name parse for %d customers (max retries reached)", skipped)
+    if not names_to_parse:
+        return
+
+    logger.info("Backfilling name parts for %d customers", len(names_to_parse))
+    parsed = parse_names_ai(names_to_parse)
+
+    for name, parts in zip(names_to_parse, parsed):
+        first = parts.get("first_name")
+        if first:
+            conn.execute(
+                """UPDATE items SET first_name = ?, last_name = ?, middle_name = ?, suffix = ?
+                   WHERE customer = ? COLLATE NOCASE
+                     AND (first_name IS NULL OR first_name = '')""",
+                (first, parts.get("last_name"), parts.get("middle_name"),
+                 parts.get("suffix"), name),
+            )
+            # Clear from failures if previously failed
+            conn.execute("DELETE FROM name_parse_failures WHERE customer_name = ?", (name,))
+        else:
+            # Parse returned no first_name — record the failure
+            conn.execute(
+                """INSERT INTO name_parse_failures (customer_name, attempts, last_attempt)
+                   VALUES (?, 1, datetime('now'))
+                   ON CONFLICT(customer_name) DO UPDATE SET
+                   attempts = attempts + 1, last_attempt = datetime('now')""",
+                (name,),
+            )
+
     conn.commit()
-    logger.info("Backfilled name parts for %d customers", len(names))
+    logger.info("Backfilled name parts for %d customers", len(names_to_parse))
 
 
 def _validate_column_names(columns: list[str]) -> None:
@@ -389,6 +424,15 @@ def init_db(db_path: str | Path | None = None) -> None:
                 alias_type      TEXT NOT NULL CHECK(alias_type IN ('name', 'email')),
                 alias_value     TEXT NOT NULL,
                 created_at      TEXT DEFAULT (datetime('now'))
+            )
+        """)
+
+        # Track customers whose name parsing has failed repeatedly
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS name_parse_failures (
+                customer_name TEXT PRIMARY KEY,
+                attempts      INTEGER DEFAULT 0,
+                last_attempt  TEXT DEFAULT (datetime('now'))
             )
         """)
 
