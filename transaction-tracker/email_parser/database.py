@@ -1125,6 +1125,33 @@ def init_db(db_path: str | Path | None = None) -> None:
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_splits_event ON acct_splits(event_id)")
 
+        # ── acct_transactions: single-source-of-truth columns ──
+        for col, col_type, default in [
+            ("item_id", "INTEGER", None),
+            ("event_name", "TEXT", None),
+            ("customer", "TEXT", None),
+            ("order_id", "TEXT", None),
+            ("entry_type", "TEXT", None),
+            ("category", "TEXT", None),
+            ("amount", "REAL", None),
+            ("account", "TEXT", None),
+            ("status", "TEXT", "'active'"),
+            ("reconciled_batch_id", "INTEGER", None),
+        ]:
+            try:
+                default_clause = f" DEFAULT {default}" if default else ""
+                conn.execute(
+                    f"ALTER TABLE acct_transactions ADD COLUMN {col} {col_type}{default_clause}"
+                )
+            except sqlite3.OperationalError:
+                pass
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_item ON acct_transactions(item_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_event_name ON acct_transactions(event_name)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_entry_type ON acct_transactions(entry_type)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_status ON acct_transactions(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_source_ref ON acct_transactions(source_ref)")
+
         # ── Unified financial model migrations (Issue #242) ──
         for col, col_type, default in [
             ("payment_method", "TEXT", "'godaddy'"),
@@ -2049,6 +2076,56 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                 cursor = conn.execute(sql, values)
                 if cursor.rowcount > 0:
                     inserted += 1
+                    # ── Accounting: create entries for GoDaddy orders ──
+                    try:
+                        new_item_id = cursor.lastrowid
+                        item_price = _parse_dollar(row.get("item_price"))
+                        tx_fees = _parse_dollar(row.get("transaction_fees"))
+                        merchant = row.get("merchant") or ""
+                        # Only create entries for real GoDaddy orders (not manual, not roster import)
+                        if item_price > 0 and merchant and not merchant.startswith(("Manual", "Paid Separately", "Roster", "Customer Entry", "RSVP")):
+                            event_name = row.get("item_name") or ""
+                            customer_name = row.get("customer") or ""
+                            order_id_val = row.get("order_id") or ""
+                            order_date = row.get("order_date") or ""
+
+                            # INCOME entry for registration revenue
+                            _write_acct_entry(
+                                conn,
+                                item_id=new_item_id,
+                                event_name=event_name,
+                                customer=customer_name,
+                                order_id=order_id_val,
+                                entry_type="income",
+                                category="registration",
+                                source="godaddy",
+                                amount=item_price,
+                                description=f"GoDaddy registration: {customer_name} — {event_name}",
+                                account="TGF Checking",
+                                source_ref=f"godaddy-income-{new_item_id}",
+                                date=order_date,
+                            )
+
+                            # EXPENSE entry for processing fee (if > 0)
+                            if tx_fees > 0:
+                                _write_acct_entry(
+                                    conn,
+                                    item_id=new_item_id,
+                                    event_name=event_name,
+                                    customer=customer_name,
+                                    order_id=order_id_val,
+                                    entry_type="expense",
+                                    category="processing_fee",
+                                    source="godaddy",
+                                    amount=tx_fees,
+                                    description=f"GoDaddy processing fee: {customer_name} — {event_name}",
+                                    account="TGF Checking",
+                                    source_ref=f"godaddy-fee-{new_item_id}",
+                                    date=order_date,
+                                )
+                    except Exception:
+                        logger.warning("Failed to create accounting entries for item %s",
+                                       row.get("email_uid"), exc_info=True)
             except sqlite3.IntegrityError:
                 skipped += 1
                 logger.debug("Duplicate item skipped: email_uid=%s item_index=%s",
@@ -4254,6 +4331,33 @@ def refund_item(item_id: int, method: str = "", note: str = "",
             except Exception:
                 logger.warning("Failed to create accounting entry for refund %s", item_id, exc_info=True)
 
+            # ── Flat acct_transactions entry for single-source-of-truth ──
+            try:
+                item_d = dict(item) if not isinstance(item, dict) else item
+                refund_amount = _parse_dollar(item_d.get("item_price"))
+                if refund_amount > 0:
+                    refund_source = "manual"
+                    if method:
+                        refund_source = method.lower().replace(" ", "_")
+                    refund_account = "Venmo" if "venmo" in (method or "").lower() else "TGF Checking"
+                    _write_acct_entry(
+                        conn,
+                        item_id=item_id,
+                        event_name=item_d.get("item_name", ""),
+                        customer=item_d.get("customer", ""),
+                        order_id=item_d.get("order_id", ""),
+                        entry_type="expense",
+                        category="refund",
+                        source=refund_source,
+                        amount=refund_amount,
+                        description=f"Refund ({method}): {item_d.get('customer', '')} — {item_d.get('item_name', '')}",
+                        account=refund_account,
+                        source_ref=f"refund-flat-{item_id}",
+                        date=item_d.get("order_date") or "",
+                    )
+            except Exception:
+                logger.warning("Failed to create flat accounting entry for refund %s", item_id, exc_info=True)
+
         conn.commit()
         return cursor.rowcount > 0
 
@@ -4291,6 +4395,33 @@ def wd_item(
             "WHERE parent_item_id = ? AND COALESCE(transaction_status, 'active') = 'active'",
             (note or "WD (cascaded from parent)", item_id),
         )
+
+        # ── Accounting: liability entry for WD credits ──
+        if cursor.rowcount > 0 and credit_amount:
+            try:
+                wd_credit_val = _parse_dollar(credit_amount)
+                if wd_credit_val > 0:
+                    item_row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+                    if item_row:
+                        item_d = dict(item_row)
+                        _write_acct_entry(
+                            conn,
+                            item_id=item_id,
+                            event_name=item_d.get("item_name", ""),
+                            customer=item_d.get("customer", ""),
+                            order_id=item_d.get("order_id", ""),
+                            entry_type="liability",
+                            category="credit_issued",
+                            source="manual",
+                            amount=wd_credit_val,
+                            description=f"WD credit issued: {item_d.get('customer', '')} — {item_d.get('item_name', '')}",
+                            account="TGF Checking",
+                            source_ref=f"wd-credit-{item_id}",
+                            date=item_d.get("order_date") or "",
+                        )
+            except Exception:
+                logger.warning("Failed to create liability entry for WD %s", item_id, exc_info=True)
+
         conn.commit()
         return cursor.rowcount > 0
 
@@ -4433,6 +4564,37 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
                     override_price=orig_price,
                     create_txn=False,  # we already created the txn above
                 )
+
+                # 4. Flat acct_transactions entries for single-source-of-truth
+                _write_acct_entry(
+                    conn,
+                    item_id=item_id,
+                    event_name=source_event_name,
+                    customer=orig.get("customer", ""),
+                    order_id=orig.get("order_id", ""),
+                    entry_type="contra",
+                    category="transfer_out",
+                    source="godaddy",
+                    amount=orig_price,
+                    description=f"Credit transfer out: {orig.get('customer', '')} from {source_event_name} to {target_event_name}",
+                    account="TGF Checking",
+                    source_ref=f"xfer-flat-{item_id}-out",
+                    date=alloc_date,
+                )
+                _write_acct_entry(
+                    conn,
+                    item_id=new_id,
+                    event_name=target_event_name,
+                    customer=orig.get("customer", ""),
+                    entry_type="income",
+                    category="transfer_in",
+                    source="godaddy",
+                    amount=orig_price,
+                    description=f"Credit transfer in: {orig.get('customer', '')} to {target_event_name} from {source_event_name}",
+                    account="TGF Checking",
+                    source_ref=f"xfer-flat-{item_id}-in",
+                    date=alloc_date,
+                )
         except Exception:
             logger.warning("Failed to create accounting entries for transfer %s", item_id, exc_info=True)
 
@@ -4471,6 +4633,14 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
                 conn.execute("DELETE FROM acct_allocations WHERE order_id = ?", (f"XFER-{transferred_to_id}",))
             except Exception:
                 logger.warning("Failed to clean up accounting for reversed transfer %s", item_id, exc_info=True)
+            # Mark flat entries as reversed
+            try:
+                conn.execute(
+                    "UPDATE acct_transactions SET status = 'reversed' WHERE source_ref LIKE ? AND COALESCE(status, 'active') = 'active'",
+                    (f"xfer-flat-{item_id}-%",),
+                )
+            except Exception:
+                logger.warning("Failed to reverse flat transfer entries for %s", item_id, exc_info=True)
 
         if status == "refunded":
             # Clean up refund accounting entries
@@ -4479,6 +4649,24 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
                 conn.execute("DELETE FROM acct_transactions WHERE source_ref = ?", (f"refund-{item_id}",))
             except Exception:
                 logger.warning("Failed to clean up accounting for reversed refund %s", item_id, exc_info=True)
+            # Mark flat entry as reversed
+            try:
+                conn.execute(
+                    "UPDATE acct_transactions SET status = 'reversed' WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+                    (f"refund-flat-{item_id}",),
+                )
+            except Exception:
+                logger.warning("Failed to reverse flat refund entry for %s", item_id, exc_info=True)
+
+        if status == "wd":
+            # Mark WD credit liability entry as reversed
+            try:
+                conn.execute(
+                    "UPDATE acct_transactions SET status = 'reversed' WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+                    (f"wd-credit-{item_id}",),
+                )
+            except Exception:
+                logger.warning("Failed to reverse WD credit entry for %s", item_id, exc_info=True)
 
         # Reset original
         conn.execute(
@@ -4684,6 +4872,47 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
             except Exception:
                 logger.warning("Failed to create allocation for external payment item %d", new_id, exc_info=True)
 
+        # ── Accounting: flat acct_transactions entries ──
+        try:
+            alloc_date = new_values.get("order_date") or ""
+            if mode == "comp":
+                _write_acct_entry(
+                    conn,
+                    item_id=new_id,
+                    event_name=event_name,
+                    customer=customer,
+                    entry_type="expense",
+                    category="comp",
+                    source="manual",
+                    amount=0,
+                    description=f"Comp — course fee absorbed by TGF: {customer} — {event_name}",
+                    account="TGF Checking",
+                    source_ref=f"comp-{new_id}",
+                    date=alloc_date,
+                )
+            elif mode == "paid_separately":
+                pay_amount = _parse_dollar(payment_amount)
+                pay_method = (payment_source or "external").lower().replace(" ", "_")
+                if pay_method not in ("venmo", "cash", "zelle", "check"):
+                    pay_method = "cash"
+                acct = "Venmo" if pay_method == "venmo" else "TGF Checking"
+                _write_acct_entry(
+                    conn,
+                    item_id=new_id,
+                    event_name=event_name,
+                    customer=customer,
+                    entry_type="income",
+                    category="addon",
+                    source=pay_method,
+                    amount=pay_amount,
+                    description=f"External payment ({payment_source}): {customer} — {event_name}",
+                    account=acct,
+                    source_ref=f"ext-pay-{new_id}",
+                    date=alloc_date,
+                )
+        except Exception:
+            logger.warning("Failed to create acct_transactions entry for player %d", new_id, exc_info=True)
+
         conn.commit()
 
         new_values["id"] = new_id
@@ -4816,6 +5045,32 @@ def add_payment_to_event(event_name: str, customer: str,
                 )
         except Exception:
             logger.warning("Failed to create allocation for add-payment item %d", new_id, exc_info=True)
+
+        # ── Accounting: flat acct_transactions entry for add-on ──
+        try:
+            pay_amount = _parse_dollar(payment_amount)
+            if pay_amount > 0:
+                pay_method = (payment_source or "external").lower().replace(" ", "_")
+                if pay_method not in ("venmo", "cash", "zelle", "check", "godaddy"):
+                    pay_method = "cash"
+                acct = "Venmo" if pay_method == "venmo" else "TGF Checking"
+                alloc_date = new_values.get("order_date") or ""
+                _write_acct_entry(
+                    conn,
+                    item_id=new_id,
+                    event_name=event_name,
+                    customer=customer,
+                    entry_type="income",
+                    category="addon",
+                    source=pay_method,
+                    amount=pay_amount,
+                    description=f"Add-on payment ({payment_item}): {customer} — {event_name}",
+                    account=acct,
+                    source_ref=f"addon-{new_id}",
+                    date=alloc_date,
+                )
+        except Exception:
+            logger.warning("Failed to create acct_transactions entry for add-payment %d", new_id, exc_info=True)
 
         conn.commit()
 
@@ -8777,6 +9032,56 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
     return results
 
 
+def _write_acct_entry(
+    conn: sqlite3.Connection,
+    *,
+    item_id: int | None = None,
+    event_name: str = "",
+    customer: str = "",
+    order_id: str = "",
+    entry_type: str,
+    category: str,
+    source: str,
+    amount: float,
+    description: str = "",
+    account: str = "TGF Checking",
+    source_ref: str = "",
+    date: str = "",
+) -> int | None:
+    """Write a single accounting entry to acct_transactions.
+
+    This is the central helper for the single-source-of-truth ledger.
+    Uses source_ref for idempotency — skips if an active entry with the
+    same source_ref already exists.
+
+    Returns the new row id, or None if skipped (duplicate).
+    """
+    if source_ref:
+        existing = conn.execute(
+            "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+            (source_ref,),
+        ).fetchone()
+        if existing:
+            return None
+
+    # Map entry_type to legacy 'type' column for backward compat
+    legacy_type_map = {"income": "income", "expense": "expense",
+                       "contra": "expense", "liability": "expense"}
+    legacy_type = legacy_type_map.get(entry_type, "expense")
+
+    cur = conn.execute(
+        """INSERT INTO acct_transactions
+           (date, description, total_amount, type, source, source_ref,
+            item_id, event_name, customer, order_id, entry_type, category,
+            amount, account, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')""",
+        (date, description, abs(amount), legacy_type, source, source_ref,
+         item_id, event_name, customer, order_id, entry_type, category,
+         amount, account),
+    )
+    return cur.lastrowid
+
+
 def _parse_dollar(val, default: float = 0.0) -> float:
     """Safely parse a dollar amount string to float.
 
@@ -9035,13 +9340,14 @@ def get_acct_allocations(month: str | None = None, event: str | None = None,
 
 
 def get_event_financial_summary(event_name: str, db_path: str | Path | None = None) -> dict:
-    """Server-side financial summary for one event, aggregated from accounting data.
+    """Server-side financial summary for one event.
 
-    This is the unified source of truth for the Events Financial tab (Issue #242).
-    Combines acct_allocations (per-player bucket breakdown) with acct_transactions
-    (credit transfers, refunds) to produce a complete financial picture.
+    Primary path: reads from flat acct_transactions entries grouped by event_name
+    (single source of truth).  Falls back to allocation-based calculation when
+    no flat entries exist.
 
-    Returns a dict with revenue, expenses, profit, and player counts.
+    Returns a dict with revenue, expenses, profit, player counts, and an
+    ``accounting_verified`` flag indicating which path was used.
     """
     with _connect(db_path) as conn:
         # ── Resolve event ──
@@ -9079,85 +9385,133 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
         paid_count = len(active_parents) - comp_count - rsvp_count - wd_count
         total_active = len(active_parents) - rsvp_count - wd_count
 
-        # ── Allocations for this event ──
-        allocs = conn.execute(
-            f"SELECT * FROM acct_allocations WHERE event_name COLLATE NOCASE IN ({name_placeholders})",
+        # ── Try flat acct_transactions first (single source of truth) ──
+        acct_entries = conn.execute(
+            f"""SELECT * FROM acct_transactions
+                WHERE event_name COLLATE NOCASE IN ({name_placeholders})
+                AND COALESCE(status, 'active') = 'active'
+                AND entry_type IS NOT NULL""",
             all_names,
         ).fetchall()
-        allocs = [dict(r) for r in allocs]
+        acct_entries = [dict(r) for r in acct_entries]
+        accounting_verified = len(acct_entries) > 0
 
-        # Separate by payment method
-        godaddy_allocs = [a for a in allocs if (a.get("payment_method") or "godaddy") == "godaddy"]
-        external_allocs = [a for a in allocs if (a.get("payment_method") or "godaddy") in ("venmo", "cash", "zelle", "check")]
-        xfer_allocs = [a for a in allocs if (a.get("payment_method") or "") == "credit_transfer"]
+        if accounting_verified:
+            # ── Revenue from acct_transactions ──
+            income_entries = [e for e in acct_entries if e["entry_type"] == "income"]
+            godaddy_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "registration"), 2)
+            external_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "addon" and e.get("source") not in ("godaddy",)), 2)
+            xfer_in_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "transfer_in"), 2)
+            addon_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "addon" and e.get("source") == "godaddy"), 2)
+            total_revenue = round(godaddy_revenue + external_revenue + xfer_in_revenue + addon_revenue, 2)
 
-        godaddy_revenue = round(sum(a.get("total_collected", 0) for a in godaddy_allocs), 2)
-        external_revenue = round(sum(a.get("total_collected", 0) for a in external_allocs), 2)
-        xfer_in_revenue = round(sum(a.get("total_collected", 0) for a in xfer_allocs), 2)
+            # ── Contra-revenue ──
+            contra_entries = [e for e in acct_entries if e["entry_type"] == "contra"]
+            xfer_out = round(sum(e["amount"] for e in contra_entries if e.get("category") == "transfer_out"), 2)
 
-        # Add-on payments from child items (MANUAL-PAY- prefix)
-        addon_allocs = [a for a in allocs if (a.get("order_id") or "").startswith("MANUAL-PAY-")]
-        addon_revenue = round(sum(a.get("total_collected", 0) for a in addon_allocs), 2)
+            # ── Expenses ──
+            expense_entries = [e for e in acct_entries if e["entry_type"] == "expense"]
+            refund_total = round(sum(e["amount"] for e in expense_entries if e.get("category") == "refund"), 2)
+            total_processing = round(sum(e["amount"] for e in expense_entries if e.get("category") == "processing_fee"), 2)
 
-        total_revenue = round(godaddy_revenue + external_revenue + xfer_in_revenue + addon_revenue, 2)
+            contra_total = round(xfer_out + refund_total, 2)
+            net_revenue = round(total_revenue - contra_total, 2)
 
-        # ── Credit transfers OUT (contra-revenue) ──
-        xfer_out = 0
-        if event_db_id:
-            xfer_out_rows = conn.execute(
-                """SELECT COALESCE(SUM(s.amount), 0) as total
-                   FROM acct_transactions t
-                   JOIN acct_splits s ON s.transaction_id = t.id
-                   WHERE t.source = 'credit_transfer' AND t.type = 'expense'
-                   AND s.event_id = ?""",
-                (event_db_id,),
-            ).fetchone()
-            xfer_out = round(xfer_out_rows["total"], 2) if xfer_out_rows else 0
+            # Course fees and prize fund still from allocations (best source)
+            aggregate_course_cost = _calc_aggregate_course_cost(event, all_items, conn)
 
-        # ── Refunds ──
-        refund_total = 0
-        if event_db_id:
-            refund_rows = conn.execute(
-                """SELECT COALESCE(SUM(s.amount), 0) as total
-                   FROM acct_transactions t
-                   JOIN acct_splits s ON s.transaction_id = t.id
-                   WHERE t.source = 'refund' AND t.type = 'expense'
-                   AND s.event_id = ?""",
-                (event_db_id,),
-            ).fetchone()
-            refund_total = round(refund_rows["total"], 2) if refund_rows else 0
+            allocs = conn.execute(
+                f"SELECT * FROM acct_allocations WHERE event_name COLLATE NOCASE IN ({name_placeholders})",
+                all_names,
+            ).fetchall()
+            allocs = [dict(r) for r in allocs]
+            total_prize_pool = round(sum(a.get("prize_pool", 0) for a in allocs), 2)
+            total_tgf_operating = round(sum(a.get("tgf_operating", 0) for a in allocs), 2)
+            total_tax_reserve = round(sum(a.get("tax_reserve", 0) for a in allocs), 2)
 
-        contra_total = round(xfer_out + refund_total, 2)
-        net_revenue = round(total_revenue - contra_total, 2)
+            total_expenses = round(aggregate_course_cost + total_prize_pool + total_processing, 2)
+            projected_profit = round(net_revenue - total_expenses, 2)
 
-        # ── Expenses from allocations ──
-        # Course fees: aggregate-corrected calculation (Issue #242 rounding fix)
-        aggregate_course_cost = _calc_aggregate_course_cost(event, all_items, conn)
+            # Coverage based on acct_transactions entries
+            items_needing_entry = [i for i in all_items
+                                   if i.get("transaction_status") in (None, "active")
+                                   and not (i.get("email_uid") or "").startswith("manual-comp")
+                                   and i.get("transaction_status") != "rsvp_only"
+                                   and _parse_dollar(i.get("item_price")) > 0]
+            acct_item_ids = {e.get("item_id") for e in acct_entries if e.get("item_id")}
+            items_with_entry = sum(1 for i in items_needing_entry if i["id"] in acct_item_ids)
+            coverage = round(items_with_entry / len(items_needing_entry) * 100, 1) if items_needing_entry else 0
 
-        # Prize fund and processing fees from allocations
-        total_prize_pool = round(sum(a.get("prize_pool", 0) for a in allocs), 2)
-        total_processing = round(sum(a.get("godaddy_fee", 0) for a in allocs), 2)
-        total_tgf_operating = round(sum(a.get("tgf_operating", 0) for a in allocs), 2)
-        total_tax_reserve = round(sum(a.get("tax_reserve", 0) for a in allocs), 2)
+        else:
+            # ── Fallback: allocation-based calculation ──
+            allocs = conn.execute(
+                f"SELECT * FROM acct_allocations WHERE event_name COLLATE NOCASE IN ({name_placeholders})",
+                all_names,
+            ).fetchall()
+            allocs = [dict(r) for r in allocs]
 
-        total_expenses = round(aggregate_course_cost + total_prize_pool + total_processing, 2)
-        projected_profit = round(net_revenue - total_expenses, 2)
+            godaddy_allocs = [a for a in allocs if (a.get("payment_method") or "godaddy") == "godaddy"]
+            external_allocs = [a for a in allocs if (a.get("payment_method") or "godaddy") in ("venmo", "cash", "zelle", "check")]
+            xfer_allocs = [a for a in allocs if (a.get("payment_method") or "") == "credit_transfer"]
 
-        # ── Allocation coverage ──
-        # How many items that SHOULD have allocations actually do?
-        items_needing_alloc = [i for i in all_items
-                               if i.get("transaction_status") in (None, "active")
-                               and not (i.get("email_uid") or "").startswith("manual-comp")
-                               and i.get("transaction_status") != "rsvp_only"
-                               and _parse_dollar(i.get("item_price")) > 0]
-        allocated_item_ids = {a.get("item_id") for a in allocs if a.get("item_id")}
-        items_with_alloc = sum(1 for i in items_needing_alloc if i["id"] in allocated_item_ids)
-        coverage = round(items_with_alloc / len(items_needing_alloc) * 100, 1) if items_needing_alloc else 0
+            godaddy_revenue = round(sum(a.get("total_collected", 0) for a in godaddy_allocs), 2)
+            external_revenue = round(sum(a.get("total_collected", 0) for a in external_allocs), 2)
+            xfer_in_revenue = round(sum(a.get("total_collected", 0) for a in xfer_allocs), 2)
+
+            addon_allocs = [a for a in allocs if (a.get("order_id") or "").startswith("MANUAL-PAY-")]
+            addon_revenue = round(sum(a.get("total_collected", 0) for a in addon_allocs), 2)
+
+            total_revenue = round(godaddy_revenue + external_revenue + xfer_in_revenue + addon_revenue, 2)
+
+            xfer_out = 0
+            if event_db_id:
+                xfer_out_rows = conn.execute(
+                    """SELECT COALESCE(SUM(s.amount), 0) as total
+                       FROM acct_transactions t
+                       JOIN acct_splits s ON s.transaction_id = t.id
+                       WHERE t.source = 'credit_transfer' AND t.type = 'expense'
+                       AND s.event_id = ?""",
+                    (event_db_id,),
+                ).fetchone()
+                xfer_out = round(xfer_out_rows["total"], 2) if xfer_out_rows else 0
+
+            refund_total = 0
+            if event_db_id:
+                refund_rows = conn.execute(
+                    """SELECT COALESCE(SUM(s.amount), 0) as total
+                       FROM acct_transactions t
+                       JOIN acct_splits s ON s.transaction_id = t.id
+                       WHERE t.source = 'refund' AND t.type = 'expense'
+                       AND s.event_id = ?""",
+                    (event_db_id,),
+                ).fetchone()
+                refund_total = round(refund_rows["total"], 2) if refund_rows else 0
+
+            contra_total = round(xfer_out + refund_total, 2)
+            net_revenue = round(total_revenue - contra_total, 2)
+
+            aggregate_course_cost = _calc_aggregate_course_cost(event, all_items, conn)
+            total_prize_pool = round(sum(a.get("prize_pool", 0) for a in allocs), 2)
+            total_processing = round(sum(a.get("godaddy_fee", 0) for a in allocs), 2)
+            total_tgf_operating = round(sum(a.get("tgf_operating", 0) for a in allocs), 2)
+            total_tax_reserve = round(sum(a.get("tax_reserve", 0) for a in allocs), 2)
+
+            total_expenses = round(aggregate_course_cost + total_prize_pool + total_processing, 2)
+            projected_profit = round(net_revenue - total_expenses, 2)
+
+            items_needing_alloc = [i for i in all_items
+                                   if i.get("transaction_status") in (None, "active")
+                                   and not (i.get("email_uid") or "").startswith("manual-comp")
+                                   and i.get("transaction_status") != "rsvp_only"
+                                   and _parse_dollar(i.get("item_price")) > 0]
+            allocated_item_ids = {a.get("item_id") for a in allocs if a.get("item_id")}
+            items_with_alloc = sum(1 for i in items_needing_alloc if i["id"] in allocated_item_ids)
+            coverage = round(items_with_alloc / len(items_needing_alloc) * 100, 1) if items_needing_alloc else 0
 
     # ── Revenue sanity check: cross-check item_price vs total_amount - fees ──
     revenue_discrepancy = None
-    calc_a = 0.0  # Sum of item_price (existing calculation)
-    calc_b = 0.0  # Sum of (total_amount - transaction_fees) — independent check
+    calc_a = 0.0
+    calc_b = 0.0
     for i in all_items:
         if (i.get("transaction_status") or "active") != "active":
             continue
@@ -9167,13 +9521,11 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             continue
         price = _parse_dollar(i.get("item_price"))
         calc_a += price
-        # Independent check using order total - fees (only for GoDaddy orders)
         total_amt = _parse_dollar(i.get("total_amount"))
         tx_fees = _parse_dollar(i.get("transaction_fees"))
         if total_amt > 0:
             calc_b += round(total_amt - tx_fees, 2)
         elif i.get("transferred_from_id") or (i.get("merchant") or "").startswith("Paid Separately"):
-            # Non-GoDaddy items: use item_price for both (no cross-check possible)
             calc_b += price
 
     calc_a = round(calc_a, 2)
@@ -9218,9 +9570,10 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             "wd": wd_count,
             "total_active": total_active,
         },
-        "has_allocation_data": len(allocs) > 0,
+        "has_allocation_data": len(allocs) > 0 if not accounting_verified else True,
         "allocation_coverage_pct": coverage,
         "revenue_discrepancy": revenue_discrepancy,
+        "accounting_verified": accounting_verified,
     }
 
 
@@ -9505,6 +9858,377 @@ def backfill_financial_entries(db_path: str | Path | None = None) -> dict:
 
     results["total"] = (results["external_payments"] + results["credit_transfers"]
                         + results["add_on_payments"] + results["refunds"])
+    return results
+
+
+def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
+    """Backfill flat acct_transactions entries for all 2026 items missing them.
+
+    Processes items in order_date ascending.  Idempotent — uses source_ref to
+    skip items that already have entries.  Returns counts of entries created.
+    """
+    results = {"godaddy_income": 0, "godaddy_fees": 0, "comps": 0,
+               "external_payments": 0, "addons": 0, "transfers": 0,
+               "refunds": 0, "wd_credits": 0, "errors": 0, "items_processed": 0}
+
+    with _connect(db_path) as conn:
+        # ── 1. GoDaddy orders — income + processing fee entries ──
+        gd_items = conn.execute(
+            """SELECT * FROM items
+               WHERE order_date >= '2026-01-01'
+               AND merchant IS NOT NULL
+               AND merchant NOT LIKE 'Manual%'
+               AND merchant NOT LIKE 'Paid Separately%'
+               AND merchant NOT LIKE 'Roster%'
+               AND merchant NOT LIKE 'Customer Entry%'
+               AND merchant NOT LIKE 'RSVP%'
+               AND merchant NOT LIKE 'Refund%'
+               AND COALESCE(transaction_status, 'active') NOT IN ('rsvp_only')
+               AND parent_item_id IS NULL
+               AND id NOT IN (SELECT item_id FROM acct_transactions WHERE item_id IS NOT NULL AND entry_type = 'income' AND category = 'registration')
+               ORDER BY order_date ASC""",
+        ).fetchall()
+        for row in gd_items:
+            try:
+                item = dict(row)
+                item_price = _parse_dollar(item.get("item_price"))
+                if item_price <= 0:
+                    continue  # Skip comps ($0 price)
+                # Skip already-reversed items
+                if item.get("transaction_status") in ("credited", "refunded", "transferred"):
+                    continue
+
+                _write_acct_entry(
+                    conn,
+                    item_id=item["id"],
+                    event_name=item.get("item_name", ""),
+                    customer=item.get("customer", ""),
+                    order_id=item.get("order_id", ""),
+                    entry_type="income",
+                    category="registration",
+                    source="godaddy",
+                    amount=item_price,
+                    description=f"GoDaddy registration: {item.get('customer', '')} — {item.get('item_name', '')}",
+                    account="TGF Checking",
+                    source_ref=f"godaddy-income-{item['id']}",
+                    date=item.get("order_date") or "",
+                )
+                results["godaddy_income"] += 1
+
+                # Processing fee entry
+                tx_fees = _parse_dollar(item.get("transaction_fees"))
+                if tx_fees > 0:
+                    _write_acct_entry(
+                        conn,
+                        item_id=item["id"],
+                        event_name=item.get("item_name", ""),
+                        customer=item.get("customer", ""),
+                        order_id=item.get("order_id", ""),
+                        entry_type="expense",
+                        category="processing_fee",
+                        source="godaddy",
+                        amount=tx_fees,
+                        description=f"GoDaddy processing fee: {item.get('customer', '')} — {item.get('item_name', '')}",
+                        account="TGF Checking",
+                        source_ref=f"godaddy-fee-{item['id']}",
+                        date=item.get("order_date") or "",
+                    )
+                    results["godaddy_fees"] += 1
+
+                results["items_processed"] += 1
+            except Exception:
+                logger.warning("Backfill acct_txn: failed GoDaddy item %s", row["id"], exc_info=True)
+                results["errors"] += 1
+
+        # ── 2. Comps ──
+        comp_items = conn.execute(
+            """SELECT * FROM items
+               WHERE order_date >= '2026-01-01'
+               AND email_uid LIKE 'manual-comp%'
+               AND COALESCE(transaction_status, 'active') != 'rsvp_only'
+               AND id NOT IN (SELECT item_id FROM acct_transactions WHERE item_id IS NOT NULL AND entry_type = 'expense' AND category = 'comp')
+               ORDER BY order_date ASC""",
+        ).fetchall()
+        for row in comp_items:
+            try:
+                item = dict(row)
+                _write_acct_entry(
+                    conn,
+                    item_id=item["id"],
+                    event_name=item.get("item_name", ""),
+                    customer=item.get("customer", ""),
+                    entry_type="expense",
+                    category="comp",
+                    source="manual",
+                    amount=0,
+                    description=f"Comp — course fee absorbed by TGF: {item.get('customer', '')} — {item.get('item_name', '')}",
+                    account="TGF Checking",
+                    source_ref=f"comp-{item['id']}",
+                    date=item.get("order_date") or "",
+                )
+                results["comps"] += 1
+            except Exception:
+                logger.warning("Backfill acct_txn: failed comp item %s", row["id"], exc_info=True)
+                results["errors"] += 1
+
+        # ── 3. External payments (Paid Separately) ──
+        ext_items = conn.execute(
+            """SELECT * FROM items
+               WHERE order_date >= '2026-01-01'
+               AND merchant LIKE 'Paid Separately%'
+               AND COALESCE(transaction_status, 'active') = 'active'
+               AND parent_item_id IS NULL
+               AND id NOT IN (SELECT item_id FROM acct_transactions WHERE item_id IS NOT NULL AND entry_type = 'income' AND category = 'addon')
+               ORDER BY order_date ASC""",
+        ).fetchall()
+        for row in ext_items:
+            try:
+                item = dict(row)
+                pay_amount = _parse_dollar(item.get("item_price"))
+                if pay_amount <= 0:
+                    continue
+                source = (item.get("merchant") or "").replace("Paid Separately (", "").rstrip(")")
+                pay_method = source.lower().replace(" ", "_")
+                if pay_method not in ("venmo", "cash", "zelle", "check"):
+                    pay_method = "cash"
+                acct = "Venmo" if pay_method == "venmo" else "TGF Checking"
+                _write_acct_entry(
+                    conn,
+                    item_id=item["id"],
+                    event_name=item.get("item_name", ""),
+                    customer=item.get("customer", ""),
+                    entry_type="income",
+                    category="addon",
+                    source=pay_method,
+                    amount=pay_amount,
+                    description=f"External payment ({source}): {item.get('customer', '')} — {item.get('item_name', '')}",
+                    account=acct,
+                    source_ref=f"ext-pay-{item['id']}",
+                    date=item.get("order_date") or "",
+                )
+                results["external_payments"] += 1
+            except Exception:
+                logger.warning("Backfill acct_txn: failed ext item %s", row["id"], exc_info=True)
+                results["errors"] += 1
+
+        # ── 4. Add-on child payments ──
+        child_items = conn.execute(
+            """SELECT * FROM items
+               WHERE order_date >= '2026-01-01'
+               AND parent_item_id IS NOT NULL
+               AND COALESCE(transaction_status, 'active') = 'active'
+               AND id NOT IN (SELECT item_id FROM acct_transactions WHERE item_id IS NOT NULL AND entry_type = 'income' AND category = 'addon')
+               ORDER BY order_date ASC""",
+        ).fetchall()
+        for row in child_items:
+            try:
+                item = dict(row)
+                pay_amount = _parse_dollar(item.get("item_price"))
+                if pay_amount <= 0:
+                    continue  # Skip negative (refund) child items — handled separately
+                source = (item.get("merchant") or "").replace("Manual Entry (", "").rstrip(")")
+                pay_method = source.lower().replace(" ", "_")
+                if pay_method not in ("venmo", "cash", "zelle", "check", "godaddy"):
+                    pay_method = "cash"
+                acct = "Venmo" if pay_method == "venmo" else "TGF Checking"
+                _write_acct_entry(
+                    conn,
+                    item_id=item["id"],
+                    event_name=item.get("item_name", ""),
+                    customer=item.get("customer", ""),
+                    entry_type="income",
+                    category="addon",
+                    source=pay_method,
+                    amount=pay_amount,
+                    description=f"Add-on payment: {item.get('customer', '')} — {item.get('item_name', '')}",
+                    account=acct,
+                    source_ref=f"addon-{item['id']}",
+                    date=item.get("order_date") or "",
+                )
+                results["addons"] += 1
+            except Exception:
+                logger.warning("Backfill acct_txn: failed child item %s", row["id"], exc_info=True)
+                results["errors"] += 1
+
+        # ── 5. Credit transfers ──
+        xfer_items = conn.execute(
+            """SELECT i.*, i2.id as target_item_id, i2.item_name as target_event
+               FROM items i
+               JOIN items i2 ON i2.transferred_from_id = i.id
+               WHERE i.transaction_status = 'transferred'
+               AND i.order_date >= '2026-01-01'
+               ORDER BY i.order_date ASC""",
+        ).fetchall()
+        for row in xfer_items:
+            try:
+                item = dict(row)
+                orig_price = _parse_dollar(item.get("item_price"))
+                if orig_price <= 0:
+                    continue
+                source_event = item.get("item_name", "")
+                target_event = item.get("target_event", "")
+
+                _write_acct_entry(
+                    conn,
+                    item_id=item["id"],
+                    event_name=source_event,
+                    customer=item.get("customer", ""),
+                    order_id=item.get("order_id", ""),
+                    entry_type="contra",
+                    category="transfer_out",
+                    source="godaddy",
+                    amount=orig_price,
+                    description=f"Credit transfer out: {item.get('customer', '')} from {source_event} to {target_event}",
+                    account="TGF Checking",
+                    source_ref=f"xfer-flat-{item['id']}-out",
+                    date=item.get("order_date") or "",
+                )
+                _write_acct_entry(
+                    conn,
+                    item_id=item["target_item_id"],
+                    event_name=target_event,
+                    customer=item.get("customer", ""),
+                    entry_type="income",
+                    category="transfer_in",
+                    source="godaddy",
+                    amount=orig_price,
+                    description=f"Credit transfer in: {item.get('customer', '')} to {target_event} from {source_event}",
+                    account="TGF Checking",
+                    source_ref=f"xfer-flat-{item['id']}-in",
+                    date=item.get("order_date") or "",
+                )
+                results["transfers"] += 1
+            except Exception:
+                logger.warning("Backfill acct_txn: failed xfer item %s", row["id"], exc_info=True)
+                results["errors"] += 1
+
+        # ── 6. Refunds ──
+        refund_items = conn.execute(
+            """SELECT * FROM items
+               WHERE transaction_status = 'refunded'
+               AND order_date >= '2026-01-01'
+               AND id NOT IN (SELECT item_id FROM acct_transactions WHERE item_id IS NOT NULL AND entry_type = 'expense' AND category = 'refund')
+               ORDER BY order_date ASC""",
+        ).fetchall()
+        for row in refund_items:
+            try:
+                item = dict(row)
+                refund_amount = _parse_dollar(item.get("item_price"))
+                if refund_amount <= 0:
+                    continue
+                credit_note = item.get("credit_note") or ""
+                method = "manual"
+                if "venmo" in credit_note.lower():
+                    method = "venmo"
+                elif "zelle" in credit_note.lower():
+                    method = "zelle"
+                elif "godaddy" in credit_note.lower():
+                    method = "godaddy"
+                refund_account = "Venmo" if method == "venmo" else "TGF Checking"
+                _write_acct_entry(
+                    conn,
+                    item_id=item["id"],
+                    event_name=item.get("item_name", ""),
+                    customer=item.get("customer", ""),
+                    order_id=item.get("order_id", ""),
+                    entry_type="expense",
+                    category="refund",
+                    source=method,
+                    amount=refund_amount,
+                    description=f"Refund: {item.get('customer', '')} — {item.get('item_name', '')}",
+                    account=refund_account,
+                    source_ref=f"refund-flat-{item['id']}",
+                    date=item.get("order_date") or "",
+                )
+                results["refunds"] += 1
+            except Exception:
+                logger.warning("Backfill acct_txn: failed refund item %s", row["id"], exc_info=True)
+                results["errors"] += 1
+
+        # ── 7. WD credits (liability) ──
+        wd_items = conn.execute(
+            """SELECT * FROM items
+               WHERE transaction_status = 'wd'
+               AND credit_amount IS NOT NULL AND credit_amount != ''
+               AND order_date >= '2026-01-01'
+               AND id NOT IN (SELECT item_id FROM acct_transactions WHERE item_id IS NOT NULL AND entry_type = 'liability' AND category = 'credit_issued')
+               ORDER BY order_date ASC""",
+        ).fetchall()
+        for row in wd_items:
+            try:
+                item = dict(row)
+                wd_credit_val = _parse_dollar(item.get("credit_amount"))
+                if wd_credit_val <= 0:
+                    continue
+                _write_acct_entry(
+                    conn,
+                    item_id=item["id"],
+                    event_name=item.get("item_name", ""),
+                    customer=item.get("customer", ""),
+                    order_id=item.get("order_id", ""),
+                    entry_type="liability",
+                    category="credit_issued",
+                    source="manual",
+                    amount=wd_credit_val,
+                    description=f"WD credit issued: {item.get('customer', '')} — {item.get('item_name', '')}",
+                    account="TGF Checking",
+                    source_ref=f"wd-credit-{item['id']}",
+                    date=item.get("order_date") or "",
+                )
+                results["wd_credits"] += 1
+            except Exception:
+                logger.warning("Backfill acct_txn: failed WD item %s", row["id"], exc_info=True)
+                results["errors"] += 1
+
+        # ── 8. Partial refunds (negative child items) ──
+        neg_children = conn.execute(
+            """SELECT * FROM items
+               WHERE parent_item_id IS NOT NULL
+               AND COALESCE(transaction_status, 'active') = 'active'
+               AND order_date >= '2026-01-01'
+               AND item_price LIKE '-%'
+               AND id NOT IN (SELECT item_id FROM acct_transactions WHERE item_id IS NOT NULL AND entry_type = 'expense' AND category = 'refund')
+               ORDER BY order_date ASC""",
+        ).fetchall()
+        for row in neg_children:
+            try:
+                item = dict(row)
+                refund_amount = abs(_parse_dollar(item.get("item_price")))
+                if refund_amount <= 0:
+                    continue
+                merchant = item.get("merchant") or ""
+                method = "manual"
+                if "venmo" in merchant.lower():
+                    method = "venmo"
+                elif "zelle" in merchant.lower():
+                    method = "zelle"
+                elif "godaddy" in merchant.lower():
+                    method = "godaddy"
+                refund_account = "Venmo" if method == "venmo" else "TGF Checking"
+                _write_acct_entry(
+                    conn,
+                    item_id=item["id"],
+                    event_name=item.get("item_name", ""),
+                    customer=item.get("customer", ""),
+                    entry_type="expense",
+                    category="refund",
+                    source=method,
+                    amount=refund_amount,
+                    description=f"Partial refund: {item.get('customer', '')} — {item.get('item_name', '')}",
+                    account=refund_account,
+                    source_ref=f"partial-refund-{item['id']}",
+                    date=item.get("order_date") or "",
+                )
+                results["refunds"] += 1
+            except Exception:
+                logger.warning("Backfill acct_txn: failed negative child %s", row["id"], exc_info=True)
+                results["errors"] += 1
+
+        conn.commit()
+
+    total_entries = sum(v for k, v in results.items() if k not in ("errors", "items_processed"))
+    results["total_entries"] = total_entries
+    logger.info("Backfilled %d accounting entries for %d items", total_entries, results["items_processed"])
     return results
 
 
