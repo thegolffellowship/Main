@@ -6068,20 +6068,67 @@ try:
         _bf_result = backfill_acct_transactions()
         logger.info("Startup backfill: %s", _bf_result)
     else:
-        # Check if old entries need merchant fee fix (description says "processing fee" not "merchant fee")
+        # Targeted fix: transfer target items double-counted as registrations
         with _startup_connect() as _fix_conn:
-            _old_fees = _fix_conn.execute(
-                "SELECT COUNT(*) as cnt FROM acct_transactions WHERE category = 'processing_fee' AND description LIKE '%processing fee%'"
+            _bad_xfer = _fix_conn.execute(
+                """SELECT COUNT(*) as cnt FROM acct_transactions t
+                   JOIN items i ON i.id = t.item_id
+                   WHERE t.entry_type = 'income' AND t.category = 'registration'
+                   AND i.transferred_from_id IS NOT NULL"""
             ).fetchone()["cnt"]
-        if _old_fees > 0:
-            logger.info("Detected %d old processing fee entries — re-running backfill with merchant fee formula", _old_fees)
-            with _startup_connect() as _fix_conn:
-                _fix_conn.execute("DELETE FROM acct_transactions WHERE entry_type IS NOT NULL")
+            if _bad_xfer > 0:
+                from email_parser.database import _write_acct_entry, _parse_dollar
+
+                # 1. Get transfer target item_ids
+                _xfer_item_ids = [r["item_id"] for r in _fix_conn.execute(
+                    """SELECT DISTINCT t.item_id FROM acct_transactions t
+                       JOIN items i ON i.id = t.item_id
+                       WHERE i.transferred_from_id IS NOT NULL
+                       AND t.entry_type IS NOT NULL"""
+                ).fetchall()]
+                logger.info("Fixing %d transfer target items: %s", len(_xfer_item_ids), _xfer_item_ids)
+
+                # 2. Delete ALL acct_transactions for these transfer target items
+                for _xid in _xfer_item_ids:
+                    _del = _fix_conn.execute(
+                        "DELETE FROM acct_transactions WHERE item_id = ? AND entry_type IS NOT NULL",
+                        (_xid,),
+                    )
+                    logger.info("  Deleted %d entries for transfer target item %d", _del.rowcount, _xid)
+
+                # 3. Re-create correct transfer_in entries only
+                _xfer_items = _fix_conn.execute(
+                    """SELECT i.*, orig.item_price as orig_price, orig.item_name as source_event,
+                              orig.order_date as orig_date, orig.customer as orig_customer
+                       FROM items i
+                       JOIN items orig ON orig.id = i.transferred_from_id
+                       WHERE i.id IN ({})""".format(",".join("?" * len(_xfer_item_ids))),
+                    _xfer_item_ids,
+                ).fetchall()
+                for _xi in _xfer_items:
+                    _xi = dict(_xi)
+                    _credit_amt = _parse_dollar(_xi.get("orig_price"))
+                    if _credit_amt > 0:
+                        _write_acct_entry(
+                            _fix_conn,
+                            item_id=_xi["id"],
+                            event_name=_xi.get("item_name", ""),
+                            customer=_xi.get("orig_customer", ""),
+                            entry_type="income",
+                            category="transfer_in",
+                            source="godaddy",
+                            amount=_credit_amt,
+                            description=f"Credit transfer in: {_xi.get('orig_customer', '')} to {_xi.get('item_name', '')} from {_xi.get('source_event', '')}",
+                            account="TGF Checking",
+                            source_ref=f"xfer-flat-{_xi['transferred_from_id']}-in",
+                            date=_xi.get("orig_date") or "",
+                        )
+                        logger.info("  Created transfer_in $%.2f for item %d (%s)", _credit_amt, _xi["id"], _xi.get("item_name"))
+
                 _fix_conn.commit()
-            _bf_result = backfill_acct_transactions()
-            logger.info("Re-backfill result: %s", _bf_result)
-        else:
-            logger.info("Accounting entries already exist (%d), skipping startup backfill", _acct_count)
+                logger.info("Transfer correction complete: removed %d bad items, re-created transfer_in entries", len(_xfer_item_ids))
+            else:
+                logger.info("Accounting entries already exist (%d), no transfer fixes needed", _acct_count)
 
     # ── Verify s18.4 LANDA PARK numbers ──
     try:
