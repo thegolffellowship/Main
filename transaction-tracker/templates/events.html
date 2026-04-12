@@ -1483,6 +1483,14 @@
         return div.innerHTML;
     }
 
+    function parseDollar(value, defaultVal = 0) {
+        if (!value) return defaultVal;
+        const cleaned = String(value).replace(/[^\d.\-]/g, '');
+        if (!cleaned || cleaned === '.') return defaultVal;
+        const parsed = parseFloat(cleaned);
+        return isNaN(parsed) ? defaultVal : parsed;
+    }
+
     function _cleanStatus(raw) {
         let s = (raw || "").trim();
         if (!s) return "\u2014";
@@ -2375,7 +2383,7 @@
         const txFeePct = (ev.transaction_fee_pct || 3.5) / 100;
 
         paidPlayers.forEach(r => {
-            let price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+            let price = parseDollar(r.item_price);
             const isTransfer = !!r.transferred_from_id;
             const isGodaddy = r.order_id && !isTransfer
                 && !(r.merchant || "").startsWith("Paid Separately")
@@ -2399,7 +2407,7 @@
 
             // Transaction fees: use actual parsed value from email, not calculated
             if (isGodaddy && price > 0) {
-                const txFee = parseFloat((r.transaction_fees || "0").replace(/[^0-9.-]/g, "")) || 0;
+                const txFee = parseDollar(r.transaction_fees);
                 totalTransactionFees += txFee;
                 // Track order total for GoDaddy fee calc (per-order)
                 const orderTotal = price + txFee;
@@ -2409,7 +2417,7 @@
             }
         });
         childPayments.forEach(r => {
-            const price = parseFloat((r.item_price || "0").replace(/[^0-9.-]/g, "")) || 0;
+            const price = parseDollar(r.item_price);
             if (price < 0) {
                 // Negative child = refund (contra-revenue)
                 refundTotal += Math.abs(price);
@@ -2646,11 +2654,20 @@
         if (!container) return;
         try {
             const res = await fetch(`/api/events/${encodeURIComponent(ev.item_name)}/financial-summary`);
-            if (!res.ok) return; // keep client-side fallback (auth required — manager+)
+            if (!res.ok) return;
             const data = await res.json();
-            if (!data.has_allocation_data || data.allocation_coverage_pct < 50) return;
 
-            // Overlay server-rendered financial panel
+            // Show revenue discrepancy banner if detected (regardless of allocation coverage)
+            if (data.revenue_discrepancy) {
+                const d = data.revenue_discrepancy;
+                const bannerHtml = `<div style="margin:0.5rem 1rem; padding:0.6rem 0.8rem; background:#fef3c7; border:1px solid #f59e0b; border-radius:8px; font-size:0.8rem; color:#92400e;">
+                    <strong>⚠️ Revenue discrepancy detected:</strong> item_price total ($${d.item_price_total.toFixed(2)}) differs from order total cross-check ($${d.order_total_crosscheck.toFixed(2)}) by <strong>$${Math.abs(d.gap).toFixed(2)}</strong> (${d.direction}).
+                    <a href="/admin#audit" style="color:#92400e; text-decoration:underline; margin-left:0.3rem;">Review parse warnings →</a>
+                </div>`;
+                container.insertAdjacentHTML('afterbegin', bannerHtml);
+            }
+
+            if (!data.has_allocation_data || data.allocation_coverage_pct < 50) return;
             const serverHtml = renderFinancialPanelServer(data, ev, registrants);
             if (serverHtml) container.innerHTML = serverHtml;
         } catch (e) {
