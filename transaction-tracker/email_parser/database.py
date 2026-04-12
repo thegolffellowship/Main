@@ -277,9 +277,10 @@ _connect = managed_connection
 
 
 def init_db(db_path: str | Path | None = None) -> None:
-    """Create the items table if it doesn't exist."""
+    """Create all tables and run schema migrations."""
     with _connect(db_path) as conn:
 
+        # ── Items table (main transaction data) ──────────────────────
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS items (
@@ -298,12 +299,16 @@ def init_db(db_path: str | Path | None = None) -> None:
                 order_date       TEXT NOT NULL,
                 order_time       TEXT,
                 total_amount     TEXT,
+                transaction_fees TEXT,
+                coupon_code      TEXT,
+                coupon_amount    TEXT,
                 item_name        TEXT NOT NULL,
                 item_price       TEXT,
                 quantity         INTEGER DEFAULT 1,
                 chapter          TEXT,
                 course           TEXT,
                 handicap         TEXT,
+                has_handicap     TEXT,
                 side_games       TEXT,
                 tee_choice       TEXT,
                 user_status      TEXT,
@@ -330,189 +335,39 @@ def init_db(db_path: str | Path | None = None) -> None:
                 credit_note      TEXT,
                 transferred_from_id INTEGER,
                 transferred_to_id   INTEGER,
+                wd_reason        TEXT,
+                wd_note          TEXT,
+                wd_credits       TEXT,
+                credit_amount    TEXT,
+                parent_item_id   INTEGER,
+                parent_snapshot  TEXT,
+                customer_id      INTEGER,
+                archived         INTEGER DEFAULT 0,
                 created_at       TEXT DEFAULT (datetime('now')),
                 UNIQUE(email_uid, item_index)
             )
             """
         )
 
-        # Migrate: add columns that may not exist in older databases
+        # Items migrations — columns that may not exist on older databases
         for col, col_type in [
-            ("customer_email", "TEXT"),
-            ("customer_phone", "TEXT"),
-            ("transaction_status", "TEXT DEFAULT 'active'"),
-            ("credit_note", "TEXT"),
-            ("transferred_from_id", "INTEGER"),
-            ("transferred_to_id", "INTEGER"),
-            ("chapter", "TEXT"),
-            ("has_handicap", "TEXT"),
             ("transaction_fees", "TEXT"),
-            ("partner_request", "TEXT"),
-            ("fellowship_after", "TEXT"),
-            ("notes", "TEXT"),
+            ("has_handicap", "TEXT"),
             ("wd_reason", "TEXT"),
             ("wd_note", "TEXT"),
             ("wd_credits", "TEXT"),
             ("credit_amount", "TEXT"),
-            ("order_time", "TEXT"),
-            ("first_name", "TEXT"),
-            ("last_name", "TEXT"),
-            ("middle_name", "TEXT"),
-            ("suffix", "TEXT"),
+            ("parent_item_id", "INTEGER"),
+            ("parent_snapshot", "TEXT"),
+            ("customer_id", "INTEGER"),
             ("archived", "INTEGER DEFAULT 0"),
-            ("holes", "TEXT"),
             ("coupon_code", "TEXT"),
             ("coupon_amount", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
-                logger.info("Added new column: %s", col)
             except sqlite3.OperationalError:
-                pass  # column already exists
-
-        # Migration: rename member_status → user_status
-        try:
-            conn.execute("ALTER TABLE items RENAME COLUMN member_status TO user_status")
-            logger.info("Migrated items.member_status → items.user_status")
-        except sqlite3.OperationalError:
-            pass  # already renamed or doesn't exist
-
-        # Migration: rename fellowship_after → fellowship
-        try:
-            conn.execute("ALTER TABLE items RENAME COLUMN fellowship_after TO fellowship")
-            logger.info("Migrated items.fellowship_after → items.fellowship")
-        except sqlite3.OperationalError:
-            pass  # already renamed or doesn't exist
-
-        # Migration: merge event city → chapter, then rename shipping_* → address fields
-        # Step 1: copy city data into chapter where chapter is empty
-        try:
-            conn.execute(
-                "UPDATE items SET chapter = city "
-                "WHERE (chapter IS NULL OR chapter = '') "
-                "AND city IS NOT NULL AND city != ''"
-            )
-            # Step 2: rename old city column out of the way
-            conn.execute("ALTER TABLE items RENAME COLUMN city TO _city_deprecated")
-            logger.info("Migrated items.city → items.chapter (merged)")
-        except sqlite3.OperationalError:
-            pass  # already renamed or column doesn't exist
-
-        # Clean up _city_deprecated if it still exists
-        try:
-            conn.execute(
-                "UPDATE items SET chapter = _city_deprecated "
-                "WHERE (chapter IS NULL OR chapter = '') "
-                "AND _city_deprecated IS NOT NULL AND _city_deprecated != ''"
-            )
-            conn.execute("ALTER TABLE items DROP COLUMN _city_deprecated")
-            logger.info("Dropped items._city_deprecated after merging into chapter")
-        except sqlite3.OperationalError:
-            pass  # column doesn't exist — already cleaned up
-
-        # Step 3: rename shipping_* → plain address field names
-        # Try rename first; if it fails (target column already exists from a
-        # prior ensure_column run), copy data from old → new and drop old.
-        for old, new in [
-            ("shipping_address", "address"),
-            ("shipping_address2", "address2"),
-            ("shipping_city", "city"),
-            ("shipping_state", "state"),
-            ("shipping_zip", "zip"),
-        ]:
-            try:
-                conn.execute(f"ALTER TABLE items RENAME COLUMN {old} TO {new}")
-                logger.info("Migrated items.%s → items.%s", old, new)
-            except sqlite3.OperationalError:
-                # Rename failed — either already done, or target column exists.
-                # If both old and new columns exist, copy data from old → new.
-                try:
-                    conn.execute(
-                        f"UPDATE items SET [{new}] = [{old}] "
-                        f"WHERE ([{new}] IS NULL OR [{new}] = '') "
-                        f"AND [{old}] IS NOT NULL AND [{old}] != ''"
-                    )
-                    conn.execute(f"ALTER TABLE items DROP COLUMN [{old}]")
-                    logger.info("Copied items.%s → items.%s and dropped old column", old, new)
-                except sqlite3.OperationalError:
-                    pass  # old column doesn't exist — already fully migrated
-
-        # Ensure address columns exist — covers edge cases where shipping_*
-        # columns never existed so the rename above was a no-op.
-        for col in ["address", "address2", "city", "state", "zip"]:
-            try:
-                conn.execute(f"ALTER TABLE items ADD COLUMN {col} TEXT")
-                logger.info("Added missing column: %s", col)
-            except sqlite3.OperationalError:
-                pass  # column already exists
-
-        # Ensure parent_item_id column exists for child payment records
-        try:
-            conn.execute("ALTER TABLE items ADD COLUMN parent_item_id INTEGER")
-            logger.info("Added missing column: parent_item_id")
-        except sqlite3.OperationalError:
-            pass  # column already exists
-
-        # Migrate parent_item_id from TEXT to INTEGER (cast existing string values)
-        try:
-            text_rows = conn.execute(
-                "SELECT id, parent_item_id FROM items "
-                "WHERE parent_item_id IS NOT NULL AND typeof(parent_item_id) = 'text'"
-            ).fetchall()
-            if text_rows:
-                for r in text_rows:
-                    conn.execute(
-                        "UPDATE items SET parent_item_id = CAST(parent_item_id AS INTEGER) WHERE id = ?",
-                        (r["id"],),
-                    )
-                conn.commit()
-                logger.info("Migrated %d parent_item_id values from TEXT to INTEGER", len(text_rows))
-        except Exception:
-            logger.exception("parent_item_id TEXT→INTEGER migration failed (non-fatal)")
-
-        # Migrate transferred_from_id / transferred_to_id from TEXT to INTEGER
-        for col in ("transferred_from_id", "transferred_to_id"):
-            try:
-                text_rows = conn.execute(
-                    f"SELECT id, {col} FROM items "
-                    f"WHERE {col} IS NOT NULL AND typeof({col}) = 'text'"
-                ).fetchall()
-                if text_rows:
-                    for r in text_rows:
-                        conn.execute(
-                            f"UPDATE items SET {col} = CAST({col} AS INTEGER) WHERE id = ?",
-                            (r["id"],),
-                        )
-                    conn.commit()
-                    logger.info("Migrated %d %s values from TEXT to INTEGER", len(text_rows), col)
-            except Exception:
-                logger.exception("%s TEXT→INTEGER migration failed (non-fatal)", col)
-
-        # Ensure customer_id column exists for linking items to customers
-        try:
-            conn.execute("ALTER TABLE items ADD COLUMN customer_id INTEGER")
-            logger.info("Added missing column: customer_id")
-        except sqlite3.OperationalError:
-            pass  # column already exists
-
-        # Migration: drop event_date column from items (unreliable data)
-        try:
-            conn.execute("ALTER TABLE items DROP COLUMN event_date")
-            logger.info("Dropped items.event_date column")
-        except sqlite3.OperationalError:
-            pass  # column already dropped or doesn't exist
-
-        # Migration: backfill NULL transaction_status → 'active' for parsed orders
-        try:
-            updated = conn.execute(
-                "UPDATE items SET transaction_status = 'active' "
-                "WHERE transaction_status IS NULL AND merchant != 'Manual Entry'"
-            ).rowcount
-            if updated:
-                conn.commit()
-                logger.info("Backfilled transaction_status='active' on %d rows", updated)
-        except Exception:
-            logger.exception("transaction_status backfill failed (non-fatal)")
+                pass
 
         # Processed emails table — tracks ALL email UIDs we've already sent to
         # the AI, even if no items were extracted.  Prevents re-parsing the same
@@ -548,103 +403,61 @@ def init_db(db_path: str | Path | None = None) -> None:
         # Only runs once — skips rows that already have first_name populated.
         _backfill_name_parts(conn)
 
-        # Events table — canonical event list, auto-populated from items
+        # ── Events table — canonical event list ────────────────────
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS events (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_name   TEXT NOT NULL UNIQUE,
-                event_date  TEXT,
-                course      TEXT,
-                chapter     TEXT,
-                event_type  TEXT DEFAULT 'event',
-                format      TEXT,
-                start_type  TEXT,
-                start_time  TEXT,
-                tee_time_count INTEGER,
-                tee_time_interval INTEGER,
-                start_time_18 TEXT,
-                start_type_18 TEXT,
-                tee_time_count_18 INTEGER,
-                tee_direction TEXT DEFAULT 'First Tee',
-                tee_direction_18 TEXT DEFAULT 'First Tee',
-                course_cost REAL,
-                tgf_markup REAL,
-                side_game_fee REAL,
-                transaction_fee_pct REAL DEFAULT 3.5,
-                created_at  TEXT DEFAULT (datetime('now'))
+                id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_name             TEXT NOT NULL UNIQUE,
+                event_date            TEXT,
+                course                TEXT,
+                chapter               TEXT,
+                event_type            TEXT DEFAULT 'event',
+                format                TEXT,
+                start_type            TEXT,
+                start_time            TEXT,
+                tee_time_count        INTEGER,
+                tee_time_interval     INTEGER,
+                start_time_18         TEXT,
+                start_type_18         TEXT,
+                tee_time_count_18     INTEGER,
+                tee_direction         TEXT DEFAULT 'First Tee',
+                tee_direction_18      TEXT DEFAULT 'First Tee',
+                course_cost           REAL,
+                course_cost_9         REAL,
+                course_cost_18        REAL,
+                tgf_markup            REAL,
+                tgf_markup_9          REAL,
+                tgf_markup_18         REAL,
+                tgf_markup_final      REAL,
+                tgf_markup_final_9    REAL,
+                tgf_markup_final_18   REAL,
+                side_game_fee         REAL,
+                side_game_fee_9       REAL,
+                side_game_fee_18      REAL,
+                transaction_fee_pct   REAL DEFAULT 3.5,
+                course_surcharge      REAL DEFAULT 0,
+                course_cost_breakdown TEXT,
+                course_cost_breakdown_9  TEXT,
+                course_cost_breakdown_18 TEXT,
+                created_at            TEXT DEFAULT (datetime('now'))
             )
             """
         )
 
-        # Migration: rename city → chapter in events table (existing DBs)
-        try:
-            conn.execute("ALTER TABLE events RENAME COLUMN city TO chapter")
-            logger.info("Migrated events.city → events.chapter")
-        except sqlite3.OperationalError:
-            pass  # column already named chapter, or doesn't exist
-
-        # Migration: add new event planning columns
-        for col, col_type in [("format", "TEXT"), ("start_type", "TEXT"), ("start_time", "TEXT"),
-                               ("tee_time_count", "INTEGER"), ("tee_time_interval", "INTEGER"),
-                               ("start_time_18", "TEXT"), ("start_type_18", "TEXT"),
-                               ("tee_time_count_18", "INTEGER"),
-                               ("tee_direction", "TEXT DEFAULT 'First Tee'"),
-                               ("tee_direction_18", "TEXT DEFAULT 'First Tee'")]:
+        # Events migrations — columns that may not exist on older databases
+        for col, col_type in [
+            ("course_cost_9", "REAL"), ("course_cost_18", "REAL"),
+            ("tgf_markup_9", "REAL"), ("tgf_markup_18", "REAL"),
+            ("tgf_markup_final", "REAL"), ("tgf_markup_final_9", "REAL"), ("tgf_markup_final_18", "REAL"),
+            ("side_game_fee_9", "REAL"), ("side_game_fee_18", "REAL"),
+            ("course_surcharge", "REAL DEFAULT 0"),
+            ("course_cost_breakdown", "TEXT"), ("course_cost_breakdown_9", "TEXT"), ("course_cost_breakdown_18", "TEXT"),
+        ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
-                logger.info("Added events.%s column", col)
             except sqlite3.OperationalError:
-                pass  # already exists
-
-        # Migration: add event pricing columns
-        for col, col_type in [("course_cost", "REAL"),
-                               ("tgf_markup", "REAL"),
-                               ("side_game_fee", "REAL"),
-                               ("transaction_fee_pct", "REAL DEFAULT 3.5")]:
-            try:
-                conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
-                logger.info("Added events.%s column", col)
-            except sqlite3.OperationalError:
-                pass  # already exists
-
-        # Migration: add combo pricing columns (9/18 separate pricing)
-        for col, col_type in [("course_cost_9", "REAL"),
-                               ("course_cost_18", "REAL"),
-                               ("tgf_markup_9", "REAL"),
-                               ("tgf_markup_18", "REAL"),
-                               ("side_game_fee_9", "REAL"),
-                               ("side_game_fee_18", "REAL"),
-                               ("tgf_markup_final", "REAL"),
-                               ("tgf_markup_final_9", "REAL"),
-                               ("tgf_markup_final_18", "REAL")]:
-            try:
-                conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
-                logger.info("Added events.%s column", col)
-            except sqlite3.OperationalError:
-                pass  # already exists
-
-        # Migration: add course surcharge field (e.g. $1 ACGT printing fee)
-        try:
-            conn.execute("ALTER TABLE events ADD COLUMN course_surcharge REAL DEFAULT 0")
-            logger.info("Added events.course_surcharge column")
-        except sqlite3.OperationalError:
-            pass  # already exists
-
-        # Migration: add parent_snapshot column for child payment revert
-        try:
-            conn.execute("ALTER TABLE items ADD COLUMN parent_snapshot TEXT")
-            logger.info("Added items.parent_snapshot column")
-        except sqlite3.OperationalError:
-            pass  # already exists
-
-        # Migration: add course cost breakdown JSON columns
-        for col in ["course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18"]:
-            try:
-                conn.execute(f"ALTER TABLE events ADD COLUMN {col} TEXT")
-                logger.info("Added events.%s column", col)
-            except sqlite3.OperationalError:
-                pass  # already exists
+                pass
 
         # RSVPs table — Golf Genius round signup confirmations
         conn.execute(
@@ -1187,6 +1000,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 category_id     INTEGER,
                 amount          REAL NOT NULL,
                 memo            TEXT,
+                event_id        INTEGER,
                 FOREIGN KEY (transaction_id) REFERENCES acct_transactions(id) ON DELETE CASCADE,
                 FOREIGN KEY (entity_id) REFERENCES acct_entities(id),
                 FOREIGN KEY (category_id) REFERENCES acct_categories(id)
@@ -1262,34 +1076,24 @@ def init_db(db_path: str | Path | None = None) -> None:
         if existing_cats["cnt"] == 0:
             _seed_acct_categories(conn)
 
-        # ── Accounting schema migrations ──
-        # Add event_id to splits (links accounting transactions to TGF events)
-        for col, col_type in [
-            ("event_id", "INTEGER"),
-        ]:
+        # Accounting schema migrations
+        for col, col_type in [("event_id", "INTEGER")]:
             try:
                 conn.execute(f"ALTER TABLE acct_splits ADD COLUMN {col} {col_type}")
-                logger.info("Added acct_splits.%s", col)
             except sqlite3.OperationalError:
                 pass
-
         conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_splits_event ON acct_splits(event_id)")
 
-        # ── Unified financial model migrations (Issue #242) ──
         for col, col_type, default in [
             ("payment_method", "TEXT", "'godaddy'"),
             ("acct_transaction_id", "INTEGER", None),
         ]:
             try:
                 default_clause = f" DEFAULT {default}" if default else ""
-                conn.execute(
-                    f"ALTER TABLE acct_allocations ADD COLUMN {col} {col_type}{default_clause}"
-                )
-                logger.info("Added acct_allocations.%s", col)
+                conn.execute(f"ALTER TABLE acct_allocations ADD COLUMN {col} {col_type}{default_clause}")
             except sqlite3.OperationalError:
                 pass
 
-        # Seed unified financial model categories if missing
         _seed_unified_financial_categories(conn)
 
         # Account-level rules/heuristics for AI bookkeeper
@@ -1325,7 +1129,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
-        # Allocation tracking — breaks down every GoDaddy order's dollars
+        # Allocation tracking — breaks down every order's dollars
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS acct_allocations (
@@ -1345,6 +1149,8 @@ def init_db(db_path: str | Path | None = None) -> None:
                 total_collected     REAL DEFAULT 0,
                 allocation_status   TEXT DEFAULT 'pending'
                     CHECK(allocation_status IN ('pending', 'complete', 'needs_course_cost')),
+                payment_method      TEXT DEFAULT 'godaddy',
+                acct_transaction_id INTEGER,
                 notes               TEXT,
                 created_at          TEXT DEFAULT (datetime('now')),
                 UNIQUE(order_id, item_id)
@@ -1579,10 +1385,10 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
             """
         )
-        # Migration: add summary column if missing
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(coo_chat_sessions)").fetchall()]
-        if "summary" not in cols:
+        try:
             conn.execute("ALTER TABLE coo_chat_sessions ADD COLUMN summary TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS coo_chat_messages (
