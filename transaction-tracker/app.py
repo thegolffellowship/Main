@@ -6068,23 +6068,31 @@ try:
         _bf_result = backfill_acct_transactions()
         logger.info("Startup backfill: %s", _bf_result)
     else:
-        # Targeted fix: recalculate merchant fees with correct formula
-        # Old formula: total_amount * 0.027 + 0.30 / item_count  (wrong precedence)
-        # New formula: (total_amount * 0.027 + 0.30) / item_count
+        # Targeted fix: delete non-GoDaddy processing fees + recalculate remaining with correct formula
         with _startup_connect() as _fix_conn:
             from email_parser.database import _parse_dollar
-            # Check if fees need recalculation by sampling a multi-item order
+
+            # 1. Delete processing_fee entries for non-GoDaddy items
+            _bad_fees = _fix_conn.execute(
+                """SELECT t.id, t.amount, t.item_id, i.merchant, i.customer, i.item_name
+                   FROM acct_transactions t
+                   JOIN items i ON i.id = t.item_id
+                   WHERE t.entry_type = 'expense' AND t.category = 'processing_fee'
+                   AND i.merchant != 'The Golf Fellowship'"""
+            ).fetchall()
+            _needs_fix = len(_bad_fees) > 0
+
+            # 2. Check if parenthesization fix is also needed (sample a multi-item order)
+            _needs_recalc = False
             _sample = _fix_conn.execute(
-                """SELECT t.id, t.amount as current_fee, t.item_id, i.total_amount, i.order_id
+                """SELECT t.id, t.amount as current_fee, i.total_amount, i.order_id
                    FROM acct_transactions t
                    JOIN items i ON i.id = t.item_id
                    WHERE t.entry_type = 'expense' AND t.category = 'processing_fee'
                    AND i.order_id IN (
                        SELECT order_id FROM items GROUP BY order_id HAVING COUNT(*) > 1
-                   )
-                   LIMIT 1"""
+                   ) LIMIT 1"""
             ).fetchone()
-            _needs_fee_fix = False
             if _sample:
                 _s = dict(_sample)
                 _ta = _parse_dollar(_s["total_amount"])
@@ -6093,49 +6101,60 @@ try:
                 ).fetchone()["cnt"]
                 _correct = round((_ta * 0.027 + 0.30) / _cnt, 2)
                 if abs(_s["current_fee"] - _correct) > 0.005:
-                    _needs_fee_fix = True
+                    _needs_recalc = True
 
-            if _needs_fee_fix:
-                # Recalculate every processing_fee entry in place
-                _fee_rows = _fix_conn.execute(
-                    """SELECT t.id, t.item_id, i.total_amount, i.order_id
-                       FROM acct_transactions t
-                       JOIN items i ON i.id = t.item_id
-                       WHERE t.entry_type = 'expense' AND t.category = 'processing_fee'"""
-                ).fetchall()
-                _updated = 0
-                _old_total = 0.0
-                _new_total = 0.0
-                for _fr in _fee_rows:
-                    _fr = dict(_fr)
-                    _ta = _parse_dollar(_fr["total_amount"])
-                    if _ta <= 0:
-                        continue
-                    _oid = _fr["order_id"] or ""
-                    _cnt = 1
-                    if _oid:
-                        _cnt = max(_fix_conn.execute(
-                            "SELECT COUNT(*) as cnt FROM items WHERE order_id = ?", (_oid,)
-                        ).fetchone()["cnt"], 1)
-                    _new_fee = round((_ta * 0.027 + 0.30) / _cnt, 2)
-                    _old_row = _fix_conn.execute(
-                        "SELECT amount FROM acct_transactions WHERE id = ?", (_fr["id"],)
-                    ).fetchone()
-                    _old_fee = _old_row["amount"] if _old_row else 0
-                    _old_total += _old_fee
-                    _new_total += _new_fee
-                    _fix_conn.execute(
-                        "UPDATE acct_transactions SET amount = ?, total_amount = ? WHERE id = ?",
-                        (_new_fee, abs(_new_fee), _fr["id"]),
-                    )
-                    _updated += 1
+            if _needs_fix or _needs_recalc:
+                # Delete non-GoDaddy processing fees
+                if _bad_fees:
+                    _deleted_amt = 0.0
+                    for _bf in _bad_fees:
+                        _bf = dict(_bf)
+                        _fix_conn.execute("DELETE FROM acct_transactions WHERE id = ?", (_bf["id"],))
+                        _deleted_amt += _bf["amount"]
+                        logger.info("  Deleted spurious processing_fee $%.2f for item %d (%s — %s)",
+                                    _bf["amount"], _bf["item_id"], _bf["merchant"], _bf["item_name"])
+                    logger.info("Deleted %d non-GoDaddy processing_fee entries totaling $%.2f",
+                                len(_bad_fees), _deleted_amt)
+
+                # Recalculate remaining GoDaddy fees with correct formula
+                if _needs_recalc:
+                    _fee_rows = _fix_conn.execute(
+                        """SELECT t.id, t.item_id, i.total_amount, i.order_id
+                           FROM acct_transactions t
+                           JOIN items i ON i.id = t.item_id
+                           WHERE t.entry_type = 'expense' AND t.category = 'processing_fee'"""
+                    ).fetchall()
+                    _updated = 0
+                    _old_total = 0.0
+                    _new_total = 0.0
+                    for _fr in _fee_rows:
+                        _fr = dict(_fr)
+                        _ta = _parse_dollar(_fr["total_amount"])
+                        if _ta <= 0:
+                            continue
+                        _oid = _fr["order_id"] or ""
+                        _cnt = 1
+                        if _oid:
+                            _cnt = max(_fix_conn.execute(
+                                "SELECT COUNT(*) as cnt FROM items WHERE order_id = ?", (_oid,)
+                            ).fetchone()["cnt"], 1)
+                        _new_fee = round((_ta * 0.027 + 0.30) / _cnt, 2)
+                        _old_row = _fix_conn.execute(
+                            "SELECT amount FROM acct_transactions WHERE id = ?", (_fr["id"],)
+                        ).fetchone()
+                        _old_fee = _old_row["amount"] if _old_row else 0
+                        _old_total += _old_fee
+                        _new_total += _new_fee
+                        _fix_conn.execute(
+                            "UPDATE acct_transactions SET amount = ?, total_amount = ? WHERE id = ?",
+                            (_new_fee, abs(_new_fee), _fr["id"]),
+                        )
+                        _updated += 1
+                    logger.info("Merchant fee recalc: %d entries, $%.2f → $%.2f", _updated, _old_total, _new_total)
+
                 _fix_conn.commit()
-                logger.info(
-                    "Merchant fee recalculation: updated %d entries, total $%.2f → $%.2f (delta $%.2f)",
-                    _updated, _old_total, _new_total, _new_total - _old_total,
-                )
             else:
-                logger.info("Accounting entries already exist (%d), merchant fees correct", _acct_count)
+                logger.info("Accounting entries OK (%d), no fixes needed", _acct_count)
 
     # ── Verify s18.4 LANDA PARK numbers ──
     try:

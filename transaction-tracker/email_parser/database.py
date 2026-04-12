@@ -2081,8 +2081,8 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                         new_item_id = cursor.lastrowid
                         item_price = _parse_dollar(row.get("item_price"))
                         merchant = row.get("merchant") or ""
-                        # Only create entries for real GoDaddy orders (not manual, not roster, not transfer targets)
-                        if item_price > 0 and merchant and not merchant.startswith(("Manual", "Paid Separately", "Roster", "Customer Entry", "RSVP")) and not row.get("transferred_from_id"):
+                        # Only create entries for real GoDaddy orders
+                        if item_price > 0 and merchant == "The Golf Fellowship" and not row.get("transferred_from_id"):
                             event_name = row.get("item_name") or ""
                             customer_name = row.get("customer") or ""
                             order_id_val = row.get("order_id") or ""
@@ -9900,17 +9900,12 @@ def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
 
     with _connect(db_path) as conn:
         # ── 1. GoDaddy orders — income + processing fee entries ──
-        # Exclude transfer targets (transferred_from_id set) — those get transfer_in entries instead
+        # Only 'The Golf Fellowship' merchant (actual GoDaddy orders).
+        # Excludes transfer targets, manual entries, external payments, etc.
         gd_items = conn.execute(
             """SELECT * FROM items
                WHERE order_date >= '2026-01-01'
-               AND merchant IS NOT NULL
-               AND merchant NOT LIKE 'Manual%'
-               AND merchant NOT LIKE 'Paid Separately%'
-               AND merchant NOT LIKE 'Roster%'
-               AND merchant NOT LIKE 'Customer Entry%'
-               AND merchant NOT LIKE 'RSVP%'
-               AND merchant NOT LIKE 'Refund%'
+               AND merchant = 'The Golf Fellowship'
                AND COALESCE(transaction_status, 'active') NOT IN ('rsvp_only')
                AND parent_item_id IS NULL
                AND transferred_from_id IS NULL
