@@ -2777,6 +2777,21 @@
             </div>`;
         }
 
+        // Reconciliation status (async loaded)
+        html += `<div id="recon-status-${ev.id}" style="margin-top:0.3rem; font-size:0.75rem; color:var(--text-muted);"></div>`;
+        setTimeout(async () => {
+            try {
+                const reconRes = await fetch(`/api/reconciliation/event/${encodeURIComponent(ev.item_name)}`);
+                if (!reconRes.ok) return;
+                const recon = await reconRes.json();
+                const el = document.getElementById(`recon-status-${ev.id}`);
+                if (!el || recon.total_transactions === 0) return;
+                const pct = Math.round(recon.reconciled_transactions / recon.total_transactions * 100);
+                el.innerHTML = `Reconciliation: ${recon.reconciled_transactions} of ${recon.total_transactions} transactions confirmed in bank ($${recon.matched_amount.toFixed(2)} matched)`;
+                el.style.color = pct === 100 ? '#166534' : '#92400e';
+            } catch(e) {}
+        }, 100);
+
         // Actual expenses container (async loaded)
         html += `<div id="financial-expenses-${ev.id}" style="margin-top:1rem;">`;
         html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:var(--text-muted);">Actual Expenses</h4>`;
