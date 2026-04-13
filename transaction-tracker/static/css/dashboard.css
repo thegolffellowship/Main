@@ -2247,6 +2247,23 @@ div.mobile-card.row-rsvp-only {
 .acct-mc-actions { display: flex; gap: 0.35rem; padding-top: 0.5rem; flex-wrap: wrap; }
 .acct-mc-actions select { flex: 1; min-width: 0; padding: 0.4rem 0.5rem; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); min-height: 36px; }
 .acct-mc-splits { padding-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.acct-mc-controls {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; padding-top: 0.5rem;
+}
+.acct-mc-controls select {
+    width: 100%; padding: 0.45rem 0.5rem; font-size: 0.8rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    min-height: 38px; background: var(--surface); transition: border-color 0.2s, box-shadow 0.2s;
+}
+.acct-mc-controls select:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.acct-mc-tags {
+    display: flex; flex-wrap: wrap; gap: 0.25rem; padding-top: 0.4rem;
+}
+.acct-mc-tags .acct-tag-selectable { cursor: pointer; border: 1.5px solid; padding: 0.15rem 0.5rem; }
+.acct-mc-btn-row {
+    display: flex; gap: 0.35rem; padding-top: 0.5rem;
+}
+.acct-mc-btn-row .btn { min-height: 38px; font-size: 0.78rem; }
 
 /* Expense row styling on mobile cards */
 .acct-mobile-card.acct-mc-expense { border-left: 3px solid #3b82f6; }
