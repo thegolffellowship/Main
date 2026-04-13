@@ -1697,6 +1697,50 @@ def init_db(db_path: str | Path | None = None) -> None:
                              (new_name, old_name))
                 logger.info("Renamed account '%s' → '%s'", old_name, new_name)
 
+        # ── Auto-populate account last_four from expense transactions ──
+        # If an account has no last_four but expense_transactions reference it
+        # by account_name and have account_last4, backfill the digits
+        accts_missing_last4 = conn.execute(
+            "SELECT id, name FROM acct_accounts WHERE last_four IS NULL OR last_four = ''"
+        ).fetchall()
+        for acct in accts_missing_last4:
+            # Find a matching expense transaction that has last4 digits
+            match = conn.execute(
+                """SELECT account_last4 FROM expense_transactions
+                   WHERE account_name = ? AND account_last4 IS NOT NULL AND account_last4 != ''
+                   LIMIT 1""",
+                (acct["name"],)
+            ).fetchone()
+            if match:
+                conn.execute("UPDATE acct_accounts SET last_four = ? WHERE id = ?",
+                             (match["account_last4"], acct["id"]))
+                logger.info("Backfilled last_four '%s' for account '%s'",
+                            match["account_last4"], acct["name"])
+        # Also try matching by name fragments in expense_transactions
+        # e.g., account "Chase Southwest Perf Biz" might match expense account_name
+        # containing "Southwest" with last4
+        for acct in accts_missing_last4:
+            # Check if already filled above
+            check = conn.execute("SELECT last_four FROM acct_accounts WHERE id = ?",
+                                 (acct["id"],)).fetchone()
+            if check and check["last_four"]:
+                continue
+            # Try fuzzy: find expenses where account_name words overlap
+            words = [w for w in acct["name"].split() if len(w) > 3 and w.lower() not in ('chase', 'card', 'credit')]
+            for word in words:
+                match = conn.execute(
+                    """SELECT account_last4 FROM expense_transactions
+                       WHERE account_name LIKE ? AND account_last4 IS NOT NULL AND account_last4 != ''
+                       LIMIT 1""",
+                    (f"%{word}%",)
+                ).fetchone()
+                if match:
+                    conn.execute("UPDATE acct_accounts SET last_four = ? WHERE id = ?",
+                                 (match["account_last4"], acct["id"]))
+                    logger.info("Backfilled last_four '%s' for account '%s' (fuzzy match on '%s')",
+                                match["account_last4"], acct["name"], word)
+                    break
+
         # ── One-time duplicate customer merge (idempotent) ──────────
         _merge_duplicate_customers(conn)
 
