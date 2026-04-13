@@ -102,6 +102,10 @@ function renderTransactionList(txns, total) {
         ACCT.categories.filter(c => c.type === 'expense').map(c =>
             `<option value="${c.name}">${c.name}</option>`).join('');
 
+    const _expAcctOpts = '<option value="">— Account —</option>' +
+        ACCT.accounts.map(a => `<option value="${a.name}">${a.name}</option>`).join('') +
+        '<option value="__new__">+ New Account</option>';
+
     function _catOptsForType(type, selectedId) {
         return '<option value="">— Category —</option>' +
             ACCT.categories.filter(c => c.type === type).map(c =>
@@ -153,19 +157,10 @@ function renderTransactionList(txns, total) {
                     </div>
                 </div>
                 <div class="acct-mobile-card-details">
-                    <div class="acct-mc-fields">
-                        <div class="acct-mc-field">
-                            <span class="acct-mc-label">Type</span>
-                            <span class="acct-mc-value"><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></span>
-                        </div>
-                        <div class="acct-mc-field">
-                            <span class="acct-mc-label">Account</span>
-                            <span class="acct-mc-value">${t.account_name || '—'}</span>
-                        </div>
-                    </div>
                     <div class="acct-mc-controls">
                         <select class="mc-exp-entity" data-expense-id="${t.expense_id}">${_expEntOpts}</select>
                         <select class="mc-exp-category" data-expense-id="${t.expense_id}">${_expCatOpts}</select>
+                        <select class="mc-exp-account" data-expense-id="${t.expense_id}">${_expAcctOpts}</select>
                     </div>
                     ${m.splitBadges ? `<div class="acct-mc-splits">${m.splitBadges}</div>` : ''}
                     <div class="acct-mc-btn-row">
@@ -248,6 +243,16 @@ function renderTransactionList(txns, total) {
                     catSel.style.borderColor = '#7dd3fc';
                 }
             }
+            // Pre-select account
+            const acctSel = card.querySelector('.mc-exp-account');
+            const acctName = t.account_name || '';
+            if (acctSel && acctName) {
+                for (const opt of acctSel.options) {
+                    if (opt.value && opt.value.toUpperCase() === acctName.toUpperCase()) {
+                        opt.selected = true; break;
+                    }
+                }
+            }
         } else {
             // Pre-select regular txn dropdowns
             const entSel = card.querySelector('.mc-entity');
@@ -309,18 +314,40 @@ function renderTransactionList(txns, total) {
     });
 
     // ── Mobile card: inline save for EXPENSE transactions ──
-    el.querySelectorAll('.acct-mobile-cards .mc-exp-entity, .acct-mobile-cards .mc-exp-category').forEach(sel => {
+    el.querySelectorAll('.acct-mobile-cards .mc-exp-entity, .acct-mobile-cards .mc-exp-category, .acct-mobile-cards .mc-exp-account').forEach(sel => {
         sel.addEventListener('change', async (e) => {
             e.stopPropagation();
             const card = sel.closest('.acct-mobile-card');
             const expId = card.dataset.expenseId;
+
+            // Handle "+ New Account"
+            const acctSel = card.querySelector('.mc-exp-account');
+            if (acctSel && acctSel.value === '__new__') {
+                const newName = prompt('New account name:');
+                if (!newName || !newName.trim()) { acctSel.value = ''; return; }
+                try {
+                    const created = await api('/accounts', { method: 'POST', body: { name: newName.trim(), account_type: 'checking', opening_balance: 0 } });
+                    ACCT.accounts.push({ id: created.id, name: newName.trim() });
+                    const opt = document.createElement('option');
+                    opt.value = newName.trim();
+                    opt.textContent = newName.trim();
+                    // Insert before the "+ New" option
+                    acctSel.insertBefore(opt, acctSel.querySelector('option[value="__new__"]'));
+                    acctSel.value = newName.trim();
+                } catch (err) {
+                    alert('Error creating account: ' + err.message);
+                    acctSel.value = '';
+                    return;
+                }
+            }
+
             const entity = card.querySelector('.mc-exp-entity').value || null;
             const category = card.querySelector('.mc-exp-category').value || null;
+            const account_name = acctSel ? acctSel.value || null : null;
             try {
-                await api('/expense-transactions/' + expId, {
-                    method: 'PATCH',
-                    body: { entity, category, reviewed_at: new Date().toISOString(), reviewed_by: 'admin' }
-                });
+                const body = { entity, category, reviewed_at: new Date().toISOString(), reviewed_by: 'admin' };
+                if (account_name && account_name !== '__new__') body.account_name = account_name;
+                await api('/expense-transactions/' + expId, { method: 'PATCH', body });
                 sel.style.borderColor = 'var(--green)';
                 sel.style.boxShadow = '0 0 0 1px var(--green)';
                 setTimeout(() => { sel.style.borderColor = ''; sel.style.boxShadow = ''; }, 2000);
@@ -338,11 +365,12 @@ function renderTransactionList(txns, total) {
             const expId = card.dataset.expenseId;
             const entity = card.querySelector('.mc-exp-entity').value || null;
             const category = card.querySelector('.mc-exp-category').value || null;
+            const acctSel = card.querySelector('.mc-exp-account');
+            const account_name = acctSel ? acctSel.value || null : null;
             try {
-                await api('/expense-transactions/' + expId, {
-                    method: 'PATCH',
-                    body: { entity, category, review_status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: 'admin' }
-                });
+                const body = { entity, category, review_status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: 'admin' };
+                if (account_name && account_name !== '__new__') body.account_name = account_name;
+                await api('/expense-transactions/' + expId, { method: 'PATCH', body });
                 card.style.opacity = '0.5';
                 btn.textContent = 'Approved';
                 btn.disabled = true;
