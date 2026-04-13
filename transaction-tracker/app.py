@@ -106,6 +106,8 @@ from email_parser.database import (
     get_handicap_settings,
     update_handicap_settings,
     get_handicap_export_data,
+    build_handicap_card_data,
+    build_handicap_card_html,
     relink_all_unlinked_players,
     mark_email_processed,
     clear_failed_processed,
@@ -4696,6 +4698,192 @@ def api_handicap_sync_status():
 
     merged = {**persisted, **_gg_sync_jobs}
     return jsonify(merged)
+
+
+# ---------------------------------------------------------------------------
+# Routes — Handicap Email Cards
+# ---------------------------------------------------------------------------
+
+@app.route("/api/handicaps/preview-email", methods=["POST"])
+@require_role("manager")
+def api_handicap_preview_email():
+    """Preview a handicap card email for a player."""
+    data = request.get_json(silent=True) or {}
+    player_name = (data.get("player_name") or "").strip()
+    if not player_name:
+        return jsonify({"error": "player_name is required"}), 400
+
+    card_data = build_handicap_card_data(player_name)
+    html = build_handicap_card_html(card_data)
+
+    first = card_data.get("first_name") or ""
+    last = card_data.get("last_name") or ""
+    display = f"{first} {last}".strip() or player_name
+    subject = f"TGF Handicap Update \u2014 {display}"
+
+    return jsonify({
+        "html": html,
+        "subject": subject,
+        "email": card_data.get("email") or "",
+        "has_email": bool(card_data.get("email")),
+        "has_index": card_data.get("handicap_index_9") is not None,
+        "player_name": player_name,
+    })
+
+
+@app.route("/api/handicaps/send-email", methods=["POST"])
+@require_role("manager")
+def api_handicap_send_email():
+    """Send a handicap card email to a single player."""
+    data = request.get_json(silent=True) or {}
+    player_name = (data.get("player_name") or "").strip()
+    if not player_name:
+        return jsonify({"error": "player_name is required"}), 400
+
+    card_data = build_handicap_card_data(player_name)
+
+    email = card_data.get("email") or ""
+    if not email:
+        return jsonify({"error": f"No email address found for {player_name}"}), 400
+
+    if card_data.get("handicap_index_9") is None:
+        return jsonify({"error": f"{player_name} does not have a handicap index yet"}), 400
+
+    html = build_handicap_card_html(card_data)
+
+    first = card_data.get("first_name") or ""
+    last = card_data.get("last_name") or ""
+    display = f"{first} {last}".strip() or player_name
+    subject = f"TGF Handicap Update \u2014 {display}"
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return jsonify({"error": "Email credentials not configured on server"}), 500
+
+    ok = send_mail_graph(
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+        from_address=from_address,
+        to_address=email,
+        subject=subject,
+        html_body=html,
+    )
+
+    status = "sent" if ok else "failed"
+    try:
+        log_message({
+            "event_name": "handicap-card",
+            "channel": "email",
+            "recipient_name": player_name,
+            "recipient_address": email,
+            "subject": subject,
+            "body_preview": f"Handicap card: {card_data.get('handicap_index_9')}N",
+            "status": status,
+            "sent_by": session.get("role", "unknown"),
+        })
+    except Exception:
+        logger.warning("Failed to log handicap card email", exc_info=True)
+
+    if ok:
+        return jsonify({"status": "ok", "email": email})
+    return jsonify({"error": "Failed to send email — check server logs"}), 500
+
+
+@app.route("/api/handicaps/send-bulk-email", methods=["POST"])
+@require_role("manager")
+def api_handicap_send_bulk_email():
+    """Send handicap card emails to all eligible players (or filtered by chapter)."""
+    import time as _time
+
+    data = request.get_json(silent=True) or {}
+    chapter = (data.get("chapter") or "").strip() or None
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return jsonify({"error": "Email credentials not configured on server"}), 500
+
+    export = get_handicap_export_data(chapter=chapter)
+    eligible_rows = export.get("rows") or []
+
+    sent = 0
+    failed = 0
+    errors = []
+    role = session.get("role", "unknown")
+
+    for i, row in enumerate(eligible_rows):
+        pname = row["player_name"]
+        email = row.get("email") or ""
+        if not email:
+            continue
+
+        try:
+            card_data = build_handicap_card_data(pname)
+            if card_data.get("handicap_index_9") is None:
+                continue
+
+            html = build_handicap_card_html(card_data)
+            first = card_data.get("first_name") or ""
+            last = card_data.get("last_name") or ""
+            display = f"{first} {last}".strip() or pname
+            subject = f"TGF Handicap Update \u2014 {display}"
+
+            ok = send_mail_graph(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret,
+                from_address=from_address,
+                to_address=email,
+                subject=subject,
+                html_body=html,
+            )
+
+            status = "sent" if ok else "failed"
+            if ok:
+                sent += 1
+            else:
+                failed += 1
+                errors.append({"player": pname, "email": email, "error": "send_mail_graph returned False"})
+
+            try:
+                log_message({
+                    "event_name": "handicap-card",
+                    "channel": "email",
+                    "recipient_name": pname,
+                    "recipient_address": email,
+                    "subject": subject,
+                    "body_preview": f"Handicap card: {card_data.get('handicap_index_9')}N",
+                    "status": status,
+                    "sent_by": role,
+                })
+            except Exception:
+                logger.warning("Failed to log handicap card email for %s", pname, exc_info=True)
+
+        except Exception as exc:
+            failed += 1
+            errors.append({"player": pname, "email": email, "error": str(exc)})
+
+        # Throttle to avoid rate limiting (300ms between sends)
+        if i < len(eligible_rows) - 1:
+            _time.sleep(0.3)
+
+    return jsonify({
+        "status": "ok" if failed == 0 else "partial",
+        "sent": sent,
+        "failed": failed,
+        "skipped_no_email": len(export.get("no_email") or []),
+        "skipped_no_index": len(export.get("no_index") or []),
+        "total_eligible": len(eligible_rows),
+        "errors": errors[:20],  # limit error details
+    })
 
 
 # ---------------------------------------------------------------------------

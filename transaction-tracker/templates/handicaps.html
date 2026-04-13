@@ -36,6 +36,15 @@
         .hcp-tag.plus    { background: #f0fdf4; color: #15803d; }
         .hcp-tag.high    { background: #fef3c7; color: #92400e; }
 
+        .btn-email-action {
+            background: none; border: 1px solid #cbd5e1; border-radius: 4px;
+            cursor: pointer; padding: 2px 6px; font-size: 0.82em; color: #2563eb;
+            transition: background 0.15s, border-color 0.15s; margin-right: 4px;
+        }
+        .btn-email-action:hover { background: #eff6ff; border-color: #93c5fd; }
+        .btn-email-action:disabled { opacity: 0.4; cursor: default; }
+        .btn-email-action:disabled:hover { background: none; border-color: #cbd5e1; }
+
         .rounds-table { width: auto; border-collapse: collapse; font-size: 0.85em; }
         .rounds-table th { background: #f1f5f9; padding: 6px 10px; text-align: left;
                            font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
@@ -216,6 +225,7 @@
                 <button id="btn-dl-sa"     class="btn btn-secondary" title="Download San Antonio handicap CSV" style="display:none;">⬇ SA CSV</button>
                 <button id="btn-dl-austin"  class="btn btn-secondary" title="Download Austin handicap CSV" style="display:none;">⬇ Austin CSV</button>
             </div>
+            <button id="btn-email-cards" class="btn btn-secondary" style="display:none;" title="Email handicap cards to all players with a linked email">Email Cards</button>
             <button id="btn-auto-link" class="btn btn-secondary" style="display:none;" title="Try to match unlinked handicap players to customer records (needed for Golf Genius CSV/Sync)">Auto-link Players</button>
             <button id="btn-create-customers" class="btn btn-secondary" style="display:none;" title="Create archived customer records for unlinked handicap players">Create Customers for Unlinked</button>
             <button id="btn-repair-links" class="btn btn-secondary" style="display:none;" title="Fix any player↔customer links that were stored backwards due to a prior bug">Repair Links</button>
@@ -436,6 +446,84 @@
         </div>
     </div>
 
+    <!-- ── Email Preview Modal (Individual) ───────────────────────── -->
+    <div id="modal-email-preview" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:660px;">
+            <div class="modal-header">
+                <h2>Handicap Card Preview</h2>
+                <button class="modal-close" onclick="closeEmailPreview()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="email-preview-info" style="font-size:0.85em;color:#64748b;margin-bottom:12px;
+                     padding:8px 12px;background:#f8fafc;border-radius:6px;">
+                    <div><strong>To:</strong> <span id="email-preview-to">—</span></div>
+                    <div><strong>Subject:</strong> <span id="email-preview-subject">—</span></div>
+                </div>
+                <div id="email-preview-warning" style="display:none;padding:10px 12px;background:#fef3c7;
+                     color:#92400e;border-radius:6px;font-size:0.85em;margin-bottom:12px;"></div>
+                <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background:#f1f5f9;">
+                    <iframe id="email-preview-frame" style="width:100%;height:480px;border:none;background:#fff;"
+                            sandbox="allow-same-origin"></iframe>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeEmailPreview()">Cancel</button>
+                <button class="btn btn-primary" id="btn-send-single" onclick="sendSingleEmail()" disabled>
+                    Send Email
+                </button>
+            </div>
+            <div id="email-send-result" style="display:none;margin:0 24px 16px;padding:10px 14px;
+                 border-radius:6px;font-size:0.88em;"></div>
+        </div>
+    </div>
+
+    <!-- ── Bulk Email Modal ───────────────────────────────────────── -->
+    <div id="modal-email-bulk" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:520px;">
+            <div class="modal-header">
+                <h2>Email Handicap Cards</h2>
+                <button class="modal-close" onclick="closeBulkEmail()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:0.88em;color:#64748b;margin-bottom:14px;">
+                    Send personalized handicap cards to all players with a linked email and a valid index.
+                </p>
+                <div style="margin-bottom:14px;">
+                    <label for="bulk-email-chapter" style="font-size:0.85em;font-weight:600;color:#475569;">
+                        Chapter Filter
+                    </label>
+                    <select id="bulk-email-chapter" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;
+                            border-radius:6px;font-size:0.9em;margin-top:4px;"
+                            onchange="updateBulkSummary()">
+                        <option value="">All Chapters</option>
+                        <option value="San Antonio">San Antonio</option>
+                        <option value="Austin">Austin</option>
+                    </select>
+                </div>
+                <div id="bulk-email-summary" style="padding:12px 14px;background:#f0f7ff;border-radius:6px;
+                     font-size:0.88em;color:#1e40af;">
+                    Calculating...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeBulkEmail()">Cancel</button>
+                <button class="btn btn-primary" id="btn-send-bulk" onclick="sendBulkEmails()">
+                    Send All
+                </button>
+            </div>
+            <div id="bulk-email-progress" style="display:none;margin:0 24px 8px;">
+                <div style="background:#e2e8f0;border-radius:4px;height:6px;overflow:hidden;">
+                    <div id="bulk-progress-bar" style="background:#2563eb;height:100%;width:0%;
+                         transition:width 0.3s;"></div>
+                </div>
+                <div id="bulk-progress-text" style="font-size:0.82em;color:#64748b;margin-top:4px;
+                     text-align:center;">Sending...</div>
+            </div>
+            <div id="bulk-email-result" style="display:none;margin:0 24px 16px;padding:10px 14px;
+                 border-radius:6px;font-size:0.88em;"></div>
+        </div>
+    </div>
+
     <script src="/static/js/auth.js"></script>
     <script>
     // ── State ───────────────────────────────────────────────────────
@@ -584,6 +672,7 @@
             document.getElementById('btn-dl-all').style.display = '';
             document.getElementById('btn-dl-sa').style.display = '';
             document.getElementById('btn-dl-austin').style.display = '';
+            document.getElementById('btn-email-cards').style.display = '';
         }
         if (currentRole === 'admin') {
             document.getElementById('btn-settings').style.display = '';
@@ -737,7 +826,7 @@
             if (p.customer_name) {
                 playerCell = `<a class="player-link" href="/customers?name=${encodeURIComponent(p.customer_name)}">${esc(displayName(p.player_name))}</a>`;
                 if (canManage) {
-                    actionCell = `<span class="action-unlink" data-player-name="${esc(p.player_name)}" data-customer-name="${esc(p.customer_name)}"></span>`;
+                    actionCell = `<span class="action-email" data-player-name="${esc(p.player_name)}"></span><span class="action-unlink" data-player-name="${esc(p.player_name)}" data-customer-name="${esc(p.customer_name)}"></span>`;
                 }
             } else {
                 playerCell = `<span class="player-unlinked">${esc(displayName(p.player_name))}</span>`;
@@ -787,6 +876,16 @@
                 unlinkBtn.addEventListener('click', function(ev) { ev.stopPropagation(); unlinkPlayer(pName); });
                 unlinkSpan.appendChild(unlinkBtn);
             }
+            const emailSpan = tr.querySelector('.action-email');
+            if (emailSpan) {
+                const pName = emailSpan.dataset.playerName;
+                const emailBtn = document.createElement('button');
+                emailBtn.className = 'btn-email-action';
+                emailBtn.textContent = '✉';
+                emailBtn.title = 'Email handicap card';
+                emailBtn.addEventListener('click', function(ev) { ev.stopPropagation(); openEmailPreviewModal(pName); });
+                emailSpan.appendChild(emailBtn);
+            }
 
             // Expanded row placeholder
             const expandTr = document.createElement('tr');
@@ -813,11 +912,15 @@
                 mobileList.innerHTML = '<p style="text-align:center;color:#94a3b8;padding:32px 0;">' +
                     (allPlayers.length ? 'No players match your search.' : 'No handicap data yet.') + '</p>';
             } else {
+                const canManageMobile = currentRole === 'admin' || currentRole === 'manager';
                 players.forEach(p => {
                     const id = safeid(p.player_name);
                     const idxHtml = p.handicap_index !== null
                         ? `<span class="hcp-mc-idx">${p.handicap_index.toFixed(1)}</span><span class="hcp-mc-n">N</span><span style="font-size:0.85rem;color:#64748b;margin-left:2px;"> / ${p.handicap_index_18.toFixed(1)}</span>`
                         : `<span class="hcp-mc-idx na">N/A</span>`;
+                    const mobileEmailBtn = (canManageMobile && p.customer_name)
+                        ? `<button class="btn-email-action" onclick="event.stopPropagation();openEmailPreviewModal(${esc(JSON.stringify(p.player_name))})" title="Email handicap card" style="margin-right:6px;">✉</button>`
+                        : '';
                     const sub = [
                         (p.active_rounds ?? 0) + ' active',
                         p.latest_round_date ? 'Last: ' + p.latest_round_date : null
@@ -834,6 +937,7 @@
                                 <div class="hcp-mc-sub">${esc(sub)}</div>
                             </div>
                             <div class="hcp-mc-right">
+                                ${mobileEmailBtn}
                                 ${idxHtml}
                                 <span class="hcp-mc-chev">▶</span>
                             </div>
@@ -1544,6 +1648,204 @@
             }
         }
     }
+
+    // ── Handicap Email Card Functions ───────────────────────────────
+
+    let _emailPreviewPlayer = '';
+
+    async function openEmailPreviewModal(playerName) {
+        _emailPreviewPlayer = playerName;
+        const modal = document.getElementById('modal-email-preview');
+        const frame = document.getElementById('email-preview-frame');
+        const toEl  = document.getElementById('email-preview-to');
+        const subEl = document.getElementById('email-preview-subject');
+        const warn  = document.getElementById('email-preview-warning');
+        const sendBtn = document.getElementById('btn-send-single');
+        const result = document.getElementById('email-send-result');
+
+        // Reset
+        frame.srcdoc = '<p style="text-align:center;color:#94a3b8;padding:40px;">Loading preview...</p>';
+        toEl.textContent = '—';
+        subEl.textContent = '—';
+        warn.style.display = 'none';
+        warn.textContent = '';
+        sendBtn.disabled = true;
+        result.style.display = 'none';
+        modal.style.display = 'flex';
+
+        try {
+            const r = await fetch('/api/handicaps/preview-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_name: playerName }),
+            });
+            const data = await r.json();
+            if (!r.ok) {
+                warn.textContent = data.error || 'Failed to load preview.';
+                warn.style.display = '';
+                frame.srcdoc = '<p style="text-align:center;color:#ef4444;padding:40px;">Error loading preview</p>';
+                return;
+            }
+
+            frame.srcdoc = data.html || '';
+            toEl.textContent = data.email || '(no email)';
+            subEl.textContent = data.subject || '';
+
+            if (!data.has_email) {
+                warn.textContent = 'This player has no linked email address. Link them to a customer with an email first.';
+                warn.style.display = '';
+            } else if (!data.has_index) {
+                warn.textContent = 'This player does not have a handicap index yet (not enough rounds).';
+                warn.style.display = '';
+            } else {
+                sendBtn.disabled = false;
+            }
+        } catch (e) {
+            warn.textContent = 'Network error loading preview.';
+            warn.style.display = '';
+        }
+    }
+
+    function closeEmailPreview() {
+        document.getElementById('modal-email-preview').style.display = 'none';
+        _emailPreviewPlayer = '';
+    }
+
+    async function sendSingleEmail() {
+        const sendBtn = document.getElementById('btn-send-single');
+        const result = document.getElementById('email-send-result');
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending...';
+        result.style.display = 'none';
+
+        try {
+            const r = await fetch('/api/handicaps/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_name: _emailPreviewPlayer }),
+            });
+            const data = await r.json();
+            if (r.ok) {
+                result.style.background = '#dcfce7';
+                result.style.color = '#166534';
+                result.textContent = 'Email sent to ' + (data.email || _emailPreviewPlayer);
+            } else {
+                result.style.background = '#fee2e2';
+                result.style.color = '#991b1b';
+                result.textContent = data.error || 'Failed to send email.';
+            }
+            result.style.display = '';
+        } catch (e) {
+            result.style.background = '#fee2e2';
+            result.style.color = '#991b1b';
+            result.textContent = 'Network error sending email.';
+            result.style.display = '';
+        }
+        sendBtn.textContent = 'Send Email';
+        sendBtn.disabled = false;
+    }
+
+    function openBulkEmailModal() {
+        const modal = document.getElementById('modal-email-bulk');
+        document.getElementById('bulk-email-chapter').value = '';
+        document.getElementById('bulk-email-result').style.display = 'none';
+        document.getElementById('bulk-email-progress').style.display = 'none';
+        document.getElementById('btn-send-bulk').disabled = false;
+        document.getElementById('btn-send-bulk').textContent = 'Send All';
+        modal.style.display = 'flex';
+        updateBulkSummary();
+    }
+
+    function closeBulkEmail() {
+        document.getElementById('modal-email-bulk').style.display = 'none';
+    }
+
+    function updateBulkSummary() {
+        const chapter = document.getElementById('bulk-email-chapter').value;
+        const summaryEl = document.getElementById('bulk-email-summary');
+        // Count from cached allPlayers data
+        const eligible = allPlayers.filter(p =>
+            p.customer_name && p.handicap_index !== null
+        );
+        const noIndex = allPlayers.filter(p =>
+            p.customer_name && p.handicap_index === null
+        ).length;
+        const noLink = allPlayers.filter(p => !p.customer_name).length;
+        // Note: we can't filter by chapter on client side (need server data),
+        // but we show the general count as a guide
+        if (chapter) {
+            summaryEl.innerHTML = `<strong>${eligible.length}</strong> players have a valid index and linked customer (all chapters). ` +
+                `Server will filter to <strong>${chapter}</strong> chapter only.<br>` +
+                `<span style="color:#64748b;font-size:0.9em;">${noIndex} skipped (no index) · ${noLink} skipped (not linked)</span>`;
+        } else {
+            summaryEl.innerHTML = `<strong>${eligible.length}</strong> players have a valid index and linked customer.<br>` +
+                `<span style="color:#64748b;font-size:0.9em;">${noIndex} skipped (no index) · ${noLink} skipped (not linked)</span>`;
+        }
+    }
+
+    async function sendBulkEmails() {
+        const sendBtn = document.getElementById('btn-send-bulk');
+        const progress = document.getElementById('bulk-email-progress');
+        const progressBar = document.getElementById('bulk-progress-bar');
+        const progressText = document.getElementById('bulk-progress-text');
+        const result = document.getElementById('bulk-email-result');
+        const chapter = document.getElementById('bulk-email-chapter').value || undefined;
+
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending...';
+        result.style.display = 'none';
+        progress.style.display = '';
+        progressBar.style.width = '30%';
+        progressText.textContent = 'Building and sending handicap cards...';
+
+        try {
+            const body = {};
+            if (chapter) body.chapter = chapter;
+
+            const r = await fetch('/api/handicaps/send-bulk-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            progressBar.style.width = '100%';
+            const data = await r.json();
+
+            if (r.ok) {
+                const parts = [`<strong>${data.sent}</strong> sent`];
+                if (data.failed) parts.push(`<strong style="color:#dc2626;">${data.failed}</strong> failed`);
+                if (data.skipped_no_email) parts.push(`${data.skipped_no_email} skipped (no email)`);
+                if (data.skipped_no_index) parts.push(`${data.skipped_no_index} skipped (no index)`);
+                result.style.background = data.failed ? '#fef3c7' : '#dcfce7';
+                result.style.color = data.failed ? '#92400e' : '#166534';
+                result.innerHTML = parts.join(' · ');
+                if (data.errors && data.errors.length) {
+                    result.innerHTML += '<br><span style="font-size:0.85em;color:#991b1b;">Errors: ' +
+                        data.errors.map(e => e.player + ': ' + e.error).join(', ') + '</span>';
+                }
+            } else {
+                result.style.background = '#fee2e2';
+                result.style.color = '#991b1b';
+                result.textContent = data.error || 'Failed to send bulk emails.';
+            }
+            result.style.display = '';
+        } catch (e) {
+            progressBar.style.width = '100%';
+            result.style.background = '#fee2e2';
+            result.style.color = '#991b1b';
+            result.textContent = 'Network error sending bulk emails.';
+            result.style.display = '';
+        }
+        progress.style.display = 'none';
+        sendBtn.textContent = 'Send All';
+        sendBtn.disabled = false;
+    }
+
+    // Wire up Email Cards header button
+    (function() {
+        const btn = document.getElementById('btn-email-cards');
+        if (btn) btn.addEventListener('click', openBulkEmailModal);
+    })();
+
     </script>
 
     <!-- Handicap Calculation Modal -->
