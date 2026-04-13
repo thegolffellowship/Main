@@ -2182,7 +2182,7 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
                 if updated:
                     # Create alias for future lookups
                     conn.execute(
-                        "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_name, alias_type) VALUES (?, ?, 'name')",
+                        "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_value, alias_type) VALUES (?, ?, 'name')",
                         (best_name, n),
                     )
                     logger.info("Normalized items.customer '%s' → '%s' (%d items, shared email %s)",
