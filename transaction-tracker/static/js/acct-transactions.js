@@ -105,6 +105,23 @@ function renderTransactionList(txns, total) {
     const _expAcctOpts = '<option value="">— Account —</option>' +
         ACCT.accounts.map(a => `<option value="${a.name}">${a.name}</option>`).join('') +
         '<option value="__new__">+ New Account</option>';
+    const _expEventOpts = '<option value="">— Event —</option>' +
+        ACCT.events.map(ev => `<option value="${ev.item_name}">${ev.item_name}${ev.event_date ? ' (' + ev.event_date + ')' : ''}</option>`).join('');
+
+    // Guess event from description (for Zelle/Venmo memos)
+    function _guessEvent(description) {
+        if (!description || !ACCT.events.length) return null;
+        const desc = description.toLowerCase();
+        for (const ev of ACCT.events) {
+            const name = (ev.item_name || '').toLowerCase();
+            // Match course name keywords (2+ word fragments)
+            const words = name.split(/[\s\-–—]+/).filter(w => w.length > 2);
+            for (const w of words) {
+                if (desc.includes(w)) return ev.item_name;
+            }
+        }
+        return null;
+    }
 
     function _catOptsForType(type, selectedId) {
         return '<option value="">— Category —</option>' +
@@ -161,6 +178,7 @@ function renderTransactionList(txns, total) {
                         <select class="mc-exp-entity" data-expense-id="${t.expense_id}">${_expEntOpts}</select>
                         <select class="mc-exp-category" data-expense-id="${t.expense_id}">${_expCatOpts}</select>
                         <select class="mc-exp-account" data-expense-id="${t.expense_id}">${_expAcctOpts}</select>
+                        <select class="mc-exp-event" data-expense-id="${t.expense_id}">${_expEventOpts}</select>
                     </div>
                     ${m.splitBadges ? `<div class="acct-mc-splits">${m.splitBadges}</div>` : ''}
                     <div class="acct-mc-btn-row">
@@ -253,6 +271,19 @@ function renderTransactionList(txns, total) {
                     }
                 }
             }
+            // Pre-select event (from data or guess from description)
+            const evSel = card.querySelector('.mc-exp-event');
+            const evName = split0.event_name || _guessEvent(t.description);
+            if (evSel && evName) {
+                for (const opt of evSel.options) {
+                    if (opt.value === evName) {
+                        opt.selected = true; break;
+                    }
+                }
+                if (!split0.event_name && evSel.value) {
+                    evSel.style.borderColor = '#7dd3fc';
+                }
+            }
         } else {
             // Pre-select regular txn dropdowns
             const entSel = card.querySelector('.mc-entity');
@@ -314,7 +345,7 @@ function renderTransactionList(txns, total) {
     });
 
     // ── Mobile card: inline save for EXPENSE transactions ──
-    el.querySelectorAll('.acct-mobile-cards .mc-exp-entity, .acct-mobile-cards .mc-exp-category, .acct-mobile-cards .mc-exp-account').forEach(sel => {
+    el.querySelectorAll('.acct-mobile-cards .mc-exp-entity, .acct-mobile-cards .mc-exp-category, .acct-mobile-cards .mc-exp-account, .acct-mobile-cards .mc-exp-event').forEach(sel => {
         sel.addEventListener('change', async (e) => {
             e.stopPropagation();
             const card = sel.closest('.acct-mobile-card');
@@ -344,9 +375,12 @@ function renderTransactionList(txns, total) {
             const entity = card.querySelector('.mc-exp-entity').value || null;
             const category = card.querySelector('.mc-exp-category').value || null;
             const account_name = acctSel ? acctSel.value || null : null;
+            const evSel = card.querySelector('.mc-exp-event');
+            const event_name = evSel ? evSel.value || null : null;
             try {
                 const body = { entity, category, reviewed_at: new Date().toISOString(), reviewed_by: 'admin' };
                 if (account_name && account_name !== '__new__') body.account_name = account_name;
+                if (event_name) body.event_name = event_name;
                 await api('/expense-transactions/' + expId, { method: 'PATCH', body });
                 sel.style.borderColor = 'var(--green)';
                 sel.style.boxShadow = '0 0 0 1px var(--green)';
@@ -367,13 +401,22 @@ function renderTransactionList(txns, total) {
             const category = card.querySelector('.mc-exp-category').value || null;
             const acctSel = card.querySelector('.mc-exp-account');
             const account_name = acctSel ? acctSel.value || null : null;
+            const evSel = card.querySelector('.mc-exp-event');
+            const event_name = evSel ? evSel.value || null : null;
             try {
                 const body = { entity, category, review_status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: 'admin' };
                 if (account_name && account_name !== '__new__') body.account_name = account_name;
+                if (event_name) body.event_name = event_name;
                 await api('/expense-transactions/' + expId, { method: 'PATCH', body });
-                card.style.opacity = '0.5';
-                btn.textContent = 'Approved';
-                btn.disabled = true;
+                card.style.transition = 'opacity 0.3s, max-height 0.4s, margin 0.4s, padding 0.4s';
+                card.style.opacity = '0';
+                card.style.maxHeight = card.offsetHeight + 'px';
+                requestAnimationFrame(() => {
+                    card.style.maxHeight = '0';
+                    card.style.marginBottom = '0';
+                    card.style.overflow = 'hidden';
+                });
+                setTimeout(() => card.remove(), 450);
             } catch (err) {
                 alert('Error: ' + err.message);
             }
@@ -389,9 +432,15 @@ function renderTransactionList(txns, total) {
                     method: 'PATCH',
                     body: { review_status: 'ignored', reviewed_at: new Date().toISOString(), reviewed_by: 'admin' }
                 });
-                card.classList.add('acct-mc-ignored');
-                btn.textContent = 'Ignored';
-                btn.disabled = true;
+                card.style.transition = 'opacity 0.3s, max-height 0.4s, margin 0.4s, padding 0.4s';
+                card.style.opacity = '0';
+                card.style.maxHeight = card.offsetHeight + 'px';
+                requestAnimationFrame(() => {
+                    card.style.maxHeight = '0';
+                    card.style.marginBottom = '0';
+                    card.style.overflow = 'hidden';
+                });
+                setTimeout(() => card.remove(), 450);
             } catch (err) {
                 alert('Error: ' + err.message);
             }
