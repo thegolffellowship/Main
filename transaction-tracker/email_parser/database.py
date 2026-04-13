@@ -7365,6 +7365,7 @@ def build_handicap_card_html(card_data: dict) -> str:
     idx_color = "#2563eb" if idx_9 is not None else "#94a3b8"
 
     # Build score history rows
+    _font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
     score_rows = ""
     for i, r in enumerate(rounds):
         diff_val = r.get("differential")
@@ -7373,25 +7374,26 @@ def build_handicap_card_html(card_data: dict) -> str:
 
         if is_used:
             bg = "#dcfce7"
-            diff_style = "font-weight:700; color:#166534;"
+            diff_style = f"font-weight:700; color:#166534; font-family:{_font};"
             status_html = (
-                '<span style="background:#16a34a; color:#fff; padding:2px 6px; '
-                'border-radius:3px; font-size:11px; font-weight:600;">Used</span>'
+                '<span style="background-color:#16a34a; color:#ffffff; padding:2px 6px; '
+                f'font-size:11px; font-weight:600; font-family:{_font};">&#9733; Used</span>'
             )
         else:
             bg = "#ffffff" if i % 2 == 0 else "#f8fafc"
-            diff_style = "color:#475569;"
+            diff_style = f"color:#475569; font-family:{_font};"
             status_html = ""
 
-        score_rows += f"""<tr style="background:{bg};">
-  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; white-space:nowrap;">{r.get('round_date', '')}</td>
-  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px;">{r.get('course_name', '')}</td>
-  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{r.get('tee_name', '')}</td>
-  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{r.get('adjusted_score', '')}</td>
-  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{r.get('rating', '')}</td>
-  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{r.get('slope', '')}</td>
-  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center; {diff_style}">{diff_str}</td>
-  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{status_html}</td>
+        _td = f"padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; font-family:{_font};"
+        score_rows += f"""<tr style="background-color:{bg};">
+  <td style="{_td} white-space:nowrap;">{r.get('round_date', '')}</td>
+  <td style="{_td}">{r.get('course_name', '')}</td>
+  <td style="{_td} text-align:center;">{r.get('tee_name', '')}</td>
+  <td style="{_td} text-align:center;">{r.get('adjusted_score', '')}</td>
+  <td style="{_td} text-align:center;">{r.get('rating', '')}</td>
+  <td style="{_td} text-align:center;">{r.get('slope', '')}</td>
+  <td style="{_td} text-align:center; {diff_style}">{diff_str}</td>
+  <td style="{_td} text-align:center;">{status_html}</td>
 </tr>"""
 
     summary_text = ""
@@ -7415,10 +7417,12 @@ def build_handicap_card_html(card_data: dict) -> str:
             adj_str = f" {sign} {abs(adjustment):.1f}"
 
         calc_html = (
-            f'<div style="font-size:12px; color:#94a3b8; margin-top:4px;">'
+            f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
+            f'<tr><td style="font-size:12px; color:#94a3b8; padding-top:4px; '
+            f'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">'
             f'Avg of lowest {rounds_used}: {avg_used:.2f} &times; {multiplier} = '
             f'{after_mult:.2f}{adj_str} &rarr; <strong style="color:#64748b;">{idx_9_display}</strong>'
-            f'</div>'
+            f'</td></tr></table>'
         )
     else:
         summary_text = f"Not enough rounds for a handicap index (minimum {card_data.get('min_rounds', 3)} required)"
@@ -7432,15 +7436,23 @@ def build_handicap_card_html(card_data: dict) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>TGF Handicap Card</title>
+  <!--[if mso]>
+  <style type="text/css">
+    table {{border-collapse:collapse;}}
+    td {{font-family:Arial,Helvetica,sans-serif;}}
+  </style>
+  <![endif]-->
 </head>
-<body style="margin:0; padding:0; background-color:#f1f5f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+<body style="margin:0; padding:0; width:100%; background-color:#f1f5f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
-       style="background-color:#f1f5f9; padding:24px 0;">
-<tr><td align="center">
+       style="background-color:#f1f5f9;">
+<tr><td align="center" style="padding:24px 0;">
+
+<!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" align="center"><tr><td><![endif]-->
 
 <!-- Card wrapper -->
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600"
-       style="max-width:600px; background-color:#ffffff; border:1px solid #e2e8f0;">
+       style="max-width:600px; width:100%; background-color:#ffffff; border:1px solid #e2e8f0;">
 
   <!-- Header band -->
   <tr>
@@ -7540,6 +7552,8 @@ def build_handicap_card_html(card_data: dict) -> str:
 
 </table>
 <!-- End card wrapper -->
+
+<!--[if mso]></td></tr></table><![endif]-->
 
 </td></tr>
 </table>
