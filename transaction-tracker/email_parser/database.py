@@ -7377,7 +7377,7 @@ def build_handicap_card_html(card_data: dict) -> str:
             diff_style = f"font-weight:700; color:#166534; font-family:{_font};"
             status_html = (
                 '<span style="background-color:#16a34a; color:#ffffff; padding:2px 6px; '
-                f'font-size:11px; font-weight:600; font-family:{_font};">&#9733; Used</span>'
+                f'font-size:13px; font-weight:600; font-family:{_font};">&#9733;</span>'
             )
         else:
             bg = "#ffffff" if i % 2 == 0 else "#f8fafc"
@@ -7540,13 +7540,10 @@ def build_handicap_card_html(card_data: dict) -> str:
 
   <!-- Footer -->
   <tr>
-    <td style="background-color:#f8fafc; padding:16px 24px; border-top:1px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-      <div style="font-size:12px; color:#94a3b8; text-align:center;">
-        <strong style="color:#64748b;">The Golf Fellowship</strong> — 9-Hole Handicap Index<br>
-        <span style="font-size:12px; color:#94a3b8;">
+    <td style="background-color:#f8fafc; padding:16px 24px; border-top:1px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; text-align:center; font-size:12px; color:#94a3b8;">
         <strong style="color:#64748b;">The Golf Fellowship</strong> &mdash; 9-Hole Handicap Index<br>
         <span style="font-size:11px;">This is not an official USGA handicap.
-        Calculated per WHS rules for TGF league play.</span></span>
+        Calculated per WHS rules for TGF league play.</span>
     </td>
   </tr>
 
