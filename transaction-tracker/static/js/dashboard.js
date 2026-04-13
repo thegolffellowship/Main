@@ -870,9 +870,9 @@ function displayName(name) {
     if (!s) return "\u2014";
     const parts = s.split(/\s+/);
     if (parts.length <= 1) return s;
-    const suffixes = new Set(["Jr", "Jr.", "SR", "Sr", "Sr.", "II", "III", "IV", "V"]);
+    const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
     const suffixParts = [];
-    while (parts.length > 1 && suffixes.has(parts[parts.length - 1])) {
+    while (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) {
         suffixParts.unshift(parts.pop());
     }
     if (parts.length <= 1) return s;
