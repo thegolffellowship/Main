@@ -806,7 +806,7 @@ async function openExpenseReview(expenseId) {
 
         // Try matching by last 4 digits (ignores generic names like "Visa")
         // Also map known debit card numbers to their checking accounts
-        const _debitCardMap = { '0659': '4500' }; // debit ••0659 = TGF Checking ••4500
+        const _debitCardMap = { '0695': '4500' }; // debit ••0695 = TGF Checking ••4500
         const effectiveLast4 = _debitCardMap[last4] || last4;
         if (effectiveLast4) {
             const byLast4 = ACCT.accounts.find(a => a.last_four === effectiveLast4);
