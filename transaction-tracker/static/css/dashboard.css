@@ -212,7 +212,6 @@ main {
 table {
     width: 100%;
     border-collapse: collapse;
-    table-layout: fixed;
 }
 thead th {
     background: #f9fafb;
@@ -238,18 +237,10 @@ tbody td {
     vertical-align: top;
     white-space: nowrap;
 }
-/* Transaction table column widths (table-layout: fixed) */
-th[data-col="order_date"]  { width: 90px; }
-th[data-col="customer"]    { width: 130px; }
-th[data-col="item_name"]   { width: 170px; }
-th[data-col="item_price"]  { width: 75px; }
-th[data-col="side_games"]  { width: 80px; }
-th[data-col="handicap"]    { width: 50px; }
-th[data-col="tee_choice"]  { width: 55px; }
-th[data-col="user_status"] { width: 80px; }
-th[data-col="order_id"]    { width: 90px; }
-th[data-col="actions"]     { width: 70px; }
-.customer-cell, .item-name-cell, .side-games-cell { overflow: hidden; text-overflow: ellipsis; }
+.customer-cell { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.item-name-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.price-cell { white-space: nowrap; width: 1%; }
+.side-games-cell { white-space: nowrap; width: 1%; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #f9fafb; }
 
