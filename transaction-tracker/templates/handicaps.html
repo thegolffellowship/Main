@@ -1747,37 +1747,22 @@
     }
 
     async function sendSingleEmail() {
-        const sendBtn = document.getElementById('btn-send-single');
-        const result = document.getElementById('email-send-result');
-        sendBtn.disabled = true;
-        sendBtn.textContent = 'Sending...';
-        result.style.display = 'none';
+        const playerName = _emailPreviewPlayer;
+        closeEmailPreview();
 
         try {
             const r = await fetch('/api/handicaps/send-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ player_name: _emailPreviewPlayer }),
+                body: JSON.stringify({ player_name: playerName }),
             });
             const data = await r.json();
-            if (r.ok) {
-                result.style.background = '#dcfce7';
-                result.style.color = '#166534';
-                result.textContent = 'Email sent to ' + (data.email || _emailPreviewPlayer);
-            } else {
-                result.style.background = '#fee2e2';
-                result.style.color = '#991b1b';
-                result.textContent = data.error || 'Failed to send email.';
+            if (!r.ok) {
+                alert(data.error || 'Failed to send email.');
             }
-            result.style.display = '';
         } catch (e) {
-            result.style.background = '#fee2e2';
-            result.style.color = '#991b1b';
-            result.textContent = 'Network error sending email.';
-            result.style.display = '';
+            alert('Network error sending email.');
         }
-        sendBtn.textContent = 'Send Email';
-        sendBtn.disabled = false;
     }
 
     let _bulkMode = 'all';
