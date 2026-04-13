@@ -327,9 +327,9 @@
         if (!s) return "\u2014";
         const parts = s.split(/\s+/);
         if (parts.length <= 1) return s;
-        const sfx = new Set(["Jr", "Jr.", "SR", "Sr", "Sr.", "II", "III", "IV", "V"]);
+        const sfx = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
         const sfxParts = [];
-        while (parts.length > 1 && sfx.has(parts[parts.length - 1])) {
+        while (parts.length > 1 && sfx.has(parts[parts.length - 1].toLowerCase())) {
             sfxParts.unshift(parts.pop());
         }
         if (parts.length <= 1) return s;
