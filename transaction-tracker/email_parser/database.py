@@ -7207,11 +7207,14 @@ def build_handicap_card_data(player_name: str,
     index_18 = round(index_9 * 2, 1) if index_9 is not None else None
 
     # Determine which differentials are "USED" (lowest N per lookup table)
+    multiplier = float(cfg.get("multiplier", 0.96))
     n = min(len(pool_diffs), 20)
     used_count = 0
+    adjustment = 0.0
     if n >= min_rounds:
         n_clamped = max(n, 3)
         used_count = _HANDICAP_DIFF_LOOKUP.get(n_clamped, 8)
+        adjustment = _HANDICAP_ADJUSTMENT.get(n_clamped, 0.0)
 
     # Mark rounds: sort by differential to find the N lowest, then restore date order
     if used_count > 0:
@@ -7302,6 +7305,10 @@ def build_handicap_card_data(player_name: str,
                 if ce:
                     email = (ce["email"] or "").strip().lower()
 
+    # Gather calculation breakdown for display
+    used_diffs = sorted([r["differential"] for r in annotated_rounds if r["status"] == "USED"])
+    avg_used = sum(used_diffs) / len(used_diffs) if used_diffs else 0.0
+
     today_str = datetime.now().strftime("%Y-%m-%d")
     return {
         "player_name": player_name,
@@ -7316,6 +7323,10 @@ def build_handicap_card_data(player_name: str,
         "rounds_pool": len(pool),
         "generated_date": today_str,
         "lookback_months": lookback_months,
+        "used_diffs": used_diffs,
+        "avg_used": avg_used,
+        "multiplier": multiplier,
+        "adjustment": adjustment,
     }
 
 
@@ -7384,10 +7395,35 @@ def build_handicap_card_html(card_data: dict) -> str:
 </tr>"""
 
     summary_text = ""
+    calc_html = ""
     if idx_9 is not None:
+        used_diffs = card_data.get("used_diffs") or []
+        avg_used = card_data.get("avg_used", 0.0)
+        multiplier = card_data.get("multiplier", 0.96)
+        adjustment = card_data.get("adjustment", 0.0)
+
         summary_text = (
             f"Based on best {rounds_used} of {rounds_pool} round{'s' if rounds_pool != 1 else ''} "
             f"(last {lookback} months)"
+        )
+
+        # Build calculation breakdown
+        diffs_str = " + ".join(f"{d:.1f}" for d in used_diffs)
+        avg_str = f"{avg_used:.4f}"
+        after_mult = avg_used * multiplier
+        adj_str = ""
+        if adjustment != 0.0:
+            sign = "+" if adjustment > 0 else "\u2013"
+            adj_str = f" {sign} {abs(adjustment):.1f}"
+
+        calc_html = (
+            f'<div style="font-size:12px; color:#64748b; margin-top:8px; '
+            f'padding:10px 12px; background:#f8fafc; border-radius:6px; '
+            f'font-family:monospace,monospace; line-height:1.7;">'
+            f'<div>Avg of lowest {rounds_used}: ({diffs_str}) / {rounds_used} = <strong>{avg_str}</strong></div>'
+            f'<div>{avg_str} &times; {multiplier} = {after_mult:.4f}{adj_str}</div>'
+            f'<div>Rounded: <strong style="color:#1e293b;">{idx_9_display}</strong></div>'
+            f'</div>'
         )
     else:
         summary_text = f"Not enough rounds for a handicap index (minimum {card_data.get('min_rounds', 3)} required)"
@@ -7451,11 +7487,12 @@ def build_handicap_card_html(card_data: dict) -> str:
     </td>
   </tr>
 
-  <!-- Summary line -->
+  <!-- Summary + calculation -->
   <tr>
     <td style="padding:0 24px 16px;">
       <div style="font-size:13px; color:#64748b; border-top:1px solid #e2e8f0;
                   padding-top:12px;">{summary_text}</div>
+      {calc_html}
     </td>
   </tr>
 
