@@ -4821,6 +4821,9 @@ def api_handicap_send_bulk_email():
     eligible_rows = export.get("rows") or []
 
     # If filtering by event, restrict to players registered for that event
+    # and compute event-specific skip counts
+    skipped_no_email = 0
+    skipped_no_index = 0
     if event_name:
         all_items = get_all_items()
         aliases = get_all_event_aliases()
@@ -4850,6 +4853,18 @@ def api_handicap_send_bulk_email():
             r for r in eligible_rows
             if player_to_customer.get(r["player_name"], "").strip().lower() in event_customers
         ]
+
+        # Count event-specific skips: event registrants not in eligible list
+        eligible_customers = {
+            player_to_customer.get(r["player_name"], "").strip().lower()
+            for r in eligible_rows
+        }
+        for cname_l in event_customers:
+            if cname_l not in eligible_customers:
+                skipped_no_index += 1  # no handicap, no link, or no email
+    else:
+        skipped_no_email = len(export.get("no_email") or [])
+        skipped_no_index = len(export.get("no_index") or [])
 
     sent = 0
     failed = 0
@@ -4916,8 +4931,8 @@ def api_handicap_send_bulk_email():
         "status": "ok" if failed == 0 else "partial",
         "sent": sent,
         "failed": failed,
-        "skipped_no_email": len(export.get("no_email") or []),
-        "skipped_no_index": len(export.get("no_index") or []),
+        "skipped_no_email": skipped_no_email,
+        "skipped_no_index": skipped_no_index,
         "total_eligible": len(eligible_rows),
         "errors": errors[:20],  # limit error details
     })
