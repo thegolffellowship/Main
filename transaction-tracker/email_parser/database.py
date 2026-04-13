@@ -7425,20 +7425,11 @@ def build_handicap_card_html(card_data: dict) -> str:
     _f = "Arial, Helvetica, sans-serif"
     _th = f"padding:5px 8px; font-size:11px; font-weight:600; color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:{_f};"
 
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  body {{ margin: 0; padding: 0; }}
-  table {{ mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
-</style>
-</head>
-<body style="font-family: {_f}; color: #333; margin: 0; padding: 0; background: #f1f5f9;">
+    html = f"""<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head>
+<body style="font-family:{_f};color:#333;margin:0;padding:0;background:#f1f5f9;">
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f1f5f9;">
-<tr><td align="center" style="padding: 24px 8px;">
-<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px; background:#ffffff; border:1px solid #e2e8f0;">
+<tr><td align="center" style="padding:24px 8px;">
+<table cellpadding="0" cellspacing="0" border="0" width="700" style="background:#ffffff;border:1px solid #e2e8f0;">
 
   <tr>
     <td style="background:#1e40af; padding:20px 24px;">
