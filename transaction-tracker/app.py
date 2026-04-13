@@ -6306,7 +6306,7 @@ try:
     # ── Fix TGF Checking last_four ──
     try:
         with _startup_connect() as _fix_conn:
-            _fix_conn.execute("UPDATE acct_accounts SET last_four = '0341' WHERE name = 'TGF Checking' AND last_four = '4500'")
+            _fix_conn.execute("UPDATE acct_accounts SET last_four = '0341' WHERE name = 'TGF Checking'")
             _fix_conn.commit()
     except Exception:
         pass

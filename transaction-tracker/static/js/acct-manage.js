@@ -7,6 +7,7 @@
 async function loadAccounts() {
     try {
         const data = await api('/accounts/balances');
+        window._acctAccounts = data;  // store for editAccount()
         renderAccountsGrid(data);
     } catch (e) {
         console.error('Accounts load error:', e);
@@ -20,7 +21,7 @@ function renderAccountsGrid(accounts) {
         return;
     }
     el.innerHTML = accounts.map(a => `
-        <div class="acct-account-card" data-id="${a.id}">
+        <div class="acct-account-card" data-id="${a.id}" onclick="editAccount(${a.id})" style="cursor:pointer;" title="Click to edit">
             <div class="acct-account-header">
                 <h4>${a.name}</h4>
                 <span class="acct-account-type">${a.account_type.replace('_', ' ')}</span>
@@ -33,6 +34,22 @@ function renderAccountsGrid(accounts) {
             </div>
         </div>
     `).join('');
+}
+
+function editAccount(accountId) {
+    const acct = window._acctAccounts && window._acctAccounts.find(a => a.id === accountId);
+    if (!acct) { openAccountModal(); return; }
+    $('#account-edit-id').value = acct.id;
+    $('#account-modal-title').textContent = 'Edit Account';
+    $('#account-name').value = acct.name || '';
+    $('#account-type').value = acct.account_type || 'checking';
+    $('#account-institution').value = acct.institution || '';
+    $('#account-last-four').value = acct.last_four || '';
+    $('#account-balance').value = acct.opening_balance || 0;
+    if ($('#account-entity')) {
+        $('#account-entity').value = acct.entity_id || '';
+    }
+    $('#account-modal').style.display = 'flex';
 }
 
 function openAccountModal() {
