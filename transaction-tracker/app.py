@@ -4797,11 +4797,17 @@ def api_handicap_send_email():
 @app.route("/api/handicaps/send-bulk-email", methods=["POST"])
 @require_role("manager")
 def api_handicap_send_bulk_email():
-    """Send handicap card emails to all eligible players (or filtered by chapter)."""
+    """Send handicap card emails to eligible players.
+
+    Filters: chapter (optional), event_name (optional).
+    When event_name is given, only players registered for that event
+    who also have an established TGF handicap will receive cards.
+    """
     import time as _time
 
     data = request.get_json(silent=True) or {}
     chapter = (data.get("chapter") or "").strip() or None
+    event_name = (data.get("event_name") or "").strip() or None
 
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
@@ -4813,6 +4819,37 @@ def api_handicap_send_bulk_email():
 
     export = get_handicap_export_data(chapter=chapter)
     eligible_rows = export.get("rows") or []
+
+    # If filtering by event, restrict to players registered for that event
+    if event_name:
+        all_items = get_all_items()
+        aliases = get_all_event_aliases()
+        # Collect customer names registered for this event (active only)
+        event_customers = set()
+        for item in all_items:
+            iname = item.get("item_name") or ""
+            if iname.lower() == event_name.lower() or (aliases.get(iname) or "").lower() == event_name.lower():
+                if item.get("transaction_status") in (None, "active", "rsvp_only", "gg_rsvp"):
+                    cname = (item.get("customer") or "").strip().lower()
+                    if cname:
+                        event_customers.add(cname)
+
+        # Build player_name → customer_name map from handicap links
+        conn = get_connection()
+        try:
+            links = conn.execute(
+                "SELECT player_name, customer_name FROM handicap_player_links "
+                "WHERE customer_name IS NOT NULL"
+            ).fetchall()
+        finally:
+            conn.close()
+        player_to_customer = {r["player_name"]: r["customer_name"] for r in links}
+
+        # Filter eligible rows to only those whose linked customer is in the event
+        eligible_rows = [
+            r for r in eligible_rows
+            if player_to_customer.get(r["player_name"], "").strip().lower() in event_customers
+        ]
 
     sent = 0
     failed = 0

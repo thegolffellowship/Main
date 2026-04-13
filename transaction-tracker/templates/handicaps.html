@@ -487,9 +487,23 @@
             </div>
             <div class="modal-body">
                 <p style="font-size:0.88em;color:#64748b;margin-bottom:14px;">
-                    Send personalized handicap cards to all players with a linked email and a valid index.
+                    Send personalized handicap cards to players with a linked email and a valid index.
                 </p>
-                <div style="margin-bottom:14px;">
+                <!-- Send mode toggle -->
+                <div style="display:flex;gap:0;margin-bottom:14px;border:1px solid #d1d5db;border-radius:6px;overflow:hidden;">
+                    <button id="bulk-mode-all" class="bulk-mode-btn active"
+                            onclick="setBulkMode('all')" style="flex:1;padding:8px;border:none;font-size:0.85em;
+                            font-weight:600;cursor:pointer;background:#2563eb;color:#fff;">
+                        All Players
+                    </button>
+                    <button id="bulk-mode-event" class="bulk-mode-btn"
+                            onclick="setBulkMode('event')" style="flex:1;padding:8px;border:none;border-left:1px solid #d1d5db;
+                            font-size:0.85em;font-weight:600;cursor:pointer;background:#f8fafc;color:#475569;">
+                        By Event
+                    </button>
+                </div>
+                <!-- Chapter filter (shown in "all" mode) -->
+                <div id="bulk-filter-chapter" style="margin-bottom:14px;">
                     <label for="bulk-email-chapter" style="font-size:0.85em;font-weight:600;color:#475569;">
                         Chapter Filter
                     </label>
@@ -499,6 +513,17 @@
                         <option value="">All Chapters</option>
                         <option value="San Antonio">San Antonio</option>
                         <option value="Austin">Austin</option>
+                    </select>
+                </div>
+                <!-- Event selector (shown in "event" mode) -->
+                <div id="bulk-filter-event" style="margin-bottom:14px;display:none;">
+                    <label for="bulk-email-event" style="font-size:0.85em;font-weight:600;color:#475569;">
+                        Select Event
+                    </label>
+                    <select id="bulk-email-event" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;
+                            border-radius:6px;font-size:0.9em;margin-top:4px;"
+                            onchange="updateBulkSummary()">
+                        <option value="">Loading events...</option>
                     </select>
                 </div>
                 <div id="bulk-email-summary" style="padding:12px 14px;background:#f0f7ff;border-radius:6px;
@@ -1755,6 +1780,40 @@
         sendBtn.disabled = false;
     }
 
+    let _bulkMode = 'all';
+    let _eventsList = null;
+
+    function setBulkMode(mode) {
+        _bulkMode = mode;
+        document.getElementById('bulk-mode-all').style.background = mode === 'all' ? '#2563eb' : '#f8fafc';
+        document.getElementById('bulk-mode-all').style.color = mode === 'all' ? '#fff' : '#475569';
+        document.getElementById('bulk-mode-event').style.background = mode === 'event' ? '#2563eb' : '#f8fafc';
+        document.getElementById('bulk-mode-event').style.color = mode === 'event' ? '#fff' : '#475569';
+        document.getElementById('bulk-filter-chapter').style.display = mode === 'all' ? '' : 'none';
+        document.getElementById('bulk-filter-event').style.display = mode === 'event' ? '' : 'none';
+        if (mode === 'event' && !_eventsList) loadEventsList();
+        updateBulkSummary();
+    }
+
+    async function loadEventsList() {
+        try {
+            const r = await fetch('/api/events');
+            const events = await r.json();
+            _eventsList = events;
+            const sel = document.getElementById('bulk-email-event');
+            sel.innerHTML = '<option value="">— Select an event —</option>';
+            // Show upcoming/recent events (sorted by date desc already)
+            events.forEach(ev => {
+                const name = ev.item_name || '';
+                const date = ev.event_date || '';
+                const count = ev.registrations || 0;
+                sel.innerHTML += `<option value="${name.replace(/"/g, '&quot;')}">${date ? date + ' — ' : ''}${name} (${count} players)</option>`;
+            });
+        } catch (e) {
+            console.error('Failed to load events', e);
+        }
+    }
+
     function openBulkEmailModal() {
         const modal = document.getElementById('modal-email-bulk');
         document.getElementById('bulk-email-chapter').value = '';
@@ -1762,6 +1821,7 @@
         document.getElementById('bulk-email-progress').style.display = 'none';
         document.getElementById('btn-send-bulk').disabled = false;
         document.getElementById('btn-send-bulk').textContent = 'Send All';
+        setBulkMode('all');
         modal.style.display = 'flex';
         updateBulkSummary();
     }
@@ -1771,9 +1831,25 @@
     }
 
     function updateBulkSummary() {
-        const chapter = document.getElementById('bulk-email-chapter').value;
         const summaryEl = document.getElementById('bulk-email-summary');
-        // Count from cached allPlayers data
+
+        if (_bulkMode === 'event') {
+            const eventName = document.getElementById('bulk-email-event').value;
+            if (!eventName) {
+                summaryEl.innerHTML = 'Select an event to see eligible players.';
+                return;
+            }
+            // We can't know the exact count client-side (server cross-references
+            // event registrations with handicap data), so show a helpful message
+            const ev = (_eventsList || []).find(e => e.item_name === eventName);
+            const regCount = ev ? (ev.registrations || 0) : '?';
+            summaryEl.innerHTML = `<strong>${eventName}</strong> has ${regCount} registered players.<br>` +
+                `<span style="color:#64748b;font-size:0.9em;">Only those with a TGF handicap and linked email will receive cards.</span>`;
+            return;
+        }
+
+        // "All" mode
+        const chapter = document.getElementById('bulk-email-chapter').value;
         const eligible = allPlayers.filter(p =>
             p.customer_name && p.handicap_index !== null
         );
@@ -1781,8 +1857,6 @@
             p.customer_name && p.handicap_index === null
         ).length;
         const noLink = allPlayers.filter(p => !p.customer_name).length;
-        // Note: we can't filter by chapter on client side (need server data),
-        // but we show the general count as a guide
         if (chapter) {
             summaryEl.innerHTML = `<strong>${eligible.length}</strong> players have a valid index and linked customer (all chapters). ` +
                 `Server will filter to <strong>${chapter}</strong> chapter only.<br>` +
@@ -1799,7 +1873,22 @@
         const progressBar = document.getElementById('bulk-progress-bar');
         const progressText = document.getElementById('bulk-progress-text');
         const result = document.getElementById('bulk-email-result');
-        const chapter = document.getElementById('bulk-email-chapter').value || undefined;
+
+        const body = {};
+        if (_bulkMode === 'event') {
+            const eventName = document.getElementById('bulk-email-event').value;
+            if (!eventName) {
+                result.style.background = '#fef3c7';
+                result.style.color = '#92400e';
+                result.textContent = 'Please select an event first.';
+                result.style.display = '';
+                return;
+            }
+            body.event_name = eventName;
+        } else {
+            const chapter = document.getElementById('bulk-email-chapter').value;
+            if (chapter) body.chapter = chapter;
+        }
 
         sendBtn.disabled = true;
         sendBtn.textContent = 'Sending...';
@@ -1809,9 +1898,6 @@
         progressText.textContent = 'Building and sending handicap cards...';
 
         try {
-            const body = {};
-            if (chapter) body.chapter = chapter;
-
             const r = await fetch('/api/handicaps/send-bulk-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1827,7 +1913,7 @@
                 if (data.skipped_no_index) parts.push(`${data.skipped_no_index} skipped (no index)`);
                 result.style.background = data.failed ? '#fef3c7' : '#dcfce7';
                 result.style.color = data.failed ? '#92400e' : '#166534';
-                result.innerHTML = parts.join(' · ');
+                result.innerHTML = parts.join(' &middot; ');
                 if (data.errors && data.errors.length) {
                     result.innerHTML += '<br><span style="font-size:0.85em;color:#991b1b;">Errors: ' +
                         data.errors.map(e => e.player + ': ' + e.error).join(', ') + '</span>';
