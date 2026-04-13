@@ -2075,58 +2075,26 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
             logger.exception("Customer merge failed for pair: %s", pair)
 
     # ── Generic email-based auto-merge ──
-    # Find all emails shared by multiple customer_ids
-    dup_emails = conn.execute(
-        """SELECT LOWER(email) as email, GROUP_CONCAT(DISTINCT customer_id) as cids, COUNT(DISTINCT customer_id) as cnt
-           FROM customer_emails
-           GROUP BY LOWER(email)
-           HAVING cnt > 1"""
-    ).fetchall()
-    logger.info("Email dedup: found %d shared emails in customer_emails", len(dup_emails))
+    # Build unified email → customer_ids map from ALL sources
+    email_to_cids = {}
 
-    # Also check items table
-    dup_items_emails = conn.execute(
-        """SELECT LOWER(customer_email) as email,
-                  GROUP_CONCAT(DISTINCT customer_id) as cids,
-                  COUNT(DISTINCT customer_id) as cnt
-           FROM items
-           WHERE customer_email IS NOT NULL AND customer_id IS NOT NULL
-           GROUP BY LOWER(customer_email)
-           HAVING cnt > 1"""
-    ).fetchall()
-    logger.info("Email dedup: found %d shared emails in items", len(dup_items_emails))
+    # Source 1: customer_emails table
+    for row in conn.execute("SELECT customer_id, LOWER(TRIM(email)) as email FROM customer_emails WHERE email IS NOT NULL").fetchall():
+        em = row["email"]
+        if em:
+            email_to_cids.setdefault(em, set()).add(row["customer_id"])
 
-    # Also cross-check: find customers whose customer_emails entries match
-    # other customers' items.customer_email (catches mismatched tables)
-    cross_dups = conn.execute(
-        """SELECT LOWER(ce.email) as email,
-                  ce.customer_id as cid1,
-                  i.customer_id as cid2
-           FROM customer_emails ce
-           JOIN items i ON LOWER(i.customer_email) = LOWER(ce.email)
-                       AND i.customer_id IS NOT NULL
-                       AND i.customer_id != ce.customer_id
-           GROUP BY LOWER(ce.email), ce.customer_id, i.customer_id"""
-    ).fetchall()
-    logger.info("Email dedup: found %d cross-table email matches", len(cross_dups))
+    # Source 2: items.customer_email
+    for row in conn.execute(
+        "SELECT DISTINCT customer_id, LOWER(TRIM(customer_email)) as email FROM items WHERE customer_email IS NOT NULL AND customer_id IS NOT NULL"
+    ).fetchall():
+        em = row["email"]
+        if em:
+            email_to_cids.setdefault(em, set()).add(row["customer_id"])
 
-    all_email_dups = {}
-    for row in list(dup_emails) + list(dup_items_emails):
-        email = row["email"]
-        cids = sorted(set(int(c) for c in str(row["cids"]).split(",") if c.strip()))
-        if len(cids) >= 2:
-            if email not in all_email_dups:
-                all_email_dups[email] = set()
-            all_email_dups[email].update(cids)
-
-    for row in cross_dups:
-        email = row["email"]
-        if email not in all_email_dups:
-            all_email_dups[email] = set()
-        all_email_dups[email].add(row["cid1"])
-        all_email_dups[email].add(row["cid2"])
-
-    logger.info("Email dedup: %d emails with duplicate customers to merge", len(all_email_dups))
+    # Find emails with multiple customer_ids
+    all_email_dups = {em: cids for em, cids in email_to_cids.items() if len(cids) >= 2}
+    logger.info("Email dedup: %d emails with multiple customer_ids to merge", len(all_email_dups))
     for email, cids in all_email_dups.items():
         logger.info("  %s → customer_ids: %s", email, sorted(cids))
 
