@@ -177,6 +177,7 @@ from email_parser.database import (
     import_bank_deposits,
     run_deposit_auto_match,
     manual_match_deposit,
+    get_match_suggestions,
     unmatch_deposit,
     get_bank_deposits,
     get_unreconciled_transactions,
@@ -6053,6 +6054,12 @@ def api_recon_unreconciled():
     account = request.args.get("account")
     month = request.args.get("month")
     return jsonify(get_unreconciled_transactions(account, month))
+
+
+@app.route("/api/reconciliation/suggestions/<int:deposit_id>")
+@require_role("admin")
+def api_recon_suggestions(deposit_id):
+    return jsonify(get_match_suggestions(deposit_id))
 
 
 @app.route("/api/reconciliation/monthly")

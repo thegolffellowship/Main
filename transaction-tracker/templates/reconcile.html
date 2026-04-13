@@ -126,8 +126,8 @@
                     <div id="deposit-list"><div style="color:var(--text-muted); font-size:0.82rem;">Select an account or click Auto-match...</div></div>
                 </div>
                 <div class="match-col">
-                    <h3>Accounting Entries (Unreconciled)</h3>
-                    <div id="txn-list"><div style="color:var(--text-muted); font-size:0.82rem;">Click a deposit to see potential matches...</div></div>
+                    <h3>Suggested Matches</h3>
+                    <div id="txn-list"><div style="color:var(--text-muted); font-size:0.82rem;">Click a deposit on the left to see suggestions ranked by confidence.</div></div>
                 </div>
             </div>
         </section>
@@ -247,53 +247,71 @@
         const qs = new URLSearchParams();
         if (accountId) qs.set('account_id', accountId);
         if (month) qs.set('month', month);
-        qs.set('status', 'unmatched');
 
         try {
-            const [depRes, txnRes] = await Promise.all([
-                fetch(`/api/reconciliation/deposits?${qs}`),
-                fetch(`/api/reconciliation/unreconciled?${new URLSearchParams({account: accountId ? accounts.find(a=>a.id==accountId)?.name||'' : '', month: month||''})}`),
-            ]);
+            const depRes = await fetch(`/api/reconciliation/deposits?${qs}`);
             const deposits = await depRes.json();
-            const txns = await txnRes.json();
 
             const depDiv = document.getElementById('deposit-list');
-            if (!deposits.length) { depDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No unmatched deposits found.</div>'; }
-            else {
-                depDiv.innerHTML = deposits.map(d => `
-                    <div class="match-row" onclick="selectDeposit(${d.id}, ${d.amount}, '${d.deposit_date}')" data-id="${d.id}">
+            if (!deposits.length) {
+                depDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No deposits found. Import a bank statement first.</div>';
+            } else {
+                depDiv.innerHTML = deposits.map(d => {
+                    const amtClass = d.amount >= 0 ? 'color:#166534' : 'color:#dc2626';
+                    const amtStr = d.amount >= 0 ? `$${d.amount.toFixed(2)}` : `-$${Math.abs(d.amount).toFixed(2)}`;
+                    return `<div class="match-row" onclick="selectDeposit(${d.id})" data-id="${d.id}">
                         <span>${d.deposit_date}</span>
                         <span class="desc"><span class="status-dot dot-${d.status}"></span>${esc(d.description || '')}</span>
-                        <span class="amt">$${d.amount.toFixed(2)}</span>
-                    </div>
-                `).join('');
+                        <span class="amt" style="${amtClass}">${amtStr}</span>
+                    </div>`;
+                }).join('');
             }
 
+            // Right side: show instructions until a deposit is clicked
             const txnDiv = document.getElementById('txn-list');
-            if (!txns.length) { txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No unreconciled transactions.</div>'; }
-            else {
-                txnDiv.innerHTML = txns.map(t => `
-                    <div class="match-row" onclick="selectTxn(${t.id})" data-id="${t.id}">
-                        <span>${t.date || ''}</span>
-                        <span class="desc">${esc(t.customer || '')} — ${esc(t.event_name || '')} (${t.category})</span>
-                        <span class="amt">$${(t.amount||0).toFixed(2)}</span>
-                    </div>
-                `).join('');
-            }
+            txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">Click a deposit on the left to see suggested matches.</div>';
         } catch(e) { console.error('Match queue load failed:', e); }
     }
 
-    function selectDeposit(id, amount, date) {
+    async function selectDeposit(id) {
         selectedDeposit = id;
+        selectedTxn = null;
         document.querySelectorAll('#deposit-list .match-row').forEach(r => r.classList.remove('selected'));
         const row = document.querySelector(`#deposit-list .match-row[data-id="${id}"]`);
         if (row) row.classList.add('selected');
-        // Highlight potential txn matches (similar amount)
-        document.querySelectorAll('#txn-list .match-row').forEach(r => {
-            const amt = parseFloat(r.querySelector('.amt').textContent.replace('$',''));
-            if (Math.abs(amt - amount) < 5) r.style.background = '#fef9c3';
-            else r.style.background = '';
-        });
+
+        // Fetch smart suggestions for this deposit
+        const txnDiv = document.getElementById('txn-list');
+        txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">Finding matches...</div>';
+
+        try {
+            const res = await fetch(`/api/reconciliation/suggestions/${id}`);
+            const suggestions = await res.json();
+
+            if (!suggestions.length) {
+                txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No matching candidates found within ±7 days.</div>';
+            } else {
+                txnDiv.innerHTML = suggestions.map(s => {
+                    const score = s._score || 0;
+                    const reason = s._reason || '';
+                    const barColor = score >= 60 ? '#16a34a' : score >= 30 ? '#f59e0b' : '#d1d5db';
+                    const barWidth = Math.min(score, 100);
+                    return `<div class="match-row" onclick="selectTxn(${s.id})" data-id="${s.id}" style="grid-template-columns:70px 1fr auto auto;">
+                        <span>${s.date || ''}</span>
+                        <span class="desc">${esc(s.customer || '')} — ${esc(s.event_name || '')} <span style="color:var(--text-muted);">(${s.category || s.entry_type})</span></span>
+                        <span class="amt">$${(s.amount||0).toFixed(2)}</span>
+                        <span style="width:70px; display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+                            <span style="font-size:0.65rem; color:var(--text-muted);">${reason}</span>
+                            <span style="width:100%; height:4px; background:#e5e7eb; border-radius:2px; overflow:hidden;">
+                                <span style="display:block; height:100%; width:${barWidth}%; background:${barColor};"></span>
+                            </span>
+                        </span>
+                    </div>`;
+                }).join('');
+            }
+        } catch(e) {
+            txnDiv.innerHTML = `<div style="color:#dc2626; font-size:0.82rem; padding:1rem;">Failed to load suggestions: ${e}</div>`;
+        }
         updateMatchButton();
     }
 
