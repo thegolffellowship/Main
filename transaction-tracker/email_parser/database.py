@@ -2276,9 +2276,47 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                 cursor = conn.execute(sql, values)
                 if cursor.rowcount > 0:
                     inserted += 1
+                    new_item_id = cursor.lastrowid
+
+                    # ── Auto-replace RSVP placeholder when payment arrives ──
+                    # If this is a real payment (GoDaddy), check for existing RSVP item
+                    # for the same customer + event and remove it
+                    try:
+                        cust_id = row.get("customer_id")
+                        cust_name = row.get("customer") or ""
+                        event_name_val = row.get("item_name") or ""
+                        merchant_val = row.get("merchant") or ""
+                        if cust_name and event_name_val and merchant_val == "The Golf Fellowship":
+                            # Match by customer_id (most reliable) or by name
+                            rsvp_match = None
+                            if cust_id:
+                                rsvp_match = conn.execute(
+                                    """SELECT id FROM items
+                                       WHERE customer_id = ? AND item_name = ? COLLATE NOCASE
+                                         AND transaction_status IN ('rsvp_only', 'gg_rsvp')
+                                         AND id != ?
+                                       LIMIT 1""",
+                                    (cust_id, event_name_val, new_item_id),
+                                ).fetchone()
+                            if not rsvp_match:
+                                rsvp_match = conn.execute(
+                                    """SELECT id FROM items
+                                       WHERE customer = ? COLLATE NOCASE AND item_name = ? COLLATE NOCASE
+                                         AND transaction_status IN ('rsvp_only', 'gg_rsvp')
+                                         AND id != ?
+                                       LIMIT 1""",
+                                    (cust_name, event_name_val, new_item_id),
+                                ).fetchone()
+                            if rsvp_match:
+                                conn.execute("DELETE FROM items WHERE id = ?", (rsvp_match["id"],))
+                                logger.info("Auto-replaced RSVP item #%d for %s at %s (paid item #%d)",
+                                            rsvp_match["id"], cust_name, event_name_val, new_item_id)
+                    except Exception:
+                        logger.warning("RSVP replacement check failed for item %s",
+                                       row.get("email_uid"), exc_info=True)
+
                     # ── Accounting: create entries for GoDaddy orders ──
                     try:
-                        new_item_id = cursor.lastrowid
                         item_price = _parse_dollar(row.get("item_price"))
                         merchant = row.get("merchant") or ""
                         # Only create entries for real GoDaddy orders
