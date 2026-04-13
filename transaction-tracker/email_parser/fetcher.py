@@ -378,16 +378,6 @@ def send_mail_graph(
                 "content": html_body,
             },
             "toRecipients": to_recipients,
-            "internetMessageHeaders": [
-                {
-                    "name": "X-MS-Exchange-Organization-ContentConvertTo",
-                    "value": "mime",
-                },
-                {
-                    "name": "X-MS-Exchange-Organization-AuthAs",
-                    "value": "Internal",
-                },
-            ],
         },
         "saveToSentItems": "false",
     }
