@@ -2092,7 +2092,9 @@ div.mobile-card.row-rsvp-only {
 }
 
 /* ---- Modals ---- */
-.acct-modal { width: 90%; max-width: 700px; max-height: 90vh; overflow-y: auto; }
+.acct-modal { width: 90%; max-width: 700px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+.acct-modal .modal-body { flex: 1; overflow-y: auto; }
+.acct-modal .modal-footer { flex-shrink: 0; display: flex; gap: 0.5rem; justify-content: flex-end; padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); }
 .acct-modal-sm { max-width: 500px; }
 .acct-modal-lg { max-width: 900px; }
 
