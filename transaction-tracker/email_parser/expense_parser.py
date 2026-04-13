@@ -96,11 +96,13 @@ def classify_email(subject: str, from_addr: str, body_text: str) -> dict:
     if "golfgenius.com" in from_lower or "golf genius" in from_lower:
         return {"type": "golf_genius_rsvp", "confidence": 99}
 
-    if ("chase" in from_lower or "chase.com" in from_lower) and (
-        "transaction" in subject_lower or "you made a" in subject_lower
-        or "you sent" in subject_lower or "payment" in subject_lower
-    ):
-        return {"type": "chase_transaction_alert", "confidence": 95}
+    if ("chase" in from_lower or "chase.com" in from_lower):
+        # Skip statement notifications — these are balance alerts, not transactions
+        if "statement is available" in subject_lower or "statement ready" in subject_lower:
+            return {"type": "unknown", "confidence": 95}
+        if ("transaction" in subject_lower or "you made a" in subject_lower
+            or "you sent" in subject_lower or "payment" in subject_lower):
+            return {"type": "chase_transaction_alert", "confidence": 95}
 
     if "venmo" in from_lower and (
         "you paid" in subject_lower or "you sent" in subject_lower

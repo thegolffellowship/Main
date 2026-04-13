@@ -183,7 +183,7 @@ function renderTransactionList(txns, total) {
                     ${m.splitBadges ? `<div class="acct-mc-splits">${m.splitBadges}</div>` : ''}
                     <div class="acct-mc-btn-row">
                         <button class="btn btn-sm mc-exp-approve" data-expense-id="${t.expense_id}" style="background:var(--green);color:#fff;border:none;flex:1;">${sug ? 'Approve' : 'Approve'}</button>
-                        <button class="btn btn-secondary btn-sm mc-exp-ignore" data-expense-id="${t.expense_id}" style="flex:1;">Ignore</button>
+                        <button class="btn btn-secondary btn-sm mc-exp-ignore" data-expense-id="${t.expense_id}" style="flex:1;">Skip</button>
                         <button class="btn btn-secondary btn-sm mc-open-detail" style="flex:0 0 auto;">Edit</button>
                     </div>
                 </div>

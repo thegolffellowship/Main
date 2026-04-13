@@ -5459,6 +5459,16 @@ def api_update_expense_transaction(tid):
     return jsonify(update_expense_transaction(tid, d))
 
 
+@app.route("/api/accounting/expense-transactions/<int:tid>", methods=["DELETE"])
+@require_role("admin")
+def api_delete_expense_transaction(tid):
+    from email_parser.database import _connect
+    with _connect() as conn:
+        conn.execute("DELETE FROM expense_transactions WHERE id = ?", (tid,))
+        conn.commit()
+    return jsonify({"deleted": True})
+
+
 @app.route("/api/accounting/action-items")
 @require_role("admin")
 def api_action_items():

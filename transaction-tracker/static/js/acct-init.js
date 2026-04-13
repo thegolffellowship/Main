@@ -103,6 +103,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#expense-modal-cancel').addEventListener('click', closeExpenseModal);
     $('#expense-btn-approve').addEventListener('click', () => saveExpenseReview('approve'));
     $('#expense-btn-ignore').addEventListener('click', () => saveExpenseReview('ignore'));
+    $('#expense-btn-discard').addEventListener('click', async () => {
+        const expId = $('#expense-review-id').value;
+        if (!expId) return;
+        if (!confirm('This will permanently delete this item. It is not a real transaction.\n\nContinue?')) return;
+        try {
+            await api('/expense-transactions/' + expId, { method: 'DELETE' });
+            closeExpenseModal();
+            refreshActiveTab();
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    });
 
     // Expense type toggle (show/hide transfer row, update labels + categories)
     $('#expense-type').addEventListener('change', () => {
