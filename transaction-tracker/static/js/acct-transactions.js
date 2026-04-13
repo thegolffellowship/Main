@@ -91,7 +91,35 @@ function renderTransactionList(txns, total) {
             </tr>`;
         }).join('')}</tbody></table>`;
 
-    // Mobile cards
+    // Mobile cards — build option strings once
+    const _acctOpts = '<option value="">— Account —</option>' +
+        ACCT.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    const _entOpts = ACCT.entities.map(e =>
+        `<option value="${e.id}">${e.short_name}</option>`).join('');
+    const _expEntOpts = '<option value="">— Entity —</option>' +
+        ACCT.entities.map(e => `<option value="${e.short_name}">${e.short_name}</option>`).join('');
+    const _expCatOpts = '<option value="">— Category —</option>' +
+        ACCT.categories.filter(c => c.type === 'expense').map(c =>
+            `<option value="${c.name}">${c.name}</option>`).join('');
+
+    function _catOptsForType(type, selectedId) {
+        return '<option value="">— Category —</option>' +
+            ACCT.categories.filter(c => c.type === type).map(c =>
+                `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.name}</option>`
+            ).join('');
+    }
+
+    function _tagChipsHTML(tags) {
+        if (!ACCT.tags.length) return '';
+        const tagIds = (tags || []).map(tg => tg.id);
+        return ACCT.tags.map(t => {
+            const sel = tagIds.includes(t.id);
+            return `<span class="acct-tag-chip acct-tag-selectable ${sel ? 'selected' : ''}"
+                style="background:${sel ? t.color : 'transparent'}; border-color:${t.color}; color:${sel ? '#fff' : t.color}"
+                data-tag-id="${t.id}">${t.name}</span>`;
+        }).join('');
+    }
+
     const cardsHTML = `<div class="acct-mobile-cards">${txns.map(t => {
         const m = _txnMeta(t);
         const cardClass = m.isExp
@@ -100,11 +128,60 @@ function renderTransactionList(txns, total) {
         const cardData = m.isExp
             ? `data-id="${t.id}" data-expense-id="${t.expense_id}"`
             : `data-id="${t.id}"`;
+        const split0 = t.splits[0] || {};
 
+        if (m.isExp) {
+            // ── Expense transaction: entity + category dropdowns + approve/ignore
+            const sug = t.suggestion;
+            const sugBadge = sug
+                ? `<span class="acct-mc-sug-badge acct-mc-sug-${sug.confidence}" title="${sug.source || ''}">${
+                    sug.confidence === 'learned' ? 'Learned' :
+                    sug.confidence === 'rule' ? 'Rule' :
+                    sug.confidence === 'history' ? 'History' :
+                    sug.confidence === 'similar' ? 'Similar' : 'Suggested'
+                }</span>`
+                : '';
+            return `<div class="${cardClass}" ${cardData} data-sug-cat="${sug ? (sug.category || '') : ''}" data-sug-ent="${sug ? (sug.entity || '') : ''}">
+                <div class="acct-mobile-card-top">
+                    <div class="acct-mc-left">
+                        <div class="acct-mc-date">${t.date || ''} ${m.sourceBadge}${m.reviewBadge}${sugBadge}</div>
+                        <div class="acct-mc-desc">${t.description || ''}</div>
+                    </div>
+                    <div class="acct-mc-right">
+                        <span class="acct-mc-amount ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</span>
+                        <span class="acct-mc-chevron">&#9654;</span>
+                    </div>
+                </div>
+                <div class="acct-mobile-card-details">
+                    <div class="acct-mc-fields">
+                        <div class="acct-mc-field">
+                            <span class="acct-mc-label">Type</span>
+                            <span class="acct-mc-value"><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></span>
+                        </div>
+                        <div class="acct-mc-field">
+                            <span class="acct-mc-label">Account</span>
+                            <span class="acct-mc-value">${t.account_name || '—'}</span>
+                        </div>
+                    </div>
+                    <div class="acct-mc-controls">
+                        <select class="mc-exp-entity" data-expense-id="${t.expense_id}">${_expEntOpts}</select>
+                        <select class="mc-exp-category" data-expense-id="${t.expense_id}">${_expCatOpts}</select>
+                    </div>
+                    ${m.splitBadges ? `<div class="acct-mc-splits">${m.splitBadges}</div>` : ''}
+                    <div class="acct-mc-btn-row">
+                        <button class="btn btn-sm mc-exp-approve" data-expense-id="${t.expense_id}" style="background:var(--green);color:#fff;border:none;flex:1;">${sug ? 'Approve' : 'Approve'}</button>
+                        <button class="btn btn-secondary btn-sm mc-exp-ignore" data-expense-id="${t.expense_id}" style="flex:1;">Ignore</button>
+                        <button class="btn btn-secondary btn-sm mc-open-detail" style="flex:0 0 auto;">Edit</button>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        // ── Regular transaction: entity + category + account + tags
         return `<div class="${cardClass}" ${cardData}>
             <div class="acct-mobile-card-top">
                 <div class="acct-mc-left">
-                    <div class="acct-mc-date">${t.date || ''} ${m.sourceBadge}${m.reviewBadge}${m.reconBadge}</div>
+                    <div class="acct-mc-date">${t.date || ''} ${m.sourceBadge}${m.reconBadge}</div>
                     <div class="acct-mc-desc">${t.description || ''} ${m.tagBadges}</div>
                 </div>
                 <div class="acct-mc-right">
@@ -113,41 +190,216 @@ function renderTransactionList(txns, total) {
                 </div>
             </div>
             <div class="acct-mobile-card-details">
-                <div class="acct-mc-fields">
-                    <div class="acct-mc-field">
-                        <span class="acct-mc-label">Type</span>
-                        <span class="acct-mc-value"><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></span>
-                    </div>
-                    <div class="acct-mc-field">
-                        <span class="acct-mc-label">Account</span>
-                        <span class="acct-mc-value">${t.account_name || '—'}</span>
-                    </div>
+                <div class="acct-mc-controls">
+                    <select class="mc-entity" data-id="${t.id}">${_entOpts}</select>
+                    <select class="mc-category" data-id="${t.id}" data-type="${t.type}">${_catOptsForType(t.type, split0.category_id)}</select>
+                    <select class="mc-account" data-id="${t.id}">${_acctOpts}</select>
                 </div>
+                ${ACCT.tags.length ? `<div class="acct-mc-tags" data-id="${t.id}">${_tagChipsHTML(t.tags)}</div>` : ''}
                 ${m.splitBadges ? `<div class="acct-mc-splits">${m.splitBadges}</div>` : ''}
-                ${!m.isExp ? `<div class="acct-mc-actions" style="padding-top:0.4rem;"><button class="btn btn-secondary btn-sm acct-btn-del" data-id="${t.id}" style="font-size:0.75rem;">Delete</button></div>` : ''}
+                <div class="acct-mc-btn-row">
+                    <button class="btn btn-secondary btn-sm mc-open-detail" style="flex:1;">Full Edit</button>
+                    <button class="btn btn-secondary btn-sm acct-btn-del" data-id="${t.id}" style="color:var(--red);">Delete</button>
+                </div>
             </div>
         </div>`;
     }).join('')}</div>`;
 
     el.innerHTML = tableHTML + cardsHTML;
 
-    // Mobile card expand/collapse
+    // ── Mobile card: pre-select current values + apply suggestions ──
+    el.querySelectorAll('.acct-mobile-cards .acct-mobile-card').forEach(card => {
+        const txnId = card.dataset.id;
+        const t = txns.find(x => String(x.id) === txnId);
+        if (!t) return;
+        const split0 = t.splits[0] || {};
+        if (t._is_expense) {
+            const entSel = card.querySelector('.mc-exp-entity');
+            const catSel = card.querySelector('.mc-exp-category');
+
+            // First try current values from split data
+            let entMatch = split0.entity_name || '';
+            let catMatch = split0.category_name || '';
+
+            // If empty, use suggestion data
+            const sugCat = card.dataset.sugCat;
+            const sugEnt = card.dataset.sugEnt;
+            if (!catMatch && sugCat) catMatch = sugCat;
+            if ((!entMatch || entMatch === '?') && sugEnt) entMatch = sugEnt;
+
+            // Apply to selects
+            if (entSel && entMatch && entMatch !== '?') {
+                for (const opt of entSel.options) {
+                    if (opt.value && opt.value.toUpperCase() === entMatch.toUpperCase()) {
+                        opt.selected = true; break;
+                    }
+                }
+                if (sugEnt && entSel.value) {
+                    entSel.style.borderColor = '#7dd3fc';
+                }
+            }
+            if (catSel && catMatch) {
+                for (const opt of catSel.options) {
+                    if (opt.value && opt.value.toUpperCase() === catMatch.toUpperCase()) {
+                        opt.selected = true; break;
+                    }
+                }
+                if (sugCat && catSel.value) {
+                    catSel.style.borderColor = '#7dd3fc';
+                }
+            }
+        } else {
+            // Pre-select regular txn dropdowns
+            const entSel = card.querySelector('.mc-entity');
+            const acctSel = card.querySelector('.mc-account');
+            if (entSel && split0.entity_id) entSel.value = split0.entity_id;
+            if (acctSel && t.account_id) acctSel.value = t.account_id;
+        }
+    });
+
+    // ── Mobile card: expand/collapse ──
     el.querySelectorAll('.acct-mobile-card-top').forEach(top => {
         top.addEventListener('click', () => {
             top.closest('.acct-mobile-card').classList.toggle('expanded');
         });
     });
 
-    // Mobile card tap description to open editor
-    el.querySelectorAll('.acct-mobile-card .acct-mc-desc').forEach(desc => {
-        desc.addEventListener('click', (e) => {
+    // ── Mobile card: "Full Edit" / "Edit" button opens modal ──
+    el.querySelectorAll('.acct-mobile-cards .mc-open-detail').forEach(btn => {
+        btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const card = desc.closest('.acct-mobile-card');
+            const card = btn.closest('.acct-mobile-card');
             const expId = card.dataset.expenseId;
             if (expId) {
                 openExpenseReview(parseInt(expId));
             } else {
                 openEditTransaction(parseInt(card.dataset.id));
+            }
+        });
+    });
+
+    // ── Mobile card: inline save for REGULAR transactions ──
+    el.querySelectorAll('.acct-mobile-cards .mc-entity, .acct-mobile-cards .mc-category, .acct-mobile-cards .mc-account').forEach(sel => {
+        sel.addEventListener('change', async (e) => {
+            e.stopPropagation();
+            const card = sel.closest('.acct-mobile-card');
+            const txnId = card.dataset.id;
+            const entVal = card.querySelector('.mc-entity').value;
+            const catVal = card.querySelector('.mc-category').value;
+            const acctVal = card.querySelector('.mc-account').value;
+            try {
+                const txn = await api('/transactions/' + txnId);
+                const body = {
+                    splits: txn.splits.map(s => ({
+                        entity_id: entVal ? parseInt(entVal) : s.entity_id,
+                        category_id: catVal ? parseInt(catVal) : s.category_id,
+                        amount: s.amount,
+                        memo: s.memo,
+                    })),
+                };
+                if (acctVal) body.account_id = parseInt(acctVal);
+                await api('/transactions/' + txnId, { method: 'PUT', body });
+                sel.style.borderColor = 'var(--green)';
+                sel.style.boxShadow = '0 0 0 1px var(--green)';
+                setTimeout(() => { sel.style.borderColor = ''; sel.style.boxShadow = ''; }, 2000);
+            } catch (err) {
+                alert('Save error: ' + err.message);
+            }
+        });
+    });
+
+    // ── Mobile card: inline save for EXPENSE transactions ──
+    el.querySelectorAll('.acct-mobile-cards .mc-exp-entity, .acct-mobile-cards .mc-exp-category').forEach(sel => {
+        sel.addEventListener('change', async (e) => {
+            e.stopPropagation();
+            const card = sel.closest('.acct-mobile-card');
+            const expId = card.dataset.expenseId;
+            const entity = card.querySelector('.mc-exp-entity').value || null;
+            const category = card.querySelector('.mc-exp-category').value || null;
+            try {
+                await api('/expense-transactions/' + expId, {
+                    method: 'PATCH',
+                    body: { entity, category, reviewed_at: new Date().toISOString(), reviewed_by: 'admin' }
+                });
+                sel.style.borderColor = 'var(--green)';
+                sel.style.boxShadow = '0 0 0 1px var(--green)';
+                setTimeout(() => { sel.style.borderColor = ''; sel.style.boxShadow = ''; }, 2000);
+            } catch (err) {
+                alert('Save error: ' + err.message);
+            }
+        });
+    });
+
+    // ── Mobile card: Approve / Ignore expense ──
+    el.querySelectorAll('.acct-mobile-cards .mc-exp-approve').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const card = btn.closest('.acct-mobile-card');
+            const expId = card.dataset.expenseId;
+            const entity = card.querySelector('.mc-exp-entity').value || null;
+            const category = card.querySelector('.mc-exp-category').value || null;
+            try {
+                await api('/expense-transactions/' + expId, {
+                    method: 'PATCH',
+                    body: { entity, category, review_status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: 'admin' }
+                });
+                card.style.opacity = '0.5';
+                btn.textContent = 'Approved';
+                btn.disabled = true;
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        });
+    });
+    el.querySelectorAll('.acct-mobile-cards .mc-exp-ignore').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const card = btn.closest('.acct-mobile-card');
+            const expId = card.dataset.expenseId;
+            try {
+                await api('/expense-transactions/' + expId, {
+                    method: 'PATCH',
+                    body: { review_status: 'ignored', reviewed_at: new Date().toISOString(), reviewed_by: 'admin' }
+                });
+                card.classList.add('acct-mc-ignored');
+                btn.textContent = 'Ignored';
+                btn.disabled = true;
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        });
+    });
+
+    // ── Mobile card: tag toggle ──
+    el.querySelectorAll('.acct-mobile-cards .acct-mc-tags .acct-tag-selectable').forEach(chip => {
+        chip.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const card = chip.closest('.acct-mobile-card');
+            const txnId = card.dataset.id;
+            const tagId = parseInt(chip.dataset.tagId);
+            const isSel = chip.classList.contains('selected');
+            try {
+                const txn = await api('/transactions/' + txnId);
+                let tagIds = txn.tags.map(tg => tg.id);
+                if (isSel) {
+                    tagIds = tagIds.filter(id => id !== tagId);
+                } else {
+                    tagIds.push(tagId);
+                }
+                await api('/transactions/' + txnId, { method: 'PUT', body: { tag_ids: tagIds } });
+                // Toggle chip visual
+                const tagObj = ACCT.tags.find(t => t.id === tagId);
+                if (isSel) {
+                    chip.classList.remove('selected');
+                    chip.style.background = 'transparent';
+                    chip.style.color = tagObj ? tagObj.color : '';
+                } else {
+                    chip.classList.add('selected');
+                    chip.style.background = tagObj ? tagObj.color : '';
+                    chip.style.color = '#fff';
+                }
+            } catch (err) {
+                alert('Tag error: ' + err.message);
             }
         });
     });
