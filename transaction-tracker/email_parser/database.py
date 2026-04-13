@@ -7384,7 +7384,7 @@ def build_handicap_card_html(card_data: dict) -> str:
             diff_style = f"color:#475569; font-family:{_font};"
             status_html = ""
 
-        _td = f"padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; font-family:{_font};"
+        _td = f"padding:4px 8px; border-bottom:1px solid #f1f5f9; font-size:13px; font-family:{_font};"
         score_rows += f"""<tr style="background-color:{bg};">
   <td style="{_td} white-space:nowrap;">{r.get('round_date', '')}</td>
   <td style="{_td}">{r.get('course_name', '')}</td>
@@ -7417,53 +7417,41 @@ def build_handicap_card_html(card_data: dict) -> str:
             adj_str = f" {sign} {abs(adjustment):.1f}"
 
         calc_html = (
-            f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
-            f'<tr><td style="font-size:12px; color:#94a3b8; padding-top:4px; '
-            f'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">'
-            f'Avg of lowest {rounds_used}: {avg_used:.2f} &times; {multiplier} = '
-            f'{after_mult:.2f}{adj_str} &rarr; <strong style="color:#64748b;">{idx_9_display}</strong>'
-            f'</td></tr></table>'
+            f'Avg of lowest {rounds_used}: {avg_used:.2f} &#215; {multiplier} = '
+            f'{after_mult:.2f}{adj_str} &#8594; <strong style="color:#64748b;">{idx_9_display}</strong>'
         )
     else:
         summary_text = f"Not enough rounds for a handicap index (minimum {card_data.get('min_rounds', 3)} required)"
 
     chapter_line = f'<div style="font-size:13px; color:#64748b; margin-top:2px;">{chapter}</div>' if chapter else ""
 
+    _f = "Arial, Helvetica, sans-serif"
+    _th = f"padding:5px 8px; font-size:11px; font-weight:600; color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:{_f};"
+
     html = f"""<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>TGF Handicap Card</title>
-  <!--[if mso]>
-  <style type="text/css">
-    table {{border-collapse:collapse;}}
-    td {{font-family:Arial,Helvetica,sans-serif;}}
-  </style>
-  <![endif]-->
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {{ margin: 0; padding: 0; }}
+  table {{ mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+</style>
 </head>
-<body style="margin:0; padding:0; width:100%; background-color:#f1f5f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
-       style="background-color:#f1f5f9;">
-<tr><td align="center" style="padding:24px 0;">
+<body style="font-family: {_f}; color: #333; margin: 0; padding: 0; background: #f1f5f9;">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f1f5f9;">
+<tr><td align="center" style="padding: 24px 8px;">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px; background:#ffffff; border:1px solid #e2e8f0;">
 
-<!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" align="center"><tr><td><![endif]-->
-
-<!-- Card wrapper -->
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600"
-       style="max-width:600px; width:100%; background-color:#ffffff; border:1px solid #e2e8f0;">
-
-  <!-- Header band -->
   <tr>
-    <td style="background-color:#1e40af; padding:20px 24px;">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+    <td style="background:#1e40af; padding:20px 24px;">
+      <table cellpadding="0" cellspacing="0" border="0" width="100%">
         <tr>
-          <td style="vertical-align:middle; font-size:28px; font-weight:800; color:#ffffff; letter-spacing:1px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-            TGF<br>
-            <span style="font-size:12px; font-weight:400; color:#93c5fd;">The Golf Fellowship</span>
+          <td style="vertical-align:middle; font-family:{_f};">
+            <span style="font-size:28px; font-weight:800; color:#ffffff; letter-spacing:1px;">TGF</span><br>
+            <span style="font-size:12px; color:#93c5fd;">The Golf Fellowship</span>
           </td>
-          <td style="text-align:right; vertical-align:middle; font-size:14px; font-weight:600; color:#93c5fd; text-transform:uppercase; letter-spacing:1px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+          <td style="text-align:right; vertical-align:middle; font-size:14px; font-weight:600; color:#93c5fd; text-transform:uppercase; letter-spacing:1px; font-family:{_f};">
             Handicap Card
           </td>
         </tr>
@@ -7471,23 +7459,21 @@ def build_handicap_card_html(card_data: dict) -> str:
     </td>
   </tr>
 
-  <!-- Player info + Index -->
   <tr>
     <td style="padding:24px;">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+      <table cellpadding="0" cellspacing="0" border="0" width="100%">
         <tr>
-          <td style="vertical-align:top; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+          <td style="vertical-align:top; font-family:{_f};">
             <span style="font-size:22px; font-weight:700; color:#1e293b;">{display_name}</span><br>
             {('<span style="font-size:13px; color:#64748b;">' + chapter + '</span><br>') if chapter else ''}
             <span style="font-size:12px; color:#94a3b8;">As of {date_str}</span>
           </td>
           <td style="text-align:right; vertical-align:top; width:160px;">
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="right"
-                   style="background-color:#f0f7ff; border:2px solid #bfdbfe;">
+            <table cellpadding="0" cellspacing="0" border="0" align="right" style="background:#f0f7ff; border:2px solid #bfdbfe;">
               <tr>
-                <td style="padding:12px 20px; text-align:center; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                <td style="padding:12px 20px; text-align:center; font-family:{_f};">
                   <span style="font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:1px;">9-Hole Index</span><br>
-                  <span style="font-size:32px; font-weight:800; color:{idx_color}; line-height:1.2;">{idx_9_display}</span><br>
+                  <span style="font-size:32px; font-weight:800; color:{idx_color};">{idx_9_display}</span><br>
                   <span style="font-size:12px; color:#64748b;">18-Hole: {idx_18_display}</span>
                 </td>
               </tr>
@@ -7498,60 +7484,41 @@ def build_handicap_card_html(card_data: dict) -> str:
     </td>
   </tr>
 
-  <!-- Summary + calculation -->
   <tr>
-    <td style="padding:0 24px 16px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-        <tr><td style="border-top:1px solid #e2e8f0; padding-top:12px; font-size:13px; color:#64748b;">
-          {summary_text}
-        </td></tr>
-      </table>
-      {calc_html}
+    <td style="padding:0 24px 16px; font-family:{_f};">
+      <hr style="border:none; border-top:1px solid #e2e8f0; margin:0 0 12px 0;">
+      <span style="font-size:13px; color:#64748b;">{summary_text}</span><br>
+      <span style="font-size:12px; color:#94a3b8;">{calc_html}</span>
     </td>
   </tr>
 
-  <!-- Score history table -->
   <tr>
     <td style="padding:0 24px 24px;">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="1" bordercolor="#e2e8f0" width="100%"
-             style="border-collapse:collapse; border:1px solid #e2e8f0;">
-        <tr style="background-color:#f1f5f9;">
-          <th style="padding:8px 10px; text-align:left; font-size:11px; font-weight:600;
-                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Date</th>
-          <th style="padding:8px 10px; text-align:left; font-size:11px; font-weight:600;
-                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Course</th>
-          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
-                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Tee</th>
-          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
-                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Score</th>
-          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
-                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Rating</th>
-          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
-                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Slope</th>
-          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
-                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Diff</th>
-          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
-                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Status</th>
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse; border:1px solid #e2e8f0;">
+        <tr style="background:#f1f5f9;">
+          <th style="{_th} text-align:left;">Date</th>
+          <th style="{_th} text-align:left;">Course</th>
+          <th style="{_th} text-align:center;">Tee</th>
+          <th style="{_th} text-align:center;">Score</th>
+          <th style="{_th} text-align:center;">Rating</th>
+          <th style="{_th} text-align:center;">Slope</th>
+          <th style="{_th} text-align:center;">Diff</th>
+          <th style="{_th} text-align:center;">Status</th>
         </tr>
         {score_rows}
       </table>
     </td>
   </tr>
 
-  <!-- Footer -->
   <tr>
-    <td style="background-color:#f8fafc; padding:16px 24px; border-top:1px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; text-align:center; font-size:12px; color:#94a3b8;">
-        <strong style="color:#64748b;">The Golf Fellowship</strong> &mdash; 9-Hole Handicap Index<br>
+    <td style="background:#f8fafc; padding:16px 24px; border-top:1px solid #e2e8f0; font-family:{_f}; text-align:center; font-size:12px; color:#94a3b8;">
+        <strong style="color:#64748b;">The Golf Fellowship</strong> &#8212; 9-Hole Handicap Index<br>
         <span style="font-size:11px;">This is not an official USGA handicap.
         Calculated per WHS rules for TGF league play.</span>
     </td>
   </tr>
 
 </table>
-<!-- End card wrapper -->
-
-<!--[if mso]></td></tr></table><![endif]-->
-
 </td></tr>
 </table>
 </body>
