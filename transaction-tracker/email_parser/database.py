@@ -2140,6 +2140,54 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
             except Exception:
                 logger.warning("Auto-merge failed for customer #%d → #%d", dup_id, canonical_id, exc_info=True)
 
+    # ── Normalize items.customer text for same-email name variants ──
+    # The Customers page groups by items.customer text, so "Will Peterson" and
+    # "William Peterson" show as separate entries even with the same customer_id.
+    # Find emails with multiple distinct customer name strings and normalize.
+    name_variants = conn.execute(
+        """SELECT LOWER(TRIM(customer_email)) as email,
+                  GROUP_CONCAT(DISTINCT customer) as names,
+                  COUNT(DISTINCT customer) as cnt
+           FROM items
+           WHERE customer_email IS NOT NULL AND customer_email != ''
+             AND customer IS NOT NULL AND customer != ''
+           GROUP BY LOWER(TRIM(customer_email))
+           HAVING cnt > 1"""
+    ).fetchall()
+
+    for row in name_variants:
+        email = row["email"]
+        names = [n.strip() for n in row["names"].split(",") if n.strip()]
+        if len(names) < 2:
+            continue
+        # Keep the name with the most items (most established)
+        best_name = None
+        best_count = 0
+        for n in names:
+            cnt = conn.execute(
+                "SELECT COUNT(*) as cnt FROM items WHERE customer = ?", (n,)
+            ).fetchone()["cnt"]
+            if cnt > best_count:
+                best_count = cnt
+                best_name = n
+        if not best_name:
+            continue
+        # Rewrite all variant names to the canonical one
+        for n in names:
+            if n != best_name:
+                updated = conn.execute(
+                    "UPDATE items SET customer = ? WHERE customer = ?",
+                    (best_name, n),
+                ).rowcount
+                if updated:
+                    # Create alias for future lookups
+                    conn.execute(
+                        "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_name, alias_type) VALUES (?, ?, 'name')",
+                        (best_name, n),
+                    )
+                    logger.info("Normalized items.customer '%s' → '%s' (%d items, shared email %s)",
+                                n, best_name, updated, email)
+
     conn.commit()
 
 
