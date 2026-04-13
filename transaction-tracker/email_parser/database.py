@@ -7827,7 +7827,7 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
                 acct_total = result["total"]
 
         # --- Build suggestion data for expense transactions ---
-        suggestion_data = get_expense_suggestions(db_path=db_path)
+        suggestion_data = get_expense_suggestions(conn)
 
         # --- Expense transactions ---
         exp_txns = []
@@ -8609,7 +8609,7 @@ def process_acct_recurring(db_path: str | Path | None = None) -> int:
 # AI Bookkeeper — Auto-categorization & Review Queue
 # ═══════════════════════════════════════════════════════════════════════════
 
-def get_expense_suggestions(db_path: str | Path | None = None) -> dict:
+def get_expense_suggestions(conn) -> dict:
     """Build merchant→suggestion map for expense transactions.
 
     Sources (in priority order):
@@ -8620,61 +8620,61 @@ def get_expense_suggestions(db_path: str | Path | None = None) -> dict:
     Returns: {UPPER_MERCHANT: {category, entity, confidence, source}}
     """
     suggestions = {}  # UPPER(merchant) → suggestion
-    with _connect(db_path) as conn:
-        # Source 1: Past approved expenses — highest priority (direct learning)
-        approved = conn.execute(
-            """SELECT UPPER(TRIM(merchant)) as vendor, category, entity,
-                      COUNT(*) as cnt
-               FROM expense_transactions
-               WHERE review_status IN ('approved', 'corrected')
-                 AND category IS NOT NULL AND category != ''
-               GROUP BY UPPER(TRIM(merchant)), category, entity
-               ORDER BY cnt DESC"""
-        ).fetchall()
-        for r in approved:
-            v = r["vendor"]
-            if v and v not in suggestions:
-                suggestions[v] = {
-                    "category": r["category"],
-                    "entity": r["entity"],
-                    "confidence": "learned",
-                    "source": f"approved {r['cnt']}x",
-                }
 
-        # Source 2: Keyword rules
-        rules = conn.execute(
-            """SELECT kr.keyword, kr.match_type,
-                      c.name as category_name, c.type as category_type,
-                      e.short_name as entity_name
-               FROM acct_keyword_rules kr
-               LEFT JOIN acct_categories c ON c.id = kr.category_id
-               LEFT JOIN acct_entities e ON e.id = kr.entity_id
-               WHERE kr.is_active = 1"""
-        ).fetchall()
-        kw_rules = [dict(r) for r in rules]
+    # Source 1: Past approved expenses — highest priority (direct learning)
+    approved = conn.execute(
+        """SELECT UPPER(TRIM(merchant)) as vendor, category, entity,
+                  COUNT(*) as cnt
+           FROM expense_transactions
+           WHERE review_status IN ('approved', 'corrected')
+             AND category IS NOT NULL AND category != ''
+           GROUP BY UPPER(TRIM(merchant)), category, entity
+           ORDER BY cnt DESC"""
+    ).fetchall()
+    for r in approved:
+        v = r["vendor"]
+        if v and v not in suggestions:
+            suggestions[v] = {
+                "category": r["category"],
+                "entity": r["entity"],
+                "confidence": "learned",
+                "source": f"approved {r['cnt']}x",
+            }
 
-        # Source 3: Vendor history from acct_transactions
-        vendor_rows = conn.execute(
-            """SELECT UPPER(TRIM(t.description)) as vendor,
-                      c.name as category_name, e.short_name as entity_name,
-                      COUNT(*) as cnt
-               FROM acct_transactions t
-               JOIN acct_splits s ON s.transaction_id = t.id
-               LEFT JOIN acct_categories c ON c.id = s.category_id
-               LEFT JOIN acct_entities e ON e.id = s.entity_id
-               WHERE s.category_id IS NOT NULL
-               GROUP BY UPPER(TRIM(t.description)), c.name, e.short_name
-               ORDER BY cnt DESC"""
-        ).fetchall()
-        for r in vendor_rows:
-            v = r["vendor"]
-            if v and v not in suggestions:
-                suggestions[v] = {
-                    "category": r["category_name"],
-                    "entity": r["entity_name"],
-                    "confidence": "history",
-                    "source": f"matched {r['cnt']}x",
-                }
+    # Source 2: Keyword rules
+    rules = conn.execute(
+        """SELECT kr.keyword, kr.match_type,
+                  c.name as category_name, c.type as category_type,
+                  e.short_name as entity_name
+           FROM acct_keyword_rules kr
+           LEFT JOIN acct_categories c ON c.id = kr.category_id
+           LEFT JOIN acct_entities e ON e.id = kr.entity_id
+           WHERE kr.is_active = 1"""
+    ).fetchall()
+    kw_rules = [dict(r) for r in rules]
+
+    # Source 3: Vendor history from acct_transactions
+    vendor_rows = conn.execute(
+        """SELECT UPPER(TRIM(t.description)) as vendor,
+                  c.name as category_name, e.short_name as entity_name,
+                  COUNT(*) as cnt
+           FROM acct_transactions t
+           JOIN acct_splits s ON s.transaction_id = t.id
+           LEFT JOIN acct_categories c ON c.id = s.category_id
+           LEFT JOIN acct_entities e ON e.id = s.entity_id
+           WHERE s.category_id IS NOT NULL
+           GROUP BY UPPER(TRIM(t.description)), c.name, e.short_name
+           ORDER BY cnt DESC"""
+    ).fetchall()
+    for r in vendor_rows:
+        v = r["vendor"]
+        if v and v not in suggestions:
+            suggestions[v] = {
+                "category": r["category_name"],
+                "entity": r["entity_name"],
+                "confidence": "history",
+                "source": f"matched {r['cnt']}x",
+            }
 
     return {"exact": suggestions, "keyword_rules": kw_rules}
 
