@@ -2211,6 +2211,47 @@ div.mobile-card.row-rsvp-only {
 .acct-empty { color: var(--text-muted); text-align: center; padding: 2rem; font-size: 0.9rem; }
 .acct-muted { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.5rem; }
 
+/* ---- Accounting Mobile Card Layout ---- */
+.acct-mobile-cards { display: none; }
+.acct-mobile-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 0.5rem; box-shadow: var(--shadow); overflow: hidden;
+}
+.acct-mobile-card-top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.65rem 0.75rem; cursor: pointer; gap: 0.5rem; min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+}
+.acct-mobile-card-top:active { background: #f1f5f9; }
+.acct-mc-left { flex: 1; min-width: 0; }
+.acct-mc-date { font-size: 0.7rem; color: var(--text-muted); }
+.acct-mc-desc {
+    font-size: 0.88rem; font-weight: 600; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+}
+.acct-mc-right { text-align: right; flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem; }
+.acct-mc-amount { font-size: 0.9rem; font-weight: 700; }
+.acct-mc-chevron { color: var(--text-muted); font-size: 0.75rem; transition: transform 0.15s; flex-shrink: 0; }
+.acct-mobile-card.expanded > .acct-mobile-card-top > .acct-mc-right > .acct-mc-chevron { transform: rotate(90deg); }
+.acct-mobile-card-details {
+    display: none; padding: 0 0.75rem 0.65rem; border-top: 1px solid var(--border);
+}
+.acct-mobile-card.expanded > .acct-mobile-card-details { display: block; }
+.acct-mc-fields {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem 1rem;
+    font-size: 0.82rem; padding-top: 0.5rem;
+}
+.acct-mc-field { display: flex; flex-direction: column; gap: 0.1rem; }
+.acct-mc-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+.acct-mc-value { font-weight: 500; }
+.acct-mc-actions { display: flex; gap: 0.35rem; padding-top: 0.5rem; flex-wrap: wrap; }
+.acct-mc-actions select { flex: 1; min-width: 0; padding: 0.4rem 0.5rem; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); min-height: 36px; }
+.acct-mc-splits { padding-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.25rem; }
+
+/* Expense row styling on mobile cards */
+.acct-mobile-card.acct-mc-expense { border-left: 3px solid #3b82f6; }
+.acct-mobile-card.acct-mc-ignored { opacity: 0.55; }
+
 /* ---- Responsive ---- */
 @media (max-width: 768px) {
     .acct-summary-cards { grid-template-columns: 1fr; gap: 0.5rem; margin-bottom: 1rem; }
@@ -2276,47 +2317,6 @@ div.mobile-card.row-rsvp-only {
     .acct-table-mobile-hide { display: none; }
     .acct-mobile-cards { display: block; }
 }
-
-/* ---- Accounting Mobile Card Layout ---- */
-.acct-mobile-cards { display: none; }
-.acct-mobile-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    margin-bottom: 0.5rem; box-shadow: var(--shadow); overflow: hidden;
-}
-.acct-mobile-card-top {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0.65rem 0.75rem; cursor: pointer; gap: 0.5rem; min-height: 44px;
-    -webkit-tap-highlight-color: transparent;
-}
-.acct-mobile-card-top:active { background: #f1f5f9; }
-.acct-mc-left { flex: 1; min-width: 0; }
-.acct-mc-date { font-size: 0.7rem; color: var(--text-muted); }
-.acct-mc-desc {
-    font-size: 0.88rem; font-weight: 600; white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis;
-}
-.acct-mc-right { text-align: right; flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem; }
-.acct-mc-amount { font-size: 0.9rem; font-weight: 700; }
-.acct-mc-chevron { color: var(--text-muted); font-size: 0.75rem; transition: transform 0.15s; flex-shrink: 0; }
-.acct-mobile-card.expanded > .acct-mobile-card-top > .acct-mc-right > .acct-mc-chevron { transform: rotate(90deg); }
-.acct-mobile-card-details {
-    display: none; padding: 0 0.75rem 0.65rem; border-top: 1px solid var(--border);
-}
-.acct-mobile-card.expanded > .acct-mobile-card-details { display: block; }
-.acct-mc-fields {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem 1rem;
-    font-size: 0.82rem; padding-top: 0.5rem;
-}
-.acct-mc-field { display: flex; flex-direction: column; gap: 0.1rem; }
-.acct-mc-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
-.acct-mc-value { font-weight: 500; }
-.acct-mc-actions { display: flex; gap: 0.35rem; padding-top: 0.5rem; flex-wrap: wrap; }
-.acct-mc-actions select { flex: 1; min-width: 0; padding: 0.4rem 0.5rem; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); min-height: 36px; }
-.acct-mc-splits { padding-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.25rem; }
-
-/* Expense row styling on mobile cards */
-.acct-mobile-card.acct-mc-expense { border-left: 3px solid #3b82f6; }
-.acct-mobile-card.acct-mc-ignored { opacity: 0.55; }
 
 /* =========================================================
    COO Dashboard Styles
