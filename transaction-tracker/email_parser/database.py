@@ -7407,9 +7407,7 @@ def build_handicap_card_html(card_data: dict) -> str:
             f"(last {lookback} months)"
         )
 
-        # Build calculation breakdown
-        diffs_str = " + ".join(f"{d:.1f}" for d in used_diffs)
-        avg_str = f"{avg_used:.4f}"
+        # Compact calculation line
         after_mult = avg_used * multiplier
         adj_str = ""
         if adjustment != 0.0:
@@ -7417,12 +7415,9 @@ def build_handicap_card_html(card_data: dict) -> str:
             adj_str = f" {sign} {abs(adjustment):.1f}"
 
         calc_html = (
-            f'<div style="font-size:12px; color:#64748b; margin-top:8px; '
-            f'padding:10px 12px; background:#f8fafc; border-radius:6px; '
-            f'font-family:monospace,monospace; line-height:1.7;">'
-            f'<div>Avg of lowest {rounds_used}: ({diffs_str}) / {rounds_used} = <strong>{avg_str}</strong></div>'
-            f'<div>{avg_str} &times; {multiplier} = {after_mult:.4f}{adj_str}</div>'
-            f'<div>Rounded: <strong style="color:#1e293b;">{idx_9_display}</strong></div>'
+            f'<div style="font-size:12px; color:#94a3b8; margin-top:4px;">'
+            f'Avg of lowest {rounds_used}: {avg_used:.2f} &times; {multiplier} = '
+            f'{after_mult:.2f}{adj_str} &rarr; <strong style="color:#64748b;">{idx_9_display}</strong>'
             f'</div>'
         )
     else:
