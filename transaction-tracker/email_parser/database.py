@@ -7375,10 +7375,7 @@ def build_handicap_card_html(card_data: dict) -> str:
         if is_used:
             bg = "#dcfce7"
             diff_style = f"font-weight:700; color:#166534; font-family:{_font};"
-            status_html = (
-                '<span style="background-color:#16a34a; color:#ffffff; padding:2px 6px; '
-                f'font-size:13px; font-weight:600; font-family:{_font};">&#9733;</span>'
-            )
+            status_html = '<span style="color:#16a34a; font-size:15px;">&#9733;</span>'
         else:
             bg = "#ffffff" if i % 2 == 0 else "#f8fafc"
             diff_style = f"color:#475569; font-family:{_font};"
