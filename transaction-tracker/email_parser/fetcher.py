@@ -353,42 +353,73 @@ def send_mail_graph(
     subject: str,
     html_body: str,
 ) -> bool:
-    """Send an email via Microsoft Graph API (requires Mail.Send permission).
+    """Send an email via Microsoft Graph API using raw MIME format.
+
+    Sends as a proper MIME message to prevent Exchange from converting to
+    TNEF/winmail.dat when delivering to non-Microsoft recipients (iCloud,
+    Gmail, etc.).
 
     ``to_address`` may be a single email or a comma-separated list of emails.
     """
+    import base64
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
     token = _get_graph_token(tenant_id, client_id, client_secret)
     if not token:
         return False
 
     # Support comma-separated recipient list
     addresses = [a.strip() for a in to_address.split(",") if a.strip()]
-    to_recipients = [{"emailAddress": {"address": addr}} for addr in addresses]
 
-    headers = {
+    # Build a proper MIME message — this prevents TNEF encoding
+    msg = MIMEMultipart("alternative")
+    msg["From"] = from_address
+    msg["To"] = ", ".join(addresses)
+    msg["Subject"] = subject
+    msg["MIME-Version"] = "1.0"
+
+    # Plain text fallback (strip HTML tags for basic readability)
+    import re
+    plain_text = re.sub(r"<[^>]+>", " ", html_body)
+    plain_text = re.sub(r"\s+", " ", plain_text).strip()
+    msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    mime_content = msg.as_string()
+
+    # Step 1: Create draft message using MIME format
+    create_headers = {
         "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
+        "Content-Type": "text/plain",
     }
-
-    payload = {
-        "message": {
-            "subject": subject,
-            "body": {
-                "contentType": "HTML",
-                "content": html_body,
-            },
-            "toRecipients": to_recipients,
-        },
-        "saveToSentItems": "false",
-    }
-
-    url = f"{GRAPH_BASE}/users/{from_address}/sendMail"
+    create_url = f"{GRAPH_BASE}/users/{from_address}/messages"
 
     try:
-        resp = _request_with_retry("post", url, headers=headers, json=payload, timeout=30)
+        resp = _request_with_retry(
+            "post", create_url, headers=create_headers,
+            data=mime_content.encode("utf-8"), timeout=30,
+        )
         resp.raise_for_status()
-        logger.info("Email sent via Graph API to %s", to_address)
+        message_id = resp.json().get("id")
+        if not message_id:
+            logger.error("Graph API: created draft but no message ID returned")
+            return False
+
+        # Step 2: Send the draft
+        send_url = f"{GRAPH_BASE}/users/{from_address}/messages/{message_id}/send"
+        send_headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Length": "0",
+        }
+        resp2 = _request_with_retry(
+            "post", send_url, headers=send_headers, timeout=30,
+        )
+        resp2.raise_for_status()
+
+        logger.info("Email sent via Graph API (MIME) to %s", to_address)
         return True
+
     except requests.exceptions.HTTPError as e:
         logger.exception("Graph API send mail error: %s", e.response.text if e.response else e)
     except Exception:
