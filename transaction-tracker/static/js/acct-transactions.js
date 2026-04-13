@@ -132,10 +132,19 @@ function renderTransactionList(txns, total) {
 
         if (m.isExp) {
             // ── Expense transaction: entity + category dropdowns + approve/ignore
-            return `<div class="${cardClass}" ${cardData}>
+            const sug = t.suggestion;
+            const sugBadge = sug
+                ? `<span class="acct-mc-sug-badge acct-mc-sug-${sug.confidence}" title="${sug.source || ''}">${
+                    sug.confidence === 'learned' ? 'Learned' :
+                    sug.confidence === 'rule' ? 'Rule' :
+                    sug.confidence === 'history' ? 'History' :
+                    sug.confidence === 'similar' ? 'Similar' : 'Suggested'
+                }</span>`
+                : '';
+            return `<div class="${cardClass}" ${cardData} data-sug-cat="${sug ? (sug.category || '') : ''}" data-sug-ent="${sug ? (sug.entity || '') : ''}">
                 <div class="acct-mobile-card-top">
                     <div class="acct-mc-left">
-                        <div class="acct-mc-date">${t.date || ''} ${m.sourceBadge}${m.reviewBadge}</div>
+                        <div class="acct-mc-date">${t.date || ''} ${m.sourceBadge}${m.reviewBadge}${sugBadge}</div>
                         <div class="acct-mc-desc">${t.description || ''}</div>
                     </div>
                     <div class="acct-mc-right">
@@ -160,7 +169,7 @@ function renderTransactionList(txns, total) {
                     </div>
                     ${m.splitBadges ? `<div class="acct-mc-splits">${m.splitBadges}</div>` : ''}
                     <div class="acct-mc-btn-row">
-                        <button class="btn btn-sm mc-exp-approve" data-expense-id="${t.expense_id}" style="background:var(--green);color:#fff;border:none;flex:1;">Approve</button>
+                        <button class="btn btn-sm mc-exp-approve" data-expense-id="${t.expense_id}" style="background:var(--green);color:#fff;border:none;flex:1;">${sug ? 'Approve' : 'Approve'}</button>
                         <button class="btn btn-secondary btn-sm mc-exp-ignore" data-expense-id="${t.expense_id}" style="flex:1;">Ignore</button>
                         <button class="btn btn-secondary btn-sm mc-open-detail" style="flex:0 0 auto;">Edit</button>
                     </div>
@@ -198,28 +207,45 @@ function renderTransactionList(txns, total) {
 
     el.innerHTML = tableHTML + cardsHTML;
 
-    // ── Mobile card: pre-select current values ──
+    // ── Mobile card: pre-select current values + apply suggestions ──
     el.querySelectorAll('.acct-mobile-cards .acct-mobile-card').forEach(card => {
         const txnId = card.dataset.id;
         const t = txns.find(x => String(x.id) === txnId);
         if (!t) return;
         const split0 = t.splits[0] || {};
         if (t._is_expense) {
-            // Pre-select expense entity/category from split or top-level data
             const entSel = card.querySelector('.mc-exp-entity');
             const catSel = card.querySelector('.mc-exp-category');
-            if (entSel && split0.entity_name) {
+
+            // First try current values from split data
+            let entMatch = split0.entity_name || '';
+            let catMatch = split0.category_name || '';
+
+            // If empty, use suggestion data
+            const sugCat = card.dataset.sugCat;
+            const sugEnt = card.dataset.sugEnt;
+            if (!catMatch && sugCat) catMatch = sugCat;
+            if ((!entMatch || entMatch === '?') && sugEnt) entMatch = sugEnt;
+
+            // Apply to selects
+            if (entSel && entMatch && entMatch !== '?') {
                 for (const opt of entSel.options) {
-                    if (opt.value && opt.value.toUpperCase() === (split0.entity_name || '').toUpperCase()) {
+                    if (opt.value && opt.value.toUpperCase() === entMatch.toUpperCase()) {
                         opt.selected = true; break;
                     }
                 }
+                if (sugEnt && entSel.value) {
+                    entSel.style.borderColor = '#7dd3fc';
+                }
             }
-            if (catSel && split0.category_name) {
+            if (catSel && catMatch) {
                 for (const opt of catSel.options) {
-                    if (opt.value && opt.value.toUpperCase() === (split0.category_name || '').toUpperCase()) {
+                    if (opt.value && opt.value.toUpperCase() === catMatch.toUpperCase()) {
                         opt.selected = true; break;
                     }
+                }
+                if (sugCat && catSel.value) {
+                    catSel.style.borderColor = '#7dd3fc';
                 }
             }
         } else {

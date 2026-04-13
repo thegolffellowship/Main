@@ -7826,6 +7826,9 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
                 acct_txns = result["transactions"]
                 acct_total = result["total"]
 
+        # --- Build suggestion data for expense transactions ---
+        suggestion_data = get_expense_suggestions(db_path=db_path)
+
         # --- Expense transactions ---
         exp_txns = []
         exp_total = 0
@@ -7876,10 +7879,21 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
             for r in exp_rows:
                 r = dict(r)
                 ent_name = r.get("entity") or "?"
+                merchant = r.get("merchant") or ""
+
+                # Build suggestion for pending expenses
+                suggestion = None
+                if r.get("review_status") == "pending":
+                    suggestion = suggest_for_merchant(merchant, suggestion_data)
+                    # Apply suggestion to entity/category if currently empty
+                    if suggestion:
+                        if not r.get("category") and suggestion.get("category"):
+                            ent_name = suggestion.get("entity") or ent_name
+
                 exp_txns.append({
                     "id": f"exp_{r['id']}",
                     "date": r.get("transaction_date"),
-                    "description": r.get("merchant") or "(unknown)",
+                    "description": merchant or "(unknown)",
                     "total_amount": r.get("amount") or 0,
                     "type": r.get("transaction_type") or "expense",
                     "account_id": None,
@@ -7907,6 +7921,7 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
                     }],
                     "tags": [],
                     "_is_expense": True,
+                    "suggestion": suggestion,
                 })
 
         # --- Merge and paginate ---
@@ -8593,6 +8608,111 @@ def process_acct_recurring(db_path: str | Path | None = None) -> int:
 # ═══════════════════════════════════════════════════════════════════════════
 # AI Bookkeeper — Auto-categorization & Review Queue
 # ═══════════════════════════════════════════════════════════════════════════
+
+def get_expense_suggestions(db_path: str | Path | None = None) -> dict:
+    """Build merchant→suggestion map for expense transactions.
+
+    Sources (in priority order):
+    1. Past approved/corrected expense transactions (exact merchant match)
+    2. User-defined keyword rules (contains/starts_with/exact)
+    3. Vendor history from acct_transactions (exact + prefix match)
+
+    Returns: {UPPER_MERCHANT: {category, entity, confidence, source}}
+    """
+    suggestions = {}  # UPPER(merchant) → suggestion
+    with _connect(db_path) as conn:
+        # Source 1: Past approved expenses — highest priority (direct learning)
+        approved = conn.execute(
+            """SELECT UPPER(TRIM(merchant)) as vendor, category, entity,
+                      COUNT(*) as cnt
+               FROM expense_transactions
+               WHERE review_status IN ('approved', 'corrected')
+                 AND category IS NOT NULL AND category != ''
+               GROUP BY UPPER(TRIM(merchant)), category, entity
+               ORDER BY cnt DESC"""
+        ).fetchall()
+        for r in approved:
+            v = r["vendor"]
+            if v and v not in suggestions:
+                suggestions[v] = {
+                    "category": r["category"],
+                    "entity": r["entity"],
+                    "confidence": "learned",
+                    "source": f"approved {r['cnt']}x",
+                }
+
+        # Source 2: Keyword rules
+        rules = conn.execute(
+            """SELECT kr.keyword, kr.match_type,
+                      c.name as category_name, c.type as category_type,
+                      e.short_name as entity_name
+               FROM acct_keyword_rules kr
+               LEFT JOIN acct_categories c ON c.id = kr.category_id
+               LEFT JOIN acct_entities e ON e.id = kr.entity_id
+               WHERE kr.is_active = 1"""
+        ).fetchall()
+        kw_rules = [dict(r) for r in rules]
+
+        # Source 3: Vendor history from acct_transactions
+        vendor_rows = conn.execute(
+            """SELECT UPPER(TRIM(t.description)) as vendor,
+                      c.name as category_name, e.short_name as entity_name,
+                      COUNT(*) as cnt
+               FROM acct_transactions t
+               JOIN acct_splits s ON s.transaction_id = t.id
+               LEFT JOIN acct_categories c ON c.id = s.category_id
+               LEFT JOIN acct_entities e ON e.id = s.entity_id
+               WHERE s.category_id IS NOT NULL
+               GROUP BY UPPER(TRIM(t.description)), c.name, e.short_name
+               ORDER BY cnt DESC"""
+        ).fetchall()
+        for r in vendor_rows:
+            v = r["vendor"]
+            if v and v not in suggestions:
+                suggestions[v] = {
+                    "category": r["category_name"],
+                    "entity": r["entity_name"],
+                    "confidence": "history",
+                    "source": f"matched {r['cnt']}x",
+                }
+
+    return {"exact": suggestions, "keyword_rules": kw_rules}
+
+
+def suggest_for_merchant(merchant: str, suggestion_data: dict) -> dict | None:
+    """Look up suggestion for a specific merchant using pre-built suggestion data."""
+    if not merchant:
+        return None
+    m_upper = merchant.strip().upper()
+
+    # 1. Exact match from approved expenses or vendor history
+    if m_upper in suggestion_data["exact"]:
+        return suggestion_data["exact"][m_upper]
+
+    # 2. Keyword rules
+    for kr in suggestion_data["keyword_rules"]:
+        kw = kr["keyword"].upper()
+        mt = kr.get("match_type", "contains")
+        if mt == "exact" and m_upper == kw:
+            return {"category": kr["category_name"], "entity": kr["entity_name"],
+                    "confidence": "rule", "source": f"rule: {kr['keyword']}"}
+        elif mt == "starts_with" and m_upper.startswith(kw):
+            return {"category": kr["category_name"], "entity": kr["entity_name"],
+                    "confidence": "rule", "source": f"rule: {kr['keyword']}"}
+        elif mt == "contains" and kw in m_upper:
+            return {"category": kr["category_name"], "entity": kr["entity_name"],
+                    "confidence": "rule", "source": f"rule: {kr['keyword']}"}
+
+    # 3. Prefix match from exact suggestions (first 12 chars)
+    prefix = m_upper[:12] if len(m_upper) >= 12 else m_upper.split()[0] if m_upper else ""
+    if len(prefix) >= 4:
+        for v, sug in suggestion_data["exact"].items():
+            if v.startswith(prefix):
+                return {**sug, "confidence": "similar",
+                        "source": f"similar to '{v[:30]}'"}
+
+    return None
+
 
 def _get_category_rules(db_path: str | Path | None = None) -> list[dict]:
     """Return learned vendor→category mappings from past categorisations."""
@@ -10518,6 +10638,38 @@ def update_expense_transaction(txn_id: int, fields: dict,
         set_clause = ", ".join(f"{k} = ?" for k in safe)
         conn.execute(f"UPDATE expense_transactions SET {set_clause} WHERE id = ?",
                      (*safe.values(), txn_id))
+
+        # Auto-learn: create keyword rule when expense is approved with category
+        if safe.get("review_status") in ("approved", "corrected"):
+            merchant = original.get("merchant", "") if original else ""
+            cat_name = safe.get("category") or (original.get("category") if original else None)
+            ent_name = safe.get("entity") or (original.get("entity") if original else None)
+            if merchant and cat_name:
+                # Look up category_id and entity_id by name
+                cat_row = conn.execute(
+                    "SELECT id FROM acct_categories WHERE name = ? COLLATE NOCASE LIMIT 1",
+                    (cat_name,)
+                ).fetchone()
+                ent_row = conn.execute(
+                    "SELECT id FROM acct_entities WHERE short_name = ? COLLATE NOCASE LIMIT 1",
+                    (ent_name,)
+                ).fetchone() if ent_name else None
+                cat_id = cat_row["id"] if cat_row else None
+                ent_id = ent_row["id"] if ent_row else None
+                if cat_id:
+                    # Check if a rule already exists for this merchant
+                    existing_rule = conn.execute(
+                        "SELECT id FROM acct_keyword_rules WHERE UPPER(keyword) = UPPER(?) LIMIT 1",
+                        (merchant.strip(),)
+                    ).fetchone()
+                    if not existing_rule:
+                        conn.execute(
+                            """INSERT INTO acct_keyword_rules
+                               (keyword, match_type, category_id, entity_id)
+                               VALUES (?, 'contains', ?, ?)""",
+                            (merchant.strip(), cat_id, ent_id),
+                        )
+
         conn.commit()
         row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?", (txn_id,)).fetchone()
     return dict(row) if row else {}
