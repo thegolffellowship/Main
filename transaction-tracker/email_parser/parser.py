@@ -623,41 +623,82 @@ def _expand_quantity_rows(rows: list[dict]) -> list[dict]:
 def _promote_guest_customers(rows: list[dict]) -> list[dict]:
     """Swap customer on GUEST items in multi-item orders to the actual guest.
 
-    When a buyer purchases two separate line items — one for themselves
-    (MEMBER) and one for a guest (GUEST/1st TIMER) — both items get the
-    buyer's name as customer. This function detects items where a
-    ``guest_name`` is available and promotes the guest to customer,
-    adding a "Purchased by <buyer>" note.
+    Handles two patterns:
+    1. guest_name is on the GUEST/1st TIMER item itself → swap that item's customer.
+    2. guest_name is on the MEMBER item (e.g. "Playing Partner Request: Tanner Chalfant")
+       → find the companion GUEST/1st TIMER item from the same buyer/order and swap IT.
 
-    Detection: item has a non-empty ``guest_name`` field AND either
-    user_status contains "GUEST" or "1ST TIMER", AND the current
-    customer differs from the guest_name (meaning the buyer's name is
-    on the row, not the guest's).
+    In both cases, the swapped item gets a "Purchased by <buyer>" note and
+    buyer-specific fields (email, phone, address) are cleared.
     """
+    # ── Pass 1: direct swap (guest_name on the GUEST/1st TIMER item itself) ──
     for row in rows:
         guest = (row.get("guest_name") or "").strip()
         if not guest:
             continue
         status = (row.get("user_status") or "").upper()
-        # Fire for GUEST or 1st TIMER items with a guest_name set
         if "GUEST" not in status and "1ST TIMER" not in status:
             continue
         buyer = (row.get("customer") or "").strip()
-        # Only swap if the customer is still the buyer (not already the guest)
         guest_norm = _normalize_customer_name(guest)
         if not guest_norm or guest_norm.lower() == buyer.lower():
             continue
-        row["customer"] = guest_norm
-        row["notes"] = f"Purchased by {buyer}"
-        # Clear buyer-specific fields — guest has different contact info
-        row["customer_email"] = None
-        row["customer_phone"] = None
-        row["address"] = None
-        row["address2"] = None
-        row["city"] = None
-        row["state"] = None
-        row["zip"] = None
+        _do_guest_swap(row, guest_norm, buyer)
+
+    # ── Pass 2: cross-item swap (guest_name on the MEMBER item) ──
+    # Group by order_id to find companion items
+    from collections import defaultdict
+    order_groups = defaultdict(list)
+    for row in rows:
+        oid = row.get("order_id")
+        if oid:
+            order_groups[oid].append(row)
+
+    for oid, group in order_groups.items():
+        if len(group) < 2:
+            continue
+
+        # Find MEMBER items with guest_name set
+        for member_row in group:
+            m_status = (member_row.get("user_status") or "").upper()
+            if "MEMBER" not in m_status:
+                continue
+            guest = (member_row.get("guest_name") or member_row.get("partner_request") or "").strip()
+            # Strip "(guest)" suffix if present
+            guest = guest.replace("(guest)", "").replace("(Guest)", "").strip()
+            if not guest:
+                continue
+            guest_norm = _normalize_customer_name(guest)
+            if not guest_norm:
+                continue
+            buyer = (member_row.get("customer") or "").strip()
+
+            # Find the companion GUEST/1st TIMER item from the same buyer
+            for companion in group:
+                if companion is member_row:
+                    continue
+                c_status = (companion.get("user_status") or "").upper()
+                c_customer = (companion.get("customer") or "").strip()
+                if ("GUEST" in c_status or "1ST TIMER" in c_status) and c_customer.lower() == buyer.lower():
+                    # Only swap if not already swapped
+                    if c_customer.lower() != guest_norm.lower():
+                        _do_guest_swap(companion, guest_norm, buyer)
+                        break
+
     return rows
+
+
+def _do_guest_swap(row: dict, guest_name: str, buyer_name: str) -> None:
+    """Apply the guest-to-customer swap on a single row."""
+    row["customer"] = guest_name
+    row["notes"] = f"Purchased by {buyer_name}"
+    row["customer_email"] = None
+    row["customer_phone"] = None
+    row["address"] = None
+    row["address2"] = None
+    row["city"] = None
+    row["state"] = None
+    row["zip"] = None
 
 
 # ---------------------------------------------------------------------------
