@@ -7172,6 +7172,344 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Handicap Email Card — data assembly + HTML builder
+# ---------------------------------------------------------------------------
+
+def build_handicap_card_data(player_name: str,
+                             db_path: str | Path | None = None) -> dict:
+    """Assemble all data needed to render a TGF Handicap Card email.
+
+    Returns a dict with player metadata, index values, annotated rounds
+    (each marked USED or ACTIVE), and summary counts.
+    """
+    cfg = get_handicap_settings(db_path)
+    lookback_months = int(cfg.get("lookback_months", 12))
+    min_rounds = int(cfg.get("min_rounds", 3))
+
+    cutoff = datetime.now() - timedelta(days=lookback_months * 30.44)
+    cutoff_str = cutoff.strftime("%Y-%m-%d")
+
+    # Get all rounds for this player
+    all_rounds = get_handicap_rounds(player_name=player_name, db_path=db_path)
+
+    # Filter to active rounds (within lookback window, with a differential)
+    active_rounds = [
+        r for r in all_rounds
+        if r.get("differential") is not None and (r.get("round_date") or "") >= cutoff_str
+    ]
+
+    # Pool = most recent 20 active rounds (already sorted newest-first by get_handicap_rounds)
+    pool = active_rounds[:20]
+
+    # Compute index
+    pool_diffs = [r["differential"] for r in pool]
+    index_9 = compute_handicap_index(pool_diffs, cfg)
+    index_18 = round(index_9 * 2, 1) if index_9 is not None else None
+
+    # Determine which differentials are "USED" (lowest N per lookup table)
+    n = min(len(pool_diffs), 20)
+    used_count = 0
+    if n >= min_rounds:
+        n_clamped = max(n, 3)
+        used_count = _HANDICAP_DIFF_LOOKUP.get(n_clamped, 8)
+
+    # Mark rounds: sort by differential to find the N lowest, then restore date order
+    if used_count > 0:
+        indexed_pool = [(i, r["differential"]) for i, r in enumerate(pool)]
+        indexed_pool.sort(key=lambda x: x[1])
+        used_indices = {indexed_pool[j][0] for j in range(min(used_count, len(indexed_pool)))}
+    else:
+        used_indices = set()
+
+    annotated_rounds = []
+    for i, r in enumerate(pool):
+        annotated_rounds.append({
+            "round_date": r.get("round_date") or "",
+            "course_name": r.get("course_name") or "",
+            "tee_name": r.get("tee_name") or "",
+            "adjusted_score": r.get("adjusted_score"),
+            "rating": r.get("rating"),
+            "slope": r.get("slope"),
+            "differential": r.get("differential"),
+            "status": "USED" if i in used_indices else "ACTIVE",
+        })
+
+    # Resolve player metadata (email, chapter, name parts) via links
+    email = ""
+    chapter = ""
+    first_name = ""
+    last_name = ""
+    with _connect(db_path) as conn:
+        link = conn.execute(
+            "SELECT customer_name FROM handicap_player_links WHERE player_name = ?",
+            (player_name,),
+        ).fetchone()
+        if link and link["customer_name"]:
+            cname = link["customer_name"]
+            meta = conn.execute(
+                """SELECT
+                    COALESCE(
+                      (SELECT LOWER(TRIM(i1.customer_email)) FROM items i1
+                       WHERE LOWER(i1.customer) = LOWER(?)
+                         AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
+                       ORDER BY i1.id DESC LIMIT 1),
+                      (SELECT LOWER(TRIM(ca.alias_value)) FROM customer_aliases ca
+                       WHERE LOWER(ca.customer_name) = LOWER(?)
+                         AND ca.alias_type = 'email'
+                       LIMIT 1),
+                      ''
+                    ) AS customer_email,
+                    COALESCE(
+                      (SELECT i2.chapter FROM items i2
+                       WHERE LOWER(i2.customer) = LOWER(?)
+                         AND i2.chapter IS NOT NULL AND TRIM(i2.chapter) != ''
+                       ORDER BY i2.id DESC LIMIT 1),
+                      ''
+                    ) AS chapter,
+                    COALESCE(
+                      (SELECT i3.first_name FROM items i3
+                       WHERE LOWER(i3.customer) = LOWER(?)
+                         AND i3.first_name IS NOT NULL AND TRIM(i3.first_name) != ''
+                       ORDER BY i3.id DESC LIMIT 1),
+                      ''
+                    ) AS first_name,
+                    COALESCE(
+                      (SELECT i4.last_name FROM items i4
+                       WHERE LOWER(i4.customer) = LOWER(?)
+                         AND i4.last_name IS NOT NULL AND TRIM(i4.last_name) != ''
+                       ORDER BY i4.id DESC LIMIT 1),
+                      ''
+                    ) AS last_name
+                """,
+                (cname, cname, cname, cname, cname),
+            ).fetchone()
+            if meta:
+                email = (meta["customer_email"] or "").strip()
+                chapter = (meta["chapter"] or "").strip()
+                first_name = (meta["first_name"] or "").strip()
+                last_name = (meta["last_name"] or "").strip()
+
+            # Also check customer_emails table for primary email
+            if not email:
+                ce = conn.execute(
+                    """SELECT e.email FROM customer_emails e
+                       JOIN customers c ON c.customer_id = e.customer_id
+                       WHERE LOWER(c.first_name || ' ' || c.last_name) = LOWER(?)
+                         AND e.is_primary = 1
+                       LIMIT 1""",
+                    (cname,),
+                ).fetchone()
+                if ce:
+                    email = (ce["email"] or "").strip().lower()
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    return {
+        "player_name": player_name,
+        "first_name": first_name,
+        "last_name": last_name,
+        "chapter": chapter,
+        "email": email,
+        "handicap_index_9": index_9,
+        "handicap_index_18": index_18,
+        "rounds": annotated_rounds,
+        "rounds_used": used_count,
+        "rounds_pool": len(pool),
+        "generated_date": today_str,
+        "lookback_months": lookback_months,
+    }
+
+
+def _fmt_handicap_display(index_9: float | None) -> str:
+    """Format a 9-hole index for display: '+2.1N', '6.3N', or 'N/A'."""
+    if index_9 is None:
+        return "N/A"
+    if index_9 < 0:
+        return f"+{abs(index_9):.1f}N"
+    return f"{index_9:.1f}N"
+
+
+def build_handicap_card_html(card_data: dict) -> str:
+    """Build a styled HTML email for a TGF Handicap Card.
+
+    Uses only inline CSS and table-based layout for email client compatibility.
+    """
+    name = card_data["player_name"]
+    first = card_data.get("first_name") or ""
+    last = card_data.get("last_name") or ""
+    display_name = f"{first} {last}".strip() if first or last else name
+    chapter = card_data.get("chapter") or ""
+    date_str = card_data.get("generated_date") or ""
+    idx_9 = card_data.get("handicap_index_9")
+    idx_18 = card_data.get("handicap_index_18")
+    rounds = card_data.get("rounds") or []
+    rounds_used = card_data.get("rounds_used", 0)
+    rounds_pool = card_data.get("rounds_pool", 0)
+    lookback = card_data.get("lookback_months", 12)
+
+    idx_9_display = _fmt_handicap_display(idx_9)
+    idx_18_display = f"{abs(idx_18):.1f}" if idx_18 is not None else "N/A"
+    if idx_18 is not None and idx_18 < 0:
+        idx_18_display = f"+{abs(idx_18):.1f}"
+
+    idx_color = "#2563eb" if idx_9 is not None else "#94a3b8"
+
+    # Build score history rows
+    score_rows = ""
+    for i, r in enumerate(rounds):
+        bg = "#ffffff" if i % 2 == 0 else "#f8fafc"
+        diff_val = r.get("differential")
+        diff_str = f"{diff_val:.1f}" if diff_val is not None else "—"
+        is_used = r.get("status") == "USED"
+
+        diff_style = (
+            "font-weight:700; color:#16a34a;"
+            if is_used
+            else "color:#475569;"
+        )
+        status_html = (
+            '<span style="background:#dcfce7; color:#16a34a; padding:2px 6px; '
+            'border-radius:3px; font-size:11px; font-weight:600;">Used</span>'
+            if is_used
+            else '<span style="color:#94a3b8; font-size:11px;">Active</span>'
+        )
+
+        score_rows += f"""<tr style="background:{bg};">
+  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; white-space:nowrap;">{r.get('round_date', '')}</td>
+  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px;">{r.get('course_name', '')}</td>
+  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{r.get('tee_name', '')}</td>
+  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{r.get('adjusted_score', '')}</td>
+  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{r.get('rating', '')}</td>
+  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{r.get('slope', '')}</td>
+  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center; {diff_style}">{diff_str}</td>
+  <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:center;">{status_html}</td>
+</tr>"""
+
+    summary_text = ""
+    if idx_9 is not None:
+        summary_text = (
+            f"Based on best {rounds_used} of {rounds_pool} round{'s' if rounds_pool != 1 else ''} "
+            f"(last {lookback} months)"
+        )
+    else:
+        summary_text = f"Not enough rounds for a handicap index (minimum {card_data.get('min_rounds', 3)} required)"
+
+    chapter_line = f'<div style="font-size:13px; color:#64748b; margin-top:2px;">{chapter}</div>' if chapter else ""
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0; padding:0; background:#f1f5f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+       style="background:#f1f5f9; padding:24px 0;">
+<tr><td align="center">
+
+<!-- Card wrapper -->
+<table role="presentation" cellpadding="0" cellspacing="0" width="600"
+       style="max-width:600px; background:#ffffff; border-radius:12px;
+              border:1px solid #e2e8f0; overflow:hidden;">
+
+  <!-- Header band -->
+  <tr>
+    <td style="background:#1e40af; padding:20px 24px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td style="vertical-align:middle;">
+            <div style="font-size:28px; font-weight:800; color:#ffffff; letter-spacing:1px;">TGF</div>
+            <div style="font-size:12px; color:#93c5fd; margin-top:2px;">The Golf Fellowship</div>
+          </td>
+          <td style="text-align:right; vertical-align:middle;">
+            <div style="font-size:14px; font-weight:600; color:#93c5fd; text-transform:uppercase;
+                        letter-spacing:1px;">Handicap Card</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- Player info + Index -->
+  <tr>
+    <td style="padding:24px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td style="vertical-align:top; width:60%;">
+            <div style="font-size:22px; font-weight:700; color:#1e293b;">{display_name}</div>
+            {chapter_line}
+            <div style="font-size:12px; color:#94a3b8; margin-top:8px;">As of {date_str}</div>
+          </td>
+          <td style="text-align:right; vertical-align:top;">
+            <div style="background:#f0f7ff; border:2px solid #bfdbfe; border-radius:10px;
+                        padding:12px 20px; display:inline-block; text-align:center;">
+              <div style="font-size:11px; color:#64748b; text-transform:uppercase;
+                          letter-spacing:1px; margin-bottom:4px;">9-Hole Index</div>
+              <div style="font-size:32px; font-weight:800; color:{idx_color};
+                          line-height:1;">{idx_9_display}</div>
+              <div style="font-size:12px; color:#64748b; margin-top:6px;">
+                18-Hole: {idx_18_display}</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- Summary line -->
+  <tr>
+    <td style="padding:0 24px 16px;">
+      <div style="font-size:13px; color:#64748b; border-top:1px solid #e2e8f0;
+                  padding-top:12px;">{summary_text}</div>
+    </td>
+  </tr>
+
+  <!-- Score history table -->
+  <tr>
+    <td style="padding:0 24px 24px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+             style="border:1px solid #e2e8f0; border-radius:8px; overflow:hidden;">
+        <tr style="background:#f1f5f9;">
+          <th style="padding:8px 10px; text-align:left; font-size:11px; font-weight:600;
+                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0;">Date</th>
+          <th style="padding:8px 10px; text-align:left; font-size:11px; font-weight:600;
+                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0;">Course</th>
+          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
+                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0;">Tee</th>
+          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
+                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0;">Score</th>
+          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
+                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0;">Rating</th>
+          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
+                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0;">Slope</th>
+          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
+                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0;">Diff</th>
+          <th style="padding:8px 10px; text-align:center; font-size:11px; font-weight:600;
+                     color:#64748b; text-transform:uppercase; border-bottom:2px solid #e2e8f0;">Status</th>
+        </tr>
+        {score_rows}
+      </table>
+    </td>
+  </tr>
+
+  <!-- Footer -->
+  <tr>
+    <td style="background:#f8fafc; padding:16px 24px; border-top:1px solid #e2e8f0;">
+      <div style="font-size:12px; color:#94a3b8; text-align:center;">
+        <strong style="color:#64748b;">The Golf Fellowship</strong> — 9-Hole Handicap Index<br>
+        <span style="font-size:11px;">This is not an official USGA handicap.
+        Calculated per WHS rules for TGF league play.</span>
+      </div>
+    </td>
+  </tr>
+
+</table>
+<!-- End card wrapper -->
+
+</td></tr>
+</table>
+</body>
+</html>"""
+    return html
+
+
+# ---------------------------------------------------------------------------
 # Season Contest Enrollment
 # ---------------------------------------------------------------------------
 
