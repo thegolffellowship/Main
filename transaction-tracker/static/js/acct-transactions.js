@@ -759,44 +759,128 @@ function collectTagIds() { return [..._selectedTagIds]; }
 
 // ── Expense Review Modal ────────────────────────────────
 
+// Store original account for warning logic
+let _expOriginalAccount = null;
+
 async function openExpenseReview(expenseId) {
     try {
         const exp = await api('/expense-transactions/' + expenseId);
         $('#expense-review-id').value = exp.id;
+        $('#expense-source-type').value = exp.source_type || '';
 
-        // Read-only fields
-        const srcLabel = _SOURCE_LABELS[exp.source_type] || exp.source_type || '—';
-        $('#expense-source').innerHTML = `<span class="acct-source-badge acct-source-${exp.source_type || ''}">${srcLabel}</span>`;
-        $('#expense-date').textContent = exp.transaction_date || '—';
-        $('#expense-confidence').textContent = exp.confidence != null ? exp.confidence + '%' : '—';
-        $('#expense-merchant').textContent = exp.merchant || '(unknown)';
-        $('#expense-amount').textContent = fmt(exp.amount);
-        $('#expense-account').textContent = exp.account_name || (exp.account_last4 ? '...' + exp.account_last4 : '—');
-        $('#expense-status').textContent = (exp.review_status || 'pending').toUpperCase();
+        // Title
+        const status = (exp.review_status || 'pending');
+        $('#expense-modal-title').textContent = status === 'pending' ? 'Review Transaction' : 'Edit Transaction';
 
-        // Editable: Entity dropdown (text-based, match to acct_entities)
+        // Source info bar
+        const srcLabel = _SOURCE_LABELS[exp.source_type] || exp.source_type || '';
+        if (srcLabel) {
+            $('#expense-source-row').style.display = '';
+            $('#expense-source').innerHTML = `<span class="acct-source-badge acct-source-${exp.source_type || ''}">${srcLabel}</span>`;
+            $('#expense-confidence').textContent = exp.confidence != null ? exp.confidence + '%' : '—';
+            $('#expense-status').textContent = status.toUpperCase();
+        } else {
+            $('#expense-source-row').style.display = 'none';
+        }
+
+        // Editable core fields
+        $('#expense-date-input').value = exp.transaction_date || '';
+        $('#expense-merchant-input').value = exp.merchant || '';
+        $('#expense-amount-input').value = exp.amount || '';
+
+        // Type
+        const txType = exp.transaction_type || 'expense';
+        $('#expense-type').value = txType;
+        $('#expense-transfer-row').style.display = txType === 'transfer' ? '' : 'none';
+        $('#expense-account-label').textContent = txType === 'transfer' ? 'From Account' : 'Account';
+
+        // Account dropdown (editable, with warning for source-detected)
+        const acctOpts = '<option value="">— Account —</option>' +
+            ACCT.accounts.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+        $('#expense-account-select').innerHTML = acctOpts;
+        $('#expense-transfer-to').innerHTML = acctOpts;
+
+        const detectedAcct = exp.account_name || (exp.account_last4 ? '...' + exp.account_last4 : '');
+        _expOriginalAccount = detectedAcct;
+        if (detectedAcct) {
+            const sel = $('#expense-account-select');
+            for (const opt of sel.options) {
+                if (opt.value && opt.value.toUpperCase() === detectedAcct.toUpperCase()) {
+                    opt.selected = true; break;
+                }
+            }
+        }
+        $('#expense-account-warning').style.display = 'none';
+
+        // Entity dropdown
         const entOpts = '<option value="">— None —</option>' +
             ACCT.entities.map(e => `<option value="${e.short_name}" ${
                 (exp.entity || '').toUpperCase() === e.short_name.toUpperCase() ? 'selected' : ''
             }>${e.short_name}</option>`).join('');
         $('#expense-entity').innerHTML = entOpts;
 
-        // Editable: Category dropdown (text-based)
+        // Category dropdown (show all categories, not just expense)
+        const catType = txType === 'income' ? 'income' : 'expense';
         const catOpts = '<option value="">— None —</option>' +
-            ACCT.categories.filter(c => c.type === 'expense').map(c => `<option value="${c.name}" ${
+            ACCT.categories.filter(c => c.type === catType).map(c => `<option value="${c.name}" ${
                 (exp.category || '').toUpperCase() === c.name.toUpperCase() ? 'selected' : ''
             }>${c.name}</option>`).join('');
         $('#expense-category').innerHTML = catOpts;
 
-        // Editable: Event dropdown
+        // Event dropdown
         const evOpts = '<option value="">No Event</option>' +
             ACCT.events.map(ev => `<option value="${ev.item_name}" ${
                 exp.event_name === ev.item_name ? 'selected' : ''
             }>${ev.item_name}${ev.event_date ? ' (' + ev.event_date + ')' : ''}</option>`).join('');
         $('#expense-event').innerHTML = evOpts;
 
+        // AI suggestion
+        const sugBar = $('#expense-suggestion-bar');
+        if (exp.suggestion) {
+            const s = exp.suggestion;
+            sugBar.style.display = '';
+            const parts = [];
+            if (s.category) parts.push(`Category: <strong>${s.category}</strong>`);
+            if (s.entity) parts.push(`Entity: <strong>${s.entity}</strong>`);
+            parts.push(`<em>(${s.confidence} — ${s.source || ''})</em>`);
+            $('#expense-suggestion-text').innerHTML = 'Suggestion: ' + parts.join(' &middot; ');
+
+            // Pre-fill from suggestion if fields are empty
+            if (!exp.category && s.category) {
+                for (const opt of $('#expense-category').options) {
+                    if (opt.value && opt.value.toUpperCase() === s.category.toUpperCase()) {
+                        opt.selected = true; break;
+                    }
+                }
+            }
+            if (!exp.entity && s.entity) {
+                for (const opt of $('#expense-entity').options) {
+                    if (opt.value && opt.value.toUpperCase() === s.entity.toUpperCase()) {
+                        opt.selected = true; break;
+                    }
+                }
+            }
+        } else {
+            sugBar.style.display = 'none';
+        }
+
+        // Event guess from description
+        if (!exp.event_name) {
+            const guess = _guessEventFromDesc(exp.merchant);
+            if (guess) {
+                for (const opt of $('#expense-event').options) {
+                    if (opt.value === guess) { opt.selected = true; break; }
+                }
+            }
+        }
+
         // Notes
         $('#expense-notes').value = exp.notes || '';
+
+        // Show/hide approve+ignore buttons based on status
+        const isPending = status === 'pending';
+        $('#expense-btn-approve').style.display = isPending ? '' : 'none';
+        $('#expense-btn-ignore').style.display = isPending ? '' : 'none';
 
         $('#expense-review-modal').style.display = 'flex';
     } catch (e) {
@@ -804,11 +888,41 @@ async function openExpenseReview(expenseId) {
     }
 }
 
+// Guess event from merchant/description text
+function _guessEventFromDesc(text) {
+    if (!text || !ACCT.events.length) return null;
+    const lower = text.toLowerCase();
+    for (const ev of ACCT.events) {
+        const name = (ev.item_name || '').toLowerCase();
+        const words = name.split(/[\s\-–—]+/).filter(w => w.length > 2);
+        for (const w of words) {
+            if (lower.includes(w)) return ev.item_name;
+        }
+    }
+    return null;
+}
+
 async function saveExpenseReview(action) {
     const expId = $('#expense-review-id').value;
     if (!expId) return;
 
+    // Account change warning
+    const newAcct = $('#expense-account-select').value || null;
+    const sourceType = $('#expense-source-type').value;
+    if (newAcct && _expOriginalAccount && sourceType &&
+        newAcct.toUpperCase() !== _expOriginalAccount.toUpperCase()) {
+        const srcName = _SOURCE_LABELS[sourceType] || sourceType;
+        if (!confirm(`Account was detected from ${srcName} as "${_expOriginalAccount}".\n\nAre you sure you want to change it to "${newAcct}"?`)) {
+            return;
+        }
+    }
+
     const fields = {
+        merchant: $('#expense-merchant-input').value.trim() || null,
+        amount: parseFloat($('#expense-amount-input').value) || null,
+        transaction_date: $('#expense-date-input').value || null,
+        transaction_type: $('#expense-type').value || 'expense',
+        account_name: newAcct,
         entity: $('#expense-entity').value || null,
         category: $('#expense-category').value || null,
         event_name: $('#expense-event').value || null,
@@ -818,7 +932,6 @@ async function saveExpenseReview(action) {
     };
 
     if (action === 'approve') {
-        // If any field was changed from original, mark as corrected
         fields.review_status = 'approved';
     } else if (action === 'ignore') {
         fields.review_status = 'ignored';

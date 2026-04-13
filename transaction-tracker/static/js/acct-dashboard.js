@@ -355,7 +355,7 @@ function renderPendingExpenses(items) {
     el.innerHTML = items.map(item => {
         const badge = sourceLabels[item.source_type] || item.source_type || 'Other';
         const badgeClass = `coo-source-${item.source_type || 'other'}`;
-        return `<div class="coo-review-item" data-id="${item.id}">
+        return `<div class="coo-review-item" data-id="${item.id}" style="cursor:pointer;">
             <div class="coo-review-top">
                 <span class="coo-source-badge ${badgeClass}">${badge}</span>
                 <span class="coo-review-merchant">${item.merchant || '—'}</span>
@@ -364,43 +364,13 @@ function renderPendingExpenses(items) {
                 <span class="coo-confidence" title="AI confidence">${item.confidence || 0}%</span>
             </div>
             ${item.notes ? `<div class="coo-review-notes">${item.notes}</div>` : ''}
-            <div class="coo-review-actions">
-                <select class="coo-review-entity" data-id="${item.id}">
-                    <option value="TGF" ${item.entity === 'TGF' ? 'selected' : ''}>TGF</option>
-                    <option value="Personal" ${item.entity === 'Personal' ? 'selected' : ''}>Personal</option>
-                    <option value="Horizon" ${item.entity === 'Horizon' ? 'selected' : ''}>Horizon</option>
-                </select>
-                <button class="btn btn-primary btn-sm pending-btn-approve" data-id="${item.id}">Approve</button>
-                <button class="btn btn-secondary btn-sm pending-btn-ignore" data-id="${item.id}">Ignore</button>
-            </div>
         </div>`;
     }).join('');
 
-    el.querySelectorAll('.pending-btn-approve').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            const row = btn.closest('.coo-review-item');
-            const entity = row.querySelector('.coo-review-entity').value;
-            await api('/expense-transactions/' + id, {
-                method: 'PATCH',
-                body: {
-                    review_status: 'approved',
-                    reviewed_at: new Date().toISOString(),
-                    entity: entity || undefined,
-                },
-            });
-            loadPendingExpenses();
-        });
-    });
-
-    el.querySelectorAll('.pending-btn-ignore').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            await api('/expense-transactions/' + id, {
-                method: 'PATCH',
-                body: { review_status: 'ignored' },
-            });
-            loadPendingExpenses();
+    // Click any item to open the unified review modal
+    el.querySelectorAll('.coo-review-item').forEach(row => {
+        row.addEventListener('click', () => {
+            openExpenseReview(parseInt(row.dataset.id));
         });
     });
 }

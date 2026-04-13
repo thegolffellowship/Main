@@ -401,52 +401,72 @@
         </div>
     </div>
 
-    <!-- ═══ EXPENSE REVIEW MODAL ═══ -->
+    <!-- ═══ EXPENSE REVIEW MODAL (Unified) ═══ -->
     <div class="modal-overlay" id="expense-review-modal" style="display:none;">
         <div class="modal acct-modal">
             <div class="modal-header">
-                <h2>Review Expense Transaction</h2>
+                <h2 id="expense-modal-title">Review Transaction</h2>
                 <button class="modal-close" id="expense-modal-close">&times;</button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="expense-review-id">
-                <!-- Read-only info -->
-                <div class="acct-form-row">
+                <input type="hidden" id="expense-source-type">
+                <!-- Source info bar (for auto-parsed transactions) -->
+                <div class="acct-form-row" id="expense-source-row">
                     <div class="acct-form-group">
                         <label>Source</label>
                         <div class="acct-readonly-field" id="expense-source"></div>
                     </div>
                     <div class="acct-form-group">
-                        <label>Date</label>
-                        <div class="acct-readonly-field" id="expense-date"></div>
-                    </div>
-                    <div class="acct-form-group">
                         <label>Confidence</label>
                         <div class="acct-readonly-field" id="expense-confidence"></div>
-                    </div>
-                </div>
-                <div class="acct-form-row">
-                    <div class="acct-form-group acct-form-grow">
-                        <label>Merchant / Description</label>
-                        <div class="acct-readonly-field" id="expense-merchant"></div>
-                    </div>
-                    <div class="acct-form-group">
-                        <label>Amount</label>
-                        <div class="acct-readonly-field" id="expense-amount"></div>
-                    </div>
-                </div>
-                <div class="acct-form-row">
-                    <div class="acct-form-group">
-                        <label>Account</label>
-                        <div class="acct-readonly-field" id="expense-account"></div>
                     </div>
                     <div class="acct-form-group">
                         <label>Status</label>
                         <div class="acct-readonly-field" id="expense-status"></div>
                     </div>
                 </div>
-                <hr style="margin: 1rem 0; border-color: var(--border);">
+                <!-- AI Suggestion badge -->
+                <div id="expense-suggestion-bar" style="display:none; padding:0.4rem 0.75rem; margin-bottom:0.75rem; background:#f0f9ff; border:1px solid #7dd3fc; border-radius:var(--radius); font-size:0.8rem;">
+                    <span id="expense-suggestion-text"></span>
+                </div>
                 <!-- Editable fields -->
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Date</label>
+                        <input type="date" id="expense-date-input">
+                    </div>
+                    <div class="acct-form-group acct-form-grow">
+                        <label>Merchant / Description</label>
+                        <input type="text" id="expense-merchant-input">
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Amount</label>
+                        <input type="number" id="expense-amount-input" step="0.01" min="0">
+                    </div>
+                </div>
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>Type</label>
+                        <select id="expense-type" class="acct-select">
+                            <option value="expense">Expense</option>
+                            <option value="income">Income</option>
+                            <option value="transfer">Transfer</option>
+                        </select>
+                    </div>
+                    <div class="acct-form-group acct-form-grow">
+                        <label id="expense-account-label">Account</label>
+                        <select id="expense-account-select" class="acct-select"></select>
+                        <span id="expense-account-warning" style="display:none; font-size:0.7rem; color:var(--red); margin-top:0.2rem;"></span>
+                    </div>
+                </div>
+                <div class="acct-form-row" id="expense-transfer-row" style="display:none;">
+                    <div class="acct-form-group acct-form-grow">
+                        <label>Transfer To</label>
+                        <select id="expense-transfer-to" class="acct-select"></select>
+                    </div>
+                </div>
+                <hr style="margin: 0.75rem 0; border-color: var(--border);">
                 <div class="acct-form-row">
                     <div class="acct-form-group">
                         <label>Entity</label>

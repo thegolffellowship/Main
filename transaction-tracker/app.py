@@ -5439,12 +5439,17 @@ def api_expense_transactions():
 @app.route("/api/accounting/expense-transactions/<int:tid>")
 @require_role("admin")
 def api_get_expense_transaction(tid):
-    from email_parser.database import _connect
+    from email_parser.database import _connect, get_expense_suggestions, suggest_for_merchant
     with _connect() as conn:
         row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?", (tid,)).fetchone()
-    if not row:
-        return jsonify({"error": "not found"}), 404
-    return jsonify(dict(row))
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        result = dict(row)
+        # Add AI suggestion for pending expenses
+        if result.get("review_status") == "pending" and result.get("merchant"):
+            suggestion_data = get_expense_suggestions(conn)
+            result["suggestion"] = suggest_for_merchant(result["merchant"], suggestion_data)
+    return jsonify(result)
 
 
 @app.route("/api/accounting/expense-transactions/<int:tid>", methods=["PATCH"])

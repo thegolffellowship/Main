@@ -104,6 +104,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#expense-btn-approve').addEventListener('click', () => saveExpenseReview('approve'));
     $('#expense-btn-ignore').addEventListener('click', () => saveExpenseReview('ignore'));
 
+    // Expense type toggle (show/hide transfer row, update labels + categories)
+    $('#expense-type').addEventListener('change', () => {
+        const t = $('#expense-type').value;
+        $('#expense-transfer-row').style.display = t === 'transfer' ? '' : 'none';
+        $('#expense-account-label').textContent = t === 'transfer' ? 'From Account' : 'Account';
+        // Refresh category list for the selected type
+        const catType = t === 'income' ? 'income' : 'expense';
+        const curCat = $('#expense-category').value;
+        $('#expense-category').innerHTML = '<option value="">— None —</option>' +
+            ACCT.categories.filter(c => c.type === catType).map(c =>
+                `<option value="${c.name}" ${c.name === curCat ? 'selected' : ''}>${c.name}</option>`
+            ).join('');
+    });
+
+    // Account change warning for source-detected
+    $('#expense-account-select').addEventListener('change', () => {
+        const warn = $('#expense-account-warning');
+        const src = $('#expense-source-type').value;
+        const newVal = $('#expense-account-select').value;
+        if (src && _expOriginalAccount && newVal &&
+            newVal.toUpperCase() !== _expOriginalAccount.toUpperCase()) {
+            const srcName = _SOURCE_LABELS ? (_SOURCE_LABELS[src] || src) : src;
+            warn.textContent = `Detected from ${srcName} as "${_expOriginalAccount}"`;
+            warn.style.display = '';
+        } else {
+            warn.style.display = 'none';
+        }
+    });
+
     // Receipt upload
     $('#btn-upload-receipt').addEventListener('click', () => $('#receipt-file').click());
     $('#receipt-file').addEventListener('change', async () => {
