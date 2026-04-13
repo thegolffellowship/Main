@@ -491,6 +491,7 @@ function tdClass(key) {
     if (key === "customer") return ' class="customer-cell"';
     if (key === "item_name") return ' class="item-name-cell"';
     if (key === "item_price") return ' class="price-cell"';
+    if (key === "side_games") return ' class="side-games-cell"';
     return "";
 }
 

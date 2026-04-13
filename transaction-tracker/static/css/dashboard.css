@@ -210,7 +210,7 @@ main {
     box-shadow: var(--shadow);
 }
 table {
-    width: 100%;
+    width: auto;
     border-collapse: collapse;
 }
 thead th {
@@ -239,6 +239,8 @@ tbody td {
 }
 .customer-cell { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
 .item-name-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.price-cell { white-space: nowrap; }
+.side-games-cell { white-space: nowrap; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #f9fafb; }
 
