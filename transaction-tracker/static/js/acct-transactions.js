@@ -875,10 +875,36 @@ async function openExpenseReview(expenseId) {
         // Notes
         $('#expense-notes').value = exp.notes || '';
 
-        // Show/hide approve+ignore buttons based on status
+        // Source data (raw parsing output)
+        const rawData = exp.raw_extract || null;
+        const sourceDetails = $('#expense-source-data');
+        const rawEl = $('#expense-raw-data');
+        if (rawData || exp.email_uid) {
+            sourceDetails.style.display = '';
+            sourceDetails.removeAttribute('open');
+            let dataStr = '';
+            if (exp.email_uid) dataStr += `Email UID: ${exp.email_uid}\n`;
+            if (exp.created_at) dataStr += `Parsed at: ${exp.created_at}\n`;
+            if (exp.source_type) dataStr += `Source: ${exp.source_type}\n`;
+            if (exp.account_last4) dataStr += `Card: ••${exp.account_last4}\n`;
+            if (rawData) {
+                dataStr += '\n--- Raw Extraction ---\n';
+                try {
+                    dataStr += JSON.stringify(JSON.parse(rawData), null, 2);
+                } catch (_) {
+                    dataStr += rawData;
+                }
+            }
+            rawEl.textContent = dataStr;
+        } else {
+            sourceDetails.style.display = 'none';
+        }
+
+        // Show/hide approve+ignore+discard buttons based on status
         const isPending = status === 'pending';
         $('#expense-btn-approve').style.display = isPending ? '' : 'none';
         $('#expense-btn-ignore').style.display = isPending ? '' : 'none';
+        $('#expense-btn-discard').style.display = isPending ? '' : 'none';
 
         $('#expense-review-modal').style.display = 'flex';
     } catch (e) {
