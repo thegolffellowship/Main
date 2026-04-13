@@ -36,38 +36,42 @@ function renderTransactionList(txns, total) {
         return;
     }
 
-    el.innerHTML = `<table class="acct-table acct-table-full">
+    // Shared helpers
+    function _txnMeta(t) {
+        const isExp = t._is_expense;
+        const splitBadges = t.splits.map(s =>
+            `<span class="acct-split-badge" style="border-color:${s.entity_color || '#6b7280'}">
+                <strong>${s.entity_name || '?'}</strong> ${s.category_name || ''}${s.event_name ? ' <em>' + s.event_name + '</em>' : ''} ${fmt(s.amount)}
+            </span>`
+        ).join(' ');
+        const srcLabel = _SOURCE_LABELS[t.source];
+        const sourceBadge = srcLabel
+            ? `<span class="acct-source-badge acct-source-${t.source}">${srcLabel}</span>`
+            : '';
+        let reviewBadge = '';
+        if (isExp && t.review_status === 'pending') {
+            reviewBadge = '<span class="acct-review-badge acct-review-pending" title="Needs Review">Pending</span>';
+        } else if (isExp && t.review_status === 'ignored') {
+            reviewBadge = '<span class="acct-review-badge acct-review-ignored" title="Ignored">Ignored</span>';
+        }
+        const reconBadge = !isExp && t.is_reconciled ? '<span class="acct-reconciled" title="Reconciled">&#10003;</span>' : '';
+        const tagBadges = (t.tags || []).map(tg => `<span class="acct-tag-chip" style="background:${tg.color}">${tg.name}</span>`).join('');
+        return { isExp, splitBadges, sourceBadge, reviewBadge, reconBadge, tagBadges };
+    }
+
+    // Desktop table
+    const tableHTML = `<table class="acct-table acct-table-full acct-table-mobile-hide">
         <thead><tr>
             <th>Date</th><th>Description</th><th>Splits</th>
             <th class="text-right">Amount</th><th>Type</th><th>Account</th>
             <th></th>
         </tr></thead>
         <tbody>${txns.map(t => {
-            const isExp = t._is_expense;
-            const splitBadges = t.splits.map(s =>
-                `<span class="acct-split-badge" style="border-color:${s.entity_color || '#6b7280'}">
-                    <strong>${s.entity_name || '?'}</strong> ${s.category_name || ''}${s.event_name ? ' <em>' + s.event_name + '</em>' : ''} ${fmt(s.amount)}
-                </span>`
-            ).join(' ');
-
-            // Source badge for email-parsed transactions
-            const srcLabel = _SOURCE_LABELS[t.source];
-            const sourceBadge = srcLabel
-                ? `<span class="acct-source-badge acct-source-${t.source}">${srcLabel}</span>`
-                : '';
-
-            // Review status indicator for expense transactions
-            let reviewBadge = '';
-            if (isExp && t.review_status === 'pending') {
-                reviewBadge = '<span class="acct-review-badge acct-review-pending" title="Needs Review">Pending</span>';
-            } else if (isExp && t.review_status === 'ignored') {
-                reviewBadge = '<span class="acct-review-badge acct-review-ignored" title="Ignored">Ignored</span>';
-            }
-
-            const rowClass = isExp
+            const m = _txnMeta(t);
+            const rowClass = m.isExp
                 ? `acct-txn-row acct-txn-expense${t.review_status === 'ignored' ? ' acct-txn-ignored' : ''}`
                 : 'acct-txn-row';
-            const rowData = isExp
+            const rowData = m.isExp
                 ? `data-id="${t.id}" data-expense-id="${t.expense_id}"`
                 : `data-id="${t.id}"`;
 
@@ -75,22 +79,80 @@ function renderTransactionList(txns, total) {
                 <td>${t.date || ''}</td>
                 <td>
                     ${t.description || ''}
-                    ${sourceBadge}
-                    ${reviewBadge}
-                    ${!isExp && t.is_reconciled ? '<span class="acct-reconciled" title="Reconciled">&#10003;</span>' : ''}
-                    ${(t.tags || []).map(tg => `<span class="acct-tag-chip" style="background:${tg.color}">${tg.name}</span>`).join('')}
+                    ${m.sourceBadge}${m.reviewBadge}${m.reconBadge}${m.tagBadges}
                 </td>
-                <td class="acct-split-cell">${splitBadges}</td>
+                <td class="acct-split-cell">${m.splitBadges}</td>
                 <td class="text-right ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</td>
                 <td><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></td>
                 <td>${t.account_name || '—'}</td>
                 <td>
-                    ${isExp ? '' : `<button class="btn-icon-sm acct-btn-del" data-id="${t.id}" title="Delete">&times;</button>`}
+                    ${m.isExp ? '' : `<button class="btn-icon-sm acct-btn-del" data-id="${t.id}" title="Delete">&times;</button>`}
                 </td>
             </tr>`;
         }).join('')}</tbody></table>`;
 
-    // Click row to edit (or review for expense transactions)
+    // Mobile cards
+    const cardsHTML = `<div class="acct-mobile-cards">${txns.map(t => {
+        const m = _txnMeta(t);
+        const cardClass = m.isExp
+            ? `acct-mobile-card acct-mc-expense${t.review_status === 'ignored' ? ' acct-mc-ignored' : ''}`
+            : 'acct-mobile-card';
+        const cardData = m.isExp
+            ? `data-id="${t.id}" data-expense-id="${t.expense_id}"`
+            : `data-id="${t.id}"`;
+
+        return `<div class="${cardClass}" ${cardData}>
+            <div class="acct-mobile-card-top">
+                <div class="acct-mc-left">
+                    <div class="acct-mc-date">${t.date || ''} ${m.sourceBadge}${m.reviewBadge}${m.reconBadge}</div>
+                    <div class="acct-mc-desc">${t.description || ''} ${m.tagBadges}</div>
+                </div>
+                <div class="acct-mc-right">
+                    <span class="acct-mc-amount ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</span>
+                    <span class="acct-mc-chevron">&#9654;</span>
+                </div>
+            </div>
+            <div class="acct-mobile-card-details">
+                <div class="acct-mc-fields">
+                    <div class="acct-mc-field">
+                        <span class="acct-mc-label">Type</span>
+                        <span class="acct-mc-value"><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></span>
+                    </div>
+                    <div class="acct-mc-field">
+                        <span class="acct-mc-label">Account</span>
+                        <span class="acct-mc-value">${t.account_name || '—'}</span>
+                    </div>
+                </div>
+                ${m.splitBadges ? `<div class="acct-mc-splits">${m.splitBadges}</div>` : ''}
+                ${!m.isExp ? `<div class="acct-mc-actions" style="padding-top:0.4rem;"><button class="btn btn-secondary btn-sm acct-btn-del" data-id="${t.id}" style="font-size:0.75rem;">Delete</button></div>` : ''}
+            </div>
+        </div>`;
+    }).join('')}</div>`;
+
+    el.innerHTML = tableHTML + cardsHTML;
+
+    // Mobile card expand/collapse
+    el.querySelectorAll('.acct-mobile-card-top').forEach(top => {
+        top.addEventListener('click', () => {
+            top.closest('.acct-mobile-card').classList.toggle('expanded');
+        });
+    });
+
+    // Mobile card tap description to open editor
+    el.querySelectorAll('.acct-mobile-card .acct-mc-desc').forEach(desc => {
+        desc.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const card = desc.closest('.acct-mobile-card');
+            const expId = card.dataset.expenseId;
+            if (expId) {
+                openExpenseReview(parseInt(expId));
+            } else {
+                openEditTransaction(parseInt(card.dataset.id));
+            }
+        });
+    });
+
+    // Click row to edit (desktop — or review for expense transactions)
     el.querySelectorAll('.acct-txn-row').forEach(row => {
         row.addEventListener('click', (e) => {
             if (e.target.closest('.acct-btn-del')) return;
@@ -103,7 +165,7 @@ function renderTransactionList(txns, total) {
         });
     });
 
-    // Delete buttons (only for acct transactions)
+    // Delete buttons (both desktop and mobile)
     el.querySelectorAll('.acct-btn-del').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();

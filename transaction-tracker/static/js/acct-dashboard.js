@@ -89,7 +89,9 @@ function renderRecentTransactions(txns) {
         el.innerHTML = '<p class="acct-empty">No transactions yet</p>';
         return;
     }
-    el.innerHTML = `<table class="acct-table">
+
+    // Desktop table
+    const tableHTML = `<table class="acct-table acct-table-mobile-hide">
         <thead><tr><th>Date</th><th>Description</th><th>Entity</th><th>Category</th><th class="text-right">Amount</th><th>Type</th></tr></thead>
         <tbody>${txns.map(t => {
             const split = t.splits[0] || {};
@@ -103,8 +105,55 @@ function renderRecentTransactions(txns) {
             </tr>`;
         }).join('')}</tbody></table>`;
 
+    // Mobile cards
+    const cardsHTML = `<div class="acct-mobile-cards">${txns.map(t => {
+        const split = t.splits[0] || {};
+        return `<div class="acct-mobile-card" data-id="${t.id}">
+            <div class="acct-mobile-card-top">
+                <div class="acct-mc-left">
+                    <div class="acct-mc-date">${t.date} <span class="acct-type-badge acct-type-${t.type}" style="font-size:0.6rem;">${t.type}</span></div>
+                    <div class="acct-mc-desc">${t.description}</div>
+                </div>
+                <div class="acct-mc-right">
+                    <span class="acct-mc-amount ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</span>
+                    <span class="acct-mc-chevron">&#9654;</span>
+                </div>
+            </div>
+            <div class="acct-mobile-card-details">
+                <div class="acct-mc-fields">
+                    <div class="acct-mc-field">
+                        <span class="acct-mc-label">Entity</span>
+                        <span class="acct-mc-value"><span class="acct-entity-badge" style="background:${split.entity_color || '#6b7280'}">${split.entity_name || '—'}</span></span>
+                    </div>
+                    <div class="acct-mc-field">
+                        <span class="acct-mc-label">Category</span>
+                        <span class="acct-mc-value">${split.category_name || '—'}</span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }).join('')}</div>`;
+
+    el.innerHTML = tableHTML + cardsHTML;
+
+    // Mobile card expand/collapse
+    el.querySelectorAll('.acct-mobile-card-top').forEach(top => {
+        top.addEventListener('click', () => {
+            top.closest('.acct-mobile-card').classList.toggle('expanded');
+        });
+    });
+
+    // Click to open editor (desktop)
     el.querySelectorAll('.acct-txn-row').forEach(row => {
         row.addEventListener('click', () => openEditTransaction(parseInt(row.dataset.id)));
+    });
+
+    // Tap description to open editor (mobile)
+    el.querySelectorAll('.acct-mobile-card .acct-mc-desc').forEach(desc => {
+        desc.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEditTransaction(parseInt(desc.closest('.acct-mobile-card').dataset.id));
+        });
     });
 }
 
@@ -162,7 +211,16 @@ function renderReviewQueue(txns) {
         el.innerHTML = '<p class="acct-empty">All transactions are categorized!</p>';
         return;
     }
-    el.innerHTML = `<table class="acct-table">
+
+    const catOptions = (type) => ACCT.categories.filter(c => c.type === type).map(c =>
+        `<option value="${c.id}">${c.name}</option>`
+    ).join('');
+    const entityOptions = ACCT.entities.map(e =>
+        `<option value="${e.id}">${e.short_name}</option>`
+    ).join('');
+
+    // Desktop table
+    const tableHTML = `<table class="acct-table acct-table-mobile-hide">
         <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th><th>Category</th><th>Entity</th></tr></thead>
         <tbody>${txns.map(t => `<tr class="acct-txn-row" data-id="${t.id}">
             <td>${t.date}</td>
@@ -172,19 +230,61 @@ function renderReviewQueue(txns) {
             <td>
                 <select class="acct-select-sm review-cat" data-txn-id="${t.id}">
                     <option value="">— Select —</option>
-                    ${ACCT.categories.filter(c => c.type === t.type).map(c =>
-                        `<option value="${c.id}">${c.name}</option>`
-                    ).join('')}
+                    ${catOptions(t.type)}
                 </select>
             </td>
             <td>
                 <select class="acct-select-sm review-entity" data-txn-id="${t.id}">
-                    ${ACCT.entities.map(e =>
-                        `<option value="${e.id}">${e.short_name}</option>`
-                    ).join('')}
+                    ${entityOptions}
                 </select>
             </td>
         </tr>`).join('')}</tbody></table>`;
+
+    // Mobile cards
+    const cardsHTML = `<div class="acct-mobile-cards">${txns.map(t => `
+        <div class="acct-mobile-card" data-id="${t.id}">
+            <div class="acct-mobile-card-top">
+                <div class="acct-mc-left">
+                    <div class="acct-mc-date">${t.date}</div>
+                    <div class="acct-mc-desc">${t.description}</div>
+                </div>
+                <div class="acct-mc-right">
+                    <span class="acct-mc-amount ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</span>
+                    <span class="acct-mc-chevron">&#9654;</span>
+                </div>
+            </div>
+            <div class="acct-mobile-card-details">
+                <div class="acct-mc-fields">
+                    <div class="acct-mc-field">
+                        <span class="acct-mc-label">Type</span>
+                        <span class="acct-mc-value"><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></span>
+                    </div>
+                    <div class="acct-mc-field">
+                        <span class="acct-mc-label">Amount</span>
+                        <span class="acct-mc-value ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</span>
+                    </div>
+                </div>
+                <div class="acct-mc-actions">
+                    <select class="review-cat" data-txn-id="${t.id}">
+                        <option value="">— Category —</option>
+                        ${catOptions(t.type)}
+                    </select>
+                    <select class="review-entity" data-txn-id="${t.id}">
+                        ${entityOptions}
+                    </select>
+                </div>
+            </div>
+        </div>`).join('')}</div>`;
+
+    el.innerHTML = tableHTML + cardsHTML;
+
+    // Mobile card expand/collapse
+    el.querySelectorAll('.acct-mobile-card-top').forEach(top => {
+        top.addEventListener('click', (e) => {
+            if (e.target.tagName === 'SELECT') return;
+            top.closest('.acct-mobile-card').classList.toggle('expanded');
+        });
+    });
 
     // Bind change events — save immediately on select
     el.querySelectorAll('.review-cat').forEach(sel => {
@@ -211,11 +311,19 @@ function renderReviewQueue(txns) {
         });
     });
 
-    // Click row to open full editor
+    // Click row to open full editor (desktop)
     el.querySelectorAll('.acct-txn-row').forEach(row => {
         row.addEventListener('click', (e) => {
             if (e.target.tagName === 'SELECT') return;
             openEditTransaction(parseInt(row.dataset.id));
+        });
+    });
+
+    // Tap card to open full editor (mobile — on description, not on selects)
+    el.querySelectorAll('.acct-mobile-card .acct-mc-desc').forEach(desc => {
+        desc.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEditTransaction(parseInt(desc.closest('.acct-mobile-card').dataset.id));
         });
     });
 }
