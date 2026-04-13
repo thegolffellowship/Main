@@ -237,6 +237,8 @@ tbody td {
     vertical-align: top;
     white-space: nowrap;
 }
+.customer-cell { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.item-name-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #f9fafb; }
 

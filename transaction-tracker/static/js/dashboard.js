@@ -488,6 +488,7 @@ function cellForColumn(key, row) {
 }
 
 function tdClass(key) {
+    if (key === "customer") return ' class="customer-cell"';
     if (key === "item_name") return ' class="item-name-cell"';
     if (key === "item_price") return ' class="price-cell"';
     return "";
