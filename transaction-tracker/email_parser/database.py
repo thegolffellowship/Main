@@ -1713,6 +1713,27 @@ def _lookup_customer_id(conn: sqlite3.Connection,
         if row:
             return row["customer_id"]
 
+    # 1b. Email fallback: check items table for any customer_id with this email
+    # (catches cases where customer_emails wasn't populated)
+    if customer_email:
+        row = conn.execute(
+            """SELECT customer_id FROM items
+               WHERE LOWER(customer_email) = LOWER(?)
+                 AND customer_id IS NOT NULL
+               ORDER BY id DESC LIMIT 1""",
+            (customer_email.strip(),),
+        ).fetchone()
+        if row:
+            # Also backfill customer_emails so this doesn't happen again
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, label) VALUES (?, ?, 0, 'backfill')",
+                    (row["customer_id"], customer_email.strip()),
+                )
+            except Exception:
+                pass
+            return row["customer_id"]
+
     # 2. Alias email lookup via customer_aliases → resolve customer_name → customers
     if customer_email:
         row = conn.execute(
@@ -2052,6 +2073,77 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
 
         except Exception:
             logger.exception("Customer merge failed for pair: %s", pair)
+
+    # ── Generic email-based auto-merge ──
+    # Find all emails shared by multiple customer_ids and merge them
+    dup_emails = conn.execute(
+        """SELECT LOWER(email) as email, GROUP_CONCAT(DISTINCT customer_id) as cids, COUNT(DISTINCT customer_id) as cnt
+           FROM customer_emails
+           GROUP BY LOWER(email)
+           HAVING cnt > 1"""
+    ).fetchall()
+
+    # Also check: different customer records with the same email in items table
+    dup_items_emails = conn.execute(
+        """SELECT LOWER(customer_email) as email,
+                  GROUP_CONCAT(DISTINCT customer_id) as cids,
+                  COUNT(DISTINCT customer_id) as cnt
+           FROM items
+           WHERE customer_email IS NOT NULL AND customer_id IS NOT NULL
+           GROUP BY LOWER(customer_email)
+           HAVING cnt > 1"""
+    ).fetchall()
+
+    all_email_dups = {}
+    for row in list(dup_emails) + list(dup_items_emails):
+        email = row["email"]
+        cids = sorted(set(int(c) for c in str(row["cids"]).split(",") if c.strip()))
+        if len(cids) >= 2:
+            if email not in all_email_dups:
+                all_email_dups[email] = set()
+            all_email_dups[email].update(cids)
+
+    for email, cid_set in all_email_dups.items():
+        cids = sorted(cid_set)
+        if len(cids) < 2:
+            continue
+        canonical_id = cids[0]  # keep oldest
+        for dup_id in cids[1:]:
+            try:
+                # Check dup still exists (may have been merged already)
+                if not conn.execute("SELECT customer_id FROM customers WHERE customer_id = ?", (dup_id,)).fetchone():
+                    continue
+
+                dup_count = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM items WHERE customer_id = ?", (dup_id,)
+                ).fetchone()["cnt"]
+
+                conn.execute("UPDATE items SET customer_id = ? WHERE customer_id = ?", (canonical_id, dup_id))
+
+                # Move emails
+                for de in conn.execute("SELECT email FROM customer_emails WHERE customer_id = ?", (dup_id,)).fetchall():
+                    try:
+                        conn.execute("INSERT OR IGNORE INTO customer_emails (customer_id, email) VALUES (?, ?)", (canonical_id, de["email"]))
+                    except sqlite3.IntegrityError:
+                        pass
+                conn.execute("DELETE FROM customer_emails WHERE customer_id = ?", (dup_id,))
+
+                # Create name alias
+                dup_row = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?", (dup_id,)).fetchone()
+                canon_row = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?", (canonical_id,)).fetchone()
+                if dup_row and canon_row:
+                    dup_full = f"{dup_row['first_name']} {dup_row['last_name']}"
+                    canon_full = f"{canon_row['first_name']} {canon_row['last_name']}"
+                    conn.execute(
+                        "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_name, alias_type) VALUES (?, ?, 'name')",
+                        (canon_full, dup_full),
+                    )
+
+                conn.execute("DELETE FROM customers WHERE customer_id = ?", (dup_id,))
+                logger.info("Auto-merged customer #%d into #%d by shared email %s (%d items)",
+                            dup_id, canonical_id, email, dup_count)
+            except Exception:
+                logger.warning("Auto-merge failed for customer #%d → #%d", dup_id, canonical_id, exc_info=True)
 
     conn.commit()
 
