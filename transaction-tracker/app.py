@@ -6288,6 +6288,14 @@ try:
             else:
                 logger.info("Accounting entries OK (%d), no fixes needed", _acct_count)
 
+    # ── Fix TGF Checking last_four ──
+    try:
+        with _startup_connect() as _fix_conn:
+            _fix_conn.execute("UPDATE acct_accounts SET last_four = '0341' WHERE name = 'TGF Checking' AND last_four = '4500'")
+            _fix_conn.commit()
+    except Exception:
+        pass
+
     # ── Verify s18.4 LANDA PARK numbers ──
     try:
         with _startup_connect() as _vconn:
