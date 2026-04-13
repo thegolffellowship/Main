@@ -1680,6 +1680,23 @@ def init_db(db_path: str | Path | None = None) -> None:
             if row["cnt"] > 0:
                 logger.warning("Data quality: %d items have NULL/empty %s", row["cnt"], col)
 
+        # ── Rename accounts to include "Chase" prefix (idempotent) ──
+        _acct_renames = {
+            "Southwest Perf Biz": "Chase Southwest Perf Biz",
+            "Sapphire": "Chase Sapphire",
+        }
+        for old_name, new_name in _acct_renames.items():
+            existing = conn.execute(
+                "SELECT id FROM acct_accounts WHERE name = ?", (old_name,)
+            ).fetchone()
+            if existing:
+                conn.execute("UPDATE acct_accounts SET name = ? WHERE id = ?",
+                             (new_name, existing["id"]))
+                # Also update expense_transactions that reference the old name
+                conn.execute("UPDATE expense_transactions SET account_name = ? WHERE account_name = ?",
+                             (new_name, old_name))
+                logger.info("Renamed account '%s' → '%s'", old_name, new_name)
+
         # ── One-time duplicate customer merge (idempotent) ──────────
         _merge_duplicate_customers(conn)
 

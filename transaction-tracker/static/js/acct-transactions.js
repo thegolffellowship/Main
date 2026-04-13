@@ -93,7 +93,7 @@ function renderTransactionList(txns, total) {
 
     // Mobile cards — build option strings once
     const _acctOpts = '<option value="">— Account —</option>' +
-        ACCT.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+        ACCT.accounts.map(a => `<option value="${a.id}">${acctDisplayName(a)}</option>`).join('');
     const _entOpts = ACCT.entities.map(e =>
         `<option value="${e.id}">${e.short_name}</option>`).join('');
     const _expEntOpts = '<option value="">— Entity —</option>' +
@@ -103,7 +103,7 @@ function renderTransactionList(txns, total) {
             `<option value="${c.name}">${c.name}</option>`).join('');
 
     const _expAcctOpts = '<option value="">— Account —</option>' +
-        ACCT.accounts.map(a => `<option value="${a.name}">${a.name}</option>`).join('') +
+        ACCT.accounts.map(a => `<option value="${a.name}">${acctDisplayName(a)}</option>`).join('') +
         '<option value="__new__">+ New Account</option>';
     const _expEventOpts = '<option value="">— Event —</option>' +
         ACCT.events.map(ev => `<option value="${ev.item_name}">${ev.item_name}${ev.event_date ? ' (' + ev.event_date + ')' : ''}</option>`).join('');
@@ -521,9 +521,9 @@ function renderTransactionList(txns, total) {
 // ── Transaction Modal ────────────────────────────────────
 
 function populateDropdowns() {
-    // Account dropdowns
+    // Account dropdowns (with last 4 digits)
     const acctOpts = '<option value="">— None —</option>' +
-        ACCT.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+        ACCT.accounts.map(a => `<option value="${a.id}">${acctDisplayName(a)}</option>`).join('');
     ['#txn-account', '#txn-transfer-to', '#csv-account'].forEach(sel => {
         const el = $(sel);
         if (el) el.innerHTML = acctOpts;
@@ -543,7 +543,7 @@ function populateDropdowns() {
     const filterAcct = $('#txn-filter-account');
     if (filterAcct) {
         filterAcct.innerHTML = '<option value="">All Accounts</option>' +
-            ACCT.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+            ACCT.accounts.map(a => `<option value="${a.id}">${acctDisplayName(a)}</option>`).join('');
     }
     const filterCat = $('#txn-filter-category');
     if (filterCat) {
@@ -795,10 +795,8 @@ async function openExpenseReview(expenseId) {
         $('#expense-account-label').textContent = txType === 'transfer' ? 'From Account' : 'Account';
 
         // Account dropdown (editable, with warning for source-detected)
-        const acctOpts = '<option value="">— Account —</option>' +
-            ACCT.accounts.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
-        $('#expense-account-select').innerHTML = acctOpts;
-        $('#expense-transfer-to').innerHTML = acctOpts;
+        $('#expense-account-select').innerHTML = acctOptionsHTML('— Account —');
+        $('#expense-transfer-to').innerHTML = acctOptionsHTML('— Transfer To —');
 
         const detectedAcct = exp.account_name || (exp.account_last4 ? '...' + exp.account_last4 : '');
         _expOriginalAccount = detectedAcct;

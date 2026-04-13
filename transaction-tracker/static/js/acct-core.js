@@ -82,3 +82,19 @@ function entityName(id) {
     const e = ACCT.entities.find(x => x.id === id);
     return e ? e.short_name : '—';
 }
+
+/** Display account name with last 4 digits: "TGF Checking ••1234" */
+function acctDisplayName(acct) {
+    if (!acct) return '—';
+    const name = typeof acct === 'string' ? acct : acct.name;
+    const last4 = typeof acct === 'object' ? acct.last_four : null;
+    return last4 ? `${name} ••${last4}` : name;
+}
+
+/** Build account <option> list with last 4 digits */
+function acctOptionsHTML(placeholder, selectedName) {
+    return `<option value="">${placeholder || '— Account —'}</option>` +
+        ACCT.accounts.map(a =>
+            `<option value="${a.name}" ${selectedName && a.name.toUpperCase() === selectedName.toUpperCase() ? 'selected' : ''}>${acctDisplayName(a)}</option>`
+        ).join('');
+}
