@@ -102,6 +102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#expense-modal-close').addEventListener('click', closeExpenseModal);
     $('#expense-modal-cancel').addEventListener('click', closeExpenseModal);
     $('#expense-btn-approve').addEventListener('click', () => saveExpenseReview('approve'));
+    $('#expense-btn-save').addEventListener('click', () => saveExpenseReview('save'));
     $('#expense-btn-ignore').addEventListener('click', () => saveExpenseReview('ignore'));
     $('#expense-btn-discard').addEventListener('click', async () => {
         const expId = $('#expense-review-id').value;

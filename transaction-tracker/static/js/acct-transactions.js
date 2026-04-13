@@ -936,6 +936,7 @@ async function openExpenseReview(expenseId) {
         $('#expense-btn-approve').style.display = isPending ? '' : 'none';
         $('#expense-btn-ignore').style.display = isPending ? '' : 'none';
         $('#expense-btn-discard').style.display = isPending ? '' : 'none';
+        $('#expense-btn-save').style.display = isPending ? 'none' : '';
 
         $('#expense-review-modal').style.display = 'flex';
     } catch (e) {
