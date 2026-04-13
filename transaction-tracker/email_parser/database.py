@@ -7382,15 +7382,16 @@ def build_handicap_card_html(card_data: dict) -> str:
             status_html = ""
 
         _td = f"padding:4px 8px; border-bottom:1px solid #f1f5f9; font-size:13px; font-family:{_font};"
+        _nw = "white-space:nowrap;"
         score_rows += f"""<tr style="background-color:{bg};">
-  <td style="{_td} white-space:nowrap;">{r.get('round_date', '')}</td>
+  <td style="{_td} {_nw}">{r.get('round_date', '')}</td>
   <td style="{_td}">{r.get('course_name', '')}</td>
-  <td style="{_td} text-align:center;">{r.get('tee_name', '')}</td>
-  <td style="{_td} text-align:center;">{r.get('adjusted_score', '')}</td>
-  <td style="{_td} text-align:center;">{r.get('rating', '')}</td>
-  <td style="{_td} text-align:center;">{r.get('slope', '')}</td>
-  <td style="{_td} text-align:center; {diff_style}">{diff_str}</td>
-  <td style="{_td} text-align:center;">{status_html}</td>
+  <td style="{_td} {_nw} text-align:center;">{r.get('tee_name', '')}</td>
+  <td style="{_td} {_nw} text-align:center;">{r.get('adjusted_score', '')}</td>
+  <td style="{_td} {_nw} text-align:center;">{r.get('rating', '')}</td>
+  <td style="{_td} {_nw} text-align:center;">{r.get('slope', '')}</td>
+  <td style="{_td} {_nw} text-align:center; {diff_style}">{diff_str}</td>
+  <td style="{_td} {_nw} text-align:center;">{status_html}</td>
 </tr>"""
 
     summary_text = ""
