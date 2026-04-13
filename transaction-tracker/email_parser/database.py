@@ -11652,7 +11652,8 @@ def import_bank_deposits(file_bytes: bytes, filename: str, account_id: int,
 
 
 def _import_chase_csv(data_rows, header, batch_id, account_id, db_path):
-    """Chase CSV: Details, Posting Date, Description, Amount, Type, Balance, Check or Slip #"""
+    """Chase CSV: Details, Posting Date, Description, Amount, Type, Balance, Check or Slip #
+    Imports ALL transactions (credits and debits) for full reconciliation."""
     date_idx = header.index("posting date")
     desc_idx = header.index("description") if "description" in header else 2
     amount_idx = header.index("amount") if "amount" in header else 3
@@ -11669,14 +11670,18 @@ def _import_chase_csv(data_rows, header, batch_id, account_id, db_path):
             if not parsed_date:
                 continue
 
-            amount = _parse_dollar(row[amount_idx])
-            if amount <= 0:
-                continue  # Only import credits (deposits)
+            raw_amt = row[amount_idx].strip().replace("$", "").replace(",", "")
+            raw_amt = raw_amt.replace("(", "-").replace(")", "")
+            try:
+                amount = float(raw_amt)
+            except (ValueError, TypeError):
+                continue
+            if amount == 0:
+                continue
 
             desc = row[desc_idx].strip()
             source = "godaddy" if "GODADDY" in desc.upper() else "other"
 
-            # Idempotency: batch + date + amount
             existing = conn.execute(
                 """SELECT id FROM bank_deposits
                    WHERE account_id = ? AND deposit_date = ? AND ABS(amount - ?) < 0.01
@@ -11725,9 +11730,14 @@ def _import_venmo_csv(data_rows, header, batch_id, account_id, db_path):
             if status.lower() != "complete":
                 continue
 
-            amount = _parse_dollar(row[amount_idx] if amount_idx < len(row) else "0")
-            if amount <= 0:
-                continue  # Only import positive (received money)
+            raw_amt = (row[amount_idx] if amount_idx < len(row) else "0").strip()
+            raw_amt = raw_amt.replace("$", "").replace(",", "").replace(" ", "")
+            try:
+                amount = float(raw_amt) if raw_amt else 0
+            except (ValueError, TypeError):
+                continue
+            if amount == 0:
+                continue
 
             raw_dt = row[datetime_idx].strip() if datetime_idx < len(row) else ""
             parsed_date = _normalise_csv_date(raw_dt.split("T")[0] if "T" in raw_dt else raw_dt)
@@ -11783,11 +11793,17 @@ def _import_generic_csv(data_rows, header, batch_id, account_id, db_path):
             if not parsed_date:
                 continue
 
-            amount = _parse_dollar(row[amount_idx])
-            if amount <= 0:
+            raw_amt = row[amount_idx].strip().replace("$", "").replace(",", "")
+            raw_amt = raw_amt.replace("(", "-").replace(")", "")
+            try:
+                amount = float(raw_amt) if raw_amt else 0
+            except (ValueError, TypeError):
+                continue
+            if amount == 0:
                 continue
 
             desc = row[desc_idx].strip()
+            source = "godaddy" if "GODADDY" in desc.upper() else "other"
             existing = conn.execute(
                 """SELECT id FROM bank_deposits
                    WHERE account_id = ? AND deposit_date = ? AND ABS(amount - ?) < 0.01
@@ -11801,8 +11817,8 @@ def _import_generic_csv(data_rows, header, batch_id, account_id, db_path):
             conn.execute(
                 """INSERT INTO bank_deposits
                    (account_id, deposit_date, amount, description, source, import_batch_id, raw_data)
-                   VALUES (?, ?, ?, ?, 'other', ?, ?)""",
-                (account_id, parsed_date, amount, desc, batch_id, ",".join(row)),
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (account_id, parsed_date, amount, desc, source, batch_id, ",".join(row)),
             )
             imported += 1
             if len(preview) < 50:
@@ -12163,27 +12179,124 @@ def get_bank_deposits(account_id: int | None = None, status: str | None = None,
 
 def get_unreconciled_transactions(account: str | None = None, month: str | None = None,
                                   db_path: str | Path | None = None) -> list[dict]:
-    """Return acct_transactions not yet matched to any bank deposit."""
+    """Return acct_transactions not yet matched to any bank deposit.
+    Shows all entry types (income, expense, contra) — not just income.
+    Does NOT filter by account name since acct_transactions.account
+    doesn't match acct_accounts.name consistently."""
     with _connect(db_path) as conn:
         clauses = [
             "t.entry_type IS NOT NULL",
-            "t.entry_type = 'income'",
-            "COALESCE(t.status, 'active') = 'active'",
+            "COALESCE(t.status, 'active') IN ('active', 'reconciled')",
             "t.id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)",
         ]
         params = []
-        if account:
-            clauses.append("t.account = ?"); params.append(account)
+        # Don't filter by account name — it's inconsistent between tables
         if month:
             clauses.append("t.date LIKE ?"); params.append(f"{month}%")
         where = " AND ".join(clauses)
         rows = conn.execute(
             f"""SELECT t.* FROM acct_transactions t
                 WHERE {where}
-                ORDER BY t.date DESC""",
+                ORDER BY t.date DESC
+                LIMIT 200""",
             params,
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_match_suggestions(bank_deposit_id: int,
+                          db_path: str | Path | None = None) -> list[dict]:
+    """Return ranked match candidates for a specific bank deposit.
+
+    Scores candidates by: amount proximity, date proximity, description match.
+    Returns up to 20 suggestions sorted by score descending.
+    """
+    with _connect(db_path) as conn:
+        dep = conn.execute("SELECT * FROM bank_deposits WHERE id = ?",
+                           (bank_deposit_id,)).fetchone()
+        if not dep:
+            return []
+        dep = dict(dep)
+        dep_amt = dep["amount"]
+        dep_date = dep["deposit_date"]
+        dep_desc = (dep["description"] or "").upper()
+
+        # Get all unmatched acct_transactions within ±7 days
+        candidates = conn.execute(
+            """SELECT t.* FROM acct_transactions t
+               WHERE t.entry_type IS NOT NULL
+               AND COALESCE(t.status, 'active') != 'reversed'
+               AND t.id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
+               AND ABS(julianday(t.date) - julianday(?)) <= 7
+               ORDER BY t.date DESC""",
+            (dep_date,),
+        ).fetchall()
+
+        results = []
+        for c in candidates:
+            c = dict(c)
+            c_amt = c.get("amount", 0) or 0
+            c_date = c.get("date", "")
+            c_customer = (c.get("customer") or "").upper()
+            c_event = (c.get("event_name") or "").upper()
+
+            # Score: amount proximity (0-50 points)
+            amt_diff = abs(dep_amt - c_amt)
+            if amt_diff < 0.01:
+                amt_score = 50
+            elif amt_diff < 1.00:
+                amt_score = 40
+            elif amt_diff < 5.00:
+                amt_score = 25
+            elif amt_diff < 20.00:
+                amt_score = 10
+            else:
+                amt_score = max(0, 5 - int(amt_diff / 100))
+
+            # Score: date proximity (0-30 points)
+            try:
+                from datetime import datetime as _dt
+                d1 = _dt.strptime(dep_date, "%Y-%m-%d")
+                d2 = _dt.strptime(c_date, "%Y-%m-%d")
+                day_diff = abs((d1 - d2).days)
+            except (ValueError, TypeError):
+                day_diff = 99
+            date_score = max(0, 30 - day_diff * 5)
+
+            # Score: description match (0-20 points)
+            desc_score = 0
+            if c_customer and c_customer in dep_desc:
+                desc_score += 15
+            if c_event and c_event in dep_desc:
+                desc_score += 5
+            if "GODADDY" in dep_desc and c.get("source") == "godaddy":
+                desc_score += 10
+
+            total_score = amt_score + date_score + desc_score
+            if total_score < 5:
+                continue
+
+            reason_parts = []
+            if amt_diff < 0.01:
+                reason_parts.append("exact amount")
+            elif amt_diff < 5:
+                reason_parts.append(f"amount ±${amt_diff:.2f}")
+            if day_diff == 0:
+                reason_parts.append("same day")
+            elif day_diff <= 2:
+                reason_parts.append(f"{day_diff}d apart")
+            if c_customer and c_customer in dep_desc:
+                reason_parts.append("name match")
+            if "GODADDY" in dep_desc and c.get("source") == "godaddy":
+                reason_parts.append("GoDaddy")
+
+            c["_score"] = total_score
+            c["_reason"] = ", ".join(reason_parts) if reason_parts else "date range"
+            c["_amt_diff"] = round(amt_diff, 2)
+            results.append(c)
+
+        results.sort(key=lambda x: x["_score"], reverse=True)
+        return results[:20]
 
 
 def get_reconciliation_dashboard(db_path: str | Path | None = None) -> dict:
