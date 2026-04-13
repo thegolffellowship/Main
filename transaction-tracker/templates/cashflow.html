@@ -52,11 +52,20 @@
         </nav>
         <nav class="admin-subnav">
             <a href="/coo">COO</a>
-            <a href="/accounting">Accounting</a>
-            <a href="/accounting/reconcile">Reconcile</a>
-            <a href="/accounting/cashflow" class="active">Cash Flow</a>
+            <a href="/accounting" class="active">Accounting</a>
             <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/database">Database</a>
         </nav>
+
+        <div class="acct-subtabs" style="margin-bottom:0.5rem;">
+            <a href="/accounting" class="acct-subtab" style="text-decoration:none;">Dashboard</a>
+            <a href="/accounting#transactions" class="acct-subtab" style="text-decoration:none;">Transactions</a>
+            <a href="/accounting#accounts" class="acct-subtab" style="text-decoration:none;">Accounts</a>
+            <a href="/accounting/reconcile" class="acct-subtab" style="text-decoration:none;">Reconcile</a>
+            <a href="/accounting/cashflow" class="acct-subtab active" style="text-decoration:none;">Cash Flow</a>
+            <a href="/accounting#rules" class="acct-subtab" style="text-decoration:none;">Rules</a>
+        </div>
 
         <div class="toolbar">
             <select id="weeks-select" onchange="loadCashflow()">
