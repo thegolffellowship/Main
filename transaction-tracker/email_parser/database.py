@@ -9509,18 +9509,22 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             refund_total = round(sum(e["amount"] for e in expense_entries if e.get("category") == "refund"), 2)
             total_processing = round(sum(e["amount"] for e in expense_entries if e.get("category") == "processing_fee"), 2)
 
-            contra_total = round(xfer_out + refund_total + total_processing, 2)
+            # Contra = transfers out + refunds only (NOT processing fees — those are expenses)
+            contra_total = round(xfer_out + refund_total, 2)
             net_revenue = round(total_revenue - contra_total, 2)
 
-            # Course fees and prize fund still from allocations (best source)
+            # Course fees from aggregate calculation (most accurate)
             aggregate_course_cost = _calc_aggregate_course_cost(event, all_items, conn)
 
+            # Prize fund: set to 0 so the client uses its game matrix calculation.
+            # Allocations only have partial coverage for prize_pool data — the client-side
+            # computeGamePotTotals() is authoritative for prize fund amounts.
             allocs = conn.execute(
                 f"SELECT * FROM acct_allocations WHERE event_name COLLATE NOCASE IN ({name_placeholders})",
                 all_names,
             ).fetchall()
             allocs = [dict(r) for r in allocs]
-            total_prize_pool = round(sum(a.get("prize_pool", 0) for a in allocs), 2)
+            total_prize_pool = 0  # client calculates from games matrix
             total_tgf_operating = round(sum(a.get("tgf_operating", 0) for a in allocs), 2)
             total_tax_reserve = round(sum(a.get("tax_reserve", 0) for a in allocs), 2)
 

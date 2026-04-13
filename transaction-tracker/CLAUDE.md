@@ -440,9 +440,9 @@ Cards display the **event charge** (whole dollars, before tx fee).
 
 ## Key files
 
-- `app.py` — routes, scheduler, webhook (~3900 lines)
+- `app.py` — routes, scheduler, webhook (~6200 lines)
 - `email_parser/parser.py` — AI extraction prompt and logic
-- `email_parser/database.py` — schema, CRUD, audit queries, customer matching, COO context (~10000+ lines)
+- `email_parser/database.py` — schema, CRUD, audit queries, customer matching, COO context, bank reconciliation (~12000+ lines)
 - `email_parser/fetcher.py` — Microsoft Graph email fetching
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
@@ -454,6 +454,8 @@ Cards display the **event charge** (whole dollars, before tx fee).
 - `templates/audit.html` — Email audit/QA (admin) + per-order re-extract
 - `templates/rsvps.html` — RSVP log
 - `templates/accounting.html` — Accounting: multi-entity tracking, bank reconciliation, month-end close
+- `templates/reconcile.html` — Bank reconciliation: account dashboard, match queue, monthly summary
+- `templates/cashflow.html` — Cash flow: 90-day rolling weekly view with warning indicators
 - `templates/coo.html` — COO Dashboard: action items, financial snapshot, review queue, AI chat
 - `templates/tgf.html` — TGF Payouts: events, golfers, screenshot import
 - `templates/database.html` — Admin database browser
@@ -615,15 +617,42 @@ Each rendering path has 5 tabs: **Transactions**, **Scores**, **Winnings**, **Po
 
 ## Unified Financial Model (Issue #242)
 
-### Architecture: Two layers (client-side today, accounting bridge planned)
+### Architecture: acct_transactions as single source of truth
 
-The Events Financial tab currently calculates P&L **client-side in JavaScript** from raw
-items data on every page load. The accounting module (`acct_transactions` + `acct_allocations`)
-has infrastructure for being the source of truth but is **not yet fully connected**. New
-operations (transfers, refunds, external payments) DO create accounting entries, but the
-Financial tab reads from items, not accounting tables.
+Every financial event writes a flat entry to `acct_transactions` via `_write_acct_entry()`.
+The verified path in `get_event_financial_summary()` reads from these entries first, falling
+back to allocation-based calculation only when no flat entries exist.
 
-### Financial tab P&L model (client-side, renderFinancialPanel)
+**New columns on acct_transactions:**
+`item_id`, `event_name`, `customer`, `order_id`, `entry_type`, `category`, `amount`,
+`account`, `status`, `reconciled_batch_id`
+
+**Entry types:** `income`, `expense`, `contra`, `liability`
+**Categories:** `registration`, `processing_fee`, `comp`, `addon`, `refund`,
+`credit_issued`, `transfer_in`, `transfer_out`
+**Sources:** `godaddy`, `venmo`, `zelle`, `cash`, `manual`
+**Status:** `active`, `reversed`, `reconciled`
+
+### Financial tab P&L model
+
+The Financial tab uses a dual-path rendering:
+1. **Verified path** (server-side): `renderFinancialPanelServer()` reads from
+   `get_event_financial_summary()` which queries `acct_transactions` flat entries.
+   Shows "Accounting (verified)" badge + reconciliation count.
+2. **Fallback path** (client-side): `renderFinancialPanel()` calculates from raw items.
+   Shows "Calculated (estimated)" badge.
+
+The verified path fires when flat `acct_transactions` entries with `entry_type IS NOT NULL`
+exist for the event. After backfill, all 2026 events use the verified path.
+
+**Net revenue formula (verified path):**
+```
+Total Income = registration + addon + transfer_in + tx_fees (from items.transaction_fees)
+Contra = transfer_out + refunds + merchant_fees (from processing_fee entries)
+Net Revenue = Total Income - Contra
+```
+
+**Client-side fallback model:**
 
 ```
 INCOME
@@ -653,8 +682,10 @@ PROJECTED PROFIT = Net Income - Total Expenses
   each GoDaddy email invoice and stored in `items.transaction_fees`. They are NOT calculated —
   the actual value from the email is used. These offset the GoDaddy merchant fees.
 - **GoDaddy merchant fees (2.7% + $0.30)** are calculated PER INDIVIDUAL GoDaddy ORDER
-  on the order total (item_price + transaction_fee). This is a deduction from income, not
-  an expense. Each order's fee should eventually be stored as a DB line item.
+  on the order total (item_price + transaction_fee). Now stored as `processing_fee` entries
+  in `acct_transactions`. Formula: `(total_amount * 0.027 + 0.30) / items_in_order`.
+  Only items with `merchant = 'The Golf Fellowship'` get processing_fee entries.
+  Transfer targets (`transferred_from_id IS NOT NULL`) are excluded.
 - **Refunds** are contra-revenue (deducted from Income), not expenses. They appear as
   negative child payment items (e.g., -$29 partial refund via Zelle).
 
@@ -668,34 +699,24 @@ PROJECTED PROFIT = Net Income - Total Expenses
 ### Operations that create accounting entries
 | Operation | What Happens |
 |-----------|-------------|
-| Credit transfer (player A→B) | Contra-revenue `acct_transactions` on source + revenue on target, allocation at target with actual credit amount |
-| Refund issued | Expense `acct_transactions` entry |
-| External payment (Venmo/cash) | `acct_allocations` + `acct_transactions` via `_create_allocation_for_item()` |
-| Add-on payment (child item) | `acct_allocations` + `acct_transactions` entry |
-| Reverse any of the above | Corresponding accounting entries deleted |
-
-### Single Source of Truth — `acct_transactions` (flat ledger)
-Every financial event now writes a flat entry to `acct_transactions` with these new columns:
-`item_id`, `event_name`, `customer`, `order_id`, `entry_type`, `category`, `amount`, `account`, `status`, `reconciled_batch_id`
-
-**Entry types:** `income`, `expense`, `contra`, `liability`
-**Categories:** `registration`, `processing_fee`, `comp`, `addon`, `refund`, `credit_issued`, `transfer_in`, `transfer_out`
-**Sources:** `godaddy`, `venmo`, `zelle`, `cash`, `manual`
-
-The `_write_acct_entry()` helper is the single function all hooks call. Uses `source_ref` for idempotency.
-
-`get_event_financial_summary()` now reads from flat `acct_transactions` first (verified path) and falls back to allocation-based calculation. The Financial tab shows:
-- **✅ Accounting (verified)** — when flat entries exist for the event
-- **⚠️ Calculated (estimated)** — when falling back to raw items
-
-`backfill_acct_transactions()` runs once at startup if no flat entries exist. Processes all 2026 items in order_date ascending.
+| GoDaddy order saved | `income/registration` + `expense/processing_fee` (merchant fee) via `_write_acct_entry()` |
+| Manual comp added | `expense/comp` (amount=0) via `_write_acct_entry()` |
+| External payment (Venmo/cash) | `income/addon` + `acct_allocations` via `_create_allocation_for_item()` |
+| Add-on payment (child item) | `income/addon` + `acct_allocations` entry |
+| Credit transfer (player A→B) | `contra/transfer_out` on source + `income/transfer_in` on target, plus allocation |
+| Refund issued | `expense/refund` entry |
+| Partial refund | `expense/refund` entry for the refunded amount |
+| WD with credits | `liability/credit_issued` entry for credit amount |
+| Reverse any of the above | Original flat entries marked `status='reversed'`, legacy entries deleted |
 
 ### Key functions
+- `_write_acct_entry(conn, ...)` — central helper for all flat ledger writes; idempotent via `source_ref`
 - `_create_allocation_for_item(item, conn, payment_method, ...)` — creates allocation for
   non-GoDaddy items using synthetic `order_id` (prefixes: `EXT-`, `XFER-`, `MANUAL-PAY-`, `COMP-`)
-- `get_event_financial_summary(event_name)` — server-side aggregation (needs update)
+- `get_event_financial_summary(event_name)` — reads from flat `acct_transactions` (verified path), falls back to allocations
 - `_calc_aggregate_course_cost(event, items, conn)` — correct aggregate rounding (base × count × tax)
-- `backfill_financial_entries()` — retrofits existing data with missing allocations/transactions
+- `backfill_acct_transactions()` — one-time backfill of flat entries for all 2026 items (runs at startup)
+- `backfill_financial_entries()` — retrofits allocations/legacy transactions for existing data
 - `transfer_item()` — stores actual credit amount on transferred item (not $0.00)
 
 ### Credit/transfer/refund actions
@@ -727,7 +748,7 @@ Each row represents one player's cost allocation for one event:
 - **Income:** "Credit Transfer In", "External Payment", "Event Revenue", "Membership Fees"
 - **Expense:** "Credit Transfer Out", "Player Refunds", "Golf Course Fees / Green Fees"
 
-## Database Tables (30+)
+## Database Tables (35+)
 
 `items`, `processed_emails`, `events`, `event_aliases`, `rsvps`, `rsvp_overrides`,
 `rsvp_email_overrides`, `customers`, `customer_emails`, `customer_aliases`,
@@ -735,6 +756,7 @@ Each row represents one player's cost allocation for one event:
 `message_templates`, `message_log`, `feedback`, `parse_warnings`,
 `season_contests`, `app_settings`, `action_items`,
 `acct_allocations`, `acct_transactions`, `bank_statement_rows`, `period_closings`,
+`bank_accounts`, `bank_deposits`, `reconciliation_matches`,
 `coo_agents`, `coo_chat_sessions`, `coo_chat_messages`, `coo_manual_values`,
 `agent_action_log`, `tgf_events`, `tgf_golfers`, `tgf_payouts`
 
@@ -743,14 +765,74 @@ Key tables not documented elsewhere in this file:
 - `season_contests` — contest enrollment tracking (NET/GROSS points race, city match play)
 - `parse_warnings` — flagged items with potential parsing errors (open/dismissed/resolved)
 - `acct_allocations` — per-player event cost breakdown (course, prizes, fees, operating margin, payment_method, acct_transaction_id). Covers GoDaddy orders AND non-GoDaddy items (Venmo, cash, credit transfers) via synthetic order_ids.
-- `acct_transactions` — income/expense ledger with entity tracking. Now receives entries from credit transfers, external payments, refunds, and add-on payments via the unified financial model.
-- `bank_statement_rows` — imported bank statement data for reconciliation
+- `acct_transactions` — single source of truth flat ledger. Every financial event writes entry_type/category/amount/account/status. Flat entries link to items via item_id. Status transitions: active → reconciled (matched to bank) or reversed.
+- `bank_statement_rows` — legacy imported bank statement data (older reconciliation system)
+- `bank_accounts` — bank/payment accounts: TGF Checking (checking), Venmo (venmo). Seeded at init.
+- `bank_deposits` — imported bank statement rows with status (unmatched/partial/matched). Linked to bank_accounts. Deduped on account + date + amount + description.
+- `reconciliation_matches` — links bank_deposits to acct_transactions with match_type (auto/manual) and confidence score. UNIQUE(bank_deposit_id, acct_transaction_id).
 - `coo_agents` — AI agent definitions with system prompts (6 specialists)
 - `coo_chat_sessions` / `coo_chat_messages` — persistent AI chat history
 - `coo_manual_values` — manually entered financial values (account balances, debts)
 - `tgf_events` — tournament events with purse totals
 - `tgf_golfers` — golfer records with Venmo usernames
 - `tgf_payouts` — individual prize payouts linked to events and golfers
+
+## Bank Reconciliation System
+
+### Architecture
+Three new tables link bank statement data to the accounting ledger:
+- `bank_accounts` → `bank_deposits` → `reconciliation_matches` → `acct_transactions`
+
+### Import formats
+- **Chase CSV**: auto-detected by "Posting Date" header. Imports credits only.
+  GoDaddy deposits tagged by description containing "GODADDY".
+- **Venmo CSV**: auto-detected by "Datetime" header. Imports completed positive transactions.
+- **PDF**: text extracted via `pdfplumber`, parsed by Claude AI into date/description/amount.
+- **Idempotency**: deduplicates on `account_id + deposit_date + amount + description`.
+
+### Auto-matching (`run_deposit_auto_match`)
+Runs after every import and on-demand via "Auto-match All" button.
+- **GoDaddy batch**: finds income transactions within ±2 days, compares sum.
+  Within $1 = auto-match (confidence 0.95), within $5 = partial (0.70).
+- **Venmo**: exact amount match + customer name in description = 0.95.
+  Amount only = 0.70, flagged for review.
+- **Zelle/other**: amount + date ±1 day, always flagged for manual confirm (0.60).
+- Matched transactions get `status = 'reconciled'` in `acct_transactions`.
+
+### Reconciliation UI (`/accounting/reconcile`)
+Three tabs:
+1. **Account Dashboard** — cards per account: book/bank balance, variance, unmatched count
+2. **Match Queue** — two-column layout: unmatched deposits (left) vs unreconciled transactions (right).
+   Click deposit to highlight amount-similar transactions. Manual match button.
+3. **Monthly Summary** — income/expense by category, reconciliation %, CSV export.
+
+### Cash Flow (`/accounting/cashflow`)
+90-day rolling weekly view (configurable: 8/13/26 weeks).
+Columns: expected income, confirmed (banked), projected expenses, actual expenses, net, running balance.
+Red warning rows where projected expenses exceed confirmed income.
+
+### Visual indicators
+- **Events Financial tab**: "Reconciliation: X of Y transactions confirmed in bank ($Z matched)"
+  Loaded async via `/api/reconciliation/event/<name>`.
+- **Transactions page**: colored dot on each row:
+  - Yellow = active item, awaiting bank match
+  - Grey = comp, RSVP, or inactive (no bank match expected)
+
+### Key endpoints
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/accounting/reconcile` | GET | admin | Reconciliation UI page |
+| `/accounting/cashflow` | GET | admin | Cash flow page |
+| `/api/reconciliation/import` | POST | admin | Upload bank statement (file + account_id) |
+| `/api/reconciliation/auto-match` | POST | admin | Run auto-matching |
+| `/api/reconciliation/match` | POST | admin | Manual match (deposit + txn) |
+| `/api/reconciliation/unmatch` | POST | admin | Remove a match |
+| `/api/reconciliation/deposits` | GET | admin | List deposits (filterable) |
+| `/api/reconciliation/unreconciled` | GET | admin | Unmatched accounting entries |
+| `/api/reconciliation/dashboard` | GET | admin | Account summary cards |
+| `/api/reconciliation/monthly` | GET | admin | Monthly breakdown |
+| `/api/reconciliation/event/<name>` | GET | manager | Event reconciliation status |
+| `/api/reconciliation/cashflow` | GET | admin | Weekly cash flow data |
 
 ## Git Merge & PR Best Practices
 
