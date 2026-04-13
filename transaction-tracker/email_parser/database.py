@@ -12212,12 +12212,15 @@ def _import_pdf_deposits(file_bytes, batch_id, account_id, db_path):
         client = _anthropic.Anthropic()
         resp = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=4096,
+            max_tokens=8192,
             messages=[{"role": "user", "content": (
-                "Parse this bank statement text into a JSON array of deposit transactions. "
-                "Only include CREDITS/DEPOSITS (positive amounts). Return ONLY valid JSON:\n"
+                "Parse this bank statement text into a JSON array of ALL transactions "
+                "(both deposits/credits AND withdrawals/debits). "
+                "Use POSITIVE amounts for deposits/credits and NEGATIVE amounts for withdrawals/debits. "
+                "Include the full description (transaction type + payee/description + any reference numbers). "
+                "Return ONLY valid JSON:\n"
                 '[{"date": "YYYY-MM-DD", "description": "...", "amount": 123.45}]\n\n'
-                f"Bank statement text:\n{full_text[:8000]}"
+                f"Bank statement text:\n{full_text[:30000]}"
             )}],
         )
         raw = resp.content[0].text.strip()
@@ -12235,9 +12238,16 @@ def _import_pdf_deposits(file_bytes, batch_id, account_id, db_path):
     with _connect(db_path) as conn:
         for pr in parsed_rows:
             deposit_date = pr.get("date", "")
-            amount = _parse_dollar(pr.get("amount"))
+            raw_amt = pr.get("amount")
+            if isinstance(raw_amt, (int, float)):
+                amount = float(raw_amt)
+            else:
+                amount = _parse_dollar(raw_amt)
+                # Restore negative sign if original had it
+                if raw_amt and str(raw_amt).strip().startswith("-"):
+                    amount = -abs(amount)
             desc = pr.get("description", "")
-            if not deposit_date or amount <= 0:
+            if not deposit_date or amount == 0:
                 continue
 
             existing = conn.execute(
