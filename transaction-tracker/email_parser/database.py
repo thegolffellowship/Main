@@ -11606,9 +11606,11 @@ def get_reconciliation_summary(month: str, db_path: str | Path | None = None) ->
 
 
 def get_bank_accounts(db_path: str | Path | None = None) -> list[dict]:
-    """Return all bank accounts."""
+    """Return all accounts from acct_accounts (the existing accounting system)."""
     with _connect(db_path) as conn:
-        rows = conn.execute("SELECT * FROM bank_accounts ORDER BY name").fetchall()
+        rows = conn.execute(
+            "SELECT * FROM acct_accounts WHERE is_active = 1 ORDER BY name"
+        ).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -11916,7 +11918,7 @@ def run_deposit_auto_match(account_id: int | None = None,
         deposits = conn.execute(
             f"""SELECT d.*, ba.account_type
                 FROM bank_deposits d
-                JOIN bank_accounts ba ON ba.id = d.account_id
+                JOIN acct_accounts ba ON ba.id = d.account_id
                 WHERE {where}
                 ORDER BY d.deposit_date""",
             params,
@@ -12149,7 +12151,7 @@ def get_bank_deposits(account_id: int | None = None, status: str | None = None,
                        GROUP_CONCAT(rm.acct_transaction_id) as matched_txn_ids,
                        GROUP_CONCAT(rm.match_confidence) as match_confidences
                 FROM bank_deposits d
-                JOIN bank_accounts ba ON ba.id = d.account_id
+                JOIN acct_accounts ba ON ba.id = d.account_id
                 LEFT JOIN reconciliation_matches rm ON rm.bank_deposit_id = d.id
                 {where}
                 GROUP BY d.id
@@ -12188,7 +12190,7 @@ def get_reconciliation_dashboard(db_path: str | Path | None = None) -> dict:
     """Summary data for the reconciliation dashboard cards."""
     with _connect(db_path) as conn:
         accounts = conn.execute(
-            "SELECT * FROM bank_accounts WHERE is_active = 1 ORDER BY name"
+            "SELECT * FROM acct_accounts WHERE is_active = 1 ORDER BY name"
         ).fetchall()
         result = []
         for acct in accounts:

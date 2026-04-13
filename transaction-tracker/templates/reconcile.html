@@ -177,7 +177,8 @@
                 accounts.forEach(a => {
                     const opt = document.createElement('option');
                     opt.value = a.id;
-                    opt.textContent = `${a.name} (${a.account_type})`;
+                    const label = a.last_four ? `${a.name} ··${a.last_four}` : a.name;
+                    opt.textContent = `${label} (${a.account_type})`;
                     sel.appendChild(opt);
                 });
             });
@@ -190,7 +191,7 @@
             }
             container.innerHTML = dash.accounts.map(a => `
                 <div class="acct-card">
-                    <h3>${esc(a.name)} <span style="font-size:0.7rem; color:var(--text-muted);">${a.account_type}</span></h3>
+                    <h3>${esc(a.name)} <span style="font-size:0.7rem; color:var(--text-muted);">${a.account_type}${a.last_four ? ' ··'+a.last_four : ''}</span></h3>
                     <div class="stat"><span class="stat-label">Last Import</span><span>${a.last_import ? a.last_import.split('T')[0] : 'Never'}</span></div>
                     <div class="stat"><span class="stat-label">Book Balance</span><span>$${a.book_balance.toFixed(2)}</span></div>
                     <div class="stat"><span class="stat-label">Bank Balance</span><span>$${a.bank_balance.toFixed(2)}</span></div>
