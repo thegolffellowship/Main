@@ -1697,16 +1697,16 @@ def init_db(db_path: str | Path | None = None) -> None:
                              (new_name, old_name))
                 logger.info("Renamed account '%s' → '%s'", old_name, new_name)
 
-        # ── Set known account last_four values (idempotent) ──
+        # ── Set known account last_four values (only if NULL — never overwrite user edits) ──
         _acct_last4 = {
-            "TGF Checking": "4500",
+            "TGF Checking": "0341",
             "Chase Southwest Perf Biz": "7680",
             "Chase Sapphire": "6159",
         }
         for acct_name, last4 in _acct_last4.items():
             conn.execute(
-                "UPDATE acct_accounts SET last_four = ? WHERE name = ? AND (last_four IS NULL OR last_four != ?)",
-                (last4, acct_name, last4),
+                "UPDATE acct_accounts SET last_four = ? WHERE name = ? AND last_four IS NULL",
+                (last4, acct_name),
             )
 
         # ── One-time duplicate customer merge (idempotent) ──────────
