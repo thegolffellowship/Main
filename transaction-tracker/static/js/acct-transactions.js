@@ -805,8 +805,11 @@ async function openExpenseReview(expenseId) {
         const sel = $('#expense-account-select');
 
         // Try matching by last 4 digits (ignores generic names like "Visa")
-        if (last4) {
-            const byLast4 = ACCT.accounts.find(a => a.last_four === last4);
+        // Also map known debit card numbers to their checking accounts
+        const _debitCardMap = { '0659': '4500' }; // debit ••0659 = TGF Checking ••4500
+        const effectiveLast4 = _debitCardMap[last4] || last4;
+        if (effectiveLast4) {
+            const byLast4 = ACCT.accounts.find(a => a.last_four === effectiveLast4);
             if (byLast4) {
                 matchedAcctName = byLast4.name;
                 sel.value = byLast4.name;
