@@ -7356,22 +7356,21 @@ def build_handicap_card_html(card_data: dict) -> str:
     # Build score history rows
     score_rows = ""
     for i, r in enumerate(rounds):
-        bg = "#ffffff" if i % 2 == 0 else "#f8fafc"
         diff_val = r.get("differential")
         diff_str = f"{diff_val:.1f}" if diff_val is not None else "—"
         is_used = r.get("status") == "USED"
 
-        diff_style = (
-            "font-weight:700; color:#16a34a;"
-            if is_used
-            else "color:#475569;"
-        )
-        status_html = (
-            '<span style="background:#dcfce7; color:#16a34a; padding:2px 6px; '
-            'border-radius:3px; font-size:11px; font-weight:600;">Used</span>'
-            if is_used
-            else '<span style="color:#94a3b8; font-size:11px;">Active</span>'
-        )
+        if is_used:
+            bg = "#dcfce7"
+            diff_style = "font-weight:700; color:#166534;"
+            status_html = (
+                '<span style="background:#16a34a; color:#fff; padding:2px 6px; '
+                'border-radius:3px; font-size:11px; font-weight:600;">Used</span>'
+            )
+        else:
+            bg = "#ffffff" if i % 2 == 0 else "#f8fafc"
+            diff_style = "color:#475569;"
+            status_html = ""
 
         score_rows += f"""<tr style="background:{bg};">
   <td style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; white-space:nowrap;">{r.get('round_date', '')}</td>
