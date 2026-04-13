@@ -624,21 +624,23 @@ def _promote_guest_customers(rows: list[dict]) -> list[dict]:
     """Swap customer on GUEST items in multi-item orders to the actual guest.
 
     When a buyer purchases two separate line items — one for themselves
-    (MEMBER) and one for a guest (GUEST) — both items get the buyer's
-    name as customer. This function detects GUEST items where a
+    (MEMBER) and one for a guest (GUEST/1st TIMER) — both items get the
+    buyer's name as customer. This function detects items where a
     ``guest_name`` is available and promotes the guest to customer,
     adding a "Purchased by <buyer>" note.
 
-    Detection: item has user_status containing "GUEST" AND a non-empty
-    ``guest_name`` field, AND the current customer differs from the
-    guest_name (meaning the buyer's name is on the row, not the guest's).
+    Detection: item has a non-empty ``guest_name`` field AND either
+    user_status contains "GUEST" or "1ST TIMER", AND the current
+    customer differs from the guest_name (meaning the buyer's name is
+    on the row, not the guest's).
     """
     for row in rows:
-        status = (row.get("user_status") or "").upper()
-        if "GUEST" not in status:
-            continue
         guest = (row.get("guest_name") or "").strip()
         if not guest:
+            continue
+        status = (row.get("user_status") or "").upper()
+        # Fire for GUEST or 1st TIMER items with a guest_name set
+        if "GUEST" not in status and "1ST TIMER" not in status:
             continue
         buyer = (row.get("customer") or "").strip()
         # Only swap if the customer is still the buyer (not already the guest)
