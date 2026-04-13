@@ -798,17 +798,45 @@ async function openExpenseReview(expenseId) {
         $('#expense-account-select').innerHTML = acctOptionsHTML('— Account —');
         $('#expense-transfer-to').innerHTML = acctOptionsHTML('— Transfer To —');
 
-        const detectedAcct = exp.account_name || (exp.account_last4 ? '...' + exp.account_last4 : '');
-        _expOriginalAccount = detectedAcct;
-        if (detectedAcct) {
-            const sel = $('#expense-account-select');
-            for (const opt of sel.options) {
-                if (opt.value && opt.value.toUpperCase() === detectedAcct.toUpperCase()) {
-                    opt.selected = true; break;
+        // Match account by last4 digits first (most reliable), then by name
+        const last4 = exp.account_last4 || '';
+        const acctName = exp.account_name || '';
+        let matchedAcctName = '';
+        const sel = $('#expense-account-select');
+
+        // Try matching by last 4 digits (ignores generic names like "Visa")
+        if (last4) {
+            const byLast4 = ACCT.accounts.find(a => a.last_four === last4);
+            if (byLast4) {
+                matchedAcctName = byLast4.name;
+                sel.value = byLast4.name;
+            }
+        }
+        // Fallback: match by account_name (skip generic card types)
+        if (!matchedAcctName && acctName) {
+            const generic = ['visa', 'mastercard', 'amex', 'discover'];
+            if (!generic.includes(acctName.toLowerCase())) {
+                for (const opt of sel.options) {
+                    if (opt.value && opt.value.toUpperCase() === acctName.toUpperCase()) {
+                        matchedAcctName = opt.value;
+                        opt.selected = true; break;
+                    }
                 }
             }
         }
-        $('#expense-account-warning').style.display = 'none';
+        _expOriginalAccount = matchedAcctName || acctName;
+        // Show source info (card + last4) for reference, not as a warning
+        const warnEl = $('#expense-account-warning');
+        if (last4 || acctName) {
+            const srcDesc = last4 ? `Card ••${last4}${acctName ? ' (' + acctName + ')' : ''}` : acctName;
+            warnEl.textContent = matchedAcctName
+                ? `Matched from ${srcDesc}`
+                : `Source: ${srcDesc} — no matching account found`;
+            warnEl.style.display = '';
+            warnEl.style.color = matchedAcctName ? 'var(--text-muted)' : 'var(--red)';
+        } else {
+            warnEl.style.display = 'none';
+        }
 
         // Entity dropdown
         const entOpts = '<option value="">— None —</option>' +

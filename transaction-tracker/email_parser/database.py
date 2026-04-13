@@ -7507,6 +7507,8 @@ def _seed_unified_financial_categories(conn: sqlite3.Connection) -> None:
         ("Credit Transfer In", "income", tgf_id),
         ("External Payment", "income", tgf_id),
         ("Player Refunds", "expense", tgf_id),
+        # General expense categories (entity_id=None → available for all entities)
+        ("Internet & Utilities", "expense", None),
     ]
     for name, cat_type, entity_id in new_categories:
         existing = conn.execute(
