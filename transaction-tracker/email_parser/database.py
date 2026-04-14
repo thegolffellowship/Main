@@ -11,8 +11,10 @@ import json
 import math
 import os
 import re
+import shutil
 import sqlite3
 import logging
+from collections import defaultdict
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 from pathlib import Path
@@ -276,6 +278,34 @@ def _validate_column_names(columns: list[str]) -> None:
 # Allow overriding via env var so Railway can point to a persistent volume.
 _default_db = Path(__file__).resolve().parent.parent / "transactions.db"
 DB_PATH = Path(os.environ.get("DATABASE_PATH", str(_default_db)))
+
+
+def backup_database(db_path: str | Path | None = None, label: str = "") -> str | None:
+    """Create a timestamped backup of the SQLite database.
+
+    Returns the backup file path, or None if the source doesn't exist.
+    Safe to call before migrations — if the backup already exists for this
+    label+date, it skips (no duplicate backups).
+    """
+    src = Path(db_path or DB_PATH)
+    if not src.exists():
+        logger.info("Backup skipped — source DB does not exist: %s", src)
+        return None
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    suffix = f"-{label}" if label else ""
+    backup_name = f"{src.stem}_backup_{ts}{suffix}{src.suffix}"
+    backup_path = src.parent / backup_name
+
+    if backup_path.exists():
+        logger.info("Backup already exists: %s", backup_path)
+        return str(backup_path)
+
+    shutil.copy2(str(src), str(backup_path))
+    size_mb = backup_path.stat().st_size / (1024 * 1024)
+    logger.info("Database backup created: %s (%.1f MB)", backup_path, size_mb)
+    return str(backup_path)
+
 
 # All item-level columns (order matches the CREATE TABLE below)
 ITEM_COLUMNS = [
@@ -1153,6 +1183,16 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_status ON acct_transactions(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_source_ref ON acct_transactions(source_ref)")
 
+        # ── Order-level GoDaddy columns ─────────────────────────────
+        for col, col_type in [
+            ("net_deposit", "REAL"),
+            ("merchant_fee", "REAL"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE acct_transactions ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass
+
         # ── Unified financial model migrations (Issue #242) ──
         for col, col_type, default in [
             ("payment_method", "TEXT", "'godaddy'"),
@@ -1461,6 +1501,28 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_recon_deposit ON reconciliation_matches(bank_deposit_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_recon_txn ON reconciliation_matches(acct_transaction_id)")
+
+        # ── GoDaddy order-level splits ──────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS godaddy_order_splits (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                transaction_id  INTEGER NOT NULL,
+                item_id         INTEGER,
+                event_name      TEXT,
+                customer        TEXT,
+                split_type      TEXT NOT NULL
+                    CHECK(split_type IN ('registration', 'transaction_fee', 'merchant_fee', 'coupon')),
+                amount          REAL NOT NULL,
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (transaction_id) REFERENCES acct_transactions(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_splits_txn ON godaddy_order_splits(transaction_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_splits_item ON godaddy_order_splits(item_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_splits_event ON godaddy_order_splits(event_name)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_splits_type ON godaddy_order_splits(split_type)")
 
         # Seed default bank accounts
         for acct_name, acct_type in [("TGF Checking", "checking"), ("Venmo", "venmo")]:
@@ -2286,6 +2348,7 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
 
         inserted = 0
         skipped = 0
+        _touched_gd_orders = set()  # Track GoDaddy orders for order-level accounting
         for row in rows:
             # Auto-resolve customer_id if not already set
             if not row.get("customer_id"):
@@ -2344,70 +2407,48 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                         logger.warning("RSVP replacement check failed for item %s",
                                        row.get("email_uid"), exc_info=True)
 
-                    # ── Accounting: create entries for GoDaddy orders ──
+                    # ── Track GoDaddy orders for order-level accounting ──
                     try:
                         item_price = _parse_dollar(row.get("item_price"))
-                        merchant = row.get("merchant") or ""
-                        # Only create entries for real GoDaddy orders
-                        if item_price > 0 and merchant == "The Golf Fellowship" and not row.get("transferred_from_id"):
-                            event_name = row.get("item_name") or ""
-                            customer_name = row.get("customer") or ""
-                            order_id_val = row.get("order_id") or ""
-                            order_date = row.get("order_date") or ""
-
-                            # INCOME entry for registration revenue
-                            _write_acct_entry(
-                                conn,
-                                item_id=new_item_id,
-                                event_name=event_name,
-                                customer=customer_name,
-                                order_id=order_id_val,
-                                entry_type="income",
-                                category="registration",
-                                source="godaddy",
-                                amount=item_price,
-                                description=f"GoDaddy registration: {customer_name} — {event_name}",
-                                account="TGF Checking",
-                                source_ref=f"godaddy-income-{new_item_id}",
-                                date=order_date,
-                            )
-
-                            # EXPENSE entry for GoDaddy merchant fee (2.7% + $0.30 per order)
-                            total_amount = _parse_dollar(row.get("total_amount"))
-                            if total_amount > 0:
-                                # Count items in this order to split $0.30 fixed fee
-                                order_item_count = 1
-                                if order_id_val:
-                                    cnt_row = conn.execute(
-                                        "SELECT COUNT(*) as cnt FROM items WHERE order_id = ?",
-                                        (order_id_val,),
-                                    ).fetchone()
-                                    order_item_count = max(cnt_row["cnt"], 1) if cnt_row else 1
-                                merchant_fee = round(
-                                    (total_amount * 0.027 + 0.30) / order_item_count, 2
-                                )
-                                _write_acct_entry(
-                                    conn,
-                                    item_id=new_item_id,
-                                    event_name=event_name,
-                                    customer=customer_name,
-                                    order_id=order_id_val,
-                                    entry_type="expense",
-                                    category="processing_fee",
-                                    source="godaddy",
-                                    amount=merchant_fee,
-                                    description=f"GoDaddy merchant fee: {customer_name} — {event_name}",
-                                    account="TGF Checking",
-                                    source_ref=f"godaddy-fee-{new_item_id}",
-                                    date=order_date,
-                                )
+                        merchant_val = row.get("merchant") or ""
+                        if item_price > 0 and merchant_val == "The Golf Fellowship" and not row.get("transferred_from_id"):
+                            oid = row.get("order_id") or ""
+                            if oid:
+                                _touched_gd_orders.add(oid)
                     except Exception:
-                        logger.warning("Failed to create accounting entries for item %s",
+                        logger.warning("Failed to track GoDaddy order for item %s",
                                        row.get("email_uid"), exc_info=True)
             except sqlite3.IntegrityError:
                 skipped += 1
                 logger.debug("Duplicate item skipped: email_uid=%s item_index=%s",
                              row.get("email_uid"), row.get("item_index"))
+
+        # ── Create order-level accounting entries for touched GoDaddy orders ──
+        for oid in _touched_gd_orders:
+            try:
+                order_items = conn.execute(
+                    """SELECT * FROM items
+                       WHERE order_id = ? AND merchant = 'The Golf Fellowship'
+                       AND COALESCE(transaction_status, 'active') NOT IN ('rsvp_only')
+                       AND parent_item_id IS NULL
+                       AND transferred_from_id IS NULL""",
+                    (oid,),
+                ).fetchall()
+                valid_items = [
+                    dict(r) for r in order_items
+                    if _parse_dollar(dict(r).get("item_price")) > 0
+                    and dict(r).get("transaction_status") not in ("credited", "refunded", "transferred")
+                ]
+                if valid_items:
+                    _write_godaddy_order_entry(
+                        conn,
+                        order_id=oid,
+                        items=valid_items,
+                        date=valid_items[0].get("order_date") or "",
+                    )
+            except Exception:
+                logger.warning("Failed to create order-level accounting for order %s",
+                               oid, exc_info=True)
 
         conn.commit()
         logger.info("Saved %d new item rows, %d duplicates skipped (%d total provided)",
@@ -9791,6 +9832,8 @@ def _write_acct_entry(
     account: str = "TGF Checking",
     source_ref: str = "",
     date: str = "",
+    net_deposit: float | None = None,
+    merchant_fee: float | None = None,
 ) -> int | None:
     """Write a single accounting entry to acct_transactions.
 
@@ -9817,13 +9860,158 @@ def _write_acct_entry(
         """INSERT INTO acct_transactions
            (date, description, total_amount, type, source, source_ref,
             item_id, event_name, customer, order_id, entry_type, category,
-            amount, account, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')""",
+            amount, account, status, net_deposit, merchant_fee)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)""",
         (date, description, abs(amount), legacy_type, source, source_ref,
          item_id, event_name, customer, order_id, entry_type, category,
-         amount, account),
+         amount, account, net_deposit, merchant_fee),
     )
     return cur.lastrowid
+
+
+def _write_godaddy_order_entry(
+    conn: sqlite3.Connection,
+    *,
+    order_id: str,
+    items: list[dict],
+    date: str = "",
+) -> int | None:
+    """Create one order-level acct_transaction with godaddy_order_splits.
+
+    Replaces the old pattern of 2 entries per item (income + fee).
+    Now creates ONE transaction per GoDaddy order with child splits for:
+      - registration income per item (item_price)
+      - transaction fee income per item
+      - merchant fee expense (proportional per item)
+      - coupon discount per item (if coupon_code present)
+
+    Re-entrant: if an order-level entry already exists for this order_id,
+    it is soft-deleted (status='reversed') and its splits removed, then
+    a fresh entry is created with the current item set.
+
+    Returns the new transaction id, or None if no valid items.
+    """
+    if not items:
+        return None
+
+    # ── Calculate order totals ───────────────────────────────────
+    total_item_prices = 0.0
+    total_tx_fees = 0.0
+    order_total = 0.0
+
+    for item in items:
+        ip = _parse_dollar(item.get("item_price"))
+        tf = _parse_dollar(item.get("transaction_fees"))
+        ta = _parse_dollar(item.get("total_amount"))
+        total_item_prices += ip
+        total_tx_fees += tf
+        # Use actual total_amount when available; fallback to computed
+        order_total += ta if ta > 0 else (ip + tf)
+
+    if order_total <= 0:
+        return None
+
+    merchant_fee_val = round(order_total * 0.027 + 0.30, 2)
+    net_deposit_val = round(order_total - merchant_fee_val, 2)
+
+    # ── Determine shared event_name and customer ─────────────────
+    event_names = list(dict.fromkeys(
+        item.get("item_name") or "" for item in items if item.get("item_name")
+    ))
+    event_name = event_names[0] if event_names else ""
+
+    customers = list(dict.fromkeys(
+        item.get("customer") or "" for item in items if item.get("customer")
+    ))
+    customer_name = customers[0] if customers else ""
+
+    source_ref = f"godaddy-order-{order_id}"
+
+    # ── Re-entrant: soft-delete existing order entry if present ──
+    existing = conn.execute(
+        "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+        (source_ref,),
+    ).fetchone()
+    if existing:
+        old_id = existing[0]
+        conn.execute("UPDATE acct_transactions SET status = 'reversed' WHERE id = ?", (old_id,))
+        conn.execute("DELETE FROM godaddy_order_splits WHERE transaction_id = ?", (old_id,))
+
+    # ── Create order-level transaction ───────────────────────────
+    n_items = len(items)
+    desc_parts = [f"{customer_name}"] if len(customers) == 1 else [f"{n_items} players"]
+    desc_parts.append(event_name if len(event_names) == 1 else f"{len(event_names)} events")
+    description = f"GoDaddy order {order_id}: {' — '.join(desc_parts)}"
+
+    txn_id = _write_acct_entry(
+        conn,
+        item_id=None,
+        event_name=event_name,
+        customer=customer_name,
+        order_id=order_id,
+        entry_type="income",
+        category="godaddy_order",
+        source="godaddy",
+        amount=order_total,
+        description=description,
+        account="TGF Checking",
+        source_ref=source_ref,
+        date=date,
+        net_deposit=net_deposit_val,
+        merchant_fee=merchant_fee_val,
+    )
+    if txn_id is None:
+        return None
+
+    # ── Create splits ────────────────────────────────────────────
+    for item in items:
+        item_id = item.get("id")
+        item_event = item.get("item_name") or event_name
+        item_customer = item.get("customer") or customer_name
+        ip = _parse_dollar(item.get("item_price"))
+        tf = _parse_dollar(item.get("transaction_fees"))
+        ta = _parse_dollar(item.get("total_amount"))
+        item_total = ta if ta > 0 else (ip + tf)
+
+        # Registration income split
+        if ip > 0:
+            conn.execute(
+                """INSERT INTO godaddy_order_splits
+                   (transaction_id, item_id, event_name, customer, split_type, amount)
+                   VALUES (?, ?, ?, ?, 'registration', ?)""",
+                (txn_id, item_id, item_event, item_customer, ip),
+            )
+
+        # Transaction fee income split
+        if tf > 0:
+            conn.execute(
+                """INSERT INTO godaddy_order_splits
+                   (transaction_id, item_id, event_name, customer, split_type, amount)
+                   VALUES (?, ?, ?, ?, 'transaction_fee', ?)""",
+                (txn_id, item_id, item_event, item_customer, tf),
+            )
+
+        # Coupon discount split (contra-revenue, stored as negative)
+        coupon_amt = _parse_dollar(item.get("coupon_amount"))
+        if coupon_amt > 0 and item.get("coupon_code"):
+            conn.execute(
+                """INSERT INTO godaddy_order_splits
+                   (transaction_id, item_id, event_name, customer, split_type, amount)
+                   VALUES (?, ?, ?, ?, 'coupon', ?)""",
+                (txn_id, item_id, item_event, item_customer, -coupon_amt),
+            )
+
+        # Merchant fee split (proportional, negative = expense)
+        if item_total > 0 and order_total > 0:
+            item_merchant_fee = round(merchant_fee_val * item_total / order_total, 2)
+            conn.execute(
+                """INSERT INTO godaddy_order_splits
+                   (transaction_id, item_id, event_name, customer, split_type, amount)
+                   VALUES (?, ?, ?, ?, 'merchant_fee', ?)""",
+                (txn_id, item_id, item_event, item_customer, -item_merchant_fee),
+            )
+
+    return txn_id
 
 
 def _parse_dollar(val, default: float = 0.0) -> float:
@@ -10143,7 +10331,19 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
         if accounting_verified:
             # ── Revenue from acct_transactions ──
             income_entries = [e for e in acct_entries if e["entry_type"] == "income"]
-            godaddy_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "registration"), 2)
+            # Old per-item format (category='registration')
+            old_reg_revenue = sum(e["amount"] for e in income_entries if e.get("category") == "registration")
+            # New order-level format (from godaddy_order_splits)
+            new_reg_row = conn.execute(
+                f"""SELECT COALESCE(SUM(s.amount), 0) as total
+                    FROM godaddy_order_splits s
+                    JOIN acct_transactions t ON t.id = s.transaction_id
+                    WHERE s.event_name COLLATE NOCASE IN ({name_placeholders})
+                    AND s.split_type = 'registration'
+                    AND COALESCE(t.status, 'active') = 'active'""",
+                all_names,
+            ).fetchone()
+            godaddy_revenue = round(old_reg_revenue + (new_reg_row["total"] if new_reg_row else 0), 2)
             external_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "addon" and e.get("source") not in ("godaddy",)), 2)
             xfer_in_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "transfer_in"), 2)
             addon_revenue = round(sum(e["amount"] for e in income_entries if e.get("category") == "addon" and e.get("source") == "godaddy"), 2)
@@ -10175,7 +10375,19 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             # ── Expenses ──
             expense_entries = [e for e in acct_entries if e["entry_type"] == "expense"]
             refund_total = round(sum(e["amount"] for e in expense_entries if e.get("category") == "refund"), 2)
-            total_processing = round(sum(e["amount"] for e in expense_entries if e.get("category") == "processing_fee"), 2)
+            # Old per-item format (category='processing_fee')
+            old_processing = sum(e["amount"] for e in expense_entries if e.get("category") == "processing_fee")
+            # New order-level format (from godaddy_order_splits, stored as negative)
+            new_fee_row = conn.execute(
+                f"""SELECT COALESCE(SUM(ABS(s.amount)), 0) as total
+                    FROM godaddy_order_splits s
+                    JOIN acct_transactions t ON t.id = s.transaction_id
+                    WHERE s.event_name COLLATE NOCASE IN ({name_placeholders})
+                    AND s.split_type = 'merchant_fee'
+                    AND COALESCE(t.status, 'active') = 'active'""",
+                all_names,
+            ).fetchone()
+            total_processing = round(old_processing + (new_fee_row["total"] if new_fee_row else 0), 2)
 
             # Contra = transfers out + refunds only (NOT processing fees — those are expenses)
             contra_total = round(xfer_out + refund_total, 2)
@@ -10199,13 +10411,23 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             total_expenses = round(aggregate_course_cost + total_prize_pool + total_processing, 2)
             projected_profit = round(net_revenue - total_expenses, 2)
 
-            # Coverage based on acct_transactions entries
+            # Coverage based on acct_transactions entries + order splits
             items_needing_entry = [i for i in all_items
                                    if i.get("transaction_status") in (None, "active")
                                    and not (i.get("email_uid") or "").startswith("manual-comp")
                                    and i.get("transaction_status") != "rsvp_only"
                                    and _parse_dollar(i.get("item_price")) > 0]
             acct_item_ids = {e.get("item_id") for e in acct_entries if e.get("item_id")}
+            # Also get item_ids from order-level splits
+            split_item_rows = conn.execute(
+                f"""SELECT DISTINCT s.item_id FROM godaddy_order_splits s
+                    JOIN acct_transactions t ON t.id = s.transaction_id
+                    WHERE s.event_name COLLATE NOCASE IN ({name_placeholders})
+                    AND COALESCE(t.status, 'active') = 'active'
+                    AND s.item_id IS NOT NULL""",
+                all_names,
+            ).fetchall()
+            acct_item_ids.update(r[0] for r in split_item_rows)
             items_with_entry = sum(1 for i in items_needing_entry if i["id"] in acct_item_ids)
             coverage = round(items_with_entry / len(items_needing_entry) * 100, 1) if items_needing_entry else 0
 
@@ -10634,12 +10856,12 @@ def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
     Processes items in order_date ascending.  Idempotent — uses source_ref to
     skip items that already have entries.  Returns counts of entries created.
     """
-    results = {"godaddy_income": 0, "godaddy_fees": 0, "comps": 0,
+    results = {"godaddy_orders": 0, "godaddy_items": 0, "comps": 0,
                "external_payments": 0, "addons": 0, "transfers": 0,
                "refunds": 0, "wd_credits": 0, "errors": 0, "items_processed": 0}
 
     with _connect(db_path) as conn:
-        # ── 1. GoDaddy orders — income + processing fee entries ──
+        # ── 1. GoDaddy orders — order-level entries with splits ──
         # Only 'The Golf Fellowship' merchant (actual GoDaddy orders).
         # Excludes transfer targets, manual entries, external payments, etc.
         gd_items = conn.execute(
@@ -10649,70 +10871,37 @@ def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
                AND COALESCE(transaction_status, 'active') NOT IN ('rsvp_only')
                AND parent_item_id IS NULL
                AND transferred_from_id IS NULL
-               AND id NOT IN (SELECT item_id FROM acct_transactions WHERE item_id IS NOT NULL AND entry_type = 'income' AND category = 'registration')
                ORDER BY order_date ASC""",
         ).fetchall()
+
+        # Group by order_id
+        orders = defaultdict(list)
         for row in gd_items:
+            item = dict(row)
+            oid = item.get("order_id") or f"solo-{item['id']}"
+            orders[oid].append(item)
+
+        for oid, items in orders.items():
+            valid_items = [
+                i for i in items
+                if _parse_dollar(i.get("item_price")) > 0
+                and i.get("transaction_status") not in ("credited", "refunded", "transferred")
+            ]
+            if not valid_items:
+                continue
             try:
-                item = dict(row)
-                item_price = _parse_dollar(item.get("item_price"))
-                if item_price <= 0:
-                    continue  # Skip comps ($0 price)
-                # Skip already-reversed items
-                if item.get("transaction_status") in ("credited", "refunded", "transferred"):
-                    continue
-
-                _write_acct_entry(
+                txn_id = _write_godaddy_order_entry(
                     conn,
-                    item_id=item["id"],
-                    event_name=item.get("item_name", ""),
-                    customer=item.get("customer", ""),
-                    order_id=item.get("order_id", ""),
-                    entry_type="income",
-                    category="registration",
-                    source="godaddy",
-                    amount=item_price,
-                    description=f"GoDaddy registration: {item.get('customer', '')} — {item.get('item_name', '')}",
-                    account="TGF Checking",
-                    source_ref=f"godaddy-income-{item['id']}",
-                    date=item.get("order_date") or "",
+                    order_id=oid,
+                    items=valid_items,
+                    date=valid_items[0].get("order_date") or "",
                 )
-                results["godaddy_income"] += 1
-
-                # Processing fee entry — GoDaddy merchant fee (2.7% + $0.30 per order)
-                total_amount = _parse_dollar(item.get("total_amount"))
-                if total_amount > 0:
-                    order_id_val = item.get("order_id") or ""
-                    order_item_count = 1
-                    if order_id_val:
-                        cnt_row = conn.execute(
-                            "SELECT COUNT(*) as cnt FROM items WHERE order_id = ?",
-                            (order_id_val,),
-                        ).fetchone()
-                        order_item_count = max(cnt_row["cnt"], 1) if cnt_row else 1
-                    merchant_fee = round(
-                        (total_amount * 0.027 + 0.30) / order_item_count, 2
-                    )
-                    _write_acct_entry(
-                        conn,
-                        item_id=item["id"],
-                        event_name=item.get("item_name", ""),
-                        customer=item.get("customer", ""),
-                        order_id=order_id_val,
-                        entry_type="expense",
-                        category="processing_fee",
-                        source="godaddy",
-                        amount=merchant_fee,
-                        description=f"GoDaddy merchant fee: {item.get('customer', '')} — {item.get('item_name', '')}",
-                        account="TGF Checking",
-                        source_ref=f"godaddy-fee-{item['id']}",
-                        date=item.get("order_date") or "",
-                    )
-                    results["godaddy_fees"] += 1
-
-                results["items_processed"] += 1
+                if txn_id:
+                    results["godaddy_orders"] += 1
+                    results["godaddy_items"] += len(valid_items)
+                    results["items_processed"] += len(valid_items)
             except Exception:
-                logger.warning("Backfill acct_txn: failed GoDaddy item %s", row["id"], exc_info=True)
+                logger.warning("Backfill acct_txn: failed GoDaddy order %s", oid, exc_info=True)
                 results["errors"] += 1
 
         # ── 2. Comps ──
@@ -11004,6 +11193,163 @@ def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
     total_entries = sum(v for k, v in results.items() if k not in ("errors", "items_processed"))
     results["total_entries"] = total_entries
     logger.info("Backfilled %d accounting entries for %d items", total_entries, results["items_processed"])
+    return results
+
+
+def migrate_item_to_order_entries(db_path: str | Path | None = None) -> dict:
+    """Migrate old per-item GoDaddy entries to order-level entries.
+
+    Old format: 2 entries per item
+      - source_ref = 'godaddy-income-{item_id}', category='registration'
+      - source_ref = 'godaddy-fee-{item_id}', category='processing_fee'
+
+    New format: 1 entry per order
+      - source_ref = 'godaddy-order-{order_id}', category='godaddy_order'
+      - child rows in godaddy_order_splits
+
+    Creates a backup before any changes.  Preserves reconciliation_matches by
+    re-linking them from old income entries to the new order entry.
+
+    Idempotent: skips orders that already have a 'godaddy-order-*' entry.
+    """
+    backup_path = backup_database(db_path, label="pre-order-migration")
+    logger.info("Migration backup created: %s", backup_path)
+
+    results = {
+        "orders_migrated": 0,
+        "old_entries_reversed": 0,
+        "matches_relinked": 0,
+        "skipped_already_migrated": 0,
+        "errors": 0,
+        "backup_path": backup_path,
+    }
+
+    with _connect(db_path) as conn:
+        # Find all old-format per-item income entries
+        old_income = conn.execute(
+            """SELECT at.*, i.order_id
+               FROM acct_transactions at
+               JOIN items i ON i.id = at.item_id
+               WHERE at.source_ref LIKE 'godaddy-income-%'
+               AND at.category = 'registration'
+               AND COALESCE(at.status, 'active') = 'active'
+               ORDER BY at.date ASC""",
+        ).fetchall()
+
+        if not old_income:
+            logger.info("No old-format per-item GoDaddy entries found — nothing to migrate.")
+            return results
+
+        # Group old income entries by order_id
+        orders_to_migrate = defaultdict(list)
+        for row in old_income:
+            r = dict(row)
+            oid = r.get("order_id") or f"solo-{r['item_id']}"
+            orders_to_migrate[oid].append(r)
+
+        for oid, old_entries in orders_to_migrate.items():
+            # Skip if already migrated
+            existing_order = conn.execute(
+                "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+                (f"godaddy-order-{oid}",),
+            ).fetchone()
+            if existing_order:
+                results["skipped_already_migrated"] += 1
+                continue
+
+            try:
+                # Gather item_ids from old entries
+                item_ids = [e["item_id"] for e in old_entries if e.get("item_id")]
+                if not item_ids:
+                    continue
+
+                # Fetch full item data for these items
+                placeholders = ",".join(["?"] * len(item_ids))
+                items = [
+                    dict(r) for r in conn.execute(
+                        f"SELECT * FROM items WHERE id IN ({placeholders})", item_ids
+                    ).fetchall()
+                ]
+                valid_items = [
+                    i for i in items
+                    if _parse_dollar(i.get("item_price")) > 0
+                    and i.get("transaction_status") not in ("credited", "refunded", "transferred")
+                ]
+                if not valid_items:
+                    continue
+
+                # Collect reconciliation_matches from old income entries before reversing
+                old_income_ids = [e["id"] for e in old_entries]
+                old_fee_ids = []
+                for iid in item_ids:
+                    fee_row = conn.execute(
+                        "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+                        (f"godaddy-fee-{iid}",),
+                    ).fetchone()
+                    if fee_row:
+                        old_fee_ids.append(fee_row[0])
+
+                all_old_ids = old_income_ids + old_fee_ids
+                old_id_placeholders = ",".join(["?"] * len(all_old_ids))
+                saved_matches = conn.execute(
+                    f"""SELECT bank_deposit_id, match_type, confidence, matched_at
+                        FROM reconciliation_matches
+                        WHERE acct_transaction_id IN ({old_id_placeholders})""",
+                    all_old_ids,
+                ).fetchall()
+
+                # Soft-delete old income entries
+                for eid in old_income_ids:
+                    conn.execute("UPDATE acct_transactions SET status = 'reversed' WHERE id = ?", (eid,))
+                    results["old_entries_reversed"] += 1
+
+                # Soft-delete old fee entries
+                for fid in old_fee_ids:
+                    conn.execute("UPDATE acct_transactions SET status = 'reversed' WHERE id = ?", (fid,))
+                    results["old_entries_reversed"] += 1
+
+                # Remove old reconciliation_matches (will re-link to new entry)
+                if all_old_ids:
+                    conn.execute(
+                        f"DELETE FROM reconciliation_matches WHERE acct_transaction_id IN ({old_id_placeholders})",
+                        all_old_ids,
+                    )
+
+                # Create new order-level entry
+                txn_id = _write_godaddy_order_entry(
+                    conn,
+                    order_id=oid,
+                    items=valid_items,
+                    date=valid_items[0].get("order_date") or "",
+                )
+
+                if txn_id:
+                    results["orders_migrated"] += 1
+
+                    # Re-link saved reconciliation_matches to new entry
+                    for match in saved_matches:
+                        try:
+                            conn.execute(
+                                """INSERT OR IGNORE INTO reconciliation_matches
+                                   (bank_deposit_id, acct_transaction_id, match_type, confidence, matched_at)
+                                   VALUES (?, ?, ?, ?, ?)""",
+                                (match[0], txn_id, match[1], match[2], match[3]),
+                            )
+                            results["matches_relinked"] += 1
+                        except Exception:
+                            pass  # duplicate or constraint — safe to skip
+
+            except Exception:
+                logger.warning("Migration failed for order %s", oid, exc_info=True)
+                results["errors"] += 1
+
+        conn.commit()
+
+    logger.info(
+        "Migration complete: %d orders migrated, %d old entries reversed, %d matches relinked, %d skipped, %d errors",
+        results["orders_migrated"], results["old_entries_reversed"],
+        results["matches_relinked"], results["skipped_already_migrated"], results["errors"],
+    )
     return results
 
 
@@ -12664,11 +13010,11 @@ def run_deposit_auto_match(account_id: int | None = None,
             detail = ""
 
             if dep_source == "godaddy" or "GODADDY" in dep_desc:
-                # GoDaddy batch: find income transactions within ± 2 days
+                # GoDaddy batch: find order-level transactions using net_deposit
                 candidates = conn.execute(
-                    """SELECT id, amount, date, customer, event_name, order_id
+                    """SELECT id, amount, net_deposit, merchant_fee, date, customer, event_name, order_id
                        FROM acct_transactions
-                       WHERE entry_type = 'income' AND source = 'godaddy'
+                       WHERE category = 'godaddy_order'
                        AND COALESCE(status, 'active') = 'active'
                        AND ABS(julianday(date) - julianday(?)) <= 2
                        AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
@@ -12677,32 +13023,42 @@ def run_deposit_auto_match(account_id: int | None = None,
                 ).fetchall()
                 candidates = [dict(c) for c in candidates]
 
+                if not candidates:
+                    # Fallback: old per-item format (category='registration')
+                    candidates = conn.execute(
+                        """SELECT id, amount, date, customer, event_name, order_id
+                           FROM acct_transactions
+                           WHERE entry_type = 'income' AND source = 'godaddy'
+                           AND category = 'registration'
+                           AND COALESCE(status, 'active') = 'active'
+                           AND ABS(julianday(date) - julianday(?)) <= 2
+                           AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
+                           ORDER BY date""",
+                        (dep_date,),
+                    ).fetchall()
+                    candidates = [dict(c) for c in candidates]
+
                 if candidates:
-                    # Sum candidate amounts and compare to deposit
-                    # GoDaddy deposits = sum(total_amount) - merchant_fee per order
-                    # For simplicity, match on total income minus estimated fees
-                    total_income = sum(c["amount"] for c in candidates)
-                    # Estimate deposit: income collected + tx fees - merchant fees
-                    # Deposit ≈ total_amount per order (item_price + tx_fee - nothing, GoDaddy deposits full amount then takes fee)
-                    # Actually GoDaddy deposits: total_amount - merchant_fee
-                    # Try direct amount match first
-                    gap = abs(total_income - dep_amt)
+                    # Use net_deposit (what actually hits the bank) when available
+                    total_net = sum(c.get("net_deposit") or c["amount"] for c in candidates)
+                    gap = abs(total_net - dep_amt)
 
                     if gap < 1.00:
                         matched_txn_ids = [c["id"] for c in candidates]
                         confidence = 0.95
-                        detail = f"Batch match: {len(candidates)} txns, gap ${gap:.2f}"
+                        detail = f"Batch match: {len(candidates)} orders, gap ${gap:.2f}"
                     elif gap < 5.00:
                         matched_txn_ids = [c["id"] for c in candidates]
                         confidence = 0.70
-                        detail = f"Partial batch: {len(candidates)} txns, gap ${gap:.2f}"
+                        detail = f"Partial batch: {len(candidates)} orders, gap ${gap:.2f}"
                     else:
-                        # Try individual order matching by amount
+                        # Try individual order matching by net_deposit
                         for c in candidates:
-                            if abs(c["amount"] - dep_amt) < 1.00:
+                            c_net = c.get("net_deposit") or c["amount"]
+                            if abs(c_net - dep_amt) < 1.00:
                                 matched_txn_ids = [c["id"]]
                                 confidence = 0.90
-                                detail = f"Single order: {c['customer']} ${c['amount']:.2f}"
+                                detail = f"Single order: {c['customer']} ${c_net:.2f}"
                                 break
 
             elif acct_type == "venmo" or dep_source == "venmo":
@@ -12817,6 +13173,34 @@ def manual_match_deposit(bank_deposit_id: int, acct_transaction_id: int,
     return {"status": "ok"}
 
 
+def batch_match_deposit(bank_deposit_id: int, acct_transaction_ids: list[int],
+                        db_path: str | Path | None = None) -> dict:
+    """Match multiple acct_transactions to a single bank deposit (1:many).
+
+    Used for GoDaddy daily batch deposits that contain multiple orders.
+    """
+    with _connect(db_path) as conn:
+        matched = 0
+        for tid in acct_transaction_ids:
+            conn.execute(
+                """INSERT OR IGNORE INTO reconciliation_matches
+                   (bank_deposit_id, acct_transaction_id, match_type, match_confidence)
+                   VALUES (?, ?, 'manual', 1.0)""",
+                (bank_deposit_id, tid),
+            )
+            conn.execute(
+                "UPDATE acct_transactions SET status = 'reconciled' WHERE id = ?",
+                (tid,),
+            )
+            matched += 1
+        conn.execute(
+            "UPDATE bank_deposits SET status = 'matched' WHERE id = ?",
+            (bank_deposit_id,),
+        )
+        conn.commit()
+    return {"status": "ok", "matched": matched}
+
+
 def unmatch_deposit(bank_deposit_id: int, acct_transaction_id: int | None = None,
                     db_path: str | Path | None = None) -> dict:
     """Remove a reconciliation match. If acct_transaction_id is None, remove all matches."""
@@ -12914,6 +13298,88 @@ def get_unreconciled_transactions(account: str | None = None, month: str | None 
         return [dict(r) for r in rows]
 
 
+def merge_transactions(acct_transaction_ids: list[int],
+                       db_path: str | Path | None = None) -> dict:
+    """Merge multiple GoDaddy order transactions into a single batch entry.
+
+    Creates a new 'godaddy_batch' transaction with the combined net_deposit
+    and merchant_fee, then marks the original entries as 'merged'.
+    The batch entry can then be matched to a single bank deposit.
+
+    Returns the new batch transaction id.
+    """
+    if len(acct_transaction_ids) < 2:
+        return {"error": "Need at least 2 transactions to merge"}
+
+    with _connect(db_path) as conn:
+        placeholders = ",".join(["?"] * len(acct_transaction_ids))
+        txns = conn.execute(
+            f"""SELECT * FROM acct_transactions
+                WHERE id IN ({placeholders})
+                AND COALESCE(status, 'active') = 'active'
+                AND entry_type IS NOT NULL""",
+            acct_transaction_ids,
+        ).fetchall()
+
+        if len(txns) < 2:
+            return {"error": "Less than 2 active transactions found"}
+
+        txns = [dict(t) for t in txns]
+
+        total_amount = sum(t.get("amount", 0) or 0 for t in txns)
+        total_merchant = sum(t.get("merchant_fee", 0) or 0 for t in txns)
+        total_net = sum((t.get("net_deposit") or t.get("amount", 0) or 0) for t in txns)
+
+        # Use the earliest date as batch date
+        dates = sorted(t.get("date", "") for t in txns if t.get("date"))
+        batch_date = dates[0] if dates else ""
+
+        order_ids = [t.get("order_id", "") for t in txns if t.get("order_id")]
+        batch_ref = f"godaddy-batch-{'-'.join(str(i) for i in sorted(acct_transaction_ids))}"
+
+        # Check if batch already exists
+        existing = conn.execute(
+            "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+            (batch_ref,),
+        ).fetchone()
+        if existing:
+            return {"error": "These transactions are already merged", "batch_id": existing[0]}
+
+        description = f"GoDaddy batch: {len(txns)} orders ({batch_date})"
+        batch_id = _write_acct_entry(
+            conn,
+            item_id=None,
+            event_name="",
+            customer="",
+            order_id=",".join(order_ids[:5]),
+            entry_type="income",
+            category="godaddy_batch",
+            source="godaddy",
+            amount=total_amount,
+            description=description,
+            account="TGF Checking",
+            source_ref=batch_ref,
+            date=batch_date,
+            net_deposit=total_net,
+            merchant_fee=total_merchant,
+        )
+
+        if batch_id is None:
+            return {"error": "Failed to create batch entry"}
+
+        # Mark original entries as merged (preserves data but removes from active matching)
+        for tid in acct_transaction_ids:
+            conn.execute(
+                "UPDATE acct_transactions SET reconciled_batch_id = ?, status = 'merged' WHERE id = ?",
+                (batch_id, tid),
+            )
+
+        conn.commit()
+
+    return {"status": "ok", "batch_id": batch_id, "merged_count": len(txns),
+            "net_deposit": round(total_net, 2), "merchant_fee": round(total_merchant, 2)}
+
+
 def get_match_suggestions(bank_deposit_id: int,
                           db_path: str | Path | None = None) -> list[dict]:
     """Return ranked match candidates for a specific bank deposit.
@@ -12935,7 +13401,7 @@ def get_match_suggestions(bank_deposit_id: int,
         candidates = conn.execute(
             """SELECT t.* FROM acct_transactions t
                WHERE t.entry_type IS NOT NULL
-               AND COALESCE(t.status, 'active') != 'reversed'
+               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
                AND t.id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
                AND ABS(julianday(t.date) - julianday(?)) <= 7
                ORDER BY t.date DESC""",
@@ -12945,7 +13411,8 @@ def get_match_suggestions(bank_deposit_id: int,
         results = []
         for c in candidates:
             c = dict(c)
-            c_amt = c.get("amount", 0) or 0
+            # Use net_deposit for GoDaddy orders (actual bank amount)
+            c_amt = c.get("net_deposit") or c.get("amount", 0) or 0
             c_date = c.get("date", "")
             c_customer = (c.get("customer") or "").upper()
             c_event = (c.get("event_name") or "").upper()
@@ -13063,11 +13530,12 @@ def get_monthly_reconciliation(month: str, db_path: str | Path | None = None) ->
     """Monthly summary for the reconciliation reports tab."""
     with _connect(db_path) as conn:
         # Income by category from acct_transactions
+        # Use net_deposit for GoDaddy order entries (actual cash arriving)
         income_rows = conn.execute(
-            """SELECT category, COALESCE(SUM(amount), 0) as total, COUNT(*) as cnt
+            """SELECT category, COALESCE(SUM(COALESCE(net_deposit, amount)), 0) as total, COUNT(*) as cnt
                FROM acct_transactions
                WHERE entry_type = 'income' AND date LIKE ?
-               AND COALESCE(status, 'active') != 'reversed'
+               AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                AND entry_type IS NOT NULL
                GROUP BY category""",
             (f"{month}%",),
@@ -13078,7 +13546,7 @@ def get_monthly_reconciliation(month: str, db_path: str | Path | None = None) ->
             """SELECT category, COALESCE(SUM(amount), 0) as total, COUNT(*) as cnt
                FROM acct_transactions
                WHERE entry_type IN ('expense', 'contra') AND date LIKE ?
-               AND COALESCE(status, 'active') != 'reversed'
+               AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                AND entry_type IS NOT NULL
                GROUP BY category""",
             (f"{month}%",),
@@ -13086,7 +13554,7 @@ def get_monthly_reconciliation(month: str, db_path: str | Path | None = None) ->
 
         # Reconciliation stats
         total_txns = conn.execute(
-            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE date LIKE ? AND entry_type IS NOT NULL AND COALESCE(status, 'active') != 'reversed'",
+            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE date LIKE ? AND entry_type IS NOT NULL AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')",
             (f"{month}%",),
         ).fetchone()["cnt"]
 
@@ -13125,7 +13593,7 @@ def get_event_reconciliation_status(event_name: str,
             f"""SELECT COUNT(*) as cnt FROM acct_transactions
                 WHERE event_name COLLATE NOCASE IN ({placeholders})
                 AND entry_type = 'income'
-                AND COALESCE(status, 'active') != 'reversed'
+                AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                 AND entry_type IS NOT NULL""",
             all_names,
         ).fetchone()["cnt"]
@@ -13140,7 +13608,7 @@ def get_event_reconciliation_status(event_name: str,
         ).fetchone()["cnt"]
 
         matched_amt = conn.execute(
-            f"""SELECT COALESCE(SUM(t.amount), 0) as total
+            f"""SELECT COALESCE(SUM(COALESCE(t.net_deposit, t.amount)), 0) as total
                 FROM reconciliation_matches rm
                 JOIN acct_transactions t ON t.id = rm.acct_transaction_id
                 WHERE t.event_name COLLATE NOCASE IN ({placeholders})
@@ -13176,18 +13644,18 @@ def get_cashflow_data(weeks: int = 13, db_path: str | Path | None = None) -> lis
             ws = week_start.strftime("%Y-%m-%d")
             we = week_end.strftime("%Y-%m-%d")
 
-            # Expected income (all income entries in this week)
+            # Expected income (use net_deposit for GoDaddy orders = actual cash arriving)
             expected = conn.execute(
-                """SELECT COALESCE(SUM(amount), 0) as total FROM acct_transactions
+                """SELECT COALESCE(SUM(COALESCE(net_deposit, amount)), 0) as total FROM acct_transactions
                    WHERE entry_type = 'income' AND date BETWEEN ? AND ?
-                   AND COALESCE(status, 'active') != 'reversed'
+                   AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                    AND entry_type IS NOT NULL""",
                 (ws, we),
             ).fetchone()["total"]
 
             # Confirmed income (reconciled to bank)
             confirmed = conn.execute(
-                """SELECT COALESCE(SUM(t.amount), 0) as total
+                """SELECT COALESCE(SUM(COALESCE(t.net_deposit, t.amount)), 0) as total
                    FROM acct_transactions t
                    JOIN reconciliation_matches rm ON rm.acct_transaction_id = t.id
                    WHERE t.entry_type = 'income' AND t.date BETWEEN ? AND ?""",
@@ -13198,7 +13666,7 @@ def get_cashflow_data(weeks: int = 13, db_path: str | Path | None = None) -> lis
             proj_expenses = conn.execute(
                 """SELECT COALESCE(SUM(amount), 0) as total FROM acct_transactions
                    WHERE entry_type IN ('expense', 'contra') AND date BETWEEN ? AND ?
-                   AND COALESCE(status, 'active') != 'reversed'
+                   AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                    AND entry_type IS NOT NULL""",
                 (ws, we),
             ).fetchone()["total"]

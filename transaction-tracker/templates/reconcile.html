@@ -147,7 +147,8 @@
     <script>
     let accounts = [];
     let selectedDeposit = null;
-    let selectedTxn = null;
+    let selectedTxns = new Set();  // Multi-select: set of acct_transaction IDs
+    let selectedTxnAmounts = {};   // id -> display amount for running total
 
     document.addEventListener('DOMContentLoaded', () => {
         if (typeof initAuth === 'function') initAuth();
@@ -275,7 +276,8 @@
 
     async function selectDeposit(id) {
         selectedDeposit = id;
-        selectedTxn = null;
+        selectedTxns.clear();
+        selectedTxnAmounts = {};
         document.querySelectorAll('#deposit-list .match-row').forEach(r => r.classList.remove('selected'));
         const row = document.querySelector(`#deposit-list .match-row[data-id="${id}"]`);
         if (row) row.classList.add('selected');
@@ -296,10 +298,14 @@
                     const reason = s._reason || '';
                     const barColor = score >= 60 ? '#16a34a' : score >= 30 ? '#f59e0b' : '#d1d5db';
                     const barWidth = Math.min(score, 100);
-                    return `<div class="match-row" onclick="selectTxn(${s.id})" data-id="${s.id}" style="grid-template-columns:70px 1fr auto auto;">
+                    const displayAmt = s.net_deposit || s.amount || 0;
+                    const hasNet = s.net_deposit && s.net_deposit !== s.amount;
+                    const netLabel = hasNet ? `<span style="font-size:0.65rem; color:#2563eb;" title="Net deposit (after merchant fee)">net</span>` : '';
+                    return `<div class="match-row" onclick="toggleTxn(${s.id}, ${displayAmt})" data-id="${s.id}" style="grid-template-columns:24px 70px 1fr auto auto;">
+                        <input type="checkbox" ${selectedTxns.has(s.id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleTxn(${s.id}, ${displayAmt})" style="cursor:pointer;">
                         <span>${s.date || ''}</span>
                         <span class="desc">${esc(s.customer || '')} — ${esc(s.event_name || '')} <span style="color:var(--text-muted);">(${s.category || s.entry_type})</span></span>
-                        <span class="amt">$${(s.amount||0).toFixed(2)}</span>
+                        <span class="amt">$${displayAmt.toFixed(2)} ${netLabel}</span>
                         <span style="width:70px; display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
                             <span style="font-size:0.65rem; color:var(--text-muted);">${reason}</span>
                             <span style="width:100%; height:4px; background:#e5e7eb; border-radius:2px; overflow:hidden;">
@@ -315,27 +321,59 @@
         updateMatchButton();
     }
 
-    function selectTxn(id) {
-        selectedTxn = id;
-        document.querySelectorAll('#txn-list .match-row').forEach(r => r.classList.remove('selected'));
-        const row = document.querySelector(`#txn-list .match-row[data-id="${id}"]`);
-        if (row) row.classList.add('selected');
+    function toggleTxn(id, amt) {
+        if (selectedTxns.has(id)) {
+            selectedTxns.delete(id);
+            delete selectedTxnAmounts[id];
+        } else {
+            selectedTxns.add(id);
+            selectedTxnAmounts[id] = amt;
+        }
+        // Update visual selection + checkboxes
+        document.querySelectorAll('#txn-list .match-row').forEach(r => {
+            const rid = parseInt(r.dataset.id);
+            r.classList.toggle('selected', selectedTxns.has(rid));
+            const cb = r.querySelector('input[type="checkbox"]');
+            if (cb) cb.checked = selectedTxns.has(rid);
+        });
         updateMatchButton();
     }
 
     function updateMatchButton() {
-        document.getElementById('btn-manual-match').disabled = !(selectedDeposit && selectedTxn);
+        const btn = document.getElementById('btn-manual-match');
+        const n = selectedTxns.size;
+        const canMatch = selectedDeposit && n > 0;
+        btn.disabled = !canMatch;
+        if (n > 0) {
+            const total = Object.values(selectedTxnAmounts).reduce((a, b) => a + b, 0);
+            btn.textContent = `Match ${n} Selected ($${total.toFixed(2)})`;
+        } else {
+            btn.textContent = 'Match Selected';
+        }
     }
 
     async function confirmManualMatch() {
-        if (!selectedDeposit || !selectedTxn) return;
+        if (!selectedDeposit || selectedTxns.size === 0) return;
+        const txnIds = [...selectedTxns];
         try {
-            await fetch('/api/reconciliation/match', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ bank_deposit_id: selectedDeposit, acct_transaction_id: selectedTxn }),
-            });
-            selectedDeposit = null; selectedTxn = null;
+            if (txnIds.length === 1) {
+                // Single match — use existing endpoint
+                await fetch('/api/reconciliation/match', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ bank_deposit_id: selectedDeposit, acct_transaction_id: txnIds[0] }),
+                });
+            } else {
+                // Batch match — match multiple txns to one deposit
+                await fetch('/api/reconciliation/match-batch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ bank_deposit_id: selectedDeposit, acct_transaction_ids: txnIds }),
+                });
+            }
+            selectedDeposit = null;
+            selectedTxns.clear();
+            selectedTxnAmounts = {};
             loadMatchQueue();
             loadDashboard();
         } catch(e) { alert('Match failed: ' + e); }

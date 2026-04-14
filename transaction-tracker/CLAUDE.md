@@ -625,13 +625,36 @@ back to allocation-based calculation only when no flat entries exist.
 
 **New columns on acct_transactions:**
 `item_id`, `event_name`, `customer`, `order_id`, `entry_type`, `category`, `amount`,
-`account`, `status`, `reconciled_batch_id`
+`account`, `status`, `reconciled_batch_id`, `net_deposit`, `merchant_fee`
 
 **Entry types:** `income`, `expense`, `contra`, `liability`
 **Categories:** `registration`, `processing_fee`, `comp`, `addon`, `refund`,
-`credit_issued`, `transfer_in`, `transfer_out`
+`credit_issued`, `transfer_in`, `transfer_out`, `godaddy_order`, `godaddy_batch`
 **Sources:** `godaddy`, `venmo`, `zelle`, `cash`, `manual`
-**Status:** `active`, `reversed`, `reconciled`
+**Status:** `active`, `reversed`, `reconciled`, `merged`
+
+### GoDaddy Order-Level Accounting (NEW)
+
+GoDaddy orders now create **one `acct_transaction` per order** (not per item):
+- `category='godaddy_order'`, `amount=order_total` (gross), `net_deposit=order_total - merchant_fee`
+- `merchant_fee = order_total * 0.027 + 0.30` per ORDER
+- Child rows in `godaddy_order_splits` table: registration, transaction_fee, merchant_fee, coupon
+- `net_deposit` is what actually hits the bank — used for reconciliation and cash flow
+
+**`godaddy_order_splits` table:**
+- `transaction_id` FK → `acct_transactions.id`
+- `item_id`, `event_name`, `customer`, `split_type`, `amount`
+- `split_type` IN ('registration', 'transaction_fee', 'merchant_fee', 'coupon')
+- Registration/tx_fee amounts are positive; merchant_fee/coupon are negative
+
+**Migration:** `migrate_item_to_order_entries()` converts old per-item entries
+(`godaddy-income-{id}` + `godaddy-fee-{id}`) to new order-level format.
+Runs automatically at startup if old entries exist. Admin endpoint:
+`POST /api/reconciliation/migrate-to-order-level`
+
+**Batch matching:** `batch_match_deposit()` matches multiple order transactions
+to a single bank deposit (1:many). `merge_transactions()` combines multiple
+orders into a `godaddy_batch` entry (marks originals as `status='merged'`).
 
 ### Financial tab P&L model
 
@@ -682,9 +705,10 @@ PROJECTED PROFIT = Net Income - Total Expenses
   each GoDaddy email invoice and stored in `items.transaction_fees`. They are NOT calculated —
   the actual value from the email is used. These offset the GoDaddy merchant fees.
 - **GoDaddy merchant fees (2.7% + $0.30)** are calculated PER INDIVIDUAL GoDaddy ORDER
-  on the order total (item_price + transaction_fee). Now stored as `processing_fee` entries
-  in `acct_transactions`. Formula: `(total_amount * 0.027 + 0.30) / items_in_order`.
-  Only items with `merchant = 'The Golf Fellowship'` get processing_fee entries.
+  on the order total (item_price + transaction_fee). Stored in the `merchant_fee` column
+  on the order-level `acct_transaction` and as proportional `merchant_fee` splits in
+  `godaddy_order_splits`. Formula: `order_total * 0.027 + 0.30`.
+  Only items with `merchant = 'The Golf Fellowship'` get GoDaddy order entries.
   Transfer targets (`transferred_from_id IS NOT NULL`) are excluded.
 - **Refunds** are contra-revenue (deducted from Income), not expenses. They appear as
   negative child payment items (e.g., -$29 partial refund via Zelle).
@@ -699,7 +723,7 @@ PROJECTED PROFIT = Net Income - Total Expenses
 ### Operations that create accounting entries
 | Operation | What Happens |
 |-----------|-------------|
-| GoDaddy order saved | `income/registration` + `expense/processing_fee` (merchant fee) via `_write_acct_entry()` |
+| GoDaddy order saved | `income/godaddy_order` with splits (registration, tx_fee, merchant_fee, coupon) via `_write_godaddy_order_entry()` |
 | Manual comp added | `expense/comp` (amount=0) via `_write_acct_entry()` |
 | External payment (Venmo/cash) | `income/addon` + `acct_allocations` via `_create_allocation_for_item()` |
 | Add-on payment (child item) | `income/addon` + `acct_allocations` entry |
@@ -710,12 +734,17 @@ PROJECTED PROFIT = Net Income - Total Expenses
 | Reverse any of the above | Original flat entries marked `status='reversed'`, legacy entries deleted |
 
 ### Key functions
-- `_write_acct_entry(conn, ...)` — central helper for all flat ledger writes; idempotent via `source_ref`
+- `_write_acct_entry(conn, ...)` — central helper for all flat ledger writes; idempotent via `source_ref`. Accepts `net_deposit`/`merchant_fee` kwargs.
+- `_write_godaddy_order_entry(conn, *, order_id, items, date)` — creates order-level transaction + splits. Re-entrant (soft-deletes + recreates).
 - `_create_allocation_for_item(item, conn, payment_method, ...)` — creates allocation for
   non-GoDaddy items using synthetic `order_id` (prefixes: `EXT-`, `XFER-`, `MANUAL-PAY-`, `COMP-`)
-- `get_event_financial_summary(event_name)` — reads from flat `acct_transactions` (verified path), falls back to allocations
+- `get_event_financial_summary(event_name)` — reads from flat `acct_transactions` + `godaddy_order_splits` (verified path), falls back to allocations
 - `_calc_aggregate_course_cost(event, items, conn)` — correct aggregate rounding (base × count × tax)
-- `backfill_acct_transactions()` — one-time backfill of flat entries for all 2026 items (runs at startup)
+- `backfill_acct_transactions()` — one-time backfill of flat entries for all 2026 items (runs at startup). Groups GoDaddy items by order_id.
+- `migrate_item_to_order_entries()` — converts old per-item entries to order-level. Creates backup first.
+- `batch_match_deposit()` — match multiple transactions to one bank deposit (1:many)
+- `merge_transactions()` — combine multiple orders into a godaddy_batch entry
+- `backup_database()` — creates timestamped .db backup before migrations
 - `backfill_financial_entries()` — retrofits allocations/legacy transactions for existing data
 - `transfer_item()` — stores actual credit amount on transferred item (not $0.00)
 
@@ -755,8 +784,8 @@ Each row represents one player's cost allocation for one event:
 `handicap_rounds`, `handicap_player_links`, `handicap_settings`,
 `message_templates`, `message_log`, `feedback`, `parse_warnings`,
 `season_contests`, `app_settings`, `action_items`,
-`acct_allocations`, `acct_transactions`, `bank_statement_rows`, `period_closings`,
-`bank_accounts`, `bank_deposits`, `reconciliation_matches`,
+`acct_allocations`, `acct_transactions`, `godaddy_order_splits`, `bank_statement_rows`,
+`period_closings`, `bank_accounts`, `bank_deposits`, `reconciliation_matches`,
 `coo_agents`, `coo_chat_sessions`, `coo_chat_messages`, `coo_manual_values`,
 `agent_action_log`, `tgf_events`, `tgf_golfers`, `tgf_payouts`
 
@@ -826,6 +855,9 @@ Red warning rows where projected expenses exceed confirmed income.
 | `/api/reconciliation/import` | POST | admin | Upload bank statement (file + account_id) |
 | `/api/reconciliation/auto-match` | POST | admin | Run auto-matching |
 | `/api/reconciliation/match` | POST | admin | Manual match (deposit + txn) |
+| `/api/reconciliation/match-batch` | POST | admin | Batch match (1 deposit : N txns) |
+| `/api/reconciliation/merge-transactions` | POST | admin | Merge orders into batch entry |
+| `/api/reconciliation/migrate-to-order-level` | POST | admin | Migrate old per-item to order-level |
 | `/api/reconciliation/unmatch` | POST | admin | Remove a match |
 | `/api/reconciliation/deposits` | GET | admin | List deposits (filterable) |
 | `/api/reconciliation/unreconciled` | GET | admin | Unmatched accounting entries |
