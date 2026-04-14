@@ -459,6 +459,8 @@ function cellForChildPayment(key, row) {
 }
 
 function _reconDot(row) {
+    // Only visible for admin
+    if (currentRole !== 'admin') return '';
     const s = row.transaction_status || "active";
     const uid = row.email_uid || "";
     const grey = '<span title="No bank match expected" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-right:4px;vertical-align:middle;"></span>';
