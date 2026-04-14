@@ -9751,8 +9751,8 @@ def calculate_order_allocation(order_id: str, db_path: str | Path | None = None)
         # Parse order total (once per order, from first item)
         order_total = _parse_dollar(items[0].get("total_amount"))
 
-        # GoDaddy fee: 2.7% + $0.30 per order (split evenly across items)
-        gd_fee_total = round(order_total * 0.027 + 0.30, 2) if order_total else 0
+        # GoDaddy fee: 2.9% + $0.30 per order (split evenly across items)
+        gd_fee_total = round(order_total * 0.029 + 0.30, 2) if order_total else 0
         gd_fee_per_item = round(gd_fee_total / len(items), 2) if items else 0
 
         results = []
@@ -9911,7 +9911,7 @@ def _write_godaddy_order_entry(
     if order_total <= 0:
         return None
 
-    merchant_fee_val = round(order_total * 0.027 + 0.30, 2)
+    merchant_fee_val = round(order_total * 0.029 + 0.30, 2)
     net_deposit_val = round(order_total - merchant_fee_val, 2)
 
     # ── Determine shared event_name and customer ─────────────────

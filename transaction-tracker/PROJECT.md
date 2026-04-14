@@ -684,7 +684,7 @@ Each row represents one player's cost allocation for one event.
 | course_surcharge | REAL | Per-player surcharge |
 | prize_pool | REAL | Player's contribution to prize fund |
 | tgf_operating | REAL | TGF's operating margin |
-| godaddy_fee | REAL | Actual merchant fee share (2.7% + $0.30); 0 for non-GoDaddy |
+| godaddy_fee | REAL | Actual merchant fee share (2.9% + $0.30); 0 for non-GoDaddy |
 | tax_reserve | REAL | Sales tax reserve (8.25% of tgf_operating) |
 | total_collected | REAL | Total revenue collected from this player |
 | allocation_status | TEXT | `pending` / `complete` / `needs_course_cost` |
@@ -1221,7 +1221,7 @@ The app is installable as a Progressive Web App:
 **Transaction fee handling:**
 - Transaction fees (3.5%) are collected revenue from players, parsed from each GoDaddy email
 - Stored in `items.transaction_fees` — actual values from invoices, NOT calculated
-- GoDaddy merchant fees (2.7% + $0.30) calculated PER ORDER on order total
+- GoDaddy merchant fees (2.9% + $0.30) calculated PER ORDER on order total
 - Refunds shown as contra-revenue (deducted from Income), not expenses
 
 **Parser fix — item_price extraction:**

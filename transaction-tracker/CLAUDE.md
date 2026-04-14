@@ -533,10 +533,10 @@ The `events` table has extensive pricing columns:
 - Client: `calcAggregateCost()` in events.html (fallback path)
 
 **Processing fee (GoDaddy merchant fee):**
-- Actual formula: `order_total × 2.7% + $0.30` per order
+- Actual formula: `order_total × 2.9% + $0.30` per order
 - Stored in `acct_allocations.godaddy_fee` per player
 - The 3.5% `transaction_fee_pct` is the blanket fee charged to players —
-  the difference between 3.5% revenue and actual 2.7%+$0.30 cost is TGF margin
+  the difference between 3.5% revenue and actual 2.9%+$0.30 cost is TGF margin
 
 ### COO Chat UI Features
 - **Copy button** — clipboard icon on hover for all AI responses (coo-dashboard.js)
@@ -637,7 +637,7 @@ back to allocation-based calculation only when no flat entries exist.
 
 GoDaddy orders now create **one `acct_transaction` per order** (not per item):
 - `category='godaddy_order'`, `amount=order_total` (gross), `net_deposit=order_total - merchant_fee`
-- `merchant_fee = order_total * 0.027 + 0.30` per ORDER
+- `merchant_fee = order_total * 0.029 + 0.30` per ORDER
 - Child rows in `godaddy_order_splits` table: registration, transaction_fee, merchant_fee, coupon
 - `net_deposit` is what actually hits the bank — used for reconciliation and cash flow
 
@@ -686,7 +686,7 @@ INCOME
   Subtotal
   + Transaction Fees (actual parsed value from each GoDaddy email, NOT calculated)
   = Gross Revenue
-  - GoDaddy Merchant Fees (2.7% + $0.30 PER ORDER, calculated per-order)
+  - GoDaddy Merchant Fees (2.9% + $0.30 PER ORDER, calculated per-order)
   - Refunds (negative child items = contra-revenue)
   ─────────────────────────────────
   = NET INCOME
@@ -704,10 +704,10 @@ PROJECTED PROFIT = Net Income - Total Expenses
 - **Transaction fees (3.5%)** are intentionally collected revenue from players, parsed from
   each GoDaddy email invoice and stored in `items.transaction_fees`. They are NOT calculated —
   the actual value from the email is used. These offset the GoDaddy merchant fees.
-- **GoDaddy merchant fees (2.7% + $0.30)** are calculated PER INDIVIDUAL GoDaddy ORDER
+- **GoDaddy merchant fees (2.9% + $0.30)** are calculated PER INDIVIDUAL GoDaddy ORDER
   on the order total (item_price + transaction_fee). Stored in the `merchant_fee` column
   on the order-level `acct_transaction` and as proportional `merchant_fee` splits in
-  `godaddy_order_splits`. Formula: `order_total * 0.027 + 0.30`.
+  `godaddy_order_splits`. Formula: `order_total * 0.029 + 0.30`.
   Only items with `merchant = 'The Golf Fellowship'` get GoDaddy order entries.
   Transfer targets (`transferred_from_id IS NOT NULL`) are excluded.
 - **Refunds** are contra-revenue (deducted from Income), not expenses. They appear as

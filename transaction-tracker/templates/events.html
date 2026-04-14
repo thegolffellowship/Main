@@ -2376,7 +2376,7 @@
         let creditTransferRevenue = 0;
         let creditTransferCount = 0;
         let totalTransactionFees = 0; // 3.5% tx fees collected from players
-        let totalGodaddyFees = 0;     // 2.7% + $0.30 per GoDaddy order
+        let totalGodaddyFees = 0;     // 2.9% + $0.30 per GoDaddy order
 
         // Track per-order totals for GoDaddy fee calculation
         const orderTotals = {};  // order_id → total amount (item_price + tx_fee)
@@ -2428,9 +2428,9 @@
             }
         });
 
-        // GoDaddy merchant fees: 2.7% + $0.30 PER ORDER on the order total
+        // GoDaddy merchant fees: 2.9% + $0.30 PER ORDER on the order total
         Object.values(orderTotals).forEach(orderTotal => {
-            totalGodaddyFees += orderTotal * 0.027 + 0.30;
+            totalGodaddyFees += orderTotal * 0.029 + 0.30;
         });
         totalGodaddyFees = Math.round(totalGodaddyFees * 100) / 100;
 

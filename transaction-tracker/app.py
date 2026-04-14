@@ -6512,6 +6512,62 @@ try:
     except Exception:
         logger.warning("Order-level migration check failed", exc_info=True)
 
+    # ── One-time fix: recalculate merchant fees from 2.7% to 2.9% ──
+    try:
+        with _startup_connect() as _fee_conn:
+            # Check if any orders still have the old 2.7% rate
+            # Signature: old rate gives merchant_fee ≈ amount * 0.027 + 0.30
+            # New rate gives merchant_fee ≈ amount * 0.029 + 0.30
+            _sample = _fee_conn.execute(
+                """SELECT id, amount, merchant_fee FROM acct_transactions
+                   WHERE category = 'godaddy_order' AND merchant_fee IS NOT NULL
+                   AND amount > 0 AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
+                   LIMIT 1"""
+            ).fetchone()
+            if _sample:
+                _expected_29 = round(_sample["amount"] * 0.029 + 0.30, 2)
+                _expected_27 = round(_sample["amount"] * 0.027 + 0.30, 2)
+                if abs(_sample["merchant_fee"] - _expected_27) < 0.02 and abs(_sample["merchant_fee"] - _expected_29) > 0.02:
+                    logger.info("Detected old 2.7%% merchant fees — recalculating to 2.9%%")
+                    _orders = _fee_conn.execute(
+                        """SELECT id, amount FROM acct_transactions
+                           WHERE category = 'godaddy_order' AND amount > 0
+                           AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')"""
+                    ).fetchall()
+                    _updated = 0
+                    for _ord in _orders:
+                        _new_fee = round(_ord["amount"] * 0.029 + 0.30, 2)
+                        _new_net = round(_ord["amount"] - _new_fee, 2)
+                        _fee_conn.execute(
+                            "UPDATE acct_transactions SET merchant_fee = ?, net_deposit = ? WHERE id = ?",
+                            (_new_fee, _new_net, _ord["id"]),
+                        )
+                        _updated += 1
+                    # Also update merchant_fee splits in godaddy_order_splits
+                    _splits = _fee_conn.execute(
+                        """SELECT s.id, s.transaction_id, t.amount as order_amount, s.amount as split_amount
+                           FROM godaddy_order_splits s
+                           JOIN acct_transactions t ON t.id = s.transaction_id
+                           WHERE s.split_type = 'merchant_fee'"""
+                    ).fetchall()
+                    for _sp in _splits:
+                        _item_count = _fee_conn.execute(
+                            "SELECT COUNT(*) as cnt FROM godaddy_order_splits WHERE transaction_id = ? AND split_type = 'registration'",
+                            (_sp["transaction_id"],),
+                        ).fetchone()["cnt"] or 1
+                        _total_fee = round(_sp["order_amount"] * 0.029 + 0.30, 2)
+                        _per_item = round(_total_fee / _item_count, 2)
+                        _fee_conn.execute(
+                            "UPDATE godaddy_order_splits SET amount = ? WHERE id = ?",
+                            (-_per_item, _sp["id"]),
+                        )
+                    _fee_conn.commit()
+                    logger.info("Recalculated merchant fees for %d orders (2.7%% → 2.9%%)", _updated)
+                else:
+                    logger.info("Merchant fees already at 2.9%% rate — no recalculation needed")
+    except Exception:
+        logger.warning("Merchant fee recalculation failed", exc_info=True)
+
     # ── Verify s18.4 LANDA PARK numbers ──
     # Works with both old (registration + processing_fee) and new (godaddy_order) formats.
     try:
