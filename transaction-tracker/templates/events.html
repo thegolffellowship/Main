@@ -3761,7 +3761,8 @@
                     if (c.key === "rsvp") {
                         html += `<td class="rsvp-col"></td>`;
                     } else if (c.key === "customer") {
-                        html += `<td style="${style}; padding-left:2rem;"><span style="color:${payColor}; font-size:0.65rem; font-weight:600; margin-right:0.25rem;">${payLabel}</span> ${escapeHtml(child.notes || child.side_games || "Payment")}</td>`;
+                        const noteText = escapeHtml(child.notes || child.side_games || "Payment");
+                        html += `<td style="${style}; padding-left:2rem;"><div style="max-width:0; min-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${noteText}"><span style="color:${payColor}; font-size:0.65rem; font-weight:600; margin-right:0.25rem;">${payLabel}</span> ${noteText}</div></td>`;
                     } else if (c.key === "side_games") {
                         html += `<td style="${style}; font-weight:600;${isRefundRow ? ' color:#dc2626;' : ''}">${escapeHtml(isRefundRow ? (child.side_games || "\u2014") : (child.side_games || "\u2014"))}</td>`;
                     } else if (c.key === "item_price") {
