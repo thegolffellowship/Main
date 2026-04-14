@@ -640,6 +640,7 @@
             { key: "customer_email", label: "Email", value: customer.email || "" },
             { key: "customer_phone", label: "Phone", value: customer.phone || "" },
             { key: "chapter", label: "Chapter", value: customer.chapter || "" },
+            { key: "venmo_username", label: "Venmo", value: customer.venmo_username || "" },
             { key: "date_of_birth", label: "Date of Birth", value: (customer.items[0] || {}).date_of_birth || "" },
             { key: "shirt_size", label: "Shirt Size", value: (customer.items[0] || {}).shirt_size || "" },
             { key: "address", label: "Address", value: customer.items.map(i => i.address).find(Boolean) || "" },
@@ -1017,6 +1018,7 @@
             { key: "customer_email", label: "Email", value: customer.email || "" },
             { key: "customer_phone", label: "Phone", value: customer.phone || "" },
             { key: "chapter", label: "Chapter", value: customer.chapter || "" },
+            { key: "venmo_username", label: "Venmo", value: customer.venmo_username || "" },
             { key: "date_of_birth", label: "DOB", value: customer.items.map(i => i.date_of_birth).find(Boolean) || "" },
             { key: "shirt_size", label: "Shirt Size", value: customer.items.map(i => i.shirt_size).find(Boolean) || "" },
         ];
@@ -1032,12 +1034,14 @@
         // Read-only view
         let html = '<div class="cust-info-view">';
         html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; max-width:500px; font-size:0.82rem;">';
-        html += infoFields.map(f =>
-            `<div>` +
+        html += infoFields.map(f => {
+            let displayVal = escapeHtml(f.value);
+            if (f.key === "venmo_username" && f.value) displayVal = "@" + displayVal;
+            return `<div>` +
             `<div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">${f.label}</div>` +
-            `<div style="margin-top:0.1rem; min-height:1.2em;">${escapeHtml(f.value) || '<span style="color:var(--text-muted);">\u2014</span>'}</div>` +
-            `</div>`
-        ).join("");
+            `<div style="margin-top:0.1rem; min-height:1.2em;">${displayVal || '<span style="color:var(--text-muted);">\u2014</span>'}</div>` +
+            `</div>`;
+        }).join("");
         html += '</div>';
 
         // Address section (read-only)
@@ -2014,6 +2018,7 @@
         { key: "alias_name", label: "Alias Name(s)" },
         { key: "alias_email", label: "Alias Email(s)" },
         { key: "chapter", label: "Chapter" },
+        { key: "venmo_username", label: "Venmo Handle" },
         { key: "handicap", label: "Handicap" },
         { key: "date_of_birth", label: "Date of Birth" },
         { key: "shirt_size", label: "Shirt Size" },
@@ -2031,6 +2036,7 @@
         alias_name: /^(alias|alias\s*name|alternate\s*name|aka|nick\s*name|maiden)$/i,
         alias_email: /^(alias\s*email|alt\s*email|secondary\s*email|other\s*email)$/i,
         chapter: /^(chapter|city|location|region|affiliation)$/i,
+        venmo_username: /^(venmo|venmo\s*handle|venmo\s*username|venmo\s*id|@\s*handle)$/i,
         handicap: /^(handicap|hcp|hdcp|index)$/i,
         date_of_birth: /^(dob|date\s*of\s*birth|birth\s*date|birthday)$/i,
         shirt_size: /^(shirt\s*size|size|tee\s*size)$/i,
@@ -2502,6 +2508,20 @@
                     if (idx !== undefined) c.handicapIndex = idx;
                 });
             } catch (e) { /* handicap data optional */ }
+
+            // Fetch Venmo handles and merge into customer objects
+            try {
+                const venmoRes = await fetch("/api/customers/venmo-handles");
+                const venmoData = await venmoRes.json();
+                const venmoMap = {};
+                venmoData.forEach(v => {
+                    if (v.customer_name) venmoMap[v.customer_name.toLowerCase()] = v.venmo_username;
+                });
+                allCustomers.forEach(c => {
+                    const v = venmoMap[c.name.toLowerCase()];
+                    if (v) c.venmo_username = v;
+                });
+            } catch (e) { /* venmo data optional */ }
 
             // Update selectedCustomer with fresh data before rendering
             if (selectedCustomer) {

@@ -777,6 +777,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                                      CHECK (account_status IN (
                                          'active', 'inactive', 'banned'
                                      )),
+                venmo_username       VARCHAR(50),
                 created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -921,6 +922,38 @@ def init_db(db_path: str | Path | None = None) -> None:
         ).rowcount
         if items_phone_cleaned:
             logger.info("Normalized %d empty customer_phone fields to NULL in items table", items_phone_cleaned)
+
+        # Add venmo_username column to customers table (migration for existing DBs)
+        try:
+            conn.execute("ALTER TABLE customers ADD COLUMN venmo_username VARCHAR(50)")
+        except sqlite3.OperationalError:
+            pass
+
+        # One-time migration: copy venmo_username from tgf_golfers to customers
+        # where a matching customer exists (by name) and customers.venmo_username is empty
+        try:
+            migrated = conn.execute(
+                """UPDATE customers SET venmo_username = (
+                       SELECT g.venmo_username FROM tgf_golfers g
+                       JOIN items i ON i.customer_id = customers.customer_id
+                       WHERE (i.customer = g.name COLLATE NOCASE
+                              OR (customers.first_name || ' ' || customers.last_name) = g.name COLLATE NOCASE)
+                         AND g.venmo_username IS NOT NULL AND g.venmo_username != ''
+                       LIMIT 1
+                   )
+                   WHERE (customers.venmo_username IS NULL OR customers.venmo_username = '')
+                     AND EXISTS (
+                       SELECT 1 FROM tgf_golfers g
+                       JOIN items i ON i.customer_id = customers.customer_id
+                       WHERE (i.customer = g.name COLLATE NOCASE
+                              OR (customers.first_name || ' ' || customers.last_name) = g.name COLLATE NOCASE)
+                         AND g.venmo_username IS NOT NULL AND g.venmo_username != ''
+                   )"""
+            ).rowcount
+            if migrated:
+                logger.info("Migrated venmo_username from tgf_golfers to %d customer(s)", migrated)
+        except Exception as e:
+            logger.warning("venmo_username migration from tgf_golfers failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
@@ -3493,10 +3526,17 @@ def update_customer_info(customer_name: str, fields: dict,
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
-               "address", "address2", "city", "state", "zip"}
+               "address", "address2", "city", "state", "zip",
+               "venmo_username"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return 0
+
+    # venmo_username is stored on the customers table, not items — extract it
+    venmo_username = safe.pop("venmo_username", None)
+    if venmo_username is not None:
+        # Normalize: strip leading @ if provided
+        venmo_username = venmo_username.lstrip("@").strip()
 
     # Validate email and phone if provided
     if "customer_email" in safe and safe["customer_email"]:
@@ -3519,28 +3559,63 @@ def update_customer_info(customer_name: str, fields: dict,
         if display:
             safe["customer"] = display
 
-    _validate_column_names(list(safe))
-    set_clause = ", ".join(f"{col} = ?" for col in safe)
-    values = list(safe.values()) + [customer_name]
-
     with _connect(db_path) as conn:
-        cursor = conn.execute(
-            f"UPDATE items SET {set_clause} WHERE customer = ? COLLATE NOCASE",
-            values,
-        )
-        # Update alias references if display name changed
-        if "customer" in safe and safe["customer"] != customer_name:
-            conn.execute(
-                "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
-                (safe["customer"], customer_name),
+        rowcount = 0
+
+        # Update items table (for item-level fields)
+        if safe:
+            _validate_column_names(list(safe))
+            set_clause = ", ".join(f"{col} = ?" for col in safe)
+            values = list(safe.values()) + [customer_name]
+            cursor = conn.execute(
+                f"UPDATE items SET {set_clause} WHERE customer = ? COLLATE NOCASE",
+                values,
             )
-            # Also update handicap_player_links so handicap stays connected
+            rowcount = cursor.rowcount
+            # Update alias references if display name changed
+            if "customer" in safe and safe["customer"] != customer_name:
+                conn.execute(
+                    "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+                    (safe["customer"], customer_name),
+                )
+                # Also update handicap_player_links so handicap stays connected
+                conn.execute(
+                    "UPDATE handicap_player_links SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+                    (safe["customer"], customer_name),
+                )
+
+        # Update venmo_username on the customers table (customer-level field)
+        if venmo_username is not None:
             conn.execute(
-                "UPDATE handicap_player_links SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
-                (safe["customer"], customer_name),
+                """UPDATE customers SET venmo_username = ?
+                   WHERE customer_id = (
+                       SELECT customer_id FROM items
+                       WHERE customer = ? COLLATE NOCASE AND customer_id IS NOT NULL
+                       LIMIT 1
+                   )""",
+                (venmo_username or None, customer_name),
             )
+            rowcount = max(rowcount, 1)
+
         conn.commit()
-        return cursor.rowcount
+        return rowcount
+
+
+def get_customer_venmo_handles(db_path=None) -> list[dict]:
+    """Return all customers that have a venmo_username set.
+
+    Returns list of {customer_name, venmo_username}.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT c.customer_id, i.customer AS customer_name, c.venmo_username
+               FROM customers c
+               JOIN items i ON i.customer_id = c.customer_id
+               WHERE c.venmo_username IS NOT NULL AND c.venmo_username != ''
+               GROUP BY c.customer_id"""
+        ).fetchall()
+        return [{"customer_name": r["customer_name"],
+                 "venmo_username": r["venmo_username"]} for r in rows]
 
 
 def create_customer(name: str, email: str = "", phone: str = "",
@@ -3973,6 +4048,9 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
                     if k in allowed_fields and k != "customer" and v
                     and not k.startswith("_")}
 
+            # Extract venmo_username (stored on customers table, not items)
+            venmo_raw = (row.get("venmo_username") or "").strip().lstrip("@").strip()
+
             # Extract alias fields (not stored in items table)
             alias_names = [v.strip() for v in (row.get("alias_name") or "").split(",") if v.strip()]
             alias_emails = [v.strip().lower() for v in (row.get("alias_email") or "").split(",") if v.strip()]
@@ -4011,6 +4089,18 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
 
                 # Store aliases for existing customer
                 _save_customer_aliases(conn, existing_name, alias_names, alias_emails)
+
+                # Update venmo_username on customers table if provided
+                if venmo_raw:
+                    conn.execute(
+                        """UPDATE customers SET venmo_username = ?
+                           WHERE customer_id = (
+                               SELECT customer_id FROM items
+                               WHERE customer = ? COLLATE NOCASE AND customer_id IS NOT NULL
+                               LIMIT 1
+                           ) AND (venmo_username IS NULL OR venmo_username = '')""",
+                        (venmo_raw, existing_name),
+                    )
             else:
                 # Create new customer entry
                 new_values = {c: None for c in ITEM_COLUMNS}
@@ -4037,6 +4127,18 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
 
                 # Store aliases for new customer
                 _save_customer_aliases(conn, name, alias_names, alias_emails)
+
+                # Set venmo_username on the new customer record if provided
+                if venmo_raw:
+                    conn.execute(
+                        """UPDATE customers SET venmo_username = ?
+                           WHERE customer_id = (
+                               SELECT customer_id FROM items
+                               WHERE customer = ? COLLATE NOCASE AND customer_id IS NOT NULL
+                               LIMIT 1
+                           )""",
+                        (venmo_raw, name),
+                    )
 
         conn.commit()
     logger.info("Roster import: %d created, %d updated, %d skipped",
@@ -13539,13 +13641,20 @@ def get_tgf_data(db_path=None):
             events.append(ev_dict)
 
         # Compute all-time winnings per golfer
+        # Prefer venmo_username from customers table (single source of truth),
+        # fall back to tgf_golfers.venmo_username for backward compatibility
         winnings = {}
         for row in conn.execute(
-            """SELECT g.id, g.name, g.venmo_username, g.chapter,
+            """SELECT g.id, g.name,
+                      COALESCE(c.venmo_username, g.venmo_username) as venmo_username,
+                      g.chapter,
                       COALESCE(SUM(p.amount), 0) as total_winnings,
                       COUNT(DISTINCT p.event_id) as events_played
                FROM tgf_golfers g
                LEFT JOIN tgf_payouts p ON p.golfer_id = g.id
+               LEFT JOIN items i ON i.customer = g.name COLLATE NOCASE
+                                    AND i.customer_id IS NOT NULL
+               LEFT JOIN customers c ON c.customer_id = i.customer_id
                GROUP BY g.id
                ORDER BY total_winnings DESC"""
         ).fetchall():
