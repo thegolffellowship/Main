@@ -3,7 +3,7 @@
    ========================================================= */
 
 let allItems = [];
-let reconciledItemIds = new Set();  // Populated from /api/reconciliation/reconciled-items
+let reconciledItemMap = {};  // item_id → bank_deposit_id, from /api/reconciliation/reconciled-items
 // currentRole is provided by auth.js
 
 function classifyGameType(sideGames) {
@@ -340,12 +340,9 @@ async function fetchItems() {
         ]);
         const raw = await res.json();
         allItems = raw.filter(i => !PLACEHOLDER_MERCHANTS.includes(i.merchant) && i.transaction_status !== "rsvp_only");
-        // Load reconciled item IDs for green dots (admin-only endpoint, fails gracefully)
+        // Load reconciled item map for green dots (admin-only endpoint, fails gracefully)
         if (reconRes.ok) {
-            try {
-                const ids = await reconRes.json();
-                reconciledItemIds = new Set(ids);
-            } catch(_) {}
+            try { reconciledItemMap = await reconRes.json(); } catch(_) {}
         }
         updateCategoryCounts();
         applyFilters();
@@ -464,10 +461,13 @@ function cellForChildPayment(key, row) {
 function _reconDot(row) {
     const s = row.transaction_status || "active";
     const uid = row.email_uid || "";
-    if (uid.startsWith("manual-comp") || s === "rsvp_only") return '<span title="No bank match expected" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-right:4px;vertical-align:middle;"></span>';
-    if (s === "refunded" || s === "credited" || s === "transferred") return '<span title="Inactive" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-right:4px;vertical-align:middle;"></span>';
-    // Green = reconciled (matched to bank deposit), Yellow = awaiting match
-    if (reconciledItemIds.has(row.id)) return '<span title="Reconciled (matched to bank)" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:4px;vertical-align:middle;"></span>';
+    const grey = '<span title="No bank match expected" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-right:4px;vertical-align:middle;"></span>';
+    if (uid.startsWith("manual-comp") || s === "rsvp_only") return grey;
+    if (s === "refunded" || s === "credited" || s === "transferred") return grey;
+    // Green = reconciled (matched to bank deposit) — clickable to view match
+    const depId = reconciledItemMap[row.id];
+    if (depId) return `<a href="/accounting/reconcile?deposit_id=${depId}" title="Reconciled — click to view match" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:4px;vertical-align:middle;cursor:pointer;" onclick="event.stopPropagation();"></a>`;
+    // Yellow = awaiting bank match
     return '<span title="Awaiting bank match" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#fbbf24;margin-right:4px;vertical-align:middle;"></span>';
 }
 

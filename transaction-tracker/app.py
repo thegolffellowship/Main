@@ -6358,28 +6358,28 @@ def api_recon_matched(deposit_id):
 @app.route("/api/reconciliation/reconciled-items")
 @require_role("admin")
 def api_recon_reconciled_items():
-    """Return item_ids that have been reconciled (matched to a bank deposit)."""
+    """Return item_id → bank_deposit_id mapping for reconciled items."""
     from email_parser.database import _connect
     with _connect() as conn:
         rows = conn.execute(
-            """SELECT DISTINCT t.item_id
+            """SELECT DISTINCT t.item_id, rm.bank_deposit_id
                FROM acct_transactions t
                JOIN reconciliation_matches rm ON rm.acct_transaction_id = t.id
                WHERE t.item_id IS NOT NULL"""
         ).fetchall()
         # Also get item_ids from order-level entries via splits
         split_rows = conn.execute(
-            """SELECT DISTINCT s.item_id
+            """SELECT DISTINCT s.item_id, rm.bank_deposit_id
                FROM godaddy_order_splits s
                JOIN reconciliation_matches rm ON rm.acct_transaction_id = s.transaction_id
                WHERE s.item_id IS NOT NULL"""
         ).fetchall()
-        ids = set()
+        mapping = {}
         for r in rows:
-            ids.add(r["item_id"])
+            mapping[r["item_id"]] = r["bank_deposit_id"]
         for r in split_rows:
-            ids.add(r["item_id"])
-        return jsonify(list(ids))
+            mapping[r["item_id"]] = r["bank_deposit_id"]
+        return jsonify(mapping)
 
 
 @app.route("/api/reconciliation/monthly")

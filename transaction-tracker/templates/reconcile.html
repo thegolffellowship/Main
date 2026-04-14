@@ -183,6 +183,24 @@
         const mm = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
         document.getElementById('match-month-filter').value = mm;
         document.getElementById('monthly-selector').value = mm;
+
+        // Deep-link: ?deposit_id=N opens Match Queue and selects that deposit
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetDepositId = urlParams.get('deposit_id');
+        if (targetDepositId) {
+            // Switch to Match Queue tab, show all deposits, then auto-select
+            document.getElementById('deposit-status-filter').value = '';  // Show all
+            document.getElementById('match-month-filter').value = '';     // Any month
+            switchTab('match');
+            // Wait for deposits to load, then select the target
+            setTimeout(() => {
+                const depRow = document.querySelector(`#deposit-list .match-row[data-id="${targetDepositId}"]`);
+                if (depRow) {
+                    depRow.click();
+                    depRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 500);
+        }
     });
 
     function switchTab(tab) {
