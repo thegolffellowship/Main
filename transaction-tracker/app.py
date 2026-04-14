@@ -155,6 +155,8 @@ from email_parser.database import (
     get_event_financial_summary,
     backfill_financial_entries,
     backfill_acct_transactions,
+    migrate_item_to_order_entries,
+    backup_database,
     scan_price_games_mismatches,
     save_expense_transaction,
     get_expense_transactions,
@@ -6339,6 +6341,14 @@ def api_cashflow():
     return jsonify(get_cashflow_data(weeks))
 
 
+@app.route("/api/reconciliation/migrate-to-order-level", methods=["POST"])
+@require_role("admin")
+def api_migrate_to_order_level():
+    """Migrate old per-item GoDaddy entries to order-level format."""
+    results = migrate_item_to_order_entries()
+    return jsonify(results)
+
+
 # ---------------------------------------------------------------------------
 # TGF Payouts
 # ---------------------------------------------------------------------------
@@ -6457,40 +6467,68 @@ try:
     else:
         logger.info("Accounting entries exist (%d), skipping backfill", _acct_count)
 
+    # ── Auto-migrate old per-item GoDaddy entries to order-level ──
+    try:
+        _old_format_count = _conn.execute(
+            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE source_ref LIKE 'godaddy-income-%' AND COALESCE(status, 'active') = 'active'"
+        ).fetchone()["cnt"]
+        if _old_format_count > 0:
+            logger.info("Found %d old-format per-item GoDaddy entries — running migration", _old_format_count)
+            _mig_result = migrate_item_to_order_entries()
+            logger.info("Order-level migration: %s", _mig_result)
+        else:
+            logger.info("No old-format GoDaddy entries — order-level migration not needed")
+    except Exception:
+        logger.warning("Order-level migration check failed", exc_info=True)
+
     # ── Verify s18.4 LANDA PARK numbers ──
+    # Works with both old (registration + processing_fee) and new (godaddy_order) formats.
     try:
         with _startup_connect() as _vconn:
             _landa = _vconn.execute(
-                """SELECT entry_type, category, COALESCE(SUM(amount), 0) as total
+                """SELECT entry_type, category,
+                          COALESCE(SUM(amount), 0) as total,
+                          COALESCE(SUM(merchant_fee), 0) as total_merchant_fee,
+                          COALESCE(SUM(net_deposit), 0) as total_net_deposit
                    FROM acct_transactions
                    WHERE event_name = 's18.4 LANDA PARK'
                    AND COALESCE(status, 'active') = 'active'
                    AND entry_type IS NOT NULL
                    GROUP BY entry_type, category""",
             ).fetchall()
+            # Also check splits for multi-event orders where event_name on the
+            # parent entry might differ from the item's event
+            _landa_splits = _vconn.execute(
+                """SELECT COALESCE(SUM(s.amount), 0) as reg_total,
+                          COALESCE(SUM(CASE WHEN s.split_type = 'merchant_fee' THEN s.amount ELSE 0 END), 0) as mf_total
+                   FROM godaddy_order_splits s
+                   WHERE s.event_name = 's18.4 LANDA PARK'
+                   AND s.split_type IN ('registration', 'merchant_fee')""",
+            ).fetchone()
+
             if _landa:
-                _landa_income = sum(r["total"] for r in _landa if r["entry_type"] == "income")
-                _landa_fees = sum(r["total"] for r in _landa if r["entry_type"] == "expense" and r["category"] == "processing_fee")
+                # Old format: separate registration income + processing_fee expense entries
+                _old_income = sum(r["total"] for r in _landa if r["entry_type"] == "income" and r["category"] == "registration")
+                _old_fees = sum(r["total"] for r in _landa if r["entry_type"] == "expense" and r["category"] == "processing_fee")
+
+                # New format: godaddy_order entries with merchant_fee column
+                _new_income = sum(r["total"] for r in _landa if r["entry_type"] == "income" and r["category"] == "godaddy_order")
+                _new_merchant = sum(r["total_merchant_fee"] for r in _landa if r["category"] == "godaddy_order")
+                _new_net = sum(r["total_net_deposit"] for r in _landa if r["category"] == "godaddy_order")
+
+                _landa_income = _old_income + _new_income
+                _landa_fees = _old_fees + _new_merchant
                 _landa_refunds = sum(r["total"] for r in _landa if r["entry_type"] == "expense" and r["category"] == "refund")
-                # Also get tx fees from items (collected revenue — GoDaddy orders only, no transfers)
-                from email_parser.database import _parse_dollar
-                _tx_fee_rows = _vconn.execute(
-                    """SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(transaction_fees, '$', ''), ',', '') AS REAL)), 0) as total
-                       FROM items
-                       WHERE item_name = 's18.4 LANDA PARK'
-                       AND COALESCE(transaction_status, 'active') = 'active'
-                       AND parent_item_id IS NULL
-                       AND transferred_from_id IS NULL
-                       AND email_uid NOT LIKE 'manual-comp%'"""
-                ).fetchone()
-                _tx_fees = round(_tx_fee_rows["total"], 2) if _tx_fee_rows else 0
-                _landa_net = round(_landa_income + _tx_fees - _landa_fees - _landa_refunds, 2)
+                _landa_net_deposit = _new_net if _new_net > 0 else round(_landa_income - _landa_fees, 2)
+
                 logger.info(
-                    "LANDA PARK verification: income=$%.2f, tx_fees=$%.2f, merchant_fees=$%.2f, refunds=$%.2f, net=$%.2f",
-                    _landa_income, _tx_fees, _landa_fees, _landa_refunds, _landa_net,
+                    "LANDA PARK verification: income=$%.2f, merchant_fees=$%.2f, refunds=$%.2f, net_deposit=$%.2f",
+                    _landa_income, _landa_fees, _landa_refunds, _landa_net_deposit,
                 )
                 for r in _landa:
-                    logger.info("  %s/%s: $%.2f", r["entry_type"], r["category"], r["total"])
+                    logger.info("  %s/%s: amount=$%.2f merchant_fee=$%.2f net_deposit=$%.2f",
+                                r["entry_type"], r["category"], r["total"],
+                                r["total_merchant_fee"], r["total_net_deposit"])
     except Exception:
         logger.warning("LANDA PARK verification query failed", exc_info=True)
 except Exception:

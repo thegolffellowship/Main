@@ -11196,6 +11196,163 @@ def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
     return results
 
 
+def migrate_item_to_order_entries(db_path: str | Path | None = None) -> dict:
+    """Migrate old per-item GoDaddy entries to order-level entries.
+
+    Old format: 2 entries per item
+      - source_ref = 'godaddy-income-{item_id}', category='registration'
+      - source_ref = 'godaddy-fee-{item_id}', category='processing_fee'
+
+    New format: 1 entry per order
+      - source_ref = 'godaddy-order-{order_id}', category='godaddy_order'
+      - child rows in godaddy_order_splits
+
+    Creates a backup before any changes.  Preserves reconciliation_matches by
+    re-linking them from old income entries to the new order entry.
+
+    Idempotent: skips orders that already have a 'godaddy-order-*' entry.
+    """
+    backup_path = backup_database(db_path, label="pre-order-migration")
+    logger.info("Migration backup created: %s", backup_path)
+
+    results = {
+        "orders_migrated": 0,
+        "old_entries_reversed": 0,
+        "matches_relinked": 0,
+        "skipped_already_migrated": 0,
+        "errors": 0,
+        "backup_path": backup_path,
+    }
+
+    with _connect(db_path) as conn:
+        # Find all old-format per-item income entries
+        old_income = conn.execute(
+            """SELECT at.*, i.order_id
+               FROM acct_transactions at
+               JOIN items i ON i.id = at.item_id
+               WHERE at.source_ref LIKE 'godaddy-income-%'
+               AND at.category = 'registration'
+               AND COALESCE(at.status, 'active') = 'active'
+               ORDER BY at.date ASC""",
+        ).fetchall()
+
+        if not old_income:
+            logger.info("No old-format per-item GoDaddy entries found — nothing to migrate.")
+            return results
+
+        # Group old income entries by order_id
+        orders_to_migrate = defaultdict(list)
+        for row in old_income:
+            r = dict(row)
+            oid = r.get("order_id") or f"solo-{r['item_id']}"
+            orders_to_migrate[oid].append(r)
+
+        for oid, old_entries in orders_to_migrate.items():
+            # Skip if already migrated
+            existing_order = conn.execute(
+                "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+                (f"godaddy-order-{oid}",),
+            ).fetchone()
+            if existing_order:
+                results["skipped_already_migrated"] += 1
+                continue
+
+            try:
+                # Gather item_ids from old entries
+                item_ids = [e["item_id"] for e in old_entries if e.get("item_id")]
+                if not item_ids:
+                    continue
+
+                # Fetch full item data for these items
+                placeholders = ",".join(["?"] * len(item_ids))
+                items = [
+                    dict(r) for r in conn.execute(
+                        f"SELECT * FROM items WHERE id IN ({placeholders})", item_ids
+                    ).fetchall()
+                ]
+                valid_items = [
+                    i for i in items
+                    if _parse_dollar(i.get("item_price")) > 0
+                    and i.get("transaction_status") not in ("credited", "refunded", "transferred")
+                ]
+                if not valid_items:
+                    continue
+
+                # Collect reconciliation_matches from old income entries before reversing
+                old_income_ids = [e["id"] for e in old_entries]
+                old_fee_ids = []
+                for iid in item_ids:
+                    fee_row = conn.execute(
+                        "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+                        (f"godaddy-fee-{iid}",),
+                    ).fetchone()
+                    if fee_row:
+                        old_fee_ids.append(fee_row[0])
+
+                all_old_ids = old_income_ids + old_fee_ids
+                old_id_placeholders = ",".join(["?"] * len(all_old_ids))
+                saved_matches = conn.execute(
+                    f"""SELECT bank_deposit_id, match_type, confidence, matched_at
+                        FROM reconciliation_matches
+                        WHERE acct_transaction_id IN ({old_id_placeholders})""",
+                    all_old_ids,
+                ).fetchall()
+
+                # Soft-delete old income entries
+                for eid in old_income_ids:
+                    conn.execute("UPDATE acct_transactions SET status = 'reversed' WHERE id = ?", (eid,))
+                    results["old_entries_reversed"] += 1
+
+                # Soft-delete old fee entries
+                for fid in old_fee_ids:
+                    conn.execute("UPDATE acct_transactions SET status = 'reversed' WHERE id = ?", (fid,))
+                    results["old_entries_reversed"] += 1
+
+                # Remove old reconciliation_matches (will re-link to new entry)
+                if all_old_ids:
+                    conn.execute(
+                        f"DELETE FROM reconciliation_matches WHERE acct_transaction_id IN ({old_id_placeholders})",
+                        all_old_ids,
+                    )
+
+                # Create new order-level entry
+                txn_id = _write_godaddy_order_entry(
+                    conn,
+                    order_id=oid,
+                    items=valid_items,
+                    date=valid_items[0].get("order_date") or "",
+                )
+
+                if txn_id:
+                    results["orders_migrated"] += 1
+
+                    # Re-link saved reconciliation_matches to new entry
+                    for match in saved_matches:
+                        try:
+                            conn.execute(
+                                """INSERT OR IGNORE INTO reconciliation_matches
+                                   (bank_deposit_id, acct_transaction_id, match_type, confidence, matched_at)
+                                   VALUES (?, ?, ?, ?, ?)""",
+                                (match[0], txn_id, match[1], match[2], match[3]),
+                            )
+                            results["matches_relinked"] += 1
+                        except Exception:
+                            pass  # duplicate or constraint — safe to skip
+
+            except Exception:
+                logger.warning("Migration failed for order %s", oid, exc_info=True)
+                results["errors"] += 1
+
+        conn.commit()
+
+    logger.info(
+        "Migration complete: %d orders migrated, %d old entries reversed, %d matches relinked, %d skipped, %d errors",
+        results["orders_migrated"], results["old_entries_reversed"],
+        results["matches_relinked"], results["skipped_already_migrated"], results["errors"],
+    )
+    return results
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Expense Transactions & Action Items CRUD
 # ═══════════════════════════════════════════════════════════════════════════
