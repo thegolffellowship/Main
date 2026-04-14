@@ -122,7 +122,14 @@
             </div>
             <div class="match-layout">
                 <div class="match-col">
-                    <h3>Bank Deposits (Unmatched)</h3>
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        <h3 style="margin:0;">Bank Deposits</h3>
+                        <select id="deposit-status-filter" onchange="loadMatchQueue()" style="font-size:0.75rem; padding:2px 6px; margin-left:auto;">
+                            <option value="unmatched">Unmatched</option>
+                            <option value="matched">Matched</option>
+                            <option value="">All</option>
+                        </select>
+                    </div>
                     <div id="deposit-list"><div style="color:var(--text-muted); font-size:0.82rem;">Select an account or click Auto-match...</div></div>
                 </div>
                 <div class="match-col">
@@ -263,9 +270,11 @@
     async function loadMatchQueue() {
         const accountId = document.getElementById('match-account-filter').value;
         const month = document.getElementById('match-month-filter').value;
+        const statusFilter = document.getElementById('deposit-status-filter').value;
         const qs = new URLSearchParams();
         if (accountId) qs.set('account_id', accountId);
         if (month) qs.set('month', month);
+        if (statusFilter) qs.set('status', statusFilter);
 
         try {
             const depRes = await fetch(`/api/reconciliation/deposits?${qs}`);
@@ -273,12 +282,14 @@
 
             const depDiv = document.getElementById('deposit-list');
             if (!deposits.length) {
-                depDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No deposits found. Import a bank statement first.</div>';
+                depDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No deposits found for this filter.</div>';
             } else {
                 depDiv.innerHTML = deposits.map(d => {
                     const amtClass = d.amount >= 0 ? 'color:#166534' : 'color:#dc2626';
                     const amtStr = d.amount >= 0 ? `$${d.amount.toFixed(2)}` : `-$${Math.abs(d.amount).toFixed(2)}`;
-                    return `<div class="match-row" onclick="selectDeposit(${d.id})" data-id="${d.id}">
+                    const isMatched = d.status === 'matched';
+                    const rowBg = isMatched ? 'background:#f0fdf4;' : '';
+                    return `<div class="match-row" onclick="selectDeposit(${d.id}, '${d.status}')" data-id="${d.id}" data-status="${d.status}" style="${rowBg}">
                         <span>${d.deposit_date}</span>
                         <span class="desc"><span class="status-dot dot-${d.status}"></span>${esc(d.description || '')}</span>
                         <span class="amt" style="${amtClass}">${amtStr}</span>
@@ -292,17 +303,53 @@
         } catch(e) { console.error('Match queue load failed:', e); }
     }
 
-    async function selectDeposit(id) {
+    async function selectDeposit(id, status) {
         selectedDeposit = id;
         selectedTxns.clear();
         selectedTxnAmounts = {};
         document.querySelectorAll('#deposit-list .match-row').forEach(r => r.classList.remove('selected'));
         const row = document.querySelector(`#deposit-list .match-row[data-id="${id}"]`);
         if (row) row.classList.add('selected');
+        const depStatus = status || row?.dataset?.status || 'unmatched';
+
+        // If this deposit is already matched, show its matched transactions with unmatch option
+        if (depStatus === 'matched') {
+            const txnDiv = document.getElementById('txn-list');
+            txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">Loading matched transactions...</div>';
+            try {
+                const res = await fetch(`/api/reconciliation/matched/${id}`);
+                const matched = await res.json();
+                if (!matched.length) {
+                    txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No matched transactions found.</div>';
+                } else {
+                    const total = matched.reduce((s, m) => s + (m.net_deposit || m.amount || 0), 0);
+                    let html = `<div style="padding:6px 8px; background:#f0fdf4; border-radius:6px; margin-bottom:6px;">
+                        <div style="font-size:0.78rem; font-weight:600; color:#166534;">Matched Transactions (${matched.length}) — $${total.toFixed(2)}</div>
+                    </div>`;
+                    html += matched.map(m => {
+                        const displayAmt = m.net_deposit || m.amount || 0;
+                        const hasNet = m.net_deposit && m.net_deposit !== m.amount;
+                        const netLabel = hasNet ? `<span style="font-size:0.65rem; color:#2563eb;">net</span>` : '';
+                        return `<div class="match-row" style="grid-template-columns:70px 1fr auto; background:#f0fdf4;">
+                            <span>${m.date || ''}</span>
+                            <span class="desc">${esc(m.customer || '')} — ${esc(m.event_name || '')} <span style="color:var(--text-muted);">(${m.category || m.entry_type})</span></span>
+                            <span class="amt" style="color:#166534;">$${displayAmt.toFixed(2)} ${netLabel}</span>
+                        </div>`;
+                    }).join('');
+                    html += `<div style="padding:8px; text-align:center;">
+                        <button class="btn btn-secondary" onclick="unmatchDeposit(${id})" style="font-size:0.78rem; color:#dc2626; border-color:#dc2626;">Unmatch All</button>
+                    </div>`;
+                    txnDiv.innerHTML = html;
+                }
+            } catch(e) {
+                txnDiv.innerHTML = `<div style="color:#dc2626; font-size:0.82rem; padding:1rem;">Failed to load: ${e}</div>`;
+            }
+            updateMatchButton();
+            return;
+        }
 
         // In Browse All mode, keep the current transaction list (don't reload suggestions)
         if (browseAllMode) {
-            // Just clear selections visually
             document.querySelectorAll('#txn-list .match-row').forEach(r => {
                 r.classList.remove('selected');
                 const cb = r.querySelector('input[type="checkbox"]');
@@ -349,6 +396,20 @@
             txnDiv.innerHTML = `<div style="color:#dc2626; font-size:0.82rem; padding:1rem;">Failed to load suggestions: ${e}</div>`;
         }
         updateMatchButton();
+    }
+
+    async function unmatchDeposit(depositId) {
+        if (!confirm('Remove all matches for this deposit? Transactions will return to unmatched.')) return;
+        try {
+            await fetch('/api/reconciliation/unmatch', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ bank_deposit_id: depositId }),
+            });
+            selectedDeposit = null;
+            loadMatchQueue();
+            loadDashboard();
+        } catch(e) { alert('Unmatch failed: ' + e); }
     }
 
     function toggleTxn(id, amt) {

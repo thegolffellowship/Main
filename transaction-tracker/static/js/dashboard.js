@@ -3,6 +3,7 @@
    ========================================================= */
 
 let allItems = [];
+let reconciledItemIds = new Set();  // Populated from /api/reconciliation/reconciled-items
 // currentRole is provided by auth.js
 
 function classifyGameType(sideGames) {
@@ -333,9 +334,19 @@ function revertToSpan(input, value, field, rowId) {
 // ---------------------------------------------------------------------------
 async function fetchItems() {
     try {
-        const res = await fetch("/api/items");
+        const [res, reconRes] = await Promise.all([
+            fetch("/api/items"),
+            fetch("/api/reconciliation/reconciled-items").catch(() => ({ ok: false })),
+        ]);
         const raw = await res.json();
         allItems = raw.filter(i => !PLACEHOLDER_MERCHANTS.includes(i.merchant) && i.transaction_status !== "rsvp_only");
+        // Load reconciled item IDs for green dots (admin-only endpoint, fails gracefully)
+        if (reconRes.ok) {
+            try {
+                const ids = await reconRes.json();
+                reconciledItemIds = new Set(ids);
+            } catch(_) {}
+        }
         updateCategoryCounts();
         applyFilters();
     } catch (err) {
@@ -455,7 +466,8 @@ function _reconDot(row) {
     const uid = row.email_uid || "";
     if (uid.startsWith("manual-comp") || s === "rsvp_only") return '<span title="No bank match expected" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-right:4px;vertical-align:middle;"></span>';
     if (s === "refunded" || s === "credited" || s === "transferred") return '<span title="Inactive" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-right:4px;vertical-align:middle;"></span>';
-    // Active items: yellow = awaiting bank match (default for now; green/red set via reconciliation data if available)
+    // Green = reconciled (matched to bank deposit), Yellow = awaiting match
+    if (reconciledItemIds.has(row.id)) return '<span title="Reconciled (matched to bank)" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:4px;vertical-align:middle;"></span>';
     return '<span title="Awaiting bank match" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#fbbf24;margin-right:4px;vertical-align:middle;"></span>';
 }
 
