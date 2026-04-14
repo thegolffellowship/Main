@@ -6324,7 +6324,12 @@ def api_recon_deposits():
 def api_recon_unreconciled():
     account = request.args.get("account")
     month = request.args.get("month")
-    return jsonify(get_unreconciled_transactions(account, month))
+    date_from = request.args.get("date_from")
+    date_to = request.args.get("date_to")
+    source = request.args.get("source")
+    return jsonify(get_unreconciled_transactions(account, month,
+                                                 date_from=date_from, date_to=date_to,
+                                                 source=source))
 
 
 @app.route("/api/reconciliation/suggestions/<int:deposit_id>")

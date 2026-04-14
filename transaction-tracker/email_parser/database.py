@@ -13016,7 +13016,7 @@ def run_deposit_auto_match(account_id: int | None = None,
                        FROM acct_transactions
                        WHERE category = 'godaddy_order'
                        AND COALESCE(status, 'active') = 'active'
-                       AND ABS(julianday(date) - julianday(?)) <= 2
+                       AND ABS(julianday(date) - julianday(?)) <= 5
                        AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
                        ORDER BY date""",
                     (dep_date,),
@@ -13031,7 +13031,7 @@ def run_deposit_auto_match(account_id: int | None = None,
                            WHERE entry_type = 'income' AND source = 'godaddy'
                            AND category = 'registration'
                            AND COALESCE(status, 'active') = 'active'
-                           AND ABS(julianday(date) - julianday(?)) <= 2
+                           AND ABS(julianday(date) - julianday(?)) <= 5
                            AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
                            ORDER BY date""",
                         (dep_date,),
@@ -13272,27 +13272,37 @@ def get_bank_deposits(account_id: int | None = None, status: str | None = None,
 
 
 def get_unreconciled_transactions(account: str | None = None, month: str | None = None,
+                                  date_from: str | None = None, date_to: str | None = None,
+                                  source: str | None = None,
                                   db_path: str | Path | None = None) -> list[dict]:
     """Return acct_transactions not yet matched to any bank deposit.
     Shows all entry types (income, expense, contra) — not just income.
     Does NOT filter by account name since acct_transactions.account
-    doesn't match acct_accounts.name consistently."""
+    doesn't match acct_accounts.name consistently.
+
+    Optional filters: date_from/date_to (YYYY-MM-DD), source (godaddy/venmo/etc).
+    """
     with _connect(db_path) as conn:
         clauses = [
             "t.entry_type IS NOT NULL",
-            "COALESCE(t.status, 'active') IN ('active', 'reconciled')",
+            "COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')",
             "t.id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)",
         ]
         params = []
-        # Don't filter by account name — it's inconsistent between tables
         if month:
             clauses.append("t.date LIKE ?"); params.append(f"{month}%")
+        if date_from:
+            clauses.append("t.date >= ?"); params.append(date_from)
+        if date_to:
+            clauses.append("t.date <= ?"); params.append(date_to)
+        if source:
+            clauses.append("t.source = ?"); params.append(source)
         where = " AND ".join(clauses)
         rows = conn.execute(
             f"""SELECT t.* FROM acct_transactions t
                 WHERE {where}
                 ORDER BY t.date DESC
-                LIMIT 200""",
+                LIMIT 500""",
             params,
         ).fetchall()
         return [dict(r) for r in rows]
@@ -13397,15 +13407,19 @@ def get_match_suggestions(bank_deposit_id: int,
         dep_date = dep["deposit_date"]
         dep_desc = (dep["description"] or "").upper()
 
-        # Get all unmatched acct_transactions within ±7 days
+        # Wider window for GoDaddy deposits (batches span multiple days)
+        is_godaddy = "GODADDY" in dep_desc
+        day_window = 14 if is_godaddy else 7
+
+        # Get all unmatched acct_transactions within date window
         candidates = conn.execute(
             """SELECT t.* FROM acct_transactions t
                WHERE t.entry_type IS NOT NULL
                AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
                AND t.id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
-               AND ABS(julianday(t.date) - julianday(?)) <= 7
+               AND ABS(julianday(t.date) - julianday(?)) <= ?
                ORDER BY t.date DESC""",
-            (dep_date,),
+            (dep_date, day_window),
         ).fetchall()
 
         results = []
@@ -13431,6 +13445,7 @@ def get_match_suggestions(bank_deposit_id: int,
                 amt_score = max(0, 5 - int(amt_diff / 100))
 
             # Score: date proximity (0-30 points)
+            # GoDaddy batches span multiple days, so penalize less per day
             try:
                 from datetime import datetime as _dt
                 d1 = _dt.strptime(dep_date, "%Y-%m-%d")
@@ -13438,7 +13453,8 @@ def get_match_suggestions(bank_deposit_id: int,
                 day_diff = abs((d1 - d2).days)
             except (ValueError, TypeError):
                 day_diff = 99
-            date_score = max(0, 30 - day_diff * 5)
+            day_penalty = 3 if is_godaddy else 5
+            date_score = max(0, 30 - day_diff * day_penalty)
 
             # Score: description match (0-20 points)
             desc_score = 0
@@ -13473,7 +13489,8 @@ def get_match_suggestions(bank_deposit_id: int,
             results.append(c)
 
         results.sort(key=lambda x: x["_score"], reverse=True)
-        return results[:20]
+        max_results = 50 if is_godaddy else 20
+        return results[:max_results]
 
 
 def get_reconciliation_dashboard(db_path: str | Path | None = None) -> dict:

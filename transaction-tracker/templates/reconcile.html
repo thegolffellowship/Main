@@ -126,7 +126,25 @@
                     <div id="deposit-list"><div style="color:var(--text-muted); font-size:0.82rem;">Select an account or click Auto-match...</div></div>
                 </div>
                 <div class="match-col">
-                    <h3>Suggested Matches</h3>
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        <h3 id="txn-col-title" style="margin:0;">Suggested Matches</h3>
+                        <label style="font-size:0.75rem; display:flex; align-items:center; gap:4px; cursor:pointer; margin-left:auto; white-space:nowrap;">
+                            <input type="checkbox" id="browse-all-toggle" onchange="toggleBrowseAll()"> Browse All
+                        </label>
+                    </div>
+                    <div id="browse-filters" style="display:none; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:6px; font-size:0.75rem;">
+                        <input type="date" id="browse-date-from" style="font-size:0.75rem; padding:2px 4px;">
+                        <span>to</span>
+                        <input type="date" id="browse-date-to" style="font-size:0.75rem; padding:2px 4px;">
+                        <select id="browse-source" style="font-size:0.75rem; padding:2px 4px;">
+                            <option value="">All sources</option>
+                            <option value="godaddy">GoDaddy</option>
+                            <option value="venmo">Venmo</option>
+                            <option value="zelle">Zelle</option>
+                            <option value="cash">Cash</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="loadBrowseAll()" style="font-size:0.72rem; padding:2px 8px;">Search</button>
+                    </div>
                     <div id="txn-list"><div style="color:var(--text-muted); font-size:0.82rem;">Click a deposit on the left to see suggestions ranked by confidence.</div></div>
                 </div>
             </div>
@@ -282,6 +300,18 @@
         const row = document.querySelector(`#deposit-list .match-row[data-id="${id}"]`);
         if (row) row.classList.add('selected');
 
+        // In Browse All mode, keep the current transaction list (don't reload suggestions)
+        if (browseAllMode) {
+            // Just clear selections visually
+            document.querySelectorAll('#txn-list .match-row').forEach(r => {
+                r.classList.remove('selected');
+                const cb = r.querySelector('input[type="checkbox"]');
+                if (cb) cb.checked = false;
+            });
+            updateMatchButton();
+            return;
+        }
+
         // Fetch smart suggestions for this deposit
         const txnDiv = document.getElementById('txn-list');
         txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">Finding matches...</div>';
@@ -291,7 +321,7 @@
             const suggestions = await res.json();
 
             if (!suggestions.length) {
-                txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No matching candidates found within ±7 days.</div>';
+                txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No matching candidates found. Try "Browse All" to search by date range.</div>';
             } else {
                 txnDiv.innerHTML = suggestions.map(s => {
                     const score = s._score || 0;
@@ -350,6 +380,80 @@
         } else {
             btn.textContent = 'Match Selected';
         }
+    }
+
+    let browseAllMode = false;
+
+    function toggleBrowseAll() {
+        browseAllMode = document.getElementById('browse-all-toggle').checked;
+        const filters = document.getElementById('browse-filters');
+        const title = document.getElementById('txn-col-title');
+        filters.style.display = browseAllMode ? 'flex' : 'none';
+        title.textContent = browseAllMode ? 'All Unmatched Transactions' : 'Suggested Matches';
+
+        if (browseAllMode) {
+            // Pre-fill date range from selected deposit ±7 days
+            if (selectedDeposit) {
+                const depRow = document.querySelector(`#deposit-list .match-row.selected`);
+                if (depRow) {
+                    const dateStr = depRow.querySelector('span')?.textContent?.trim();
+                    if (dateStr) {
+                        try {
+                            const d = new Date(dateStr + 'T00:00:00');
+                            const from = new Date(d); from.setDate(from.getDate() - 7);
+                            const to = new Date(d); to.setDate(to.getDate() + 2);
+                            document.getElementById('browse-date-from').value = from.toISOString().slice(0, 10);
+                            document.getElementById('browse-date-to').value = to.toISOString().slice(0, 10);
+                        } catch(e) {}
+                    }
+                }
+            }
+            loadBrowseAll();
+        } else if (selectedDeposit) {
+            // Switch back to suggestions mode
+            selectDeposit(selectedDeposit);
+        } else {
+            document.getElementById('txn-list').innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">Click a deposit on the left to see suggestions ranked by confidence.</div>';
+        }
+    }
+
+    async function loadBrowseAll() {
+        const txnDiv = document.getElementById('txn-list');
+        txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">Loading transactions...</div>';
+
+        const qs = new URLSearchParams();
+        const dateFrom = document.getElementById('browse-date-from').value;
+        const dateTo = document.getElementById('browse-date-to').value;
+        const source = document.getElementById('browse-source').value;
+        if (dateFrom) qs.set('date_from', dateFrom);
+        if (dateTo) qs.set('date_to', dateTo);
+        if (source) qs.set('source', source);
+
+        try {
+            const res = await fetch(`/api/reconciliation/unreconciled?${qs}`);
+            const txns = await res.json();
+
+            if (!txns.length) {
+                txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No unmatched transactions found for these filters.</div>';
+            } else {
+                txnDiv.innerHTML = `<div style="font-size:0.7rem; color:var(--text-muted); padding:2px 8px;">${txns.length} transactions</div>` +
+                    txns.map(s => {
+                    const displayAmt = s.net_deposit || s.amount || 0;
+                    const hasNet = s.net_deposit && s.net_deposit !== s.amount;
+                    const netLabel = hasNet ? `<span style="font-size:0.65rem; color:#2563eb;" title="Net deposit (after merchant fee)">net</span>` : '';
+                    const srcLabel = s.source ? `<span style="font-size:0.6rem; padding:1px 4px; border-radius:3px; background:${s.source==='godaddy'?'#dbeafe':'#f3e8ff'}; color:${s.source==='godaddy'?'#1d4ed8':'#7c3aed'};">${s.source}</span>` : '';
+                    return `<div class="match-row" onclick="toggleTxn(${s.id}, ${displayAmt})" data-id="${s.id}" style="grid-template-columns:24px 70px 1fr auto;">
+                        <input type="checkbox" ${selectedTxns.has(s.id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleTxn(${s.id}, ${displayAmt})" style="cursor:pointer;">
+                        <span>${s.date || ''}</span>
+                        <span class="desc">${esc(s.customer || '')} — ${esc(s.event_name || '')} ${srcLabel}</span>
+                        <span class="amt">$${displayAmt.toFixed(2)} ${netLabel}</span>
+                    </div>`;
+                }).join('');
+            }
+        } catch(e) {
+            txnDiv.innerHTML = `<div style="color:#dc2626; font-size:0.82rem; padding:1rem;">Failed to load: ${e}</div>`;
+        }
+        updateMatchButton();
     }
 
     async function confirmManualMatch() {
