@@ -13173,6 +13173,34 @@ def manual_match_deposit(bank_deposit_id: int, acct_transaction_id: int,
     return {"status": "ok"}
 
 
+def batch_match_deposit(bank_deposit_id: int, acct_transaction_ids: list[int],
+                        db_path: str | Path | None = None) -> dict:
+    """Match multiple acct_transactions to a single bank deposit (1:many).
+
+    Used for GoDaddy daily batch deposits that contain multiple orders.
+    """
+    with _connect(db_path) as conn:
+        matched = 0
+        for tid in acct_transaction_ids:
+            conn.execute(
+                """INSERT OR IGNORE INTO reconciliation_matches
+                   (bank_deposit_id, acct_transaction_id, match_type, match_confidence)
+                   VALUES (?, ?, 'manual', 1.0)""",
+                (bank_deposit_id, tid),
+            )
+            conn.execute(
+                "UPDATE acct_transactions SET status = 'reconciled' WHERE id = ?",
+                (tid,),
+            )
+            matched += 1
+        conn.execute(
+            "UPDATE bank_deposits SET status = 'matched' WHERE id = ?",
+            (bank_deposit_id,),
+        )
+        conn.commit()
+    return {"status": "ok", "matched": matched}
+
+
 def unmatch_deposit(bank_deposit_id: int, acct_transaction_id: int | None = None,
                     db_path: str | Path | None = None) -> dict:
     """Remove a reconciliation match. If acct_transaction_id is None, remove all matches."""
@@ -13270,6 +13298,88 @@ def get_unreconciled_transactions(account: str | None = None, month: str | None 
         return [dict(r) for r in rows]
 
 
+def merge_transactions(acct_transaction_ids: list[int],
+                       db_path: str | Path | None = None) -> dict:
+    """Merge multiple GoDaddy order transactions into a single batch entry.
+
+    Creates a new 'godaddy_batch' transaction with the combined net_deposit
+    and merchant_fee, then marks the original entries as 'merged'.
+    The batch entry can then be matched to a single bank deposit.
+
+    Returns the new batch transaction id.
+    """
+    if len(acct_transaction_ids) < 2:
+        return {"error": "Need at least 2 transactions to merge"}
+
+    with _connect(db_path) as conn:
+        placeholders = ",".join(["?"] * len(acct_transaction_ids))
+        txns = conn.execute(
+            f"""SELECT * FROM acct_transactions
+                WHERE id IN ({placeholders})
+                AND COALESCE(status, 'active') = 'active'
+                AND entry_type IS NOT NULL""",
+            acct_transaction_ids,
+        ).fetchall()
+
+        if len(txns) < 2:
+            return {"error": "Less than 2 active transactions found"}
+
+        txns = [dict(t) for t in txns]
+
+        total_amount = sum(t.get("amount", 0) or 0 for t in txns)
+        total_merchant = sum(t.get("merchant_fee", 0) or 0 for t in txns)
+        total_net = sum((t.get("net_deposit") or t.get("amount", 0) or 0) for t in txns)
+
+        # Use the earliest date as batch date
+        dates = sorted(t.get("date", "") for t in txns if t.get("date"))
+        batch_date = dates[0] if dates else ""
+
+        order_ids = [t.get("order_id", "") for t in txns if t.get("order_id")]
+        batch_ref = f"godaddy-batch-{'-'.join(str(i) for i in sorted(acct_transaction_ids))}"
+
+        # Check if batch already exists
+        existing = conn.execute(
+            "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status, 'active') = 'active'",
+            (batch_ref,),
+        ).fetchone()
+        if existing:
+            return {"error": "These transactions are already merged", "batch_id": existing[0]}
+
+        description = f"GoDaddy batch: {len(txns)} orders ({batch_date})"
+        batch_id = _write_acct_entry(
+            conn,
+            item_id=None,
+            event_name="",
+            customer="",
+            order_id=",".join(order_ids[:5]),
+            entry_type="income",
+            category="godaddy_batch",
+            source="godaddy",
+            amount=total_amount,
+            description=description,
+            account="TGF Checking",
+            source_ref=batch_ref,
+            date=batch_date,
+            net_deposit=total_net,
+            merchant_fee=total_merchant,
+        )
+
+        if batch_id is None:
+            return {"error": "Failed to create batch entry"}
+
+        # Mark original entries as merged (preserves data but removes from active matching)
+        for tid in acct_transaction_ids:
+            conn.execute(
+                "UPDATE acct_transactions SET reconciled_batch_id = ?, status = 'merged' WHERE id = ?",
+                (batch_id, tid),
+            )
+
+        conn.commit()
+
+    return {"status": "ok", "batch_id": batch_id, "merged_count": len(txns),
+            "net_deposit": round(total_net, 2), "merchant_fee": round(total_merchant, 2)}
+
+
 def get_match_suggestions(bank_deposit_id: int,
                           db_path: str | Path | None = None) -> list[dict]:
     """Return ranked match candidates for a specific bank deposit.
@@ -13291,7 +13401,7 @@ def get_match_suggestions(bank_deposit_id: int,
         candidates = conn.execute(
             """SELECT t.* FROM acct_transactions t
                WHERE t.entry_type IS NOT NULL
-               AND COALESCE(t.status, 'active') != 'reversed'
+               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
                AND t.id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
                AND ABS(julianday(t.date) - julianday(?)) <= 7
                ORDER BY t.date DESC""",
@@ -13301,7 +13411,8 @@ def get_match_suggestions(bank_deposit_id: int,
         results = []
         for c in candidates:
             c = dict(c)
-            c_amt = c.get("amount", 0) or 0
+            # Use net_deposit for GoDaddy orders (actual bank amount)
+            c_amt = c.get("net_deposit") or c.get("amount", 0) or 0
             c_date = c.get("date", "")
             c_customer = (c.get("customer") or "").upper()
             c_event = (c.get("event_name") or "").upper()
@@ -13424,7 +13535,7 @@ def get_monthly_reconciliation(month: str, db_path: str | Path | None = None) ->
             """SELECT category, COALESCE(SUM(COALESCE(net_deposit, amount)), 0) as total, COUNT(*) as cnt
                FROM acct_transactions
                WHERE entry_type = 'income' AND date LIKE ?
-               AND COALESCE(status, 'active') != 'reversed'
+               AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                AND entry_type IS NOT NULL
                GROUP BY category""",
             (f"{month}%",),
@@ -13435,7 +13546,7 @@ def get_monthly_reconciliation(month: str, db_path: str | Path | None = None) ->
             """SELECT category, COALESCE(SUM(amount), 0) as total, COUNT(*) as cnt
                FROM acct_transactions
                WHERE entry_type IN ('expense', 'contra') AND date LIKE ?
-               AND COALESCE(status, 'active') != 'reversed'
+               AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                AND entry_type IS NOT NULL
                GROUP BY category""",
             (f"{month}%",),
@@ -13443,7 +13554,7 @@ def get_monthly_reconciliation(month: str, db_path: str | Path | None = None) ->
 
         # Reconciliation stats
         total_txns = conn.execute(
-            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE date LIKE ? AND entry_type IS NOT NULL AND COALESCE(status, 'active') != 'reversed'",
+            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE date LIKE ? AND entry_type IS NOT NULL AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')",
             (f"{month}%",),
         ).fetchone()["cnt"]
 
@@ -13482,7 +13593,7 @@ def get_event_reconciliation_status(event_name: str,
             f"""SELECT COUNT(*) as cnt FROM acct_transactions
                 WHERE event_name COLLATE NOCASE IN ({placeholders})
                 AND entry_type = 'income'
-                AND COALESCE(status, 'active') != 'reversed'
+                AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                 AND entry_type IS NOT NULL""",
             all_names,
         ).fetchone()["cnt"]
@@ -13537,7 +13648,7 @@ def get_cashflow_data(weeks: int = 13, db_path: str | Path | None = None) -> lis
             expected = conn.execute(
                 """SELECT COALESCE(SUM(COALESCE(net_deposit, amount)), 0) as total FROM acct_transactions
                    WHERE entry_type = 'income' AND date BETWEEN ? AND ?
-                   AND COALESCE(status, 'active') != 'reversed'
+                   AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                    AND entry_type IS NOT NULL""",
                 (ws, we),
             ).fetchone()["total"]
@@ -13555,7 +13666,7 @@ def get_cashflow_data(weeks: int = 13, db_path: str | Path | None = None) -> lis
             proj_expenses = conn.execute(
                 """SELECT COALESCE(SUM(amount), 0) as total FROM acct_transactions
                    WHERE entry_type IN ('expense', 'contra') AND date BETWEEN ? AND ?
-                   AND COALESCE(status, 'active') != 'reversed'
+                   AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
                    AND entry_type IS NOT NULL""",
                 (ws, we),
             ).fetchone()["total"]

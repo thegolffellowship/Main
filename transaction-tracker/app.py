@@ -181,6 +181,8 @@ from email_parser.database import (
     import_bank_deposits,
     run_deposit_auto_match,
     manual_match_deposit,
+    batch_match_deposit,
+    merge_transactions,
     get_match_suggestions,
     unmatch_deposit,
     get_bank_deposits,
@@ -6285,6 +6287,18 @@ def api_recon_match():
     return jsonify(manual_match_deposit(bank_deposit_id, acct_transaction_id))
 
 
+@app.route("/api/reconciliation/match-batch", methods=["POST"])
+@require_role("admin")
+def api_recon_match_batch():
+    """Match multiple acct_transactions to a single bank deposit (1:many)."""
+    d = request.json or {}
+    bank_deposit_id = d.get("bank_deposit_id")
+    acct_transaction_ids = d.get("acct_transaction_ids", [])
+    if not bank_deposit_id or not acct_transaction_ids:
+        return jsonify({"error": "bank_deposit_id and acct_transaction_ids required"}), 400
+    return jsonify(batch_match_deposit(bank_deposit_id, acct_transaction_ids))
+
+
 @app.route("/api/reconciliation/unmatch", methods=["POST"])
 @require_role("admin")
 def api_recon_unmatch():
@@ -6347,6 +6361,17 @@ def api_migrate_to_order_level():
     """Migrate old per-item GoDaddy entries to order-level format."""
     results = migrate_item_to_order_entries()
     return jsonify(results)
+
+
+@app.route("/api/reconciliation/merge-transactions", methods=["POST"])
+@require_role("admin")
+def api_merge_transactions():
+    """Merge multiple GoDaddy order transactions into a single batch entry."""
+    d = request.json or {}
+    ids = d.get("acct_transaction_ids", [])
+    if len(ids) < 2:
+        return jsonify({"error": "Need at least 2 transaction IDs"}), 400
+    return jsonify(merge_transactions(ids))
 
 
 # ---------------------------------------------------------------------------
