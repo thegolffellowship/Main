@@ -6494,9 +6494,10 @@ try:
 
     # ── Auto-migrate old per-item GoDaddy entries to order-level ──
     try:
-        _old_format_count = _conn.execute(
-            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE source_ref LIKE 'godaddy-income-%' AND COALESCE(status, 'active') = 'active'"
-        ).fetchone()["cnt"]
+        with _startup_connect() as _mig_conn:
+            _old_format_count = _mig_conn.execute(
+                "SELECT COUNT(*) as cnt FROM acct_transactions WHERE source_ref LIKE 'godaddy-income-%' AND COALESCE(status, 'active') = 'active'"
+            ).fetchone()["cnt"]
         if _old_format_count > 0:
             logger.info("Found %d old-format per-item GoDaddy entries — running migration", _old_format_count)
             _mig_result = migrate_item_to_order_entries()
