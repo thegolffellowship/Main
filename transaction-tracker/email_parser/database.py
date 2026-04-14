@@ -11292,7 +11292,7 @@ def migrate_item_to_order_entries(db_path: str | Path | None = None) -> dict:
                 all_old_ids = old_income_ids + old_fee_ids
                 old_id_placeholders = ",".join(["?"] * len(all_old_ids))
                 saved_matches = conn.execute(
-                    f"""SELECT bank_deposit_id, match_type, confidence, matched_at
+                    f"""SELECT bank_deposit_id, match_type, match_confidence, created_at
                         FROM reconciliation_matches
                         WHERE acct_transaction_id IN ({old_id_placeholders})""",
                     all_old_ids,
@@ -11331,7 +11331,7 @@ def migrate_item_to_order_entries(db_path: str | Path | None = None) -> dict:
                         try:
                             conn.execute(
                                 """INSERT OR IGNORE INTO reconciliation_matches
-                                   (bank_deposit_id, acct_transaction_id, match_type, confidence, matched_at)
+                                   (bank_deposit_id, acct_transaction_id, match_type, match_confidence, created_at)
                                    VALUES (?, ?, ?, ?, ?)""",
                                 (match[0], txn_id, match[1], match[2], match[3]),
                             )
