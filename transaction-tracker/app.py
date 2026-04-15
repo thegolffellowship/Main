@@ -179,6 +179,7 @@ from email_parser.database import (
     # Bank deposit reconciliation (new)
     get_bank_accounts,
     import_bank_deposits,
+    import_venmo_statement,
     run_deposit_auto_match,
     manual_match_deposit,
     batch_match_deposit,
@@ -6268,6 +6269,16 @@ def api_recon_import():
     if not account_id:
         return jsonify({"error": "account_id required"}), 400
     file_bytes = f.read()
+    # Detect Venmo statement format before default import path
+    csv_text = file_bytes.decode("utf-8", errors="replace")
+    first_line = csv_text.split("\n", 1)[0].strip()
+    if "Account Statement" in first_line or first_line.lower().startswith("transaction id"):
+        result = import_venmo_statement(csv_text, "Venmo")
+        # Auto-match after import
+        if result.get("imported", 0) > 0:
+            match_result = run_deposit_auto_match()
+            result["auto_match"] = match_result
+        return jsonify(result)
     result = import_bank_deposits(file_bytes, f.filename or "upload.csv", account_id)
     # Auto-match after import
     if result.get("imported", 0) > 0:

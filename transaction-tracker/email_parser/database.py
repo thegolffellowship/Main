@@ -12923,6 +12923,261 @@ def _import_venmo_csv(data_rows, header, batch_id, account_id, db_path):
             "format": "Venmo", "rows_preview": preview}
 
 
+def import_venmo_statement(csv_text: str, account_label: str,
+                           db_path: str | Path | None = None) -> dict:
+    """Import Venmo CSV statement with auto-categorization and accounting entries.
+
+    Handles two formats:
+      - Format 1 (Personal): starts with "Account Statement" header row
+      - Format 2 (Business): starts with "Transaction ID" header row
+
+    Writes to both bank_deposits and acct_transactions for each row.
+
+    Returns {imported, skipped, format, categorized: {category: count, ...},
+             rows_preview}.
+    """
+    import csv
+    import hashlib
+    import io
+    import re
+
+    batch_id = (f"{datetime.now().strftime('%Y%m%d%H%M%S')}-"
+                f"{hashlib.md5(csv_text.encode()).hexdigest()[:8]}")
+
+    reader = csv.reader(io.StringIO(csv_text))
+    all_rows = list(reader)
+    if len(all_rows) < 2:
+        return {"imported": 0, "skipped": 0, "format": "empty",
+                "categorized": {}, "rows_preview": []}
+
+    # --- Detect format ---
+    first_row_joined = ",".join(all_rows[0]).strip()
+
+    if "Account Statement" in first_row_joined:
+        fmt = "Venmo Personal"
+        # Row 0 = account header, Row 1 = "Account Activity",
+        # Row 2 = column headers (starts with blank), Row 3 = balance (skip),
+        # data starts at Row 4
+        if len(all_rows) < 5:
+            return {"imported": 0, "skipped": 0, "format": fmt,
+                    "categorized": {}, "rows_preview": []}
+        header = [h.strip().lower() for h in all_rows[2]]
+        data_rows = all_rows[4:]
+        # Column indices (header has leading blank col)
+        id_idx = next((i for i, h in enumerate(header) if h == "id"), 1)
+        dt_idx = next((i for i, h in enumerate(header) if "datetime" in h), 2)
+        type_idx = next((i for i, h in enumerate(header) if h == "type"), 3)
+        status_idx = next((i for i, h in enumerate(header) if "status" in h), 4)
+        note_idx = next((i for i, h in enumerate(header) if "note" in h), 5)
+        from_idx = next((i for i, h in enumerate(header) if h == "from"), 6)
+        to_idx = next((i for i, h in enumerate(header) if h == "to"), 7)
+        amt_idx = next((i for i, h in enumerate(header)
+                        if "amount" in h and "total" in h), 8)
+        if amt_idx == 8:
+            amt_idx = next((i for i, h in enumerate(header) if "amount" in h), 8)
+
+    elif first_row_joined.lower().startswith("transaction id"):
+        fmt = "Venmo Business"
+        header = [h.strip().lower() for h in all_rows[0]]
+        data_rows = all_rows[1:]
+        id_idx = next((i for i, h in enumerate(header) if "transaction id" in h), 0)
+        # Date and Time are separate columns
+        date_col_idx = next((i for i, h in enumerate(header) if h == "date"), 1)
+        time_col_idx = next((i for i, h in enumerate(header)
+                             if h.startswith("time")), 2)
+        type_idx = next((i for i, h in enumerate(header) if h == "type"), 3)
+        status_idx = next((i for i, h in enumerate(header) if "status" in h), 4)
+        note_idx = next((i for i, h in enumerate(header) if "note" in h), 5)
+        from_idx = next((i for i, h in enumerate(header) if h == "from"), 6)
+        to_idx = next((i for i, h in enumerate(header) if h == "to"), 7)
+        amt_idx = next((i for i, h in enumerate(header)
+                        if "amount" in h and "total" in h), 8)
+        if amt_idx == 8:
+            amt_idx = next((i for i, h in enumerate(header) if "amount" in h), 8)
+        dt_idx = None  # handled via date_col_idx + time_col_idx
+    else:
+        return {"imported": 0, "skipped": 0, "format": "unknown",
+                "categorized": {}, "rows_preview": [],
+                "error": "Unrecognized Venmo CSV format"}
+
+    # --- Helpers ---
+    def _parse_venmo_amount(raw: str) -> float | None:
+        """Parse '- $16.00' or '+ $5.00' into signed float."""
+        cleaned = raw.replace("$", "").replace(",", "").replace(" ", "").strip()
+        if not cleaned:
+            return None
+        try:
+            return float(cleaned)
+        except (ValueError, TypeError):
+            return None
+
+    def _extract_customer(note: str, to_name: str, is_outgoing: bool) -> str:
+        """Extract customer name from Note or To field."""
+        # Try 'FIRSTNAME LASTNAME - reason' pattern in note
+        m = re.match(r"^(.+?)\s*-\s+", note)
+        if m:
+            raw_name = m.group(1).strip()
+            # Normalize to Title Case (notes use ALL CAPS for last names)
+            return raw_name.title()
+        # For outgoing, use the To field
+        if is_outgoing and to_name:
+            return to_name.title()
+        # Fallback: use full note as-is (title-cased)
+        if note:
+            return note.strip().title()
+        return ""
+
+    def _categorize(note: str, is_incoming: bool) -> tuple[str, str]:
+        """Return (category, entry_type) from note content."""
+        note_upper = note.upper()
+        if "WINNINGS" in note_upper or "WINNING" in note_upper:
+            return "prize_payout", "expense"
+        if "REFUND" in note_upper:
+            return "refund", "expense"
+        if "DRINKS" in note_upper or "DRINK" in note_upper:
+            return "event_expense", "expense"
+        if is_incoming:
+            return "addon", "income"
+        return "miscellaneous", "expense"
+
+    imported, skipped = 0, 0
+    preview: list[dict] = []
+    categorized: dict[str, int] = {}
+
+    with _connect(db_path) as conn:
+        # Look up Venmo account_id from bank_accounts
+        acct_row = conn.execute(
+            "SELECT id FROM bank_accounts WHERE account_type = 'venmo' LIMIT 1"
+        ).fetchone()
+        if not acct_row:
+            # Fallback: try by name
+            acct_row = conn.execute(
+                "SELECT id FROM bank_accounts WHERE LOWER(name) LIKE '%venmo%' LIMIT 1"
+            ).fetchone()
+        account_id = acct_row["id"] if acct_row else None
+        if account_id is None:
+            return {"imported": 0, "skipped": 0, "format": fmt,
+                    "categorized": {}, "rows_preview": [],
+                    "error": "No Venmo account found in bank_accounts"}
+
+        for row in data_rows:
+            if not row:
+                continue
+
+            # --- Extract venmo_id ---
+            raw_id = row[id_idx].strip() if id_idx < len(row) else ""
+            # Business format uses triple-quoted IDs: """4548432077528504170"""
+            venmo_id = raw_id.strip('"').strip()
+            if not venmo_id:
+                continue  # Skip disclaimer rows / empty rows
+
+            # --- Extract status ---
+            status = row[status_idx].strip() if status_idx < len(row) else ""
+            if status.lower() != "complete":
+                continue
+
+            # --- Parse amount ---
+            raw_amt = row[amt_idx].strip() if amt_idx < len(row) else ""
+            amount = _parse_venmo_amount(raw_amt)
+            if amount is None or amount == 0:
+                continue
+
+            is_incoming = amount > 0
+
+            # --- Parse date ---
+            if fmt == "Venmo Personal":
+                raw_dt = row[dt_idx].strip() if dt_idx < len(row) else ""
+                # ISO 8601: 2026-03-01T23:15:56
+                parsed_date = _normalise_csv_date(
+                    raw_dt.split("T")[0] if "T" in raw_dt else raw_dt)
+            else:
+                # Business: separate Date and Time columns
+                raw_date_str = (row[date_col_idx].strip()
+                                if date_col_idx < len(row) else "")
+                parsed_date = _normalise_csv_date(raw_date_str)
+
+            if not parsed_date:
+                continue
+
+            # --- Extract fields ---
+            note = row[note_idx].strip() if note_idx < len(row) else ""
+            from_name = row[from_idx].strip() if from_idx < len(row) else ""
+            to_name = row[to_idx].strip() if to_idx < len(row) else ""
+
+            # --- Auto-categorize ---
+            category, entry_type = _categorize(note, is_incoming)
+            categorized[category] = categorized.get(category, 0) + 1
+
+            # --- Extract customer name ---
+            customer = _extract_customer(note, to_name, not is_incoming)
+
+            # --- Build description ---
+            if is_incoming and from_name:
+                desc = f"{from_name}: {note}" if note else from_name
+            elif not is_incoming and to_name:
+                desc = f"{to_name}: {note}" if note else to_name
+            else:
+                desc = note or "(no note)"
+
+            source_ref = f"venmo-{venmo_id}"
+
+            # --- Dedup: bank_deposits via source_ref in raw_data ---
+            existing_dep = conn.execute(
+                "SELECT id FROM bank_deposits WHERE raw_data = ?",
+                (source_ref,),
+            ).fetchone()
+
+            # --- Dedup: acct_transactions via source_ref ---
+            existing_txn = conn.execute(
+                "SELECT id FROM acct_transactions WHERE source_ref = ? "
+                "AND COALESCE(status, 'active') = 'active'",
+                (source_ref,),
+            ).fetchone()
+
+            if existing_dep and existing_txn:
+                skipped += 1
+                continue
+
+            # --- Write bank_deposit ---
+            if not existing_dep:
+                conn.execute(
+                    """INSERT INTO bank_deposits
+                       (account_id, deposit_date, amount, description,
+                        source, import_batch_id, raw_data)
+                       VALUES (?, ?, ?, ?, 'venmo', ?, ?)""",
+                    (account_id, parsed_date, amount, desc,
+                     batch_id, source_ref),
+                )
+
+            # --- Write acct_transaction ---
+            if not existing_txn:
+                _write_acct_entry(
+                    conn,
+                    entry_type=entry_type,
+                    category=category,
+                    source="venmo",
+                    amount=amount,
+                    description=desc,
+                    account="Venmo",
+                    source_ref=source_ref,
+                    date=parsed_date,
+                    customer=customer,
+                )
+
+            imported += 1
+            if len(preview) < 50:
+                preview.append({
+                    "date": parsed_date, "description": desc,
+                    "amount": amount, "category": category,
+                    "entry_type": entry_type, "customer": customer,
+                })
+
+        conn.commit()
+
+    return {"imported": imported, "skipped": skipped, "format": fmt,
+            "categorized": categorized, "rows_preview": preview}
+
+
 def _import_generic_csv(data_rows, header, batch_id, account_id, db_path):
     """Fallback for unknown CSV formats."""
     date_idx = next((i for i, h in enumerate(header) if "date" in h), 0)
