@@ -9897,16 +9897,16 @@ def _write_godaddy_order_entry(
     # ── Calculate order totals ───────────────────────────────────
     total_item_prices = 0.0
     total_tx_fees = 0.0
-    order_total = 0.0
 
     for item in items:
-        ip = _parse_dollar(item.get("item_price"))
-        tf = _parse_dollar(item.get("transaction_fees"))
-        ta = _parse_dollar(item.get("total_amount"))
-        total_item_prices += ip
-        total_tx_fees += tf
-        # Use actual total_amount when available; fallback to computed
-        order_total += ta if ta > 0 else (ip + tf)
+        total_item_prices += _parse_dollar(item.get("item_price"))
+        total_tx_fees += _parse_dollar(item.get("transaction_fees"))
+
+    # total_amount on each item row stores the FULL ORDER total (same value
+    # on every item in the order).  Use it from the first item only; fall
+    # back to the sum of per-item prices + fees when it's missing/zero.
+    first_ta = _parse_dollar(items[0].get("total_amount"))
+    order_total = first_ta if first_ta > 0 else (total_item_prices + total_tx_fees)
 
     if order_total <= 0:
         return None
@@ -9970,8 +9970,7 @@ def _write_godaddy_order_entry(
         item_customer = item.get("customer") or customer_name
         ip = _parse_dollar(item.get("item_price"))
         tf = _parse_dollar(item.get("transaction_fees"))
-        ta = _parse_dollar(item.get("total_amount"))
-        item_total = ta if ta > 0 else (ip + tf)
+        item_total = ip + tf  # per-item contribution to order total
 
         # Registration income split
         if ip > 0:
@@ -10001,9 +10000,10 @@ def _write_godaddy_order_entry(
                 (txn_id, item_id, item_event, item_customer, -coupon_amt),
             )
 
-        # Merchant fee split (proportional, negative = expense)
-        if item_total > 0 and order_total > 0:
-            item_merchant_fee = round(merchant_fee_val * item_total / order_total, 2)
+        # Merchant fee split (proportional by per-item contribution, negative = expense)
+        _sum_items = total_item_prices + total_tx_fees
+        if item_total > 0 and _sum_items > 0:
+            item_merchant_fee = round(merchant_fee_val * item_total / _sum_items, 2)
             conn.execute(
                 """INSERT INTO godaddy_order_splits
                    (transaction_id, item_id, event_name, customer, split_type, amount)
