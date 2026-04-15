@@ -2179,7 +2179,7 @@ def api_update_customer():
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
-               "archived"}
+               "archived", "venmo_username"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return jsonify({"error": "No valid fields to update"}), 400
@@ -2189,6 +2189,14 @@ def api_update_customer():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"status": "ok", "items_updated": updated})
+
+
+@app.route("/api/customers/venmo-handles")
+@require_role("view-only")
+def api_customer_venmo_handles():
+    """Return all customers with Venmo handles set."""
+    from email_parser.database import get_customer_venmo_handles
+    return jsonify(get_customer_venmo_handles())
 
 
 @app.route("/api/customers/create", methods=["POST"])
