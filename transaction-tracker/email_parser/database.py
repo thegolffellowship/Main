@@ -748,36 +748,59 @@ def _migrate_wire_payouts_to_ledger(conn: sqlite3.Connection) -> None:
            JOIN tgf_events e ON e.id = p.event_id
            WHERE p.acct_transaction_id IS NULL"""
     ).fetchall()
-    if not pending_rows:
-        return
 
-    logger.info("Wiring %d existing payouts to the ledger", len(pending_rows))
-    paired = _reconcile_payouts_with_venmo(conn, pending_rows)
+    paired = 0
+    if pending_rows:
+        logger.info("Wiring %d existing payouts to the ledger", len(pending_rows))
+        paired = _reconcile_payouts_with_venmo(conn, pending_rows)
+
+    # Also run the reverse match across ALL currently-pending payouts (including
+    # ones wired in a previous run) — this picks up grouped (customer+event) matches
+    # that the earlier per-row matcher missed.
+    retroactive = _match_pending_payouts_to_new_venmo(conn)
+
     conn.commit()
-    logger.info(
-        "Payout ledger wiring complete — %d matched to existing Venmo, %d pending",
-        paired, len(pending_rows) - paired,
-    )
+    if pending_rows or retroactive:
+        logger.info(
+            "Payout ledger wiring complete — %d newly wired (%d auto-matched), %d pending retroactively linked to Venmo",
+            len(pending_rows), paired, retroactive,
+        )
 
 
 def _reconcile_payouts_with_venmo(conn: sqlite3.Connection, payout_rows) -> int:
     """For a list of unlinked payouts, either match them to an existing Venmo
     prize_payout acct_transaction, or create a pending placeholder.
 
+    Matching is done at the (customer_id, event_id) level — all of a golfer's
+    payouts for one event are summed and matched to a single Venmo transaction.
+    This handles the common case where one Venmo payment covers multiple
+    prize categories (e.g., Kelly Barna's $208.25 = sum of skins + net + gross
+    + team + mvp wins at one event).
+
     Returns count of payouts that matched an existing Venmo payment.
     """
-    matched = 0
+    # Group payouts by (event_id, customer_id)
+    groups: dict[tuple[int, int], dict] = {}
     for p in payout_rows:
-        payout_id = p["id"]
-        event_date = p["event_date"]
-        customer_id = p["customer_id"]
-        amount = round(float(p["amount"]), 2)
-        event_name = p["event_name"]
+        key = (p["event_id"], p["customer_id"])
+        if key not in groups:
+            groups[key] = {
+                "event_date": p["event_date"],
+                "event_name": p["event_name"],
+                "customer_id": p["customer_id"],
+                "payouts": [],
+            }
+        groups[key]["payouts"].append(dict(p))
 
-        # Look for an unreserved Venmo prize_payout within 7 days post-event
-        # with exact amount match (abs value — stored as negative since expense)
+    matched = 0
+    for (event_id, customer_id), g in groups.items():
+        group_sum = round(sum(float(p["amount"]) for p in g["payouts"]), 2)
+        event_date = g["event_date"]
+        event_name = g["event_name"]
+
+        # Find a single Venmo prize_payout matching the group sum
         venmo_match = conn.execute(
-            """SELECT t.id, t.date, t.amount FROM acct_transactions t
+            """SELECT t.id, t.date FROM acct_transactions t
                WHERE t.source = 'venmo'
                  AND t.category = 'prize_payout'
                  AND COALESCE(t.status, 'active') = 'active'
@@ -794,44 +817,50 @@ def _reconcile_payouts_with_venmo(conn: sqlite3.Connection, payout_rows) -> int:
                      AND LOWER(t.customer) = LOWER(c.first_name || ' ' || c.last_name)
                  )
                ORDER BY t.date ASC LIMIT 1""",
-            (amount, event_date, event_date, customer_id),
+            (group_sum, event_date, event_date, customer_id),
         ).fetchone()
 
         if venmo_match:
-            conn.execute(
-                "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
-                (venmo_match["id"], venmo_match["date"], payout_id),
-            )
-            matched += 1
+            # Link every payout in the group to this single Venmo transaction
+            for p in g["payouts"]:
+                conn.execute(
+                    "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
+                    (venmo_match["id"], venmo_match["date"], p["id"]),
+                )
+                matched += 1
         else:
-            # Create a pending expense entry — payout owed but not yet reconciled
-            cur = conn.execute(
-                """INSERT INTO acct_transactions
-                       (date, description, total_amount, type, source, source_ref,
-                        customer, order_id, entry_type, category, amount, account,
-                        status, event_name)
-                   VALUES (?, ?, ?, 'expense', 'pending', ?, ?, ?, 'expense', 'prize_payout',
-                           ?, 'Venmo', 'active', ?)""",
-                (
-                    event_date, f"Payout: {p['category']} — {event_name}", amount,
-                    f"payout-{payout_id}",
-                    "",  # customer name resolved by customer_id below
-                    f"PAYOUT-{payout_id}",
-                    -amount,  # signed negative (expense/contra)
-                    event_name,
-                ),
-            )
-            conn.execute(
-                "UPDATE tgf_payouts SET acct_transaction_id = ? WHERE id = ?",
-                (cur.lastrowid, payout_id),
-            )
-            # Denormalize customer name onto the acct_transaction
-            conn.execute(
-                """UPDATE acct_transactions SET customer = (
-                       SELECT first_name || ' ' || last_name FROM customers WHERE customer_id = ?
-                   ) WHERE id = ?""",
-                (customer_id, cur.lastrowid),
-            )
+            # Create per-payout pending entries — each payout gets its own
+            # placeholder since we can't resolve them against a Venmo yet
+            for p in g["payouts"]:
+                cur = conn.execute(
+                    """INSERT INTO acct_transactions
+                           (date, description, total_amount, type, source, source_ref,
+                            customer, order_id, entry_type, category, amount, account,
+                            status, event_name)
+                       VALUES (?, ?, ?, 'expense', 'pending', ?, ?, ?, 'expense', 'prize_payout',
+                               ?, 'Venmo', 'active', ?)""",
+                    (
+                        event_date, f"Payout: {p['category']} — {event_name}",
+                        round(float(p["amount"]), 2),
+                        f"payout-{p['id']}",
+                        "",  # customer name filled in below
+                        f"PAYOUT-{p['id']}",
+                        -round(float(p["amount"]), 2),  # signed negative (expense)
+                        event_name,
+                    ),
+                )
+                new_txn_id = cur.lastrowid
+                conn.execute(
+                    "UPDATE tgf_payouts SET acct_transaction_id = ? WHERE id = ?",
+                    (new_txn_id, p["id"]),
+                )
+                # Denormalize customer name onto the acct_transaction
+                conn.execute(
+                    """UPDATE acct_transactions SET customer = (
+                           SELECT first_name || ' ' || last_name FROM customers WHERE customer_id = ?
+                       ) WHERE id = ?""",
+                    (customer_id, new_txn_id),
+                )
     return matched
 
 
@@ -839,17 +868,17 @@ def _match_pending_payouts_to_new_venmo(conn: sqlite3.Connection) -> int:
     """Reverse reconciliation: Venmo prize_payouts that just arrived may cover
     previously-pending tgf_payouts. Link them.
 
-    For each tgf_payouts row with a pending source='pending' acct_transaction,
-    look for an unreserved Venmo prize_payout with exact amount match, same
-    customer, within 7 days post-event. When matched:
-      - Reverse the pending entry (status='reversed')
-      - Repoint tgf_payouts.acct_transaction_id to the Venmo entry
-      - Set tgf_payouts.paid_at
+    Groups pending payouts by (customer_id, event_id), sums each group, and
+    looks for a single Venmo prize_payout that matches the sum. When matched:
+      - Reverses all pending entries in the group (status='reversed')
+      - Points every tgf_payouts row in the group to the Venmo entry
+      - Sets paid_at
 
-    Returns count of newly-matched payouts.
+    Returns count of newly-matched payouts (individual rows, not groups).
     """
     pending = conn.execute(
-        """SELECT p.id as payout_id, p.customer_id, p.amount, p.acct_transaction_id,
+        """SELECT p.id as payout_id, p.event_id, p.customer_id, p.amount,
+                  p.acct_transaction_id,
                   e.event_date, e.name as event_name
            FROM tgf_payouts p
            JOIN tgf_events e ON e.id = p.event_id
@@ -859,9 +888,17 @@ def _match_pending_payouts_to_new_venmo(conn: sqlite3.Connection) -> int:
     if not pending:
         return 0
 
-    matched = 0
+    # Group by (event_id, customer_id)
+    groups: dict[tuple[int, int], list] = {}
     for p in pending:
-        amount = round(float(p["amount"]), 2)
+        key = (p["event_id"], p["customer_id"])
+        groups.setdefault(key, []).append(dict(p))
+
+    matched = 0
+    for (event_id, customer_id), rows in groups.items():
+        group_sum = round(sum(float(r["amount"]) for r in rows), 2)
+        event_date = rows[0]["event_date"]
+
         venmo = conn.execute(
             """SELECT t.id, t.date FROM acct_transactions t
                WHERE t.source = 'venmo'
@@ -880,24 +917,25 @@ def _match_pending_payouts_to_new_venmo(conn: sqlite3.Connection) -> int:
                      AND LOWER(t.customer) = LOWER(c.first_name || ' ' || c.last_name)
                  )
                ORDER BY t.date ASC LIMIT 1""",
-            (amount, p["event_date"], p["event_date"], p["customer_id"]),
+            (group_sum, event_date, event_date, customer_id),
         ).fetchone()
         if not venmo:
             continue
 
-        # Reverse the pending entry + link the real Venmo one
-        conn.execute(
-            "UPDATE acct_transactions SET status = 'reversed' WHERE id = ?",
-            (p["acct_transaction_id"],),
-        )
-        conn.execute(
-            "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
-            (venmo["id"], venmo["date"], p["payout_id"]),
-        )
-        matched += 1
+        # Reverse every pending placeholder in this group + link to the Venmo
+        for r in rows:
+            conn.execute(
+                "UPDATE acct_transactions SET status = 'reversed' WHERE id = ?",
+                (r["acct_transaction_id"],),
+            )
+            conn.execute(
+                "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
+                (venmo["id"], venmo["date"], r["payout_id"]),
+            )
+            matched += 1
 
     if matched:
-        logger.info("Matched %d pending payouts to newly-imported Venmo payments", matched)
+        logger.info("Matched %d pending payouts to Venmo payments (grouped by customer+event)", matched)
     return matched
 
 
