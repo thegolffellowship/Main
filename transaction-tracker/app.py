@@ -6705,6 +6705,121 @@ def api_tgf_dedup_audit():
     return jsonify({"summary": summary, "customers": results})
 
 
+@app.route("/api/tgf/match-diagnostic", methods=["GET"])
+@require_role("admin")
+def api_tgf_match_diagnostic():
+    """Diagnostic: for each pending payout, show WHY it didn't match a Venmo payment.
+
+    Groups pending payouts by (customer_id, event_id) and for each group shows:
+      - expected sum
+      - event date & 7-day window
+      - customer name as stored in customers table
+      - candidate Venmo prize_payout transactions (all, not just matches)
+      - reason for non-match (amount / customer / date / already linked)
+    """
+    from email_parser.database import _connect
+    with _connect() as conn:
+        # Get all pending payout groups (those with source='pending' acct_transaction)
+        pending = conn.execute(
+            """SELECT p.id as payout_id, p.event_id, p.customer_id, p.amount, p.category,
+                      p.acct_transaction_id, t.source as txn_source,
+                      e.event_date, e.name as event_name,
+                      (c.first_name || ' ' || c.last_name) as customer_name
+               FROM tgf_payouts p
+               JOIN tgf_events e ON e.id = p.event_id
+               JOIN customers c ON c.customer_id = p.customer_id
+               LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+               WHERE p.paid_at IS NULL"""
+        ).fetchall()
+
+        # Group by (event_id, customer_id)
+        groups = {}
+        for p in pending:
+            key = (p["event_id"], p["customer_id"])
+            if key not in groups:
+                groups[key] = {
+                    "event_name": p["event_name"],
+                    "event_date": p["event_date"],
+                    "customer_id": p["customer_id"],
+                    "customer_name": p["customer_name"],
+                    "payouts": [],
+                }
+            groups[key]["payouts"].append({
+                "payout_id": p["payout_id"],
+                "amount": p["amount"],
+                "category": p["category"],
+                "txn_source": p["txn_source"],
+            })
+
+        results = []
+        for (event_id, customer_id), g in groups.items():
+            group_sum = round(sum(p["amount"] for p in g["payouts"]), 2)
+            event_date = g["event_date"]
+
+            # List ALL Venmo prize_payouts for this customer (any amount/date)
+            all_venmo = conn.execute(
+                """SELECT id, date, amount, customer, description,
+                          COALESCE(status, 'active') as status,
+                          (SELECT existing.id FROM tgf_payouts existing
+                           WHERE existing.acct_transaction_id = t.id LIMIT 1) as already_linked_to
+                   FROM acct_transactions t
+                   WHERE source = 'venmo' AND category = 'prize_payout'
+                     AND LOWER(customer) = LOWER(?)
+                   ORDER BY date DESC""",
+                (g["customer_name"],),
+            ).fetchall()
+
+            candidates = []
+            for v in all_venmo:
+                v_dict = dict(v)
+                # Compute why this venmo didn't match (or did)
+                reasons = []
+                if round(abs(v_dict["amount"]), 2) != group_sum:
+                    reasons.append(f"amount: venmo ${abs(v_dict['amount']):.2f} vs needed ${group_sum:.2f}")
+                if v_dict["status"] != "active":
+                    reasons.append(f"status: {v_dict['status']}")
+                if v_dict["already_linked_to"]:
+                    reasons.append(f"already linked to payout {v_dict['already_linked_to']}")
+                # Date check
+                date_ok = conn.execute(
+                    "SELECT DATE(?) >= DATE(?) AND DATE(?) <= DATE(?, '+7 days') as ok",
+                    (v_dict["date"], event_date, v_dict["date"], event_date),
+                ).fetchone()
+                if not date_ok or not date_ok["ok"]:
+                    reasons.append(f"date: {v_dict['date']} outside {event_date} to +7d")
+                v_dict["match_blockers"] = reasons or ["would match ✓"]
+                candidates.append(v_dict)
+
+            # Also search for venmo transactions where customer name might differ
+            name_variants = conn.execute(
+                """SELECT id, date, amount, customer, description
+                   FROM acct_transactions
+                   WHERE source = 'venmo' AND category = 'prize_payout'
+                     AND ROUND(ABS(amount), 2) = ?
+                     AND DATE(date) >= DATE(?)
+                     AND DATE(date) <= DATE(?, '+7 days')
+                     AND LOWER(customer) != LOWER(?)""",
+                (group_sum, event_date, event_date, g["customer_name"]),
+            ).fetchall()
+
+            results.append({
+                "event_name": g["event_name"],
+                "event_date": g["event_date"],
+                "customer_name": g["customer_name"],
+                "customer_id": g["customer_id"],
+                "payout_sum": group_sum,
+                "payout_count": len(g["payouts"]),
+                "payouts": g["payouts"],
+                "all_venmo_for_this_customer": candidates,
+                "venmo_amount_matches_but_different_customer_name": [dict(v) for v in name_variants],
+            })
+
+    return jsonify({
+        "total_pending_groups": len(results),
+        "groups": results,
+    })
+
+
 @app.route("/api/tgf/parse-screenshot", methods=["POST"])
 @require_role("manager")
 def api_tgf_parse_screenshot():
