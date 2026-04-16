@@ -2200,6 +2200,42 @@ def api_customer_venmo_handles():
     return jsonify(get_customer_venmo_handles())
 
 
+@app.route("/api/customer-roles")
+@require_role("view-only")
+def api_customer_roles():
+    """Return a map of customer_id → {roles: [...], first_timer_ever: bool}.
+
+    Used by frontend pages (Customers, Events, Transactions) to display
+    role badges and flag STATUS mismatches between self-selected
+    items.user_status and authoritative customer_roles.
+    """
+    from email_parser.database import _connect
+    result = {}
+    with _connect() as conn:
+        # Build role lists per customer
+        role_rows = conn.execute(
+            "SELECT customer_id, role_type FROM customer_roles ORDER BY customer_id, role_type"
+        ).fetchall()
+        for r in role_rows:
+            cid = str(r["customer_id"])
+            if cid not in result:
+                result[cid] = {"roles": [], "first_timer_ever": True}
+            result[cid]["roles"].append(r["role_type"])
+
+        # Add first_timer_ever for every customer (even those without roles)
+        customer_rows = conn.execute(
+            "SELECT customer_id, first_timer_ever FROM customers"
+        ).fetchall()
+        for c in customer_rows:
+            cid = str(c["customer_id"])
+            if cid not in result:
+                result[cid] = {"roles": [], "first_timer_ever": bool(c["first_timer_ever"])}
+            else:
+                result[cid]["first_timer_ever"] = bool(c["first_timer_ever"])
+
+    return jsonify(result)
+
+
 @app.route("/api/customers/create", methods=["POST"])
 @require_role("manager")
 def api_create_customer():

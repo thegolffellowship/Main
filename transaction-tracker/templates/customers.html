@@ -459,6 +459,7 @@
             if (!map[name]) {
                 map[name] = {
                     name: name,
+                    customer_id: item.customer_id || null,
                     first_name: item.first_name || "",
                     last_name: item.last_name || "",
                     middle_name: item.middle_name || "",
@@ -472,7 +473,13 @@
                     aliases: [],
                     archived: false,
                     handicapIndex: null,
+                    roles: [],
+                    first_timer_ever: null,
                 };
+            }
+            // Prefer a non-null customer_id if one shows up later
+            if (!map[name].customer_id && item.customer_id) {
+                map[name].customer_id = item.customer_id;
             }
             map[name].items.push(item);
             if ((item.transaction_status || "active") === "active") {
@@ -1043,6 +1050,35 @@
             `</div>`;
         }).join("");
         html += '</div>';
+
+        // Roles section (read-only)
+        const roleColors = {
+            owner: "#7c3aed;background:#f3e8ff",
+            admin: "#b91c1c;background:#fee2e2",
+            manager: "#c2410c;background:#ffedd5",
+            member: "#166534;background:#dcfce7",
+            course_contact: "#1e40af;background:#dbeafe",
+            sponsor: "#854d0e;background:#fef08a",
+            vendor: "#475569;background:#f1f5f9",
+        };
+        const customerRoles = Array.isArray(customer.roles) ? customer.roles : [];
+        const firstTimerFlag = customer.first_timer_ever === true || customer.first_timer_ever === 1;
+        let rolesHtml = "";
+        if (customerRoles.length) {
+            rolesHtml = customerRoles.map(r => {
+                const c = roleColors[r] || "#475569;background:#f1f5f9";
+                return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;color:${c};margin-right:4px;text-transform:uppercase;letter-spacing:0.03em;">${r.replace(/_/g, " ")}</span>`;
+            }).join("");
+        } else {
+            rolesHtml = '<span style="color:var(--text-muted); font-size:0.82rem;">No assigned roles</span>';
+        }
+        if (firstTimerFlag) {
+            rolesHtml += `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;color:#a16207;background:#fefce8;margin-right:4px;text-transform:uppercase;letter-spacing:0.03em;">1st Timer (lifetime)</span>`;
+        }
+        html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
+            <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Roles</div>
+            <div style="font-size:0.82rem; min-height:1.2em;">${rolesHtml}</div>
+        </div>`;
 
         // Address section (read-only)
         const formattedAddr = formatShippingAddress(customer);
@@ -2522,6 +2558,21 @@
                     if (v) c.venmo_username = v;
                 });
             } catch (e) { /* venmo data optional */ }
+
+            // Fetch customer roles and merge into customer objects
+            try {
+                const rolesRes = await fetch("/api/customer-roles");
+                const rolesData = await rolesRes.json();
+                allCustomers.forEach(c => {
+                    if (c.customer_id) {
+                        const info = rolesData[String(c.customer_id)];
+                        if (info) {
+                            c.roles = info.roles || [];
+                            c.first_timer_ever = info.first_timer_ever;
+                        }
+                    }
+                });
+            } catch (e) { /* roles data optional */ }
 
             // Update selectedCustomer with fresh data before rendering
             if (selectedCustomer) {
