@@ -1353,7 +1353,7 @@
     let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
     let payoutsOpenForEvent = {};  // keyed by event id → true if payouts panel is open
-    let tgfPayoutData = { golfers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
+    let tgfPayoutData = { customers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
     let mvpUnlinks = new Set();  // event names unlinked from same-day TGF MVP combining
     let eventSortField = "event_date";
     let eventSortDir = "asc";
@@ -2879,14 +2879,16 @@
         html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.5rem 1rem;"><span style="font-size:0.7rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;">Payouts</span><div style="font-size:1.1rem;font-weight:700;">${tgfEvent.payouts.length}</div></div>`;
         html += `</div>`;
 
-        // ── Group payouts by golfer ──
+        // ── Group payouts by customer ──
         const golferMap = {};
         tgfEvent.payouts.forEach(p => {
-            if (!golferMap[p.golfer_name]) {
-                golferMap[p.golfer_name] = { name: p.golfer_name, golfer_id: p.golfer_id, total: 0, items: [] };
+            const name = p.customer_name || p.golfer_name || "Unknown";
+            const cid = p.customer_id || p.golfer_id;
+            if (!golferMap[name]) {
+                golferMap[name] = { name: name, golfer_id: cid, total: 0, items: [] };
             }
-            golferMap[p.golfer_name].total += p.amount;
-            golferMap[p.golfer_name].items.push(p);
+            golferMap[name].total += p.amount;
+            golferMap[name].items.push(p);
         });
         const golferList = Object.values(golferMap).sort((a, b) => b.total - a.total);
 
