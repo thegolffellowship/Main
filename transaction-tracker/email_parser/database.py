@@ -500,6 +500,123 @@ def _migrate_eliminate_tgf_golfers(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
+    """One-time cleanup: merge duplicate customers created by tgf_golfers migration.
+
+    The migration stored "LAST, First" names from payout screenshots as
+    separate customers instead of matching them to existing "First Last"
+    records.  This function merges the confirmed duplicates.
+
+    Idempotent — skips if no acquisition_source='tgf_payout_migration'
+    customers remain.
+    """
+    remaining = conn.execute(
+        "SELECT COUNT(*) as c FROM customers WHERE acquisition_source = 'tgf_payout_migration'"
+    ).fetchone()["c"]
+    if remaining == 0:
+        return  # Already cleaned up
+
+    logger.info("Starting payout customer dedup — %d migration customers to process", remaining)
+
+    # Approved merge map: migrated_customer_id → target_customer_id
+    # User-confirmed matches from the dedup audit
+    MERGE_MAP = {
+        363: 296,   # Roland Campos → Rolando Campos
+        364: 14,    # MARQUES, Mike → Mike Marques
+        365: 15,    # REED, Paul → Paul Reed
+        366: 31,    # STRATON, Robert → Robert Straiton (typo)
+        367: 29,    # MOORE, Dion → Dion Moore
+        368: 37,    # HOGUE, Jay → Jay Hogue
+        369: 302,   # Moore, Hunter → Hunter Moore
+        370: 39,    # BARNA, Kelly → Kelly Barna
+        371: 312,   # GAGE, Erica → Erica Gage
+        372: 294,   # JENKINS, Mike → Mike Jenkins
+        373: 239,   # COTTRILL, Matt → Matt Cottrill
+        374: 299,   # FREUND, Mark → Mark Freund
+        375: 236,   # CEDILLO, David → David Cedillo
+        376: 296,   # CAMPOS, Roland → Rolando Campos (same target as 363)
+        377: 136,   # YOUNGS, Pat → Pat Youngs
+        378: 46,    # McCRARY, Justin → Justin McCrary (canonical)
+        379: 3,     # WOLIN, Allen → Allen Wolin
+        380: 320,   # AGUILERA, Hector → Hector Aguilera
+        381: 38,    # SHARITZ, Don → Don Sharitz
+        382: 24,    # SOUTH, Daniel → Daniel South
+        383: 219,   # ATKINSON, Bob → Bob Atkinson
+        384: 325,   # CHALFANT, Tanner → Tanner Chalfant
+        385: 31,    # STRAITON, Robert → Robert Straiton (same target as 366)
+        386: 61,    # MELCHOR, Eduardo → Eduardo Melchor
+        387: 30,    # SHARP, Matt → Matt Sharp
+        388: 116,   # COLASANTO, Adam → Adam Colasanto
+        389: 109,   # CLOER, Neal → Neal Cloer
+        390: 16,    # SARRIA, Al → Al Sarria
+        391: 22,    # GARTZ, Joshua → Joshua Bartz (typo in screenshot)
+    }
+
+    # Pre-existing duplicates to also clean up
+    PRE_EXISTING_MERGES = {
+        11: 312,    # Erica Cage (typo) → Erica Gage
+        317: 46,    # Justin McCrary (wrong Venmo) → canonical Justin McCrary
+        324: 46,    # Justin McCrary (third dup) → canonical Justin McCrary
+    }
+
+    merged = 0
+    for source_cid, target_cid in {**MERGE_MAP, **PRE_EXISTING_MERGES}.items():
+        # Verify source still exists (idempotent)
+        source = conn.execute(
+            "SELECT customer_id FROM customers WHERE customer_id = ?", (source_cid,)
+        ).fetchone()
+        if not source:
+            continue  # Already merged in a previous run
+
+        target = conn.execute(
+            "SELECT customer_id FROM customers WHERE customer_id = ?", (target_cid,)
+        ).fetchone()
+        if not target:
+            logger.warning("Merge target customer_id=%d not found — skipping source %d",
+                           target_cid, source_cid)
+            continue
+
+        # Reassign tgf_payouts
+        conn.execute(
+            "UPDATE tgf_payouts SET customer_id = ? WHERE customer_id = ?",
+            (target_cid, source_cid),
+        )
+
+        # Reassign items (if any)
+        conn.execute(
+            "UPDATE items SET customer_id = ? WHERE customer_id = ?",
+            (target_cid, source_cid),
+        )
+
+        # Move emails (skip dupes)
+        src_emails = conn.execute(
+            "SELECT email FROM customer_emails WHERE customer_id = ?", (source_cid,)
+        ).fetchall()
+        for e in src_emails:
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO customer_emails (customer_id, email, label) VALUES (?, ?, 'merged')",
+                    (target_cid, e["email"]),
+                )
+            except Exception:
+                pass
+        conn.execute("DELETE FROM customer_emails WHERE customer_id = ?", (source_cid,))
+
+        # Delete the orphaned source customer
+        conn.execute("DELETE FROM customers WHERE customer_id = ?", (source_cid,))
+        merged += 1
+
+    # Fix wrong Venmo on customer 317 target → customer 46 should NOT inherit tchalfant
+    conn.execute(
+        """UPDATE customers SET venmo_username = NULL
+           WHERE customer_id = 46
+             AND venmo_username = 'tchalfant'""",
+    )
+
+    conn.commit()
+    logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
+
+
 def init_db(db_path: str | Path | None = None) -> None:
     """Create the items table if it doesn't exist."""
     with _connect(db_path) as conn:
@@ -1113,6 +1230,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_eliminate_tgf_golfers(conn)
         except Exception as e:
             logger.warning("tgf_golfers elimination migration failed: %s", e)
+
+        # One-time cleanup: merge duplicate payout customers created by migration
+        try:
+            _migrate_dedupe_payout_customers(conn)
+        except Exception as e:
+            logger.warning("Payout customer dedup migration failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
@@ -4611,6 +4734,19 @@ def merge_customers(source_name: str, target_name: str,
             conn.execute(
                 "UPDATE items SET customer_id = ? WHERE customer_id = ?",
                 (target_cid, source_cid),
+            )
+
+            # Reassign tgf_payouts from source to target
+            conn.execute(
+                "UPDATE tgf_payouts SET customer_id = ? WHERE customer_id = ?",
+                (target_cid, source_cid),
+            )
+
+            # Reassign acct_transactions customer field
+            conn.execute(
+                """UPDATE acct_transactions SET customer = ?
+                   WHERE customer = ? COLLATE NOCASE""",
+                (target_name, source_name),
             )
 
             # Move source's customer_emails to target (skip duplicates)
@@ -14476,9 +14612,13 @@ def run_compliance_checks(db_path: str | Path | None = None) -> list[dict]:
 def _resolve_customer_for_payout(conn: sqlite3.Connection, name: str) -> int:
     """Return customer_id for a payout entry, creating a customer if needed.
 
+    Handles both "First Last" and "LAST, First" formats (the latter is common
+    in tournament leaderboard screenshots).
+
     Uses the same resolution cascade as email parsing (_lookup_customer_id):
-    exact name, alias, etc.  If no customer matches, creates one from the
-    provided name with acquisition_source='tgf_payout'.
+    exact name, alias, etc.  If the raw name doesn't match, tries the reversed
+    "LAST, First" → "First Last" interpretation.  If no customer matches,
+    creates one from the normalized name with acquisition_source='tgf_payout'.
 
     Raises ValueError if the name is empty or cannot be parsed into first+last.
     """
@@ -14487,12 +14627,42 @@ def _resolve_customer_for_payout(conn: sqlite3.Connection, name: str) -> int:
 
     clean_name = name.strip()
 
-    # Try to find an existing customer via the standard cascade
+    # Detect and normalize "LAST, First" format
+    if "," in clean_name:
+        parts = [p.strip() for p in clean_name.split(",", 1)]
+        if len(parts) == 2 and parts[0] and parts[1]:
+            # "CAMPOS, Roland" → first="Roland", last="Campos"
+            normalized_first = parts[1].title()
+            normalized_last = parts[0].title()
+            normalized_name = f"{normalized_first} {normalized_last}"
+
+            # Try normalized name first (most likely to match existing customer)
+            cid = _lookup_customer_id(conn, normalized_name, None)
+            if cid is not None:
+                return cid
+
+            # Also try the raw format in case it was stored that way
+            cid = _lookup_customer_id(conn, clean_name, None)
+            if cid is not None:
+                return cid
+
+            # Create customer using the properly-ordered name
+            cur = conn.execute(
+                """INSERT INTO customers
+                       (first_name, last_name, account_status, acquisition_source)
+                   VALUES (?, ?, 'active', 'tgf_payout')""",
+                (normalized_first, normalized_last),
+            )
+            new_cid = cur.lastrowid
+            logger.info("Created customer %d for payout entry '%s' (normalized: %s)",
+                        new_cid, clean_name, normalized_name)
+            return new_cid
+
+    # Standard "First Last" format
     cid = _lookup_customer_id(conn, clean_name, None)
     if cid is not None:
         return cid
 
-    # Create a new customer record
     parts = clean_name.split()
     if len(parts) >= 2:
         first = parts[0]
