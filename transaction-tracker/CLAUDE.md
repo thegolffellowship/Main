@@ -787,7 +787,7 @@ Each row represents one player's cost allocation for one event:
 ## Database Tables (35+)
 
 `items`, `processed_emails`, `events`, `event_aliases`, `rsvps`, `rsvp_overrides`,
-`rsvp_email_overrides`, `customers`, `customer_emails`, `customer_aliases`,
+`rsvp_email_overrides`, `customers`, `customer_emails`, `customer_aliases`, `customer_roles`,
 `handicap_rounds`, `handicap_player_links`, `handicap_settings`,
 `message_templates`, `message_log`, `feedback`, `parse_warnings`,
 `season_contests`, `app_settings`, `action_items`,
@@ -797,6 +797,7 @@ Each row represents one player's cost allocation for one event:
 `agent_action_log`, `tgf_events`, `tgf_payouts`
 
 Key tables not documented elsewhere in this file:
+- `customer_roles` — multi-role junction table (maps to Platform `user_types`). Roles: `member`, `manager`, `admin`, `owner` (→ Platform `super_admin`), `course_contact`, `sponsor`, `vendor`. UNIQUE(customer_id, role_type). `granted_by` tracks who assigned the role.
 - `app_settings` — persistent key-value store (matrix data, feature flags)
 - `season_contests` — contest enrollment tracking (NET/GROSS points race, city match play)
 - `parse_warnings` — flagged items with potential parsing errors (open/dismissed/resolved)

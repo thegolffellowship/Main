@@ -617,6 +617,96 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
     logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
 
 
+def _migrate_seed_customer_roles(conn: sqlite3.Connection) -> None:
+    """One-time seed of customer_roles junction table + first_timer_ever backfill.
+
+    Idempotent — skips if customer_roles already has rows.
+
+    Maps to Platform user_types table:
+      'member', 'manager', 'admin', 'owner' (→ super_admin at migration),
+      'course_contact', 'sponsor', 'vendor'
+
+    Seed logic:
+      - Kerry Niester → owner + admin + member
+      - Robert Straiton, James Jones → manager + member
+      - All customers with current_player_status in (active_member, expired_member) → member
+      - first_timer_ever backfilled: 0 for anyone with paid registrations, 1 for all others
+    """
+    existing = conn.execute("SELECT COUNT(*) as c FROM customer_roles").fetchone()["c"]
+    if existing > 0:
+        return
+
+    logger.info("Seeding customer_roles junction table")
+
+    def _find_customer(conn, first, last):
+        row = conn.execute(
+            "SELECT customer_id FROM customers WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)",
+            (first, last),
+        ).fetchone()
+        return row["customer_id"] if row else None
+
+    def _add_role(conn, cid, role, granted_by=None):
+        if cid is None:
+            return
+        conn.execute(
+            "INSERT OR IGNORE INTO customer_roles (customer_id, role_type, granted_by) VALUES (?, ?, ?)",
+            (cid, role, granted_by),
+        )
+
+    # Named leadership roles
+    kerry_id = _find_customer(conn, "Kerry", "Niester")
+    robert_id = _find_customer(conn, "Robert", "Straiton")
+    james_id = _find_customer(conn, "James", "Jones")
+
+    if kerry_id:
+        for role in ("owner", "admin", "member"):
+            _add_role(conn, kerry_id, role)
+        logger.info("Assigned owner+admin+member to Kerry Niester (customer_id=%s)", kerry_id)
+
+    if robert_id:
+        for role in ("manager", "member"):
+            _add_role(conn, robert_id, role, granted_by=kerry_id)
+        logger.info("Assigned manager+member to Robert Straiton (customer_id=%s)", robert_id)
+
+    if james_id:
+        for role in ("manager", "member"):
+            _add_role(conn, james_id, role, granted_by=kerry_id)
+        logger.info("Assigned manager+member to James Jones (customer_id=%s)", james_id)
+
+    # Bulk-assign 'member' role to all active/expired members
+    member_ids = conn.execute(
+        """SELECT customer_id FROM customers
+           WHERE current_player_status IN ('active_member', 'expired_member')
+             AND customer_id NOT IN (SELECT customer_id FROM customer_roles WHERE role_type = 'member')"""
+    ).fetchall()
+    for row in member_ids:
+        _add_role(conn, row["customer_id"], "member")
+
+    total_roles = conn.execute("SELECT COUNT(*) as c FROM customer_roles").fetchone()["c"]
+    logger.info("Seeded %d customer_roles entries", total_roles)
+
+    # Backfill first_timer_ever: FALSE for anyone with paid event registrations
+    updated = conn.execute(
+        """UPDATE customers SET first_timer_ever = 0
+           WHERE first_timer_ever IS NULL
+             AND customer_id IN (
+               SELECT DISTINCT customer_id FROM items
+               WHERE customer_id IS NOT NULL
+                 AND COALESCE(transaction_status, 'active') IN ('active', 'credited', 'transferred', 'wd', 'refunded')
+                 AND item_name != 'TGF MEMBERSHIP'
+                 AND merchant NOT IN ('Roster Import', 'Customer Entry', 'RSVP Import', 'RSVP Email Link')
+             )"""
+    ).rowcount
+
+    # Default everyone else to TRUE (they are a first timer until proven otherwise)
+    defaulted = conn.execute(
+        "UPDATE customers SET first_timer_ever = 1 WHERE first_timer_ever IS NULL"
+    ).rowcount
+
+    conn.commit()
+    logger.info("first_timer_ever backfill: %d set to FALSE (played), %d defaulted to TRUE", updated, defaulted)
+
+
 def init_db(db_path: str | Path | None = None) -> None:
     """Create the items table if it doesn't exist."""
     with _connect(db_path) as conn:
@@ -1075,6 +1165,26 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
 
+        # Customer roles — multi-role support (maps to Platform user_types)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS customer_roles (
+                role_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL
+                            REFERENCES customers(customer_id)
+                            ON DELETE CASCADE,
+                role_type   VARCHAR(30) NOT NULL
+                            CHECK (role_type IN (
+                                'member', 'manager', 'admin', 'owner',
+                                'course_contact', 'sponsor', 'vendor'
+                            )),
+                granted_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                granted_by  INTEGER REFERENCES customers(customer_id),
+                UNIQUE(customer_id, role_type)
+            )
+            """
+        )
+
         # Multiple emails per customer.
         # is_primary  = the canonical identity email (max one per customer).
         # is_golf_genius = the email used for Golf Genius handicap exports
@@ -1236,6 +1346,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_dedupe_payout_customers(conn)
         except Exception as e:
             logger.warning("Payout customer dedup migration failed: %s", e)
+
+        # Seed customer_roles junction + backfill first_timer_ever
+        try:
+            _migrate_seed_customer_roles(conn)
+        except Exception as e:
+            logger.warning("Customer roles seed migration failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
