@@ -6480,6 +6480,152 @@ def api_tgf_action():
         return jsonify({"error": f"Unknown action: {action}"}), 400
 
 
+@app.route("/api/tgf/dedup-audit", methods=["GET"])
+@require_role("admin")
+def api_tgf_dedup_audit():
+    """Diagnostic: list customers created by the tgf_golfers migration and
+    find likely duplicates of existing customers (name-format mismatches).
+
+    For each customer with acquisition_source IN ('tgf_payout','tgf_payout_migration'),
+    try to find an existing customer whose name matches in reversed format
+    ("LAST, First" ↔ "First Last") or normalized form.
+    """
+    from email_parser.database import _connect
+
+    def normalize(s: str) -> str:
+        return " ".join((s or "").strip().split()).lower()
+
+    def parse_commaed(name: str) -> tuple[str, str] | None:
+        """Parse 'LAST, First' → ('First', 'LAST'). Returns None if not that format."""
+        if "," not in name:
+            return None
+        parts = [p.strip() for p in name.split(",", 1)]
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            return None
+        # LAST, First → return (First, Last)
+        return parts[1], parts[0]
+
+    results = []
+    with _connect() as conn:
+        # All customers created from tgf_golfers migration
+        migrated_rows = conn.execute(
+            """SELECT customer_id, first_name, last_name, venmo_username, chapter,
+                      acquisition_source, created_at
+               FROM customers
+               WHERE acquisition_source IN ('tgf_payout', 'tgf_payout_migration')
+               ORDER BY customer_id"""
+        ).fetchall()
+
+        for mr in migrated_rows:
+            mr_d = dict(mr)
+            full_name = f"{mr_d['first_name']} {mr_d['last_name']}".strip()
+
+            # How many payouts point to this customer?
+            payout_stats = conn.execute(
+                """SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as total
+                   FROM tgf_payouts WHERE customer_id = ?""",
+                (mr_d["customer_id"],),
+            ).fetchone()
+
+            # Try to find candidate matches in the customers table
+            candidates = []
+
+            # Case 1: stored as "LAST, First" with last_name containing comma format
+            # e.g., first_name="CAMPOS" last_name="Roland" (because parser split incorrectly)
+            # Try the reversed interpretation: treat last_name as first, first_name as last
+            reversed_candidates = conn.execute(
+                """SELECT customer_id, first_name, last_name, venmo_username, chapter,
+                          acquisition_source
+                   FROM customers
+                   WHERE customer_id != ?
+                     AND acquisition_source IS NOT 'tgf_payout_migration'
+                     AND acquisition_source IS NOT 'tgf_payout'
+                     AND (
+                       (LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?))
+                       OR (LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?))
+                     )""",
+                (
+                    mr_d["customer_id"],
+                    # interpretation 1: first_name/last_name swapped (comma form)
+                    mr_d["last_name"], mr_d["first_name"],
+                    # interpretation 2: same as stored (exact match)
+                    mr_d["first_name"], mr_d["last_name"],
+                ),
+            ).fetchall()
+
+            for rc in reversed_candidates:
+                candidates.append({
+                    "match_type": "reversed_exact",
+                    **dict(rc),
+                })
+
+            # Case 2: fuzzy — same last name, either first name matches as initial or shared prefix
+            if not candidates and mr_d["last_name"]:
+                fuzzy = conn.execute(
+                    """SELECT customer_id, first_name, last_name, venmo_username, chapter,
+                              acquisition_source
+                       FROM customers
+                       WHERE customer_id != ?
+                         AND acquisition_source IS NOT 'tgf_payout_migration'
+                         AND acquisition_source IS NOT 'tgf_payout'
+                         AND (
+                           LOWER(last_name) = LOWER(?)
+                           OR LOWER(first_name) = LOWER(?)
+                         )
+                       LIMIT 5""",
+                    (mr_d["customer_id"], mr_d["last_name"], mr_d["last_name"]),
+                ).fetchall()
+                for f in fuzzy:
+                    candidates.append({
+                        "match_type": "fuzzy_lastname",
+                        **dict(f),
+                    })
+
+            # Also look for intra-migration duplicates (two customers both created by migration)
+            intra_candidates = conn.execute(
+                """SELECT customer_id, first_name, last_name, venmo_username, chapter,
+                          acquisition_source
+                   FROM customers
+                   WHERE customer_id != ?
+                     AND acquisition_source IN ('tgf_payout', 'tgf_payout_migration')
+                     AND (
+                       (LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?))
+                       OR (LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?))
+                     )""",
+                (
+                    mr_d["customer_id"],
+                    mr_d["last_name"], mr_d["first_name"],
+                    mr_d["first_name"], mr_d["last_name"],
+                ),
+            ).fetchall()
+            for ic in intra_candidates:
+                candidates.append({
+                    "match_type": "intra_migration_reversed",
+                    **dict(ic),
+                })
+
+            results.append({
+                "migrated_customer_id": mr_d["customer_id"],
+                "migrated_name": full_name,
+                "first_name": mr_d["first_name"],
+                "last_name": mr_d["last_name"],
+                "venmo_username": mr_d["venmo_username"],
+                "chapter": mr_d["chapter"],
+                "acquisition_source": mr_d["acquisition_source"],
+                "payout_count": payout_stats["cnt"],
+                "payout_total": round(payout_stats["total"] or 0, 2),
+                "candidate_matches": candidates,
+            })
+
+        summary = {
+            "total_migrated_customers": len(migrated_rows),
+            "with_candidates": sum(1 for r in results if r["candidate_matches"]),
+            "without_candidates": sum(1 for r in results if not r["candidate_matches"]),
+        }
+
+    return jsonify({"summary": summary, "customers": results})
+
+
 @app.route("/api/tgf/parse-screenshot", methods=["POST"])
 @require_role("manager")
 def api_tgf_parse_screenshot():
