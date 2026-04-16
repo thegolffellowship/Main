@@ -79,13 +79,20 @@ Add this to your `claude_desktop_config.json` (Settings → Developer → Edit C
 
 No Python or local install needed — Claude Desktop connects directly to Railway.
 
-### Available tools (21)
+### Available tools (31)
 
 **Read:**
 `get_transactions`, `get_transaction_by_id`, `get_statistics`,
 `get_data_quality_report`, `get_recent_snapshot`, `list_events`,
 `get_event_registrations`, `list_customers`, `get_customer_details`,
 `search_transactions`
+
+**Financial & Reconciliation:**
+`get_event_financial_summary`, `get_acct_transactions`,
+`get_bank_deposits`, `get_reconciliation_detail`,
+`get_cashflow_summary`, `get_acct_allocations`,
+`get_godaddy_order_splits`, `get_chart_of_accounts`,
+`get_mcp_ledger_entries`, `get_venmo_transactions`
 
 **Write:**
 `update_transaction`, `credit_transaction`, `transfer_transaction`,
@@ -209,7 +216,7 @@ When a new transaction arrives, the system resolves the customer in this order:
 - **COO AI** — Claude-powered business intelligence chat with 6 specialist agents
 - **TGF Payouts** — tournament payout tracking with screenshot import via Claude Vision
 - **Golf Genius sync** via direct HTTP requests in `golf_genius_sync.py` (rewritten from Playwright)
-- **MCP Server** in `mcp_server.py` — 21 tools for Claude direct DB access
+- **MCP Server** in `mcp_server.py` — 31 tools for Claude direct DB access
 - **Auth** — PIN-based with roles: `admin`, `manager`, `view-only`; `@require_role()` decorator
 - **`initAuth()`** must be called on every page for nav link visibility (DATABASE link, etc.)
 
@@ -467,7 +474,7 @@ Cards display the **event charge** (whole dollars, before tx fee).
 - `static/js/version.js` — Version number + changelog data
 - `static/js/chat-widget.js` — Support/feedback chat widget
 - `golf_genius_sync.py` — Golf Genius handicap sync via HTTP
-- `mcp_server.py` — MCP server (21 tools for Claude direct DB access)
+- `mcp_server.py` — MCP server (31 tools for Claude direct DB access)
 
 ## COO Dashboard & AI Chat
 

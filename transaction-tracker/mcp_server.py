@@ -45,6 +45,12 @@ from email_parser.database import (
     get_all_rsvps,
     get_rsvp_stats,
     rematch_rsvps,
+    # Financial & reconciliation
+    get_event_financial_summary as _get_event_financial_summary,
+    get_cashflow_data as _get_cashflow_data,
+    get_chart_of_accounts as _get_chart_of_accounts,
+    get_ledger_entries as _get_ledger_entries,
+    _connect,
 )
 
 # ── Initialise ──────────────────────────────────────────────────────────
@@ -610,6 +616,355 @@ def get_agent_action_log(agent_name: str = "", date_from: str = "",
         date_to=date_to or None,
         limit=limit,
     ), indent=2)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  FINANCIAL & RECONCILIATION TOOLS
+# ═══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def get_event_financial_summary(event_name: str) -> str:
+    """Get full financial picture for an event: income, contra, net revenue, course fees,
+    prize pool, projected profit, reconciliation count, and verified/fallback path indicator.
+
+    Args:
+        event_name: The exact event name (case-insensitive)
+    """
+    result = _get_event_financial_summary(event_name)
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def get_acct_transactions(
+    event_name: str = "",
+    category: str = "",
+    entry_type: str = "",
+    status: str = "active",
+    limit: int = 100,
+) -> str:
+    """Query accounting transactions (the single-source-of-truth ledger).
+
+    Args:
+        event_name: Filter by event name (exact, case-insensitive)
+        category: Filter by category (registration, processing_fee, addon, refund,
+                  godaddy_order, godaddy_batch, transfer_in, transfer_out, comp, credit_issued)
+        entry_type: Filter by type (income, expense, contra, liability)
+        status: Filter by status (active, reversed, reconciled, merged). Default: active
+        limit: Max rows (default 100)
+    """
+    clauses = []
+    params = []
+    if event_name:
+        clauses.append("event_name = ? COLLATE NOCASE")
+        params.append(event_name)
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
+    if entry_type:
+        clauses.append("entry_type = ?")
+        params.append(entry_type)
+    if status:
+        clauses.append("COALESCE(status, 'active') = ?")
+        params.append(status)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.append(limit)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""SELECT id, date, description, entry_type, category, amount,
+                       net_deposit, merchant_fee, source, source_ref,
+                       event_name, customer, order_id, status
+                FROM acct_transactions{where}
+                ORDER BY date DESC, id DESC LIMIT ?""",
+            params,
+        ).fetchall()
+    return json.dumps([dict(r) for r in rows], indent=2)
+
+
+@mcp.tool()
+def get_bank_deposits(
+    account_id: int = 0,
+    status: str = "",
+    month: str = "",
+    limit: int = 100,
+) -> str:
+    """Query imported bank statement deposits with match status.
+
+    Args:
+        account_id: Filter by bank account ID (0 = all)
+        status: Filter by match status (unmatched, partial, matched)
+        month: Filter by month in YYYY-MM format
+        limit: Max rows (default 100)
+    """
+    clauses = []
+    params = []
+    if account_id:
+        clauses.append("d.account_id = ?")
+        params.append(account_id)
+    if status:
+        clauses.append("d.status = ?")
+        params.append(status)
+    if month:
+        clauses.append("d.deposit_date LIKE ?")
+        params.append(f"{month}%")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.append(limit)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""SELECT d.id, ba.name as account_name, ba.account_type,
+                       d.deposit_date, d.description, d.amount,
+                       d.status, d.raw_data as source_ref
+                FROM bank_deposits d
+                JOIN bank_accounts ba ON ba.id = d.account_id
+                {where}
+                ORDER BY d.deposit_date DESC, d.id DESC LIMIT ?""",
+            params,
+        ).fetchall()
+    return json.dumps([dict(r) for r in rows], indent=2)
+
+
+@mcp.tool()
+def get_reconciliation_detail(month: str) -> str:
+    """Get full reconciliation detail for a month: matched/unmatched deposits and transactions,
+    dollar totals, and period close status.
+
+    Args:
+        month: Month in YYYY-MM format (e.g. "2026-04")
+    """
+    with _connect() as conn:
+        # All deposits for the month
+        deposits = conn.execute(
+            """SELECT d.id, d.deposit_date, d.description, d.amount, d.status,
+                      ba.name as account_name
+               FROM bank_deposits d
+               JOIN bank_accounts ba ON ba.id = d.account_id
+               WHERE d.deposit_date LIKE ?
+               ORDER BY d.deposit_date""",
+            (f"{month}%",),
+        ).fetchall()
+
+        # Matches for those deposits
+        deposit_ids = [d["id"] for d in deposits]
+        matches = []
+        if deposit_ids:
+            placeholders = ",".join("?" * len(deposit_ids))
+            matches = conn.execute(
+                f"""SELECT rm.bank_deposit_id, rm.acct_transaction_id,
+                           rm.match_confidence, rm.match_type,
+                           t.amount as txn_amount, t.description as txn_description,
+                           t.category, t.source_ref
+                    FROM reconciliation_matches rm
+                    JOIN acct_transactions t ON t.id = rm.acct_transaction_id
+                    WHERE rm.bank_deposit_id IN ({placeholders})""",
+                deposit_ids,
+            ).fetchall()
+
+        # Unmatched accounting transactions for the month
+        unmatched_txns = conn.execute(
+            """SELECT id, date, description, amount, category, source_ref, entry_type
+               FROM acct_transactions
+               WHERE date LIKE ? AND entry_type = 'income'
+                 AND COALESCE(status, 'active') = 'active'
+                 AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
+               ORDER BY date""",
+            (f"{month}%",),
+        ).fetchall()
+
+        # Period close status
+        period_close = conn.execute(
+            "SELECT * FROM period_closings WHERE period = ?",
+            (month,),
+        ).fetchone()
+
+    # Build match map
+    match_map = {}
+    for m in matches:
+        dep_id = m["bank_deposit_id"]
+        if dep_id not in match_map:
+            match_map[dep_id] = []
+        match_map[dep_id].append(dict(m))
+
+    matched_dollars = sum(d["amount"] for d in deposits if d["status"] == "matched")
+    unmatched_dollars = sum(d["amount"] for d in deposits if d["status"] != "matched")
+
+    return json.dumps({
+        "month": month,
+        "deposits": [
+            {**dict(d), "matches": match_map.get(d["id"], [])}
+            for d in deposits
+        ],
+        "unmatched_transactions": [dict(r) for r in unmatched_txns],
+        "summary": {
+            "total_deposits": len(deposits),
+            "matched_deposits": sum(1 for d in deposits if d["status"] == "matched"),
+            "unmatched_deposits": sum(1 for d in deposits if d["status"] != "matched"),
+            "matched_dollars": matched_dollars,
+            "unmatched_dollars": unmatched_dollars,
+            "unmatched_transactions": len(unmatched_txns),
+        },
+        "period_closed": bool(period_close),
+    }, indent=2)
+
+
+@mcp.tool()
+def get_cashflow_summary() -> str:
+    """Get weekly cash flow data: expected income, confirmed income, projected expenses,
+    actual expenses, net, running balance, and warning flags. Returns ~13 weeks by default."""
+    result = _get_cashflow_data()
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def get_acct_allocations(
+    event_name: str = "",
+    month: str = "",
+    limit: int = 100,
+) -> str:
+    """Query per-player cost allocations: course payable, prize pool, TGF operating,
+    GoDaddy fee, tax reserve, total collected.
+
+    Args:
+        event_name: Filter by event name (exact, case-insensitive)
+        month: Filter by month in YYYY-MM format (matches allocation_date)
+        limit: Max rows (default 100)
+    """
+    clauses = []
+    params = []
+    if event_name:
+        clauses.append("event_name = ? COLLATE NOCASE")
+        params.append(event_name)
+    if month:
+        clauses.append("allocation_date LIKE ?")
+        params.append(f"{month}%")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.append(limit)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""SELECT order_id, item_id, event_name, chapter, allocation_date,
+                       course_payable, prize_pool, tgf_operating, godaddy_fee,
+                       tax_reserve, total_collected, allocation_status, payment_method
+                FROM acct_allocations{where}
+                ORDER BY allocation_date DESC, id DESC LIMIT ?""",
+            params,
+        ).fetchall()
+    return json.dumps([dict(r) for r in rows], indent=2)
+
+
+@mcp.tool()
+def get_godaddy_order_splits(
+    event_name: str = "",
+    split_type: str = "",
+    limit: int = 100,
+) -> str:
+    """Query GoDaddy order split details: registration, transaction fee, merchant fee,
+    and coupon components per order.
+
+    Args:
+        event_name: Filter by event name (exact, case-insensitive)
+        split_type: Filter by split type (registration, transaction_fee, merchant_fee, coupon)
+        limit: Max rows (default 100)
+    """
+    clauses = []
+    params = []
+    if event_name:
+        clauses.append("s.event_name = ? COLLATE NOCASE")
+        params.append(event_name)
+    if split_type:
+        clauses.append("s.split_type = ?")
+        params.append(split_type)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.append(limit)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""SELECT s.id, s.transaction_id, s.item_id, s.event_name,
+                       s.customer, s.split_type, s.amount,
+                       t.date as transaction_date, t.status as transaction_status
+                FROM godaddy_order_splits s
+                JOIN acct_transactions t ON t.id = s.transaction_id
+                {where}
+                ORDER BY t.date DESC, s.id DESC LIMIT ?""",
+            params,
+        ).fetchall()
+    return json.dumps([dict(r) for r in rows], indent=2)
+
+
+@mcp.tool()
+def get_chart_of_accounts() -> str:
+    """Get the full chart of accounts: code, name, account type, Schedule C line, active status."""
+    result = _get_chart_of_accounts()
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def get_mcp_ledger_entries(
+    account_code: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    reconciled: int = -1,
+    limit: int = 200,
+) -> str:
+    """Get general ledger entries with optional filters.
+
+    Args:
+        account_code: Filter by account code (e.g. "4000" for Event Revenue)
+        date_from: Start date YYYY-MM-DD
+        date_to: End date YYYY-MM-DD
+        reconciled: Filter by reconciled status (0=no, 1=yes, -1=all). Default: all
+        limit: Max rows (default 200)
+    """
+    result = _get_ledger_entries(
+        account_code=account_code or None,
+        date_from=date_from or None,
+        date_to=date_to or None,
+        reconciled=reconciled if reconciled >= 0 else None,
+        limit=limit,
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def get_venmo_transactions(
+    direction: str = "",
+    category: str = "",
+    month: str = "",
+    limit: int = 100,
+) -> str:
+    """Query Venmo accounting transactions (source = 'venmo').
+
+    Args:
+        direction: Filter by direction: 'in' (income) or 'out' (expense/contra)
+        category: Filter by category (addon, prize_payout, refund, event_expense, miscellaneous)
+        month: Filter by month in YYYY-MM format
+        limit: Max rows (default 100)
+    """
+    clauses = ["source = 'venmo'"]
+    params = []
+    if direction == "in":
+        clauses.append("entry_type = 'income'")
+    elif direction == "out":
+        clauses.append("entry_type IN ('expense', 'contra')")
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
+    if month:
+        clauses.append("date LIKE ?")
+        params.append(f"{month}%")
+    clauses.append("COALESCE(status, 'active') = 'active'")
+    where = " WHERE " + " AND ".join(clauses)
+    params.append(limit)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""SELECT date, description, customer, amount, category,
+                       entry_type, source_ref, status
+                FROM acct_transactions{where}
+                ORDER BY date DESC, id DESC LIMIT ?""",
+            params,
+        ).fetchall()
+    return json.dumps([dict(r) for r in rows], indent=2)
 
 
 # ═══════════════════════════════════════════════════════════════════════
