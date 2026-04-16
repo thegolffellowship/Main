@@ -617,6 +617,53 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
     logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
 
 
+def _migrate_normalize_venmo_customer_names(conn: sqlite3.Connection) -> None:
+    """One-shot: rewrite acct_transactions.customer for Venmo prize_payouts to
+    the canonical customers.first_name + last_name when the name resolves
+    (via _lookup_customer_id) to a customer.
+
+    Fixes cases where Venmo notes used a name variant (e.g., "Roland Campos")
+    that doesn't match the canonical record ("Rolando Campos"), preventing
+    the payout matcher from linking them.
+
+    Idempotent — safe to run every startup; only updates when the stored
+    name doesn't already match the canonical name.
+    """
+    # Only look at venmo prize_payouts (small scope)
+    rows = conn.execute(
+        """SELECT id, customer FROM acct_transactions
+           WHERE source = 'venmo' AND category = 'prize_payout'
+             AND customer IS NOT NULL AND customer != ''"""
+    ).fetchall()
+    if not rows:
+        return
+
+    normalized = 0
+    for r in rows:
+        stored_name = r["customer"]
+        cid = _lookup_customer_id(conn, stored_name, None)
+        if cid is None:
+            continue
+        canonical = conn.execute(
+            "SELECT first_name || ' ' || last_name as n FROM customers WHERE customer_id = ?",
+            (cid,),
+        ).fetchone()
+        if not canonical:
+            continue
+        canonical_name = canonical["n"]
+        if canonical_name.lower() == stored_name.lower():
+            continue  # Already canonical
+        conn.execute(
+            "UPDATE acct_transactions SET customer = ? WHERE id = ?",
+            (canonical_name, r["id"]),
+        )
+        normalized += 1
+
+    if normalized:
+        conn.commit()
+        logger.info("Normalized %d Venmo acct_transactions.customer values to canonical names", normalized)
+
+
 def _migrate_seed_customer_roles(conn: sqlite3.Connection) -> None:
     """One-time seed of customer_roles junction table + first_timer_ever backfill.
 
@@ -803,7 +850,7 @@ def _reconcile_payouts_with_venmo(conn: sqlite3.Connection, payout_rows) -> int:
             """SELECT t.id, t.date FROM acct_transactions t
                WHERE t.source = 'venmo'
                  AND t.category = 'prize_payout'
-                 AND COALESCE(t.status, 'active') = 'active'
+                 AND COALESCE(t.status, 'active') IN ('active', 'reconciled')
                  AND ROUND(ABS(t.amount), 2) = ?
                  AND DATE(t.date) >= DATE(?)
                  AND DATE(t.date) <= DATE(?, '+7 days')
@@ -811,13 +858,25 @@ def _reconcile_payouts_with_venmo(conn: sqlite3.Connection, payout_rows) -> int:
                    SELECT 1 FROM tgf_payouts existing
                    WHERE existing.acct_transaction_id = t.id
                  )
-                 AND EXISTS (
-                   SELECT 1 FROM customers c
-                   WHERE c.customer_id = ?
-                     AND LOWER(t.customer) = LOWER(c.first_name || ' ' || c.last_name)
+                 AND (
+                   -- Direct customer name match
+                   EXISTS (
+                     SELECT 1 FROM customers c
+                     WHERE c.customer_id = ?
+                       AND LOWER(t.customer) = LOWER(c.first_name || ' ' || c.last_name)
+                   )
+                   OR
+                   -- Alias match via customer_aliases (handles name variants)
+                   EXISTS (
+                     SELECT 1 FROM customer_aliases a
+                     JOIN customers c2 ON LOWER(c2.first_name || ' ' || c2.last_name) = LOWER(a.customer_name)
+                     WHERE a.alias_type = 'name'
+                       AND LOWER(a.alias_value) = LOWER(t.customer)
+                       AND c2.customer_id = ?
+                   )
                  )
                ORDER BY t.date ASC LIMIT 1""",
-            (group_sum, event_date, event_date, customer_id),
+            (group_sum, event_date, event_date, customer_id, customer_id),
         ).fetchone()
 
         if venmo_match:
@@ -903,7 +962,7 @@ def _match_pending_payouts_to_new_venmo(conn: sqlite3.Connection) -> int:
             """SELECT t.id, t.date FROM acct_transactions t
                WHERE t.source = 'venmo'
                  AND t.category = 'prize_payout'
-                 AND COALESCE(t.status, 'active') = 'active'
+                 AND COALESCE(t.status, 'active') IN ('active', 'reconciled')
                  AND ROUND(ABS(t.amount), 2) = ?
                  AND DATE(t.date) >= DATE(?)
                  AND DATE(t.date) <= DATE(?, '+7 days')
@@ -911,13 +970,23 @@ def _match_pending_payouts_to_new_venmo(conn: sqlite3.Connection) -> int:
                    SELECT 1 FROM tgf_payouts existing
                    WHERE existing.acct_transaction_id = t.id
                  )
-                 AND EXISTS (
-                   SELECT 1 FROM customers c
-                   WHERE c.customer_id = ?
-                     AND LOWER(t.customer) = LOWER(c.first_name || ' ' || c.last_name)
+                 AND (
+                   EXISTS (
+                     SELECT 1 FROM customers c
+                     WHERE c.customer_id = ?
+                       AND LOWER(t.customer) = LOWER(c.first_name || ' ' || c.last_name)
+                   )
+                   OR
+                   EXISTS (
+                     SELECT 1 FROM customer_aliases a
+                     JOIN customers c2 ON LOWER(c2.first_name || ' ' || c2.last_name) = LOWER(a.customer_name)
+                     WHERE a.alias_type = 'name'
+                       AND LOWER(a.alias_value) = LOWER(t.customer)
+                       AND c2.customer_id = ?
+                   )
                  )
                ORDER BY t.date ASC LIMIT 1""",
-            (group_sum, event_date, event_date, customer_id),
+            (group_sum, event_date, event_date, customer_id, customer_id),
         ).fetchone()
         if not venmo:
             continue
@@ -1584,6 +1653,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_seed_customer_roles(conn)
         except Exception as e:
             logger.warning("Customer roles seed migration failed: %s", e)
+
+        # Normalize Venmo customer names to canonical so payout matching works
+        try:
+            _migrate_normalize_venmo_customer_names(conn)
+        except Exception as e:
+            logger.warning("Venmo customer name normalization failed: %s", e)
 
         # Step 3: wire tgf_payouts into acct_transactions ledger
         try:
