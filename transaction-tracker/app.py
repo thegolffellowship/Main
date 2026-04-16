@@ -6581,6 +6581,49 @@ def api_tgf_dedup_audit():
                         **dict(f),
                     })
 
+            # Case 3: "LAST, First" parsing bug — the comma stayed in first_name.
+            # The REAL last name is first_name with comma stripped. Search for that.
+            first_stripped = (mr_d["first_name"] or "").rstrip(",").strip()
+            if first_stripped and first_stripped != mr_d["last_name"]:
+                comma_bug = conn.execute(
+                    """SELECT customer_id, first_name, last_name, venmo_username, chapter,
+                              acquisition_source
+                       FROM customers
+                       WHERE customer_id != ?
+                         AND acquisition_source IS NOT 'tgf_payout_migration'
+                         AND acquisition_source IS NOT 'tgf_payout'
+                         AND LOWER(last_name) = LOWER(?)
+                         AND LOWER(first_name) = LOWER(?)
+                       LIMIT 5""",
+                    (mr_d["customer_id"], first_stripped, mr_d["last_name"]),
+                ).fetchall()
+                for c in comma_bug:
+                    # Avoid duplicates from previous cases
+                    if not any(cand.get("customer_id") == c["customer_id"] for cand in candidates):
+                        candidates.append({
+                            "match_type": "comma_bug_reversed_exact",
+                            **dict(c),
+                        })
+
+                # Broader: same real last name, any first name
+                comma_bug_fuzzy = conn.execute(
+                    """SELECT customer_id, first_name, last_name, venmo_username, chapter,
+                              acquisition_source
+                       FROM customers
+                       WHERE customer_id != ?
+                         AND acquisition_source IS NOT 'tgf_payout_migration'
+                         AND acquisition_source IS NOT 'tgf_payout'
+                         AND LOWER(last_name) = LOWER(?)
+                       LIMIT 5""",
+                    (mr_d["customer_id"], first_stripped),
+                ).fetchall()
+                for c in comma_bug_fuzzy:
+                    if not any(cand.get("customer_id") == c["customer_id"] for cand in candidates):
+                        candidates.append({
+                            "match_type": "comma_bug_lastname_match",
+                            **dict(c),
+                        })
+
             # Also look for intra-migration duplicates (two customers both created by migration)
             intra_candidates = conn.execute(
                 """SELECT customer_id, first_name, last_name, venmo_username, chapter,
