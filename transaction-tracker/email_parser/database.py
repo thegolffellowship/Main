@@ -707,6 +707,200 @@ def _migrate_seed_customer_roles(conn: sqlite3.Connection) -> None:
     logger.info("first_timer_ever backfill: %d set to FALSE (played), %d defaulted to TRUE", updated, defaulted)
 
 
+def _migrate_wire_payouts_to_ledger(conn: sqlite3.Connection) -> None:
+    """Step 3 migration: wire tgf_payouts into the acct_transactions ledger.
+
+    Adds acct_transaction_id and paid_at columns to tgf_payouts (existing
+    installs), then backfills:
+      1. Creates a pending acct_transactions expense entry for each historical
+         payout that lacks one (category='prize_payout', source='pending').
+      2. Attempts exact-amount match against existing Venmo prize_payout
+         acct_transactions (same customer_id, exact amount, date within 7 days
+         after the event). When matched: links the payout to the Venmo txn
+         and marks the pending entry as reversed.
+
+    Idempotent — skips rows that already have acct_transaction_id set.
+    """
+    # Skip if tgf_payouts doesn't exist yet (fresh install — table gets
+    # created later in init_db with the correct schema from the start)
+    table_exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='tgf_payouts'"
+    ).fetchone()
+    if not table_exists:
+        return
+
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(tgf_payouts)").fetchall()]
+    added_cols = False
+    if "acct_transaction_id" not in cols:
+        conn.execute("ALTER TABLE tgf_payouts ADD COLUMN acct_transaction_id INTEGER REFERENCES acct_transactions(id)")
+        added_cols = True
+    if "paid_at" not in cols:
+        conn.execute("ALTER TABLE tgf_payouts ADD COLUMN paid_at TIMESTAMP")
+        added_cols = True
+    if added_cols:
+        logger.info("Added acct_transaction_id + paid_at to tgf_payouts")
+
+    # Backfill pending ledger entries + match
+    pending_rows = conn.execute(
+        """SELECT p.id, p.event_id, p.customer_id, p.amount, p.category, p.description,
+                  e.event_date, e.name as event_name
+           FROM tgf_payouts p
+           JOIN tgf_events e ON e.id = p.event_id
+           WHERE p.acct_transaction_id IS NULL"""
+    ).fetchall()
+    if not pending_rows:
+        return
+
+    logger.info("Wiring %d existing payouts to the ledger", len(pending_rows))
+    paired = _reconcile_payouts_with_venmo(conn, pending_rows)
+    conn.commit()
+    logger.info(
+        "Payout ledger wiring complete — %d matched to existing Venmo, %d pending",
+        paired, len(pending_rows) - paired,
+    )
+
+
+def _reconcile_payouts_with_venmo(conn: sqlite3.Connection, payout_rows) -> int:
+    """For a list of unlinked payouts, either match them to an existing Venmo
+    prize_payout acct_transaction, or create a pending placeholder.
+
+    Returns count of payouts that matched an existing Venmo payment.
+    """
+    matched = 0
+    for p in payout_rows:
+        payout_id = p["id"]
+        event_date = p["event_date"]
+        customer_id = p["customer_id"]
+        amount = round(float(p["amount"]), 2)
+        event_name = p["event_name"]
+
+        # Look for an unreserved Venmo prize_payout within 7 days post-event
+        # with exact amount match (abs value — stored as negative since expense)
+        venmo_match = conn.execute(
+            """SELECT t.id, t.date, t.amount FROM acct_transactions t
+               WHERE t.source = 'venmo'
+                 AND t.category = 'prize_payout'
+                 AND COALESCE(t.status, 'active') = 'active'
+                 AND ROUND(ABS(t.amount), 2) = ?
+                 AND DATE(t.date) >= DATE(?)
+                 AND DATE(t.date) <= DATE(?, '+7 days')
+                 AND NOT EXISTS (
+                   SELECT 1 FROM tgf_payouts existing
+                   WHERE existing.acct_transaction_id = t.id
+                 )
+                 AND EXISTS (
+                   SELECT 1 FROM customers c
+                   WHERE c.customer_id = ?
+                     AND LOWER(t.customer) = LOWER(c.first_name || ' ' || c.last_name)
+                 )
+               ORDER BY t.date ASC LIMIT 1""",
+            (amount, event_date, event_date, customer_id),
+        ).fetchone()
+
+        if venmo_match:
+            conn.execute(
+                "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
+                (venmo_match["id"], venmo_match["date"], payout_id),
+            )
+            matched += 1
+        else:
+            # Create a pending expense entry — payout owed but not yet reconciled
+            cur = conn.execute(
+                """INSERT INTO acct_transactions
+                       (date, description, total_amount, type, source, source_ref,
+                        customer, order_id, entry_type, category, amount, account,
+                        status, event_name)
+                   VALUES (?, ?, ?, 'expense', 'pending', ?, ?, ?, 'expense', 'prize_payout',
+                           ?, 'Venmo', 'active', ?)""",
+                (
+                    event_date, f"Payout: {p['category']} — {event_name}", amount,
+                    f"payout-{payout_id}",
+                    "",  # customer name resolved by customer_id below
+                    f"PAYOUT-{payout_id}",
+                    -amount,  # signed negative (expense/contra)
+                    event_name,
+                ),
+            )
+            conn.execute(
+                "UPDATE tgf_payouts SET acct_transaction_id = ? WHERE id = ?",
+                (cur.lastrowid, payout_id),
+            )
+            # Denormalize customer name onto the acct_transaction
+            conn.execute(
+                """UPDATE acct_transactions SET customer = (
+                       SELECT first_name || ' ' || last_name FROM customers WHERE customer_id = ?
+                   ) WHERE id = ?""",
+                (customer_id, cur.lastrowid),
+            )
+    return matched
+
+
+def _match_pending_payouts_to_new_venmo(conn: sqlite3.Connection) -> int:
+    """Reverse reconciliation: Venmo prize_payouts that just arrived may cover
+    previously-pending tgf_payouts. Link them.
+
+    For each tgf_payouts row with a pending source='pending' acct_transaction,
+    look for an unreserved Venmo prize_payout with exact amount match, same
+    customer, within 7 days post-event. When matched:
+      - Reverse the pending entry (status='reversed')
+      - Repoint tgf_payouts.acct_transaction_id to the Venmo entry
+      - Set tgf_payouts.paid_at
+
+    Returns count of newly-matched payouts.
+    """
+    pending = conn.execute(
+        """SELECT p.id as payout_id, p.customer_id, p.amount, p.acct_transaction_id,
+                  e.event_date, e.name as event_name
+           FROM tgf_payouts p
+           JOIN tgf_events e ON e.id = p.event_id
+           JOIN acct_transactions t ON t.id = p.acct_transaction_id
+           WHERE t.source = 'pending' AND COALESCE(t.status, 'active') = 'active'"""
+    ).fetchall()
+    if not pending:
+        return 0
+
+    matched = 0
+    for p in pending:
+        amount = round(float(p["amount"]), 2)
+        venmo = conn.execute(
+            """SELECT t.id, t.date FROM acct_transactions t
+               WHERE t.source = 'venmo'
+                 AND t.category = 'prize_payout'
+                 AND COALESCE(t.status, 'active') = 'active'
+                 AND ROUND(ABS(t.amount), 2) = ?
+                 AND DATE(t.date) >= DATE(?)
+                 AND DATE(t.date) <= DATE(?, '+7 days')
+                 AND NOT EXISTS (
+                   SELECT 1 FROM tgf_payouts existing
+                   WHERE existing.acct_transaction_id = t.id
+                 )
+                 AND EXISTS (
+                   SELECT 1 FROM customers c
+                   WHERE c.customer_id = ?
+                     AND LOWER(t.customer) = LOWER(c.first_name || ' ' || c.last_name)
+                 )
+               ORDER BY t.date ASC LIMIT 1""",
+            (amount, p["event_date"], p["event_date"], p["customer_id"]),
+        ).fetchone()
+        if not venmo:
+            continue
+
+        # Reverse the pending entry + link the real Venmo one
+        conn.execute(
+            "UPDATE acct_transactions SET status = 'reversed' WHERE id = ?",
+            (p["acct_transaction_id"],),
+        )
+        conn.execute(
+            "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
+            (venmo["id"], venmo["date"], p["payout_id"]),
+        )
+        matched += 1
+
+    if matched:
+        logger.info("Matched %d pending payouts to newly-imported Venmo payments", matched)
+    return matched
+
+
 def init_db(db_path: str | Path | None = None) -> None:
     """Create the items table if it doesn't exist."""
     with _connect(db_path) as conn:
@@ -1352,6 +1546,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_seed_customer_roles(conn)
         except Exception as e:
             logger.warning("Customer roles seed migration failed: %s", e)
+
+        # Step 3: wire tgf_payouts into acct_transactions ledger
+        try:
+            _migrate_wire_payouts_to_ledger(conn)
+        except Exception as e:
+            logger.warning("Payouts-to-ledger migration failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
@@ -2025,13 +2225,15 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS tgf_payouts (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id        INTEGER NOT NULL REFERENCES tgf_events(id) ON DELETE CASCADE,
-                customer_id     INTEGER NOT NULL REFERENCES customers(customer_id),
-                category        TEXT NOT NULL,
-                amount          REAL NOT NULL,
-                description     TEXT,
-                created_at      TEXT DEFAULT (datetime('now'))
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id            INTEGER NOT NULL REFERENCES tgf_events(id) ON DELETE CASCADE,
+                customer_id         INTEGER NOT NULL REFERENCES customers(customer_id),
+                category            TEXT NOT NULL,
+                amount              REAL NOT NULL,
+                description         TEXT,
+                acct_transaction_id INTEGER REFERENCES acct_transactions(id),
+                paid_at             TIMESTAMP,
+                created_at          TEXT DEFAULT (datetime('now'))
             )
             """
         )
@@ -13546,10 +13748,15 @@ def import_venmo_statement(csv_text: str, account_label: str,
                     "entry_type": entry_type, "customer": customer,
                 })
 
+        # Reverse-match: newly imported Venmo prize_payouts may cover
+        # previously-pending tgf_payouts. Try to link them now.
+        matched_payouts = _match_pending_payouts_to_new_venmo(conn)
+
         conn.commit()
 
     return {"imported": imported, "skipped": skipped, "format": fmt,
-            "categorized": categorized, "rows_preview": preview}
+            "categorized": categorized, "rows_preview": preview,
+            "payouts_matched": matched_payouts}
 
 
 def _import_generic_csv(data_rows, header, batch_id, account_id, db_path):
@@ -14816,13 +15023,30 @@ def get_tgf_data(db_path=None):
         events = []
         for ev in conn.execute("SELECT * FROM tgf_events ORDER BY event_date DESC").fetchall():
             ev_dict = dict(ev)
-            payouts = [dict(p) for p in conn.execute(
-                """SELECT p.*, (c.first_name || ' ' || c.last_name) as customer_name
-                   FROM tgf_payouts p JOIN customers c ON c.customer_id = p.customer_id
+            payouts = []
+            for p in conn.execute(
+                """SELECT p.*,
+                          (c.first_name || ' ' || c.last_name) as customer_name,
+                          t.source as txn_source,
+                          COALESCE(t.status, 'active') as txn_status
+                   FROM tgf_payouts p
+                   JOIN customers c ON c.customer_id = p.customer_id
+                   LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
                    WHERE p.event_id = ?
                    ORDER BY p.amount DESC""",
                 (ev["id"],),
-            ).fetchall()]
+            ).fetchall():
+                pd = dict(p)
+                # Derive payment status
+                if pd.get("acct_transaction_id") is None:
+                    pd["payment_status"] = "unwired"  # pre-Step 3 legacy
+                elif pd.get("txn_source") == "pending":
+                    pd["payment_status"] = "pending"
+                elif pd.get("txn_source") == "venmo":
+                    pd["payment_status"] = "paid"
+                else:
+                    pd["payment_status"] = "paid"  # any other ledger link counts as paid
+                payouts.append(pd)
             ev_dict["payouts"] = payouts
             events.append(ev_dict)
 
@@ -14865,16 +15089,36 @@ def add_tgf_event(data: dict, db_path=None) -> dict:
         )
         event_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
+        new_payout_ids: list[int] = []
         for p in data.get("payouts", []):
             customer_id = _resolve_customer_for_payout(conn, p["golferName"])
-            conn.execute(
+            cur = conn.execute(
                 """INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description)
                    VALUES (?, ?, ?, ?, ?)""",
                 (event_id, customer_id, p["category"], p["amount"], p.get("description", "")),
             )
+            new_payout_ids.append(cur.lastrowid)
+
+        # Wire new payouts to the ledger + match existing Venmo payments
+        matched = 0
+        if new_payout_ids:
+            placeholders = ",".join("?" * len(new_payout_ids))
+            new_rows = conn.execute(
+                f"""SELECT p.id, p.event_id, p.customer_id, p.amount, p.category, p.description,
+                           e.event_date, e.name as event_name
+                    FROM tgf_payouts p
+                    JOIN tgf_events e ON e.id = p.event_id
+                    WHERE p.id IN ({placeholders})""",
+                new_payout_ids,
+            ).fetchall()
+            matched = _reconcile_payouts_with_venmo(conn, new_rows)
 
         conn.commit()
-        return {"event_id": event_id, "payouts_added": len(data.get("payouts", []))}
+        return {
+            "event_id": event_id,
+            "payouts_added": len(data.get("payouts", [])),
+            "matched": matched,
+        }
 
 
 def import_tgf_payouts(event_id: int, payouts: list, db_path=None) -> dict:
@@ -14882,24 +15126,46 @@ def import_tgf_payouts(event_id: int, payouts: list, db_path=None) -> dict:
 
     payouts: [{golferName, category, amount, description}]
       (golferName field retained for backward-compatible API; resolves to customer_id internally)
-    Returns {payouts_added, event_id} or {error}.
+
+    Each new payout gets a corresponding acct_transactions entry
+    (category='prize_payout'). If a matching Venmo payment already exists
+    (exact amount + same customer + within 7 days of event), the payout is
+    linked to it. Otherwise a pending expense entry is created.
+
+    Returns {payouts_added, matched, pending, event_id} or {error}.
     """
     if not payouts:
         return {"error": "No payouts provided"}
     with _connect(db_path) as conn:
-        ev = conn.execute("SELECT id FROM tgf_events WHERE id = ?", (event_id,)).fetchone()
+        ev = conn.execute("SELECT id, name, event_date FROM tgf_events WHERE id = ?", (event_id,)).fetchone()
         if not ev:
             return {"error": f"Event {event_id} not found"}
 
         added = 0
+        new_payout_ids: list[int] = []
         for p in payouts:
             customer_id = _resolve_customer_for_payout(conn, p["golferName"])
-            conn.execute(
+            cur = conn.execute(
                 """INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description)
                    VALUES (?, ?, ?, ?, ?)""",
                 (event_id, customer_id, p["category"], p["amount"], p.get("description", "")),
             )
+            new_payout_ids.append(cur.lastrowid)
             added += 1
+
+        # Reconcile new payouts with existing Venmo prize_payouts + create pending entries
+        matched = 0
+        if new_payout_ids:
+            placeholders = ",".join("?" * len(new_payout_ids))
+            new_rows = conn.execute(
+                f"""SELECT p.id, p.event_id, p.customer_id, p.amount, p.category, p.description,
+                           e.event_date, e.name as event_name
+                    FROM tgf_payouts p
+                    JOIN tgf_events e ON e.id = p.event_id
+                    WHERE p.id IN ({placeholders})""",
+                new_payout_ids,
+            ).fetchall()
+            matched = _reconcile_payouts_with_venmo(conn, new_rows)
 
         # Update event aggregates
         stats = conn.execute(
@@ -14913,7 +15179,13 @@ def import_tgf_payouts(event_id: int, payouts: list, db_path=None) -> dict:
             (stats["total"], stats["winners"], stats["cnt"], event_id),
         )
         conn.commit()
-        return {"event_id": event_id, "payouts_added": added, "total_purse": stats["total"]}
+        return {
+            "event_id": event_id,
+            "payouts_added": added,
+            "matched": matched,
+            "pending": added - matched,
+            "total_purse": stats["total"],
+        }
 
 
 def update_tgf_event(event_id: int, data: dict, db_path=None) -> dict:

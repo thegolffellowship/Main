@@ -349,10 +349,28 @@
             const golferMap = {};
             (ev.payouts || []).forEach(p => {
                 if (!golferMap[p.customer_name]) {
-                    golferMap[p.customer_name] = { name: p.customer_name, golfer_id: p.customer_id, total: 0, items: [] };
+                    golferMap[p.customer_name] = {
+                        name: p.customer_name, golfer_id: p.customer_id,
+                        total: 0, items: [], statuses: new Set(),
+                    };
                 }
                 golferMap[p.customer_name].total += p.amount;
                 golferMap[p.customer_name].items.push(p);
+                golferMap[p.customer_name].statuses.add(p.payment_status || "unwired");
+            });
+            // Roll up per-golfer payment status: all paid → paid, any pending → pending,
+            // any unwired → unwired (legacy), otherwise mixed
+            Object.values(golferMap).forEach(g => {
+                const s = g.statuses;
+                if (s.size === 1) {
+                    g.payment_status = [...s][0];
+                } else if (s.has("unwired")) {
+                    g.payment_status = "unwired";
+                } else if (s.has("pending")) {
+                    g.payment_status = "pending";
+                } else {
+                    g.payment_status = "mixed";
+                }
             });
             const golferList = Object.values(golferMap).sort((a, b) => b.total - a.total);
 
@@ -410,17 +428,26 @@
                 return '<div class="empty-state"><p>No payouts recorded for this event</p></div>';
             }
 
+            const STATUS_BADGE = {
+                paid:    '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#dcfce7;color:#166534;">PAID ✓</span>',
+                pending: '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#fef3c7;color:#92400e;">PENDING</span>',
+                unwired: '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#f1f5f9;color:#475569;">UNPAID</span>',
+                mixed:   '<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#fce7f3;color:#9d174d;">PARTIAL</span>',
+            };
+
             let rows = "";
             golferList.forEach((g, idx) => {
                 // Look up venmo username
                 const winData = Object.values(DATA.winnings).find(w => w.id === g.golfer_id);
                 const venmo = winData ? winData.venmo_username : "";
-                const venmoHtml = venmo
+                const alreadyPaid = g.payment_status === "paid";
+                const venmoHtml = venmo && !alreadyPaid
                     ? `<a class="venmo-btn" href="${venmoLink(venmo, g.total, ev.code, ev.name)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
                          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>
                          Pay
                        </a>`
                     : "";
+                const statusBadge = STATUS_BADGE[g.payment_status] || "";
 
                 rows += `
                     <tr class="golfer-row" data-gid="${g.golfer_id}">
@@ -428,7 +455,7 @@
                         <td>${g.name}</td>
                         <td class="right">${g.items.length}</td>
                         <td class="right total-amount">${fmt(g.total)}</td>
-                        <td class="right">${venmoHtml}</td>
+                        <td class="right">${statusBadge} ${venmoHtml}</td>
                     </tr>
                     <tr class="breakdown-row" data-gid="${g.golfer_id}">
                         <td colspan="5">
