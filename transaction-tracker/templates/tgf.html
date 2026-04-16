@@ -251,9 +251,9 @@
     (function() {
         "use strict";
 
-        let DATA = { golfers: [], events: [], winnings: {} };
+        let DATA = { customers: [], events: [], winnings: {} };
         let selectedEventIdx = -1;
-        let selectedGolferId = -1;
+        let selectedGolferId = -1;  // retained name: refers to customer_id now
 
         const CATEGORY_LABELS = {
             team_net: "Team Net",
@@ -345,14 +345,14 @@
             }
             const ev = DATA.events[selectedEventIdx];
 
-            // Group payouts by golfer
+            // Group payouts by customer (displayed as "golfer" in UI)
             const golferMap = {};
             (ev.payouts || []).forEach(p => {
-                if (!golferMap[p.golfer_name]) {
-                    golferMap[p.golfer_name] = { name: p.golfer_name, golfer_id: p.golfer_id, total: 0, items: [] };
+                if (!golferMap[p.customer_name]) {
+                    golferMap[p.customer_name] = { name: p.customer_name, golfer_id: p.customer_id, total: 0, items: [] };
                 }
-                golferMap[p.golfer_name].total += p.amount;
-                golferMap[p.golfer_name].items.push(p);
+                golferMap[p.customer_name].total += p.amount;
+                golferMap[p.customer_name].items.push(p);
             });
             const golferList = Object.values(golferMap).sort((a, b) => b.total - a.total);
 
@@ -538,10 +538,10 @@
                 return;
             }
 
-            // Find all events with payouts for this golfer
+            // Find all events with payouts for this customer (displayed as "golfer")
             const golferEvents = [];
             DATA.events.forEach(ev => {
-                const myPayouts = (ev.payouts || []).filter(p => p.golfer_id === g.id);
+                const myPayouts = (ev.payouts || []).filter(p => p.customer_id === g.id);
                 if (myPayouts.length) {
                     const evTotal = myPayouts.reduce((s, p) => s + p.amount, 0);
                     golferEvents.push({ event: ev, payouts: myPayouts, total: evTotal });
@@ -601,7 +601,7 @@
         }
 
         function renderGolferInfo(g) {
-            const golfer = DATA.golfers.find(gl => gl.id === g.id) || {};
+            const golfer = DATA.customers.find(gl => gl.id === g.id) || {};
             return `
                 <h2 style="font-size:1.15rem;margin-bottom:1rem;">Golfer Info</h2>
                 <div class="golfer-info-grid">

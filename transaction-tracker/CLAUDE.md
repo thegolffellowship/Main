@@ -564,8 +564,8 @@ The `events` table has extensive pricing columns:
 
 ### Architecture
 - **Page** at `/tgf` — two top-level tabs: EVENTS and GOLFERS
-- **Data** from `tgf_events`, `tgf_golfers`, `tgf_payouts` tables
-- **API:** `GET /api/tgf` returns all events with payouts + golfer winnings
+- **Data** from `tgf_events` and `tgf_payouts` tables; golfer identity is the `customers` table (tgf_golfers was eliminated)
+- **API:** `GET /api/tgf` returns `{customers, events, winnings}` where customers is the list of payout recipients
 
 ### Events Tab
 - Sidebar lists events by date with total purse amounts
@@ -586,8 +586,8 @@ The `events` table has extensive pricing columns:
 - **Paste only fires** when events tab is active AND an event is selected
 
 ### Golfer name resolution
-- `_get_or_create_golfer(conn, name)` — finds or creates golfer by exact name match
-- Golfers linked to payouts via `tgf_payouts.golfer_id`
+- `_resolve_customer_for_payout(conn, name)` — resolves payout recipient to a `customer_id` via the standard `_lookup_customer_id` cascade; creates a new customer with `acquisition_source='tgf_payout'` if no match found
+- Payouts linked to identity via `tgf_payouts.customer_id` (FK to `customers.customer_id`)
 
 ### Category types
 `team_net`, `individual_net`, `individual_gross`, `skins`, `closest_to_pin`,
@@ -794,7 +794,7 @@ Each row represents one player's cost allocation for one event:
 `acct_allocations`, `acct_transactions`, `godaddy_order_splits`, `bank_statement_rows`,
 `period_closings`, `bank_accounts`, `bank_deposits`, `reconciliation_matches`,
 `coo_agents`, `coo_chat_sessions`, `coo_chat_messages`, `coo_manual_values`,
-`agent_action_log`, `tgf_events`, `tgf_golfers`, `tgf_payouts`
+`agent_action_log`, `tgf_events`, `tgf_payouts`
 
 Key tables not documented elsewhere in this file:
 - `app_settings` — persistent key-value store (matrix data, feature flags)
@@ -810,8 +810,7 @@ Key tables not documented elsewhere in this file:
 - `coo_chat_sessions` / `coo_chat_messages` — persistent AI chat history
 - `coo_manual_values` — manually entered financial values (account balances, debts)
 - `tgf_events` — tournament events with purse totals
-- `tgf_golfers` — golfer records with Venmo usernames
-- `tgf_payouts` — individual prize payouts linked to events and golfers
+- `tgf_payouts` — individual prize payouts linked to events via `event_id` and to customers via `customer_id` (no separate golfer table; identity is unified in `customers`)
 
 ## Bank Reconciliation System
 

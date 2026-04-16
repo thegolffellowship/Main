@@ -356,6 +356,150 @@ def managed_connection(db_path: str | Path | None = None):
 _connect = managed_connection
 
 
+def _migrate_eliminate_tgf_golfers(conn: sqlite3.Connection) -> None:
+    """Migrate tgf_payouts.golfer_id → tgf_payouts.customer_id, then drop tgf_golfers.
+
+    Runs inside init_db(). Idempotent — skips if tgf_golfers is already dropped.
+
+    For each existing payout:
+      1. Resolve the golfer's name to a customer_id via _lookup_customer_id.
+      2. If no match, create a new customer from the golfer record (first+last name,
+         carrying venmo_username and chapter).
+      3. Backfill tgf_payouts.customer_id.
+
+    Then rebuilds tgf_payouts without the golfer_id column and drops tgf_golfers.
+    """
+    golfers_exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='tgf_golfers'"
+    ).fetchone()
+    if not golfers_exists:
+        return  # Already migrated
+
+    logger.info("Starting tgf_golfers elimination migration")
+
+    # Step 1: Add customer_id column to tgf_payouts if not present
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(tgf_payouts)").fetchall()]
+    if "customer_id" not in cols:
+        conn.execute("ALTER TABLE tgf_payouts ADD COLUMN customer_id INTEGER")
+        logger.info("Added customer_id column to tgf_payouts")
+
+    # Step 2: Backfill customer_id by resolving each distinct golfer name
+    # Build a golfer_id → customer_id map
+    golfer_rows = conn.execute(
+        "SELECT id, name, venmo_username, chapter FROM tgf_golfers"
+    ).fetchall()
+
+    golfer_to_customer: dict[int, int] = {}
+    for g in golfer_rows:
+        name = (g["name"] or "").strip()
+        if not name:
+            continue
+
+        # Try to resolve to existing customer (by name + alias cascade)
+        cid = _lookup_customer_id(conn, name, None)
+
+        if cid is None:
+            # No existing customer — create one from the golfer record
+            parts = name.split()
+            if len(parts) >= 2:
+                first = parts[0]
+                last = " ".join(parts[1:])
+            else:
+                first = name
+                last = "(Unknown)"
+            try:
+                cur = conn.execute(
+                    """INSERT INTO customers
+                           (first_name, last_name, chapter, venmo_username,
+                            account_status, acquisition_source)
+                       VALUES (?, ?, ?, ?, 'active', 'tgf_payout_migration')""",
+                    (first, last, g["chapter"] or None, g["venmo_username"] or None),
+                )
+                cid = cur.lastrowid
+                logger.info("Created customer %d for former golfer '%s'", cid, name)
+            except Exception as exc:
+                logger.warning("Failed to create customer for golfer '%s': %s", name, exc)
+                continue
+        else:
+            # Backfill venmo_username/chapter onto existing customer if missing
+            if g["venmo_username"]:
+                conn.execute(
+                    """UPDATE customers SET venmo_username = ?
+                       WHERE customer_id = ?
+                         AND (venmo_username IS NULL OR venmo_username = '')""",
+                    (g["venmo_username"], cid),
+                )
+            if g["chapter"]:
+                conn.execute(
+                    """UPDATE customers SET chapter = ?
+                       WHERE customer_id = ?
+                         AND (chapter IS NULL OR chapter = '')""",
+                    (g["chapter"], cid),
+                )
+
+        golfer_to_customer[g["id"]] = cid
+
+    # Apply the mapping to payouts
+    for golfer_id, customer_id in golfer_to_customer.items():
+        conn.execute(
+            "UPDATE tgf_payouts SET customer_id = ? WHERE golfer_id = ? AND customer_id IS NULL",
+            (customer_id, golfer_id),
+        )
+
+    # Step 3: Verify all payouts have customer_id set before dropping golfer linkage
+    unmapped = conn.execute(
+        "SELECT COUNT(*) as cnt FROM tgf_payouts WHERE customer_id IS NULL"
+    ).fetchone()["cnt"]
+    if unmapped > 0:
+        logger.warning(
+            "Aborting tgf_golfers drop — %d payouts still have NULL customer_id",
+            unmapped,
+        )
+        conn.commit()
+        return
+
+    # Step 4: Rebuild tgf_payouts with clean schema (remove golfer_id column).
+    # SQLite can't drop a column directly in older versions, so use table rebuild.
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute(
+        """
+        CREATE TABLE tgf_payouts_new (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id        INTEGER NOT NULL REFERENCES tgf_events(id) ON DELETE CASCADE,
+            customer_id     INTEGER NOT NULL REFERENCES customers(customer_id),
+            category        TEXT NOT NULL,
+            amount          REAL NOT NULL,
+            description     TEXT,
+            created_at      TEXT DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """INSERT INTO tgf_payouts_new
+               (id, event_id, customer_id, category, amount, description, created_at)
+           SELECT id, event_id, customer_id, category, amount, description, created_at
+           FROM tgf_payouts"""
+    )
+    conn.execute("DROP TABLE tgf_payouts")
+    conn.execute("ALTER TABLE tgf_payouts_new RENAME TO tgf_payouts")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tgf_payouts_event ON tgf_payouts(event_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tgf_payouts_customer ON tgf_payouts(customer_id)"
+    )
+
+    # Step 5: Drop tgf_golfers
+    conn.execute("DROP TABLE tgf_golfers")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.commit()
+
+    logger.info(
+        "tgf_golfers eliminated — migrated %d golfers to customers, dropped tgf_golfers table",
+        len(golfer_to_customer),
+    )
+
+
 def init_db(db_path: str | Path | None = None) -> None:
     """Create the items table if it doesn't exist."""
     with _connect(db_path) as conn:
@@ -959,31 +1103,16 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass
 
-        # One-time migration: copy venmo_username from tgf_golfers to customers
-        # where a matching customer exists (by name) and customers.venmo_username is empty
+        # One-time migration: eliminate tgf_golfers table, unify into customers.
+        # - Adds customer_id column to tgf_payouts
+        # - Backfills customer_id from golfer→customer mapping (creates missing customers)
+        # - Copies any remaining venmo_username / chapter data to customers
+        # - Rebuilds tgf_payouts without golfer_id
+        # - Drops tgf_golfers
         try:
-            migrated = conn.execute(
-                """UPDATE customers SET venmo_username = (
-                       SELECT g.venmo_username FROM tgf_golfers g
-                       JOIN items i ON i.customer_id = customers.customer_id
-                       WHERE (i.customer = g.name COLLATE NOCASE
-                              OR (customers.first_name || ' ' || customers.last_name) = g.name COLLATE NOCASE)
-                         AND g.venmo_username IS NOT NULL AND g.venmo_username != ''
-                       LIMIT 1
-                   )
-                   WHERE (customers.venmo_username IS NULL OR customers.venmo_username = '')
-                     AND EXISTS (
-                       SELECT 1 FROM tgf_golfers g
-                       JOIN items i ON i.customer_id = customers.customer_id
-                       WHERE (i.customer = g.name COLLATE NOCASE
-                              OR (customers.first_name || ' ' || customers.last_name) = g.name COLLATE NOCASE)
-                         AND g.venmo_username IS NOT NULL AND g.venmo_username != ''
-                   )"""
-            ).rowcount
-            if migrated:
-                logger.info("Migrated venmo_username from tgf_golfers to %d customer(s)", migrated)
+            _migrate_eliminate_tgf_golfers(conn)
         except Exception as e:
-            logger.warning("venmo_username migration from tgf_golfers failed: %s", e)
+            logger.warning("tgf_golfers elimination migration failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
@@ -1634,18 +1763,9 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_msg_session ON coo_chat_messages(session_id)")
 
         # ── TGF Payouts ─────────────────────────────────────────────
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tgf_golfers (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                name            TEXT UNIQUE NOT NULL,
-                venmo_username  TEXT,
-                chapter         TEXT,
-                created_at      TEXT DEFAULT (datetime('now'))
-            )
-            """
-        )
-
+        # Note: tgf_golfers table was eliminated — golfer identity is now
+        # unified into the customers table. Existing installs get migrated
+        # below via _migrate_eliminate_tgf_golfers().
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS tgf_events (
@@ -1668,7 +1788,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             CREATE TABLE IF NOT EXISTS tgf_payouts (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 event_id        INTEGER NOT NULL REFERENCES tgf_events(id) ON DELETE CASCADE,
-                golfer_id       INTEGER NOT NULL REFERENCES tgf_golfers(id),
+                customer_id     INTEGER NOT NULL REFERENCES customers(customer_id),
                 category        TEXT NOT NULL,
                 amount          REAL NOT NULL,
                 description     TEXT,
@@ -1677,7 +1797,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_event ON tgf_payouts(event_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_golfer ON tgf_payouts(golfer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_customer ON tgf_payouts(customer_id)")
 
         # Seed COO agents on first run
         existing_agents = conn.execute("SELECT COUNT(*) as cnt FROM coo_agents").fetchone()
@@ -12264,9 +12384,11 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
         pay = []
         try:
             ev_count = conn.execute("SELECT COUNT(*) as c FROM tgf_events").fetchone()["c"]
-            golfer_count = conn.execute("SELECT COUNT(*) as c FROM tgf_golfers").fetchone()["c"]
+            winners_count = conn.execute(
+                "SELECT COUNT(DISTINCT customer_id) as c FROM tgf_payouts"
+            ).fetchone()["c"]
             total_paid = conn.execute("SELECT COALESCE(SUM(amount), 0) as t FROM tgf_payouts").fetchone()["t"]
-            pay.append(f"Events with payouts: {ev_count}, Golfers: {golfer_count}, Total paid: ${total_paid:,.2f}")
+            pay.append(f"Events with payouts: {ev_count}, Winners: {winners_count}, Total paid: ${total_paid:,.2f}")
 
             # Recent payout events
             recent_pay = conn.execute(
@@ -14351,28 +14473,66 @@ def run_compliance_checks(db_path: str | Path | None = None) -> list[dict]:
 # TGF Payouts
 # ---------------------------------------------------------------------------
 
-def _get_or_create_golfer(conn, name: str) -> int:
-    """Return golfer id, creating if needed."""
-    row = conn.execute("SELECT id FROM tgf_golfers WHERE name = ?", (name,)).fetchone()
-    if row:
-        return row["id"]
-    conn.execute("INSERT INTO tgf_golfers (name) VALUES (?)", (name,))
-    return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+def _resolve_customer_for_payout(conn: sqlite3.Connection, name: str) -> int:
+    """Return customer_id for a payout entry, creating a customer if needed.
+
+    Uses the same resolution cascade as email parsing (_lookup_customer_id):
+    exact name, alias, etc.  If no customer matches, creates one from the
+    provided name with acquisition_source='tgf_payout'.
+
+    Raises ValueError if the name is empty or cannot be parsed into first+last.
+    """
+    if not name or not name.strip():
+        raise ValueError("Cannot resolve payout customer: name is empty")
+
+    clean_name = name.strip()
+
+    # Try to find an existing customer via the standard cascade
+    cid = _lookup_customer_id(conn, clean_name, None)
+    if cid is not None:
+        return cid
+
+    # Create a new customer record
+    parts = clean_name.split()
+    if len(parts) >= 2:
+        first = parts[0]
+        last = " ".join(parts[1:])
+    else:
+        first = clean_name
+        last = "(Unknown)"
+    cur = conn.execute(
+        """INSERT INTO customers
+               (first_name, last_name, account_status, acquisition_source)
+           VALUES (?, ?, 'active', 'tgf_payout')""",
+        (first, last),
+    )
+    new_cid = cur.lastrowid
+    logger.info("Created customer %d for payout entry '%s'", new_cid, clean_name)
+    return new_cid
 
 
 def get_tgf_data(db_path=None):
-    """Return all golfers and events with payouts."""
+    """Return all customers with payouts and events with payouts.
+
+    Returns {customers: [...], events: [...], winnings: {customer_id: {...}}}.
+    """
     with _connect(db_path) as conn:
-        golfers = [dict(r) for r in conn.execute(
-            "SELECT * FROM tgf_golfers ORDER BY name"
+        # Customers who have received payouts
+        customers = [dict(r) for r in conn.execute(
+            """SELECT DISTINCT c.customer_id as id,
+                      (c.first_name || ' ' || c.last_name) as name,
+                      c.venmo_username, c.chapter
+               FROM customers c
+               JOIN tgf_payouts p ON p.customer_id = c.customer_id
+               ORDER BY c.last_name, c.first_name"""
         ).fetchall()]
 
         events = []
         for ev in conn.execute("SELECT * FROM tgf_events ORDER BY event_date DESC").fetchall():
             ev_dict = dict(ev)
             payouts = [dict(p) for p in conn.execute(
-                """SELECT p.*, g.name as golfer_name
-                   FROM tgf_payouts p JOIN tgf_golfers g ON g.id = p.golfer_id
+                """SELECT p.*, (c.first_name || ' ' || c.last_name) as customer_name
+                   FROM tgf_payouts p JOIN customers c ON c.customer_id = p.customer_id
                    WHERE p.event_id = ?
                    ORDER BY p.amount DESC""",
                 (ev["id"],),
@@ -14380,27 +14540,23 @@ def get_tgf_data(db_path=None):
             ev_dict["payouts"] = payouts
             events.append(ev_dict)
 
-        # Compute all-time winnings per golfer
-        # Prefer venmo_username from customers table (single source of truth),
-        # fall back to tgf_golfers.venmo_username for backward compatibility
+        # Compute all-time winnings per customer who has received at least one payout
         winnings = {}
         for row in conn.execute(
-            """SELECT g.id, g.name,
-                      COALESCE(c.venmo_username, g.venmo_username) as venmo_username,
-                      g.chapter,
+            """SELECT c.customer_id as id,
+                      (c.first_name || ' ' || c.last_name) as name,
+                      c.venmo_username,
+                      c.chapter,
                       COALESCE(SUM(p.amount), 0) as total_winnings,
                       COUNT(DISTINCT p.event_id) as events_played
-               FROM tgf_golfers g
-               LEFT JOIN tgf_payouts p ON p.golfer_id = g.id
-               LEFT JOIN items i ON i.customer = g.name COLLATE NOCASE
-                                    AND i.customer_id IS NOT NULL
-               LEFT JOIN customers c ON c.customer_id = i.customer_id
-               GROUP BY g.id
+               FROM customers c
+               JOIN tgf_payouts p ON p.customer_id = c.customer_id
+               GROUP BY c.customer_id
                ORDER BY total_winnings DESC"""
         ).fetchall():
             winnings[row["id"]] = dict(row)
 
-        return {"golfers": golfers, "events": events, "winnings": winnings}
+        return {"customers": customers, "events": events, "winnings": winnings}
 
 
 def add_tgf_event(data: dict, db_path=None) -> dict:
@@ -14424,11 +14580,11 @@ def add_tgf_event(data: dict, db_path=None) -> dict:
         event_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         for p in data.get("payouts", []):
-            golfer_id = _get_or_create_golfer(conn, p["golferName"])
+            customer_id = _resolve_customer_for_payout(conn, p["golferName"])
             conn.execute(
-                """INSERT INTO tgf_payouts (event_id, golfer_id, category, amount, description)
+                """INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description)
                    VALUES (?, ?, ?, ?, ?)""",
-                (event_id, golfer_id, p["category"], p["amount"], p.get("description", "")),
+                (event_id, customer_id, p["category"], p["amount"], p.get("description", "")),
             )
 
         conn.commit()
@@ -14439,6 +14595,7 @@ def import_tgf_payouts(event_id: int, payouts: list, db_path=None) -> dict:
     """Add payouts to an existing TGF event.
 
     payouts: [{golferName, category, amount, description}]
+      (golferName field retained for backward-compatible API; resolves to customer_id internally)
     Returns {payouts_added, event_id} or {error}.
     """
     if not payouts:
@@ -14450,18 +14607,18 @@ def import_tgf_payouts(event_id: int, payouts: list, db_path=None) -> dict:
 
         added = 0
         for p in payouts:
-            golfer_id = _get_or_create_golfer(conn, p["golferName"])
+            customer_id = _resolve_customer_for_payout(conn, p["golferName"])
             conn.execute(
-                """INSERT INTO tgf_payouts (event_id, golfer_id, category, amount, description)
+                """INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description)
                    VALUES (?, ?, ?, ?, ?)""",
-                (event_id, golfer_id, p["category"], p["amount"], p.get("description", "")),
+                (event_id, customer_id, p["category"], p["amount"], p.get("description", "")),
             )
             added += 1
 
         # Update event aggregates
         stats = conn.execute(
             """SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as total,
-                      COUNT(DISTINCT golfer_id) as winners
+                      COUNT(DISTINCT customer_id) as winners
                FROM tgf_payouts WHERE event_id = ?""",
             (event_id,),
         ).fetchone()
@@ -14500,108 +14657,100 @@ def delete_tgf_event(event_id: int, db_path=None) -> dict:
 
 
 def add_tgf_golfer(data: dict, db_path=None) -> dict:
-    """Add or update a golfer."""
+    """Add or update a customer's golfer-related info (venmo_username, chapter).
+
+    Backward-compatible name — the API still accepts {name, venmo_username?, chapter?}
+    but now operates on the customers table instead of a separate tgf_golfers table.
+    """
     with _connect(db_path) as conn:
-        existing = conn.execute("SELECT id FROM tgf_golfers WHERE name = ?", (data["name"],)).fetchone()
-        if existing:
-            updates = []
-            vals = []
-            for key in ("venmo_username", "chapter"):
-                if key in data:
-                    updates.append(f"{key} = ?")
-                    vals.append(data[key])
-            if updates:
-                vals.append(existing["id"])
-                conn.execute(f"UPDATE tgf_golfers SET {', '.join(updates)} WHERE id = ?", vals)
-                conn.commit()
-            return {"golfer_id": existing["id"], "updated": True}
-        conn.execute(
-            "INSERT INTO tgf_golfers (name, venmo_username, chapter) VALUES (?, ?, ?)",
-            (data["name"], data.get("venmo_username", ""), data.get("chapter", "")),
-        )
+        customer_id = _resolve_customer_for_payout(conn, data["name"])
+        updates = []
+        vals = []
+        if "venmo_username" in data:
+            updates.append("venmo_username = ?")
+            vals.append(data["venmo_username"] or None)
+        if "chapter" in data:
+            updates.append("chapter = ?")
+            vals.append(data["chapter"] or None)
+        if updates:
+            vals.append(customer_id)
+            conn.execute(
+                f"UPDATE customers SET {', '.join(updates)} WHERE customer_id = ?",
+                vals,
+            )
         conn.commit()
-        return {"golfer_id": conn.execute("SELECT last_insert_rowid()").fetchone()[0]}
+        return {"customer_id": customer_id, "updated": True}
 
 
 def import_tgf_golfers(golfers: list[dict], db_path=None) -> dict:
-    """Bulk import/update golfers. Each dict: {name, venmo_username?, chapter?}."""
+    """Bulk import/update golfer-related fields on customers.
+
+    Each dict: {name, venmo_username?, chapter?}. Resolves each name to a
+    customer record (creating one if necessary) and updates its venmo/chapter.
+    """
     added = 0
     updated = 0
     with _connect(db_path) as conn:
         for g in golfers:
-            existing = conn.execute("SELECT id FROM tgf_golfers WHERE name = ?", (g["name"],)).fetchone()
-            if existing:
-                parts = []
+            name = g.get("name", "").strip()
+            if not name:
+                continue
+            existing_cid = _lookup_customer_id(conn, name, None)
+            customer_id = _resolve_customer_for_payout(conn, name)
+            if existing_cid is None:
+                added += 1  # New customer was created
+            else:
+                updates = []
                 vals = []
                 for key in ("venmo_username", "chapter"):
                     if g.get(key):
-                        parts.append(f"{key} = ?")
+                        updates.append(f"{key} = ?")
                         vals.append(g[key])
-                if parts:
-                    vals.append(existing["id"])
-                    conn.execute(f"UPDATE tgf_golfers SET {', '.join(parts)} WHERE id = ?", vals)
+                if updates:
+                    vals.append(customer_id)
+                    conn.execute(
+                        f"UPDATE customers SET {', '.join(updates)} WHERE customer_id = ?",
+                        vals,
+                    )
                     updated += 1
-            else:
-                conn.execute(
-                    "INSERT INTO tgf_golfers (name, venmo_username, chapter) VALUES (?, ?, ?)",
-                    (g["name"], g.get("venmo_username", ""), g.get("chapter", "")),
-                )
-                added += 1
         conn.commit()
     return {"added": added, "updated": updated}
 
 
 def get_customer_winnings(customer_name: str, db_path=None) -> dict:
-    """Look up payout/winnings history for a customer by matching to tgf_golfers.
+    """Look up payout/winnings history for a customer by customer_id.
 
-    Returns {golfer_name, total_winnings, payouts: [{event_name, event_date, category, amount, description}]}
+    Resolves the provided name to a customer via the standard lookup cascade,
+    then queries tgf_payouts by customer_id directly.
+
+    Returns {golfer_name, total_winnings, payouts: [{event_name, event_date, category, amount, description}]}.
+    The field name 'golfer_name' is retained for backward-compatible API response shape.
     """
     with _connect(db_path) as conn:
-        # Try exact match first, then case-insensitive, then alias lookup
-        golfer = conn.execute(
-            "SELECT id, name FROM tgf_golfers WHERE name = ?", (customer_name,)
-        ).fetchone()
-        if not golfer:
-            golfer = conn.execute(
-                "SELECT id, name FROM tgf_golfers WHERE name = ? COLLATE NOCASE", (customer_name,)
-            ).fetchone()
-        if not golfer:
-            # Try matching via customer_aliases
-            alias_row = conn.execute(
-                """SELECT g.id, g.name FROM tgf_golfers g
-                   JOIN customer_aliases ca ON (ca.alias_name = g.name COLLATE NOCASE OR ca.canonical_name = g.name COLLATE NOCASE)
-                   WHERE ca.canonical_name = ? COLLATE NOCASE OR ca.alias_name = ? COLLATE NOCASE
-                   LIMIT 1""",
-                (customer_name, customer_name),
-            ).fetchone()
-            if alias_row:
-                golfer = alias_row
-        if not golfer:
-            # Try first+last name reversal (e.g. customer is "First Last", golfer is "Last, First")
-            parts = customer_name.strip().split()
-            if len(parts) >= 2:
-                reversed_name = f"{parts[-1]}, {' '.join(parts[:-1])}"
-                golfer = conn.execute(
-                    "SELECT id, name FROM tgf_golfers WHERE name = ? COLLATE NOCASE", (reversed_name,)
-                ).fetchone()
-
-        if not golfer:
+        customer_id = _lookup_customer_id(conn, customer_name, None)
+        if customer_id is None:
             return {"golfer_name": None, "total_winnings": 0, "payouts": []}
+
+        cust = conn.execute(
+            "SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+            (customer_id,),
+        ).fetchone()
+        display_name = f"{cust['first_name']} {cust['last_name']}" if cust else customer_name
 
         payouts = [dict(r) for r in conn.execute(
             """SELECT p.amount, p.category, p.description,
                       e.name as event_name, e.event_date, e.course
                FROM tgf_payouts p
                JOIN tgf_events e ON e.id = p.event_id
-               WHERE p.golfer_id = ?
+               WHERE p.customer_id = ?
                ORDER BY e.event_date DESC, p.amount DESC""",
-            (golfer["id"],),
+            (customer_id,),
         ).fetchall()]
 
         total = sum(p["amount"] for p in payouts)
 
         return {
-            "golfer_name": golfer["name"],
+            "golfer_name": display_name,
             "total_winnings": round(total, 2),
             "payouts": payouts,
         }
