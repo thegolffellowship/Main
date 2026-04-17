@@ -165,6 +165,7 @@ from email_parser.database import (
     get_blocked_merchants,
     block_merchant,
     dismiss_bank_deposit,
+    record_internal_transfer,
     save_action_item,
     get_action_items,
     update_action_item,
@@ -6609,10 +6610,23 @@ def api_recon_deposits():
 def api_dismiss_deposit():
     d = request.json or {}
     deposit_id = d.get("deposit_id")
-    reason = d.get("reason", "internal_transfer")
+    reason = d.get("reason", "not_applicable")
     if not deposit_id:
         return jsonify({"error": "deposit_id required"}), 400
     return jsonify(dismiss_bank_deposit(deposit_id, reason))
+
+
+@app.route("/api/reconciliation/record-transfer", methods=["POST"])
+@require_role("admin")
+def api_record_transfer():
+    d = request.json or {}
+    deposit_id = d.get("deposit_id")
+    from_account = d.get("from_account", "TGF Checking")
+    to_account = d.get("to_account", "Venmo")
+    notes = d.get("notes", "")
+    if not deposit_id:
+        return jsonify({"error": "deposit_id required"}), 400
+    return jsonify(record_internal_transfer(deposit_id, from_account, to_account, notes))
 
 
 @app.route("/api/reconciliation/unreconciled")

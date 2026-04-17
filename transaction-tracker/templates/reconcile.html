@@ -153,9 +153,26 @@
                         </select>
                         <button class="btn btn-secondary" onclick="loadBrowseAll()" style="font-size:0.72rem; padding:2px 8px;">Search</button>
                     </div>
-                    <div id="suggestions-dismiss-bar" style="display:none; padding:4px 0 6px 0; border-bottom:1px solid var(--border); margin-bottom:4px;">
-                        <button class="btn btn-sm" onclick="dismissDeposit('internal_transfer')" style="font-size:0.75rem; background:#f1f5f9; border-color:#94a3b8; color:#475569; margin-right:4px;">↔ Mark as Internal Transfer</button>
-                        <button class="btn btn-sm" onclick="dismissDeposit('not_applicable')" style="font-size:0.75rem; background:#f1f5f9; border-color:#94a3b8; color:#475569;">✕ Not Applicable</button>
+                    <div id="suggestions-dismiss-bar" style="display:none; padding:6px 0 8px 0; border-bottom:1px solid var(--border); margin-bottom:4px;">
+                        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                            <span style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap;">Record as transfer:</span>
+                            <select id="xfer-from" style="font-size:0.75rem; padding:3px 6px; border:1px solid var(--border); border-radius:4px;">
+                                <option value="TGF Checking">TGF Checking</option>
+                                <option value="Venmo">Venmo</option>
+                                <option value="PayPal">PayPal</option>
+                                <option value="Zelle">Zelle</option>
+                                <option value="Other">Other</option>
+                            </select>
+                            <span style="font-size:0.72rem; color:var(--text-muted);">→</span>
+                            <select id="xfer-to" style="font-size:0.75rem; padding:3px 6px; border:1px solid var(--border); border-radius:4px;">
+                                <option value="Venmo">Venmo</option>
+                                <option value="TGF Checking">TGF Checking</option>
+                                <option value="PayPal">PayPal</option>
+                                <option value="Zelle">Zelle</option>
+                                <option value="Other">Other</option>
+                            </select>
+                            <button class="btn btn-sm" onclick="recordTransfer()" style="font-size:0.75rem; background:#dbeafe; border-color:#2563eb; color:#1d4ed8; white-space:nowrap;">↔ Record Transfer</button>
+                        </div>
                     </div>
                     <div id="txn-list"><div style="color:var(--text-muted); font-size:0.82rem;">Click a deposit on the left to see suggestions ranked by confidence.</div></div>
                 </div>
@@ -294,14 +311,20 @@
         const accountId = document.getElementById('match-account-filter').value;
         const month = document.getElementById('match-month-filter').value;
         const statusFilter = document.getElementById('deposit-status-filter').value;
+        const isDismissedView = statusFilter === 'dismissed';
         const qs = new URLSearchParams();
         if (accountId) qs.set('account_id', accountId);
         if (month) qs.set('month', month);
-        if (statusFilter) qs.set('status', statusFilter);
+        if (isDismissedView) {
+            qs.set('include_dismissed', 'true');
+        } else if (statusFilter) {
+            qs.set('status', statusFilter);
+        }
 
         try {
             const depRes = await fetch(`/api/reconciliation/deposits?${qs}`);
-            const deposits = await depRes.json();
+            let deposits = await depRes.json();
+            if (isDismissedView) deposits = deposits.filter(d => d.dismissed);
 
             const depDiv = document.getElementById('deposit-list');
             if (!deposits.length) {
@@ -311,10 +334,12 @@
                     const amtClass = d.amount >= 0 ? 'color:#166534' : 'color:#dc2626';
                     const amtStr = d.amount >= 0 ? `$${d.amount.toFixed(2)}` : `-$${Math.abs(d.amount).toFixed(2)}`;
                     const isMatched = d.status === 'matched';
-                    const rowBg = isMatched ? 'background:#f0fdf4;' : '';
+                    const isDismissed = d.dismissed;
+                    const rowBg = isDismissed ? 'background:#f9fafb; opacity:0.7;' : isMatched ? 'background:#f0fdf4;' : '';
+                    const dismissedTag = isDismissed ? ` <span style="font-size:0.65rem; color:#6b7280; background:#e5e7eb; border-radius:3px; padding:1px 4px;">${d.dismiss_reason || 'dismissed'}</span>` : '';
                     return `<div class="match-row" onclick="selectDeposit(${d.id}, '${d.status}')" data-id="${d.id}" data-status="${d.status}" style="${rowBg}">
                         <span>${d.deposit_date}</span>
-                        <span class="desc"><span class="status-dot dot-${d.status}"></span>${esc(d.description || '')}</span>
+                        <span class="desc"><span class="status-dot dot-${d.status}"></span>${esc(d.description || '')}${dismissedTag}</span>
                         <span class="amt" style="${amtClass}">${amtStr}</span>
                     </div>`;
                 }).join('');
@@ -388,9 +413,17 @@
         // Fetch smart suggestions for this deposit
         const txnDiv = document.getElementById('txn-list');
         txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">Finding matches...</div>';
-        // Show dismiss controls header immediately (before async suggestions load)
-        document.getElementById('suggestions-dismiss-bar').style.display = '';
-        document.getElementById('suggestions-dismiss-bar').dataset.depositId = id;
+        // Show transfer bar, auto-detect direction from description
+        const bar = document.getElementById('suggestions-dismiss-bar');
+        bar.style.display = '';
+        bar.dataset.depositId = id;
+        const selRow = document.querySelector(`#deposit-list .match-row[data-id="${id}"]`);
+        const depDesc = (selRow?.querySelector('.desc')?.textContent || '').toUpperCase();
+        const xferTo = document.getElementById('xfer-to');
+        if (depDesc.includes('VENMO')) { xferTo.value = 'Venmo'; }
+        else if (depDesc.includes('PAYPAL')) { xferTo.value = 'PayPal'; }
+        else if (depDesc.includes('ZELLE')) { xferTo.value = 'Zelle'; }
+        else { xferTo.value = 'Venmo'; }
 
         try {
             const res = await fetch(`/api/reconciliation/suggestions/${id}`);
@@ -517,23 +550,26 @@
         }
     }
 
-    async function dismissDeposit(reason) {
+    async function recordTransfer() {
         const bar = document.getElementById('suggestions-dismiss-bar');
         const depositId = bar?.dataset?.depositId;
         if (!depositId) return;
-        const label = reason === 'internal_transfer' ? 'internal transfer' : 'not applicable';
-        if (!confirm(`Mark this deposit as ${label}? It will be hidden from the match queue.`)) return;
+        const fromAcct = document.getElementById('xfer-from').value;
+        const toAcct = document.getElementById('xfer-to').value;
         try {
-            await fetch('/api/reconciliation/dismiss-deposit', {
+            const res = await fetch('/api/reconciliation/record-transfer', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ deposit_id: parseInt(depositId), reason }),
+                body: JSON.stringify({ deposit_id: parseInt(depositId),
+                                       from_account: fromAcct, to_account: toAcct }),
             });
+            const data = await res.json();
+            if (data.error) { alert('Error: ' + data.error); return; }
             bar.style.display = 'none';
             selectedDeposit = null;
             loadMatchQueue();
             loadDashboard();
-        } catch(e) { alert('Dismiss failed: ' + e); }
+        } catch(e) { alert('Record transfer failed: ' + e); }
     }
 
     async function unmatchDeposit(depositId) {

@@ -15329,9 +15329,51 @@ def unmatch_deposit(bank_deposit_id: int, acct_transaction_id: int | None = None
     return {"status": "ok"}
 
 
-def dismiss_bank_deposit(deposit_id: int, reason: str = "internal_transfer",
+def record_internal_transfer(deposit_id: int, from_account: str, to_account: str,
+                             notes: str = "", db_path: str | Path | None = None) -> dict:
+    """Record a bank-to-bank internal transfer (e.g. Chase → Venmo funding sweep).
+
+    Creates a transfer acct_transaction, links it to the bank deposit, and marks
+    the deposit as matched so it no longer appears in the unmatched queue.
+    """
+    with _connect(db_path) as conn:
+        dep = conn.execute("SELECT * FROM bank_deposits WHERE id = ?", (deposit_id,)).fetchone()
+        if not dep:
+            return {"error": "deposit not found"}
+        dep = dict(dep)
+        amount = abs(dep["amount"])
+        dep_date = dep["deposit_date"]
+        description = notes or f"Internal transfer: {from_account} → {to_account}"
+
+        cur = conn.execute(
+            """INSERT INTO acct_transactions
+               (date, description, total_amount, type, source, source_ref,
+                entry_type, category, amount, account, status)
+               VALUES (?, ?, ?, 'transfer', 'manual', ?,
+                       'transfer', 'account_transfer', ?, ?, 'reconciled')""",
+            (dep_date, description, amount,
+             f"INTXFER-{deposit_id}", amount, from_account),
+        )
+        txn_id = cur.lastrowid
+
+        conn.execute(
+            """INSERT OR IGNORE INTO reconciliation_matches
+               (bank_deposit_id, acct_transaction_id, match_type, match_confidence)
+               VALUES (?, ?, 'manual', 1.0)""",
+            (deposit_id, txn_id),
+        )
+        conn.execute(
+            "UPDATE bank_deposits SET status = 'matched' WHERE id = ?", (deposit_id,)
+        )
+        conn.commit()
+
+    return {"created": True, "acct_transaction_id": txn_id, "deposit_id": deposit_id,
+            "from_account": from_account, "to_account": to_account}
+
+
+def dismiss_bank_deposit(deposit_id: int, reason: str = "not_applicable",
                          db_path: str | Path | None = None) -> dict:
-    """Mark a bank deposit as dismissed (internal transfer, not applicable, etc.)."""
+    """Mark a bank deposit as dismissed (not applicable — no ledger entry needed)."""
     with _connect(db_path) as conn:
         conn.execute(
             "UPDATE bank_deposits SET dismissed = 1, dismiss_reason = ? WHERE id = ?",

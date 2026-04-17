@@ -1,5 +1,21 @@
-window.TGF_VERSION = "2.6.0";
+window.TGF_VERSION = "2.6.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.1",
+    date: "2026-04-17",
+    title: "Expense Inbox Hardening & Reconcile Transfer Accounting",
+    changes: [
+      "Expense re-parse no longer overwrites ignored/approved/corrected status — previously clearing inbox would re-queue already-dismissed items",
+      "Block Merchant — new button on expense review modal; future emails from that merchant are auto-ignored at parse time",
+      "'Not a Transaction' now sets ignored status instead of deleting the row, so the item won't reappear on next email sync",
+      "Expense parser now uses the email received date as transaction_date unless the email body explicitly contains a different payment date — prevents invoice/event dates from being captured as the charge date",
+      "Match Queue sign filter — suggestions for negative bank deposits (expense withdrawals) now show only expense/contra ledger entries, not income entries",
+      "Internal transfer accounting — 'Mark as Internal Transfer' now creates a real acct_transactions entry (type=transfer) linked to the bank deposit, recording the debit/credit between accounts for proper reconciliation",
+      "Transfer form with From/To account dropdowns — auto-detects destination account from bank deposit description (VENMO→Venmo, PAYPAL→PayPal, etc.)",
+      "Removed 'Not Applicable' button from reconcile Match Queue — all bank deposits are real transactions and should be accounted for",
+      "Dismissed deposits excluded from unmatched count on Account Dashboard",
+    ],
+  },
   {
     version: "2.6.0",
     date: "2026-04-17",
