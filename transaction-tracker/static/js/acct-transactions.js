@@ -3,23 +3,74 @@
    ========================================================= */
 
 async function loadTransactions() {
-    const qs = buildQS({
+    const acctPill = document.querySelector('#ledger-acct-pills .ledger-pill.active');
+    const statusPill = document.querySelector('#ledger-status-pills .ledger-pill.active');
+    const acctId = acctPill?.dataset.acctId || null;
+    const ledgerStatus = statusPill?.dataset.status || 'all';
+
+    const params = {
         entity_id: ACCT.activeEntity,
-        account_id: $('#txn-filter-account').value || null,
-        category_id: $('#txn-filter-category').value || null,
-        type: $('#txn-filter-type').value || null,
-        source: $('#txn-filter-source').value || null,
-        review_status: $('#txn-filter-review').value || null,
-        search: $('#txn-search').value || null,
+        account_id: acctId,
+        category_id: $('#txn-filter-category')?.value || null,
+        type: $('#txn-filter-type')?.value || null,
+        source: $('#txn-filter-source')?.value || null,
+        search: $('#txn-search')?.value || null,
         limit: ACCT.txnLimit,
         offset: ACCT.txnPage * ACCT.txnLimit,
-    });
+    };
+
+    if (ledgerStatus === 'pending') {
+        params.review_status = 'pending';
+    } else if (ledgerStatus !== 'all') {
+        params.ledger_status = ledgerStatus;
+        // advanced review filter still respected when not using status pill shortcut
+    } else {
+        params.review_status = $('#txn-filter-review')?.value || null;
+    }
+
     try {
-        const data = await api('/transactions/unified' + qs);
+        const data = await api('/transactions/unified' + buildQS(params));
         renderTransactionList(data.transactions, data.total);
     } catch (e) {
         console.error('Transaction load error:', e);
     }
+}
+
+function initLedgerPills() {
+    const acctBar = document.getElementById('ledger-acct-pills');
+    if (acctBar && ACCT.accounts.length) {
+        const active = acctBar.querySelector('.ledger-pill.active')?.dataset.acctId || '';
+        acctBar.innerHTML =
+            `<button class="ledger-pill${active === '' ? ' active' : ''}" data-acct-id="">All Accounts</button>` +
+            ACCT.accounts.map(a =>
+                `<button class="ledger-pill${active === String(a.id) ? ' active' : ''}" data-acct-id="${a.id}">${acctDisplayName(a)}</button>`
+            ).join('');
+        acctBar.querySelectorAll('.ledger-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                acctBar.querySelectorAll('.ledger-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                ACCT.txnPage = 0;
+                loadTransactions();
+            });
+        });
+    }
+
+    const statusBar = document.getElementById('ledger-status-pills');
+    if (statusBar) {
+        statusBar.querySelectorAll('.ledger-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                statusBar.querySelectorAll('.ledger-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                ACCT.txnPage = 0;
+                loadTransactions();
+            });
+        });
+    }
+
+    document.getElementById('btn-ledger-adv')?.addEventListener('click', () => {
+        const panel = document.getElementById('ledger-adv-panel');
+        if (panel) panel.style.display = panel.style.display === 'none' ? '' : 'none';
+    });
 }
 
 const _SOURCE_LABELS = {

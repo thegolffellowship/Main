@@ -9468,6 +9468,7 @@ def get_acct_transactions(entity_id: int | None = None, account_id: int | None =
                           category_id: int | None = None,
                           start_date: str | None = None, end_date: str | None = None,
                           search: str | None = None, txn_type: str | None = None,
+                          acct_status: str | None = None,
                           limit: int = 200, offset: int = 0,
                           db_path: str | Path | None = None) -> dict:
     """Return transactions with their splits. Filters by entity/account/category/date/search."""
@@ -9495,6 +9496,9 @@ def get_acct_transactions(entity_id: int | None = None, account_id: int | None =
         if txn_type:
             clauses.append("t.type = ?")
             params.append(txn_type)
+        if acct_status:
+            clauses.append("t.status = ?")
+            params.append(acct_status)
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
 
@@ -9550,6 +9554,7 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
                              start_date: str | None = None, end_date: str | None = None,
                              search: str | None = None, txn_type: str | None = None,
                              source: str | None = None, review_status: str | None = None,
+                             ledger_status: str | None = None,
                              limit: int = 200, offset: int = 0,
                              db_path: str | Path | None = None) -> dict:
     """Return both acct_transactions and expense_transactions in a unified list.
@@ -9557,6 +9562,18 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
     Expense transactions are mapped to a compatible shape with synthetic splits.
     Results are interleaved by date descending with correct pagination.
     """
+    # Ledger status pill routing: map UI status to query constraints
+    acct_status_filter = None
+    if ledger_status == 'pending':
+        # Only pending expense_transactions
+        include_acct_override = False
+        review_status = 'pending'
+    elif ledger_status in ('active', 'reconciled', 'reversed', 'merged'):
+        include_acct_override = True   # only ledger entries, no expense rows
+        acct_status_filter = ledger_status
+    else:
+        include_acct_override = None  # no override
+
     with _connect(db_path) as conn:
         # --- Build entity short_name→color lookup ---
         entity_rows = conn.execute(
@@ -9567,6 +9584,11 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
         # --- Determine which sources to include ---
         include_acct = source in (None, "", "manual")
         include_expense = source not in ("manual",)
+        if include_acct_override is True:
+            include_acct = True
+            include_expense = False
+        elif include_acct_override is False:
+            include_acct = False
         # If source is a specific expense type, only include expense
         if source in ("chase_alert", "venmo", "receipt"):
             include_acct = False
@@ -9583,6 +9605,7 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
                     entity_id=entity_id, account_id=account_id,
                     category_id=category_id, start_date=start_date,
                     end_date=end_date, search=search, txn_type=txn_type,
+                    acct_status=acct_status_filter,
                     limit=limit + offset,  # fetch enough for merge
                     offset=0, db_path=db_path,
                 )

@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Accounting — TGF Tracker</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        .ledger-pill-row{display:flex;flex-wrap:wrap;gap:.4rem;padding:.5rem 0;}
+        .ledger-pill{padding:.28rem .85rem;border:1.5px solid var(--border,#d1d5db);border-radius:999px;background:transparent;color:var(--text,#374151);cursor:pointer;font-size:.82rem;font-weight:500;transition:background .15s,border-color .15s,color .15s;white-space:nowrap;}
+        .ledger-pill:hover{border-color:#3b82f6;color:#3b82f6;}
+        .ledger-pill.active{background:#3b82f6;border-color:#3b82f6;color:#fff;}
+        .ledger-filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.25rem 0 .5rem;border-bottom:1px solid var(--border,#e5e7eb);margin-bottom:.5rem;}
+        .ledger-filter-right{display:flex;align-items:center;gap:.5rem;margin-left:auto;}
+        @media(max-width:640px){.ledger-filter-right{margin-left:0;flex-wrap:wrap;}.ledger-filter-bar{flex-direction:column;align-items:flex-start;}}
+    </style>
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
@@ -224,15 +233,33 @@
 
         <!-- ═══ LEDGER TAB ═══ -->
         <section class="acct-tab-panel active" id="panel-ledger">
-            <div class="acct-toolbar">
-                <input type="text" id="txn-search" class="acct-search" placeholder="Search transactions...">
+            <!-- Account Pills -->
+            <div class="ledger-pill-row" id="ledger-acct-pills">
+                <button class="ledger-pill active" data-acct-id="">All Accounts</button>
+            </div>
+            <!-- Status Pills + Search + Controls -->
+            <div class="ledger-filter-bar">
+                <div class="ledger-pill-row" id="ledger-status-pills" style="margin:0; padding:0;">
+                    <button class="ledger-pill active" data-status="all">All</button>
+                    <button class="ledger-pill" data-status="active">Active</button>
+                    <button class="ledger-pill" data-status="reconciled">&#10003; Reconciled</button>
+                    <button class="ledger-pill" data-status="pending">Pending Review</button>
+                </div>
+                <div class="ledger-filter-right">
+                    <input type="text" id="txn-search" class="acct-search" placeholder="Search ledger..." style="width:160px;">
+                    <button class="btn btn-secondary btn-sm" id="btn-ledger-adv" title="Advanced filters">&#9881; Filters</button>
+                    <button class="btn btn-secondary btn-sm" id="btn-import-csv" title="Import bank statement CSV">Import CSV</button>
+                </div>
+            </div>
+            <!-- Advanced Filters (collapsed by default) -->
+            <div id="ledger-adv-panel" class="acct-toolbar" style="display:none; flex-wrap:wrap; gap:0.5rem; padding:0.5rem 0; border-bottom:1px solid var(--border,#e5e7eb); margin-bottom:0.25rem;">
                 <select id="txn-filter-type" class="acct-select">
                     <option value="">All Types</option>
                     <option value="income">Income</option>
                     <option value="expense">Expense</option>
                     <option value="transfer">Transfer</option>
                 </select>
-                <select id="txn-filter-account" class="acct-select">
+                <select id="txn-filter-account" class="acct-select" style="display:none;">
                     <option value="">All Accounts</option>
                 </select>
                 <select id="txn-filter-category" class="acct-select">
@@ -240,21 +267,17 @@
                 </select>
                 <select id="txn-filter-source" class="acct-select">
                     <option value="">All Sources</option>
-                    <option value="manual">Manual & CSV</option>
+                    <option value="manual">Manual &amp; CSV</option>
                     <option value="chase_alert">Chase Alerts</option>
                     <option value="venmo">Venmo</option>
                     <option value="receipt">Receipts</option>
                 </select>
                 <select id="txn-filter-review" class="acct-select">
-                    <option value="">All Statuses</option>
-                    <option value="pending">Pending Review</option>
+                    <option value="">All Review Statuses</option>
                     <option value="approved">Approved</option>
                     <option value="corrected">Corrected</option>
                     <option value="ignored">Ignored</option>
                 </select>
-                <button class="btn btn-secondary" id="btn-import-csv" title="Import bank statement CSV">
-                    Import CSV
-                </button>
             </div>
             <div class="acct-txn-list" id="txn-list"></div>
             <div class="acct-pagination" id="txn-pagination"></div>

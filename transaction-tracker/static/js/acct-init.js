@@ -14,15 +14,16 @@ async function reloadMasterData() {
     ACCT.events = events;
     renderEntityPills();
     populateDropdowns();
+    initLedgerPills();
 
-    // Show pending review count badge on Transactions tab
+    // Show pending review count badge on Ledger tab
     try {
         const review = await api('/pending-review');
-        const txnTab = document.querySelector('.acct-subtab[data-tab="transactions"]');
-        if (txnTab && review.expense_pending > 0) {
-            txnTab.innerHTML = `Transactions <span class="acct-pending-badge">${review.expense_pending}</span>`;
-        } else if (txnTab) {
-            txnTab.textContent = 'Transactions';
+        const ledgerTab = document.querySelector('.acct-subtab[data-tab="ledger"]');
+        if (ledgerTab && review.expense_pending > 0) {
+            ledgerTab.innerHTML = `Ledger <span class="acct-pending-badge">${review.expense_pending}</span>`;
+        } else if (ledgerTab) {
+            ledgerTab.textContent = 'Ledger';
         }
     } catch (_) { /* ignore */ }
 }
@@ -58,7 +59,7 @@ function switchTab(tab) {
 function refreshActiveTab() {
     switch (ACCT.activeTab) {
         case 'dashboard': loadDashboard(); break;
-        case 'transactions': loadTransactions(); break;
+        case 'ledger': loadTransactions(); break;
         case 'accounts': loadAccounts(); break;
         case 'categories': loadCategories(); break;
         case 'reports': loadReports(); break;

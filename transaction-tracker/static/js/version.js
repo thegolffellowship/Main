@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.6.10";
+window.TGF_VERSION = "2.7.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.7.0",
+    date: "2026-04-17",
+    title: "Ledger — account toggle pills + status filter pills",
+    changes: [
+      "Account pills replace the account dropdown: All Accounts | TGF Checking | Venmo (dynamically loaded from your bank accounts)",
+      "Status pills replace the review dropdown: All | Active | Reconciled | Pending Review — one tap to see exactly what needs attention",
+      "'Reconciled' pill shows only bank-confirmed ledger entries; 'Pending Review' shows only expense_transactions awaiting approval",
+      "Advanced filters (Type, Category, Source, Review Status) now collapse behind a ⚙ Filters button to reduce clutter",
+      "Tab renamed from 'Transactions' to 'Ledger' (v2.6.10) to distinguish from the top-level Transactions revenue page",
+    ],
+  },
   {
     version: "2.6.10",
     date: "2026-04-17",

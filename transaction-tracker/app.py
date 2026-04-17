@@ -5285,6 +5285,7 @@ def api_acct_unified_transactions():
         txn_type=request.args.get("type"),
         source=request.args.get("source"),
         review_status=request.args.get("review_status"),
+        ledger_status=request.args.get("ledger_status"),
         limit=request.args.get("limit", 200, type=int),
         offset=request.args.get("offset", 0, type=int),
     ))
