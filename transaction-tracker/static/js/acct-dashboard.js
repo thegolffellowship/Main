@@ -162,37 +162,244 @@ function renderRecentTransactions(txns) {
 
 function renderBookkeeperBanner(stats) {
     const banner = $('#bookkeeper-banner');
-    if (!stats || stats.total === 0) {
+    const pending = (stats?.pending_expenses || 0) + (stats?.uncategorized || 0);
+    if (!stats || (stats.total === 0 && pending === 0)) {
         banner.style.display = 'none';
         return;
     }
     banner.style.display = 'flex';
     const statusEl = $('#bookkeeper-status');
-    if (stats.uncategorized === 0) {
-        statusEl.innerHTML = `<span class="acct-positive">All ${stats.total} transactions categorized</span>`;
-        $('#btn-ai-categorize').style.display = 'none';
+    const btn = $('#btn-ai-categorize');
+    if (pending === 0) {
+        statusEl.innerHTML = `<span class="acct-positive">All transactions categorized ✓</span>`;
+        btn.style.display = 'none';
         $('#btn-review-queue').style.display = 'none';
     } else {
-        statusEl.innerHTML = `<span class="acct-negative">${stats.uncategorized} of ${stats.total} transactions need categorization</span> (${stats.pct}% done)`;
-        $('#btn-ai-categorize').style.display = '';
+        const parts = [];
+        if (stats.pending_expenses > 0) parts.push(`${stats.pending_expenses} inbox`);
+        if (stats.uncategorized > 0) parts.push(`${stats.uncategorized} uncategorized`);
+        statusEl.innerHTML = `<span class="acct-negative">${parts.join(' · ')} — needs review</span>`;
+        const totalPending = (stats.pending_expenses || 0) + (stats.uncategorized || 0);
+        btn.textContent = `Review Batch (${totalPending})`;
+        btn.style.display = '';
         $('#btn-review-queue').style.display = '';
     }
 }
 
+// ── Batch Categorization Preview ──────────────────────────────────────────
+
+const BATCH = { offset: 0, limit: 20, total: 0, categories: [], entities: [] };
+
+const CONF_BADGE = {
+    high:   { label: 'High',   bg: '#dcfce7', color: '#166534' },
+    medium: { label: 'Medium', bg: '#fef9c3', color: '#854d0e' },
+    rule:   { label: 'Rule',   bg: '#dbeafe', color: '#1e40af' },
+    ai:     { label: 'AI',     bg: '#f3e8ff', color: '#6b21a8' },
+    none:   { label: 'None',   bg: '#f3f4f6', color: '#6b7280' },
+};
+
 async function runAiCategorize() {
-    const btn = $('#btn-ai-categorize');
-    btn.disabled = true;
-    btn.textContent = 'Categorizing...';
+    await openBatchPreview(0);
+}
+
+async function openBatchPreview(offset = 0) {
+    const panel = $('#batch-preview-panel');
+    const list  = $('#batch-preview-list');
+    list.innerHTML = '<div style="padding:1.5rem; text-align:center; color:var(--text-muted);">Loading suggestions…</div>';
+    panel.style.display = '';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
     try {
-        const res = await api('/ai/bulk-categorize', { method: 'POST' });
-        alert(`AI categorized ${res.updated} of ${res.total} transactions`);
+        const data = await api(`/ai/batch?limit=${BATCH.limit}&offset=${offset}`);
+        BATCH.offset     = offset;
+        BATCH.total      = data.total;
+        BATCH.categories = data.categories || [];
+        BATCH.entities   = data.entities   || [];
+        renderBatchPreview(data.items);
+        updateBatchControls();
+    } catch (e) {
+        list.innerHTML = `<div style="padding:1.5rem; color:var(--danger);">Error: ${e.message}</div>`;
+    }
+}
+
+function renderBatchPreview(items) {
+    const list = $('#batch-preview-list');
+
+    if (!items || !items.length) {
+        list.innerHTML = '<div style="padding:1.5rem; text-align:center; color:var(--text-muted);">No pending transactions — inbox is clear! 🎉</div>';
+        $('#btn-batch-approve').disabled = true;
+        return;
+    }
+
+    const catOpts = (selected) => {
+        const grouped = { income: [], expense: [] };
+        BATCH.categories.forEach(c => {
+            if (grouped[c.type]) grouped[c.type].push(c);
+        });
+        const makeGroup = (label, cats) => cats.length
+            ? `<optgroup label="${label}">${cats.map(c =>
+                `<option value="${c.name}" ${c.name === selected ? 'selected' : ''}>${c.name}</option>`
+              ).join('')}</optgroup>`
+            : '';
+        return `<option value="">— Category —</option>` +
+               makeGroup('Income', grouped.income) +
+               makeGroup('Expense', grouped.expense);
+    };
+
+    const entOpts = (selected) =>
+        BATCH.entities.map(e =>
+            `<option value="${e.short_name}" ${e.short_name === selected ? 'selected' : ''}>${e.short_name}</option>`
+        ).join('');
+
+    const srcBadge = (src, itemType) => {
+        if (itemType === 'acct') {
+            return `<span style="font-size:0.7rem; padding:1px 6px; border-radius:9999px; background:#374151; color:#fff; white-space:nowrap;">Ledger</span>`;
+        }
+        const labels = { chase_alert: 'Chase', venmo: 'Venmo', receipt: 'Receipt' };
+        const colors = { chase_alert: '#1d4ed8', venmo: '#1e3a5f', receipt: '#047857' };
+        const label = labels[src] || src || 'Manual';
+        const bg    = colors[src] || '#6b7280';
+        return `<span style="font-size:0.7rem; padding:1px 6px; border-radius:9999px; background:${bg}; color:#fff; white-space:nowrap;">${label}</span>`;
+    };
+
+    const confBadge = (conf) => {
+        const b = CONF_BADGE[conf] || CONF_BADGE.none;
+        return `<span style="font-size:0.7rem; padding:1px 6px; border-radius:9999px; background:${b.bg}; color:${b.color}; white-space:nowrap;">${b.label}</span>`;
+    };
+
+    list.innerHTML = items.map((item, i) => {
+        const sugCat = item.suggestion?.category_name || '';
+        const sugEnt = item.suggestion?.entity_name   || '';
+        const conf   = item.suggestion?.confidence    || 'none';
+        const isDupe = item.is_duplicate;
+
+        return `<div class="batch-row" data-id="${item.id}" data-item-type="${item.item_type || 'expense'}" style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.65rem 1rem; border-bottom:1px solid var(--border); ${isDupe ? 'background:#fff7ed;' : ''}">
+            <div style="padding-top:2px; flex-shrink:0;">
+                <input type="checkbox" class="batch-chk" data-id="${item.id}" ${isDupe ? '' : 'checked'} style="width:16px; height:16px; cursor:pointer;">
+            </div>
+            <div style="flex:1; min-width:0;">
+                <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.3rem;">
+                    <span style="font-size:0.82rem; color:var(--text-muted);">${item.date || '—'}</span>
+                    ${srcBadge(item.source_type, item.item_type)}
+                    ${isDupe ? '<span style="font-size:0.7rem; padding:1px 6px; border-radius:9999px; background:#fef3c7; color:#92400e; white-space:nowrap;">⚠ Possible Duplicate</span>' : ''}
+                    ${confBadge(conf)}
+                </div>
+                <div style="font-weight:500; font-size:0.9rem; margin-bottom:0.35rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${item.merchant}">${item.merchant || '(unknown)'}</div>
+                ${item.notes ? `<div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.35rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${item.notes}</div>` : ''}
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <select class="batch-cat acct-select-sm" data-id="${item.id}" style="min-width:160px;">${catOpts(sugCat)}</select>
+                    <select class="batch-ent acct-select-sm" data-id="${item.id}" style="min-width:80px;"><option value="">— Entity —</option>${entOpts(sugEnt)}</select>
+                </div>
+            </div>
+            <div style="flex-shrink:0; text-align:right; min-width:60px;">
+                <span style="font-weight:600; font-size:0.9rem; color:${item.transaction_type === 'income' ? 'var(--success)' : 'var(--danger)'};">${fmtAmt(item.amount)}</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    bindBatchEvents();
+    updateApproveButton();
+}
+
+function fmtAmt(v) {
+    if (v == null) return '—';
+    return '$' + Math.abs(parseFloat(v)).toFixed(2);
+}
+
+function bindBatchEvents() {
+    const list = $('#batch-preview-list');
+
+    // Checkbox changes → update approve button count
+    list.querySelectorAll('.batch-chk').forEach(chk => {
+        chk.addEventListener('change', updateApproveButton);
+    });
+
+    // Select-all checkbox
+    const selectAll = $('#batch-select-all');
+    if (selectAll) {
+        selectAll.checked = false;
+        selectAll.onchange = () => {
+            list.querySelectorAll('.batch-chk').forEach(chk => {
+                const row = chk.closest('.batch-row');
+                const isDupe = row && row.style.background.includes('fff7ed');
+                if (!isDupe) chk.checked = selectAll.checked;
+            });
+            updateApproveButton();
+        };
+    }
+}
+
+function updateApproveButton() {
+    const checked = document.querySelectorAll('.batch-chk:checked').length;
+    const btn = $('#btn-batch-approve');
+    btn.disabled = checked === 0;
+    btn.textContent = `Approve Selected (${checked})`;
+}
+
+function updateBatchControls() {
+    const totalPages = Math.ceil(BATCH.total / BATCH.limit) || 1;
+    const currentPage = Math.floor(BATCH.offset / BATCH.limit) + 1;
+    $('#batch-preview-count').textContent = `${BATCH.total} pending`;
+    $('#batch-page-label').textContent     = `Page ${currentPage} of ${totalPages}`;
+    $('#btn-batch-prev').disabled = BATCH.offset === 0;
+    $('#btn-batch-next').disabled = BATCH.offset + BATCH.limit >= BATCH.total;
+}
+
+async function submitBatchApprove() {
+    const btn = $('#btn-batch-approve');
+    btn.disabled = true;
+    btn.textContent = 'Approving…';
+
+    const items = [];
+    document.querySelectorAll('.batch-row').forEach(row => {
+        const id       = parseInt(row.dataset.id);
+        const itemType = row.dataset.itemType || 'expense';
+        const chk      = row.querySelector('.batch-chk');
+        if (!chk?.checked) return;
+        const cat = row.querySelector('.batch-cat')?.value || '';
+        const ent = row.querySelector('.batch-ent')?.value || '';
+        items.push({ id, item_type: itemType, category_name: cat || null, entity_name: ent || null });
+    });
+
+    if (!items.length) return;
+
+    try {
+        const res = await api('/ai/batch-approve', { method: 'POST', body: { items } });
+        const msg = `✓ Approved ${res.approved}` +
+            (res.skipped ? `, skipped ${res.skipped}` : '') +
+            (res.errors?.length ? `, ${res.errors.length} errors` : '');
+        showToast(msg, 'success');
+
+        // Advance to next batch or close if done
+        const nextOffset = BATCH.offset; // stay on same page — approved rows are gone
+        const remaining  = BATCH.total - res.approved;
+        if (remaining <= 0) {
+            $('#batch-preview-panel').style.display = 'none';
+        } else {
+            await openBatchPreview(Math.min(nextOffset, Math.max(0, remaining - BATCH.limit)));
+        }
         loadDashboard();
     } catch (e) {
-        alert('AI categorization error: ' + e.message);
-    } finally {
+        showToast('Error: ' + e.message, 'error');
         btn.disabled = false;
-        btn.textContent = 'Auto-Categorize';
+        btn.textContent = `Approve Selected`;
     }
+}
+
+function showToast(msg, type = 'info') {
+    let t = document.getElementById('acct-toast');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'acct-toast';
+        t.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;padding:0.65rem 1rem;border-radius:6px;font-size:0.875rem;z-index:9999;max-width:320px;box-shadow:0 4px 12px rgba(0,0,0,.15);transition:opacity .3s;';
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.background = type === 'success' ? '#166534' : type === 'error' ? '#991b1b' : '#1e3a5f';
+    t.style.color = '#fff';
+    t.style.opacity = '1';
+    clearTimeout(t._hide);
+    t._hide = setTimeout(() => { t.style.opacity = '0'; }, 3500);
 }
 
 async function loadReviewQueue() {
@@ -373,4 +580,193 @@ function renderPendingExpenses(items) {
             openExpenseReview(parseInt(row.dataset.id));
         });
     });
+}
+
+// ═══════════════════════════════════════════════════
+// LIABILITIES DASHBOARD
+// ═══════════════════════════════════════════════════
+
+let _liabData = null;
+let _liabEditKey = null;
+
+function loadLiabilities() {
+    const content = document.getElementById('liabilities-content');
+    const loading = document.getElementById('liabilities-loading');
+    if (loading) loading.style.display = 'block';
+    if (content) content.style.display = 'none';
+
+    fetch('/api/accounting/liabilities')
+        .then(r => r.json())
+        .then(data => {
+            _liabData = data;
+            renderLiabilities(data);
+        })
+        .catch(() => {
+            if (loading) loading.textContent = 'Failed to load liabilities.';
+        });
+}
+
+function renderLiabilities(d) {
+    const loading = document.getElementById('liabilities-loading');
+    const content = document.getElementById('liabilities-content');
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'block';
+
+    const $ = id => document.getElementById(id);
+
+    const fmt = v => '$' + Number(v || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const amtEl = (el, v) => {
+        if (!el) return;
+        el.textContent = fmt(v);
+        el.classList.toggle('zero', !v || v === 0);
+    };
+
+    // Event Obligations
+    amtEl($('liab-prize-pools'), d.event_obligations.prize_pools.total);
+    amtEl($('liab-course-fees'), d.event_obligations.course_fees_owed);
+    const evtTotal = d.event_obligations.prize_pools.total + d.event_obligations.course_fees_owed;
+    const evtEl = $('liab-total-event');
+    if (evtEl) evtEl.textContent = fmt(evtTotal);
+
+    // Per-event prize pool breakdown
+    const breakdown = $('liab-prize-breakdown');
+    if (breakdown) {
+        const rows = d.event_obligations.prize_pools.per_event;
+        if (rows && rows.length) {
+            breakdown.innerHTML = rows.map(e =>
+                `<div class="liab-prize-event-row"><span>${e.event}</span><span>${fmt(e.amount)}</span></div>`
+            ).join('');
+        } else {
+            breakdown.innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted);padding:0.25rem 0;">No upcoming events with prize pools</div>';
+        }
+    }
+
+    // Running Pools
+    amtEl($('liab-hio-pot'), d.running_pools.hio_pot);
+    amtEl($('liab-season-contests'), d.running_pools.season_contests);
+    amtEl($('liab-lone-star'), d.running_pools.lone_star_cup_shirts);
+    const poolTotal = d.running_pools.hio_pot + d.running_pools.season_contests + d.running_pools.lone_star_cup_shirts;
+    const poolEl = $('liab-total-pools');
+    if (poolEl) poolEl.textContent = fmt(poolTotal);
+
+    // Operational
+    amtEl($('liab-chapter-mgr'), d.operational.chapter_manager_payouts);
+    amtEl($('liab-tax-reserve'), d.operational.tax_reserve_ytd);
+    const opTotal = d.operational.chapter_manager_payouts + d.operational.tax_reserve_ytd;
+    const opEl = $('liab-total-operational');
+    if (opEl) opEl.textContent = fmt(opTotal);
+
+    // Debts
+    amtEl($('liab-investor-debt'), d.debts.investor_debt);
+    amtEl($('liab-member-credits'), d.debts.member_credits_2025);
+    amtEl($('liab-irs'), d.debts.irs_balance);
+    amtEl($('liab-chase-biz'), d.debts.chase_biz_7680);
+    amtEl($('liab-chase-saph'), d.debts.chase_sapphire_6159);
+    const debtTotal = d.debts.investor_debt + d.debts.member_credits_2025
+        + d.debts.irs_balance + d.debts.chase_biz_7680 + d.debts.chase_sapphire_6159;
+    const debtEl = $('liab-total-debts');
+    if (debtEl) debtEl.textContent = fmt(debtTotal);
+
+    // Grand total
+    const gt = $('liabilities-grand-total');
+    if (gt) gt.textContent = fmt(d.grand_total);
+}
+
+function openLiabEditModal(key, currentValue) {
+    _liabEditKey = key;
+    const labels = {
+        hio_pot: 'HIO Pot',
+        season_contests_total: 'Season Contests Total',
+        lone_star_cup_shirts: 'Lone Star Cup Shirt Fund',
+        chapter_manager_payouts: 'Chapter Manager Payouts',
+        grandparent_loan: 'Investor Debt',
+        member_credits_2025: 'Member Credits 2025',
+        irs_balance: 'IRS Balance',
+        chase_biz_7680: 'Chase Biz (7680)',
+        chase_sapphire_6159: 'Chase Sapphire (6159)',
+    };
+    const modal = document.getElementById('liab-edit-modal');
+    const title = document.getElementById('liab-modal-title');
+    const input = document.getElementById('liab-modal-input');
+    if (title) title.textContent = 'Update: ' + (labels[key] || key);
+    if (input) { input.value = Number(currentValue || 0).toFixed(2); input.focus(); input.select(); }
+    if (modal) modal.style.display = 'flex';
+}
+
+function saveLiabEdit() {
+    const input = document.getElementById('liab-modal-input');
+    const value = parseFloat(input ? input.value : 0);
+    if (isNaN(value)) { showToast('Enter a valid number', 'error'); return; }
+    fetch('/api/accounting/liabilities/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: _liabEditKey, value }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.error) { showToast(res.error, 'error'); return; }
+        closeLiabModal();
+        loadLiabilities();
+        showToast('Saved', 'success');
+    })
+    .catch(() => showToast('Save failed', 'error'));
+}
+
+function closeLiabModal() {
+    const modal = document.getElementById('liab-edit-modal');
+    if (modal) modal.style.display = 'none';
+    _liabEditKey = null;
+}
+
+function initLiabilitiesTab() {
+    // Edit buttons
+    document.querySelectorAll('.liab-edit-btn').forEach(btn => {
+        const row = btn.closest('.liab-editable');
+        if (!row) return;
+        btn.addEventListener('click', () => {
+            const key = row.dataset.key;
+            // Find current value from rendered element
+            const amtMap = {
+                hio_pot: 'liab-hio-pot',
+                season_contests_total: 'liab-season-contests',
+                lone_star_cup_shirts: 'liab-lone-star',
+                chapter_manager_payouts: 'liab-chapter-mgr',
+                grandparent_loan: 'liab-investor-debt',
+                member_credits_2025: 'liab-member-credits',
+                irs_balance: 'liab-irs',
+                chase_biz_7680: 'liab-chase-biz',
+                chase_sapphire_6159: 'liab-chase-saph',
+            };
+            const elId = amtMap[key];
+            const el = elId ? document.getElementById(elId) : null;
+            const raw = el ? el.textContent.replace(/[$,]/g, '') : '0';
+            openLiabEditModal(key, parseFloat(raw) || 0);
+        });
+    });
+
+    // Expand prize pools breakdown
+    const expandBtn = document.getElementById('btn-expand-prize');
+    const breakdown = document.getElementById('liab-prize-breakdown');
+    if (expandBtn && breakdown) {
+        expandBtn.addEventListener('click', () => {
+            const open = breakdown.style.display !== 'none';
+            breakdown.style.display = open ? 'none' : 'block';
+            expandBtn.textContent = open ? '▾' : '▴';
+        });
+    }
+
+    // Modal buttons
+    const saveBtn = document.getElementById('liab-modal-save');
+    const cancelBtn = document.getElementById('liab-modal-cancel');
+    const input = document.getElementById('liab-modal-input');
+    if (saveBtn) saveBtn.addEventListener('click', saveLiabEdit);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeLiabModal);
+    if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') saveLiabEdit(); if (e.key === 'Escape') closeLiabModal(); });
+
+    // Refresh button
+    const refreshBtn = document.getElementById('btn-liabilities-refresh');
+    if (refreshBtn) refreshBtn.addEventListener('click', loadLiabilities);
+
+    // Load data
+    loadLiabilities();
 }

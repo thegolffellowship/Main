@@ -201,6 +201,13 @@ from email_parser.database import (
     create_acct_keyword_rule,
     update_acct_keyword_rule,
     delete_acct_keyword_rule,
+    # Batch categorization preview + promotion
+    get_expense_batch_preview,
+    batch_approve_expenses,
+    # Create ledger entry from orphaned bank deposit
+    create_entry_from_deposit,
+    # Liabilities Dashboard
+    get_accounting_liabilities,
     # TGF Payouts
     get_tgf_data,
     add_tgf_event,
@@ -5508,6 +5515,56 @@ def api_acct_ai_stats():
     return jsonify(get_acct_categorization_stats())
 
 
+@app.route("/api/accounting/ai/batch")
+@require_role("admin")
+def api_acct_ai_batch():
+    """Return a batch of pending expense_transactions with AI suggestions pre-populated."""
+    limit = int(request.args.get("limit", 20))
+    offset = int(request.args.get("offset", 0))
+    return jsonify(get_expense_batch_preview(limit=limit, offset=offset))
+
+
+@app.route("/api/accounting/ai/batch-approve", methods=["POST"])
+@require_role("admin")
+def api_acct_ai_batch_approve():
+    """Approve and promote selected expense_transactions into the ledger."""
+    d = request.json or {}
+    items = d.get("items", [])
+    if not items:
+        return jsonify({"error": "items required"}), 400
+    result = batch_approve_expenses(items)
+    return jsonify(result)
+
+
+@app.route("/api/accounting/liabilities")
+@require_role("admin")
+def api_accounting_liabilities():
+    """Return all liability buckets for the Liabilities Dashboard."""
+    return jsonify(get_accounting_liabilities())
+
+
+@app.route("/api/accounting/liabilities/update", methods=["POST"])
+@require_role("admin")
+def api_accounting_liabilities_update():
+    """Update a manual liability value."""
+    d = request.json or {}
+    key = d.get("key", "").strip()
+    value = d.get("value")
+    allowed_keys = {
+        "hio_pot", "season_contests_total", "lone_star_cup_shirts",
+        "chapter_manager_payouts", "grandparent_loan", "member_credits_2025",
+        "irs_balance", "chase_biz_7680", "chase_sapphire_6159",
+    }
+    if not key or key not in allowed_keys:
+        return jsonify({"error": "invalid key"}), 400
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return jsonify({"error": "value must be a number"}), 400
+    set_coo_manual_value(key, value)
+    return jsonify({"ok": True, "key": key, "value": value})
+
+
 @app.route("/api/accounting/ai/bulk-categorize", methods=["POST"])
 @require_role("admin")
 def api_acct_ai_bulk_categorize():
@@ -6422,6 +6479,24 @@ def api_recon_unmatch():
     if not bank_deposit_id:
         return jsonify({"error": "bank_deposit_id required"}), 400
     return jsonify(unmatch_deposit(bank_deposit_id, acct_transaction_id))
+
+
+@app.route("/api/reconciliation/create-entry", methods=["POST"])
+@require_role("admin")
+def api_recon_create_entry():
+    """Create a ledger entry from an unmatched bank deposit and immediately reconcile it."""
+    d = request.json or {}
+    deposit_id = d.get("deposit_id")
+    if not deposit_id:
+        return jsonify({"error": "deposit_id required"}), 400
+    result = create_entry_from_deposit(
+        deposit_id=deposit_id,
+        txn_type=d.get("txn_type", "expense"),
+        category_name=d.get("category_name"),
+        entity_name=d.get("entity_name"),
+        notes=d.get("notes"),
+    )
+    return jsonify(result)
 
 
 @app.route("/api/reconciliation/deposits")
