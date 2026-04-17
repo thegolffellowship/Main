@@ -9619,7 +9619,7 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
 
         # --- Merge and paginate ---
         combined = acct_txns + exp_txns
-        combined.sort(key=lambda t: (t.get("date") or "", t.get("id") or ""), reverse=True)
+        combined.sort(key=lambda t: (t.get("date") or "", str(t.get("id") or "")), reverse=True)
         total = acct_total + exp_total
         page = combined[offset:offset + limit]
 
