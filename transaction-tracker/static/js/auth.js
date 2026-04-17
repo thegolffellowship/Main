@@ -112,6 +112,10 @@ function updateNavForRole() {
     document.querySelectorAll(".tab-nav a.admin-nav").forEach(link => {
         link.style.display = (currentRole === "admin") ? "" : "none";
     });
+    // Show/hide admin sub-nav on pages where it is conditionally rendered (e.g. changelog)
+    document.querySelectorAll(".admin-subnav.admin-nav").forEach(el => {
+        el.style.display = (currentRole === "admin") ? "" : "none";
+    });
 }
 
 async function initAuth() {

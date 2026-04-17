@@ -10,7 +10,7 @@ const ACCT = {
     events: [],
     accountRules: {},
     activeEntity: null,   // null = "All"
-    activeTab: 'dashboard',
+    activeTab: 'transactions',
     txnPage: 0,
     txnLimit: 50,
     csvData: null,

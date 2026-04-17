@@ -50,12 +50,13 @@
             <a href="/audit">Audit Log</a>
             <a href="/matrix">Matrix</a>
             <a href="/database">Database</a>
+            <a href="/changelog">Changelog</a>
         </nav>
 
         <!-- Accounting Sub-Tabs -->
         <div class="acct-subtabs" id="acct-subtabs">
-            <button class="acct-subtab active" data-tab="dashboard">Dashboard</button>
-            <button class="acct-subtab" data-tab="transactions">Transactions</button>
+            <button class="acct-subtab" data-tab="dashboard">Dashboard</button>
+            <button class="acct-subtab active" data-tab="transactions">Transactions</button>
             <button class="acct-subtab" data-tab="accounts">Accounts</button>
             <button class="acct-subtab" data-tab="categories">Categories</button>
             <button class="acct-subtab" data-tab="reports">Reports</button>
@@ -65,7 +66,7 @@
         </div>
 
         <!-- ═══ DASHBOARD TAB ═══ -->
-        <section class="acct-tab-panel active" id="panel-dashboard">
+        <section class="acct-tab-panel" id="panel-dashboard">
             <!-- Summary Cards -->
             <div class="acct-summary-cards" id="summary-cards">
                 <div class="acct-card acct-card-income">
@@ -151,7 +152,7 @@
         </section>
 
         <!-- ═══ TRANSACTIONS TAB ═══ -->
-        <section class="acct-tab-panel" id="panel-transactions">
+        <section class="acct-tab-panel active" id="panel-transactions">
             <div class="acct-toolbar">
                 <input type="text" id="txn-search" class="acct-search" placeholder="Search transactions...">
                 <select id="txn-filter-type" class="acct-select">
