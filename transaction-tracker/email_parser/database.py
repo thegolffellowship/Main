@@ -617,6 +617,90 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
     logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
 
 
+def _migrate_create_dedup_aliases(conn: sqlite3.Connection) -> None:
+    """Create customer_aliases entries for the dedup-migration name mappings.
+
+    The original _migrate_dedupe_payout_customers merged 29 golfer records
+    into existing customers but did NOT create aliases for the original
+    names. This means acct_transactions entries stored under old names
+    (e.g., "Roland Campos" when canonical is "Rolando Campos") can't
+    be resolved via _lookup_customer_id → they fail to match in payout
+    reconciliation.
+
+    Idempotent — uses INSERT OR IGNORE.
+    """
+    # Map: old_name (as stored in venmo/payout data) → canonical customer_id
+    ALIAS_SEED = [
+        ("Roland Campos", 296),
+        ("MARQUES, Mike", 14),
+        ("REED, Paul", 15),
+        ("STRATON, Robert", 31),      # typo variant
+        ("STRAITON, Robert", 31),
+        ("MOORE, Dion", 29),
+        ("HOGUE, Jay", 37),
+        ("Moore, Hunter", 302),
+        ("BARNA, Kelly", 39),
+        ("GAGE, Erica", 312),
+        ("JENKINS, Mike", 294),
+        ("COTTRILL, Matt", 239),
+        ("FREUND, Mark", 299),
+        ("CEDILLO, David", 236),
+        ("CAMPOS, Roland", 296),
+        ("YOUNGS, Pat", 136),
+        ("McCRARY, Justin", 46),
+        ("WOLIN, Allen", 3),
+        ("AGUILERA, Hector", 320),
+        ("SHARITZ, Don", 38),
+        ("SOUTH, Daniel", 24),
+        ("ATKINSON, Bob", 219),
+        ("CHALFANT, Tanner", 325),
+        ("MELCHOR, Eduardo", 61),
+        ("SHARP, Matt", 30),
+        ("COLASANTO, Adam", 116),
+        ("CLOER, Neal", 109),
+        ("SARRIA, Al", 16),
+        ("GARTZ, Joshua", 22),
+        ("Erica Cage", 312),            # typo variant
+    ]
+
+    created = 0
+    for alias_name, target_cid in ALIAS_SEED:
+        canonical = conn.execute(
+            "SELECT first_name || ' ' || last_name as n FROM customers WHERE customer_id = ?",
+            (target_cid,),
+        ).fetchone()
+        if not canonical:
+            continue
+        canonical_name = canonical["n"]
+        if alias_name.lower() == canonical_name.lower():
+            continue  # No alias needed
+
+        # Check if alias already exists
+        existing = conn.execute(
+            """SELECT id FROM customer_aliases
+               WHERE alias_type = 'name'
+                 AND LOWER(alias_value) = LOWER(?)
+                 AND LOWER(customer_name) = LOWER(?)""",
+            (alias_name, canonical_name),
+        ).fetchone()
+        if existing:
+            continue
+
+        try:
+            conn.execute(
+                """INSERT INTO customer_aliases (customer_name, alias_type, alias_value)
+                   VALUES (?, 'name', ?)""",
+                (canonical_name, alias_name),
+            )
+            created += 1
+        except Exception as exc:
+            logger.debug("Alias insert failed for %r → %r: %s", alias_name, canonical_name, exc)
+
+    if created:
+        conn.commit()
+        logger.info("Created %d customer_aliases for dedup-merged names", created)
+
+
 def _migrate_normalize_venmo_customer_names(conn: sqlite3.Connection) -> None:
     """One-shot: rewrite acct_transactions.customer for Venmo prize_payouts to
     the canonical customers.first_name + last_name when the name resolves
@@ -848,7 +932,7 @@ def _reconcile_payouts_with_venmo(conn: sqlite3.Connection, payout_rows) -> int:
         # Find a single Venmo prize_payout matching the group sum
         venmo_match = conn.execute(
             """SELECT t.id, t.date FROM acct_transactions t
-               WHERE t.source = 'venmo'
+               WHERE t.source != 'pending'
                  AND t.category = 'prize_payout'
                  AND COALESCE(t.status, 'active') IN ('active', 'reconciled')
                  AND ROUND(ABS(t.amount), 2) = ?
@@ -960,7 +1044,7 @@ def _match_pending_payouts_to_new_venmo(conn: sqlite3.Connection) -> int:
 
         venmo = conn.execute(
             """SELECT t.id, t.date FROM acct_transactions t
-               WHERE t.source = 'venmo'
+               WHERE t.source != 'pending'
                  AND t.category = 'prize_payout'
                  AND COALESCE(t.status, 'active') IN ('active', 'reconciled')
                  AND ROUND(ABS(t.amount), 2) = ?
@@ -1653,6 +1737,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_seed_customer_roles(conn)
         except Exception as e:
             logger.warning("Customer roles seed migration failed: %s", e)
+
+        # Create aliases for the dedup-migrated names (so _lookup_customer_id
+        # can resolve them during normalization below)
+        try:
+            _migrate_create_dedup_aliases(conn)
+        except Exception as e:
+            logger.warning("Dedup alias creation failed: %s", e)
 
         # Normalize Venmo customer names to canonical so payout matching works
         try:
