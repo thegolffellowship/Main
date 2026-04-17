@@ -16088,29 +16088,68 @@ def delete_chat_session(session_id: int, db_path=None) -> dict:
 
 def get_expense_batch_preview(limit: int = 20, offset: int = 0,
                               db_path: str | Path | None = None) -> dict:
-    """Return a batch of pending expense_transactions with AI suggestions pre-populated.
+    """Return a unified batch of ALL uncategorized transactions with AI suggestions.
+
+    Merges two pools (both sorted by date desc, interleaved):
+    - Pool A: expense_transactions WHERE review_status='pending'
+      → item_type='expense', on approve: promote to acct_transactions
+    - Pool B: acct_transactions with no categorized splits (type != transfer)
+      → item_type='acct', on approve: update existing split category
 
     Each item includes:
-    - The raw expense_transaction fields
     - suggestion: {category_name, entity_name, confidence, source}
-    - is_duplicate: True if a matching acct_transaction (same date+amount+source) already exists
+    - is_duplicate: True if a matching acct_transaction already covers this
     """
     with _connect(db_path) as conn:
-        total = conn.execute(
+        # --- Count both pools ---
+        exp_total = conn.execute(
             "SELECT COUNT(*) as c FROM expense_transactions WHERE review_status = 'pending'"
         ).fetchone()["c"]
 
-        rows = conn.execute(
-            """SELECT * FROM expense_transactions
-               WHERE review_status = 'pending'
-               ORDER BY transaction_date DESC, id DESC
-               LIMIT ? OFFSET ?""",
-            (limit, offset),
+        acct_uncategorized_total = conn.execute(
+            """SELECT COUNT(*) as c FROM acct_transactions t
+               WHERE t.type != 'transfer'
+                 AND t.id NOT IN (
+                     SELECT s.transaction_id FROM acct_splits s WHERE s.category_id IS NOT NULL
+                 )"""
+        ).fetchone()["c"]
+
+        total = exp_total + acct_uncategorized_total
+
+        # --- Fetch ALL unprocessed items (both pools, sorted by date) ---
+        exp_rows = conn.execute(
+            """SELECT id, transaction_date as date, merchant as description,
+                      amount as total_amount, source_type as source,
+                      transaction_type as type, account_last4, account_name,
+                      event_name, notes, 'expense' as item_type
+               FROM expense_transactions
+               WHERE review_status = 'pending'"""
         ).fetchall()
+
+        acct_rows = conn.execute(
+            """SELECT t.id, t.date, t.description, t.total_amount, t.source,
+                      t.type, NULL as account_last4, a.name as account_name,
+                      t.event_name, t.notes, 'acct' as item_type
+               FROM acct_transactions t
+               LEFT JOIN acct_accounts a ON a.id = t.account_id
+               WHERE t.type != 'transfer'
+                 AND t.id NOT IN (
+                     SELECT s.transaction_id FROM acct_splits s WHERE s.category_id IS NOT NULL
+                 )"""
+        ).fetchall()
+
+        # Merge and sort by date descending
+        all_rows = sorted(
+            [dict(r) for r in exp_rows] + [dict(r) for r in acct_rows],
+            key=lambda r: (r.get("date") or ""),
+            reverse=True,
+        )
+        page_rows = all_rows[offset: offset + limit]
 
         suggestion_data = get_expense_suggestions(conn)
 
-        # Build fingerprint set from acct_transactions for duplicate detection
+        # Fingerprints of existing acct_transactions for duplicate detection
+        # (only used to flag expense items — acct items are already in the ledger)
         acct_fps = set()
         for r in conn.execute(
             "SELECT date, total_amount, source FROM acct_transactions WHERE COALESCE(status,'active') != 'reversed'"
@@ -16118,49 +16157,71 @@ def get_expense_batch_preview(limit: int = 20, offset: int = 0,
             acct_fps.add((r["date"] or "", round(float(r["total_amount"] or 0), 2),
                          (r["source"] or "").lower()))
 
-        items = []
-        for r in rows:
-            r = dict(r)
-            merchant = r.get("merchant") or ""
-            suggestion = suggest_for_merchant(merchant, suggestion_data) or {}
+        # Run AI suggestions on the page's descriptions in one batch
+        descriptions = [r.get("description") or "" for r in page_rows]
+        types        = [r.get("type") or "expense" for r in page_rows]
+        ai_suggestions = auto_categorize_transactions(descriptions, types, db_path)
 
-            # Duplicate flag: same date + amount + source already in ledger
-            fp = (r.get("transaction_date") or "",
-                  round(float(r.get("amount") or 0), 2),
-                  (r.get("source_type") or "").lower())
-            is_duplicate = fp in acct_fps
+        items = []
+        for r, ai_sug in zip(page_rows, ai_suggestions):
+            item_type = r.get("item_type", "expense")
+            merchant  = r.get("description") or ""
+            src       = r.get("source") or ""
+
+            # Prefer AI suggestion; fall back to merchant-based lookup for expense items
+            if ai_sug and ai_sug.get("confidence") not in (None, "none", "skip"):
+                sug_cat  = ai_sug.get("category_name") or ""
+                sug_ent  = ai_sug.get("entity_name") or ""
+                sug_conf = ai_sug.get("confidence") or "none"
+                sug_src  = ai_sug.get("source") or ""
+            else:
+                fallback = suggest_for_merchant(merchant, suggestion_data) or {}
+                sug_cat  = fallback.get("category") or ""
+                sug_ent  = fallback.get("entity") or ""
+                sug_conf = fallback.get("confidence") or "none"
+                sug_src  = fallback.get("source") or ""
+
+            # Duplicate flag only relevant for expense items
+            is_duplicate = False
+            if item_type == "expense":
+                fp = (r.get("date") or "",
+                      round(float(r.get("total_amount") or 0), 2),
+                      src.lower())
+                is_duplicate = fp in acct_fps
 
             items.append({
-                "id": r["id"],
-                "date": r.get("transaction_date"),
-                "merchant": merchant,
-                "amount": r.get("amount"),
-                "source_type": r.get("source_type"),
-                "transaction_type": r.get("transaction_type") or "expense",
-                "account_last4": r.get("account_last4"),
-                "account_name": r.get("account_name"),
-                "event_name": r.get("event_name"),
-                "notes": r.get("notes"),
-                "confidence": r.get("confidence"),
+                "id":               r["id"],
+                "item_type":        item_type,
+                "date":             r.get("date"),
+                "merchant":         merchant,
+                "amount":           r.get("total_amount"),
+                "source_type":      src,
+                "transaction_type": r.get("type") or "expense",
+                "account_last4":    r.get("account_last4"),
+                "account_name":     r.get("account_name"),
+                "event_name":       r.get("event_name"),
+                "notes":            r.get("notes"),
                 "suggestion": {
-                    "category_name": suggestion.get("category"),
-                    "entity_name": suggestion.get("entity"),
-                    "confidence": suggestion.get("confidence", "none"),
-                    "source": suggestion.get("source", ""),
+                    "category_name": sug_cat,
+                    "entity_name":   sug_ent,
+                    "confidence":    sug_conf,
+                    "source":        sug_src,
                 },
                 "is_duplicate": is_duplicate,
             })
 
     categories = get_acct_categories(db_path=db_path)
-    entities = get_all_acct_entities(db_path=db_path)
+    entities   = get_all_acct_entities(db_path=db_path)
 
     return {
-        "items": items,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
+        "items":      items,
+        "total":      total,
+        "exp_total":  exp_total,
+        "acct_total": acct_uncategorized_total,
+        "limit":      limit,
+        "offset":     offset,
         "categories": categories,
-        "entities": entities,
+        "entities":   entities,
     }
 
 
@@ -16278,37 +16339,105 @@ def promote_expense_to_ledger(expense_id: int, category_name: str | None,
     return {"promoted": True, "acct_transaction_id": txn_id, "expense_id": expense_id}
 
 
+def _approve_acct_item(txn_id: int, category_name: str | None,
+                        entity_name: str | None, event_name: str | None = None,
+                        db_path: str | Path | None = None) -> None:
+    """Apply a category + entity to an existing acct_transaction's split."""
+    with _connect(db_path) as conn:
+        category_id = None
+        if category_name:
+            row = conn.execute(
+                "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                (category_name,),
+            ).fetchone()
+            if row:
+                category_id = row["id"]
+
+        entity_id = None
+        if entity_name:
+            row = conn.execute(
+                "SELECT id FROM acct_entities WHERE LOWER(short_name) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1",
+                (entity_name, entity_name),
+            ).fetchone()
+            if row:
+                entity_id = row["id"]
+
+        event_id = None
+        if event_name:
+            row = conn.execute(
+                "SELECT id FROM events WHERE LOWER(item_name) = LOWER(?) LIMIT 1",
+                (event_name,),
+            ).fetchone()
+            if row:
+                event_id = row["id"]
+
+        split = conn.execute(
+            "SELECT id FROM acct_splits WHERE transaction_id = ? LIMIT 1", (txn_id,)
+        ).fetchone()
+
+        if split:
+            conn.execute(
+                """UPDATE acct_splits SET category_id = ?, entity_id = ?,
+                   event_id = COALESCE(?, event_id) WHERE id = ?""",
+                (category_id, entity_id, event_id, split["id"]),
+            )
+        else:
+            # No split yet — create one
+            txn = conn.execute(
+                "SELECT total_amount FROM acct_transactions WHERE id = ?", (txn_id,)
+            ).fetchone()
+            if txn:
+                conn.execute(
+                    """INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, event_id)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (txn_id, entity_id, category_id, txn["total_amount"], event_id),
+                )
+        conn.commit()
+
+
 def batch_approve_expenses(items: list[dict],
                            db_path: str | Path | None = None) -> dict:
-    """Approve and promote multiple expense_transactions in one call.
+    """Approve a mixed batch of expense_transactions and acct_transactions.
 
-    Each item: {id, category_name, entity_name, account_id?, event_name?, notes?}
-    Skipped items (is_duplicate=True or no category) are ignored (not promoted).
+    Each item: {id, item_type, category_name, entity_name, account_id?, event_name?, notes?}
+    - item_type='expense' → promote via promote_expense_to_ledger
+    - item_type='acct'    → update existing split via _approve_acct_item
 
     Returns {approved, skipped, errors}.
     """
     approved, skipped, errors = 0, 0, []
     for item in items:
-        exp_id = item.get("id")
-        if not exp_id:
+        item_id   = item.get("id")
+        item_type = item.get("item_type", "expense")
+        if not item_id:
             continue
         if item.get("skip"):
             skipped += 1
             continue
         try:
-            result = promote_expense_to_ledger(
-                expense_id=exp_id,
-                category_name=item.get("category_name"),
-                entity_name=item.get("entity_name"),
-                account_id=item.get("account_id"),
-                event_name=item.get("event_name"),
-                notes=item.get("notes"),
-                db_path=db_path,
-            )
-            if result.get("skipped"):
-                skipped += 1
-            else:
+            if item_type == "acct":
+                _approve_acct_item(
+                    txn_id=item_id,
+                    category_name=item.get("category_name"),
+                    entity_name=item.get("entity_name"),
+                    event_name=item.get("event_name"),
+                    db_path=db_path,
+                )
                 approved += 1
+            else:
+                result = promote_expense_to_ledger(
+                    expense_id=item_id,
+                    category_name=item.get("category_name"),
+                    entity_name=item.get("entity_name"),
+                    account_id=item.get("account_id"),
+                    event_name=item.get("event_name"),
+                    notes=item.get("notes"),
+                    db_path=db_path,
+                )
+                if result.get("skipped"):
+                    skipped += 1
+                else:
+                    approved += 1
         except Exception as e:
-            errors.append({"id": exp_id, "error": str(e)})
+            errors.append({"id": item_id, "error": str(e)})
     return {"approved": approved, "skipped": skipped, "errors": errors}

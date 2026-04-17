@@ -176,10 +176,11 @@ function renderBookkeeperBanner(stats) {
         $('#btn-review-queue').style.display = 'none';
     } else {
         const parts = [];
-        if (stats.pending_expenses > 0) parts.push(`${stats.pending_expenses} pending`);
+        if (stats.pending_expenses > 0) parts.push(`${stats.pending_expenses} inbox`);
         if (stats.uncategorized > 0) parts.push(`${stats.uncategorized} uncategorized`);
         statusEl.innerHTML = `<span class="acct-negative">${parts.join(' · ')} — needs review</span>`;
-        btn.textContent = `Review Batch (${stats.pending_expenses || stats.uncategorized})`;
+        const totalPending = (stats.pending_expenses || 0) + (stats.uncategorized || 0);
+        btn.textContent = `Review Batch (${totalPending})`;
         btn.style.display = '';
         $('#btn-review-queue').style.display = '';
     }
@@ -250,7 +251,10 @@ function renderBatchPreview(items) {
             `<option value="${e.short_name}" ${e.short_name === selected ? 'selected' : ''}>${e.short_name}</option>`
         ).join('');
 
-    const srcBadge = (src) => {
+    const srcBadge = (src, itemType) => {
+        if (itemType === 'acct') {
+            return `<span style="font-size:0.7rem; padding:1px 6px; border-radius:9999px; background:#374151; color:#fff; white-space:nowrap;">Ledger</span>`;
+        }
         const labels = { chase_alert: 'Chase', venmo: 'Venmo', receipt: 'Receipt' };
         const colors = { chase_alert: '#1d4ed8', venmo: '#1e3a5f', receipt: '#047857' };
         const label = labels[src] || src || 'Manual';
@@ -269,14 +273,14 @@ function renderBatchPreview(items) {
         const conf   = item.suggestion?.confidence    || 'none';
         const isDupe = item.is_duplicate;
 
-        return `<div class="batch-row" data-id="${item.id}" style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.65rem 1rem; border-bottom:1px solid var(--border); ${isDupe ? 'background:#fff7ed;' : ''}">
+        return `<div class="batch-row" data-id="${item.id}" data-item-type="${item.item_type || 'expense'}" style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.65rem 1rem; border-bottom:1px solid var(--border); ${isDupe ? 'background:#fff7ed;' : ''}">
             <div style="padding-top:2px; flex-shrink:0;">
                 <input type="checkbox" class="batch-chk" data-id="${item.id}" ${isDupe ? '' : 'checked'} style="width:16px; height:16px; cursor:pointer;">
             </div>
             <div style="flex:1; min-width:0;">
                 <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.3rem;">
                     <span style="font-size:0.82rem; color:var(--text-muted);">${item.date || '—'}</span>
-                    ${srcBadge(item.source_type)}
+                    ${srcBadge(item.source_type, item.item_type)}
                     ${isDupe ? '<span style="font-size:0.7rem; padding:1px 6px; border-radius:9999px; background:#fef3c7; color:#92400e; white-space:nowrap;">⚠ Possible Duplicate</span>' : ''}
                     ${confBadge(conf)}
                 </div>
@@ -348,12 +352,13 @@ async function submitBatchApprove() {
 
     const items = [];
     document.querySelectorAll('.batch-row').forEach(row => {
-        const id  = parseInt(row.dataset.id);
-        const chk = row.querySelector('.batch-chk');
+        const id       = parseInt(row.dataset.id);
+        const itemType = row.dataset.itemType || 'expense';
+        const chk      = row.querySelector('.batch-chk');
         if (!chk?.checked) return;
         const cat = row.querySelector('.batch-cat')?.value || '';
         const ent = row.querySelector('.batch-ent')?.value || '';
-        items.push({ id, category_name: cat || null, entity_name: ent || null });
+        items.push({ id, item_type: itemType, category_name: cat || null, entity_name: ent || null });
     });
 
     if (!items.length) return;
