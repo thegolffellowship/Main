@@ -14740,6 +14740,107 @@ def run_deposit_auto_match(account_id: int | None = None,
     return results
 
 
+def create_entry_from_deposit(deposit_id: int, txn_type: str = "expense",
+                              category_name: str | None = None,
+                              entity_name: str | None = None,
+                              notes: str | None = None,
+                              db_path: str | Path | None = None) -> dict:
+    """Create an acct_transaction from a bank deposit and immediately reconcile it.
+
+    Use this for deposits that have no matching system transaction — e.g. a bank
+    row for a manual payment, transfer, or any transaction not parsed from email.
+    The new ledger entry is marked reconciled and the deposit status → matched.
+    """
+    with _connect(db_path) as conn:
+        dep = conn.execute(
+            "SELECT * FROM bank_deposits WHERE id = ?", (deposit_id,)
+        ).fetchone()
+        if not dep:
+            return {"error": f"deposit {deposit_id} not found"}
+        dep = dict(dep)
+
+        # Resolve category FK
+        category_id = None
+        if category_name:
+            row = conn.execute(
+                "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                (category_name,),
+            ).fetchone()
+            if row:
+                category_id = row["id"]
+
+        # Resolve entity FK
+        entity_id = None
+        if entity_name:
+            row = conn.execute(
+                "SELECT id FROM acct_entities WHERE LOWER(short_name) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1",
+                (entity_name, entity_name),
+            ).fetchone()
+            if row:
+                entity_id = row["id"]
+
+        # Use the deposit's bank account → map to acct_accounts by type
+        account_id = dep.get("account_id")
+        acct_account_id = None
+        if account_id:
+            # Try to find a matching acct_account by name or type
+            ba = conn.execute(
+                "SELECT name, account_type FROM bank_accounts WHERE id = ?", (account_id,)
+            ).fetchone()
+            if ba:
+                acct_row = conn.execute(
+                    """SELECT id FROM acct_accounts
+                       WHERE is_active = 1
+                         AND (LOWER(name) LIKE LOWER(?) OR account_type = ?)
+                       LIMIT 1""",
+                    (f"%{ba['name']}%", ba["account_type"]),
+                ).fetchone()
+                if acct_row:
+                    acct_account_id = acct_row["id"]
+
+        amount    = float(dep.get("amount") or 0)
+        desc      = dep.get("description") or "Bank deposit"
+        date      = dep.get("deposit_date") or datetime.utcnow().strftime("%Y-%m-%d")
+        source_ref = f"bank-deposit-{deposit_id}"
+
+        # Check idempotency
+        existing = conn.execute(
+            "SELECT id FROM acct_transactions WHERE source_ref = ?", (source_ref,)
+        ).fetchone()
+        if existing:
+            return {"skipped": True, "acct_transaction_id": existing["id"]}
+
+        cur = conn.execute(
+            """INSERT INTO acct_transactions
+               (date, description, total_amount, type, account_id, source, source_ref,
+                notes, status)
+               VALUES (?, ?, ?, ?, ?, 'manual', ?, ?, 'reconciled')""",
+            (date, desc, amount, txn_type, acct_account_id, source_ref, notes),
+        )
+        txn_id = cur.lastrowid
+
+        # Create split
+        conn.execute(
+            """INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount)
+               VALUES (?, ?, ?, ?)""",
+            (txn_id, entity_id, category_id, amount),
+        )
+
+        # Immediately reconcile: match deposit → new transaction
+        conn.execute(
+            """INSERT OR IGNORE INTO reconciliation_matches
+               (bank_deposit_id, acct_transaction_id, match_type, match_confidence)
+               VALUES (?, ?, 'manual', 1.0)""",
+            (deposit_id, txn_id),
+        )
+        conn.execute(
+            "UPDATE bank_deposits SET status = 'matched' WHERE id = ?", (deposit_id,)
+        )
+        conn.commit()
+
+    return {"created": True, "acct_transaction_id": txn_id, "deposit_id": deposit_id}
+
+
 def manual_match_deposit(bank_deposit_id: int, acct_transaction_id: int,
                          db_path: str | Path | None = None) -> dict:
     """Manually match a bank deposit to an acct_transaction."""

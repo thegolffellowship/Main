@@ -204,6 +204,8 @@ from email_parser.database import (
     # Batch categorization preview + promotion
     get_expense_batch_preview,
     batch_approve_expenses,
+    # Create ledger entry from orphaned bank deposit
+    create_entry_from_deposit,
     # TGF Payouts
     get_tgf_data,
     add_tgf_event,
@@ -6446,6 +6448,24 @@ def api_recon_unmatch():
     if not bank_deposit_id:
         return jsonify({"error": "bank_deposit_id required"}), 400
     return jsonify(unmatch_deposit(bank_deposit_id, acct_transaction_id))
+
+
+@app.route("/api/reconciliation/create-entry", methods=["POST"])
+@require_role("admin")
+def api_recon_create_entry():
+    """Create a ledger entry from an unmatched bank deposit and immediately reconcile it."""
+    d = request.json or {}
+    deposit_id = d.get("deposit_id")
+    if not deposit_id:
+        return jsonify({"error": "deposit_id required"}), 400
+    result = create_entry_from_deposit(
+        deposit_id=deposit_id,
+        txn_type=d.get("txn_type", "expense"),
+        category_name=d.get("category_name"),
+        entity_name=d.get("entity_name"),
+        notes=d.get("notes"),
+    )
+    return jsonify(result)
 
 
 @app.route("/api/reconciliation/deposits")

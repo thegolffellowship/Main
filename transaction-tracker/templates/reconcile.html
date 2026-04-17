@@ -387,7 +387,12 @@
             const suggestions = await res.json();
 
             if (!suggestions.length) {
-                txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">No matching candidates found. Try "Browse All" to search by date range.</div>';
+                txnDiv.innerHTML = `
+                    <div style="padding:1rem;">
+                        <div style="color:var(--text-muted); font-size:0.82rem; margin-bottom:0.75rem;">No matching transactions found in the system.</div>
+                        <button class="btn btn-primary btn-sm" onclick="showCreateEntryForm(${id})" style="width:100%;">+ Create Ledger Entry from This Deposit</button>
+                        <div style="margin-top:0.5rem; font-size:0.75rem; color:var(--text-muted); text-align:center;">or try <strong>Browse All</strong> to search manually</div>
+                    </div>`;
             } else {
                 txnDiv.innerHTML = suggestions.map(s => {
                     const score = s._score || 0;
@@ -410,11 +415,92 @@
                         </span>
                     </div>`;
                 }).join('');
+                // Always offer Create Entry as escape hatch at bottom of suggestions
+                txnDiv.innerHTML += `<div style="padding:0.5rem 0.75rem; border-top:1px solid var(--border);">
+                    <button class="btn btn-sm" onclick="showCreateEntryForm(${id})" style="width:100%; font-size:0.78rem; color:var(--text-muted); border-color:var(--border);">None of these match — Create New Entry instead</button>
+                </div>`;
             }
         } catch(e) {
             txnDiv.innerHTML = `<div style="color:#dc2626; font-size:0.82rem; padding:1rem;">Failed to load suggestions: ${e}</div>`;
         }
         updateMatchButton();
+    }
+
+    // ── Create Ledger Entry from Bank Deposit ──────────────────────────────
+
+    let _reconCats = null, _reconEnts = null;
+
+    async function _loadCatsEnts() {
+        if (_reconCats) return;
+        const [cats, ents] = await Promise.all([
+            fetch('/api/acct/categories').then(r => r.json()),
+            fetch('/api/acct/entities').then(r => r.json()),
+        ]);
+        _reconCats = cats;
+        _reconEnts = ents;
+    }
+
+    async function showCreateEntryForm(depositId) {
+        const txnDiv = document.getElementById('txn-list');
+        txnDiv.innerHTML = '<div style="padding:1rem; color:var(--text-muted); font-size:0.82rem;">Loading…</div>';
+        await _loadCatsEnts();
+
+        const catGroups = { income: [], expense: [] };
+        (_reconCats || []).forEach(c => { if (catGroups[c.type]) catGroups[c.type].push(c); });
+        const catOpts = (label, cats) => cats.length
+            ? `<optgroup label="${label}">${cats.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}</optgroup>`
+            : '';
+        const entOpts = (_reconEnts || []).map(e => `<option value="${esc(e.short_name)}">${esc(e.short_name)}</option>`).join('');
+
+        txnDiv.innerHTML = `
+        <div style="padding:1rem;">
+            <div style="font-weight:600; font-size:0.88rem; margin-bottom:0.75rem; color:var(--text);">New Ledger Entry</div>
+            <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                <div style="display:flex; gap:0.5rem;">
+                    <select id="ce-type" style="flex:1; padding:6px 8px; border:1px solid var(--border); border-radius:4px; font-size:0.82rem;">
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                        <option value="transfer">Transfer</option>
+                    </select>
+                    <select id="ce-entity" style="flex:1; padding:6px 8px; border:1px solid var(--border); border-radius:4px; font-size:0.82rem;">
+                        <option value="">— Entity —</option>${entOpts}
+                    </select>
+                </div>
+                <select id="ce-category" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:4px; font-size:0.82rem;">
+                    <option value="">— Category (optional) —</option>
+                    ${catOpts('Income', catGroups.income)}
+                    ${catOpts('Expense', catGroups.expense)}
+                </select>
+                <input id="ce-notes" type="text" placeholder="Notes (optional)" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:4px; font-size:0.82rem; box-sizing:border-box;">
+                <div style="display:flex; gap:0.5rem; margin-top:0.25rem;">
+                    <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="selectDeposit(${depositId}, 'unmatched')">Cancel</button>
+                    <button class="btn btn-primary btn-sm" style="flex:1;" onclick="submitCreateEntry(${depositId})">Create &amp; Reconcile</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    async function submitCreateEntry(depositId) {
+        const txnType    = document.getElementById('ce-type')?.value || 'expense';
+        const entityName = document.getElementById('ce-entity')?.value || null;
+        const catName    = document.getElementById('ce-category')?.value || null;
+        const notes      = document.getElementById('ce-notes')?.value || null;
+
+        try {
+            const res = await fetch('/api/reconciliation/create-entry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deposit_id: depositId, txn_type: txnType,
+                                       category_name: catName, entity_name: entityName, notes }),
+            });
+            const data = await res.json();
+            if (data.error) { alert('Error: ' + data.error); return; }
+            // Refresh the deposit list and show as matched
+            await loadMatchQueue();
+            selectDeposit(depositId, 'matched');
+        } catch(e) {
+            alert('Failed: ' + e.message);
+        }
     }
 
     async function unmatchDeposit(depositId) {
