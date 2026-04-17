@@ -1,5 +1,23 @@
-window.TGF_VERSION = "2.7.2";
+window.TGF_VERSION = "2.7.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.7.3",
+    date: "2026-04-17",
+    title: "Hotfix: add missing account_last4/account_name migrations",
+    changes: [
+      "Live Railway DB crashed on boot because backfill referenced expense_transactions.account_last4 which didn't exist",
+      "Added ALTER TABLE migrations for account_last4 and account_name before backfill runs",
+    ],
+  },
+  {
+    version: "2.7.2",
+    date: "2026-04-17",
+    title: "Add account_id FK to expense_transactions",
+    changes: [
+      "expense_transactions.account_id INTEGER FK → acct_accounts.id",
+      "Backfill: matches by last_four first, then by account_name",
+    ],
+  },
   {
     version: "2.7.1",
     date: "2026-04-17",

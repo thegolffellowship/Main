@@ -2462,6 +2462,15 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
         except sqlite3.OperationalError:
             pass  # column already exists
+        # Ensure account_last4 and account_name columns exist (may be missing on older DBs)
+        try:
+            conn.execute("ALTER TABLE expense_transactions ADD COLUMN account_last4 TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        try:
+            conn.execute("ALTER TABLE expense_transactions ADD COLUMN account_name TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         # Add account_id FK so expense rows can be filtered by account like acct_transactions
         try:
             conn.execute(
