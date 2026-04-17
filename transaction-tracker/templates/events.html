@@ -3132,6 +3132,44 @@
     // Populate the shared course datalist from /api/courses for autocomplete
     // on all event modals. Called at page load.
     let COURSES_CACHE = [];  // cached list of {course_id, name, chapter_id, aliases}
+    let CUSTOMER_ROLES_MAP = {};  // customer_id → {roles: [...], first_timer_ever: bool}
+
+    // Fetch customer roles map once at page load for STATUS mismatch flagging
+    async function fetchCustomerRolesMap() {
+        try {
+            const res = await fetch("/api/customer-roles");
+            if (!res.ok) return;
+            CUSTOMER_ROLES_MAP = await res.json();
+        } catch (err) {
+            console.warn("Failed to load customer roles:", err);
+        }
+    }
+
+    // Returns null if no mismatch, or an object {expected, actual, reason}
+    // explaining how items.user_status disagrees with customer_roles.
+    function statusMismatchReason(item) {
+        if (!item || !item.customer_id) return null;
+        const info = CUSTOMER_ROLES_MAP[String(item.customer_id)];
+        if (!info) return null;
+        const roles = info.roles || [];
+        const firstTimerEver = info.first_timer_ever;
+        const selected = (_cleanStatus(item.user_status) || "").toUpperCase();
+        const hasRole = (r) => roles.includes(r);
+
+        if (selected === "MEMBER" && !hasRole("member")) {
+            return {reason: "Selected MEMBER but customer record has no 'member' role"};
+        }
+        if (selected === "MANAGER" && !hasRole("manager")) {
+            return {reason: "Selected MANAGER but customer record has no 'manager' role"};
+        }
+        if (selected === "GUEST" && hasRole("member")) {
+            return {reason: "Selected GUEST but customer IS a member"};
+        }
+        if (selected === "1ST TIMER" && firstTimerEver === false) {
+            return {reason: "Selected 1st TIMER but customer has played before"};
+        }
+        return null;
+    }
     async function fetchCoursesForDatalist() {
         try {
             const res = await fetch("/api/courses");
@@ -3791,7 +3829,11 @@
                     }
                     html += `<td style="${style}">${btns}</td>`;
                 } else if (c.key === "user_status") {
-                    html += `<td style="${style}">${escapeHtml(_cleanStatus(r.user_status))}</td>`;
+                    const mismatch = statusMismatchReason(r);
+                    const mismatchFlag = mismatch
+                        ? ` <span title="${escapeHtml(mismatch.reason)}" style="cursor:help;color:#d97706;font-weight:700;">⚠</span>`
+                        : "";
+                    html += `<td style="${style}">${escapeHtml(_cleanStatus(r.user_status))}${mismatchFlag}</td>`;
                 } else if (c.key === "handicap") {
                     // Show live handicap index from the handicap system, fall back to item field
                     const liveHcp = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
@@ -7800,8 +7842,8 @@
             }
         });
 
-        // Fetch items, handicap data, TGF payout data, and courses datalist, then sync events
-        await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData(), fetchCoursesForDatalist()]);
+        // Fetch items, handicap data, TGF payout data, courses datalist, and customer roles map
+        await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData(), fetchCoursesForDatalist(), fetchCustomerRolesMap()]);
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
         fetchParseWarnings();
         fetchOrphanedItems();
