@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.6.6";
+window.TGF_VERSION = "2.6.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.7",
+    date: "2026-04-17",
+    title: "Event typeahead — fix selection (double-quote/blur race condition)",
+    changes: [
+      "Dropdown items now use data-val + mousedown instead of onclick — JSON.stringify was injecting unescaped double-quotes into onclick attributes, breaking the handler",
+      "mousedown + preventDefault() prevents the input from losing focus before the selection registers, eliminating the blur race condition",
+    ],
+  },
   {
     version: "2.6.6",
     date: "2026-04-17",
