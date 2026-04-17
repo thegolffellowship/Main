@@ -2332,6 +2332,60 @@
         return { included: includedPot, hio: hio, net: netPot, gross: grossPot };
     }
 
+    function _renderPayoutsBudgetSection(ev, gamePots) {
+        const totalBudget = gamePots.hio + gamePots.included + gamePots.net + gamePots.gross;
+        if (totalBudget <= 0) return '';
+
+        const tgfEvent = tgfPayoutData.events.find(e => e.code === ev.item_name);
+        const actualPayouts = tgfEvent ? (tgfEvent.total_purse || 0) : null;
+
+        let html = `<div style="margin-top:1rem;padding:0.75rem;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">`;
+        html += `<h4 style="font-size:0.78rem;font-weight:700;color:#0369a1;text-transform:uppercase;margin:0 0 0.5rem;">Payouts Made vs. Budget</h4>`;
+        html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-bottom:0.5rem;">`;
+
+        html += `<div style="background:#fff;border:1px solid #bae6fd;border-radius:6px;padding:0.4rem 0.6rem;">`;
+        html += `<div style="font-size:0.68rem;color:#0369a1;font-weight:600;margin-bottom:0.2rem;">PRIZE BUDGET</div>`;
+        html += `<div style="font-size:0.95rem;font-weight:700;color:#0369a1;">$${totalBudget.toFixed(2)}</div>`;
+        html += `</div>`;
+
+        const paidColor = actualPayouts !== null ? '#059669' : '#6b7280';
+        const paidBorder = actualPayouts !== null ? '#bbf7d0' : '#d1d5db';
+        html += `<div style="background:#fff;border:1px solid ${paidBorder};border-radius:6px;padding:0.4rem 0.6rem;">`;
+        html += `<div style="font-size:0.68rem;color:${paidColor};font-weight:600;margin-bottom:0.2rem;">PAID OUT</div>`;
+        html += `<div style="font-size:0.95rem;font-weight:700;color:${paidColor};">${actualPayouts !== null ? `$${actualPayouts.toFixed(2)}` : 'No data'}</div>`;
+        html += `</div>`;
+
+        if (actualPayouts !== null) {
+            const variance = totalBudget - actualPayouts;
+            const balanced = Math.abs(variance) < 0.01;
+            const varColor = balanced ? '#059669' : (variance > 0 ? '#d97706' : '#dc2626');
+            const varLabel = balanced ? 'BALANCED' : (variance > 0 ? 'UNDERPAID' : 'OVERPAID');
+            html += `<div style="background:#fff;border:1px solid ${varColor};border-radius:6px;padding:0.4rem 0.6rem;">`;
+            html += `<div style="font-size:0.68rem;color:${varColor};font-weight:600;margin-bottom:0.2rem;">${varLabel}</div>`;
+            html += `<div style="font-size:0.95rem;font-weight:700;color:${varColor};">$${Math.abs(variance).toFixed(2)}</div>`;
+            html += `</div>`;
+        } else {
+            html += `<div style="background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:0.4rem 0.6rem;">`;
+            html += `<div style="font-size:0.68rem;color:#6b7280;font-weight:600;margin-bottom:0.2rem;">VARIANCE</div>`;
+            html += `<div style="font-size:0.95rem;color:#6b7280;">—</div>`;
+            html += `</div>`;
+        }
+        html += `</div>`;
+
+        html += `<div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:0.78rem;color:var(--text-muted);">`;
+        if (gamePots.hio > 0) html += `<span>HIO: <strong>$${gamePots.hio.toFixed(2)}</strong></span>`;
+        html += `<span>Included: <strong>$${gamePots.included.toFixed(2)}</strong></span>`;
+        if (gamePots.net > 0) html += `<span>NET: <strong>$${gamePots.net.toFixed(2)}</strong></span>`;
+        if (gamePots.gross > 0) html += `<span>GROSS: <strong>$${gamePots.gross.toFixed(2)}</strong></span>`;
+        html += `</div>`;
+
+        if (actualPayouts === null) {
+            html += `<div style="font-size:0.73rem;color:#6b7280;margin-top:0.3rem;">No payouts recorded — import from the Payouts tab.</div>`;
+        }
+        html += `</div>`;
+        return html;
+    }
+
     function renderFinancialPanel(ev, registrants) {
         const INACTIVE = ["credited", "refunded", "transferred"];
         // Only parent items (no child payments) that are active or WD
@@ -2638,6 +2692,8 @@
         html += `<span style="font-weight:700; font-size:1.2rem; color:${profitColor};">$${projectedProfit.toFixed(2)}</span>`;
         html += `</div>`;
 
+        html += _renderPayoutsBudgetSection(ev, gamePots);
+
         html += `</div>`;
 
         // Async load actual expenses
@@ -2768,6 +2824,8 @@
         html += `<span style="font-weight:700; font-size:0.9rem;">Projected Bottom Line</span>`;
         html += `<span style="font-weight:700; font-size:1.2rem; color:${adjProfitColor};">$${adjProfit.toFixed(2)}</span>`;
         html += `</div>`;
+
+        html += _renderPayoutsBudgetSection(ev, gamePots);
 
         // Accounting verification indicator
         if (data.accounting_verified) {
