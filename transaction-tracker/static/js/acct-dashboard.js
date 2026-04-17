@@ -276,6 +276,8 @@ function renderBatchPreview(items) {
         const sugEnt = item.suggestion?.entity_name   || '';
         const conf   = item.suggestion?.confidence    || 'none';
         const isDupe = item.is_duplicate;
+        const sugEvt = item.event_name || extractEventFromDesc(item.merchant) || '';
+        const sugNotes = item.notes || '';
 
         return `<div class="batch-row" data-id="${item.id}" data-item-type="${item.item_type || 'expense'}" style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.65rem 1rem; border-bottom:1px solid var(--border); ${isDupe ? 'background:#fff7ed;' : ''}">
             <div style="padding-top:2px; flex-shrink:0;">
@@ -290,9 +292,13 @@ function renderBatchPreview(items) {
                 </div>
                 <div style="font-weight:500; font-size:0.9rem; margin-bottom:0.35rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${item.merchant}">${item.merchant || '(unknown)'}</div>
                 ${item.notes ? `<div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.35rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${item.notes}</div>` : ''}
-                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.3rem;">
                     <select class="batch-cat acct-select-sm" data-id="${item.id}" style="min-width:160px;">${catOpts(sugCat)}</select>
                     <select class="batch-ent acct-select-sm" data-id="${item.id}" style="min-width:80px;"><option value="">— Entity —</option>${entOpts(sugEnt)}</select>
+                </div>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <input class="batch-evt acct-select-sm" data-id="${item.id}" value="${escAttr(sugEvt)}" placeholder="Event (optional)" style="min-width:180px; flex:2;">
+                    <input class="batch-notes acct-select-sm" data-id="${item.id}" value="${escAttr(sugNotes)}" placeholder="Notes (optional)" style="min-width:140px; flex:1;">
                 </div>
             </div>
             <div style="flex-shrink:0; text-align:right; min-width:60px;">
@@ -308,6 +314,16 @@ function renderBatchPreview(items) {
 function fmtAmt(v) {
     if (v == null) return '—';
     return '$' + Math.abs(parseFloat(v)).toFixed(2);
+}
+
+function extractEventFromDesc(desc) {
+    if (!desc) return '';
+    const m = desc.match(/\s—\s([^—]+)$/);
+    return m ? m[1].trim() : '';
+}
+
+function escAttr(s) {
+    return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 function bindBatchEvents() {
@@ -362,7 +378,9 @@ async function submitBatchApprove() {
         if (!chk?.checked) return;
         const cat = row.querySelector('.batch-cat')?.value || '';
         const ent = row.querySelector('.batch-ent')?.value || '';
-        items.push({ id, item_type: itemType, category_name: cat || null, entity_name: ent || null });
+        const evt = row.querySelector('.batch-evt')?.value.trim() || '';
+        const notes = row.querySelector('.batch-notes')?.value.trim() || '';
+        items.push({ id, item_type: itemType, category_name: cat || null, entity_name: ent || null, event_name: evt || null, notes: notes || null });
     });
 
     if (!items.length) return;

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.6.8";
+window.TGF_VERSION = "2.6.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.9",
+    date: "2026-04-17",
+    title: "Batch review — Event and Notes fields per row",
+    changes: [
+      "Each batch review row now has an Event input and a Notes input alongside Category and Entity",
+      "Event is auto-populated from the description for GoDaddy transactions (text after ' — ')",
+      "Both fields are included in the batch-approve payload — backend already supported them",
+    ],
+  },
   {
     version: "2.6.8",
     date: "2026-04-17",
