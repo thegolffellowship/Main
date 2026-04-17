@@ -786,7 +786,8 @@ Each row represents one player's cost allocation for one event:
 
 ## Database Tables (35+)
 
-`items`, `processed_emails`, `events`, `event_aliases`, `rsvps`, `rsvp_overrides`,
+`items`, `processed_emails`, `events`, `event_aliases`, `chapters`, `courses`, `course_aliases`,
+`rsvps`, `rsvp_overrides`,
 `rsvp_email_overrides`, `customers`, `customer_emails`, `customer_aliases`, `customer_roles`,
 `handicap_rounds`, `handicap_player_links`, `handicap_settings`,
 `message_templates`, `message_log`, `feedback`, `parse_warnings`,
@@ -797,6 +798,9 @@ Each row represents one player's cost allocation for one event:
 `agent_action_log`, `tgf_events`, `tgf_payouts`
 
 Key tables not documented elsewhere in this file:
+- `chapters` — chapter dimension table (San Antonio, Austin, DFW, Houston). Maps to Platform `org_units`. FK from `items.chapter_id` and `events.chapter_id`.
+- `courses` — golf course directory with canonical names and chapter linkage (nullable — courses can serve multiple chapters). Maps to Platform `courses`. FK from `items.course_id` and `events.course_id`.
+- `course_aliases` — spelling variants for courses (e.g., "shadow glen" → ShadowGlen, "la cantera" → La Cantera). Used during import to normalize free-text course names to canonical IDs.
 - `customer_roles` — multi-role junction table (maps to Platform `user_types`). Roles: `member`, `manager`, `admin`, `owner` (→ Platform `super_admin`), `course_contact`, `sponsor`, `vendor`. UNIQUE(customer_id, role_type). `granted_by` tracks who assigned the role.
 - `app_settings` — persistent key-value store (matrix data, feature flags)
 - `season_contests` — contest enrollment tracking (NET/GROSS points race, city match play)

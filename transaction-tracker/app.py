@@ -2529,6 +2529,41 @@ def api_link_rsvp_to_customer():
         return jsonify({"error": f"Server error: {e}"}), 500
 
 
+@app.route("/api/chapters")
+def api_chapters():
+    """Return all chapters with their IDs."""
+    from email_parser.database import _connect
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT chapter_id, name, short_code, timezone, status FROM chapters ORDER BY name"
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/courses")
+def api_courses():
+    """Return all courses with chapter linkage and aliases."""
+    from email_parser.database import _connect
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT c.course_id, c.name, c.chapter_id, c.city, c.state, c.status,
+                      ch.name as chapter_name
+               FROM courses c
+               LEFT JOIN chapters ch ON ch.chapter_id = c.chapter_id
+               ORDER BY c.name"""
+        ).fetchall()
+        courses = [dict(r) for r in rows]
+
+        # Attach aliases
+        alias_map: dict[int, list[str]] = {}
+        for a in conn.execute("SELECT course_id, alias_name FROM course_aliases").fetchall():
+            alias_map.setdefault(a["course_id"], []).append(a["alias_name"])
+        for c in courses:
+            c["aliases"] = alias_map.get(c["course_id"], [])
+
+    return jsonify(courses)
+
+
 @app.route("/api/events")
 def api_events():
     """Return all events with registration counts and aliases."""

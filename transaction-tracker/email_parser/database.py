@@ -701,6 +701,239 @@ def _migrate_create_dedup_aliases(conn: sqlite3.Connection) -> None:
         logger.info("Created %d customer_aliases for dedup-merged names", created)
 
 
+def _migrate_create_dim_tables(conn: sqlite3.Connection) -> None:
+    """Seed chapters and courses dimension tables from existing data.
+
+    Idempotent — skips if chapters already has rows.
+
+    1. Seed chapters from the 4 known valid values.
+    2. Scan distinct course names from items + events, normalize via
+       _COURSE_CANONICAL from parser.py, insert into courses.
+    3. Create course_aliases for known spelling variants.
+    4. Add chapter_id + course_id FK columns to items and events.
+    5. Backfill FK values by matching string columns to dim tables.
+    """
+    existing_chapters = conn.execute("SELECT COUNT(*) as c FROM chapters").fetchone()["c"]
+    existing_courses = conn.execute("SELECT COUNT(*) as c FROM courses").fetchone()["c"]
+    items_cols = [r[1] for r in conn.execute("PRAGMA table_info(items)").fetchall()]
+    needs_fk = "chapter_id" not in items_cols or "course_id" not in items_cols
+
+    if existing_chapters > 0 and existing_courses > 0 and not needs_fk:
+        # Check if any items still need backfill
+        try:
+            needs_backfill = conn.execute(
+                "SELECT COUNT(*) as c FROM items WHERE chapter_id IS NULL AND chapter IS NOT NULL AND chapter != ''"
+            ).fetchone()["c"]
+        except Exception:
+            needs_backfill = 0
+        if needs_backfill == 0:
+            return  # Already seeded and backfilled
+
+    logger.info("Seeding chapters and courses dimension tables")
+
+    # ── Step 1: Seed chapters ──
+    chapter_data = [
+        ("San Antonio", "SA", "America/Chicago"),
+        ("Austin", "AUS", "America/Chicago"),
+        ("DFW", "DFW", "America/Chicago"),
+        ("Houston", "HOU", "America/Chicago"),
+    ]
+    for name, code, tz in chapter_data:
+        conn.execute(
+            "INSERT OR IGNORE INTO chapters (name, short_code, timezone) VALUES (?, ?, ?)",
+            (name, code, tz),
+        )
+    logger.info("Seeded %d chapters", len(chapter_data))
+
+    # Build chapter lookup: lowercase → chapter_id
+    chapter_map = {}
+    for row in conn.execute("SELECT chapter_id, name FROM chapters").fetchall():
+        chapter_map[row["name"].lower()] = row["chapter_id"]
+
+    # Extended chapter alias map for backfill matching
+    chapter_aliases = {
+        "aus": "austin", "atx": "austin", "sa": "san antonio",
+        "sat": "san antonio", "dal": "dfw", "dallas": "dfw",
+        "fort worth": "dfw", "hou": "houston",
+    }
+
+    def resolve_chapter_id(chapter_str):
+        if not chapter_str:
+            return None
+        key = chapter_str.strip().lower()
+        if key in chapter_map:
+            return chapter_map[key]
+        resolved = chapter_aliases.get(key)
+        if resolved and resolved in chapter_map:
+            return chapter_map[resolved]
+        return None
+
+    # ── Step 2: Seed courses ──
+    # Gather distinct course names from items + events
+    raw_courses = set()
+    for row in conn.execute("SELECT DISTINCT course FROM items WHERE course IS NOT NULL AND course != ''"):
+        raw_courses.add(row["course"].strip())
+    for row in conn.execute("SELECT DISTINCT course FROM events WHERE course IS NOT NULL AND course != ''"):
+        raw_courses.add(row["course"].strip())
+
+    # Canonical mapping from parser.py constants
+    from email_parser.parser import _COURSE_CANONICAL
+
+    # Normalize raw courses to canonical names
+    canonical_courses: dict[str, set[str]] = {}  # canonical_name → set of raw variants
+    for raw in raw_courses:
+        key = raw.lower().replace(" golf club", "").replace(" golf course", "").strip()
+        canonical = _COURSE_CANONICAL.get(key, raw.strip().title())
+        if canonical not in canonical_courses:
+            canonical_courses[canonical] = set()
+        if raw.lower() != canonical.lower():
+            canonical_courses[canonical].add(raw)
+
+    # Determine most common chapter for each course
+    course_chapter: dict[str, int | None] = {}
+    for canonical in canonical_courses:
+        row = conn.execute(
+            """SELECT chapter, COUNT(*) as cnt FROM items
+               WHERE course IS NOT NULL AND course != ''
+               GROUP BY chapter ORDER BY cnt DESC LIMIT 1"""
+        ).fetchone()
+        # Try matching specifically for this course
+        ch_row = conn.execute(
+            """SELECT chapter, COUNT(*) as cnt FROM (
+                   SELECT chapter FROM items WHERE LOWER(course) = LOWER(?)
+                   UNION ALL
+                   SELECT chapter FROM events WHERE LOWER(course) = LOWER(?)
+               ) GROUP BY chapter ORDER BY cnt DESC LIMIT 1""",
+            (canonical, canonical),
+        ).fetchone()
+        if ch_row and ch_row["chapter"]:
+            course_chapter[canonical] = resolve_chapter_id(ch_row["chapter"])
+        else:
+            course_chapter[canonical] = None
+
+    # Insert courses
+    courses_added = 0
+    for canonical in sorted(canonical_courses.keys()):
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO courses (name, chapter_id) VALUES (?, ?)",
+                (canonical, course_chapter.get(canonical)),
+            )
+            courses_added += 1
+        except Exception:
+            pass
+    logger.info("Seeded %d courses", courses_added)
+
+    # Build course lookup: lowercase → course_id
+    course_map = {}
+    for row in conn.execute("SELECT course_id, name FROM courses").fetchall():
+        course_map[row["name"].lower()] = row["course_id"]
+
+    # ── Step 3: Create course_aliases ──
+    aliases_added = 0
+    for canonical, variants in canonical_courses.items():
+        cid = course_map.get(canonical.lower())
+        if not cid:
+            continue
+        for variant in variants:
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO course_aliases (course_id, alias_name) VALUES (?, ?)",
+                    (cid, variant),
+                )
+                aliases_added += 1
+            except Exception:
+                pass
+    # Also add the canonical mapping from _COURSE_CANONICAL keys
+    for alias_key, canonical in _COURSE_CANONICAL.items():
+        cid = course_map.get(canonical.lower())
+        if not cid:
+            continue
+        # Convert alias_key back to something recognizable (title case)
+        alias_display = alias_key.strip().title()
+        if alias_display.lower() != canonical.lower():
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO course_aliases (course_id, alias_name) VALUES (?, ?)",
+                    (cid, alias_display),
+                )
+                aliases_added += 1
+            except Exception:
+                pass
+    logger.info("Created %d course_aliases", aliases_added)
+
+    # ── Step 4: Add FK columns ──
+    for table in ("items", "events"):
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "chapter_id" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN chapter_id INTEGER REFERENCES chapters(chapter_id)")
+        if "course_id" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN course_id INTEGER REFERENCES courses(course_id)")
+
+    # Extended course lookup including aliases
+    for row in conn.execute(
+        "SELECT course_id, alias_name FROM course_aliases"
+    ).fetchall():
+        course_map[row["alias_name"].lower()] = row["course_id"]
+
+    def resolve_course_id(course_str):
+        if not course_str:
+            return None
+        key = course_str.strip().lower()
+        return course_map.get(key)
+
+    # ── Step 5: Backfill FKs ──
+    # Items
+    items_updated = 0
+    for row in conn.execute(
+        "SELECT id, chapter, course FROM items WHERE chapter_id IS NULL OR course_id IS NULL"
+    ).fetchall():
+        updates = []
+        vals = []
+        if row["chapter"]:
+            cid = resolve_chapter_id(row["chapter"])
+            if cid:
+                updates.append("chapter_id = ?")
+                vals.append(cid)
+        if row["course"]:
+            crs = resolve_course_id(row["course"])
+            if crs:
+                updates.append("course_id = ?")
+                vals.append(crs)
+        if updates:
+            vals.append(row["id"])
+            conn.execute(f"UPDATE items SET {', '.join(updates)} WHERE id = ?", vals)
+            items_updated += 1
+
+    # Events
+    events_updated = 0
+    for row in conn.execute(
+        "SELECT id, chapter, course FROM events WHERE chapter_id IS NULL OR course_id IS NULL"
+    ).fetchall():
+        updates = []
+        vals = []
+        if row["chapter"]:
+            cid = resolve_chapter_id(row["chapter"])
+            if cid:
+                updates.append("chapter_id = ?")
+                vals.append(cid)
+        if row["course"]:
+            crs = resolve_course_id(row["course"])
+            if crs:
+                updates.append("course_id = ?")
+                vals.append(crs)
+        if updates:
+            vals.append(row["id"])
+            conn.execute(f"UPDATE events SET {', '.join(updates)} WHERE id = ?", vals)
+            events_updated += 1
+
+    conn.commit()
+    logger.info(
+        "Dim table backfill: %d items updated, %d events updated",
+        items_updated, events_updated,
+    )
+
+
 def _migrate_normalize_venmo_customer_names(conn: sqlite3.Connection) -> None:
     """One-shot: rewrite acct_transactions.customer for Venmo prize_payouts to
     the canonical customers.first_name + last_name when the name resolves
@@ -1351,6 +1584,45 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_event_aliases_canonical ON event_aliases(canonical_event_name)"
         )
 
+        # ── Dimension Tables: Chapters + Courses ────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chapters (
+                chapter_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        VARCHAR(100) NOT NULL UNIQUE,
+                short_code  VARCHAR(10),
+                timezone    VARCHAR(50) DEFAULT 'America/Chicago',
+                status      VARCHAR(20) NOT NULL DEFAULT 'active',
+                created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS courses (
+                course_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        VARCHAR(200) NOT NULL UNIQUE,
+                chapter_id  INTEGER REFERENCES chapters(chapter_id),
+                city        VARCHAR(100),
+                state       VARCHAR(2),
+                status      VARCHAR(20) NOT NULL DEFAULT 'active',
+                created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS course_aliases (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_id   INTEGER NOT NULL REFERENCES courses(course_id) ON DELETE CASCADE,
+                alias_name  TEXT NOT NULL UNIQUE,
+                created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
         # MVP unlinks — events explicitly excluded from same-day TGF MVP combining
         conn.execute(
             """
@@ -1737,6 +2009,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_seed_customer_roles(conn)
         except Exception as e:
             logger.warning("Customer roles seed migration failed: %s", e)
+
+        # Steps 4+5: Create chapters + courses dimension tables
+        try:
+            _migrate_create_dim_tables(conn)
+        except Exception as e:
+            logger.warning("Dim table creation failed: %s", e)
 
         # Create aliases for the dedup-migrated names (so _lookup_customer_id
         # can resolve them during normalization below)
