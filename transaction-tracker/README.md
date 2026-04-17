@@ -9,6 +9,9 @@ Scans your email inbox for Golf Fellowship order emails, uses **Claude AI** to p
 - **Dedicated columns** — Item Name, Chapter, Course, Handicap, Side Games, Tee Choice, User Status, Holes, etc. All filterable and sortable.
 - **Event management** — auto-detects events from transactions, tracks registrations, supports manual player additions, RSVP tracking, payment reminders, tee time planning with sunset advisor.
 - **Customer directory** — derives member status, chapter affiliation, purchase history from transactions. Roster import, alias management, customer merging.
+- **Accounting & bank reconciliation** — multi-entity ledger, chart of accounts, CSV/PDF bank statement import (Chase, Frost Bank, Venmo), auto-match by amount + date + description. The Ledger tab's "Unreconciled" pill splits into a two-pane match queue so you can reconcile without leaving the page (v2.8.0).
+- **COO Dashboard** — action items, financial snapshot, liabilities dashboard, Claude-powered AI chat with six specialist agents (Chief of Staff, Financial, Operations, Course Correspondent, Member Relations, Compliance).
+- **Cash flow** — 90-day rolling weekly view with expected/confirmed income vs. projected/actual expenses and running balance.
 - **Handicap management** — 9-hole WHS handicap index calculator with Golf Genius sync, round history, and export.
 - **Side games matrix** — interactive prize calculator for NET/GROSS/Skins games by player count (9h and 18h).
 - **RSVP integration** — Golf Genius RSVP email parsing with auto-matching to registered players.

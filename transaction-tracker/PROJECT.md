@@ -1,7 +1,7 @@
 # TGF Transaction Tracker — Project Documentation
 
 > **The Golf Fellowship** — AI-powered transaction and event management platform
-> **Current Version:** v1.9.0 (April 5, 2026)
+> **Current Version:** v2.8.0 (April 17, 2026)
 > **Live URL:** https://tgf-tracker.up.railway.app
 
 ---
@@ -341,16 +341,40 @@ computes a current handicap index using the official USGA WHS lookup table.
 ### 9. Accounting (`/accounting`)
 
 Multi-entity financial tracking, bank reconciliation, and month-end close.
+The landing tab is **Ledger** (renamed from Transactions in v2.6.10) — a
+filterable flat view of every `acct_transactions` row.
 
-**Features:**
+**Sub-tabs:** Dashboard, Ledger, Accounts, Categories, Reports, Reconcile
+(links to `/accounting/reconcile`), Cash Flow, Liabilities, Contractors, Rules.
+
+**Ledger tab:**
+- **Account pills** — All Accounts + one pill per `bank_accounts` row
+- **Status pills** — All / Unreconciled / Reconciled / Pending Review
+- **Advanced filters** (⚙) — Type, Category, Source, Review Status
+- **Reconciliation dot** on each row — green (reconciled), amber (awaiting bank match), grey (no match expected)
+- **Inline Match Queue (v2.8.0)** — when the **Unreconciled** pill is active, the
+  Ledger transforms into a two-pane split:
+  - Left: unmatched bank deposits (`/api/reconciliation/deposits?status=unmatched`)
+  - Right: the unreconciled ledger table
+  - Click a deposit → amount-similar rows (±$1) get amber-highlighted
+  - Click a row → selects it as the match target
+  - **Match** button → `POST /api/reconciliation/match`
+  - **Auto-Match All** button → `POST /api/reconciliation/auto-match`
+  - Other status pills return the layout to the normal flat table
+
+**Other features:**
 - **Multi-entity tracking** — TGF main + chapter accounts with balance management
 - **Chart of accounts** — IRS Schedule C categories (income, expense, asset, liability)
 - **General ledger** — Double-entry bookkeeping journal entries
 - **Expense transactions** — Categorized expense management with approval workflow
 - **Revenue auto-sync** — Automatic revenue entries from registration items
-- **Bank reconciliation** — CSV import (Chase, Frost Bank), two-way matching, three states (Matched/In Bank Only/Missing)
+- **Bank reconciliation** — CSV import (Chase, Frost Bank, Venmo), PDF via Claude, two-way matching
 - **Month-end close** — Locks period, generates income/expense/net/tax summary
 - **Action items** — Financial action items with urgency and resolution tracking
+- **Liabilities Dashboard** — Prize pools owed, HIO pot, season contests, chapter manager payouts,
+  tax reserve, investor debt, member credits 2025 (manual + calculated buckets)
+- **Contractor Payouts** — Chapter manager revenue-share ledger per event
+- **Keyword Rules** — Auto-categorization rules checked before the AI bookkeeper
 - **Unified financial model (Issue #242)** — Accounting is the single source of truth:
   - Credit transfers create contra-revenue on source event + revenue on target event
   - External payments (Venmo/cash) create `acct_allocations` rows + `acct_transactions` entries
@@ -1208,6 +1232,69 @@ The app is installable as a Progressive Web App:
 ---
 
 ## Version History
+
+### v2.8.0 — April 17, 2026 — "Inline Match Queue in the Ledger"
+
+**Goal:** eliminate the round-trip to `/accounting/reconcile` for day-to-day
+bank matching. The Ledger tab on `/accounting` becomes the single place
+managers see both sides of a reconciliation pair.
+
+- When the **Unreconciled** status pill is active, `#ledger-split` toggles to
+  a two-pane CSS grid. Left pane = unmatched bank deposits from
+  `GET /api/reconciliation/deposits?status=unmatched`. Right pane = the
+  existing unreconciled ledger table.
+- Clicking a deposit highlights amount-similar ledger rows (±$1) by adding
+  `.lmq-candidate` — the Amount cell gets an amber `#fef3c7` background.
+- Clicking a row in split mode calls `setSelectedLedgerTxn()` (doesn't open
+  the edit modal) — row gets a blue outline via `.lmq-selected`.
+- **Match** button calls `POST /api/reconciliation/match`, fades the matched
+  row via `.lmq-matched`, and removes the deposit card.
+- **Auto-Match All** button calls `POST /api/reconciliation/auto-match` and
+  reloads both panes. Auto/partial/unmatched counts flash in the header.
+- When the active account pill is not **All Accounts**, the deposit list is
+  client-side filtered to deposits matching that `account_name`.
+- Other status pills (All / Reconciled / Pending Review) keep the normal flat
+  table layout — the split pane only appears under Unreconciled.
+- Standalone `/accounting/reconcile` page is unchanged; it remains available for
+  Account Dashboard, Monthly Summary CSV export, and batch-match workflows.
+
+**Key files touched:**
+- `templates/accounting.html` — `#ledger-split` wrapper, `#ledger-deposits-pane`, inline CSS
+- `static/js/acct-transactions.js` — `LMQ` state object, `applyLedgerSplitMode`,
+  `loadUnmatchedDeposits`, `renderDepositList`, `selectDepositInline`,
+  `highlightAmountMatches`, `setSelectedLedgerTxn`, `matchSelectedInline`,
+  `runInlineAutoMatch`; row-click logic in `renderTransactionList` branches on split mode
+- `static/js/acct-init.js` — wires `#btn-lmq-automatch` and `#btn-lmq-match`
+
+**Jinja CSS hotfix (shipped with v2.8.0):**
+- The inline `@media(max-width:900px){#ledger-split.split-on{...}}` rule
+  contained the literal `{#` two-char sequence, which Jinja2 reads as the
+  start of a comment. Template rendering crashed with `TemplateSyntaxError:
+  Missing end of comment tag` and the global 500 handler returned
+  `{"error":"Internal server error"}` for `GET /accounting`.
+- Fix: insert a space after each `{` inside the media block so `{ #selector`
+  is no longer parsed as a Jinja comment token. See the "Jinja gotcha"
+  section in CLAUDE.md for the general rule.
+
+---
+
+### v2.3.0 – v2.7.5 (April 13–17, 2026) — see `static/js/version.js` for full list
+
+Highlights:
+- **v2.3.0** — Bank reconciliation CSV/PDF import, smart expense categorization,
+  cash flow page, unified review modal, handicap card email tools, mobile
+  accounting cards
+- **v2.4.0** — GoDaddy order-level accounting (one `acct_transaction` per order +
+  `godaddy_order_splits`), batch match API, Browse All mode in Match Queue,
+  reconciliation dots on transaction rows
+- **v2.5.0** — `customer_id` FKs on `acct_transactions` and `handicap_player_links`,
+  Payouts Made vs. Budget section on Event Financial tab, legacy `acct_splits` cleanup
+- **v2.6.x** — AI Bookkeeper with batch preview, Liabilities Dashboard (9 buckets),
+  Month Close checklist, Create Ledger Entry modal with typeahead, Event typeahead
+  keyboard nav, batch internal transfer recording in Match Queue
+- **v2.7.0** — Ledger account toggle pills + status filter pills (replaces old dropdowns)
+- **v2.7.2 – v2.7.5** — `expense_transactions.account_id` FK + migrations,
+  reconciliation dot color/position matching Transactions page
 
 ### v2.2.0 — April 11, 2026 — "Unified Financial Model"
 

@@ -850,11 +850,35 @@ Runs after every import and on-demand via "Auto-match All" button.
 - Matched transactions get `status = 'reconciled'` in `acct_transactions`.
 
 ### Reconciliation UI (`/accounting/reconcile`)
-Three tabs:
+Three tabs — the standalone page, kept for power-user workflows and the
+Monthly Summary CSV export:
 1. **Account Dashboard** — cards per account: book/bank balance, variance, unmatched count
 2. **Match Queue** — two-column layout: unmatched deposits (left) vs unreconciled transactions (right).
-   Click deposit to highlight amount-similar transactions. Manual match button.
+   Click deposit to highlight amount-similar transactions. Manual match + batch-match + auto-match.
 3. **Monthly Summary** — income/expense by category, reconciliation %, CSV export.
+
+### Inline Match Queue (v2.8.0) — lives inside the Ledger tab
+The day-to-day reconciliation workflow is embedded directly in the Accounting
+Ledger tab so admins don't have to leave the main view.
+
+- When the **Unreconciled** status pill is active in `/accounting` → Ledger,
+  the `#ledger-split` container toggles to `.split-on` (CSS grid: `minmax(280px,1fr) minmax(420px,1.4fr)`).
+- **Left pane** (`#ledger-deposits-pane`) — unmatched bank deposits from
+  `GET /api/reconciliation/deposits?status=unmatched`. Optionally filtered
+  client-side by the active account pill (matches by `account_name`).
+- **Right pane** (`#txn-list`) — the existing unreconciled ledger entries.
+- **Click a deposit** → `highlightAmountMatches()` adds `.lmq-candidate` to
+  right-pane rows whose amount is within ±$1.00 (the Amount td cell `td:nth-child(4)`
+  gets an amber `#fef3c7` background).
+- **Click a ledger row in split mode** → `setSelectedLedgerTxn()` picks it as the
+  match candidate (blue outline + `.lmq-selected`) instead of opening the edit modal.
+- **Match button** → `POST /api/reconciliation/match` with `{bank_deposit_id, acct_transaction_id}`.
+  Matched row fades out via `.lmq-matched`, deposit card removed from left pane.
+- **Auto-Match All button** → `POST /api/reconciliation/auto-match` with empty body;
+  auto/partial/unmatched counts flash in the header, then `loadTransactions()` refreshes both panes.
+- Other status pills (All / Reconciled / Pending Review) keep the normal flat table layout —
+  the split pane only appears under **Unreconciled**.
+- State lives in a module-level `LMQ` object in `static/js/acct-transactions.js`.
 
 ### Cash Flow (`/accounting/cashflow`)
 90-day rolling weekly view (configurable: 8/13/26 weeks).
@@ -886,6 +910,27 @@ Red warning rows where projected expenses exceed confirmed income.
 | `/api/reconciliation/monthly` | GET | admin | Monthly breakdown |
 | `/api/reconciliation/event/<name>` | GET | manager | Event reconciliation status |
 | `/api/reconciliation/cashflow` | GET | admin | Weekly cash flow data |
+
+## Jinja gotcha in inline CSS (IMPORTANT)
+
+Flask templates are parsed by Jinja2, which treats `{#` as the start of a
+comment and `#}` as the end. **CSS rules that pack `{` directly against `#`**
+(e.g. `@media(max-width:900px){#some-id{...}}`) will crash template rendering
+with `TemplateSyntaxError: Missing end of comment tag` and the global 500
+handler returns `{"error":"Internal server error"}`.
+
+This hit `/accounting` in v2.8.0. The fix is a one-character space:
+`@media(...){ #some-id{...} }` — the brace no longer abuts the hash so Jinja
+stops reading it as a comment opener.
+
+Same rule for `{%` (statement), `{{` (expression). When embedding CSS inside
+a Jinja-rendered template, always insert whitespace between an opening
+brace and a literal `#`, `%`, or `{`. Verify with:
+
+```
+python3 -c "from jinja2 import Environment, FileSystemLoader; \
+    Environment(loader=FileSystemLoader('templates')).get_template('accounting.html').render()"
+```
 
 ## Git Merge & PR Best Practices
 
