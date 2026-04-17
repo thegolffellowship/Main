@@ -21,6 +21,32 @@
         .ledger-filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.25rem 0 .5rem;border-bottom:1px solid var(--border,#e5e7eb);margin-bottom:.5rem;}
         .ledger-filter-right{display:flex;align-items:center;gap:.5rem;margin-left:auto;}
         @media(max-width:640px){.ledger-filter-right{margin-left:0;flex-wrap:wrap;}.ledger-filter-bar{flex-direction:column;align-items:flex-start;}}
+        /* Inline Match Queue split pane (active when Unreconciled status pill selected) */
+        #ledger-split.split-on{display:grid;grid-template-columns:minmax(280px,1fr) minmax(420px,1.4fr);gap:.75rem;align-items:flex-start;}
+        #ledger-split.split-on #ledger-deposits-pane{display:block;}
+        #ledger-deposits-pane{display:none;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:.6rem .6rem .5rem;max-height:70vh;overflow-y:auto;}
+        #ledger-deposits-pane .lmq-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;padding-bottom:.35rem;border-bottom:1px solid var(--border,#e5e7eb);}
+        #ledger-deposits-pane .lmq-title{font-size:.82rem;font-weight:600;margin:0;}
+        #ledger-deposits-pane .lmq-count{font-size:.7rem;color:var(--text-muted,#6b7280);}
+        #ledger-deposits-pane .lmq-actions{margin-left:auto;display:flex;gap:.35rem;}
+        .lmq-deposit{display:grid;grid-template-columns:68px 1fr auto;gap:.4rem;align-items:center;padding:.45rem .35rem;border-bottom:1px solid var(--border,#f1f5f9);cursor:pointer;font-size:.78rem;border-radius:4px;}
+        .lmq-deposit:hover{background:#f0f9ff;}
+        .lmq-deposit.selected{background:#dbeafe;outline:2px solid #2563eb;}
+        .lmq-deposit .lmq-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:.25rem;background:#ef4444;}
+        .lmq-deposit.partial .lmq-dot{background:#f59e0b;}
+        .lmq-deposit.matched .lmq-dot{background:#16a34a;}
+        .lmq-deposit .lmq-desc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#374151;}
+        .lmq-deposit .lmq-amt{font-weight:600;text-align:right;color:#166534;font-variant-numeric:tabular-nums;}
+        .lmq-deposit .lmq-date{color:#6b7280;font-variant-numeric:tabular-nums;}
+        .lmq-empty{color:var(--text-muted,#6b7280);font-size:.78rem;padding:.85rem;text-align:center;}
+        /* Amount-similar highlight applied to right-pane rows */
+        .acct-txn-row.lmq-candidate,.acct-mobile-card.lmq-candidate{outline:2px solid #fbbf24;outline-offset:-2px;}
+        .acct-txn-row.lmq-candidate td:nth-child(4){background:#fef3c7;}
+        /* Selected ledger entry when choosing a match */
+        .acct-txn-row.lmq-selected,.acct-mobile-card.lmq-selected{outline:2px solid #2563eb;outline-offset:-2px;background:#dbeafe;}
+        /* Fade out matched rows */
+        .acct-txn-row.lmq-matched,.acct-mobile-card.lmq-matched{opacity:.3;transition:opacity .4s;}
+        @media(max-width:900px){#ledger-split.split-on{grid-template-columns:1fr;}#ledger-deposits-pane{max-height:45vh;}}
     </style>
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
@@ -35,7 +61,7 @@
         <div class="header-content">
             <h1>Accounting</h1>
             <p class="subtitle">Multi-Entity Money Management</p>
-            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.6.0</a>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.8.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -287,7 +313,21 @@
                     <option value="ignored">Ignored</option>
                 </select>
             </div>
-            <div class="acct-txn-list" id="txn-list"></div>
+            <!-- Split container: left = unmatched bank deposits (active only when Unreconciled pill selected), right = ledger entries -->
+            <div id="ledger-split">
+                <aside id="ledger-deposits-pane" aria-label="Unmatched bank deposits">
+                    <div class="lmq-header">
+                        <h4 class="lmq-title">Unmatched Deposits</h4>
+                        <span class="lmq-count" id="lmq-count"></span>
+                        <div class="lmq-actions">
+                            <button class="btn btn-secondary btn-sm" id="btn-lmq-automatch" title="Run auto-match across all deposits">Auto-Match All</button>
+                            <button class="btn btn-primary btn-sm" id="btn-lmq-match" disabled title="Match selected deposit to selected ledger entry">Match</button>
+                        </div>
+                    </div>
+                    <div id="lmq-deposit-list"><div class="lmq-empty">Loading deposits…</div></div>
+                </aside>
+                <div class="acct-txn-list" id="txn-list"></div>
+            </div>
             <div class="acct-pagination" id="txn-pagination"></div>
         </section>
 
