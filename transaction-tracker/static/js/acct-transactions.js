@@ -2,6 +2,16 @@
    Accounting Module — Transactions Tab & Modal
    ========================================================= */
 
+// ── Inline Match Queue state ──
+const LMQ = {
+    selectedDepositId: null,
+    selectedDepositAmount: 0,
+    selectedDepositAccountName: '',
+    selectedTxnId: null,
+    selectedTxnAmount: 0,
+    deposits: [],
+};
+
 async function loadTransactions() {
     const acctPill = document.querySelector('#ledger-acct-pills .ledger-pill.active');
     const statusPill = document.querySelector('#ledger-status-pills .ledger-seg-btn.active');
@@ -28,11 +38,220 @@ async function loadTransactions() {
         params.review_status = $('#txn-filter-review')?.value || null;
     }
 
+    applyLedgerSplitMode(ledgerStatus === 'unreconciled');
+
     try {
         const data = await api('/transactions/unified' + buildQS(params));
         renderTransactionList(data.transactions, data.total);
+        if (ledgerStatus === 'unreconciled') {
+            // After list renders, re-apply highlighting if a deposit was selected
+            if (LMQ.selectedDepositId) highlightAmountMatches(LMQ.selectedDepositAmount);
+        }
     } catch (e) {
         console.error('Transaction load error:', e);
+    }
+}
+
+// ── Inline Match Queue ───────────────────────────────────
+
+function applyLedgerSplitMode(isOn) {
+    const split = document.getElementById('ledger-split');
+    if (!split) return;
+    split.classList.toggle('split-on', isOn);
+    if (isOn) {
+        loadUnmatchedDeposits();
+    } else {
+        // Reset selection state when leaving unreconciled view
+        LMQ.selectedDepositId = null;
+        LMQ.selectedTxnId = null;
+        updateMatchButtonState();
+    }
+}
+
+async function loadUnmatchedDeposits() {
+    const pane = document.getElementById('lmq-deposit-list');
+    if (!pane) return;
+    const acctPill = document.querySelector('#ledger-acct-pills .ledger-pill.active');
+    const acctId = acctPill?.dataset.acctId || '';
+    const acctName = (acctPill?.textContent || '').trim();
+    pane.innerHTML = '<div class="lmq-empty">Loading deposits…</div>';
+    try {
+        const qs = new URLSearchParams({ status: 'unmatched' });
+        const res = await fetch('/api/reconciliation/deposits?' + qs.toString());
+        let deposits = await res.json();
+        if (!Array.isArray(deposits)) deposits = [];
+        // Client-side filter: match by account_name if a specific pill is active
+        if (acctId && acctName && acctName !== 'All Accounts') {
+            const filtered = deposits.filter(d => {
+                const dn = (d.account_name || '').toLowerCase();
+                const an = acctName.toLowerCase();
+                // match either exact name or substring (e.g. "TGF Checking ••4500")
+                return dn === an || an.includes(dn) || dn.includes(an.split(' ')[0] || an);
+            });
+            // Only apply the filter if it actually narrows the list — otherwise keep all
+            if (filtered.length) deposits = filtered;
+        }
+        LMQ.deposits = deposits;
+        renderDepositList(deposits);
+    } catch (e) {
+        pane.innerHTML = `<div class="lmq-empty" style="color:#dc2626;">Failed to load: ${e.message || e}</div>`;
+    }
+}
+
+function renderDepositList(deposits) {
+    const pane = document.getElementById('lmq-deposit-list');
+    const countEl = document.getElementById('lmq-count');
+    if (!pane) return;
+    if (countEl) countEl.textContent = deposits.length ? `${deposits.length} unmatched` : '';
+    if (!deposits.length) {
+        pane.innerHTML = '<div class="lmq-empty">No unmatched deposits 🎉</div>';
+        return;
+    }
+    pane.innerHTML = deposits.map(d => {
+        const amt = d.amount || 0;
+        const amtStr = amt >= 0 ? '$' + amt.toFixed(2) : '-$' + Math.abs(amt).toFixed(2);
+        const sel = LMQ.selectedDepositId === d.id ? ' selected' : '';
+        const status = d.status || 'unmatched';
+        const desc = (d.description || '').replace(/</g, '&lt;');
+        const acctTag = d.account_name ? ` <span style="font-size:.65rem;color:#6b7280;">${d.account_name}</span>` : '';
+        return `<div class="lmq-deposit ${status}${sel}" data-id="${d.id}" data-amount="${amt}" data-acct-name="${d.account_name || ''}">
+            <span class="lmq-date">${d.deposit_date || ''}</span>
+            <span class="lmq-desc"><span class="lmq-dot"></span>${desc}${acctTag}</span>
+            <span class="lmq-amt">${amtStr}</span>
+        </div>`;
+    }).join('');
+    pane.querySelectorAll('.lmq-deposit').forEach(el => {
+        el.addEventListener('click', () => selectDepositInline(parseInt(el.dataset.id)));
+    });
+}
+
+function selectDepositInline(id) {
+    const dep = LMQ.deposits.find(d => d.id === id);
+    if (!dep) return;
+    // Toggle off if clicking same deposit
+    if (LMQ.selectedDepositId === id) {
+        LMQ.selectedDepositId = null;
+        LMQ.selectedDepositAmount = 0;
+        LMQ.selectedDepositAccountName = '';
+        clearAmountHighlights();
+    } else {
+        LMQ.selectedDepositId = id;
+        LMQ.selectedDepositAmount = dep.amount || 0;
+        LMQ.selectedDepositAccountName = dep.account_name || '';
+        highlightAmountMatches(LMQ.selectedDepositAmount);
+    }
+    // Update visual selection
+    document.querySelectorAll('#lmq-deposit-list .lmq-deposit').forEach(el => {
+        el.classList.toggle('selected', parseInt(el.dataset.id) === LMQ.selectedDepositId);
+    });
+    updateMatchButtonState();
+}
+
+function highlightAmountMatches(targetAmount) {
+    clearAmountHighlights();
+    if (!targetAmount) return;
+    const tol = 1.00; // within $1
+    // Desktop table rows
+    document.querySelectorAll('#txn-list .acct-txn-row').forEach(row => {
+        // 4th td (text-right) holds the displayed amount
+        const amtCell = row.querySelector('td:nth-child(4)');
+        const num = amtCell ? parseFloat((amtCell.textContent || '').replace(/[^0-9.\-]/g, '')) : NaN;
+        if (!isNaN(num) && Math.abs(num - targetAmount) <= tol) {
+            row.classList.add('lmq-candidate');
+        }
+    });
+    // Mobile cards
+    document.querySelectorAll('#txn-list .acct-mobile-card').forEach(card => {
+        const amtEl = card.querySelector('.acct-mc-amount');
+        const num = amtEl ? parseFloat((amtEl.textContent || '').replace(/[^0-9.\-]/g, '')) : NaN;
+        if (!isNaN(num) && Math.abs(num - targetAmount) <= tol) {
+            card.classList.add('lmq-candidate');
+        }
+    });
+}
+
+function clearAmountHighlights() {
+    document.querySelectorAll('#txn-list .lmq-candidate').forEach(el => el.classList.remove('lmq-candidate'));
+}
+
+function setSelectedLedgerTxn(id, amount) {
+    LMQ.selectedTxnId = id;
+    LMQ.selectedTxnAmount = amount || 0;
+    document.querySelectorAll('#txn-list .acct-txn-row, #txn-list .acct-mobile-card').forEach(el => {
+        el.classList.toggle('lmq-selected', parseInt(el.dataset.id) === id);
+    });
+    updateMatchButtonState();
+}
+
+function updateMatchButtonState() {
+    const btn = document.getElementById('btn-lmq-match');
+    if (!btn) return;
+    const can = !!(LMQ.selectedDepositId && LMQ.selectedTxnId);
+    btn.disabled = !can;
+    if (can) {
+        btn.textContent = `Match $${LMQ.selectedTxnAmount.toFixed(2)}`;
+    } else if (LMQ.selectedDepositId) {
+        btn.textContent = 'Pick a ledger entry';
+    } else {
+        btn.textContent = 'Match';
+    }
+}
+
+async function matchSelectedInline() {
+    if (!LMQ.selectedDepositId || !LMQ.selectedTxnId) return;
+    const depId = LMQ.selectedDepositId;
+    const txnId = LMQ.selectedTxnId;
+    try {
+        const res = await fetch('/api/reconciliation/match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bank_deposit_id: depId, acct_transaction_id: txnId }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || res.statusText);
+        }
+        // Fade matched row and remove deposit card
+        const row = document.querySelector(`#txn-list [data-id="${txnId}"]`);
+        if (row) {
+            row.classList.add('lmq-matched');
+            setTimeout(() => row.remove(), 400);
+        }
+        LMQ.deposits = LMQ.deposits.filter(d => d.id !== depId);
+        LMQ.selectedDepositId = null;
+        LMQ.selectedTxnId = null;
+        renderDepositList(LMQ.deposits);
+        clearAmountHighlights();
+        updateMatchButtonState();
+    } catch (e) {
+        alert('Match failed: ' + (e.message || e));
+    }
+}
+
+async function runInlineAutoMatch() {
+    const btn = document.getElementById('btn-lmq-automatch');
+    if (btn) { btn.disabled = true; btn.textContent = 'Matching…'; }
+    try {
+        const res = await fetch('/api/reconciliation/auto-match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        const data = await res.json();
+        const msg = `Auto-matched: ${data.auto_matched || 0} | Partial: ${data.partial || 0} | Unmatched: ${data.unmatched || 0}`;
+        if (btn) btn.textContent = 'Auto-Match All';
+        // Flash the message briefly
+        const countEl = document.getElementById('lmq-count');
+        if (countEl) {
+            const prev = countEl.textContent;
+            countEl.textContent = msg;
+            setTimeout(() => { if (countEl.textContent === msg) countEl.textContent = prev; }, 3500);
+        }
+        loadTransactions();
+    } catch (e) {
+        alert('Auto-match failed: ' + (e.message || e));
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Auto-Match All'; }
     }
 }
 
@@ -534,10 +753,18 @@ function renderTransactionList(txns, total) {
         });
     });
 
-    // Click row to edit (desktop — or review for expense transactions)
+    // Click row to edit (desktop — or review for expense transactions).
+    // When the inline Match Queue is active, a click selects the row as a match candidate instead.
     el.querySelectorAll('.acct-txn-row').forEach(row => {
         row.addEventListener('click', (e) => {
             if (e.target.closest('.acct-btn-del')) return;
+            const splitOn = document.getElementById('ledger-split')?.classList.contains('split-on');
+            if (splitOn) {
+                const amtCell = row.querySelector('td:nth-child(4)');
+                const amt = amtCell ? parseFloat((amtCell.textContent || '').replace(/[^0-9.\-]/g, '')) : 0;
+                setSelectedLedgerTxn(parseInt(row.dataset.id), isNaN(amt) ? 0 : amt);
+                return;
+            }
             const expId = row.dataset.expenseId;
             if (expId) {
                 openExpenseReview(parseInt(expId));

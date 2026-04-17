@@ -179,6 +179,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#category-modal-cancel').addEventListener('click', () => $('#category-modal').style.display = 'none');
     $('#category-modal-save').addEventListener('click', saveCategory);
 
+    // Inline Match Queue (Ledger — Unreconciled pill) buttons
+    document.getElementById('btn-lmq-automatch')?.addEventListener('click', runInlineAutoMatch);
+    document.getElementById('btn-lmq-match')?.addEventListener('click', matchSelectedInline);
+
     // CSV import
     $('#btn-import-csv').addEventListener('click', openCsvModal);
     $('#csv-modal-close').addEventListener('click', () => $('#csv-modal').style.display = 'none');

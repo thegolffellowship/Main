@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.7.3";
+window.TGF_VERSION = "2.8.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.8.0",
+    date: "2026-04-17",
+    title: "Inline Match Queue in the Ledger — reconcile without leaving the page",
+    changes: [
+      "Clicking the 'Unreconciled' status pill in the Ledger now transforms the view into a two-panel split layout: unmatched bank deposits on the left, unreconciled ledger entries on the right",
+      "Click a deposit to highlight amount-similar ledger entries (±$1) on the right — the matching column cell turns amber so the candidate jumps out",
+      "Click a candidate row to select it, then press 'Match' to call POST /api/reconciliation/match — the deposit disappears from the left pane and the ledger row fades out",
+      "'Auto-Match All' button runs POST /api/reconciliation/auto-match inline and reloads both panes; a brief status message shows auto/partial/unmatched counts",
+      "When an account pill is active (not 'All Accounts'), the deposits list is client-side filtered to deposits from that bank account",
+      "Other status pills (All / Reconciled / Pending Review) still render the normal flat table — the split pane only appears under Unreconciled",
+      "The standalone /accounting/reconcile page is unchanged — it remains available for Account Dashboard, Monthly Summary / CSV export, and power-user batch matching",
+    ],
+  },
   {
     version: "2.7.3",
     date: "2026-04-17",
