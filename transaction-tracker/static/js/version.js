@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.6.9";
+window.TGF_VERSION = "2.6.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.10",
+    date: "2026-04-17",
+    title: "Rename Transactions tab to Ledger",
+    changes: [
+      "The 'Transactions' sub-tab under Accounting is now labeled 'Ledger' to distinguish it from the top-level Transactions page (which tracks revenue registrations)",
+      "acct_transactions table is the financial ledger — income, expenses, manual entries; the Transactions page at / is GoDaddy order registrations",
+    ],
+  },
   {
     version: "2.6.9",
     date: "2026-04-17",
