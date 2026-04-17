@@ -210,6 +210,12 @@ from email_parser.database import (
     get_accounting_liabilities,
     # Month Close
     get_month_close_status,
+    # Contractor tracking
+    get_contractor_payouts,
+    get_contractor_managers,
+    add_contractor_payout,
+    update_contractor_payout,
+    delete_contractor_payout,
     # TGF Payouts
     get_tgf_data,
     add_tgf_event,
@@ -5572,6 +5578,69 @@ def api_accounting_liabilities_update():
         return jsonify({"error": "value must be a number"}), 400
     set_coo_manual_value(key, value)
     return jsonify({"ok": True, "key": key, "value": value})
+
+
+# ── Contractor Payouts ────────────────────────────────────────────────────────
+
+@app.route("/api/accounting/contractors")
+@require_role("admin")
+def api_contractors_list():
+    return jsonify(get_contractor_payouts())
+
+
+@app.route("/api/accounting/contractors/managers")
+@require_role("admin")
+def api_contractors_managers():
+    return jsonify(get_contractor_managers())
+
+
+@app.route("/api/accounting/contractors", methods=["POST"])
+@require_role("admin")
+def api_contractors_add():
+    d = request.json or {}
+    mgr_id = d.get("manager_customer_id")
+    if not mgr_id:
+        return jsonify({"error": "manager_customer_id required"}), 400
+    try:
+        amount = float(d.get("amount_owed", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "amount_owed must be a number"}), 400
+    new_id = add_contractor_payout(
+        manager_customer_id=int(mgr_id),
+        event_name=d.get("event_name") or None,
+        event_date=d.get("event_date") or None,
+        amount_owed=amount,
+        chapter_id=d.get("chapter_id") or None,
+        notes=d.get("notes") or None,
+    )
+    return jsonify({"ok": True, "id": new_id})
+
+
+@app.route("/api/accounting/contractors/<int:payout_id>", methods=["PATCH"])
+@require_role("admin")
+def api_contractors_update(payout_id):
+    d = request.json or {}
+    amount_paid = d.get("amount_paid")
+    if amount_paid is not None:
+        try:
+            amount_paid = float(amount_paid)
+        except (TypeError, ValueError):
+            return jsonify({"error": "amount_paid must be a number"}), 400
+    ok = update_contractor_payout(
+        payout_id=payout_id,
+        amount_paid=amount_paid,
+        status=d.get("status") or None,
+        payment_method=d.get("payment_method") or None,
+        notes=d.get("notes"),
+    )
+    return jsonify({"ok": ok})
+
+
+@app.route("/api/accounting/contractors/<int:payout_id>", methods=["DELETE"])
+@require_role("admin")
+def api_contractors_delete(payout_id):
+    ok = delete_contractor_payout(payout_id)
+    return jsonify({"ok": ok})
 
 
 @app.route("/api/accounting/ai/bulk-categorize", methods=["POST"])

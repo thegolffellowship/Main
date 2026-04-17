@@ -881,3 +881,211 @@ function renderMonthClose(d) {
     const checklistEl = $('month-close-checklist');
     if (checklistEl) checklistEl.innerHTML = rows;
 }
+
+// ═══════════════════════════════════════════════════
+// CONTRACTORS TAB
+// ═══════════════════════════════════════════════════
+
+const CTRS = { payouts: [], managers: [], filterStatus: '' };
+
+async function loadContractors() {
+    const [payouts, managers] = await Promise.all([
+        fetch('/api/accounting/contractors').then(r => r.json()).catch(() => []),
+        fetch('/api/accounting/contractors/managers').then(r => r.json()).catch(() => []),
+    ]);
+    CTRS.payouts = payouts;
+    CTRS.managers = managers;
+    populateManagerDropdown();
+    renderContractors();
+}
+
+function populateManagerDropdown() {
+    const sel = document.getElementById('contractor-manager-select');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Select manager…</option>' +
+        CTRS.managers.map(m =>
+            `<option value="${m.customer_id}">${m.name}${m.chapter_name ? ' — ' + m.chapter_name : ''}</option>`
+        ).join('');
+}
+
+function renderContractors() {
+    const fmt = v => '$' + Number(v || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const statusFilter = (document.getElementById('contractor-filter-status') || {}).value || '';
+
+    const filtered = statusFilter
+        ? CTRS.payouts.filter(p => p.status === statusFilter)
+        : CTRS.payouts;
+
+    // Summary strip
+    const totalOwed = CTRS.payouts.reduce((s, p) => s + (p.amount_owed || 0), 0);
+    const totalPaid = CTRS.payouts.reduce((s, p) => s + (p.amount_paid || 0), 0);
+    const outstanding = totalOwed - totalPaid;
+    const summaryEl = document.getElementById('contractor-summary');
+    if (summaryEl) {
+        summaryEl.innerHTML = [
+            { label: 'Total Owed', val: totalOwed, cls: '' },
+            { label: 'Total Paid', val: totalPaid, cls: 'color:#16a34a' },
+            { label: 'Outstanding', val: outstanding, cls: outstanding > 0 ? 'color:#dc2626;font-weight:700' : 'color:#16a34a;font-weight:700' },
+        ].map(c => `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.6rem 1rem;min-width:120px;">
+            <div style="font-size:0.75rem;color:var(--text-muted)">${c.label}</div>
+            <div style="font-size:1rem;${c.cls}">${fmt(c.val)}</div>
+        </div>`).join('');
+    }
+
+    const listEl = document.getElementById('contractor-payout-list');
+    if (!listEl) return;
+
+    if (!filtered.length) {
+        listEl.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--text-muted);">
+            ${CTRS.payouts.length ? 'No payouts match the filter.' : 'No contractor payouts recorded yet. Click <strong>+ Add Payout</strong> to start.'}
+        </div>`;
+        return;
+    }
+
+    const STATUS_COLORS = { pending: '#f59e0b', partial: '#2563eb', paid: '#16a34a' };
+
+    listEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead style="background:var(--surface-alt,#f8fafc);">
+            <tr>
+                <th style="padding:0.6rem 0.9rem;text-align:left;font-weight:600;border-bottom:1px solid var(--border);">Manager</th>
+                <th style="padding:0.6rem 0.9rem;text-align:left;font-weight:600;border-bottom:1px solid var(--border);">Event</th>
+                <th style="padding:0.6rem 0.9rem;text-align:left;font-weight:600;border-bottom:1px solid var(--border);">Date</th>
+                <th style="padding:0.6rem 0.9rem;text-align:right;font-weight:600;border-bottom:1px solid var(--border);">Owed</th>
+                <th style="padding:0.6rem 0.9rem;text-align:right;font-weight:600;border-bottom:1px solid var(--border);">Paid</th>
+                <th style="padding:0.6rem 0.9rem;text-align:center;font-weight:600;border-bottom:1px solid var(--border);">Status</th>
+                <th style="padding:0.6rem 0.9rem;text-align:right;font-weight:600;border-bottom:1px solid var(--border);">Actions</th>
+            </tr>
+        </thead>
+        <tbody>${filtered.map((p, i) => {
+            const balance = (p.amount_owed || 0) - (p.amount_paid || 0);
+            const rowBg = i % 2 === 1 ? 'background:var(--surface-alt,#f8fafc)' : '';
+            const statusColor = STATUS_COLORS[p.status] || '#6b7280';
+            return `<tr style="${rowBg};border-bottom:1px solid var(--border-light,#f0f0f0);" data-id="${p.id}">
+                <td style="padding:0.6rem 0.9rem;">
+                    <div style="font-weight:500">${p.manager_name || '—'}</div>
+                    ${p.chapter_name ? `<div style="font-size:0.75rem;color:var(--text-muted)">${p.chapter_name}</div>` : ''}
+                </td>
+                <td style="padding:0.6rem 0.9rem;">${p.event_name || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td style="padding:0.6rem 0.9rem;color:var(--text-muted)">${p.event_date || '—'}</td>
+                <td style="padding:0.6rem 0.9rem;text-align:right;font-weight:500">${fmt(p.amount_owed)}</td>
+                <td style="padding:0.6rem 0.9rem;text-align:right;color:#16a34a">${p.amount_paid > 0 ? fmt(p.amount_paid) : '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td style="padding:0.6rem 0.9rem;text-align:center;">
+                    <span style="font-size:0.75rem;font-weight:600;color:${statusColor};background:${statusColor}1a;border:1px solid ${statusColor}40;border-radius:4px;padding:2px 7px;">${p.status}</span>
+                </td>
+                <td style="padding:0.6rem 0.9rem;text-align:right;white-space:nowrap;">
+                    ${p.status !== 'paid' ? `<button class="liab-edit-btn" onclick="openContractorPayModal(${p.id},${p.amount_owed},${p.amount_paid})" title="Record payment">Pay</button> ` : ''}
+                    <button class="liab-edit-btn" style="color:#dc2626" onclick="deleteContractorPayout(${p.id})" title="Delete">✕</button>
+                </td>
+            </tr>`;
+        }).join('')}</tbody>
+    </table>`;
+}
+
+function openContractorPayModal(id, owed, paid) {
+    document.getElementById('contractor-pay-id').value = id;
+    const remaining = Math.max(0, (owed || 0) - (paid || 0));
+    const amtEl = document.getElementById('contractor-pay-amount');
+    if (amtEl) { amtEl.value = remaining.toFixed(2); amtEl.focus(); amtEl.select(); }
+    const modal = document.getElementById('contractor-pay-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeContractorPayModal() {
+    const modal = document.getElementById('contractor-pay-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveContractorPayment() {
+    const id = parseInt(document.getElementById('contractor-pay-id').value);
+    const amount = parseFloat(document.getElementById('contractor-pay-amount').value || 0);
+    const method = document.getElementById('contractor-pay-method').value;
+
+    const payout = CTRS.payouts.find(p => p.id === id);
+    if (!payout) return;
+    const newStatus = amount >= (payout.amount_owed || 0) ? 'paid' : amount > 0 ? 'partial' : 'pending';
+
+    const res = await fetch(`/api/accounting/contractors/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount_paid: amount, status: newStatus, payment_method: method }),
+    }).then(r => r.json()).catch(() => null);
+
+    if (res && res.ok) {
+        closeContractorPayModal();
+        loadContractors();
+        showToast('Payment recorded', 'success');
+    } else {
+        showToast('Save failed', 'error');
+    }
+}
+
+function openAddContractorModal() {
+    document.getElementById('contractor-manager-select').value = '';
+    document.getElementById('contractor-event-name').value = '';
+    document.getElementById('contractor-event-date').value = '';
+    document.getElementById('contractor-amount-owed').value = '';
+    document.getElementById('contractor-notes').value = '';
+    document.getElementById('contractor-modal-title').textContent = 'Add Payout';
+    const modal = document.getElementById('contractor-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeContractorModal() {
+    const modal = document.getElementById('contractor-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveContractorPayout() {
+    const mgr = parseInt(document.getElementById('contractor-manager-select').value);
+    if (!mgr) { showToast('Select a manager', 'error'); return; }
+    const amount = parseFloat(document.getElementById('contractor-amount-owed').value || 0);
+    if (!amount || amount <= 0) { showToast('Enter an amount', 'error'); return; }
+
+    const res = await fetch('/api/accounting/contractors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            manager_customer_id: mgr,
+            event_name: document.getElementById('contractor-event-name').value.trim() || null,
+            event_date: document.getElementById('contractor-event-date').value || null,
+            amount_owed: amount,
+            notes: document.getElementById('contractor-notes').value.trim() || null,
+        }),
+    }).then(r => r.json()).catch(() => null);
+
+    if (res && res.ok) {
+        closeContractorModal();
+        loadContractors();
+        showToast('Payout added', 'success');
+    } else {
+        showToast('Save failed', 'error');
+    }
+}
+
+async function deleteContractorPayout(id) {
+    if (!confirm('Delete this payout record?')) return;
+    const res = await fetch(`/api/accounting/contractors/${id}`, { method: 'DELETE' })
+        .then(r => r.json()).catch(() => null);
+    if (res && res.ok) {
+        loadContractors();
+        showToast('Deleted', 'success');
+    } else {
+        showToast('Delete failed', 'error');
+    }
+}
+
+function initContractorsTab() {
+    document.getElementById('btn-add-contractor-payout')
+        ?.addEventListener('click', openAddContractorModal);
+    document.getElementById('contractor-modal-cancel')
+        ?.addEventListener('click', closeContractorModal);
+    document.getElementById('contractor-modal-save')
+        ?.addEventListener('click', saveContractorPayout);
+    document.getElementById('contractor-pay-cancel')
+        ?.addEventListener('click', closeContractorPayModal);
+    document.getElementById('contractor-pay-save')
+        ?.addEventListener('click', saveContractorPayment);
+    document.getElementById('contractor-filter-status')
+        ?.addEventListener('change', renderContractors);
+    loadContractors();
+}

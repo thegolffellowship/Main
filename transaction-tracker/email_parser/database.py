@@ -2786,6 +2786,33 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_event ON tgf_payouts(event_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_customer ON tgf_payouts(customer_id)")
 
+        # Contractor payout ledger (chapter managers, per-event revenue-share)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS contractor_payouts (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                manager_customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+                chapter_id          INTEGER REFERENCES chapters(chapter_id),
+                event_name          TEXT,
+                event_date          TEXT,
+                amount_owed         REAL NOT NULL DEFAULT 0,
+                amount_paid         REAL NOT NULL DEFAULT 0,
+                status              TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending','partial','paid')),
+                payment_method      TEXT,
+                notes               TEXT,
+                created_at          TEXT DEFAULT (datetime('now')),
+                updated_at          TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_contractor_payouts_manager ON contractor_payouts(manager_customer_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_contractor_payouts_event ON contractor_payouts(event_name)"
+        )
+
         # Seed COO agents on first run
         existing_agents = conn.execute("SELECT COUNT(*) as cnt FROM coo_agents").fetchone()
         if existing_agents["cnt"] == 0:
@@ -13584,6 +13611,110 @@ def get_coo_financial_snapshot(db_path: str | Path | None = None) -> dict:
     }
 
 
+def get_contractor_payouts(db_path: str | Path | None = None) -> list[dict]:
+    """Return all contractor payout records with manager name and chapter."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT cp.id, cp.manager_customer_id,
+                      c.customer AS manager_name,
+                      ch.name AS chapter_name,
+                      cp.chapter_id, cp.event_name, cp.event_date,
+                      cp.amount_owed, cp.amount_paid, cp.status,
+                      cp.payment_method, cp.notes, cp.created_at
+               FROM contractor_payouts cp
+               JOIN customers c ON c.customer_id = cp.manager_customer_id
+               LEFT JOIN chapters ch ON ch.chapter_id = cp.chapter_id
+               ORDER BY cp.event_date DESC, cp.created_at DESC"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_contractor_managers(db_path: str | Path | None = None) -> list[dict]:
+    """Return all customers with manager role, for the add-payout dropdown."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT c.customer_id, c.customer AS name, c.chapter,
+                      ch.name AS chapter_name, ch.chapter_id
+               FROM customers c
+               JOIN customer_roles cr ON cr.customer_id = c.customer_id
+               LEFT JOIN chapters ch ON ch.name = c.chapter
+               WHERE cr.role_type = 'manager'
+               ORDER BY c.customer"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def add_contractor_payout(
+    manager_customer_id: int,
+    event_name: str | None,
+    event_date: str | None,
+    amount_owed: float,
+    chapter_id: int | None = None,
+    notes: str | None = None,
+    db_path: str | Path | None = None,
+) -> int:
+    """Create a new contractor payout record. Returns new id."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            """INSERT INTO contractor_payouts
+               (manager_customer_id, chapter_id, event_name, event_date, amount_owed, notes)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (manager_customer_id, chapter_id, event_name or None, event_date or None,
+             round(float(amount_owed), 2), notes or None),
+        )
+        return cur.lastrowid
+
+
+def update_contractor_payout(
+    payout_id: int,
+    amount_paid: float | None = None,
+    status: str | None = None,
+    payment_method: str | None = None,
+    notes: str | None = None,
+    db_path: str | Path | None = None,
+) -> bool:
+    """Update payment info on an existing contractor payout. Returns True if updated."""
+    fields, params = [], []
+    if amount_paid is not None:
+        fields.append("amount_paid = ?")
+        params.append(round(float(amount_paid), 2))
+    if status is not None:
+        fields.append("status = ?")
+        params.append(status)
+    if payment_method is not None:
+        fields.append("payment_method = ?")
+        params.append(payment_method)
+    if notes is not None:
+        fields.append("notes = ?")
+        params.append(notes)
+    if not fields:
+        return False
+    fields.append("updated_at = datetime('now')")
+    params.append(payout_id)
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            f"UPDATE contractor_payouts SET {', '.join(fields)} WHERE id = ?", params
+        )
+        return cur.rowcount > 0
+
+
+def delete_contractor_payout(payout_id: int, db_path: str | Path | None = None) -> bool:
+    """Delete a contractor payout record."""
+    with _connect(db_path) as conn:
+        cur = conn.execute("DELETE FROM contractor_payouts WHERE id = ?", (payout_id,))
+        return cur.rowcount > 0
+
+
+def get_contractor_liability_total(db_path: str | Path | None = None) -> float:
+    """Sum of outstanding balances across all unpaid/partial contractor payouts."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            """SELECT COALESCE(SUM(amount_owed - amount_paid), 0) as total
+               FROM contractor_payouts WHERE status != 'paid'"""
+        ).fetchone()
+        return round(row["total"] or 0, 2)
+
+
 def get_accounting_liabilities(db_path: str | Path | None = None) -> dict:
     """Return all 9 liability buckets for the Liabilities Dashboard."""
     manual = get_all_coo_manual_values(db_path)
@@ -13625,7 +13756,7 @@ def get_accounting_liabilities(db_path: str | Path | None = None) -> dict:
     hio_pot = manual.get("hio_pot", 0) or 0
     season_contests = manual.get("season_contests_total", 0) or 0
     lone_star_cup = manual.get("lone_star_cup_shirts", 0) or 0
-    chapter_mgr = manual.get("chapter_manager_payouts", 0) or 0
+    chapter_mgr = get_contractor_liability_total(db_path)
     investor_debt = manual.get("grandparent_loan", 0) or 0
     member_credits_manual = manual.get("member_credits_2025", 0) or 0
     # Use the larger of calculated vs manual (manual overrides if explicitly set)
@@ -13663,7 +13794,7 @@ def get_accounting_liabilities(db_path: str | Path | None = None) -> dict:
             + irs_balance + chase_biz + chase_saph, 2
         ),
         "manual_keys": ["hio_pot", "season_contests_total", "lone_star_cup_shirts",
-                        "chapter_manager_payouts", "grandparent_loan", "member_credits_2025",
+                        "grandparent_loan", "member_credits_2025",
                         "irs_balance", "chase_biz_7680", "chase_sapphire_6159"],
     }
 

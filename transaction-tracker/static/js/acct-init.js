@@ -64,6 +64,7 @@ function refreshActiveTab() {
         case 'reports': loadReports(); break;
         case 'reconciliation': loadReconciliation(); break;
         case 'liabilities': initLiabilitiesTab(); break;
+        case 'contractors': initContractorsTab(); break;
         case 'rules': loadKeywordRules(); break;
     }
 }

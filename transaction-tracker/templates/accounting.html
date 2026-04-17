@@ -63,6 +63,7 @@
             <a href="/accounting/reconcile" class="acct-subtab" style="text-decoration:none;">Reconcile</a>
             <a href="/accounting/cashflow" class="acct-subtab" style="text-decoration:none;">Cash Flow</a>
             <button class="acct-subtab" data-tab="liabilities">Liabilities</button>
+            <button class="acct-subtab" data-tab="contractors">Contractors</button>
             <button class="acct-subtab" data-tab="rules">Rules</button>
         </div>
 
@@ -514,6 +515,101 @@
                             <button class="btn btn-secondary btn-sm" id="liab-modal-cancel">Cancel</button>
                             <button class="btn btn-primary btn-sm" id="liab-modal-save">Save</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ CONTRACTORS TAB ═══ -->
+        <section class="acct-tab-panel" id="panel-contractors">
+            <div style="max-width:960px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem;">
+                    <div>
+                        <h3 style="margin-bottom:0.15rem;">Contractor Payouts</h3>
+                        <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">
+                            Chapter manager revenue-share ledger. Each row is one payout obligation tied to an event.
+                        </p>
+                    </div>
+                    <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <select id="contractor-filter-status" class="acct-select" style="font-size:0.82rem;">
+                            <option value="">All statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="partial">Partial</option>
+                            <option value="paid">Paid</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" id="btn-add-contractor-payout">+ Add Payout</button>
+                    </div>
+                </div>
+
+                <!-- Summary strip -->
+                <div id="contractor-summary" style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;"></div>
+
+                <!-- Payout table -->
+                <div id="contractor-payout-list" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+                    <div style="padding:2rem;text-align:center;color:var(--text-muted);">Loading…</div>
+                </div>
+            </div>
+
+            <!-- Add/Edit Payout Modal -->
+            <div id="contractor-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center;">
+                <div style="background:var(--surface);border-radius:10px;padding:1.5rem;width:400px;max-width:95vw;box-shadow:0 8px 30px rgba(0,0,0,0.15);">
+                    <h4 style="margin:0 0 1rem;" id="contractor-modal-title">Add Payout</h4>
+                    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                        <div>
+                            <label style="font-size:0.82rem;font-weight:500;display:block;margin-bottom:0.25rem;">Manager</label>
+                            <select id="contractor-manager-select" class="acct-select" style="width:100%;">
+                                <option value="">Select manager…</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.82rem;font-weight:500;display:block;margin-bottom:0.25rem;">Event</label>
+                            <input type="text" id="contractor-event-name" class="acct-search" style="width:100%;" placeholder="Event name (optional)">
+                        </div>
+                        <div>
+                            <label style="font-size:0.82rem;font-weight:500;display:block;margin-bottom:0.25rem;">Event Date</label>
+                            <input type="date" id="contractor-event-date" style="width:100%;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.82rem;font-weight:500;display:block;margin-bottom:0.25rem;">Amount Owed ($)</label>
+                            <input type="number" id="contractor-amount-owed" step="0.01" min="0" class="acct-search" style="width:100%;" placeholder="0.00">
+                        </div>
+                        <div>
+                            <label style="font-size:0.82rem;font-weight:500;display:block;margin-bottom:0.25rem;">Notes</label>
+                            <input type="text" id="contractor-notes" class="acct-search" style="width:100%;" placeholder="Optional">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1.25rem;">
+                        <button class="btn btn-secondary btn-sm" id="contractor-modal-cancel">Cancel</button>
+                        <button class="btn btn-primary btn-sm" id="contractor-modal-save">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mark Paid Modal -->
+            <div id="contractor-pay-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center;">
+                <div style="background:var(--surface);border-radius:10px;padding:1.5rem;width:340px;max-width:95vw;box-shadow:0 8px 30px rgba(0,0,0,0.15);">
+                    <h4 style="margin:0 0 1rem;">Record Payment</h4>
+                    <input type="hidden" id="contractor-pay-id">
+                    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                        <div>
+                            <label style="font-size:0.82rem;font-weight:500;display:block;margin-bottom:0.25rem;">Amount Paid ($)</label>
+                            <input type="number" id="contractor-pay-amount" step="0.01" min="0" style="width:100%;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.82rem;font-weight:500;display:block;margin-bottom:0.25rem;">Payment Method</label>
+                            <select id="contractor-pay-method" style="width:100%;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
+                                <option value="">—</option>
+                                <option value="venmo">Venmo</option>
+                                <option value="zelle">Zelle</option>
+                                <option value="cash">Cash</option>
+                                <option value="check">Check</option>
+                                <option value="transfer">Bank Transfer</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1.25rem;">
+                        <button class="btn btn-secondary btn-sm" id="contractor-pay-cancel">Cancel</button>
+                        <button class="btn btn-primary btn-sm" id="contractor-pay-save">Record</button>
                     </div>
                 </div>
             </div>
