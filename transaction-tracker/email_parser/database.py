@@ -9652,6 +9652,20 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
             if txn_type:
                 exp_clauses.append("et.transaction_type = ?")
                 exp_params.append(txn_type)
+            if account_id is not None:
+                # expense_transactions store account as text — match by last4 or name
+                acct_row = conn.execute(
+                    "SELECT name, last_four FROM acct_accounts WHERE id = ?", (account_id,)
+                ).fetchone()
+                if acct_row:
+                    if acct_row["last_four"]:
+                        exp_clauses.append("et.account_last4 = ?")
+                        exp_params.append(acct_row["last_four"])
+                    else:
+                        exp_clauses.append("et.account_name = ? COLLATE NOCASE")
+                        exp_params.append(acct_row["name"])
+                else:
+                    exp_clauses.append("1 = 0")  # unknown account → exclude all
 
             exp_where = (" WHERE " + " AND ".join(exp_clauses)) if exp_clauses else ""
 
