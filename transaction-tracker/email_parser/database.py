@@ -13801,6 +13801,27 @@ def get_accounting_liabilities(db_path: str | Path | None = None) -> dict:
 
 def get_month_close_status(db_path: str | Path | None = None) -> dict:
     """Return all data needed to render the Month Close checklist and Financial Position."""
+    try:
+        return _get_month_close_status_inner(db_path)
+    except Exception as exc:
+        logger.warning("get_month_close_status failed: %s", exc, exc_info=True)
+        today = datetime.now()
+        return {
+            "period": {"month": today.strftime("%B %Y"), "year": today.strftime("%Y")},
+            "checklist": {
+                "uncategorized_ledger": 0, "pending_inbox": 0,
+                "unmatched_deposits": 0, "unreconciled_entries": 0,
+                "events_no_entries": 0, "tax_reserve_ytd": 0.0,
+            },
+            "financial_position": {
+                "ytd_income": 0.0, "ytd_expenses": 0.0, "ytd_net": 0.0,
+                "cash_on_hand": 0.0, "total_liabilities": 0.0, "net_position": 0.0,
+            },
+            "error": str(exc),
+        }
+
+
+def _get_month_close_status_inner(db_path: str | Path | None = None) -> dict:
     manual = get_all_coo_manual_values(db_path)
     today = datetime.now()
     month_prefix = today.strftime("%Y-%m")
@@ -13833,7 +13854,7 @@ def get_month_close_status(db_path: str | Path | None = None) -> dict:
         # 4. Unreconciled ledger entries (active income/expense with no bank match)
         unreconciled = conn.execute(
             """SELECT COUNT(*) as cnt FROM acct_transactions t
-               WHERE t.status = 'active'
+               WHERE COALESCE(t.status, 'active') = 'active'
                AND t.type IN ('income', 'expense')
                AND NOT EXISTS (
                    SELECT 1 FROM reconciliation_matches rm WHERE rm.acct_transaction_id = t.id
@@ -13852,11 +13873,17 @@ def get_month_close_status(db_path: str | Path | None = None) -> dict:
         ).fetchone()["cnt"]
 
         # --- Financial Position ---
-        # YTD income and expenses from acct_transactions
+        # YTD income/expenses — handles both old rows (type col) and new rows (entry_type col)
         ytd = conn.execute(
             """SELECT
-                COALESCE(SUM(CASE WHEN entry_type = 'income' AND status != 'reversed' THEN total_amount ELSE 0 END), 0) as income,
-                COALESCE(SUM(CASE WHEN entry_type = 'expense' AND status != 'reversed' THEN total_amount ELSE 0 END), 0) as expenses
+                COALESCE(SUM(CASE
+                    WHEN (entry_type = 'income' OR (entry_type IS NULL AND type = 'income'))
+                         AND COALESCE(status, 'active') != 'reversed'
+                    THEN total_amount ELSE 0 END), 0) as income,
+                COALESCE(SUM(CASE
+                    WHEN (entry_type = 'expense' OR (entry_type IS NULL AND type = 'expense'))
+                         AND COALESCE(status, 'active') != 'reversed'
+                    THEN total_amount ELSE 0 END), 0) as expenses
                FROM acct_transactions
                WHERE date LIKE ?""",
             (f"{year_prefix}%",),
