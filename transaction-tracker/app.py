@@ -128,7 +128,7 @@ from email_parser.database import (
     get_acct_account_balances,
     get_acct_transactions,
     get_acct_transaction,
-    create_acct_transaction,
+    _create_acct_ledger_entry,
     update_acct_transaction,
     delete_acct_transaction,
     reconcile_acct_transaction,
@@ -5293,7 +5293,7 @@ def api_acct_create_transaction():
     if abs(split_total - float(d["total_amount"])) > 0.01:
         return jsonify({"error": f"Split total ({split_total:.2f}) doesn't match transaction amount ({d['total_amount']})"}), 400
     try:
-        txn = create_acct_transaction(
+        txn = _create_acct_ledger_entry(
             date=d["date"], description=d["description"],
             total_amount=float(d["total_amount"]), txn_type=d["type"],
             account_id=d.get("account_id"), transfer_to_account_id=d.get("transfer_to_account_id"),

@@ -183,6 +183,8 @@ Two visual separator rows appear in the expanded rounds table:
 - `customer_emails` — Multiple emails per customer (supports primary + Golf Genius flags)
 - `customer_aliases` — Name and email aliases linking variant names to canonical customers
 - `items.customer_id` — FK linking transactions to the `customers` table
+- `acct_transactions.customer_id` — FK linking ledger entries to `customers` (backfilled via 5-step cascade)
+- `handicap_player_links.customer_id` — FK linking Golf Genius player rows to `customers`
 
 ### Customer Lookup Flow (`_lookup_customer_id` — 5-step cascade)
 When a new transaction arrives, the system resolves the customer in this order:
@@ -675,6 +677,11 @@ The Financial tab uses a dual-path rendering:
 The verified path fires when flat `acct_transactions` entries with `entry_type IS NOT NULL`
 exist for the event. After backfill, all 2026 events use the verified path.
 
+Both render paths include a **Payouts Made vs. Budget** section (below the profit bar) that compares
+the GAMES matrix prize fund budget (HIO + Included + NET + GROSS pools) against actual payouts from
+`tgfPayoutData.events[].total_purse`. Shows budget, paid out, and variance (UNDERPAID/OVERPAID/BALANCED).
+The `_renderPayoutsBudgetSection(ev, gamePots)` helper in events.html is called from both render functions.
+
 **Net revenue formula (verified path):**
 ```
 Total Income = registration + addon + transfer_in + tx_fees (from items.transaction_fees)
@@ -741,7 +748,7 @@ PROJECTED PROFIT = Net Income - Total Expenses
 | Reverse any of the above | Original flat entries marked `status='reversed'`, legacy entries deleted |
 
 ### Key functions
-- `_write_acct_entry(conn, ...)` — central helper for all flat ledger writes; idempotent via `source_ref`. Accepts `net_deposit`/`merchant_fee` kwargs.
+- `_write_acct_entry(conn, ...)` — central helper for all flat ledger writes; idempotent via `source_ref`. Accepts `net_deposit`/`merchant_fee` kwargs. Auto-resolves `customer_id` via `_lookup_customer_id` if not provided.
 - `_write_godaddy_order_entry(conn, *, order_id, items, date)` — creates order-level transaction + splits. Re-entrant (soft-deletes + recreates).
 - `_create_allocation_for_item(item, conn, payment_method, ...)` — creates allocation for
   non-GoDaddy items using synthetic `order_id` (prefixes: `EXT-`, `XFER-`, `MANUAL-PAY-`, `COMP-`)
@@ -753,7 +760,10 @@ PROJECTED PROFIT = Net Income - Total Expenses
 - `merge_transactions()` — combine multiple orders into a godaddy_batch entry
 - `backup_database()` — creates timestamped .db backup before migrations
 - `backfill_financial_entries()` — retrofits allocations/legacy transactions for existing data
-- `transfer_item()` — stores actual credit amount on transferred item (not $0.00)
+- `_backfill_customer_id_on_acct_transactions(conn)` — populates `customer_id` FK on existing acct_transactions rows
+- `_backfill_customer_id_on_player_links(conn)` — populates `customer_id` FK on existing handicap_player_links rows
+- `_create_acct_ledger_entry(...)` — accounting ledger path for bank imports and recurring entries (entity splits, account_id). Distinct from `_write_acct_entry()` which is for the event financial model.
+- `transfer_item()` — stores actual credit amount on transferred item (not $0.00); creates only flat acct_transactions entries (no legacy acct_splits)
 
 ### Credit/transfer/refund actions
 - Credit transfer items now show Credit, WD, and Refund buttons (same as regular items)

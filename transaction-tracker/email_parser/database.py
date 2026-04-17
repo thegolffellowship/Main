@@ -1752,6 +1752,10 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
             """
         )
+        try:
+            conn.execute("ALTER TABLE handicap_player_links ADD COLUMN customer_id INTEGER")
+        except sqlite3.OperationalError:
+            pass
 
         # Handicap settings — configurable calculation parameters
         conn.execute(
@@ -2272,6 +2276,15 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_entry_type ON acct_transactions(entry_type)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_status ON acct_transactions(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_acct_txn_source_ref ON acct_transactions(source_ref)")
+
+        # ── Identity FK: customer_id on acct_transactions ────────────
+        try:
+            conn.execute("ALTER TABLE acct_transactions ADD COLUMN customer_id INTEGER")
+        except sqlite3.OperationalError:
+            pass
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_txn_customer_id ON acct_transactions(customer_id)"
+        )
 
         # ── Order-level GoDaddy columns ─────────────────────────────
         for col, col_type in [
@@ -2862,6 +2875,11 @@ def init_db(db_path: str | Path | None = None) -> None:
         # created.  On fresh databases this is a no-op.
         _backfill_customer_ids(conn)
 
+        # Backfill customer_id FK on acct_transactions and handicap_player_links
+        # so direct joins work without string-matching on customer names.
+        _backfill_customer_id_on_acct_transactions(conn)
+        _backfill_customer_id_on_player_links(conn)
+
         logger.info("Database initialized at %s", db_path or DB_PATH)
 
 
@@ -3416,6 +3434,70 @@ def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
     conn.commit()
     if updated:
         logger.info("Backfilled customer_id for %d item rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_acct_transactions(conn: sqlite3.Connection) -> int:
+    """Populate customer_id on acct_transactions rows that have a customer name but no FK.
+
+    Uses _lookup_customer_id (5-step cascade) so the backfill works even for
+    customers that predate the identity unification.  Safe to call repeatedly.
+    """
+    rows = conn.execute(
+        """SELECT DISTINCT customer FROM acct_transactions
+           WHERE customer_id IS NULL
+             AND customer IS NOT NULL AND customer != ''
+             AND entry_type IS NOT NULL"""
+    ).fetchall()
+
+    if not rows:
+        return 0
+
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, row["customer"], None)
+        if cid is not None:
+            cur = conn.execute(
+                """UPDATE acct_transactions SET customer_id = ?
+                   WHERE customer_id IS NULL AND customer = ?""",
+                (cid, row["customer"]),
+            )
+            updated += cur.rowcount
+
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d acct_transactions rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_player_links(conn: sqlite3.Connection) -> int:
+    """Populate customer_id on handicap_player_links rows that lack it.
+
+    Resolves via _lookup_customer_id using the linked customer_name.
+    """
+    rows = conn.execute(
+        """SELECT player_name, customer_name FROM handicap_player_links
+           WHERE customer_id IS NULL
+             AND customer_name IS NOT NULL AND customer_name != ''"""
+    ).fetchall()
+
+    if not rows:
+        return 0
+
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, row["customer_name"], None)
+        if cid is not None:
+            cur = conn.execute(
+                """UPDATE handicap_player_links SET customer_id = ?
+                   WHERE player_name = ? AND customer_id IS NULL""",
+                (cid, row["player_name"]),
+            )
+            updated += cur.rowcount
+
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d handicap_player_links rows", updated)
     return updated
 
 
@@ -5977,90 +6059,31 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
             source_event_name = orig.get("item_name", "")
 
             if orig_price > 0:
-                # Look up event IDs and TGF entity
-                source_event_row = conn.execute(
-                    "SELECT id FROM events WHERE item_name = ? COLLATE NOCASE",
-                    (source_event_name,),
-                ).fetchone()
-                target_event_row = conn.execute(
-                    "SELECT id FROM events WHERE item_name = ? COLLATE NOCASE",
-                    (target_event_name,),
-                ).fetchone()
-                tgf_entity = conn.execute(
-                    "SELECT id FROM acct_entities WHERE short_name = 'TGF'"
-                ).fetchone()
-                tgf_id = tgf_entity["id"] if tgf_entity else 1
-
-                source_event_db_id = source_event_row["id"] if source_event_row else None
-                target_event_db_id = target_event_row["id"] if target_event_row else None
-
-                cat_out = conn.execute(
-                    "SELECT id FROM acct_categories WHERE name = 'Credit Transfer Out'"
-                ).fetchone()
-                cat_in = conn.execute(
-                    "SELECT id FROM acct_categories WHERE name = 'Credit Transfer In'"
-                ).fetchone()
-                cat_out_id = cat_out["id"] if cat_out else None
-                cat_in_id = cat_in["id"] if cat_in else None
-
                 alloc_date = orig.get("order_date") or ""
+                customer = orig.get("customer", "")
 
-                # 1. Contra-revenue on source event
-                source_ref_out = f"xfer-{item_id}-out"
-                if not conn.execute("SELECT id FROM acct_transactions WHERE source_ref = ?", (source_ref_out,)).fetchone():
-                    cur_out = conn.execute(
-                        """INSERT INTO acct_transactions
-                           (date, description, total_amount, type, source, source_ref)
-                           VALUES (?, ?, ?, 'expense', 'credit_transfer', ?)""",
-                        (alloc_date,
-                         f"Credit transfer out: {orig.get('customer', '')} from {source_event_name}",
-                         orig_price, source_ref_out),
-                    )
-                    conn.execute(
-                        "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo, event_id) VALUES (?, ?, ?, ?, ?, ?)",
-                        (cur_out.lastrowid, tgf_id, cat_out_id, orig_price,
-                         f"Credit transfer to {target_event_name}", source_event_db_id),
-                    )
-
-                # 2. Revenue on target event
-                source_ref_in = f"xfer-{item_id}-in"
-                if not conn.execute("SELECT id FROM acct_transactions WHERE source_ref = ?", (source_ref_in,)).fetchone():
-                    cur_in = conn.execute(
-                        """INSERT INTO acct_transactions
-                           (date, description, total_amount, type, source, source_ref)
-                           VALUES (?, ?, ?, 'income', 'credit_transfer', ?)""",
-                        (alloc_date,
-                         f"Credit transfer in: {orig.get('customer', '')} to {target_event_name}",
-                         orig_price, source_ref_in),
-                    )
-                    conn.execute(
-                        "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo, event_id) VALUES (?, ?, ?, ?, ?, ?)",
-                        (cur_in.lastrowid, tgf_id, cat_in_id, orig_price,
-                         f"Credit transfer from {source_event_name}", target_event_db_id),
-                    )
-
-                # 3. Create allocation for new item at target event
+                # Allocation for the new item at target event
                 new_item_for_alloc = dict(new_values)
                 new_item_for_alloc["id"] = new_id
                 _create_allocation_for_item(
                     new_item_for_alloc, conn,
                     payment_method="credit_transfer",
                     override_price=orig_price,
-                    create_txn=False,  # we already created the txn above
+                    create_txn=False,
                 )
 
-                # 4. Flat acct_transactions entries for single-source-of-truth
+                # Flat ledger entries (single source of truth — no legacy splits)
                 _write_acct_entry(
                     conn,
                     item_id=item_id,
                     event_name=source_event_name,
-                    customer=orig.get("customer", ""),
+                    customer=customer,
                     order_id=orig.get("order_id", ""),
                     entry_type="contra",
                     category="transfer_out",
                     source="godaddy",
                     amount=orig_price,
-                    description=f"Credit transfer out: {orig.get('customer', '')} from {source_event_name} to {target_event_name}",
+                    description=f"Credit transfer out: {customer} from {source_event_name} to {target_event_name}",
                     account="TGF Checking",
                     source_ref=f"xfer-flat-{item_id}-out",
                     date=alloc_date,
@@ -6069,12 +6092,12 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
                     conn,
                     item_id=new_id,
                     event_name=target_event_name,
-                    customer=orig.get("customer", ""),
+                    customer=customer,
                     entry_type="income",
                     category="transfer_in",
                     source="godaddy",
                     amount=orig_price,
-                    description=f"Credit transfer in: {orig.get('customer', '')} to {target_event_name} from {source_event_name}",
+                    description=f"Credit transfer in: {customer} to {target_event_name} from {source_event_name}",
                     account="TGF Checking",
                     source_ref=f"xfer-flat-{item_id}-in",
                     date=alloc_date,
@@ -7927,9 +7950,10 @@ def relink_all_unlinked_players(db_path: str | Path | None = None) -> dict:
             pname = row["player_name"]
             customer_name = _match_customer_name(conn, pname)
             if customer_name:
+                cid = _lookup_customer_id(conn, customer_name, None)
                 conn.execute(
-                    "UPDATE handicap_player_links SET customer_name = ? WHERE player_name = ?",
-                    (customer_name, pname),
+                    "UPDATE handicap_player_links SET customer_name = ?, customer_id = ? WHERE player_name = ?",
+                    (customer_name, cid, pname),
                 )
                 linked += 1
 
@@ -7994,11 +8018,12 @@ def import_handicap_rounds(rounds: list[dict],
                             customer_name = _match_customer_by_email(conn, player_email, player_name)
                         if not customer_name:
                             customer_name = _match_customer_name(conn, player_name)
+                        cid = _lookup_customer_id(conn, customer_name, player_email) if customer_name else None
                         conn.execute(
-                            """INSERT INTO handicap_player_links (player_name, customer_name)
-                               VALUES (?, ?)
+                            """INSERT INTO handicap_player_links (player_name, customer_name, customer_id)
+                               VALUES (?, ?, ?)
                                ON CONFLICT(player_name) DO NOTHING""",
-                            (player_name, customer_name),
+                            (player_name, customer_name, cid),
                         )
                         if customer_name:
                             matched += 1
@@ -8009,9 +8034,10 @@ def import_handicap_rounds(rounds: list[dict],
                         if not customer_name:
                             customer_name = _match_customer_name(conn, player_name)
                         if customer_name:
+                            cid = _lookup_customer_id(conn, customer_name, player_email)
                             conn.execute(
-                                "UPDATE handicap_player_links SET customer_name = ? WHERE player_name = ?",
-                                (customer_name, player_name),
+                                "UPDATE handicap_player_links SET customer_name = ?, customer_id = ? WHERE player_name = ?",
+                                (customer_name, cid, player_name),
                             )
                             matched += 1
 
@@ -9632,7 +9658,7 @@ def get_acct_transaction(txn_id: int, db_path: str | Path | None = None) -> dict
     return txn
 
 
-def create_acct_transaction(date: str, description: str, total_amount: float,
+def _create_acct_ledger_entry(date: str, description: str, total_amount: float,
                             txn_type: str, account_id: int | None = None,
                             transfer_to_account_id: int | None = None,
                             notes: str | None = None, receipt_path: str | None = None,
@@ -10103,7 +10129,7 @@ def import_acct_csv(rows: list[dict], account_id: int, default_entity_id: int,
                 continue
 
             # Create new transfer with account linkage
-            create_acct_transaction(
+            _create_acct_ledger_entry(
                 date=row["date"],
                 description=row["description"],
                 total_amount=amount,
@@ -10116,7 +10142,7 @@ def import_acct_csv(rows: list[dict], account_id: int, default_entity_id: int,
                 db_path=db_path,
             )
         else:
-            create_acct_transaction(
+            _create_acct_ledger_entry(
                 date=row["date"],
                 description=row["description"],
                 total_amount=amount,
@@ -10235,7 +10261,7 @@ def process_acct_recurring(db_path: str | Path | None = None) -> int:
         ).fetchall()
 
     for rec in due:
-        create_acct_transaction(
+        _create_acct_ledger_entry(
             date=rec["next_date"],
             description=rec["description"],
             total_amount=rec["amount"],
@@ -10988,6 +11014,7 @@ def _write_acct_entry(
     item_id: int | None = None,
     event_name: str = "",
     customer: str = "",
+    customer_id: int | None = None,
     order_id: str = "",
     entry_type: str,
     category: str,
@@ -11016,6 +11043,10 @@ def _write_acct_entry(
         if existing:
             return None
 
+    # Resolve customer_id via lookup if not provided
+    if customer_id is None and customer:
+        customer_id = _lookup_customer_id(conn, customer, None)
+
     # Map entry_type to legacy 'type' column for backward compat
     legacy_type_map = {"income": "income", "expense": "expense",
                        "contra": "expense", "liability": "expense"}
@@ -11024,11 +11055,11 @@ def _write_acct_entry(
     cur = conn.execute(
         """INSERT INTO acct_transactions
            (date, description, total_amount, type, source, source_ref,
-            item_id, event_name, customer, order_id, entry_type, category,
+            item_id, event_name, customer, customer_id, order_id, entry_type, category,
             amount, account, status, net_deposit, merchant_fee)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)""",
         (date, description, abs(amount), legacy_type, source, source_ref,
-         item_id, event_name, customer, order_id, entry_type, category,
+         item_id, event_name, customer, customer_id, order_id, entry_type, category,
          amount, account, net_deposit, merchant_fee),
     )
     return cur.lastrowid

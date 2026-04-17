@@ -1,5 +1,20 @@
-window.TGF_VERSION = "2.4.0";
+window.TGF_VERSION = "2.5.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.5.0",
+    date: "2026-04-17",
+    title: "Platform Identity FKs, Payout Budget Reconciliation & Legacy Cleanup",
+    changes: [
+      "Payouts Made vs. Budget section on Event Financial tab — compares actual prize payouts against GAMES matrix budget (HIO, Included, NET, GROSS) with variance indicator",
+      "customer_id FK added to acct_transactions — enables direct joins for event financial queries without string-matching on customer names",
+      "customer_id FK added to handicap_player_links — Golf Genius player rows now carry direct identity link to customers table",
+      "Backfill logic populates customer_id on existing acct_transactions and handicap_player_links rows using 5-step customer resolution cascade",
+      "_write_acct_entry() now resolves and writes customer_id automatically on every new ledger entry",
+      "Handicap import and relink routines now populate customer_id alongside customer_name",
+      "Removed legacy acct_splits writes from transfer_item() — transfers already write flat acct_transactions entries via _write_acct_entry()",
+      "Renamed create_acct_transaction() to _create_acct_ledger_entry() — clarifies it is the accounting-ledger path (bank imports, recurring entries), not the event financial model path",
+    ],
+  },
   {
     version: "2.4.0",
     date: "2026-04-14",
