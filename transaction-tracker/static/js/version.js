@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.7.0";
+window.TGF_VERSION = "2.7.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.7.1",
+    date: "2026-04-17",
+    title: "Fix account pill filtering for expense rows",
+    changes: [
+      "expense_transactions have no account_id FK — only account_name text and account_last4",
+      "When an account pill is selected, now matches expense rows by last_four (preferred) or account name, so Chase/Venmo/etc. rows filter correctly",
+    ],
+  },
   {
     version: "2.7.0",
     date: "2026-04-17",
