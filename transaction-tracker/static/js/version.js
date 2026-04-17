@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.6.1";
+window.TGF_VERSION = "2.6.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.2",
+    date: "2026-04-17",
+    title: "Batch Internal Transfer Recording",
+    changes: [
+      "Batch deposit selection — checkboxes on every deposit row in the Match Queue, with a Select All button",
+      "Batch transfer bar — appears above the deposit list when deposits are checked; shows From→To account dropdowns and a Record All button",
+      "Auto-detects destination account from deposit descriptions when selecting in batch (VENMO→Venmo, PAYPAL→PayPal, etc.)",
+      "Processing progress indicator while recording transfers in sequence",
+    ],
+  },
   {
     version: "2.6.1",
     date: "2026-04-17",
