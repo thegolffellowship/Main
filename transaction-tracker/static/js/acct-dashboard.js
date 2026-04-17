@@ -162,37 +162,239 @@ function renderRecentTransactions(txns) {
 
 function renderBookkeeperBanner(stats) {
     const banner = $('#bookkeeper-banner');
-    if (!stats || stats.total === 0) {
+    const pending = (stats?.pending_expenses || 0) + (stats?.uncategorized || 0);
+    if (!stats || (stats.total === 0 && pending === 0)) {
         banner.style.display = 'none';
         return;
     }
     banner.style.display = 'flex';
     const statusEl = $('#bookkeeper-status');
-    if (stats.uncategorized === 0) {
-        statusEl.innerHTML = `<span class="acct-positive">All ${stats.total} transactions categorized</span>`;
-        $('#btn-ai-categorize').style.display = 'none';
+    const btn = $('#btn-ai-categorize');
+    if (pending === 0) {
+        statusEl.innerHTML = `<span class="acct-positive">All transactions categorized ✓</span>`;
+        btn.style.display = 'none';
         $('#btn-review-queue').style.display = 'none';
     } else {
-        statusEl.innerHTML = `<span class="acct-negative">${stats.uncategorized} of ${stats.total} transactions need categorization</span> (${stats.pct}% done)`;
-        $('#btn-ai-categorize').style.display = '';
+        const parts = [];
+        if (stats.pending_expenses > 0) parts.push(`${stats.pending_expenses} pending`);
+        if (stats.uncategorized > 0) parts.push(`${stats.uncategorized} uncategorized`);
+        statusEl.innerHTML = `<span class="acct-negative">${parts.join(' · ')} — needs review</span>`;
+        btn.textContent = `Review Batch (${stats.pending_expenses || stats.uncategorized})`;
+        btn.style.display = '';
         $('#btn-review-queue').style.display = '';
     }
 }
 
+// ── Batch Categorization Preview ──────────────────────────────────────────
+
+const BATCH = { offset: 0, limit: 20, total: 0, categories: [], entities: [] };
+
+const CONF_BADGE = {
+    high:   { label: 'High',   bg: '#dcfce7', color: '#166534' },
+    medium: { label: 'Medium', bg: '#fef9c3', color: '#854d0e' },
+    rule:   { label: 'Rule',   bg: '#dbeafe', color: '#1e40af' },
+    ai:     { label: 'AI',     bg: '#f3e8ff', color: '#6b21a8' },
+    none:   { label: 'None',   bg: '#f3f4f6', color: '#6b7280' },
+};
+
 async function runAiCategorize() {
-    const btn = $('#btn-ai-categorize');
-    btn.disabled = true;
-    btn.textContent = 'Categorizing...';
+    await openBatchPreview(0);
+}
+
+async function openBatchPreview(offset = 0) {
+    const panel = $('#batch-preview-panel');
+    const list  = $('#batch-preview-list');
+    list.innerHTML = '<div style="padding:1.5rem; text-align:center; color:var(--text-muted);">Loading suggestions…</div>';
+    panel.style.display = '';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
     try {
-        const res = await api('/ai/bulk-categorize', { method: 'POST' });
-        alert(`AI categorized ${res.updated} of ${res.total} transactions`);
+        const data = await api(`/ai/batch?limit=${BATCH.limit}&offset=${offset}`);
+        BATCH.offset     = offset;
+        BATCH.total      = data.total;
+        BATCH.categories = data.categories || [];
+        BATCH.entities   = data.entities   || [];
+        renderBatchPreview(data.items);
+        updateBatchControls();
+    } catch (e) {
+        list.innerHTML = `<div style="padding:1.5rem; color:var(--danger);">Error: ${e.message}</div>`;
+    }
+}
+
+function renderBatchPreview(items) {
+    const list = $('#batch-preview-list');
+
+    if (!items || !items.length) {
+        list.innerHTML = '<div style="padding:1.5rem; text-align:center; color:var(--text-muted);">No pending transactions — inbox is clear! 🎉</div>';
+        $('#btn-batch-approve').disabled = true;
+        return;
+    }
+
+    const catOpts = (selected) => {
+        const grouped = { income: [], expense: [] };
+        BATCH.categories.forEach(c => {
+            if (grouped[c.type]) grouped[c.type].push(c);
+        });
+        const makeGroup = (label, cats) => cats.length
+            ? `<optgroup label="${label}">${cats.map(c =>
+                `<option value="${c.name}" ${c.name === selected ? 'selected' : ''}>${c.name}</option>`
+              ).join('')}</optgroup>`
+            : '';
+        return `<option value="">— Category —</option>` +
+               makeGroup('Income', grouped.income) +
+               makeGroup('Expense', grouped.expense);
+    };
+
+    const entOpts = (selected) =>
+        BATCH.entities.map(e =>
+            `<option value="${e.short_name}" ${e.short_name === selected ? 'selected' : ''}>${e.short_name}</option>`
+        ).join('');
+
+    const srcBadge = (src) => {
+        const labels = { chase_alert: 'Chase', venmo: 'Venmo', receipt: 'Receipt' };
+        const colors = { chase_alert: '#1d4ed8', venmo: '#1e3a5f', receipt: '#047857' };
+        const label = labels[src] || src || 'Manual';
+        const bg    = colors[src] || '#6b7280';
+        return `<span style="font-size:0.7rem; padding:1px 6px; border-radius:9999px; background:${bg}; color:#fff; white-space:nowrap;">${label}</span>`;
+    };
+
+    const confBadge = (conf) => {
+        const b = CONF_BADGE[conf] || CONF_BADGE.none;
+        return `<span style="font-size:0.7rem; padding:1px 6px; border-radius:9999px; background:${b.bg}; color:${b.color}; white-space:nowrap;">${b.label}</span>`;
+    };
+
+    list.innerHTML = items.map((item, i) => {
+        const sugCat = item.suggestion?.category_name || '';
+        const sugEnt = item.suggestion?.entity_name   || '';
+        const conf   = item.suggestion?.confidence    || 'none';
+        const isDupe = item.is_duplicate;
+
+        return `<div class="batch-row" data-id="${item.id}" style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.65rem 1rem; border-bottom:1px solid var(--border); ${isDupe ? 'background:#fff7ed;' : ''}">
+            <div style="padding-top:2px; flex-shrink:0;">
+                <input type="checkbox" class="batch-chk" data-id="${item.id}" ${isDupe ? '' : 'checked'} style="width:16px; height:16px; cursor:pointer;">
+            </div>
+            <div style="flex:1; min-width:0;">
+                <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.3rem;">
+                    <span style="font-size:0.82rem; color:var(--text-muted);">${item.date || '—'}</span>
+                    ${srcBadge(item.source_type)}
+                    ${isDupe ? '<span style="font-size:0.7rem; padding:1px 6px; border-radius:9999px; background:#fef3c7; color:#92400e; white-space:nowrap;">⚠ Possible Duplicate</span>' : ''}
+                    ${confBadge(conf)}
+                </div>
+                <div style="font-weight:500; font-size:0.9rem; margin-bottom:0.35rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${item.merchant}">${item.merchant || '(unknown)'}</div>
+                ${item.notes ? `<div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.35rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${item.notes}</div>` : ''}
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <select class="batch-cat acct-select-sm" data-id="${item.id}" style="min-width:160px;">${catOpts(sugCat)}</select>
+                    <select class="batch-ent acct-select-sm" data-id="${item.id}" style="min-width:80px;"><option value="">— Entity —</option>${entOpts(sugEnt)}</select>
+                </div>
+            </div>
+            <div style="flex-shrink:0; text-align:right; min-width:60px;">
+                <span style="font-weight:600; font-size:0.9rem; color:${item.transaction_type === 'income' ? 'var(--success)' : 'var(--danger)'};">${fmtAmt(item.amount)}</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    bindBatchEvents();
+    updateApproveButton();
+}
+
+function fmtAmt(v) {
+    if (v == null) return '—';
+    return '$' + Math.abs(parseFloat(v)).toFixed(2);
+}
+
+function bindBatchEvents() {
+    const list = $('#batch-preview-list');
+
+    // Checkbox changes → update approve button count
+    list.querySelectorAll('.batch-chk').forEach(chk => {
+        chk.addEventListener('change', updateApproveButton);
+    });
+
+    // Select-all checkbox
+    const selectAll = $('#batch-select-all');
+    if (selectAll) {
+        selectAll.checked = false;
+        selectAll.onchange = () => {
+            list.querySelectorAll('.batch-chk').forEach(chk => {
+                const row = chk.closest('.batch-row');
+                const isDupe = row && row.style.background.includes('fff7ed');
+                if (!isDupe) chk.checked = selectAll.checked;
+            });
+            updateApproveButton();
+        };
+    }
+}
+
+function updateApproveButton() {
+    const checked = document.querySelectorAll('.batch-chk:checked').length;
+    const btn = $('#btn-batch-approve');
+    btn.disabled = checked === 0;
+    btn.textContent = `Approve Selected (${checked})`;
+}
+
+function updateBatchControls() {
+    const totalPages = Math.ceil(BATCH.total / BATCH.limit) || 1;
+    const currentPage = Math.floor(BATCH.offset / BATCH.limit) + 1;
+    $('#batch-preview-count').textContent = `${BATCH.total} pending`;
+    $('#batch-page-label').textContent     = `Page ${currentPage} of ${totalPages}`;
+    $('#btn-batch-prev').disabled = BATCH.offset === 0;
+    $('#btn-batch-next').disabled = BATCH.offset + BATCH.limit >= BATCH.total;
+}
+
+async function submitBatchApprove() {
+    const btn = $('#btn-batch-approve');
+    btn.disabled = true;
+    btn.textContent = 'Approving…';
+
+    const items = [];
+    document.querySelectorAll('.batch-row').forEach(row => {
+        const id  = parseInt(row.dataset.id);
+        const chk = row.querySelector('.batch-chk');
+        if (!chk?.checked) return;
+        const cat = row.querySelector('.batch-cat')?.value || '';
+        const ent = row.querySelector('.batch-ent')?.value || '';
+        items.push({ id, category_name: cat || null, entity_name: ent || null });
+    });
+
+    if (!items.length) return;
+
+    try {
+        const res = await api('/ai/batch-approve', { method: 'POST', body: { items } });
+        const msg = `✓ Approved ${res.approved}` +
+            (res.skipped ? `, skipped ${res.skipped}` : '') +
+            (res.errors?.length ? `, ${res.errors.length} errors` : '');
+        showToast(msg, 'success');
+
+        // Advance to next batch or close if done
+        const nextOffset = BATCH.offset; // stay on same page — approved rows are gone
+        const remaining  = BATCH.total - res.approved;
+        if (remaining <= 0) {
+            $('#batch-preview-panel').style.display = 'none';
+        } else {
+            await openBatchPreview(Math.min(nextOffset, Math.max(0, remaining - BATCH.limit)));
+        }
         loadDashboard();
     } catch (e) {
-        alert('AI categorization error: ' + e.message);
-    } finally {
+        showToast('Error: ' + e.message, 'error');
         btn.disabled = false;
-        btn.textContent = 'Auto-Categorize';
+        btn.textContent = `Approve Selected`;
     }
+}
+
+function showToast(msg, type = 'info') {
+    let t = document.getElementById('acct-toast');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'acct-toast';
+        t.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;padding:0.65rem 1rem;border-radius:6px;font-size:0.875rem;z-index:9999;max-width:320px;box-shadow:0 4px 12px rgba(0,0,0,.15);transition:opacity .3s;';
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.background = type === 'success' ? '#166534' : type === 'error' ? '#991b1b' : '#1e3a5f';
+    t.style.color = '#fff';
+    t.style.opacity = '1';
+    clearTimeout(t._hide);
+    t._hide = setTimeout(() => { t.style.opacity = '0'; }, 3500);
 }
 
 async function loadReviewQueue() {

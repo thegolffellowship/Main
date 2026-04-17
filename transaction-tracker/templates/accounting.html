@@ -90,12 +90,40 @@
                     <span id="bookkeeper-status"></span>
                 </div>
                 <div class="acct-bookkeeper-actions">
-                    <button class="btn btn-secondary btn-sm" id="btn-ai-categorize" title="AI auto-categorize all uncategorized transactions">
-                        Auto-Categorize
+                    <button class="btn btn-primary btn-sm" id="btn-ai-categorize" title="Review AI suggestions before committing — 20 at a time">
+                        Review Batch
                     </button>
                     <button class="btn btn-secondary btn-sm" id="btn-review-queue" title="Review uncategorized transactions">
                         Review Queue
                     </button>
+                </div>
+            </div>
+
+            <!-- Batch Categorization Preview Panel -->
+            <div id="batch-preview-panel" style="display:none; margin: 0 0 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow: hidden;">
+                <div style="display:flex; align-items:center; justify-content:space-between; padding: 0.75rem 1rem; background: var(--surface-alt); border-bottom: 1px solid var(--border);">
+                    <div style="display:flex; align-items:center; gap: 0.75rem;">
+                        <strong>Review &amp; Categorize</strong>
+                        <span id="batch-preview-count" style="font-size:0.8rem; color:var(--text-muted);"></span>
+                    </div>
+                    <div style="display:flex; gap: 0.5rem; align-items:center;">
+                        <button class="btn btn-sm btn-secondary" id="btn-batch-prev" title="Previous batch" disabled>&#8592; Prev</button>
+                        <span id="batch-page-label" style="font-size:0.8rem; color:var(--text-muted);"></span>
+                        <button class="btn btn-sm btn-secondary" id="btn-batch-next" title="Next batch">Next &#8594;</button>
+                        <button class="btn btn-sm btn-secondary" id="btn-batch-close" title="Close">&#10005;</button>
+                    </div>
+                </div>
+                <div id="batch-preview-list" style="max-height: 480px; overflow-y: auto;"></div>
+                <div style="display:flex; align-items:center; justify-content:space-between; padding: 0.75rem 1rem; border-top: 1px solid var(--border); background: var(--surface-alt);">
+                    <div style="font-size:0.82rem; color:var(--text-muted);">
+                        <label style="cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
+                            <input type="checkbox" id="batch-select-all"> Select all non-duplicate
+                        </label>
+                    </div>
+                    <div style="display:flex; gap: 0.5rem;">
+                        <button class="btn btn-sm btn-secondary" id="btn-batch-skip-all">Skip All</button>
+                        <button class="btn btn-sm btn-primary" id="btn-batch-approve" disabled>Approve Selected (0)</button>
+                    </div>
                 </div>
             </div>
 

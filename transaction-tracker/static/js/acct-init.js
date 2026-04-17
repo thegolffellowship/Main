@@ -193,6 +193,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadDashboard();
     });
 
+    // Batch preview panel controls
+    $('#btn-batch-close').addEventListener('click', () => {
+        $('#batch-preview-panel').style.display = 'none';
+    });
+    $('#btn-batch-approve').addEventListener('click', submitBatchApprove);
+    $('#btn-batch-skip-all').addEventListener('click', async () => {
+        const next = BATCH.offset + BATCH.limit;
+        if (next < BATCH.total) await openBatchPreview(next);
+        else $('#batch-preview-panel').style.display = 'none';
+    });
+    $('#btn-batch-prev').addEventListener('click', () => {
+        if (BATCH.offset > 0) openBatchPreview(Math.max(0, BATCH.offset - BATCH.limit));
+    });
+    $('#btn-batch-next').addEventListener('click', () => {
+        if (BATCH.offset + BATCH.limit < BATCH.total) openBatchPreview(BATCH.offset + BATCH.limit);
+    });
+
     // Transaction filters
     let _searchTimer;
     $('#txn-search').addEventListener('input', () => {

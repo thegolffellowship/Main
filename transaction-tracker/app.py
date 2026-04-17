@@ -201,6 +201,9 @@ from email_parser.database import (
     create_acct_keyword_rule,
     update_acct_keyword_rule,
     delete_acct_keyword_rule,
+    # Batch categorization preview + promotion
+    get_expense_batch_preview,
+    batch_approve_expenses,
     # TGF Payouts
     get_tgf_data,
     add_tgf_event,
@@ -5506,6 +5509,27 @@ def api_acct_ai_review_queue():
 def api_acct_ai_stats():
     """Return categorization coverage stats."""
     return jsonify(get_acct_categorization_stats())
+
+
+@app.route("/api/accounting/ai/batch")
+@require_role("admin")
+def api_acct_ai_batch():
+    """Return a batch of pending expense_transactions with AI suggestions pre-populated."""
+    limit = int(request.args.get("limit", 20))
+    offset = int(request.args.get("offset", 0))
+    return jsonify(get_expense_batch_preview(limit=limit, offset=offset))
+
+
+@app.route("/api/accounting/ai/batch-approve", methods=["POST"])
+@require_role("admin")
+def api_acct_ai_batch_approve():
+    """Approve and promote selected expense_transactions into the ledger."""
+    d = request.json or {}
+    items = d.get("items", [])
+    if not items:
+        return jsonify({"error": "items required"}), 400
+    result = batch_approve_expenses(items)
+    return jsonify(result)
 
 
 @app.route("/api/accounting/ai/bulk-categorize", methods=["POST"])
