@@ -245,25 +245,22 @@
                     </div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
                         <div>
-                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Entity</label>
+                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Business Entity <span style="font-weight:400; color:var(--text-muted);">(TGF / Personal)</span></label>
                             <select id="cem-entity" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
-                                <option value="">— Entity (optional) —</option>
+                                <option value="">— TGF or Personal? —</option>
                             </select>
                         </div>
                         <div>
-                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Account</label>
+                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Bank Account <span style="font-size:0.65rem; font-weight:400; color:var(--text-muted);">from import</span></label>
                             <select id="cem-account" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
-                                <option value="TGF Checking">TGF Checking</option>
-                                <option value="Venmo">Venmo</option>
-                                <option value="PayPal">PayPal</option>
-                                <option value="Zelle">Zelle</option>
-                                <option value="Other">Other</option>
+                                <option value="">— Select account —</option>
                             </select>
                         </div>
                     </div>
                     <div>
-                        <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Event <span style="font-weight:400; color:var(--text-muted);">(optional)</span></label>
-                        <input type="text" id="cem-event" placeholder="e.g. s9.5 Brackenridge" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
+                        <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Event <span style="font-weight:400; color:var(--text-muted);">(optional — links to existing event)</span></label>
+                        <input type="text" id="cem-event" placeholder="Type to search events…" list="cem-events-list" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
+                        <datalist id="cem-events-list"></datalist>
                     </div>
                     <div>
                         <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Notes <span style="font-weight:400; color:var(--text-muted);">(optional)</span></label>
@@ -437,7 +434,7 @@
                     const isChecked = selectedDeposits.has(d.id);
                     const rowBg = isChecked ? 'background:#eff6ff; border-left:3px solid #2563eb;' : isDismissed ? 'background:#f9fafb; opacity:0.7;' : isMatched ? 'background:#f0fdf4;' : '';
                     const dismissedTag = isDismissed ? ` <span style="font-size:0.65rem; color:#6b7280; background:#e5e7eb; border-radius:3px; padding:1px 4px;">${d.dismiss_reason || 'dismissed'}</span>` : '';
-                    return `<div class="match-row" onclick="selectDeposit(${d.id}, '${d.status}')" data-id="${d.id}" data-status="${d.status}" data-date="${d.deposit_date}" data-amount="${d.amount}" data-desc="${(d.description||'').replace(/"/g,'&quot;')}" style="grid-template-columns:20px 80px 1fr auto; ${rowBg}">
+                    return `<div class="match-row" onclick="selectDeposit(${d.id}, '${d.status}')" data-id="${d.id}" data-status="${d.status}" data-date="${d.deposit_date}" data-amount="${d.amount}" data-desc="${(d.description||'').replace(/"/g,'&quot;')}" data-account-id="${d.account_id}" data-account-name="${esc(d.account_name||'')}" style="grid-template-columns:20px 80px 1fr auto; ${rowBg}">
                         <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleDeposit(${d.id})" style="cursor:pointer; margin:0;">
                         <span>${d.deposit_date}</span>
                         <span class="desc"><span class="status-dot dot-${d.status}"></span>${esc(d.description || '')}${dismissedTag}</span>
@@ -576,17 +573,19 @@
 
     // ── Create Ledger Entry Modal ──────────────────────────────────────────
 
-    let _reconCats = null, _reconEnts = null;
+    let _reconCats = null, _reconEnts = null, _reconEvents = null;
     let _cemDepositId = null;
 
-    async function _loadCatsEnts() {
-        if (_reconCats) return;
-        const [cats, ents] = await Promise.all([
-            fetch('/api/acct/categories').then(r => r.json()).catch(() => []),
-            fetch('/api/acct/entities').then(r => r.json()).catch(() => []),
+    async function _loadModalData() {
+        if (_reconCats && _reconEnts && _reconEvents) return;
+        const [cats, ents, evts] = await Promise.all([
+            fetch('/api/accounting/categories').then(r => r.json()).catch(() => []),
+            fetch('/api/accounting/entities').then(r => r.json()).catch(() => []),
+            fetch('/api/events').then(r => r.json()).catch(() => []),
         ]);
-        _reconCats = Array.isArray(cats) ? cats : [];
-        _reconEnts = Array.isArray(ents) ? ents : [];
+        _reconCats   = Array.isArray(cats) ? cats : [];
+        _reconEnts   = Array.isArray(ents) ? ents : [];
+        _reconEvents = Array.isArray(evts) ? evts : [];
     }
 
     function cemFilterCategories() {
@@ -594,13 +593,24 @@
         const catSel = document.getElementById('cem-category');
         const prev = catSel.value;
         catSel.innerHTML = '<option value="">— Category (optional) —</option>';
-        (_reconCats || []).forEach(c => {
-            if (!typeFilter || c.type === typeFilter || c.type === 'both') {
-                const opt = document.createElement('option');
-                opt.value = c.name; opt.textContent = c.name;
-                catSel.appendChild(opt);
-            }
-        });
+        const filtered = (_reconCats || []).filter(c =>
+            !typeFilter || typeFilter === 'transfer' ||
+            c.type === typeFilter || c.type === 'both'
+        );
+        // Group by type for optgroups
+        const income = filtered.filter(c => c.type === 'income');
+        const expense = filtered.filter(c => c.type === 'expense');
+        const other = filtered.filter(c => c.type !== 'income' && c.type !== 'expense');
+        const addGroup = (label, arr) => {
+            if (!arr.length) return;
+            const grp = document.createElement('optgroup');
+            grp.label = label;
+            arr.forEach(c => { const o = document.createElement('option'); o.value = c.name; o.textContent = c.name; grp.appendChild(o); });
+            catSel.appendChild(grp);
+        };
+        if (typeFilter === 'income') addGroup('Income', income);
+        else if (typeFilter === 'expense') addGroup('Expense', expense);
+        else { addGroup('Income', income); addGroup('Expense', expense); addGroup('Other', other); }
         if (prev) catSel.value = prev;
     }
 
@@ -611,9 +621,11 @@
 
         // Pre-populate from deposit row data-attributes
         const depRow = document.querySelector(`#deposit-list .match-row[data-id="${depositId}"]`);
-        const depDate   = depRow?.dataset?.date || '';
-        const depAmount = parseFloat(depRow?.dataset?.amount || '0');
-        const depDesc   = depRow?.dataset?.desc || '';
+        const depDate      = depRow?.dataset?.date || '';
+        const depAmount    = parseFloat(depRow?.dataset?.amount || '0');
+        const depDesc      = depRow?.dataset?.desc || '';
+        const depAccountId = parseInt(depRow?.dataset?.accountId || '0');
+        const depAccountName = depRow?.dataset?.accountName || '';
 
         document.getElementById('cem-date').value    = depDate;
         document.getElementById('cem-amount').value  = Math.abs(depAmount).toFixed(2);
@@ -625,29 +637,51 @@
         // Deposit info banner
         const sign = depAmount >= 0 ? '+' : '-';
         document.getElementById('cem-deposit-banner').innerHTML =
-            `<strong>From bank deposit:</strong> ${depDate} — ${esc(depDesc)} &nbsp;|&nbsp; <strong>${sign}$${Math.abs(depAmount).toFixed(2)}</strong>`;
+            `<strong>Bank deposit:</strong> ${depDate} — ${esc(depDesc)} &nbsp;|&nbsp; <strong>${sign}$${Math.abs(depAmount).toFixed(2)}</strong>` +
+            (depAccountName ? ` &nbsp;via <strong>${esc(depAccountName)}</strong>` : '');
 
-        await _loadCatsEnts();
+        await _loadModalData();
 
-        // Populate entity dropdown
+        // Populate entity dropdown from acct_entities table
         const entSel = document.getElementById('cem-entity');
-        entSel.innerHTML = '<option value="">— Entity (optional) —</option>';
+        entSel.innerHTML = '<option value="">— TGF or Personal? —</option>';
         (_reconEnts || []).forEach(e => {
             const opt = document.createElement('option');
-            opt.value = e.short_name; opt.textContent = e.short_name;
+            opt.value = e.short_name;
+            opt.textContent = `${e.short_name}${e.name && e.name !== e.short_name ? ' — ' + e.name : ''}`;
             entSel.appendChild(opt);
         });
+        // Default to first entity (usually TGF)
+        if (_reconEnts.length) entSel.value = _reconEnts[0].short_name;
 
-        // Populate category dropdown filtered by type
+        // Populate categories filtered by type
         cemFilterCategories();
 
-        // Account: guess from deposit description
-        const descUp = depDesc.toUpperCase();
+        // Account dropdown from bank_accounts table (already loaded as `accounts`)
         const acctSel = document.getElementById('cem-account');
-        if (descUp.includes('VENMO')) acctSel.value = 'Venmo';
-        else if (descUp.includes('PAYPAL')) acctSel.value = 'PayPal';
-        else if (descUp.includes('ZELLE')) acctSel.value = 'Zelle';
-        else acctSel.value = 'TGF Checking';
+        acctSel.innerHTML = '<option value="">— Select account —</option>';
+        (accounts || []).forEach(a => {
+            const opt = document.createElement('option');
+            opt.value = a.name;
+            opt.textContent = a.last_four ? `${a.name} ··${a.last_four}` : a.name;
+            opt.dataset.accountId = a.id;
+            acctSel.appendChild(opt);
+        });
+        // Pre-select from deposit's account
+        if (depAccountName) acctSel.value = depAccountName;
+
+        // Events datalist from events table
+        const dl = document.getElementById('cem-events-list');
+        dl.innerHTML = '';
+        (_reconEvents || [])
+            .filter(e => e.name && !e.name.startsWith('_'))
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+            .forEach(e => {
+                const opt = document.createElement('option');
+                opt.value = e.name;
+                if (e.date) opt.dataset.date = e.date;
+                dl.appendChild(opt);
+            });
     }
 
     function closeCreateModal() {

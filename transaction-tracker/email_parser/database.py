@@ -15414,7 +15414,7 @@ def get_bank_deposits(account_id: int | None = None, status: str | None = None,
                        GROUP_CONCAT(rm.acct_transaction_id) as matched_txn_ids,
                        GROUP_CONCAT(rm.match_confidence) as match_confidences
                 FROM bank_deposits d
-                JOIN acct_accounts ba ON ba.id = d.account_id
+                JOIN bank_accounts ba ON ba.id = d.account_id
                 LEFT JOIN reconciliation_matches rm ON rm.bank_deposit_id = d.id
                 {where}
                 GROUP BY d.id

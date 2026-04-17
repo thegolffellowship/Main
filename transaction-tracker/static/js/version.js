@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.6.3";
+window.TGF_VERSION = "2.6.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.4",
+    date: "2026-04-17",
+    title: "Ledger Entry modal — real DB connections for all fields",
+    changes: [
+      "Category dropdown now pulls from acct_categories table (was calling wrong URL /api/acct/categories instead of /api/accounting/categories)",
+      "Business Entity field now pulls from acct_entities table; labeled 'Business Entity (TGF / Personal)' for clarity; defaults to first entity (TGF)",
+      "Bank Account dropdown populated from bank_accounts table via already-loaded accounts data; pre-selects the account the deposit was imported to",
+      "Event field is now a browser datalist autocomplete sourced from the events table — type to search all existing events",
+      "Category dropdown groups into Income / Expense optgroups filtered by the selected Type",
+      "Fixed get_bank_deposits() SQL join: was incorrectly joining to acct_accounts instead of bank_accounts — deposit account names now resolve correctly",
+    ],
+  },
   {
     version: "2.6.3",
     date: "2026-04-17",
