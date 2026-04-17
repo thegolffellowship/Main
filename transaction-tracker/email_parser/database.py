@@ -12675,7 +12675,10 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
                     transaction_type=excluded.transaction_type, category=excluded.category,
                     entity=excluded.entity, event_name=excluded.event_name,
                     customer_id=excluded.customer_id, confidence=excluded.confidence,
-                    review_status=excluded.review_status, notes=excluded.notes,
+                    review_status=CASE WHEN expense_transactions.review_status IN ('ignored','approved','corrected')
+                                       THEN expense_transactions.review_status
+                                       ELSE excluded.review_status END,
+                    notes=excluded.notes,
                     raw_extract=excluded.raw_extract""",
                 (email_uid, data.get("source_type"), data.get("merchant"),
                  data.get("amount"), data.get("transaction_date"),
@@ -12709,7 +12712,9 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
                 """UPDATE expense_transactions SET
                     account_last4=?, account_name=?, transaction_type=?, category=?,
                     entity=?, event_name=?, customer_id=?, confidence=?,
-                    review_status=?, notes=?, raw_extract=?
+                    review_status=CASE WHEN review_status IN ('ignored','approved','corrected')
+                                       THEN review_status ELSE ? END,
+                    notes=?, raw_extract=?
                    WHERE id = ?""",
                 (data.get("account_last4"), data.get("account_name"),
                  data.get("transaction_type", "expense"), data.get("category"),
