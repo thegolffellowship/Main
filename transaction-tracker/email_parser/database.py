@@ -1078,6 +1078,37 @@ def _migrate_seed_customer_roles(conn: sqlite3.Connection) -> None:
     logger.info("first_timer_ever backfill: %d set to FALSE (played), %d defaulted to TRUE", updated, defaulted)
 
 
+def _migrate_dedup_expense_transactions(conn: sqlite3.Connection) -> None:
+    """Remove duplicate expense_transactions rows.
+
+    Two duplicate sources:
+    1. Same email processed twice with different UIDs → same merchant/amount/date
+    2. NULL email_uid rows where ON CONFLICT(email_uid) never fired
+
+    Keeps the row with the highest id (most recent) for each
+    (source_type, merchant, amount, transaction_date) group.
+    Idempotent — safe to run on every startup.
+    """
+    dupes = conn.execute(
+        """SELECT MIN(id) as drop_id
+           FROM expense_transactions
+           GROUP BY source_type,
+                    LOWER(COALESCE(merchant, '')),
+                    amount,
+                    transaction_date
+           HAVING COUNT(*) > 1"""
+    ).fetchall()
+    if not dupes:
+        return
+    drop_ids = [r["drop_id"] for r in dupes]
+    conn.executemany(
+        "DELETE FROM expense_transactions WHERE id = ?",
+        [(i,) for i in drop_ids],
+    )
+    conn.commit()
+    logger.info("Removed %d duplicate expense_transactions rows", len(drop_ids))
+
+
 def _migrate_wire_payouts_to_ledger(conn: sqlite3.Connection) -> None:
     """Step 3 migration: wire tgf_payouts into the acct_transactions ledger.
 
@@ -2045,6 +2076,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_wire_payouts_to_ledger(conn)
         except Exception as e:
             logger.warning("Payouts-to-ledger migration failed: %s", e)
+
+        # Remove duplicate expense_transactions rows
+        try:
+            _migrate_dedup_expense_transactions(conn)
+        except Exception as e:
+            logger.warning("Expense transaction dedup migration failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
@@ -9617,8 +9654,28 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
                     "suggestion": suggestion,
                 })
 
+        # --- Cross-table dedup: suppress expense rows already in acct_transactions ---
+        # Build a set of (date, amount, source) fingerprints from acct side
+        acct_fingerprints = set()
+        for t in acct_txns:
+            acct_fingerprints.add((
+                t.get("date") or "",
+                round(float(t.get("total_amount") or 0), 2),
+                (t.get("source") or "").lower(),
+            ))
+        deduped_exp = []
+        for t in exp_txns:
+            fp = (
+                t.get("date") or "",
+                round(float(t.get("total_amount") or 0), 2),
+                (t.get("source") or "").lower(),
+            )
+            if fp not in acct_fingerprints:
+                deduped_exp.append(t)
+        exp_total = len(deduped_exp)
+
         # --- Merge and paginate ---
-        combined = acct_txns + exp_txns
+        combined = acct_txns + deduped_exp
         combined.sort(key=lambda t: (t.get("date") or "", t.get("id") or ""), reverse=True)
         total = acct_total + exp_total
         page = combined[offset:offset + limit]
@@ -12554,24 +12611,89 @@ def migrate_item_to_order_entries(db_path: str | Path | None = None) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> dict:
-    """Insert or update an expense transaction. Returns the saved record."""
+    """Insert or update an expense transaction. Returns the saved record.
+
+    Dedup strategy (in priority order):
+    1. email_uid match — exact ON CONFLICT upsert
+    2. Content match — (source_type, merchant, amount, transaction_date) already exists
+       → update existing row so the same real-world transaction never appears twice
+    3. Insert new row
+    """
     with _connect(db_path) as conn:
+        email_uid = data.get("email_uid")
+
+        # Try email_uid upsert when uid is present
+        if email_uid is not None:
+            conn.execute(
+                """INSERT INTO expense_transactions
+                   (email_uid, source_type, merchant, amount, transaction_date,
+                    account_last4, account_name, transaction_type, category, entity,
+                    event_name, customer_id, confidence, review_status, notes, raw_extract)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(email_uid) DO UPDATE SET
+                    merchant=excluded.merchant, amount=excluded.amount,
+                    transaction_date=excluded.transaction_date,
+                    account_last4=excluded.account_last4, account_name=excluded.account_name,
+                    transaction_type=excluded.transaction_type, category=excluded.category,
+                    entity=excluded.entity, event_name=excluded.event_name,
+                    customer_id=excluded.customer_id, confidence=excluded.confidence,
+                    review_status=excluded.review_status, notes=excluded.notes,
+                    raw_extract=excluded.raw_extract""",
+                (email_uid, data.get("source_type"), data.get("merchant"),
+                 data.get("amount"), data.get("transaction_date"),
+                 data.get("account_last4"), data.get("account_name"),
+                 data.get("transaction_type", "expense"), data.get("category"),
+                 data.get("entity", "TGF"), data.get("event_name"),
+                 data.get("customer_id"), data.get("confidence", 0),
+                 data.get("review_status", "pending"), data.get("notes"),
+                 data.get("raw_extract")),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT * FROM expense_transactions WHERE email_uid = ?", (email_uid,)
+            ).fetchone()
+            return dict(row) if row else data
+
+        # No email_uid — check content-based dedup before inserting
+        existing = conn.execute(
+            """SELECT id FROM expense_transactions
+               WHERE source_type = ?
+                 AND LOWER(COALESCE(merchant, '')) = LOWER(COALESCE(?, ''))
+                 AND amount = ?
+                 AND transaction_date = ?
+               LIMIT 1""",
+            (data.get("source_type"), data.get("merchant"),
+             data.get("amount"), data.get("transaction_date")),
+        ).fetchone()
+
+        if existing:
+            conn.execute(
+                """UPDATE expense_transactions SET
+                    account_last4=?, account_name=?, transaction_type=?, category=?,
+                    entity=?, event_name=?, customer_id=?, confidence=?,
+                    review_status=?, notes=?, raw_extract=?
+                   WHERE id = ?""",
+                (data.get("account_last4"), data.get("account_name"),
+                 data.get("transaction_type", "expense"), data.get("category"),
+                 data.get("entity", "TGF"), data.get("event_name"),
+                 data.get("customer_id"), data.get("confidence", 0),
+                 data.get("review_status", "pending"), data.get("notes"),
+                 data.get("raw_extract"), existing["id"]),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT * FROM expense_transactions WHERE id = ?", (existing["id"],)
+            ).fetchone()
+            return dict(row) if row else data
+
+        # Genuinely new record
         conn.execute(
             """INSERT INTO expense_transactions
                (email_uid, source_type, merchant, amount, transaction_date,
                 account_last4, account_name, transaction_type, category, entity,
                 event_name, customer_id, confidence, review_status, notes, raw_extract)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(email_uid) DO UPDATE SET
-                merchant=excluded.merchant, amount=excluded.amount,
-                transaction_date=excluded.transaction_date,
-                account_last4=excluded.account_last4, account_name=excluded.account_name,
-                transaction_type=excluded.transaction_type, category=excluded.category,
-                entity=excluded.entity, event_name=excluded.event_name,
-                customer_id=excluded.customer_id, confidence=excluded.confidence,
-                review_status=excluded.review_status, notes=excluded.notes,
-                raw_extract=excluded.raw_extract""",
-            (data.get("email_uid"), data.get("source_type"), data.get("merchant"),
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (email_uid, data.get("source_type"), data.get("merchant"),
              data.get("amount"), data.get("transaction_date"),
              data.get("account_last4"), data.get("account_name"),
              data.get("transaction_type", "expense"), data.get("category"),
@@ -12582,8 +12704,7 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
         )
         conn.commit()
         row = conn.execute(
-            "SELECT * FROM expense_transactions WHERE email_uid = ?",
-            (data.get("email_uid"),),
+            "SELECT * FROM expense_transactions ORDER BY id DESC LIMIT 1"
         ).fetchone()
     return dict(row) if row else data
 
