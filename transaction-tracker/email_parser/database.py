@@ -12648,6 +12648,38 @@ def migrate_item_to_order_entries(db_path: str | Path | None = None) -> dict:
 # Expense Transactions & Action Items CRUD
 # ═══════════════════════════════════════════════════════════════════════════
 
+def get_blocked_merchants(db_path: str | Path | None = None) -> list[str]:
+    """Return list of lower-cased merchant names that are permanently blocked."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = 'expense_blocked_merchants'"
+        ).fetchone()
+    if not row:
+        return []
+    try:
+        return json.loads(row["value"]) or []
+    except Exception:
+        return []
+
+
+def block_merchant(merchant: str, db_path: str | Path | None = None) -> list[str]:
+    """Add merchant to the permanent block list. Returns updated list."""
+    normalized = merchant.strip().lower()
+    if not normalized:
+        return get_blocked_merchants(db_path)
+    blocked = get_blocked_merchants(db_path)
+    if normalized not in blocked:
+        blocked.append(normalized)
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO app_settings (key, value) VALUES ('expense_blocked_merchants', ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+            (json.dumps(blocked),),
+        )
+        conn.commit()
+    return blocked
+
+
 def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> dict:
     """Insert or update an expense transaction. Returns the saved record.
 
@@ -12657,6 +12689,11 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
        → update existing row so the same real-world transaction never appears twice
     3. Insert new row
     """
+    # Auto-ignore blocked merchants so they never surface as pending
+    merchant_name = (data.get("merchant") or "").strip().lower()
+    if merchant_name and merchant_name in get_blocked_merchants(db_path):
+        data = {**data, "review_status": "ignored"}
+
     with _connect(db_path) as conn:
         email_uid = data.get("email_uid")
 
@@ -15456,10 +15493,18 @@ def get_match_suggestions(bank_deposit_id: int,
         is_godaddy = "GODADDY" in dep_desc
         day_window = 14 if is_godaddy else 7
 
-        # Get all unmatched acct_transactions within date window
+        # Match direction: negative bank amount = expense outflow, positive = income inflow
+        is_expense_deposit = dep_amt < 0
+        if is_expense_deposit:
+            type_filter = "AND t.entry_type IN ('expense', 'contra')"
+        else:
+            type_filter = "AND t.entry_type IN ('income')"
+
+        # Get all unmatched acct_transactions within date window, filtered by direction
         candidates = conn.execute(
-            """SELECT t.* FROM acct_transactions t
+            f"""SELECT t.* FROM acct_transactions t
                WHERE t.entry_type IS NOT NULL
+               {type_filter}
                AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
                AND t.id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
                AND ABS(julianday(t.date) - julianday(?)) <= ?

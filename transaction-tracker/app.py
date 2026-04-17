@@ -162,6 +162,8 @@ from email_parser.database import (
     get_expense_transactions,
     get_unified_transactions,
     update_expense_transaction,
+    get_blocked_merchants,
+    block_merchant,
     save_action_item,
     get_action_items,
     update_action_item,
@@ -5953,6 +5955,17 @@ def api_delete_expense_transaction(tid):
         conn.execute("DELETE FROM expense_transactions WHERE id = ?", (tid,))
         conn.commit()
     return jsonify({"deleted": True})
+
+
+@app.route("/api/accounting/block-merchant", methods=["POST"])
+@require_role("admin")
+def api_block_merchant():
+    d = request.json or {}
+    merchant = (d.get("merchant") or "").strip()
+    if not merchant:
+        return jsonify({"error": "merchant required"}), 400
+    blocked = block_merchant(merchant)
+    return jsonify({"blocked": blocked})
 
 
 @app.route("/api/accounting/action-items")

@@ -106,14 +106,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#expense-btn-approve').addEventListener('click', () => saveExpenseReview('approve'));
     $('#expense-btn-save').addEventListener('click', () => saveExpenseReview('save'));
     $('#expense-btn-ignore').addEventListener('click', () => saveExpenseReview('ignore'));
-    $('#expense-btn-discard').addEventListener('click', async () => {
+    // "Not a Transaction" — sets ignored (preserves row so re-parse can't resurrect it)
+    $('#expense-btn-discard').addEventListener('click', () => saveExpenseReview('ignore'));
+    // "Block Merchant" — ignore + permanently block all future emails from this merchant
+    $('#expense-btn-block').addEventListener('click', async () => {
         const expId = $('#expense-review-id').value;
+        const merchant = $('#expense-merchant-input').value.trim();
         if (!expId) return;
-        if (!confirm('This will permanently delete this item. It is not a real transaction.\n\nContinue?')) return;
         try {
-            await api('/expense-transactions/' + expId, { method: 'DELETE' });
-            closeExpenseModal();
-            refreshActiveTab();
+            if (merchant) await api('/block-merchant', { method: 'POST', body: { merchant } });
+            await saveExpenseReview('ignore');
         } catch (e) {
             alert('Error: ' + e.message);
         }

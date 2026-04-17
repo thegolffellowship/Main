@@ -394,7 +394,11 @@
                         <div style="margin-top:0.5rem; font-size:0.75rem; color:var(--text-muted); text-align:center;">or try <strong>Browse All</strong> to search manually</div>
                     </div>`;
             } else {
-                txnDiv.innerHTML = suggestions.map(s => {
+                // Always show Create Entry at top when there are suggestions (escape hatch is clearer up here)
+                const createTopHtml = `<div style="padding:0.5rem 0.75rem; border-bottom:1px solid var(--border); margin-bottom:0.25rem;">
+                    <button class="btn btn-sm" onclick="showCreateEntryForm(${id})" style="width:100%; font-size:0.78rem; background:#f0fdf4; border-color:#16a34a; color:#15803d;">+ No match — Create New Ledger Entry</button>
+                </div>`;
+                txnDiv.innerHTML = createTopHtml + suggestions.map(s => {
                     const score = s._score || 0;
                     const reason = s._reason || '';
                     const barColor = score >= 60 ? '#16a34a' : score >= 30 ? '#f59e0b' : '#d1d5db';

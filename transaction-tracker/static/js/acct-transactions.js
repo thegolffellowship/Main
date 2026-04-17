@@ -934,8 +934,10 @@ async function openExpenseReview(expenseId) {
         // Show/hide approve+ignore+discard buttons based on status
         const isPending = status === 'pending';
         $('#expense-btn-approve').style.display = isPending ? '' : 'none';
-        $('#expense-btn-ignore').style.display = isPending ? '' : 'none';
         $('#expense-btn-discard').style.display = isPending ? '' : 'none';
+        const hasMerchant = !!(exp.merchant || '').trim();
+        $('#expense-btn-block').style.display = (isPending && hasMerchant) ? '' : 'none';
+        $('#expense-btn-ignore').style.display = 'none';
         $('#expense-btn-save').style.display = isPending ? 'none' : '';
 
         $('#expense-review-modal').style.display = 'flex';
