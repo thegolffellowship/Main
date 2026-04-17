@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.6.5";
+window.TGF_VERSION = "2.6.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.6",
+    date: "2026-04-17",
+    title: "Event typeahead fix — correct field names; entity short name only",
+    changes: [
+      "Fixed event typeahead: events table uses item_name/event_date columns, not name/date — all events were being filtered out silently",
+      "Business Entity dropdown now shows short name only (e.g. 'TGF' not 'TGF — The Golf Fellowship')",
+    ],
+  },
   {
     version: "2.6.5",
     date: "2026-04-17",

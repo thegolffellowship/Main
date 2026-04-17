@@ -741,7 +741,7 @@
         (_reconEnts || []).forEach(e => {
             const opt = document.createElement('option');
             opt.value = e.short_name;
-            opt.textContent = `${e.short_name}${e.name && e.name !== e.short_name ? ' — ' + e.name : ''}`;
+            opt.textContent = e.short_name;
             entSel.appendChild(opt);
         });
         const addOpt = document.createElement('option');
@@ -789,12 +789,12 @@
         const q = (document.getElementById('cem-event').value || '').toLowerCase();
         const drop = document.getElementById('cem-events-drop');
         const evts = (_reconEvents || [])
-            .filter(e => e.name && !e.name.startsWith('_'))
-            .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-        const matches = q ? evts.filter(e => e.name.toLowerCase().includes(q)) : evts;
+            .filter(e => e.item_name && !e.item_name.startsWith('_'))
+            .sort((a, b) => (b.event_date || '').localeCompare(a.event_date || ''));
+        const matches = q ? evts.filter(e => e.item_name.toLowerCase().includes(q)) : evts;
         if (!matches.length) { drop.style.display = 'none'; return; }
         drop.innerHTML = matches.slice(0, 30).map(e =>
-            `<div onclick="cemSelectEvent(${JSON.stringify(e.name)})" style="padding:6px 10px; cursor:pointer; font-size:0.8rem; border-bottom:1px solid var(--border);" onmouseenter="this.style.background='#f0f9ff'" onmouseleave="this.style.background=''">${esc(e.name)}${e.date ? `<span style="color:var(--text-muted); margin-left:6px; font-size:0.75rem;">${e.date}</span>` : ''}</div>`
+            `<div onclick="cemSelectEvent(${JSON.stringify(e.item_name)})" style="padding:6px 10px; cursor:pointer; font-size:0.8rem; border-bottom:1px solid var(--border);" onmouseenter="this.style.background='#f0f9ff'" onmouseleave="this.style.background=''">${esc(e.item_name)}${e.event_date ? `<span style="color:var(--text-muted); margin-left:6px; font-size:0.75rem;">${e.event_date}</span>` : ''}</div>`
         ).join('');
         drop.style.display = 'block';
     }
