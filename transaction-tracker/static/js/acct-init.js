@@ -239,6 +239,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Load dashboard
-    loadDashboard();
+    // Load initial tab
+    refreshActiveTab();
 });
