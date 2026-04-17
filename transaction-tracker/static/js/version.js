@@ -1,5 +1,23 @@
-window.TGF_VERSION = "2.5.0";
+window.TGF_VERSION = "2.6.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.0",
+    date: "2026-04-17",
+    title: "AI Bookkeeper, Liabilities Dashboard & Month Close",
+    changes: [
+      "Duplicate transaction fix — cross-table fingerprint dedup prevents email-parsed transactions from appearing twice when they already exist in the ledger",
+      "Batch categorization preview — review AI suggestions 20 at a time before committing; covers the full YTD backlog across both inbox and uncategorized ledger entries",
+      "Batch confidence badges — color-coded (green/yellow/orange/red) with source: exact match, prefix match, keyword rule, or Claude AI",
+      "Duplicate warning flags in batch preview — items that look like existing transactions are flagged before approval",
+      "Create from Bank — orphaned bank deposits that don't match any transaction can now generate a ledger entry directly from the Reconcile match queue",
+      "Liabilities Dashboard — new tab showing all 9 TGF liability buckets: prize pools (per-event), course fees owed, HIO pot, season contests, Lone Star Cup shirt fund, chapter manager payouts, tax reserve YTD, investor debt, and member credits 2025",
+      "Manual liability editing — click any manual liability bucket to update its balance; saves instantly to coo_manual_values",
+      "Prize pool drill-down — expand the prize pools row to see the per-event breakdown",
+      "Month Close checklist — live status for 5 close criteria: transactions categorized, inbox clear, deposits matched, ledger reconciled, events accounted",
+      "Financial Position cards on Dashboard — YTD income, expenses, net; cash on hand vs. total liabilities; net position (cash minus obligations)",
+      "Checklist action links — each failing item links directly to the relevant tool (batch review, reconcile page, events)",
+    ],
+  },
   {
     version: "2.5.0",
     date: "2026-04-17",

@@ -8,13 +8,17 @@ async function loadDashboard() {
     const qs = buildQS({ entity_id: ACCT.activeEntity, start_date: start, end_date: end });
 
     try {
-        const [summary, monthly, balances, txnData, aiStats] = await Promise.all([
+        const [summary, monthly, balances, txnData, aiStats, closeStatus] = await Promise.all([
             api('/reports/summary' + qs),
             api('/reports/monthly' + buildQS({ entity_id: ACCT.activeEntity, months: 12 })),
             api('/accounts/balances'),
             api('/transactions' + buildQS({ entity_id: ACCT.activeEntity, limit: 10 })),
             api('/ai/stats').catch(() => null),
+            fetch('/api/accounting/month-close').then(r => r.json()).catch(() => null),
         ]);
+
+        // Month Close checklist + Financial Position
+        if (closeStatus) renderMonthClose(closeStatus);
 
         // AI Bookkeeper banner
         renderBookkeeperBanner(aiStats);
@@ -769,4 +773,111 @@ function initLiabilitiesTab() {
 
     // Load data
     loadLiabilities();
+}
+
+// ═══════════════════════════════════════════════════
+// MONTH CLOSE CHECKLIST
+// ═══════════════════════════════════════════════════
+
+function renderMonthClose(d) {
+    const fmt = v => '$' + Number(v || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const $ = id => document.getElementById(id);
+
+    // Period label
+    const periodEl = $('month-close-period');
+    if (periodEl) periodEl.textContent = (d.period && d.period.month) || '';
+
+    // Financial position cards
+    const fp = d.financial_position || {};
+    const setCard = (id, val) => { const el = $(id); if (el) el.textContent = fmt(val); };
+    setCard('mc-ytd-income', fp.ytd_income);
+    setCard('mc-ytd-expenses', fp.ytd_expenses);
+    setCard('mc-ytd-net', fp.ytd_net);
+    setCard('mc-cash', fp.cash_on_hand);
+    setCard('mc-liabilities', fp.total_liabilities);
+    setCard('mc-net-position', fp.net_position);
+
+    // Color net and position cards
+    const netCard = $('mc-net-card');
+    if (netCard) netCard.className = 'mc-fin-card ' + ((fp.ytd_net || 0) >= 0 ? 'mc-net-positive' : 'mc-net-negative');
+    const posCard = $('mc-pos-card');
+    if (posCard) posCard.className = 'mc-fin-card ' + ((fp.net_position || 0) >= 0 ? 'mc-pos-positive' : 'mc-pos-negative');
+
+    // Checklist items
+    const cl = d.checklist || {};
+    const items = [
+        {
+            label: 'Transactions categorized',
+            count: cl.uncategorized_ledger,
+            zero: 'All ledger entries categorized',
+            nonzero: n => `${n} ledger entr${n === 1 ? 'y' : 'ies'} uncategorized`,
+            action: n => n > 0 ? { label: 'Review Batch', fn: () => { switchTab('dashboard'); document.getElementById('btn-ai-categorize') && document.getElementById('btn-ai-categorize').click(); } } : null,
+        },
+        {
+            label: 'Inbox clear',
+            count: cl.pending_inbox,
+            zero: 'No pending inbox items',
+            nonzero: n => `${n} inbox item${n === 1 ? '' : 's'} awaiting review`,
+            action: n => n > 0 ? { label: 'Review Batch', fn: () => { switchTab('dashboard'); document.getElementById('btn-ai-categorize') && document.getElementById('btn-ai-categorize').click(); } } : null,
+        },
+        {
+            label: 'Bank deposits matched',
+            count: cl.unmatched_deposits,
+            zero: 'All deposits matched',
+            nonzero: n => `${n} deposit${n === 1 ? '' : 's'} unmatched`,
+            action: n => n > 0 ? { label: 'Go to Reconcile', fn: () => { window.location.href = '/accounting/reconcile'; } } : null,
+        },
+        {
+            label: 'Ledger reconciled',
+            count: cl.unreconciled_entries,
+            zero: 'All entries reconciled',
+            nonzero: n => `${n} entr${n === 1 ? 'y' : 'ies'} not confirmed in bank`,
+            action: n => n > 0 ? { label: 'Go to Reconcile', fn: () => { window.location.href = '/accounting/reconcile'; } } : null,
+        },
+        {
+            label: 'Events accounted',
+            count: cl.events_no_entries,
+            zero: 'All this-month events have ledger entries',
+            nonzero: n => `${n} event${n === 1 ? '' : 's'} with no ledger entries`,
+            action: n => n > 0 ? { label: 'View Events', fn: () => { window.location.href = '/'; } } : null,
+        },
+        {
+            label: 'Tax reserve',
+            count: null,  // informational
+            zero: `Tax reserve YTD: ${fmt(cl.tax_reserve_ytd)}`,
+            nonzero: () => `Tax reserve YTD: ${fmt(cl.tax_reserve_ytd)}`,
+            action: () => ({ label: 'View Liabilities', fn: () => switchTab('liabilities') }),
+        },
+    ];
+
+    let doneCount = 0;
+    const rows = items.map(item => {
+        const count = item.count;
+        const isInfo = count === null;
+        const isDone = isInfo ? true : count === 0;
+        if (isDone) doneCount++;
+
+        let dotClass = 'mc-dot-green';
+        if (!isInfo && count > 0 && count <= 5) dotClass = 'mc-dot-amber';
+        else if (!isInfo && count > 5) dotClass = 'mc-dot-red';
+
+        const detail = isDone ? item.zero : (typeof item.nonzero === 'function' ? item.nonzero(count) : item.nonzero);
+        const actionObj = item.action ? item.action(count) : null;
+        const actionHtml = actionObj
+            ? `<button class="mc-item-action" onclick="(${actionObj.fn.toString()})()">${actionObj.label}</button>`
+            : '';
+
+        return `<div class="mc-item">
+            <div class="mc-dot ${dotClass}"></div>
+            <div class="mc-item-label">${item.label}</div>
+            <div class="mc-item-detail">${detail}</div>
+            ${actionHtml}
+        </div>`;
+    }).join('');
+
+    const scoreEl = $('month-close-score');
+    if (scoreEl) scoreEl.textContent = `${doneCount}/${items.length} complete`;
+
+    const checklistEl = $('month-close-checklist');
+    if (checklistEl) checklistEl.innerHTML = rows;
 }
