@@ -15140,6 +15140,11 @@ def create_entry_from_deposit(deposit_id: int, txn_type: str = "expense",
                               category_name: str | None = None,
                               entity_name: str | None = None,
                               notes: str | None = None,
+                              description: str | None = None,
+                              date_override: str | None = None,
+                              amount_override: float | None = None,
+                              event_name: str | None = None,
+                              entry_type: str | None = None,
                               db_path: str | Path | None = None) -> dict:
     """Create an acct_transaction from a bank deposit and immediately reconcile it.
 
@@ -15194,10 +15199,14 @@ def create_entry_from_deposit(deposit_id: int, txn_type: str = "expense",
                 if acct_row:
                     acct_account_id = acct_row["id"]
 
-        amount    = float(dep.get("amount") or 0)
-        desc      = dep.get("description") or "Bank deposit"
-        date      = dep.get("deposit_date") or datetime.utcnow().strftime("%Y-%m-%d")
+        amount    = amount_override if amount_override is not None else float(dep.get("amount") or 0)
+        desc      = description or dep.get("description") or "Bank deposit"
+        date      = date_override or dep.get("deposit_date") or datetime.utcnow().strftime("%Y-%m-%d")
         source_ref = f"bank-deposit-{deposit_id}"
+        # Map entry_type to legacy type column
+        if entry_type:
+            txn_type = {"income": "income", "expense": "expense",
+                        "contra": "expense", "liability": "expense"}.get(entry_type, txn_type)
 
         # Check idempotency
         existing = conn.execute(
@@ -15209,9 +15218,10 @@ def create_entry_from_deposit(deposit_id: int, txn_type: str = "expense",
         cur = conn.execute(
             """INSERT INTO acct_transactions
                (date, description, total_amount, type, account_id, source, source_ref,
-                notes, status)
-               VALUES (?, ?, ?, ?, ?, 'manual', ?, ?, 'reconciled')""",
-            (date, desc, amount, txn_type, acct_account_id, source_ref, notes),
+                notes, status, entry_type, event_name)
+               VALUES (?, ?, ?, ?, ?, 'manual', ?, ?, 'reconciled', ?, ?)""",
+            (date, desc, abs(amount), txn_type, acct_account_id, source_ref, notes,
+             entry_type or txn_type, event_name),
         )
         txn_id = cur.lastrowid
 

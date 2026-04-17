@@ -204,6 +204,79 @@
             </div>
         </section>
 
+        <!-- ═══ CREATE LEDGER ENTRY MODAL ═══ -->
+        <div id="cem-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:500; overflow-y:auto;" onclick="if(event.target===this)closeCreateModal()">
+            <div style="background:var(--card-bg,#fff); border-radius:12px; width:min(560px,96vw); margin:2.5rem auto; padding:1.5rem; box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <h3 style="margin:0; font-size:1rem;">New Ledger Entry</h3>
+                    <button onclick="closeCreateModal()" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--text-muted);">✕</button>
+                </div>
+                <div id="cem-deposit-banner" style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:8px 12px; margin-bottom:1rem; font-size:0.8rem; color:#1e40af;"></div>
+                <div style="display:grid; gap:0.75rem;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                        <div>
+                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Date</label>
+                            <input type="date" id="cem-date" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Amount ($)</label>
+                            <input type="number" id="cem-amount" step="0.01" min="0" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Description</label>
+                        <input type="text" id="cem-desc" placeholder="Description" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                        <div>
+                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Type</label>
+                            <select id="cem-type" onchange="cemFilterCategories()" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
+                                <option value="expense">Expense</option>
+                                <option value="income">Income</option>
+                                <option value="transfer">Transfer</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Category</label>
+                            <select id="cem-category" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
+                                <option value="">— Category (optional) —</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                        <div>
+                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Entity</label>
+                            <select id="cem-entity" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
+                                <option value="">— Entity (optional) —</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Account</label>
+                            <select id="cem-account" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
+                                <option value="TGF Checking">TGF Checking</option>
+                                <option value="Venmo">Venmo</option>
+                                <option value="PayPal">PayPal</option>
+                                <option value="Zelle">Zelle</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Event <span style="font-weight:400; color:var(--text-muted);">(optional)</span></label>
+                        <input type="text" id="cem-event" placeholder="e.g. s9.5 Brackenridge" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Notes <span style="font-weight:400; color:var(--text-muted);">(optional)</span></label>
+                        <input type="text" id="cem-notes" placeholder="Internal notes" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
+                    </div>
+                </div>
+                <div style="display:flex; gap:0.5rem; margin-top:1.25rem;">
+                    <button class="btn btn-secondary" onclick="closeCreateModal()" style="flex:1;">Cancel</button>
+                    <button class="btn btn-primary" id="cem-submit-btn" onclick="submitCreateModal()" style="flex:2;">Create &amp; Reconcile</button>
+                </div>
+            </div>
+        </div>
+
         <!-- ═══ MONTHLY SUMMARY TAB ═══ -->
         <section class="recon-panel" id="panel-monthly">
             <div class="toolbar">
@@ -364,7 +437,7 @@
                     const isChecked = selectedDeposits.has(d.id);
                     const rowBg = isChecked ? 'background:#eff6ff; border-left:3px solid #2563eb;' : isDismissed ? 'background:#f9fafb; opacity:0.7;' : isMatched ? 'background:#f0fdf4;' : '';
                     const dismissedTag = isDismissed ? ` <span style="font-size:0.65rem; color:#6b7280; background:#e5e7eb; border-radius:3px; padding:1px 4px;">${d.dismiss_reason || 'dismissed'}</span>` : '';
-                    return `<div class="match-row" onclick="selectDeposit(${d.id}, '${d.status}')" data-id="${d.id}" data-status="${d.status}" style="grid-template-columns:20px 80px 1fr auto; ${rowBg}">
+                    return `<div class="match-row" onclick="selectDeposit(${d.id}, '${d.status}')" data-id="${d.id}" data-status="${d.status}" data-date="${d.deposit_date}" data-amount="${d.amount}" data-desc="${(d.description||'').replace(/"/g,'&quot;')}" style="grid-template-columns:20px 80px 1fr auto; ${rowBg}">
                         <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleDeposit(${d.id})" style="cursor:pointer; margin:0;">
                         <span>${d.deposit_date}</span>
                         <span class="desc"><span class="status-dot dot-${d.status}"></span>${esc(d.description || '')}${dismissedTag}</span>
@@ -501,82 +574,124 @@
         updateMatchButton();
     }
 
-    // ── Create Ledger Entry from Bank Deposit ──────────────────────────────
+    // ── Create Ledger Entry Modal ──────────────────────────────────────────
 
     let _reconCats = null, _reconEnts = null;
+    let _cemDepositId = null;
 
     async function _loadCatsEnts() {
         if (_reconCats) return;
         const [cats, ents] = await Promise.all([
-            fetch('/api/acct/categories').then(r => r.json()),
-            fetch('/api/acct/entities').then(r => r.json()),
+            fetch('/api/acct/categories').then(r => r.json()).catch(() => []),
+            fetch('/api/acct/entities').then(r => r.json()).catch(() => []),
         ]);
-        _reconCats = cats;
-        _reconEnts = ents;
+        _reconCats = Array.isArray(cats) ? cats : [];
+        _reconEnts = Array.isArray(ents) ? ents : [];
+    }
+
+    function cemFilterCategories() {
+        const typeFilter = document.getElementById('cem-type').value;
+        const catSel = document.getElementById('cem-category');
+        const prev = catSel.value;
+        catSel.innerHTML = '<option value="">— Category (optional) —</option>';
+        (_reconCats || []).forEach(c => {
+            if (!typeFilter || c.type === typeFilter || c.type === 'both') {
+                const opt = document.createElement('option');
+                opt.value = c.name; opt.textContent = c.name;
+                catSel.appendChild(opt);
+            }
+        });
+        if (prev) catSel.value = prev;
     }
 
     async function showCreateEntryForm(depositId) {
-        const txnDiv = document.getElementById('txn-list');
-        txnDiv.innerHTML = '<div style="padding:1rem; color:var(--text-muted); font-size:0.82rem;">Loading…</div>';
+        _cemDepositId = depositId;
+        const overlay = document.getElementById('cem-overlay');
+        overlay.style.display = 'block';
+
+        // Pre-populate from deposit row data-attributes
+        const depRow = document.querySelector(`#deposit-list .match-row[data-id="${depositId}"]`);
+        const depDate   = depRow?.dataset?.date || '';
+        const depAmount = parseFloat(depRow?.dataset?.amount || '0');
+        const depDesc   = depRow?.dataset?.desc || '';
+
+        document.getElementById('cem-date').value    = depDate;
+        document.getElementById('cem-amount').value  = Math.abs(depAmount).toFixed(2);
+        document.getElementById('cem-desc').value    = depDesc;
+        document.getElementById('cem-event').value   = '';
+        document.getElementById('cem-notes').value   = '';
+        document.getElementById('cem-type').value    = depAmount < 0 ? 'expense' : 'income';
+
+        // Deposit info banner
+        const sign = depAmount >= 0 ? '+' : '-';
+        document.getElementById('cem-deposit-banner').innerHTML =
+            `<strong>From bank deposit:</strong> ${depDate} — ${esc(depDesc)} &nbsp;|&nbsp; <strong>${sign}$${Math.abs(depAmount).toFixed(2)}</strong>`;
+
         await _loadCatsEnts();
 
-        const catGroups = { income: [], expense: [] };
-        (_reconCats || []).forEach(c => { if (catGroups[c.type]) catGroups[c.type].push(c); });
-        const catOpts = (label, cats) => cats.length
-            ? `<optgroup label="${label}">${cats.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}</optgroup>`
-            : '';
-        const entOpts = (_reconEnts || []).map(e => `<option value="${esc(e.short_name)}">${esc(e.short_name)}</option>`).join('');
+        // Populate entity dropdown
+        const entSel = document.getElementById('cem-entity');
+        entSel.innerHTML = '<option value="">— Entity (optional) —</option>';
+        (_reconEnts || []).forEach(e => {
+            const opt = document.createElement('option');
+            opt.value = e.short_name; opt.textContent = e.short_name;
+            entSel.appendChild(opt);
+        });
 
-        txnDiv.innerHTML = `
-        <div style="padding:1rem;">
-            <div style="font-weight:600; font-size:0.88rem; margin-bottom:0.75rem; color:var(--text);">New Ledger Entry</div>
-            <div style="display:flex; flex-direction:column; gap:0.5rem;">
-                <div style="display:flex; gap:0.5rem;">
-                    <select id="ce-type" style="flex:1; padding:6px 8px; border:1px solid var(--border); border-radius:4px; font-size:0.82rem;">
-                        <option value="expense">Expense</option>
-                        <option value="income">Income</option>
-                        <option value="transfer">Transfer</option>
-                    </select>
-                    <select id="ce-entity" style="flex:1; padding:6px 8px; border:1px solid var(--border); border-radius:4px; font-size:0.82rem;">
-                        <option value="">— Entity —</option>${entOpts}
-                    </select>
-                </div>
-                <select id="ce-category" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:4px; font-size:0.82rem;">
-                    <option value="">— Category (optional) —</option>
-                    ${catOpts('Income', catGroups.income)}
-                    ${catOpts('Expense', catGroups.expense)}
-                </select>
-                <input id="ce-notes" type="text" placeholder="Notes (optional)" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:4px; font-size:0.82rem; box-sizing:border-box;">
-                <div style="display:flex; gap:0.5rem; margin-top:0.25rem;">
-                    <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="selectDeposit(${depositId}, 'unmatched')">Cancel</button>
-                    <button class="btn btn-primary btn-sm" style="flex:1;" onclick="submitCreateEntry(${depositId})">Create &amp; Reconcile</button>
-                </div>
-            </div>
-        </div>`;
+        // Populate category dropdown filtered by type
+        cemFilterCategories();
+
+        // Account: guess from deposit description
+        const descUp = depDesc.toUpperCase();
+        const acctSel = document.getElementById('cem-account');
+        if (descUp.includes('VENMO')) acctSel.value = 'Venmo';
+        else if (descUp.includes('PAYPAL')) acctSel.value = 'PayPal';
+        else if (descUp.includes('ZELLE')) acctSel.value = 'Zelle';
+        else acctSel.value = 'TGF Checking';
     }
 
-    async function submitCreateEntry(depositId) {
-        const txnType    = document.getElementById('ce-type')?.value || 'expense';
-        const entityName = document.getElementById('ce-entity')?.value || null;
-        const catName    = document.getElementById('ce-category')?.value || null;
-        const notes      = document.getElementById('ce-notes')?.value || null;
+    function closeCreateModal() {
+        document.getElementById('cem-overlay').style.display = 'none';
+        _cemDepositId = null;
+    }
 
+    async function submitCreateModal() {
+        if (!_cemDepositId) return;
+        const btn = document.getElementById('cem-submit-btn');
+        btn.disabled = true; btn.textContent = 'Saving…';
+        const payload = {
+            deposit_id:    _cemDepositId,
+            txn_type:      document.getElementById('cem-type').value,
+            entry_type:    document.getElementById('cem-type').value,
+            category_name: document.getElementById('cem-category').value || null,
+            entity_name:   document.getElementById('cem-entity').value || null,
+            description:   document.getElementById('cem-desc').value || null,
+            date:          document.getElementById('cem-date').value || null,
+            amount:        parseFloat(document.getElementById('cem-amount').value) || null,
+            account:       document.getElementById('cem-account').value || null,
+            event_name:    document.getElementById('cem-event').value || null,
+            notes:         document.getElementById('cem-notes').value || null,
+        };
         try {
             const res = await fetch('/api/reconciliation/create-entry', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deposit_id: depositId, txn_type: txnType,
-                                       category_name: catName, entity_name: entityName, notes }),
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
             });
             const data = await res.json();
             if (data.error) { alert('Error: ' + data.error); return; }
-            // Refresh the deposit list and show as matched
+            closeCreateModal();
             await loadMatchQueue();
-            selectDeposit(depositId, 'matched');
+            loadDashboard();
         } catch(e) {
             alert('Failed: ' + e.message);
+        } finally {
+            btn.disabled = false; btn.textContent = 'Create & Reconcile';
         }
     }
+
+    // Close modal on Escape
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCreateModal(); });
 
     async function recordTransfer() {
         const bar = document.getElementById('suggestions-dismiss-bar');

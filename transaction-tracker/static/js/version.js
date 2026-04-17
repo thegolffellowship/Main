@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.6.2";
+window.TGF_VERSION = "2.6.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.3",
+    date: "2026-04-17",
+    title: "Create Ledger Entry modal with full field set",
+    changes: [
+      "Create New Ledger Entry now opens a full modal overlay instead of replacing the suggestions column",
+      "Modal pre-populates date, amount, and description directly from the bank deposit row",
+      "Full field set: Type, Category (filtered by type), Entity, Account, Event, Notes",
+      "Category dropdown updates when Type changes (shows income or expense categories)",
+      "Account auto-detected from deposit description (VENMO→Venmo, PAYPAL→PayPal, etc.)",
+      "Amount is editable — override the deposit amount if needed",
+      "Escape key or backdrop click closes the modal",
+    ],
+  },
   {
     version: "2.6.2",
     date: "2026-04-17",

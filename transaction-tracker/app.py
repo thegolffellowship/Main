@@ -6591,6 +6591,11 @@ def api_recon_create_entry():
         category_name=d.get("category_name"),
         entity_name=d.get("entity_name"),
         notes=d.get("notes"),
+        description=d.get("description"),
+        date_override=d.get("date"),
+        amount_override=d.get("amount"),
+        event_name=d.get("event_name"),
+        entry_type=d.get("entry_type"),
     )
     return jsonify(result)
 
