@@ -206,6 +206,8 @@ from email_parser.database import (
     batch_approve_expenses,
     # Create ledger entry from orphaned bank deposit
     create_entry_from_deposit,
+    # Liabilities Dashboard
+    get_accounting_liabilities,
     # TGF Payouts
     get_tgf_data,
     add_tgf_event,
@@ -5532,6 +5534,35 @@ def api_acct_ai_batch_approve():
         return jsonify({"error": "items required"}), 400
     result = batch_approve_expenses(items)
     return jsonify(result)
+
+
+@app.route("/api/accounting/liabilities")
+@require_role("admin")
+def api_accounting_liabilities():
+    """Return all liability buckets for the Liabilities Dashboard."""
+    return jsonify(get_accounting_liabilities())
+
+
+@app.route("/api/accounting/liabilities/update", methods=["POST"])
+@require_role("admin")
+def api_accounting_liabilities_update():
+    """Update a manual liability value."""
+    d = request.json or {}
+    key = d.get("key", "").strip()
+    value = d.get("value")
+    allowed_keys = {
+        "hio_pot", "season_contests_total", "lone_star_cup_shirts",
+        "chapter_manager_payouts", "grandparent_loan", "member_credits_2025",
+        "irs_balance", "chase_biz_7680", "chase_sapphire_6159",
+    }
+    if not key or key not in allowed_keys:
+        return jsonify({"error": "invalid key"}), 400
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return jsonify({"error": "value must be a number"}), 400
+    set_coo_manual_value(key, value)
+    return jsonify({"ok": True, "key": key, "value": value})
 
 
 @app.route("/api/accounting/ai/bulk-categorize", methods=["POST"])

@@ -62,6 +62,7 @@
             <button class="acct-subtab" data-tab="reports">Reports</button>
             <a href="/accounting/reconcile" class="acct-subtab" style="text-decoration:none;">Reconcile</a>
             <a href="/accounting/cashflow" class="acct-subtab" style="text-decoration:none;">Cash Flow</a>
+            <button class="acct-subtab" data-tab="liabilities">Liabilities</button>
             <button class="acct-subtab" data-tab="rules">Rules</button>
         </div>
 
@@ -294,6 +295,186 @@
             <div class="acct-section" style="margin-top:2rem;">
                 <h3>Chart of Accounts</h3>
                 <div id="coa-table"></div>
+            </div>
+        </section>
+
+        <!-- ═══ LIABILITIES TAB ═══ -->
+        <section class="acct-tab-panel" id="panel-liabilities">
+            <div style="max-width:900px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+                    <div>
+                        <h3 style="margin-bottom:0.15rem;">Liabilities Dashboard</h3>
+                        <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">
+                            Everything TGF owes — calculated from allocations + manually tracked balances.
+                        </p>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="btn-liabilities-refresh" title="Refresh">&#8635; Refresh</button>
+                </div>
+
+                <!-- Total Banner -->
+                <div id="liabilities-total-banner" style="background:var(--surface-alt,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem;">
+                    <div style="flex:1;font-size:0.85rem;color:var(--text-muted);">Total Outstanding Liabilities</div>
+                    <div id="liabilities-grand-total" style="font-size:1.6rem;font-weight:700;color:#dc2626;">—</div>
+                </div>
+
+                <div id="liabilities-loading" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading…</div>
+                <div id="liabilities-content" style="display:none;">
+
+                    <!-- Group: Event Obligations (calculated) -->
+                    <div class="liab-group">
+                        <div class="liab-group-header">
+                            <span>Event Obligations</span>
+                            <span class="liab-group-badge">Calculated from allocations</span>
+                            <span class="liab-group-total" id="liab-total-event"></span>
+                        </div>
+                        <div class="liab-rows">
+                            <div class="liab-row liab-readonly">
+                                <div class="liab-label">
+                                    <span class="liab-name">Prize Pools Owed</span>
+                                    <span class="liab-desc">Per upcoming event — player prize funds collected but not yet paid out</span>
+                                </div>
+                                <div class="liab-amount" id="liab-prize-pools">$0.00</div>
+                                <button class="liab-expand-btn" id="btn-expand-prize" title="Show per-event breakdown">▾</button>
+                            </div>
+                            <div id="liab-prize-breakdown" style="display:none;padding:0.5rem 1rem 0.75rem 2.5rem;background:var(--surface-alt,#f8fafc);border-top:1px solid var(--border-light,#e5e7eb);">
+                                <!-- populated by JS -->
+                            </div>
+                            <div class="liab-row liab-readonly">
+                                <div class="liab-label">
+                                    <span class="liab-name">Course Fees Owed</span>
+                                    <span class="liab-desc">Collected from players but not yet paid to the course</span>
+                                </div>
+                                <div class="liab-amount" id="liab-course-fees">$0.00</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Group: Running Pools (manual) -->
+                    <div class="liab-group">
+                        <div class="liab-group-header">
+                            <span>Running Pools</span>
+                            <span class="liab-group-badge liab-badge-manual">Manual — click to edit</span>
+                            <span class="liab-group-total" id="liab-total-pools"></span>
+                        </div>
+                        <div class="liab-rows">
+                            <div class="liab-row liab-editable" data-key="hio_pot">
+                                <div class="liab-label">
+                                    <span class="liab-name">HIO Pot</span>
+                                    <span class="liab-desc">Hole-in-One pot accumulated across all events YTD</span>
+                                </div>
+                                <div class="liab-amount" id="liab-hio-pot">$0.00</div>
+                                <button class="liab-edit-btn" title="Edit">&#9998;</button>
+                            </div>
+                            <div class="liab-row liab-editable" data-key="season_contests_total">
+                                <div class="liab-label">
+                                    <span class="liab-name">Season Contests</span>
+                                    <span class="liab-desc">Buy-in pools for NET/GROSS points race and city match play</span>
+                                </div>
+                                <div class="liab-amount" id="liab-season-contests">$0.00</div>
+                                <button class="liab-edit-btn" title="Edit">&#9998;</button>
+                            </div>
+                            <div class="liab-row liab-editable" data-key="lone_star_cup_shirts">
+                                <div class="liab-label">
+                                    <span class="liab-name">Lone Star Cup Shirt Fund</span>
+                                    <span class="liab-desc">Membership shirt fund accumulated for Lone Star Cup</span>
+                                </div>
+                                <div class="liab-amount" id="liab-lone-star">$0.00</div>
+                                <button class="liab-edit-btn" title="Edit">&#9998;</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Group: Operational (mixed) -->
+                    <div class="liab-group">
+                        <div class="liab-group-header">
+                            <span>Operational</span>
+                            <span class="liab-group-badge liab-badge-manual">Manual — click to edit</span>
+                            <span class="liab-group-total" id="liab-total-operational"></span>
+                        </div>
+                        <div class="liab-rows">
+                            <div class="liab-row liab-editable" data-key="chapter_manager_payouts">
+                                <div class="liab-label">
+                                    <span class="liab-name">Chapter Manager Payouts</span>
+                                    <span class="liab-desc">Pending revenue-share payouts to chapter managers</span>
+                                </div>
+                                <div class="liab-amount" id="liab-chapter-mgr">$0.00</div>
+                                <button class="liab-edit-btn" title="Edit">&#9998;</button>
+                            </div>
+                            <div class="liab-row liab-readonly">
+                                <div class="liab-label">
+                                    <span class="liab-name">Tax Reserve (YTD)</span>
+                                    <span class="liab-desc">8.25% of TGF operating revenue — sales &amp; income tax reserve</span>
+                                </div>
+                                <div class="liab-amount" id="liab-tax-reserve">$0.00</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Group: Debts & Credits (manual) -->
+                    <div class="liab-group">
+                        <div class="liab-group-header">
+                            <span>Debts &amp; Credits</span>
+                            <span class="liab-group-badge liab-badge-manual">Manual — click to edit</span>
+                            <span class="liab-group-total" id="liab-total-debts"></span>
+                        </div>
+                        <div class="liab-rows">
+                            <div class="liab-row liab-editable" data-key="grandparent_loan">
+                                <div class="liab-label">
+                                    <span class="liab-name">Investor Debt</span>
+                                    <span class="liab-desc">Loan from investor (~$10k) — principal balance owed</span>
+                                </div>
+                                <div class="liab-amount" id="liab-investor-debt">$0.00</div>
+                                <button class="liab-edit-btn" title="Edit">&#9998;</button>
+                            </div>
+                            <div class="liab-row liab-editable" data-key="member_credits_2025">
+                                <div class="liab-label">
+                                    <span class="liab-name">Member Credits 2025</span>
+                                    <span class="liab-desc">Outstanding player credits (~$4,500) — redeemable at future events</span>
+                                </div>
+                                <div class="liab-amount" id="liab-member-credits">$0.00</div>
+                                <button class="liab-edit-btn" title="Edit">&#9998;</button>
+                            </div>
+                            <div class="liab-row liab-editable" data-key="irs_balance">
+                                <div class="liab-label">
+                                    <span class="liab-name">IRS Balance</span>
+                                    <span class="liab-desc">Outstanding IRS installment agreement balance</span>
+                                </div>
+                                <div class="liab-amount" id="liab-irs">$0.00</div>
+                                <button class="liab-edit-btn" title="Edit">&#9998;</button>
+                            </div>
+                            <div class="liab-row liab-editable" data-key="chase_biz_7680">
+                                <div class="liab-label">
+                                    <span class="liab-name">Chase Biz (7680)</span>
+                                    <span class="liab-desc">Chase business credit card balance</span>
+                                </div>
+                                <div class="liab-amount" id="liab-chase-biz">$0.00</div>
+                                <button class="liab-edit-btn" title="Edit">&#9998;</button>
+                            </div>
+                            <div class="liab-row liab-editable" data-key="chase_sapphire_6159">
+                                <div class="liab-label">
+                                    <span class="liab-name">Chase Sapphire (6159)</span>
+                                    <span class="liab-desc">Chase Sapphire credit card balance</span>
+                                </div>
+                                <div class="liab-amount" id="liab-chase-saph">$0.00</div>
+                                <button class="liab-edit-btn" title="Edit">&#9998;</button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div><!-- /liabilities-content -->
+
+                <!-- Edit modal -->
+                <div id="liab-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center;">
+                    <div style="background:var(--surface);border-radius:10px;padding:1.5rem;min-width:300px;box-shadow:0 8px 30px rgba(0,0,0,0.15);">
+                        <h4 style="margin:0 0 0.75rem;" id="liab-modal-title">Update Balance</h4>
+                        <input type="number" id="liab-modal-input" step="0.01" min="0"
+                               style="width:100%;padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;font-size:1rem;margin-bottom:1rem;">
+                        <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+                            <button class="btn btn-secondary btn-sm" id="liab-modal-cancel">Cancel</button>
+                            <button class="btn btn-primary btn-sm" id="liab-modal-save">Save</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 

@@ -581,3 +581,192 @@ function renderPendingExpenses(items) {
         });
     });
 }
+
+// ═══════════════════════════════════════════════════
+// LIABILITIES DASHBOARD
+// ═══════════════════════════════════════════════════
+
+let _liabData = null;
+let _liabEditKey = null;
+
+function loadLiabilities() {
+    const content = document.getElementById('liabilities-content');
+    const loading = document.getElementById('liabilities-loading');
+    if (loading) loading.style.display = 'block';
+    if (content) content.style.display = 'none';
+
+    fetch('/api/accounting/liabilities')
+        .then(r => r.json())
+        .then(data => {
+            _liabData = data;
+            renderLiabilities(data);
+        })
+        .catch(() => {
+            if (loading) loading.textContent = 'Failed to load liabilities.';
+        });
+}
+
+function renderLiabilities(d) {
+    const loading = document.getElementById('liabilities-loading');
+    const content = document.getElementById('liabilities-content');
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'block';
+
+    const $ = id => document.getElementById(id);
+
+    const fmt = v => '$' + Number(v || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const amtEl = (el, v) => {
+        if (!el) return;
+        el.textContent = fmt(v);
+        el.classList.toggle('zero', !v || v === 0);
+    };
+
+    // Event Obligations
+    amtEl($('liab-prize-pools'), d.event_obligations.prize_pools.total);
+    amtEl($('liab-course-fees'), d.event_obligations.course_fees_owed);
+    const evtTotal = d.event_obligations.prize_pools.total + d.event_obligations.course_fees_owed;
+    const evtEl = $('liab-total-event');
+    if (evtEl) evtEl.textContent = fmt(evtTotal);
+
+    // Per-event prize pool breakdown
+    const breakdown = $('liab-prize-breakdown');
+    if (breakdown) {
+        const rows = d.event_obligations.prize_pools.per_event;
+        if (rows && rows.length) {
+            breakdown.innerHTML = rows.map(e =>
+                `<div class="liab-prize-event-row"><span>${e.event}</span><span>${fmt(e.amount)}</span></div>`
+            ).join('');
+        } else {
+            breakdown.innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted);padding:0.25rem 0;">No upcoming events with prize pools</div>';
+        }
+    }
+
+    // Running Pools
+    amtEl($('liab-hio-pot'), d.running_pools.hio_pot);
+    amtEl($('liab-season-contests'), d.running_pools.season_contests);
+    amtEl($('liab-lone-star'), d.running_pools.lone_star_cup_shirts);
+    const poolTotal = d.running_pools.hio_pot + d.running_pools.season_contests + d.running_pools.lone_star_cup_shirts;
+    const poolEl = $('liab-total-pools');
+    if (poolEl) poolEl.textContent = fmt(poolTotal);
+
+    // Operational
+    amtEl($('liab-chapter-mgr'), d.operational.chapter_manager_payouts);
+    amtEl($('liab-tax-reserve'), d.operational.tax_reserve_ytd);
+    const opTotal = d.operational.chapter_manager_payouts + d.operational.tax_reserve_ytd;
+    const opEl = $('liab-total-operational');
+    if (opEl) opEl.textContent = fmt(opTotal);
+
+    // Debts
+    amtEl($('liab-investor-debt'), d.debts.investor_debt);
+    amtEl($('liab-member-credits'), d.debts.member_credits_2025);
+    amtEl($('liab-irs'), d.debts.irs_balance);
+    amtEl($('liab-chase-biz'), d.debts.chase_biz_7680);
+    amtEl($('liab-chase-saph'), d.debts.chase_sapphire_6159);
+    const debtTotal = d.debts.investor_debt + d.debts.member_credits_2025
+        + d.debts.irs_balance + d.debts.chase_biz_7680 + d.debts.chase_sapphire_6159;
+    const debtEl = $('liab-total-debts');
+    if (debtEl) debtEl.textContent = fmt(debtTotal);
+
+    // Grand total
+    const gt = $('liabilities-grand-total');
+    if (gt) gt.textContent = fmt(d.grand_total);
+}
+
+function openLiabEditModal(key, currentValue) {
+    _liabEditKey = key;
+    const labels = {
+        hio_pot: 'HIO Pot',
+        season_contests_total: 'Season Contests Total',
+        lone_star_cup_shirts: 'Lone Star Cup Shirt Fund',
+        chapter_manager_payouts: 'Chapter Manager Payouts',
+        grandparent_loan: 'Investor Debt',
+        member_credits_2025: 'Member Credits 2025',
+        irs_balance: 'IRS Balance',
+        chase_biz_7680: 'Chase Biz (7680)',
+        chase_sapphire_6159: 'Chase Sapphire (6159)',
+    };
+    const modal = document.getElementById('liab-edit-modal');
+    const title = document.getElementById('liab-modal-title');
+    const input = document.getElementById('liab-modal-input');
+    if (title) title.textContent = 'Update: ' + (labels[key] || key);
+    if (input) { input.value = Number(currentValue || 0).toFixed(2); input.focus(); input.select(); }
+    if (modal) modal.style.display = 'flex';
+}
+
+function saveLiabEdit() {
+    const input = document.getElementById('liab-modal-input');
+    const value = parseFloat(input ? input.value : 0);
+    if (isNaN(value)) { showToast('Enter a valid number', 'error'); return; }
+    fetch('/api/accounting/liabilities/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: _liabEditKey, value }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.error) { showToast(res.error, 'error'); return; }
+        closeLiabModal();
+        loadLiabilities();
+        showToast('Saved', 'success');
+    })
+    .catch(() => showToast('Save failed', 'error'));
+}
+
+function closeLiabModal() {
+    const modal = document.getElementById('liab-edit-modal');
+    if (modal) modal.style.display = 'none';
+    _liabEditKey = null;
+}
+
+function initLiabilitiesTab() {
+    // Edit buttons
+    document.querySelectorAll('.liab-edit-btn').forEach(btn => {
+        const row = btn.closest('.liab-editable');
+        if (!row) return;
+        btn.addEventListener('click', () => {
+            const key = row.dataset.key;
+            // Find current value from rendered element
+            const amtMap = {
+                hio_pot: 'liab-hio-pot',
+                season_contests_total: 'liab-season-contests',
+                lone_star_cup_shirts: 'liab-lone-star',
+                chapter_manager_payouts: 'liab-chapter-mgr',
+                grandparent_loan: 'liab-investor-debt',
+                member_credits_2025: 'liab-member-credits',
+                irs_balance: 'liab-irs',
+                chase_biz_7680: 'liab-chase-biz',
+                chase_sapphire_6159: 'liab-chase-saph',
+            };
+            const elId = amtMap[key];
+            const el = elId ? document.getElementById(elId) : null;
+            const raw = el ? el.textContent.replace(/[$,]/g, '') : '0';
+            openLiabEditModal(key, parseFloat(raw) || 0);
+        });
+    });
+
+    // Expand prize pools breakdown
+    const expandBtn = document.getElementById('btn-expand-prize');
+    const breakdown = document.getElementById('liab-prize-breakdown');
+    if (expandBtn && breakdown) {
+        expandBtn.addEventListener('click', () => {
+            const open = breakdown.style.display !== 'none';
+            breakdown.style.display = open ? 'none' : 'block';
+            expandBtn.textContent = open ? '▾' : '▴';
+        });
+    }
+
+    // Modal buttons
+    const saveBtn = document.getElementById('liab-modal-save');
+    const cancelBtn = document.getElementById('liab-modal-cancel');
+    const input = document.getElementById('liab-modal-input');
+    if (saveBtn) saveBtn.addEventListener('click', saveLiabEdit);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeLiabModal);
+    if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') saveLiabEdit(); if (e.key === 'Escape') closeLiabModal(); });
+
+    // Refresh button
+    const refreshBtn = document.getElementById('btn-liabilities-refresh');
+    if (refreshBtn) refreshBtn.addEventListener('click', loadLiabilities);
+
+    // Load data
+    loadLiabilities();
+}
