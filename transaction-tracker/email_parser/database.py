@@ -2462,6 +2462,31 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
         except sqlite3.OperationalError:
             pass  # column already exists
+        # Add account_id FK so expense rows can be filtered by account like acct_transactions
+        try:
+            conn.execute(
+                "ALTER TABLE expense_transactions ADD COLUMN account_id INTEGER REFERENCES acct_accounts(id)"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        # Backfill account_id: match by last_four first (reliable), then by name
+        conn.execute("""
+            UPDATE expense_transactions
+            SET account_id = (
+                SELECT a.id FROM acct_accounts a
+                WHERE (expense_transactions.account_last4 IS NOT NULL
+                       AND a.last_four = expense_transactions.account_last4)
+                   OR (expense_transactions.account_last4 IS NULL
+                       AND expense_transactions.account_name IS NOT NULL
+                       AND UPPER(a.name) = UPPER(expense_transactions.account_name))
+                ORDER BY CASE WHEN a.last_four IS NOT NULL
+                              AND a.last_four = expense_transactions.account_last4
+                         THEN 0 ELSE 1 END
+                LIMIT 1
+            )
+            WHERE account_id IS NULL
+              AND (account_last4 IS NOT NULL OR account_name IS NOT NULL)
+        """)
 
         conn.execute(
             """
@@ -9568,6 +9593,9 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
         # Only pending expense_transactions
         include_acct_override = False
         review_status = 'pending'
+    elif ledger_status == 'unreconciled':
+        include_acct_override = True
+        acct_status_filter = 'active'  # active = not yet reconciled/reversed/merged
     elif ledger_status in ('active', 'reconciled', 'reversed', 'merged'):
         include_acct_override = True   # only ledger entries, no expense rows
         acct_status_filter = ledger_status
@@ -9653,17 +9681,21 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
                 exp_clauses.append("et.transaction_type = ?")
                 exp_params.append(txn_type)
             if account_id is not None:
-                # expense_transactions store account as text — match by last4 or name
+                # Use account_id FK where backfilled; fallback to text match for legacy rows
                 acct_row = conn.execute(
                     "SELECT name, last_four FROM acct_accounts WHERE id = ?", (account_id,)
                 ).fetchone()
                 if acct_row:
                     if acct_row["last_four"]:
-                        exp_clauses.append("et.account_last4 = ?")
-                        exp_params.append(acct_row["last_four"])
+                        exp_clauses.append(
+                            "(et.account_id = ? OR (et.account_id IS NULL AND et.account_last4 = ?))"
+                        )
+                        exp_params.extend([account_id, acct_row["last_four"]])
                     else:
-                        exp_clauses.append("et.account_name = ? COLLATE NOCASE")
-                        exp_params.append(acct_row["name"])
+                        exp_clauses.append(
+                            "(et.account_id = ? OR (et.account_id IS NULL AND UPPER(et.account_name) = UPPER(?)))"
+                        )
+                        exp_params.extend([account_id, acct_row["name"]])
                 else:
                     exp_clauses.append("1 = 0")  # unknown account → exclude all
 
@@ -12860,8 +12892,8 @@ def update_expense_transaction(txn_id: int, fields: dict,
                                db_path: str | Path | None = None) -> dict:
     """Update expense transaction and record corrections for learning."""
     allowed = {"merchant", "amount", "transaction_date", "account_last4", "account_name",
-               "transaction_type", "category", "entity", "event_name", "customer_id",
-               "review_status", "reviewed_at", "reviewed_by", "notes"}
+               "account_id", "transaction_type", "category", "entity", "event_name",
+               "customer_id", "review_status", "reviewed_at", "reviewed_by", "notes"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return {}
@@ -12884,6 +12916,30 @@ def update_expense_transaction(txn_id: int, fields: dict,
         set_clause = ", ".join(f"{k} = ?" for k in safe)
         conn.execute(f"UPDATE expense_transactions SET {set_clause} WHERE id = ?",
                      (*safe.values(), txn_id))
+
+        # Auto-resolve account_id FK when account_name or account_last4 changes
+        if 'account_name' in safe or 'account_last4' in safe:
+            row = conn.execute(
+                "SELECT account_name, account_last4 FROM expense_transactions WHERE id = ?",
+                (txn_id,)
+            ).fetchone()
+            if row:
+                last4 = row["account_last4"]
+                name = row["account_name"]
+                acct = None
+                if last4:
+                    acct = conn.execute(
+                        "SELECT id FROM acct_accounts WHERE last_four = ? LIMIT 1", (last4,)
+                    ).fetchone()
+                if not acct and name:
+                    acct = conn.execute(
+                        "SELECT id FROM acct_accounts WHERE UPPER(name) = UPPER(?) LIMIT 1", (name,)
+                    ).fetchone()
+                if acct:
+                    conn.execute(
+                        "UPDATE expense_transactions SET account_id = ? WHERE id = ?",
+                        (acct["id"], txn_id)
+                    )
 
         # Auto-learn: create keyword rule when expense is approved with category
         if safe.get("review_status") in ("approved", "corrected"):

@@ -4,7 +4,7 @@
 
 async function loadTransactions() {
     const acctPill = document.querySelector('#ledger-acct-pills .ledger-pill.active');
-    const statusPill = document.querySelector('#ledger-status-pills .ledger-pill.active');
+    const statusPill = document.querySelector('#ledger-status-pills .ledger-seg-btn.active');
     const acctId = acctPill?.dataset.acctId || null;
     const ledgerStatus = statusPill?.dataset.status || 'all';
 
@@ -57,9 +57,9 @@ function initLedgerPills() {
 
     const statusBar = document.getElementById('ledger-status-pills');
     if (statusBar) {
-        statusBar.querySelectorAll('.ledger-pill').forEach(btn => {
+        statusBar.querySelectorAll('.ledger-seg-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                statusBar.querySelectorAll('.ledger-pill').forEach(b => b.classList.remove('active'));
+                statusBar.querySelectorAll('.ledger-seg-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 ACCT.txnPage = 0;
                 loadTransactions();
@@ -105,7 +105,9 @@ function renderTransactionList(txns, total) {
         } else if (isExp && t.review_status === 'ignored') {
             reviewBadge = '<span class="acct-review-badge acct-review-ignored" title="Ignored">Ignored</span>';
         }
-        const reconBadge = !isExp && t.is_reconciled ? '<span class="acct-reconciled" title="Reconciled">&#10003;</span>' : '';
+        const reconBadge = isExp ? '' : (t.is_reconciled
+            ? '<span class="acct-rec-dot acct-rec-yes" title="Reconciled">&#9679;</span>'
+            : '<span class="acct-rec-dot acct-rec-no" title="Not reconciled">&#9679;</span>');
         const tagBadges = (t.tags || []).map(tg => `<span class="acct-tag-chip" style="background:${tg.color}">${tg.name}</span>`).join('');
         return { isExp, splitBadges, sourceBadge, reviewBadge, reconBadge, tagBadges };
     }

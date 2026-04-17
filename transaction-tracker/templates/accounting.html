@@ -6,10 +6,22 @@
     <title>Accounting — TGF Tracker</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <style>
+        /* Account pills — individual round */
         .ledger-pill-row{display:flex;flex-wrap:wrap;gap:.4rem;padding:.5rem 0;}
-        .ledger-pill{padding:.28rem .85rem;border:1.5px solid var(--border,#d1d5db);border-radius:999px;background:transparent;color:var(--text,#374151);cursor:pointer;font-size:.82rem;font-weight:500;transition:background .15s,border-color .15s,color .15s;white-space:nowrap;}
+        .ledger-pill{padding:.28rem .85rem;border:1.5px solid var(--border,#d1d5db);border-radius:999px;background:transparent;color:var(--text-muted,#6b7280);cursor:pointer;font-size:.8rem;font-weight:500;transition:background .15s,border-color .15s,color .15s;white-space:nowrap;}
         .ledger-pill:hover{border-color:#3b82f6;color:#3b82f6;}
         .ledger-pill.active{background:#3b82f6;border-color:#3b82f6;color:#fff;}
+        /* Status pills — connected segmented control (matches Events PLAYERS/PAIRINGS style) */
+        .ledger-seg{display:inline-flex;border:1.5px solid var(--border,#d1d5db);border-radius:20px;overflow:hidden;}
+        .ledger-seg-btn{padding:.32rem .9rem;border:none;border-right:1px solid var(--border,#d1d5db);background:transparent;color:var(--text-muted,#6b7280);cursor:pointer;font-size:.8rem;font-weight:500;transition:background .15s,color .15s;white-space:nowrap;}
+        .ledger-seg-btn:last-child{border-right:none;}
+        .ledger-seg-btn:hover{background:#eff6ff;color:#3b82f6;}
+        .ledger-seg-btn.active{background:#3b82f6;color:#fff;}
+        /* Row reconciliation dot */
+        .acct-rec-dot{font-size:.6rem;vertical-align:middle;margin-right:3px;line-height:1;}
+        .acct-rec-yes{color:#16a34a;}
+        .acct-rec-no{color:#d97706;}
+        /* Layout */
         .ledger-filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.25rem 0 .5rem;border-bottom:1px solid var(--border,#e5e7eb);margin-bottom:.5rem;}
         .ledger-filter-right{display:flex;align-items:center;gap:.5rem;margin-left:auto;}
         @media(max-width:640px){.ledger-filter-right{margin-left:0;flex-wrap:wrap;}.ledger-filter-bar{flex-direction:column;align-items:flex-start;}}
@@ -239,11 +251,11 @@
             </div>
             <!-- Status Pills + Search + Controls -->
             <div class="ledger-filter-bar">
-                <div class="ledger-pill-row" id="ledger-status-pills" style="margin:0; padding:0;">
-                    <button class="ledger-pill active" data-status="all">All</button>
-                    <button class="ledger-pill" data-status="active">Active</button>
-                    <button class="ledger-pill" data-status="reconciled">&#10003; Reconciled</button>
-                    <button class="ledger-pill" data-status="pending">Pending Review</button>
+                <div class="ledger-seg" id="ledger-status-pills">
+                    <button class="ledger-seg-btn active" data-status="all">All</button>
+                    <button class="ledger-seg-btn" data-status="unreconciled">Unreconciled</button>
+                    <button class="ledger-seg-btn" data-status="reconciled">&#10003; Reconciled</button>
+                    <button class="ledger-seg-btn" data-status="pending">Pending Review</button>
                 </div>
                 <div class="ledger-filter-right">
                     <input type="text" id="txn-search" class="acct-search" placeholder="Search ledger..." style="width:160px;">
