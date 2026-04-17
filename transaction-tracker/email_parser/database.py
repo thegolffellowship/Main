@@ -2479,23 +2479,26 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass  # column already exists
         # Backfill account_id: match by last_four first (reliable), then by name
-        conn.execute("""
-            UPDATE expense_transactions
-            SET account_id = (
-                SELECT a.id FROM acct_accounts a
-                WHERE (expense_transactions.account_last4 IS NOT NULL
-                       AND a.last_four = expense_transactions.account_last4)
-                   OR (expense_transactions.account_last4 IS NULL
-                       AND expense_transactions.account_name IS NOT NULL
-                       AND UPPER(a.name) = UPPER(expense_transactions.account_name))
-                ORDER BY CASE WHEN a.last_four IS NOT NULL
-                              AND a.last_four = expense_transactions.account_last4
-                         THEN 0 ELSE 1 END
-                LIMIT 1
-            )
-            WHERE account_id IS NULL
-              AND (account_last4 IS NOT NULL OR account_name IS NOT NULL)
-        """)
+        try:
+            conn.execute("""
+                UPDATE expense_transactions
+                SET account_id = (
+                    SELECT a.id FROM acct_accounts a
+                    WHERE (expense_transactions.account_last4 IS NOT NULL
+                           AND a.last_four = expense_transactions.account_last4)
+                       OR (expense_transactions.account_last4 IS NULL
+                           AND expense_transactions.account_name IS NOT NULL
+                           AND UPPER(a.name) = UPPER(expense_transactions.account_name))
+                    ORDER BY CASE WHEN a.last_four IS NOT NULL
+                                  AND a.last_four = expense_transactions.account_last4
+                             THEN 0 ELSE 1 END
+                    LIMIT 1
+                )
+                WHERE account_id IS NULL
+                  AND (account_last4 IS NOT NULL OR account_name IS NOT NULL)
+            """)
+        except sqlite3.OperationalError:
+            pass  # skip backfill if columns not yet available (old schema)
 
         conn.execute(
             """
