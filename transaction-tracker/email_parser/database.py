@@ -9683,7 +9683,7 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
 
         # --- Merge and paginate ---
         combined = acct_txns + deduped_exp
-        combined.sort(key=lambda t: (t.get("date") or "", t.get("id") or ""), reverse=True)
+        combined.sort(key=lambda t: (t.get("date") or "", str(t.get("id") or "")), reverse=True)
         total = acct_total + exp_total
         page = combined[offset:offset + limit]
 
@@ -13581,6 +13581,90 @@ def get_coo_financial_snapshot(db_path: str | Path | None = None) -> dict:
                 + manual.get("chase_biz_7680", 0) + manual.get("chase_sapphire_6159", 0), 2
             ),
         },
+    }
+
+
+def get_accounting_liabilities(db_path: str | Path | None = None) -> dict:
+    """Return all 9 liability buckets for the Liabilities Dashboard."""
+    manual = get_all_coo_manual_values(db_path)
+    today = datetime.now().strftime("%Y-%m-%d")
+    month_prefix = datetime.now().strftime("%Y-%m")
+
+    with _connect(db_path) as conn:
+        # Prize pools owed — broken out per event (upcoming/future allocations)
+        prize_rows = conn.execute(
+            """SELECT event_name, COALESCE(SUM(prize_pool), 0) as total
+               FROM acct_allocations
+               WHERE allocation_date >= ? AND event_name IS NOT NULL
+               GROUP BY event_name
+               ORDER BY MIN(allocation_date) ASC""",
+            (today,),
+        ).fetchall()
+        prize_per_event = [{"event": r["event_name"], "amount": round(r["total"], 2)} for r in prize_rows]
+        prize_total = round(sum(e["amount"] for e in prize_per_event), 2)
+
+        # Course fees owed (future events)
+        course_fees = conn.execute(
+            "SELECT COALESCE(SUM(course_payable + course_surcharge), 0) as total FROM acct_allocations WHERE allocation_date >= ?",
+            (today,),
+        ).fetchone()["total"]
+
+        # Tax reserve — full YTD (not just MTD, since it accumulates)
+        tax_reserve = conn.execute(
+            "SELECT COALESCE(SUM(tax_reserve), 0) as total FROM acct_allocations WHERE allocation_date LIKE ?",
+            (f"{month_prefix[:4]}%",),  # full year
+        ).fetchone()["total"]
+
+        # Member credits: sum credited items not yet redeemed
+        member_credits_calc = conn.execute(
+            """SELECT COALESCE(SUM(ABS(item_price)), 0) as total
+               FROM items WHERE transaction_status = 'credited'""",
+        ).fetchone()["total"]
+
+    # Manual values — editable buckets
+    hio_pot = manual.get("hio_pot", 0) or 0
+    season_contests = manual.get("season_contests_total", 0) or 0
+    lone_star_cup = manual.get("lone_star_cup_shirts", 0) or 0
+    chapter_mgr = manual.get("chapter_manager_payouts", 0) or 0
+    investor_debt = manual.get("grandparent_loan", 0) or 0
+    member_credits_manual = manual.get("member_credits_2025", 0) or 0
+    # Use the larger of calculated vs manual (manual overrides if explicitly set)
+    member_credits = member_credits_manual if member_credits_manual > 0 else round(member_credits_calc, 2)
+
+    # Debt tracker (from existing COO manual values)
+    irs_balance = manual.get("irs_balance", 0) or 0
+    chase_biz = manual.get("chase_biz_7680", 0) or 0
+    chase_saph = manual.get("chase_sapphire_6159", 0) or 0
+
+    return {
+        "event_obligations": {
+            "prize_pools": {"total": prize_total, "per_event": prize_per_event},
+            "course_fees_owed": round(course_fees, 2),
+        },
+        "running_pools": {
+            "hio_pot": round(hio_pot, 2),
+            "season_contests": round(season_contests, 2),
+            "lone_star_cup_shirts": round(lone_star_cup, 2),
+        },
+        "operational": {
+            "chapter_manager_payouts": round(chapter_mgr, 2),
+            "tax_reserve_ytd": round(tax_reserve, 2),
+        },
+        "debts": {
+            "investor_debt": round(investor_debt, 2),
+            "member_credits_2025": round(member_credits, 2),
+            "irs_balance": round(irs_balance, 2),
+            "chase_biz_7680": round(chase_biz, 2),
+            "chase_sapphire_6159": round(chase_saph, 2),
+        },
+        "grand_total": round(
+            prize_total + course_fees + hio_pot + season_contests + lone_star_cup
+            + chapter_mgr + tax_reserve + investor_debt + member_credits
+            + irs_balance + chase_biz + chase_saph, 2
+        ),
+        "manual_keys": ["hio_pot", "season_contests_total", "lone_star_cup_shirts",
+                        "chapter_manager_payouts", "grandparent_loan", "member_credits_2025",
+                        "irs_balance", "chase_biz_7680", "chase_sapphire_6159"],
     }
 
 
