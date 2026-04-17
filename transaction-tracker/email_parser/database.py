@@ -13178,6 +13178,343 @@ def import_venmo_statement(csv_text: str, account_label: str,
             "categorized": categorized, "rows_preview": preview}
 
 
+def import_paypal_statement(csv_text: str, account_label: str = "PayPal",
+                            db_path: str | Path | None = None) -> dict:
+    """Import PayPal CSV statement (activity download).
+
+    Standard PayPal CSV columns include:
+      Date, Time, TimeZone, Name, Type, Status, Currency, Gross, Fee, Net,
+      From Email Address, To Email Address, Transaction ID, Item Title, ...
+
+    Creates acct_transactions entries for completed outgoing payments
+    with "Winnings" in the item title/note → category='prize_payout'.
+    Also writes bank_deposits rows. Triggers reverse-match against
+    pending tgf_payouts like the Venmo import.
+
+    Returns {imported, skipped, format, payouts_matched, rows_preview}.
+    """
+    import csv
+    import hashlib
+    import io
+    import re
+
+    batch_id = (f"{datetime.now().strftime('%Y%m%d%H%M%S')}-"
+                f"{hashlib.md5(csv_text.encode()).hexdigest()[:8]}")
+
+    reader = csv.reader(io.StringIO(csv_text))
+    all_rows = list(reader)
+    if len(all_rows) < 2:
+        return {"imported": 0, "skipped": 0, "format": "empty",
+                "rows_preview": []}
+
+    header = [h.strip().strip('"').lower() for h in all_rows[0]]
+    data_rows = all_rows[1:]
+
+    # Column lookups (PayPal exports vary slightly; be flexible)
+    def find_idx(*needles):
+        for n in needles:
+            for i, h in enumerate(header):
+                if n in h:
+                    return i
+        return None
+
+    date_idx = find_idx("date")
+    name_idx = find_idx("name")
+    type_idx = find_idx("type")
+    status_idx = find_idx("status")
+    gross_idx = find_idx("gross")
+    net_idx = find_idx("net")
+    fee_idx = find_idx("fee")
+    currency_idx = find_idx("currency")
+    title_idx = find_idx("item title", "item name", "description", "note")
+    txn_id_idx = find_idx("transaction id", "reference id")
+    to_email_idx = find_idx("to email")
+
+    if date_idx is None or gross_idx is None:
+        return {"imported": 0, "skipped": 0, "format": "unknown",
+                "rows_preview": [],
+                "error": "Not a recognizable PayPal CSV (missing Date/Gross columns)"}
+
+    def parse_amt(raw: str) -> float | None:
+        cleaned = (raw or "").replace("$", "").replace(",", "").strip()
+        if not cleaned:
+            return None
+        try:
+            return float(cleaned)
+        except (ValueError, TypeError):
+            return None
+
+    def extract_customer(name: str, title: str, to_email: str) -> str:
+        # Prefer the Name column (recipient name)
+        if name and name.strip():
+            return name.strip().title()
+        if to_email and "@" in to_email:
+            return to_email.split("@")[0].replace(".", " ").title()
+        if title and " - " in title:
+            return title.split(" - ")[0].strip().title()
+        return (name or title or "").strip()
+
+    imported, skipped = 0, 0
+    preview: list[dict] = []
+
+    with _connect(db_path) as conn:
+        acct = conn.execute(
+            "SELECT id FROM bank_accounts WHERE LOWER(name) LIKE '%paypal%' LIMIT 1"
+        ).fetchone()
+        if not acct:
+            # Create a PayPal bank_account on the fly
+            conn.execute(
+                "INSERT OR IGNORE INTO bank_accounts (name, account_type) VALUES ('PayPal', 'paypal')"
+            )
+            acct = conn.execute(
+                "SELECT id FROM bank_accounts WHERE LOWER(name) LIKE '%paypal%' LIMIT 1"
+            ).fetchone()
+        account_id = acct["id"] if acct else None
+
+        for row in data_rows:
+            if not row or len(row) <= max(filter(None, [date_idx, gross_idx, type_idx])):
+                continue
+
+            status = (row[status_idx].strip() if status_idx is not None and status_idx < len(row) else "").lower()
+            if status and "complete" not in status:
+                continue
+
+            gross = parse_amt(row[gross_idx]) if gross_idx is not None and gross_idx < len(row) else None
+            if gross is None or gross == 0:
+                continue
+
+            # We only care about OUTGOING prize payouts (negative gross)
+            if gross > 0:
+                continue
+
+            raw_date = row[date_idx].strip() if date_idx < len(row) else ""
+            parsed_date = _normalise_csv_date(raw_date)
+            if not parsed_date:
+                continue
+
+            name_v = row[name_idx].strip() if name_idx is not None and name_idx < len(row) else ""
+            title = row[title_idx].strip() if title_idx is not None and title_idx < len(row) else ""
+            to_email = row[to_email_idx].strip() if to_email_idx is not None and to_email_idx < len(row) else ""
+            txn_id = row[txn_id_idx].strip() if txn_id_idx is not None and txn_id_idx < len(row) else ""
+
+            desc_parts = [p for p in [name_v, title] if p]
+            desc = ": ".join(desc_parts) if len(desc_parts) > 1 else (desc_parts[0] if desc_parts else "(no description)")
+
+            # Categorize: winnings → prize_payout
+            note_upper = (title + " " + name_v).upper()
+            if "WINNINGS" in note_upper or "WINNING" in note_upper:
+                category = "prize_payout"
+                entry_type = "expense"
+            elif "REFUND" in note_upper:
+                category = "refund"
+                entry_type = "expense"
+            else:
+                category = "miscellaneous"
+                entry_type = "expense"
+
+            customer = extract_customer(name_v, title, to_email)
+            source_ref = f"paypal-{txn_id}" if txn_id else f"paypal-{parsed_date}-{abs(gross):.2f}-{customer}"
+
+            # Dedup
+            existing_dep = conn.execute(
+                "SELECT id FROM bank_deposits WHERE raw_data = ?", (source_ref,),
+            ).fetchone()
+            existing_txn = conn.execute(
+                "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status,'active') = 'active'",
+                (source_ref,),
+            ).fetchone()
+            if existing_dep and existing_txn:
+                skipped += 1
+                continue
+
+            if not existing_dep and account_id:
+                conn.execute(
+                    """INSERT INTO bank_deposits
+                       (account_id, deposit_date, amount, description, source, import_batch_id, raw_data)
+                       VALUES (?, ?, ?, ?, 'paypal', ?, ?)""",
+                    (account_id, parsed_date, gross, desc, batch_id, source_ref),
+                )
+
+            if not existing_txn:
+                _write_acct_entry(
+                    conn,
+                    entry_type=entry_type, category=category, source="paypal",
+                    amount=gross, description=desc, account="PayPal",
+                    source_ref=source_ref, date=parsed_date, customer=customer,
+                )
+
+            imported += 1
+            if len(preview) < 50:
+                preview.append({
+                    "date": parsed_date, "description": desc, "amount": gross,
+                    "category": category, "customer": customer,
+                })
+
+        # Reverse-match against pending tgf_payouts
+        matched_payouts = _match_pending_payouts_to_new_venmo(conn)
+        conn.commit()
+
+    return {"imported": imported, "skipped": skipped, "format": "PayPal",
+            "rows_preview": preview, "payouts_matched": matched_payouts}
+
+
+def import_cashapp_statement(csv_text: str, account_label: str = "CashApp",
+                             db_path: str | Path | None = None) -> dict:
+    """Import Cash App CSV statement.
+
+    Standard Cash App CSV columns:
+      Transaction ID, Date, Transaction Type, Currency, Amount, Fee,
+      Net Amount, Asset Type, Asset Price, Asset Amount, Status, Notes,
+      Name of sender/receiver, Account, Beneficiary Type, Beneficiary Name, ...
+
+    Imports completed outgoing payments (negative amount) as
+    prize_payout acct_transactions when note contains "Winnings".
+    """
+    import csv
+    import hashlib
+    import io
+
+    batch_id = (f"{datetime.now().strftime('%Y%m%d%H%M%S')}-"
+                f"{hashlib.md5(csv_text.encode()).hexdigest()[:8]}")
+
+    reader = csv.reader(io.StringIO(csv_text))
+    all_rows = list(reader)
+    if len(all_rows) < 2:
+        return {"imported": 0, "skipped": 0, "format": "empty", "rows_preview": []}
+
+    header = [h.strip().strip('"').lower() for h in all_rows[0]]
+    data_rows = all_rows[1:]
+
+    def find_idx(*needles):
+        for n in needles:
+            for i, h in enumerate(header):
+                if n in h:
+                    return i
+        return None
+
+    txn_id_idx = find_idx("transaction id")
+    date_idx = find_idx("date")
+    type_idx = find_idx("transaction type")
+    amount_idx = find_idx("amount")
+    net_idx = find_idx("net amount")
+    status_idx = find_idx("status")
+    note_idx = find_idx("notes", "note")
+    name_idx = find_idx("name of sender", "beneficiary name", "name")
+
+    if date_idx is None or amount_idx is None:
+        return {"imported": 0, "skipped": 0, "format": "unknown",
+                "rows_preview": [],
+                "error": "Not a recognizable Cash App CSV (missing Date/Amount)"}
+
+    def parse_amt(raw: str) -> float | None:
+        cleaned = (raw or "").replace("$", "").replace(",", "").strip()
+        if not cleaned:
+            return None
+        try:
+            return float(cleaned)
+        except (ValueError, TypeError):
+            return None
+
+    imported, skipped = 0, 0
+    preview: list[dict] = []
+
+    with _connect(db_path) as conn:
+        acct = conn.execute(
+            "SELECT id FROM bank_accounts WHERE LOWER(name) LIKE '%cashapp%' OR LOWER(name) LIKE '%cash app%' LIMIT 1"
+        ).fetchone()
+        if not acct:
+            conn.execute(
+                "INSERT OR IGNORE INTO bank_accounts (name, account_type) VALUES ('Cash App', 'cashapp')"
+            )
+            acct = conn.execute(
+                "SELECT id FROM bank_accounts WHERE LOWER(name) LIKE '%cash%' LIMIT 1"
+            ).fetchone()
+        account_id = acct["id"] if acct else None
+
+        for row in data_rows:
+            if not row or len(row) <= max(filter(None, [date_idx, amount_idx])):
+                continue
+
+            status = (row[status_idx].strip() if status_idx is not None and status_idx < len(row) else "").lower()
+            if status and "complete" not in status and "sent" not in status:
+                continue
+
+            amount = parse_amt(row[amount_idx]) if amount_idx < len(row) else None
+            if amount is None or amount == 0 or amount > 0:
+                # Skip positive (incoming) amounts for prize payouts
+                continue
+
+            raw_date = row[date_idx].strip() if date_idx < len(row) else ""
+            parsed_date = _normalise_csv_date(raw_date.split(" ")[0] if " " in raw_date else raw_date)
+            if not parsed_date:
+                continue
+
+            note = row[note_idx].strip() if note_idx is not None and note_idx < len(row) else ""
+            name_v = row[name_idx].strip() if name_idx is not None and name_idx < len(row) else ""
+            txn_id = row[txn_id_idx].strip() if txn_id_idx is not None and txn_id_idx < len(row) else ""
+
+            desc = f"{name_v}: {note}" if name_v and note else (name_v or note or "(no description)")
+
+            note_upper = (note + " " + name_v).upper()
+            if "WINNINGS" in note_upper or "WINNING" in note_upper:
+                category = "prize_payout"
+            elif "REFUND" in note_upper:
+                category = "refund"
+            else:
+                category = "miscellaneous"
+            entry_type = "expense"
+
+            # Extract customer from name or note prefix
+            customer = name_v.title() if name_v else ""
+            import re as _re
+            if not customer and note:
+                m = _re.match(r"^(.+?)\s*-\s+", note)
+                if m:
+                    customer = m.group(1).strip().title()
+
+            source_ref = f"cashapp-{txn_id}" if txn_id else f"cashapp-{parsed_date}-{abs(amount):.2f}-{customer}"
+
+            existing_dep = conn.execute(
+                "SELECT id FROM bank_deposits WHERE raw_data = ?", (source_ref,),
+            ).fetchone()
+            existing_txn = conn.execute(
+                "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status,'active') = 'active'",
+                (source_ref,),
+            ).fetchone()
+            if existing_dep and existing_txn:
+                skipped += 1
+                continue
+
+            if not existing_dep and account_id:
+                conn.execute(
+                    """INSERT INTO bank_deposits
+                       (account_id, deposit_date, amount, description, source, import_batch_id, raw_data)
+                       VALUES (?, ?, ?, ?, 'cashapp', ?, ?)""",
+                    (account_id, parsed_date, amount, desc, batch_id, source_ref),
+                )
+
+            if not existing_txn:
+                _write_acct_entry(
+                    conn,
+                    entry_type=entry_type, category=category, source="cashapp",
+                    amount=amount, description=desc, account="Cash App",
+                    source_ref=source_ref, date=parsed_date, customer=customer,
+                )
+
+            imported += 1
+            if len(preview) < 50:
+                preview.append({
+                    "date": parsed_date, "description": desc, "amount": amount,
+                    "category": category, "customer": customer,
+                })
+
+        matched_payouts = _match_pending_payouts_to_new_venmo(conn)
+        conn.commit()
+
+    return {"imported": imported, "skipped": skipped, "format": "Cash App",
+            "rows_preview": preview, "payouts_matched": matched_payouts}
+
+
 def _import_generic_csv(data_rows, header, batch_id, account_id, db_path):
     """Fallback for unknown CSV formats."""
     date_idx = next((i for i, h in enumerate(header) if "date" in h), 0)

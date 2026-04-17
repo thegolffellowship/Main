@@ -180,6 +180,8 @@ from email_parser.database import (
     get_bank_accounts,
     import_bank_deposits,
     import_venmo_statement,
+    import_paypal_statement,
+    import_cashapp_statement,
     run_deposit_auto_match,
     manual_match_deposit,
     batch_match_deposit,
@@ -6271,10 +6273,25 @@ def api_recon_import():
     file_bytes = f.read()
     # Detect Venmo statement format before default import path
     csv_text = file_bytes.decode("utf-8", errors="replace")
-    first_line = csv_text.split("\n", 1)[0].strip()
-    if "Account Statement" in first_line or first_line.lower().startswith("transaction id"):
+    first_line = csv_text.split("\n", 1)[0].strip().lower()
+    # Detect PayPal: header contains "gross" + "fee" + "net" (PayPal activity export)
+    if ("gross" in first_line and "fee" in first_line and "net" in first_line
+            and ("paypal" in first_line or "to email" in first_line or "item title" in first_line)):
+        result = import_paypal_statement(csv_text, "PayPal")
+        if result.get("imported", 0) > 0:
+            match_result = run_deposit_auto_match()
+            result["auto_match"] = match_result
+        return jsonify(result)
+    # Detect Cash App: header contains "transaction type" + "net amount" or "cash app"
+    if ("transaction type" in first_line and ("net amount" in first_line or "cash app" in first_line)):
+        result = import_cashapp_statement(csv_text, "CashApp")
+        if result.get("imported", 0) > 0:
+            match_result = run_deposit_auto_match()
+            result["auto_match"] = match_result
+        return jsonify(result)
+    # Detect Venmo: "Account Statement" or starts with "transaction id" (but not Cash App)
+    if "account statement" in first_line or (first_line.startswith("transaction id") and "transaction type" not in first_line):
         result = import_venmo_statement(csv_text, "Venmo")
-        # Auto-match after import
         if result.get("imported", 0) > 0:
             match_result = run_deposit_auto_match()
             result["auto_match"] = match_result
