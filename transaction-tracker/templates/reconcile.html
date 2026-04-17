@@ -288,6 +288,7 @@
                             <input type="text" id="cem-event" placeholder="Type to search events…" autocomplete="off"
                                    oninput="cemFilterEvents()" onfocus="cemFilterEvents()"
                                    onblur="setTimeout(cemHideEventDrop, 200)"
+                                   onkeydown="cemEventKeydown(event)"
                                    style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
                             <div id="cem-events-drop" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid var(--border); border-top:none; border-radius:0 0 6px 6px; max-height:180px; overflow-y:auto; z-index:600; box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>
                         </div>
@@ -605,6 +606,7 @@
 
     let _reconCats = null, _reconEnts = null, _reconEvents = null;
     let _cemDepositId = null;
+    let _cemEvtIdx = -1;
 
     async function _loadModalData() {
         if (_reconCats && _reconEnts && _reconEvents) return;
@@ -786,6 +788,7 @@
     }
 
     function cemFilterEvents() {
+        _cemEvtIdx = -1;
         const q = (document.getElementById('cem-event').value || '').toLowerCase();
         const drop = document.getElementById('cem-events-drop');
         const evts = (_reconEvents || [])
@@ -800,6 +803,28 @@
             el.addEventListener('mousedown', ev => { ev.preventDefault(); cemSelectEvent(el.dataset.val); });
         });
         drop.style.display = 'block';
+    }
+
+    function cemEventKeydown(e) {
+        const drop = document.getElementById('cem-events-drop');
+        if (drop.style.display === 'none') { if (e.key === 'ArrowDown') cemFilterEvents(); return; }
+        const opts = drop.querySelectorAll('.cem-evt-opt');
+        if (!opts.length) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (_cemEvtIdx >= 0) opts[_cemEvtIdx].style.background = '';
+            _cemEvtIdx = e.key === 'ArrowDown'
+                ? Math.min(_cemEvtIdx + 1, opts.length - 1)
+                : Math.max(_cemEvtIdx - 1, 0);
+            opts[_cemEvtIdx].style.background = '#dbeafe';
+            opts[_cemEvtIdx].scrollIntoView({block: 'nearest'});
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (_cemEvtIdx >= 0) cemSelectEvent(opts[_cemEvtIdx].dataset.val);
+            else if (opts.length === 1) cemSelectEvent(opts[0].dataset.val);
+        } else if (e.key === 'Escape') {
+            cemHideEventDrop();
+        }
     }
 
     function cemSelectEvent(name) {

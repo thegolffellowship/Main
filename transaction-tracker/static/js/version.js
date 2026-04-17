@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.6.7";
+window.TGF_VERSION = "2.6.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.8",
+    date: "2026-04-17",
+    title: "Event typeahead — keyboard navigation (↑↓ Enter Escape)",
+    changes: [
+      "Arrow keys move the highlighted option up/down with blue highlight and auto-scroll",
+      "Enter selects the highlighted option (or the only match when there's just one)",
+      "Escape closes the dropdown; ArrowDown opens it if closed",
+    ],
+  },
   {
     version: "2.6.7",
     date: "2026-04-17",
