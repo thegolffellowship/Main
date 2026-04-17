@@ -208,6 +208,8 @@ from email_parser.database import (
     create_entry_from_deposit,
     # Liabilities Dashboard
     get_accounting_liabilities,
+    # Month Close
+    get_month_close_status,
     # TGF Payouts
     get_tgf_data,
     add_tgf_event,
@@ -5541,6 +5543,13 @@ def api_acct_ai_batch_approve():
 def api_accounting_liabilities():
     """Return all liability buckets for the Liabilities Dashboard."""
     return jsonify(get_accounting_liabilities())
+
+
+@app.route("/api/accounting/month-close")
+@require_role("admin")
+def api_accounting_month_close():
+    """Return month-close checklist status and financial position."""
+    return jsonify(get_month_close_status())
 
 
 @app.route("/api/accounting/liabilities/update", methods=["POST"])

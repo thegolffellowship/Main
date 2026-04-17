@@ -2629,3 +2629,51 @@ div.mobile-card.row-rsvp-only {
     color: var(--text-muted);
 }
 .liab-prize-event-row span:last-child { font-weight: 600; color: var(--text); }
+
+/* ---- Month Close Checklist ---- */
+.mc-fin-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.65rem 0.9rem;
+}
+.mc-fin-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.2rem; }
+.mc-fin-val { font-size: 1.05rem; font-weight: 700; }
+.mc-income .mc-fin-val { color: #16a34a; }
+.mc-expense .mc-fin-val { color: #dc2626; }
+.mc-cash .mc-fin-val { color: #2563eb; }
+.mc-liab .mc-fin-val { color: #dc2626; }
+.mc-pos-positive .mc-fin-val { color: #16a34a; }
+.mc-pos-negative .mc-fin-val { color: #dc2626; }
+.mc-net-positive .mc-fin-val { color: #16a34a; }
+.mc-net-negative .mc-fin-val { color: #dc2626; }
+
+.mc-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border-light, #f0f0f0);
+    font-size: 0.875rem;
+}
+.mc-item:last-child { border-bottom: none; }
+.mc-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.mc-dot-green { background: #16a34a; }
+.mc-dot-amber { background: #f59e0b; }
+.mc-dot-red { background: #dc2626; }
+.mc-item-label { flex: 1; font-weight: 500; }
+.mc-item-detail { color: var(--text-muted); font-size: 0.8rem; }
+.mc-item-action {
+    font-size: 0.78rem;
+    color: var(--primary);
+    cursor: pointer;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    padding: 0;
+}
+.mc-item-action:hover { color: var(--primary-dark, #1d4ed8); }

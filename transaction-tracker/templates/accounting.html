@@ -18,7 +18,7 @@
         <div class="header-content">
             <h1>Accounting</h1>
             <p class="subtitle">Multi-Entity Money Management</p>
-            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.6.0</a>
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
@@ -144,6 +144,47 @@
                     <span class="acct-pending-badge" id="pending-expense-count">0</span>
                 </div>
                 <div id="pending-expense-list" class="coo-review-list"></div>
+            </div>
+
+            <!-- Month Close Checklist -->
+            <div id="month-close-section" style="margin-bottom:1.5rem;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+                    <h3 style="margin:0;font-size:1rem;" id="month-close-title">Month Close — <span id="month-close-period">…</span></h3>
+                    <span id="month-close-score" style="font-size:0.8rem;color:var(--text-muted);"></span>
+                </div>
+
+                <!-- Financial Position row -->
+                <div id="fin-position-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.65rem;margin-bottom:1rem;">
+                    <div class="mc-fin-card mc-income">
+                        <div class="mc-fin-label">YTD Income</div>
+                        <div class="mc-fin-val" id="mc-ytd-income">—</div>
+                    </div>
+                    <div class="mc-fin-card mc-expense">
+                        <div class="mc-fin-label">YTD Expenses</div>
+                        <div class="mc-fin-val" id="mc-ytd-expenses">—</div>
+                    </div>
+                    <div class="mc-fin-card" id="mc-net-card">
+                        <div class="mc-fin-label">YTD Net</div>
+                        <div class="mc-fin-val" id="mc-ytd-net">—</div>
+                    </div>
+                    <div class="mc-fin-card mc-cash">
+                        <div class="mc-fin-label">Cash on Hand</div>
+                        <div class="mc-fin-val" id="mc-cash">—</div>
+                    </div>
+                    <div class="mc-fin-card mc-liab">
+                        <div class="mc-fin-label">Total Liabilities</div>
+                        <div class="mc-fin-val" id="mc-liabilities">—</div>
+                    </div>
+                    <div class="mc-fin-card" id="mc-pos-card">
+                        <div class="mc-fin-label">Net Position</div>
+                        <div class="mc-fin-val" id="mc-net-position">—</div>
+                    </div>
+                </div>
+
+                <!-- Checklist -->
+                <div id="month-close-checklist" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+                    <!-- populated by JS -->
+                </div>
             </div>
 
             <!-- Date Range Selector -->

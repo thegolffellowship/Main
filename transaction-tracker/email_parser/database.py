@@ -13668,6 +13668,113 @@ def get_accounting_liabilities(db_path: str | Path | None = None) -> dict:
     }
 
 
+def get_month_close_status(db_path: str | Path | None = None) -> dict:
+    """Return all data needed to render the Month Close checklist and Financial Position."""
+    manual = get_all_coo_manual_values(db_path)
+    today = datetime.now()
+    month_prefix = today.strftime("%Y-%m")
+    year_prefix = today.strftime("%Y")
+
+    with _connect(db_path) as conn:
+        # --- Checklist items ---
+        # 1. Uncategorized ledger entries
+        total_txns = conn.execute(
+            "SELECT COUNT(*) as cnt FROM acct_transactions WHERE type != 'transfer'"
+        ).fetchone()["cnt"]
+        categorized = conn.execute(
+            """SELECT COUNT(DISTINCT t.id) as cnt
+               FROM acct_transactions t
+               JOIN acct_splits s ON s.transaction_id = t.id
+               WHERE s.category_id IS NOT NULL AND t.type != 'transfer'"""
+        ).fetchone()["cnt"]
+        uncategorized_ledger = total_txns - categorized
+
+        # 2. Pending inbox (expense_transactions awaiting review)
+        pending_inbox = conn.execute(
+            "SELECT COUNT(*) as cnt FROM expense_transactions WHERE review_status = 'pending'"
+        ).fetchone()["cnt"]
+
+        # 3. Unmatched bank deposits
+        unmatched_deposits = conn.execute(
+            "SELECT COUNT(*) as cnt FROM bank_deposits WHERE status = 'unmatched'"
+        ).fetchone()["cnt"]
+
+        # 4. Unreconciled ledger entries (active income/expense with no bank match)
+        unreconciled = conn.execute(
+            """SELECT COUNT(*) as cnt FROM acct_transactions t
+               WHERE t.status = 'active'
+               AND t.type IN ('income', 'expense')
+               AND NOT EXISTS (
+                   SELECT 1 FROM reconciliation_matches rm WHERE rm.acct_transaction_id = t.id
+               )"""
+        ).fetchone()["cnt"]
+
+        # 5. Events this month with no accounting entries
+        events_no_entries = conn.execute(
+            """SELECT COUNT(*) as cnt FROM events e
+               WHERE e.date LIKE ? AND e.name IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM acct_transactions t
+                   WHERE t.event_name = e.name AND t.entry_type IS NOT NULL
+               )""",
+            (f"{month_prefix}%",),
+        ).fetchone()["cnt"]
+
+        # --- Financial Position ---
+        # YTD income and expenses from acct_transactions
+        ytd = conn.execute(
+            """SELECT
+                COALESCE(SUM(CASE WHEN entry_type = 'income' AND status != 'reversed' THEN total_amount ELSE 0 END), 0) as income,
+                COALESCE(SUM(CASE WHEN entry_type = 'expense' AND status != 'reversed' THEN total_amount ELSE 0 END), 0) as expenses
+               FROM acct_transactions
+               WHERE date LIKE ?""",
+            (f"{year_prefix}%",),
+        ).fetchone()
+        ytd_income = round(ytd["income"] or 0, 2)
+        ytd_expenses = round(ytd["expenses"] or 0, 2)
+        ytd_net = round(ytd_income - ytd_expenses, 2)
+
+        # Tax reserve YTD
+        tax_reserve = conn.execute(
+            "SELECT COALESCE(SUM(tax_reserve), 0) as total FROM acct_allocations WHERE allocation_date LIKE ?",
+            (f"{year_prefix}%",),
+        ).fetchone()["total"]
+
+    # Cash on hand from manual values
+    checking = manual.get("tgf_checking_0341", 0) or 0
+    money_market = manual.get("tgf_money_market_8045", 0) or 0
+    cash_on_hand = round(checking + money_market, 2)
+
+    # Total liabilities (all buckets combined)
+    liabilities = get_accounting_liabilities(db_path)
+    total_liabilities = liabilities["grand_total"]
+
+    net_position = round(cash_on_hand - total_liabilities, 2)
+
+    return {
+        "period": {
+            "month": today.strftime("%B %Y"),
+            "year": today.strftime("%Y"),
+        },
+        "checklist": {
+            "uncategorized_ledger": uncategorized_ledger,
+            "pending_inbox": pending_inbox,
+            "unmatched_deposits": unmatched_deposits,
+            "unreconciled_entries": unreconciled,
+            "events_no_entries": events_no_entries,
+            "tax_reserve_ytd": round(tax_reserve, 2),
+        },
+        "financial_position": {
+            "ytd_income": ytd_income,
+            "ytd_expenses": ytd_expenses,
+            "ytd_net": ytd_net,
+            "cash_on_hand": cash_on_hand,
+            "total_liabilities": total_liabilities,
+            "net_position": net_position,
+        },
+    }
+
+
 def get_coo_review_queue(db_path: str | Path | None = None) -> list[dict]:
     """Unified review queue: pending expenses + low-confidence action items."""
     with _connect(db_path) as conn:
