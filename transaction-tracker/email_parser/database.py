@@ -2629,6 +2629,11 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_dep_date ON bank_deposits(deposit_date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_dep_status ON bank_deposits(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_dep_batch ON bank_deposits(import_batch_id)")
+        # Migration: add dismissed column for internal transfers / not-applicable deposits
+        _bank_dep_cols = [r[1] for r in conn.execute("PRAGMA table_info(bank_deposits)").fetchall()]
+        if "dismissed" not in _bank_dep_cols:
+            conn.execute("ALTER TABLE bank_deposits ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE bank_deposits ADD COLUMN dismiss_reason TEXT")
 
         conn.execute(
             """
@@ -13888,9 +13893,9 @@ def _get_month_close_status_inner(db_path: str | Path | None = None) -> dict:
             "SELECT COUNT(*) as cnt FROM expense_transactions WHERE review_status = 'pending'"
         ).fetchone()["cnt"]
 
-        # 3. Unmatched bank deposits
+        # 3. Unmatched bank deposits (excluding dismissed internal transfers)
         unmatched_deposits = conn.execute(
-            "SELECT COUNT(*) as cnt FROM bank_deposits WHERE status = 'unmatched'"
+            "SELECT COUNT(*) as cnt FROM bank_deposits WHERE status = 'unmatched' AND COALESCE(dismissed, 0) = 0"
         ).fetchone()["cnt"]
 
         # 4. Unreconciled ledger entries (active income/expense with no bank match)
@@ -15324,8 +15329,20 @@ def unmatch_deposit(bank_deposit_id: int, acct_transaction_id: int | None = None
     return {"status": "ok"}
 
 
+def dismiss_bank_deposit(deposit_id: int, reason: str = "internal_transfer",
+                         db_path: str | Path | None = None) -> dict:
+    """Mark a bank deposit as dismissed (internal transfer, not applicable, etc.)."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            "UPDATE bank_deposits SET dismissed = 1, dismiss_reason = ? WHERE id = ?",
+            (reason, deposit_id),
+        )
+        conn.commit()
+    return {"dismissed": True, "id": deposit_id, "reason": reason}
+
+
 def get_bank_deposits(account_id: int | None = None, status: str | None = None,
-                      month: str | None = None,
+                      month: str | None = None, include_dismissed: bool = False,
                       db_path: str | Path | None = None) -> list[dict]:
     """Return bank deposits with match info."""
     with _connect(db_path) as conn:
@@ -15336,6 +15353,8 @@ def get_bank_deposits(account_id: int | None = None, status: str | None = None,
             clauses.append("d.status = ?"); params.append(status)
         if month:
             clauses.append("d.deposit_date LIKE ?"); params.append(f"{month}%")
+        if not include_dismissed:
+            clauses.append("COALESCE(d.dismissed, 0) = 0")
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
 
         rows = conn.execute(
@@ -15613,7 +15632,7 @@ def get_reconciliation_dashboard(db_path: str | Path | None = None) -> dict:
             ).fetchone()["total"]
 
             unmatched_count = conn.execute(
-                "SELECT COUNT(*) as cnt FROM bank_deposits WHERE account_id = ? AND status = 'unmatched'",
+                "SELECT COUNT(*) as cnt FROM bank_deposits WHERE account_id = ? AND status = 'unmatched' AND COALESCE(dismissed, 0) = 0",
                 (aid,),
             ).fetchone()["cnt"]
 

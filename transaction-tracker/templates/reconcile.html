@@ -153,6 +153,10 @@
                         </select>
                         <button class="btn btn-secondary" onclick="loadBrowseAll()" style="font-size:0.72rem; padding:2px 8px;">Search</button>
                     </div>
+                    <div id="suggestions-dismiss-bar" style="display:none; padding:4px 0 6px 0; border-bottom:1px solid var(--border); margin-bottom:4px;">
+                        <button class="btn btn-sm" onclick="dismissDeposit('internal_transfer')" style="font-size:0.75rem; background:#f1f5f9; border-color:#94a3b8; color:#475569; margin-right:4px;">↔ Mark as Internal Transfer</button>
+                        <button class="btn btn-sm" onclick="dismissDeposit('not_applicable')" style="font-size:0.75rem; background:#f1f5f9; border-color:#94a3b8; color:#475569;">✕ Not Applicable</button>
+                    </div>
                     <div id="txn-list"><div style="color:var(--text-muted); font-size:0.82rem;">Click a deposit on the left to see suggestions ranked by confidence.</div></div>
                 </div>
             </div>
@@ -331,6 +335,9 @@
         if (row) row.classList.add('selected');
         const depStatus = status || row?.dataset?.status || 'unmatched';
 
+        // Hide dismiss bar when switching deposits
+        document.getElementById('suggestions-dismiss-bar').style.display = 'none';
+
         // If this deposit is already matched, show its matched transactions with unmatch option
         if (depStatus === 'matched') {
             const txnDiv = document.getElementById('txn-list');
@@ -381,6 +388,9 @@
         // Fetch smart suggestions for this deposit
         const txnDiv = document.getElementById('txn-list');
         txnDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.82rem; padding:1rem;">Finding matches...</div>';
+        // Show dismiss controls header immediately (before async suggestions load)
+        document.getElementById('suggestions-dismiss-bar').style.display = '';
+        document.getElementById('suggestions-dismiss-bar').dataset.depositId = id;
 
         try {
             const res = await fetch(`/api/reconciliation/suggestions/${id}`);
@@ -505,6 +515,25 @@
         } catch(e) {
             alert('Failed: ' + e.message);
         }
+    }
+
+    async function dismissDeposit(reason) {
+        const bar = document.getElementById('suggestions-dismiss-bar');
+        const depositId = bar?.dataset?.depositId;
+        if (!depositId) return;
+        const label = reason === 'internal_transfer' ? 'internal transfer' : 'not applicable';
+        if (!confirm(`Mark this deposit as ${label}? It will be hidden from the match queue.`)) return;
+        try {
+            await fetch('/api/reconciliation/dismiss-deposit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ deposit_id: parseInt(depositId), reason }),
+            });
+            bar.style.display = 'none';
+            selectedDeposit = null;
+            loadMatchQueue();
+            loadDashboard();
+        } catch(e) { alert('Dismiss failed: ' + e); }
     }
 
     async function unmatchDeposit(depositId) {

@@ -164,6 +164,7 @@ from email_parser.database import (
     update_expense_transaction,
     get_blocked_merchants,
     block_merchant,
+    dismiss_bank_deposit,
     save_action_item,
     get_action_items,
     update_action_item,
@@ -6599,7 +6600,19 @@ def api_recon_deposits():
     account_id = request.args.get("account_id", type=int)
     status = request.args.get("status")
     month = request.args.get("month")
-    return jsonify(get_bank_deposits(account_id, status, month))
+    include_dismissed = request.args.get("include_dismissed", "false").lower() == "true"
+    return jsonify(get_bank_deposits(account_id, status, month, include_dismissed))
+
+
+@app.route("/api/reconciliation/dismiss-deposit", methods=["POST"])
+@require_role("admin")
+def api_dismiss_deposit():
+    d = request.json or {}
+    deposit_id = d.get("deposit_id")
+    reason = d.get("reason", "internal_transfer")
+    if not deposit_id:
+        return jsonify({"error": "deposit_id required"}), 400
+    return jsonify(dismiss_bank_deposit(deposit_id, reason))
 
 
 @app.route("/api/reconciliation/unreconciled")
