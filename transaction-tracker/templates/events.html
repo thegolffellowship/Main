@@ -394,6 +394,9 @@
         </div>
     </div>
 
+    <!-- Shared datalist for course autocomplete on all event modals -->
+    <datalist id="course-datalist"></datalist>
+
     <!-- Edit Event Modal -->
     <div id="edit-event-overlay" class="modal-overlay" style="display:none;">
         <div class="modal edit-modal" style="max-width:700px;">
@@ -414,7 +417,7 @@
                 <div class="edit-grid">
                     <label>Event Name<input type="text" id="edit-event-item_name" class="modal-input"></label>
                     <label>Date<input type="date" id="edit-event-event_date" class="modal-input"></label>
-                    <label>Course<input type="text" id="edit-event-course" class="modal-input"></label>
+                    <label>Course<input type="text" id="edit-event-course" class="modal-input" list="course-datalist" placeholder="Type or select a course..."></label>
                     <label>Chapter
                         <select id="edit-event-chapter" class="modal-input">
                             <option value="">Select chapter...</option>
@@ -946,7 +949,7 @@
                 <div class="edit-grid">
                     <label>Event Name<input type="text" id="add-event-name" class="modal-input" required aria-required="true"></label>
                     <label>Date<input type="date" id="add-event-date" class="modal-input"></label>
-                    <label>Course<input type="text" id="add-event-course" class="modal-input"></label>
+                    <label>Course<input type="text" id="add-event-course" class="modal-input" list="course-datalist" placeholder="Type or select a course..."></label>
                     <label>Chapter
                         <select id="add-event-chapter" class="modal-input">
                             <option value="">Select chapter...</option>
@@ -1183,7 +1186,7 @@
                 <div class="edit-grid" style="margin-bottom:1rem;">
                     <label>Event Name<input type="text" id="resolve-new-name" class="modal-input"></label>
                     <label>Date<input type="date" id="resolve-new-date" class="modal-input"></label>
-                    <label>Course<input type="text" id="resolve-new-course" class="modal-input"></label>
+                    <label>Course<input type="text" id="resolve-new-course" class="modal-input" list="course-datalist" placeholder="Type or select a course..."></label>
                     <label>Chapter
                         <select id="resolve-new-chapter" class="modal-input">
                             <option value="">Select chapter...</option>
@@ -3123,6 +3126,67 @@
                 <strong>Parse failed:</strong> ${escapeHtml(err.message)}
                 <button class="btn btn-secondary" onclick="this.closest('div').parentElement.style.display='none';document.getElementById('payout-drop-zone-${ev.id}').style.display='';" style="margin-left:0.5rem;font-size:0.78rem;padding:0.2rem 0.5rem;">Try Again</button>
             </div>`;
+        }
+    }
+
+    // Populate the shared course datalist from /api/courses for autocomplete
+    // on all event modals. Called at page load.
+    let COURSES_CACHE = [];  // cached list of {course_id, name, chapter_id, aliases}
+    async function fetchCoursesForDatalist() {
+        try {
+            const res = await fetch("/api/courses");
+            if (!res.ok) return;
+            COURSES_CACHE = await res.json();
+            const dl = document.getElementById("course-datalist");
+            if (!dl) return;
+            dl.innerHTML = COURSES_CACHE
+                .map(c => `<option value="${c.name.replace(/"/g, '&quot;')}"></option>`)
+                .join("");
+        } catch (err) {
+            console.warn("Failed to load courses datalist:", err);
+        }
+    }
+
+    // Given a typed course name, ensure it exists in the courses table.
+    // Returns the course_id, creating one if needed. Silent on failure (logs).
+    async function ensureCourseExists(typedName, chapterName) {
+        const name = (typedName || "").trim();
+        if (!name) return null;
+        // Already in cache (case-insensitive match by name or alias)?
+        const lower = name.toLowerCase();
+        const existing = COURSES_CACHE.find(c =>
+            c.name.toLowerCase() === lower ||
+            (c.aliases || []).some(a => a.toLowerCase() === lower)
+        );
+        if (existing) return existing.course_id;
+        // Create it
+        try {
+            // Look up chapter_id from chapter name (cached via /api/chapters if we have it)
+            let chapter_id = null;
+            if (chapterName) {
+                const chRes = await fetch("/api/chapters");
+                if (chRes.ok) {
+                    const chapters = await chRes.json();
+                    const ch = chapters.find(x => x.name.toLowerCase() === chapterName.toLowerCase());
+                    if (ch) chapter_id = ch.chapter_id;
+                }
+            }
+            const res = await fetch("/api/courses", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({name, chapter_id}),
+            });
+            if (!res.ok) {
+                console.warn("Failed to create course:", name, await res.text());
+                return null;
+            }
+            const data = await res.json();
+            // Refresh cache
+            await fetchCoursesForDatalist();
+            return data.course_id;
+        } catch (err) {
+            console.warn("Error creating course:", err);
+            return null;
         }
     }
 
@@ -7736,8 +7800,8 @@
             }
         });
 
-        // Fetch items, handicap data, and TGF payout data, then sync events
-        await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData()]);
+        // Fetch items, handicap data, TGF payout data, and courses datalist, then sync events
+        await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData(), fetchCoursesForDatalist()]);
         fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
         fetchParseWarnings();
         fetchOrphanedItems();

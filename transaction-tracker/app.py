@@ -2564,6 +2564,30 @@ def api_courses():
     return jsonify(courses)
 
 
+@app.route("/api/courses", methods=["POST"])
+@require_role("manager")
+def api_create_course():
+    """Create a new course. Body: {name, chapter_id?, city?, state?}."""
+    from email_parser.database import _connect
+    d = request.json or {}
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Course name required"}), 400
+    with _connect() as conn:
+        existing = conn.execute(
+            "SELECT course_id FROM courses WHERE LOWER(name) = LOWER(?)", (name,)
+        ).fetchone()
+        if existing:
+            return jsonify({"error": f"Course '{name}' already exists", "course_id": existing["course_id"]}), 409
+        cur = conn.execute(
+            """INSERT INTO courses (name, chapter_id, city, state)
+               VALUES (?, ?, ?, ?)""",
+            (name, d.get("chapter_id"), d.get("city"), d.get("state")),
+        )
+        conn.commit()
+        return jsonify({"course_id": cur.lastrowid, "name": name})
+
+
 @app.route("/api/events")
 def api_events():
     """Return all events with registration counts and aliases."""

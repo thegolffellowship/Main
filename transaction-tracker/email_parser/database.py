@@ -719,11 +719,18 @@ def _migrate_create_dim_tables(conn: sqlite3.Connection) -> None:
     needs_fk = "chapter_id" not in items_cols or "course_id" not in items_cols
 
     if existing_chapters > 0 and existing_courses > 0 and not needs_fk:
-        # Check if any items still need backfill
+        # Check if any items/events still need backfill (chapter or course)
         try:
-            needs_backfill = conn.execute(
-                "SELECT COUNT(*) as c FROM items WHERE chapter_id IS NULL AND chapter IS NOT NULL AND chapter != ''"
-            ).fetchone()["c"]
+            needs_backfill_row = conn.execute(
+                """SELECT
+                   (SELECT COUNT(*) FROM items
+                      WHERE (chapter_id IS NULL AND chapter IS NOT NULL AND chapter != '')
+                         OR (course_id IS NULL AND course IS NOT NULL AND course != '')) as items_backfill,
+                   (SELECT COUNT(*) FROM events
+                      WHERE (chapter_id IS NULL AND chapter IS NOT NULL AND chapter != '')
+                         OR (course_id IS NULL AND course IS NOT NULL AND course != '')) as events_backfill"""
+            ).fetchone()
+            needs_backfill = needs_backfill_row["items_backfill"] + needs_backfill_row["events_backfill"]
         except Exception:
             needs_backfill = 0
         if needs_backfill == 0:
