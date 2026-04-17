@@ -155,3 +155,16 @@ if (document.readyState === "loading") {
 }
 window.addEventListener("load", _setStickyOffsets);
 window.addEventListener("resize", _setStickyOffsets);
+
+// Update version badge from version.js (runs on every page)
+(function _setVersionBadge() {
+    const update = () => {
+        const el = document.getElementById("version-badge");
+        if (el && window.TGF_VERSION) el.textContent = "v" + window.TGF_VERSION;
+    };
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", update);
+    } else {
+        update();
+    }
+})();
