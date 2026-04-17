@@ -585,12 +585,13 @@ def check_expense_inbox(force=False, days_back=14):
                     if not event_name and customer_id:
                         event_name = match_event_from_customer(customer_id, conn)
                     review_status = "approved" if extracted["confidence"] >= 95 else "pending"
+                    venmo_email_date = (email_data.get("date") or "")[:10]
                     save_expense_transaction({
                         "email_uid": email_data["uid"],
                         "source_type": "venmo",
                         "merchant": extracted.get("recipient_name"),
                         "amount": extracted.get("amount"),
-                        "transaction_date": extracted.get("transaction_date"),
+                        "transaction_date": extracted.get("transaction_date") or venmo_email_date or None,
                         "transaction_type": extracted.get("transaction_type", "payout"),
                         "event_name": event_name,
                         "customer_id": customer_id,
@@ -602,10 +603,12 @@ def check_expense_inbox(force=False, days_back=14):
                     processed += 1
 
             elif email_type == "expense_receipt":
+                raw_email_date = (email_data.get("date") or "")[:10]
                 extracted = parse_expense_receipt(
                     email_data.get("subject", ""),
                     email_data.get("from", ""),
                     body_text,
+                    email_date=raw_email_date or None,
                 )
                 if extracted.get("confidence", 0) > 0:
                     review_status = "approved" if extracted["confidence"] >= 95 else "pending"
@@ -614,7 +617,7 @@ def check_expense_inbox(force=False, days_back=14):
                         "source_type": "receipt",
                         "merchant": extracted.get("merchant"),
                         "amount": extracted.get("amount"),
-                        "transaction_date": extracted.get("transaction_date"),
+                        "transaction_date": extracted.get("transaction_date") or raw_email_date or None,
                         "account_last4": extracted.get("account_last4"),
                         "category": extracted.get("category"),
                         "entity": extracted.get("entity", "TGF"),

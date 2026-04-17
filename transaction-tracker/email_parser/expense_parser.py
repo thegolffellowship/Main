@@ -220,7 +220,8 @@ Return ONLY the JSON object."""
 # ---------------------------------------------------------------------------
 
 def parse_expense_receipt(subject: str, from_addr: str, body_text: str,
-                          merchant_context: dict | None = None) -> dict:
+                          merchant_context: dict | None = None,
+                          email_date: str | None = None) -> dict:
     """Extract data from an expense receipt or invoice email."""
     body_preview = (body_text or "")[:2000]
 
@@ -232,19 +233,24 @@ def parse_expense_receipt(subject: str, from_addr: str, body_text: str,
     if merchant_context:
         context_str = f"\n\nPast categorization for this merchant:\n{json.dumps(merchant_context)}"
 
+    email_date_hint = f"\nEmail received date: {email_date}" if email_date else ""
+
     prompt = f"""Extract receipt/invoice details from this email.
 
 Known merchants and their categories:
 {known_list}{context_str}
 
 From: {from_addr}
-Subject: {subject}
+Subject: {subject}{email_date_hint}
 Body: {body_preview}
 
 Return a JSON object with:
 - merchant: string (clean merchant name)
 - amount: number (positive, no $ sign)
-- transaction_date: string (YYYY-MM-DD)
+- transaction_date: string (YYYY-MM-DD) — use the date the payment was actually made.
+  IMPORTANT: Use the email received date shown above as the transaction_date unless the email
+  body explicitly contains a different payment/charge date. Do NOT use future event dates,
+  service dates, or invoice due dates — those are not when the payment occurred.
 - description: string (what was purchased/billed)
 - account_last4: string (last 4 of payment card if visible, else null)
 - category: string (from known list above, or best guess)
@@ -258,6 +264,10 @@ Return ONLY the JSON object."""
         return {"confidence": 0, "error": "LLM extraction failed"}
 
     result.setdefault("confidence", 50)
+
+    # Fall back to email_date if LLM returned no transaction_date
+    if not result.get("transaction_date") and email_date:
+        result["transaction_date"] = email_date
 
     # Auto-categorize from known merchants if not already set
     merchant_lower = (result.get("merchant") or "").lower()
