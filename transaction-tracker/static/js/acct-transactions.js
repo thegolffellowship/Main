@@ -298,6 +298,17 @@ const _SOURCE_LABELS = {
     receipt: 'Receipt',
 };
 
+function _ledgerDot(t) {
+    const GREY  = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-right:5px;vertical-align:middle;flex-shrink:0;"></span>';
+    const GREEN = '<span title="Reconciled" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:5px;vertical-align:middle;flex-shrink:0;"></span>';
+    const AMBER = '<span title="Awaiting bank match" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#fbbf24;margin-right:5px;vertical-align:middle;flex-shrink:0;"></span>';
+    if (t._is_expense) return GREY;
+    if (t.status === 'reconciled') return GREEN;
+    if (t.status === 'reversed' || t.status === 'merged') return GREY;
+    if (t.type === 'income' || t.type === 'contra') return AMBER;
+    return GREY;
+}
+
 function renderTransactionList(txns, total) {
     const el = $('#txn-list');
     if (!txns.length) {
@@ -324,11 +335,8 @@ function renderTransactionList(txns, total) {
         } else if (isExp && t.review_status === 'ignored') {
             reviewBadge = '<span class="acct-review-badge acct-review-ignored" title="Ignored">Ignored</span>';
         }
-        const reconBadge = isExp ? '' : (t.is_reconciled
-            ? '<span class="acct-rec-dot acct-rec-yes" title="Reconciled">&#9679;</span>'
-            : '<span class="acct-rec-dot acct-rec-no" title="Not reconciled">&#9679;</span>');
         const tagBadges = (t.tags || []).map(tg => `<span class="acct-tag-chip" style="background:${tg.color}">${tg.name}</span>`).join('');
-        return { isExp, splitBadges, sourceBadge, reviewBadge, reconBadge, tagBadges };
+        return { isExp, splitBadges, sourceBadge, reviewBadge, tagBadges };
     }
 
     // Desktop table
@@ -348,10 +356,10 @@ function renderTransactionList(txns, total) {
                 : `data-id="${t.id}"`;
 
             return `<tr class="${rowClass}" ${rowData}>
-                <td>${t.date || ''}</td>
+                <td style="white-space:nowrap;">${_ledgerDot(t)}${t.date || ''}</td>
                 <td>
                     ${t.description || ''}
-                    ${m.sourceBadge}${m.reviewBadge}${m.reconBadge}${m.tagBadges}
+                    ${m.sourceBadge}${m.reviewBadge}${m.tagBadges}
                 </td>
                 <td class="acct-split-cell">${m.splitBadges}</td>
                 <td class="text-right ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</td>
@@ -466,7 +474,7 @@ function renderTransactionList(txns, total) {
         return `<div class="${cardClass}" ${cardData}>
             <div class="acct-mobile-card-top">
                 <div class="acct-mc-left">
-                    <div class="acct-mc-date">${t.date || ''} ${m.sourceBadge}${m.reconBadge}</div>
+                    <div class="acct-mc-date">${_ledgerDot(t)}${t.date || ''} ${m.sourceBadge}</div>
                     <div class="acct-mc-desc">${t.description || ''} ${m.tagBadges}</div>
                 </div>
                 <div class="acct-mc-right">

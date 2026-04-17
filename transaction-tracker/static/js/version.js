@@ -15,6 +15,15 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.7.4",
+    date: "2026-04-17",
+    title: "Hotfix: guard backfill with try/except",
+    changes: [
+      "Wrapped account_id backfill in try/except so schema edge cases can't crash startup",
+      "ALTER TABLE migrations for account_last4/account_name remain; backfill is now non-fatal",
+    ],
+  },
+  {
     version: "2.7.3",
     date: "2026-04-17",
     title: "Hotfix: add missing account_last4/account_name migrations",
