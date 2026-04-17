@@ -421,6 +421,47 @@
                     }
                 });
             });
+
+            // Mark Paid buttons
+            main.querySelectorAll(".mark-paid-btn").forEach(btn => {
+                btn.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    const eventId = btn.dataset.eventId;
+                    const customerId = btn.dataset.customerId;
+                    const name = btn.dataset.name;
+                    const amount = parseFloat(btn.dataset.amount).toFixed(2);
+                    const method = prompt(
+                        `Mark ${name}'s $${amount} payout as PAID.\n\n` +
+                        `Payment method (paypal / cashapp / cash / check / zelle / other):`,
+                        "paypal"
+                    );
+                    if (!method) return;
+                    const paidDate = prompt("Paid date (YYYY-MM-DD), leave blank for today:") || "";
+                    const reference = prompt("Reference/note (optional):") || "";
+                    try {
+                        const res = await fetch("/api/tgf/mark-paid", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({
+                                event_id: parseInt(eventId),
+                                customer_id: parseInt(customerId),
+                                payment_method: method.trim().toLowerCase(),
+                                paid_date: paidDate || null,
+                                reference: reference,
+                            }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                            alert("Failed: " + (data.error || res.statusText));
+                            return;
+                        }
+                        alert(`Marked $${data.amount} paid via ${data.payment_method} (${data.linked_payouts} payouts linked).`);
+                        location.reload();
+                    } catch (err) {
+                        alert("Error: " + err.message);
+                    }
+                });
+            });
         }
 
         function renderPayoutsTab(ev, golferList) {
@@ -448,6 +489,10 @@
                        </a>`
                     : "";
                 const statusBadge = STATUS_BADGE[g.payment_status] || "";
+                const isPending = g.payment_status === "pending" || g.payment_status === "unwired" || g.payment_status === "mixed";
+                const markPaidBtn = isPending
+                    ? `<button class="mark-paid-btn" data-event-id="${ev.id}" data-customer-id="${g.golfer_id}" data-amount="${g.total}" data-name="${g.name.replace(/"/g, '&quot;')}" style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-weight:600;cursor:pointer;margin-left:4px;" onclick="event.stopPropagation()">Mark Paid</button>`
+                    : "";
 
                 rows += `
                     <tr class="golfer-row" data-gid="${g.golfer_id}">
@@ -455,7 +500,7 @@
                         <td>${g.name}</td>
                         <td class="right">${g.items.length}</td>
                         <td class="right total-amount">${fmt(g.total)}</td>
-                        <td class="right">${statusBadge} ${venmoHtml}</td>
+                        <td class="right">${statusBadge} ${venmoHtml} ${markPaidBtn}</td>
                     </tr>
                     <tr class="breakdown-row" data-gid="${g.golfer_id}">
                         <td colspan="5">

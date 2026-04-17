@@ -6879,6 +6879,105 @@ def api_tgf_match_diagnostic():
     })
 
 
+@app.route("/api/tgf/mark-paid", methods=["POST"])
+@require_role("manager")
+def api_tgf_mark_paid():
+    """Mark a group of payouts as paid via non-Venmo method.
+
+    Body: {event_id, customer_id, payment_method, paid_date?, reference?}
+
+    Creates a real acct_transaction (expense/prize_payout) with the
+    specified source, reverses the pending placeholder, and links all
+    matching tgf_payouts rows.
+    """
+    from email_parser.database import _connect
+    d = request.json or {}
+    event_id = d.get("event_id")
+    customer_id = d.get("customer_id")
+    payment_method = (d.get("payment_method") or "").strip().lower()
+    paid_date = d.get("paid_date")  # YYYY-MM-DD, defaults to today
+    reference = d.get("reference") or ""
+
+    if not event_id or not customer_id or not payment_method:
+        return jsonify({"error": "event_id, customer_id, and payment_method required"}), 400
+
+    # Whitelist allowed sources
+    ALLOWED_SOURCES = {"paypal", "cashapp", "cash", "check", "zelle", "other"}
+    if payment_method not in ALLOWED_SOURCES:
+        return jsonify({"error": f"payment_method must be one of {sorted(ALLOWED_SOURCES)}"}), 400
+
+    if not paid_date:
+        from datetime import date as _date
+        paid_date = _date.today().isoformat()
+
+    with _connect() as conn:
+        # Find all pending payouts for this customer+event
+        pending = conn.execute(
+            """SELECT p.id as payout_id, p.amount, p.acct_transaction_id,
+                      t.source as txn_source, t.status as txn_status,
+                      e.name as event_name,
+                      (c.first_name || ' ' || c.last_name) as customer_name
+               FROM tgf_payouts p
+               JOIN tgf_events e ON e.id = p.event_id
+               JOIN customers c ON c.customer_id = p.customer_id
+               LEFT JOIN acct_transactions t ON t.id = p.acct_transaction_id
+               WHERE p.event_id = ? AND p.customer_id = ?
+                 AND (p.paid_at IS NULL OR t.source = 'pending')""",
+            (event_id, customer_id),
+        ).fetchall()
+
+        if not pending:
+            return jsonify({"error": "No pending payouts found for this customer+event"}), 404
+
+        total_amount = round(sum(float(p["amount"]) for p in pending), 2)
+        customer_name = pending[0]["customer_name"]
+        event_name = pending[0]["event_name"]
+
+        # Create the real acct_transaction for the payment
+        description = f"{payment_method.upper()} payout: {customer_name} — {event_name}"
+        if reference:
+            description += f" (ref: {reference})"
+
+        cur = conn.execute(
+            """INSERT INTO acct_transactions
+                   (date, description, total_amount, type, source, source_ref,
+                    customer, order_id, entry_type, category, amount, account, status, event_name)
+               VALUES (?, ?, ?, 'expense', ?, ?, ?, ?, 'expense', 'prize_payout',
+                       ?, ?, 'active', ?)""",
+            (
+                paid_date, description, total_amount, payment_method,
+                f"manual-payout-{event_id}-{customer_id}",
+                customer_name,
+                f"MANUAL-PAYOUT-{event_id}-{customer_id}",
+                -total_amount,
+                payment_method.capitalize(),
+                event_name,
+            ),
+        )
+        new_txn_id = cur.lastrowid
+
+        # Reverse the pending placeholders + link payouts to the new entry
+        linked = 0
+        for p in pending:
+            if p["acct_transaction_id"] and p["txn_source"] == "pending":
+                conn.execute(
+                    "UPDATE acct_transactions SET status = 'reversed' WHERE id = ?",
+                    (p["acct_transaction_id"],),
+                )
+            conn.execute(
+                "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
+                (new_txn_id, paid_date, p["payout_id"]),
+            )
+            linked += 1
+
+        conn.commit()
+        return jsonify({
+            "ok": True, "linked_payouts": linked,
+            "amount": total_amount, "payment_method": payment_method,
+            "acct_transaction_id": new_txn_id,
+        })
+
+
 @app.route("/api/tgf/parse-screenshot", methods=["POST"])
 @require_role("manager")
 def api_tgf_parse_screenshot():
