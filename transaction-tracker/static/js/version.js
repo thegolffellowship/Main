@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.6.4";
+window.TGF_VERSION = "2.6.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.6.5",
+    date: "2026-04-17",
+    title: "Create Ledger Entry modal — required category, inline add category/entity, custom event typeahead",
+    changes: [
+      "Category is now required — submit is blocked with red highlight if no category is selected",
+      "Category dropdown has '＋ Add new category…' option — opens inline form to create and immediately select a new acct_categories entry",
+      "Business Entity dropdown has '＋ Add new entity…' option — opens inline form to create a new acct_entities row",
+      "Event field replaced with custom typeahead dropdown — shows matching events as you type, fully cross-browser reliable",
+      "Add-category/add-entity inline forms hide correctly when reopening the modal",
+    ],
+  },
   {
     version: "2.6.4",
     date: "2026-04-17",

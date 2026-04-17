@@ -237,18 +237,43 @@
                             </select>
                         </div>
                         <div>
-                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Category</label>
-                            <select id="cem-category" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
-                                <option value="">— Category (optional) —</option>
+                            <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Category <span style="color:#dc2626;">*</span></label>
+                            <select id="cem-category" onchange="cemCategoryChange()" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
+                                <option value="">— Select Category —</option>
                             </select>
+                            <div id="cem-add-cat-form" style="display:none; margin-top:6px; padding:8px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px;">
+                                <div style="font-size:0.75rem; font-weight:600; margin-bottom:4px;">New Category</div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:6px;">
+                                    <input type="text" id="cem-newcat-name" placeholder="Category name" style="padding:4px 6px; border:1px solid var(--border); border-radius:4px; font-size:0.8rem;">
+                                    <select id="cem-newcat-type" style="padding:4px 6px; border:1px solid var(--border); border-radius:4px; font-size:0.8rem;">
+                                        <option value="expense">Expense</option>
+                                        <option value="income">Income</option>
+                                    </select>
+                                </div>
+                                <div style="display:flex; gap:4px;">
+                                    <button onclick="cemSaveNewCategory()" class="btn btn-primary" style="flex:1; padding:4px 8px; font-size:0.78rem;">Save</button>
+                                    <button onclick="cemCancelAddCat()" class="btn btn-secondary" style="padding:4px 8px; font-size:0.78rem;">Cancel</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
                         <div>
                             <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Business Entity <span style="font-weight:400; color:var(--text-muted);">(TGF / Personal)</span></label>
-                            <select id="cem-entity" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
+                            <select id="cem-entity" onchange="cemEntityChange()" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;">
                                 <option value="">— TGF or Personal? —</option>
                             </select>
+                            <div id="cem-add-ent-form" style="display:none; margin-top:6px; padding:8px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px;">
+                                <div style="font-size:0.75rem; font-weight:600; margin-bottom:4px;">New Entity</div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:6px;">
+                                    <input type="text" id="cem-newent-short" placeholder="Short name (e.g. TGF)" style="padding:4px 6px; border:1px solid var(--border); border-radius:4px; font-size:0.8rem;">
+                                    <input type="text" id="cem-newent-name" placeholder="Full name" style="padding:4px 6px; border:1px solid var(--border); border-radius:4px; font-size:0.8rem;">
+                                </div>
+                                <div style="display:flex; gap:4px;">
+                                    <button onclick="cemSaveNewEntity()" class="btn btn-primary" style="flex:1; padding:4px 8px; font-size:0.78rem;">Save</button>
+                                    <button onclick="cemCancelAddEnt()" class="btn btn-secondary" style="padding:4px 8px; font-size:0.78rem;">Cancel</button>
+                                </div>
+                            </div>
                         </div>
                         <div>
                             <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Bank Account <span style="font-size:0.65rem; font-weight:400; color:var(--text-muted);">from import</span></label>
@@ -259,8 +284,13 @@
                     </div>
                     <div>
                         <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Event <span style="font-weight:400; color:var(--text-muted);">(optional — links to existing event)</span></label>
-                        <input type="text" id="cem-event" placeholder="Type to search events…" list="cem-events-list" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
-                        <datalist id="cem-events-list"></datalist>
+                        <div style="position:relative;">
+                            <input type="text" id="cem-event" placeholder="Type to search events…" autocomplete="off"
+                                   oninput="cemFilterEvents()" onfocus="cemFilterEvents()"
+                                   onblur="setTimeout(cemHideEventDrop, 200)"
+                                   style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; box-sizing:border-box;">
+                            <div id="cem-events-drop" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid var(--border); border-top:none; border-radius:0 0 6px 6px; max-height:180px; overflow-y:auto; z-index:600; box-shadow:0 4px 12px rgba(0,0,0,0.12);"></div>
+                        </div>
                     </div>
                     <div>
                         <label style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:3px;">Notes <span style="font-weight:400; color:var(--text-muted);">(optional)</span></label>
@@ -592,12 +622,11 @@
         const typeFilter = document.getElementById('cem-type').value;
         const catSel = document.getElementById('cem-category');
         const prev = catSel.value;
-        catSel.innerHTML = '<option value="">— Category (optional) —</option>';
+        catSel.innerHTML = '<option value="">— Select Category —</option>';
         const filtered = (_reconCats || []).filter(c =>
             !typeFilter || typeFilter === 'transfer' ||
             c.type === typeFilter || c.type === 'both'
         );
-        // Group by type for optgroups
         const income = filtered.filter(c => c.type === 'income');
         const expense = filtered.filter(c => c.type === 'expense');
         const other = filtered.filter(c => c.type !== 'income' && c.type !== 'expense');
@@ -611,7 +640,46 @@
         if (typeFilter === 'income') addGroup('Income', income);
         else if (typeFilter === 'expense') addGroup('Expense', expense);
         else { addGroup('Income', income); addGroup('Expense', expense); addGroup('Other', other); }
-        if (prev) catSel.value = prev;
+        const addOpt = document.createElement('option');
+        addOpt.value = '__add_new__';
+        addOpt.textContent = '＋ Add new category…';
+        catSel.appendChild(addOpt);
+        if (prev && prev !== '__add_new__') catSel.value = prev;
+    }
+
+    function cemCategoryChange() {
+        if (document.getElementById('cem-category').value === '__add_new__') {
+            document.getElementById('cem-category').value = '';
+            document.getElementById('cem-newcat-name').value = '';
+            const typeFilter = document.getElementById('cem-type').value;
+            document.getElementById('cem-newcat-type').value = typeFilter === 'income' ? 'income' : 'expense';
+            document.getElementById('cem-add-cat-form').style.display = 'block';
+            document.getElementById('cem-newcat-name').focus();
+        }
+    }
+
+    async function cemSaveNewCategory() {
+        const name = document.getElementById('cem-newcat-name').value.trim();
+        const type = document.getElementById('cem-newcat-type').value;
+        if (!name) { alert('Category name is required.'); return; }
+        try {
+            const res = await fetch('/api/accounting/categories', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, type}),
+            });
+            const data = await res.json();
+            if (data.error) { alert('Error: ' + data.error); return; }
+            _reconCats = null;
+            await _loadModalData();
+            cemFilterCategories();
+            document.getElementById('cem-category').value = name;
+            document.getElementById('cem-add-cat-form').style.display = 'none';
+        } catch(e) { alert('Failed: ' + e.message); }
+    }
+
+    function cemCancelAddCat() {
+        document.getElementById('cem-add-cat-form').style.display = 'none';
     }
 
     async function showCreateEntryForm(depositId) {
@@ -643,18 +711,13 @@
         await _loadModalData();
 
         // Populate entity dropdown from acct_entities table
-        const entSel = document.getElementById('cem-entity');
-        entSel.innerHTML = '<option value="">— TGF or Personal? —</option>';
-        (_reconEnts || []).forEach(e => {
-            const opt = document.createElement('option');
-            opt.value = e.short_name;
-            opt.textContent = `${e.short_name}${e.name && e.name !== e.short_name ? ' — ' + e.name : ''}`;
-            entSel.appendChild(opt);
-        });
+        _cemPopulateEntities();
         // Default to first entity (usually TGF)
-        if (_reconEnts.length) entSel.value = _reconEnts[0].short_name;
+        if (_reconEnts.length) document.getElementById('cem-entity').value = _reconEnts[0].short_name;
+        document.getElementById('cem-add-ent-form').style.display = 'none';
 
         // Populate categories filtered by type
+        document.getElementById('cem-add-cat-form').style.display = 'none';
         cemFilterCategories();
 
         // Account dropdown from bank_accounts table (already loaded as `accounts`)
@@ -669,19 +732,81 @@
         });
         // Pre-select from deposit's account
         if (depAccountName) acctSel.value = depAccountName;
+    }
 
-        // Events datalist from events table
-        const dl = document.getElementById('cem-events-list');
-        dl.innerHTML = '';
-        (_reconEvents || [])
-            .filter(e => e.name && !e.name.startsWith('_'))
-            .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-            .forEach(e => {
-                const opt = document.createElement('option');
-                opt.value = e.name;
-                if (e.date) opt.dataset.date = e.date;
-                dl.appendChild(opt);
+    function _cemPopulateEntities() {
+        const entSel = document.getElementById('cem-entity');
+        const prev = entSel.value;
+        entSel.innerHTML = '<option value="">— TGF or Personal? —</option>';
+        (_reconEnts || []).forEach(e => {
+            const opt = document.createElement('option');
+            opt.value = e.short_name;
+            opt.textContent = `${e.short_name}${e.name && e.name !== e.short_name ? ' — ' + e.name : ''}`;
+            entSel.appendChild(opt);
+        });
+        const addOpt = document.createElement('option');
+        addOpt.value = '__add_new__';
+        addOpt.textContent = '＋ Add new entity…';
+        entSel.appendChild(addOpt);
+        if (prev && prev !== '__add_new__') entSel.value = prev;
+    }
+
+    function cemEntityChange() {
+        if (document.getElementById('cem-entity').value === '__add_new__') {
+            document.getElementById('cem-entity').value = '';
+            document.getElementById('cem-newent-short').value = '';
+            document.getElementById('cem-newent-name').value = '';
+            document.getElementById('cem-add-ent-form').style.display = 'block';
+            document.getElementById('cem-newent-short').focus();
+        }
+    }
+
+    async function cemSaveNewEntity() {
+        const short_name = document.getElementById('cem-newent-short').value.trim();
+        const name = document.getElementById('cem-newent-name').value.trim() || short_name;
+        if (!short_name) { alert('Short name is required.'); return; }
+        try {
+            const res = await fetch('/api/accounting/entities', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, short_name}),
             });
+            const data = await res.json();
+            if (data.error) { alert('Error: ' + data.error); return; }
+            _reconEnts = null;
+            await _loadModalData();
+            _cemPopulateEntities();
+            document.getElementById('cem-entity').value = short_name;
+            document.getElementById('cem-add-ent-form').style.display = 'none';
+        } catch(e) { alert('Failed: ' + e.message); }
+    }
+
+    function cemCancelAddEnt() {
+        document.getElementById('cem-add-ent-form').style.display = 'none';
+    }
+
+    function cemFilterEvents() {
+        const q = (document.getElementById('cem-event').value || '').toLowerCase();
+        const drop = document.getElementById('cem-events-drop');
+        const evts = (_reconEvents || [])
+            .filter(e => e.name && !e.name.startsWith('_'))
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        const matches = q ? evts.filter(e => e.name.toLowerCase().includes(q)) : evts;
+        if (!matches.length) { drop.style.display = 'none'; return; }
+        drop.innerHTML = matches.slice(0, 30).map(e =>
+            `<div onclick="cemSelectEvent(${JSON.stringify(e.name)})" style="padding:6px 10px; cursor:pointer; font-size:0.8rem; border-bottom:1px solid var(--border);" onmouseenter="this.style.background='#f0f9ff'" onmouseleave="this.style.background=''">${esc(e.name)}${e.date ? `<span style="color:var(--text-muted); margin-left:6px; font-size:0.75rem;">${e.date}</span>` : ''}</div>`
+        ).join('');
+        drop.style.display = 'block';
+    }
+
+    function cemSelectEvent(name) {
+        document.getElementById('cem-event').value = name;
+        document.getElementById('cem-events-drop').style.display = 'none';
+    }
+
+    function cemHideEventDrop() {
+        const drop = document.getElementById('cem-events-drop');
+        if (drop) drop.style.display = 'none';
     }
 
     function closeCreateModal() {
@@ -691,6 +816,13 @@
 
     async function submitCreateModal() {
         if (!_cemDepositId) return;
+        const catVal = document.getElementById('cem-category').value;
+        if (!catVal) {
+            document.getElementById('cem-category').style.borderColor = '#dc2626';
+            document.getElementById('cem-category').focus();
+            return;
+        }
+        document.getElementById('cem-category').style.borderColor = '';
         const btn = document.getElementById('cem-submit-btn');
         btn.disabled = true; btn.textContent = 'Saving…';
         const payload = {
