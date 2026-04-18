@@ -9806,9 +9806,11 @@ def get_unified_transactions(entity_id: int | None = None, account_id: int | Non
 def get_acct_transaction(txn_id: int, db_path: str | Path | None = None) -> dict | None:
     with _connect(db_path) as conn:
         row = conn.execute(
-            """SELECT t.*, a.name as account_name
+            """SELECT t.*, a.name as account_name,
+                      (c.first_name || ' ' || c.last_name) as customer_name
                FROM acct_transactions t
                LEFT JOIN acct_accounts a ON a.id = t.account_id
+               LEFT JOIN customers c ON c.customer_id = t.customer_id
                WHERE t.id = ?""",
             (txn_id,),
         ).fetchone()
@@ -9842,16 +9844,17 @@ def _create_acct_ledger_entry(date: str, description: str, total_amount: float,
                             source: str = "manual", source_ref: str | None = None,
                             splits: list[dict] | None = None,
                             tag_ids: list[int] | None = None,
+                            customer_id: int | None = None,
                             db_path: str | Path | None = None) -> dict:
     """Create a transaction with splits. Each split: {entity_id, category_id, amount, memo}."""
     with _connect(db_path) as conn:
         cur = conn.execute(
             """INSERT INTO acct_transactions
                (date, description, total_amount, type, account_id, transfer_to_account_id,
-                notes, receipt_path, source, source_ref)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                notes, receipt_path, source, source_ref, customer_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (date, description, total_amount, txn_type, account_id,
-             transfer_to_account_id, notes, receipt_path, source, source_ref),
+             transfer_to_account_id, notes, receipt_path, source, source_ref, customer_id),
         )
         txn_id = cur.lastrowid
 
@@ -9883,7 +9886,7 @@ def update_acct_transaction(txn_id: int, db_path: str | Path | None = None, **kw
     tag_ids = kwargs.pop("tag_ids", None)
 
     allowed = {"date", "description", "total_amount", "type", "account_id",
-               "transfer_to_account_id", "notes", "receipt_path", "is_reconciled"}
+               "transfer_to_account_id", "notes", "receipt_path", "is_reconciled", "customer_id"}
     updates = {k: v for k, v in kwargs.items() if k in allowed}
 
     with _connect(db_path) as conn:
