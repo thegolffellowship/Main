@@ -3,15 +3,17 @@
    ========================================================= */
 
 async function reloadMasterData() {
-    const [entities, accounts, categories, tags, events] = await Promise.all([
+    const [entities, accounts, categories, tags, events, customers] = await Promise.all([
         api('/entities'), api('/accounts'), api('/categories'), api('/tags'),
         api('/events-list').catch(() => []),
+        api('/customers').catch(() => []),
     ]);
     ACCT.entities = entities;
     ACCT.accounts = accounts;
     ACCT.categories = categories;
     ACCT.tags = tags;
     ACCT.events = events;
+    ACCT.customers = customers;
     renderEntityPills();
     populateDropdowns();
     initLedgerPills();
@@ -99,6 +101,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#txn-amount').addEventListener('input', updateSplitTotal);
     $('#txn-type').addEventListener('change', () => {
         $('#transfer-row').style.display = $('#txn-type').value === 'transfer' ? '' : 'none';
+    });
+
+    // Customer typeahead
+    initCustomerTypeahead();
+
+    // Auto-suggest customer from description
+    $('#txn-description').addEventListener('blur', () => {
+        if (!$('#txn-customer-id').value) {
+            suggestCustomerFromDescription($('#txn-description').value);
+        }
     });
 
     // Expense review modal

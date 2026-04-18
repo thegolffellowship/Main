@@ -5256,6 +5256,26 @@ def api_acct_account_balances():
 
 # ── Transactions ──────────────────────────────────────────────────────────
 
+@app.route("/api/accounting/customers")
+@require_role("admin")
+def api_acct_customers():
+    """Return all customers and vendors for transaction linking."""
+    from email_parser.database import _connect
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT c.customer_id, c.first_name, c.last_name,
+                      c.current_player_status, c.chapter,
+                      EXISTS(
+                          SELECT 1 FROM customer_roles r
+                          WHERE r.customer_id = c.customer_id AND r.role_type = 'vendor'
+                      ) as is_vendor
+               FROM customers c
+               WHERE c.account_status = 'active'
+               ORDER BY c.last_name COLLATE NOCASE, c.first_name COLLATE NOCASE"""
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
 @app.route("/api/accounting/transactions")
 @require_role("admin")
 def api_acct_transactions():
@@ -5323,6 +5343,7 @@ def api_acct_create_transaction():
             notes=d.get("notes"), receipt_path=d.get("receipt_path"),
             source=d.get("source", "manual"), source_ref=d.get("source_ref"),
             splits=splits, tag_ids=d.get("tag_ids"),
+            customer_id=d.get("customer_id"),
         )
         return jsonify(txn), 201
     except Exception as e:

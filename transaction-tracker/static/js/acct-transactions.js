@@ -851,6 +851,7 @@ function openNewTransaction() {
     $('#txn-notes').value = '';
     $('#receipt-filename').textContent = '';
     $('#transfer-row').style.display = 'none';
+    clearTxnCustomer();
 
     // Default single split
     const defaultEntity = ACCT.activeEntity || (ACCT.entities[0] && ACCT.entities[0].id);
@@ -875,6 +876,13 @@ async function openEditTransaction(id) {
         $('#transfer-row').style.display = txn.type === 'transfer' ? '' : 'none';
         if (txn.transfer_to_account_id) $('#txn-transfer-to').value = txn.transfer_to_account_id;
 
+        if (txn.customer_id && txn.customer_name) {
+            const cust = ACCT.customers.find(c => c.customer_id === txn.customer_id);
+            setTxnCustomer(txn.customer_id, txn.customer_name, cust?.is_vendor);
+        } else {
+            clearTxnCustomer();
+        }
+
         renderSplitRows(txn.splits.map(s => ({
             entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || ''
         })));
@@ -888,6 +896,7 @@ async function openEditTransaction(id) {
 
 async function saveTransaction() {
     const editId = $('#txn-edit-id').value;
+    const custId = $('#txn-customer-id').value ? parseInt($('#txn-customer-id').value) : null;
     const data = {
         date: $('#txn-date').value,
         description: $('#txn-description').value.trim(),
@@ -899,6 +908,7 @@ async function saveTransaction() {
         notes: $('#txn-notes').value.trim() || null,
         splits: collectSplits(),
         tag_ids: collectTagIds(),
+        customer_id: custId,
     };
 
     if (!data.date || !data.description || isNaN(data.total_amount)) {
@@ -1294,4 +1304,131 @@ async function saveExpenseReview(action) {
 
 function closeExpenseModal() {
     $('#expense-review-modal').style.display = 'none';
+}
+
+// ── Customer / Vendor Typeahead ───────────────────────────
+
+function _customerDisplayName(c) {
+    return `${c.last_name}, ${c.first_name}`;
+}
+
+function setTxnCustomer(id, name, isVendor) {
+    $('#txn-customer-id').value = id;
+    $('#txn-customer-search').value = name;
+    const badge = $('#txn-customer-badge');
+    badge.textContent = isVendor ? 'Vendor' : 'Customer';
+    badge.style.background = isVendor ? '#fef3c7' : '#dbeafe';
+    badge.style.color = isVendor ? '#92400e' : '#1d4ed8';
+    badge.style.display = '';
+    $('#txn-customer-dropdown').style.display = 'none';
+}
+
+function clearTxnCustomer() {
+    $('#txn-customer-id').value = '';
+    $('#txn-customer-search').value = '';
+    $('#txn-customer-badge').style.display = 'none';
+    $('#txn-customer-dropdown').style.display = 'none';
+}
+
+function _fuzzyMatchCustomers(query) {
+    if (!query) return [];
+    const q = query.toLowerCase();
+    return ACCT.customers.filter(c => {
+        const full = `${c.first_name} ${c.last_name}`.toLowerCase();
+        const rev = `${c.last_name} ${c.first_name}`.toLowerCase();
+        const last = c.last_name.toLowerCase();
+        return full.includes(q) || rev.includes(q) || last.startsWith(q);
+    }).slice(0, 8);
+}
+
+function _renderCustomerDropdown(matches) {
+    const dd = $('#txn-customer-dropdown');
+    if (!matches.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = matches.map(c => {
+        const label = c.is_vendor ? '<span style="font-size:0.65rem;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:8px;margin-left:4px;">Vendor</span>' : '';
+        const sub = [c.chapter, c.current_player_status].filter(Boolean).join(' · ');
+        return `<div class="acct-cust-item" data-id="${c.customer_id}" data-name="${c.first_name} ${c.last_name}" data-vendor="${c.is_vendor}"
+                     style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;">
+            <div style="font-weight:500;font-size:0.875rem;">${_customerDisplayName(c)}${label}</div>
+            ${sub ? `<div style="font-size:0.75rem;color:#6b7280;">${sub}</div>` : ''}
+        </div>`;
+    }).join('');
+    dd.style.display = '';
+    dd.querySelectorAll('.acct-cust-item').forEach(el => {
+        el.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            setTxnCustomer(parseInt(el.dataset.id), el.dataset.name, el.dataset.vendor === '1');
+        });
+        el.addEventListener('mouseover', () => el.style.background = '#f9fafb');
+        el.addEventListener('mouseout', () => el.style.background = '');
+    });
+}
+
+function suggestCustomerFromDescription(desc) {
+    if (!desc || !ACCT.customers.length) return;
+    const words = desc.toLowerCase().split(/\s+/);
+    let best = null, bestScore = 0;
+    for (const c of ACCT.customers) {
+        const full = `${c.first_name} ${c.last_name}`.toLowerCase();
+        const last = c.last_name.toLowerCase();
+        let score = 0;
+        for (const w of words) {
+            if (w.length < 3) continue;
+            if (full.includes(w)) score += 2;
+            else if (last.startsWith(w)) score += 1;
+        }
+        if (score > bestScore) { bestScore = score; best = c; }
+    }
+    if (best && bestScore >= 2) {
+        const search = $('#txn-customer-search');
+        search.value = '';
+        search.placeholder = `Suggested: ${best.first_name} ${best.last_name} — press Enter to accept`;
+        search._suggested = best;
+    }
+}
+
+function initCustomerTypeahead() {
+    const input = $('#txn-customer-search');
+    const dd = $('#txn-customer-dropdown');
+    if (!input) return;
+
+    input.addEventListener('input', () => {
+        input._suggested = null;
+        input.placeholder = 'Search by name…';
+        const q = input.value.trim();
+        if (!q) { $('#txn-customer-id').value = ''; $('#txn-customer-badge').style.display = 'none'; dd.style.display = 'none'; return; }
+        _renderCustomerDropdown(_fuzzyMatchCustomers(q));
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { dd.style.display = 'none'; }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (input._suggested) {
+                setTxnCustomer(input._suggested.customer_id, `${input._suggested.first_name} ${input._suggested.last_name}`, input._suggested.is_vendor);
+                input._suggested = null;
+            } else {
+                const first = dd.querySelector('.acct-cust-item');
+                if (first) first.dispatchEvent(new Event('mousedown'));
+            }
+        }
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const items = dd.querySelectorAll('.acct-cust-item');
+            if (items.length) items[0].focus();
+        }
+    });
+
+    input.addEventListener('blur', () => {
+        setTimeout(() => { dd.style.display = 'none'; }, 150);
+        // If no customer selected, reset placeholder
+        if (!$('#txn-customer-id').value) {
+            input.placeholder = 'Search by name…';
+        }
+    });
+
+    input.addEventListener('focus', () => {
+        const q = input.value.trim();
+        if (q && !$('#txn-customer-id').value) _renderCustomerDropdown(_fuzzyMatchCustomers(q));
+    });
 }
