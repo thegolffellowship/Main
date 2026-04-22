@@ -903,7 +903,9 @@ function _buildSmartSplit(txn) {
         const mfCatId = ACCT.categories.find(c => c.type === 'expense' && c.name.toLowerCase().includes('processing'))?.id || '';
         const regAmt = +(txn.order_splits.registration || 0).toFixed(2);
         const txFeeAmt = +(txn.order_splits.transaction_fee || 0).toFixed(2);
-        const mfAmt = +(txn.merchant_fee || 0).toFixed(2);
+        // merchant_fee on the transaction row (preferred); fall back to the
+        // absolute value of the negative merchant_fee split in order_splits.
+        const mfAmt = +(txn.merchant_fee || Math.abs(txn.order_splits.merchant_fee || 0) || 0).toFixed(2);
         const splits = [
             { entity_id: entityId, category_id: regCatId, event_id: evId, amount: regAmt, memo: 'Registration' },
             { entity_id: entityId, category_id: txFeeCatId, event_id: evId, amount: txFeeAmt, memo: 'Transaction fee' },
@@ -1001,7 +1003,14 @@ async function openEditTransaction(id) {
             clearTxnCustomer();
         }
 
-        const splitsData = txn.splits.length > 0
+        // For GoDaddy orders, always rebuild splits from order_splits so the
+        // merchant fee negative line is present.  Skip rebuild only if a
+        // negative (merchant fee) split already exists in the DB.
+        const isGoDaddy = txn.category === 'godaddy_order' ||
+            (txn.order_splits && txn.order_splits.registration != null);
+        const hasMerchantFeeSplit = txn.splits.some(s => (s.amount || 0) < 0);
+        const useDbSplits = txn.splits.length > 0 && (!isGoDaddy || hasMerchantFeeSplit);
+        const splitsData = useDbSplits
             ? txn.splits.map(s => ({ entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || '' }))
             : _buildSmartSplit(txn);
         renderSplitRows(splitsData);

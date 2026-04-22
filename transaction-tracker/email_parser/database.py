@@ -3074,6 +3074,28 @@ def init_db(db_path: str | Path | None = None) -> None:
             logger.info("Migrated %d GoDaddy transactions: total_amount → net_deposit", _n)
             conn.commit()
 
+        # Backfill merchant_fee from godaddy_order_splits for GoDaddy transactions
+        # where the column is NULL (created before merchant_fee was stored).
+        _mf = conn.execute("""
+            UPDATE acct_transactions
+            SET merchant_fee = (
+                SELECT ABS(SUM(gs.amount))
+                FROM godaddy_order_splits gs
+                WHERE gs.transaction_id = acct_transactions.id
+                  AND gs.split_type = 'merchant_fee'
+            )
+            WHERE category = 'godaddy_order'
+              AND merchant_fee IS NULL
+              AND EXISTS (
+                SELECT 1 FROM godaddy_order_splits gs2
+                WHERE gs2.transaction_id = acct_transactions.id
+                  AND gs2.split_type = 'merchant_fee'
+              )
+        """).rowcount
+        if _mf:
+            logger.info("Backfilled merchant_fee on %d GoDaddy transactions", _mf)
+            conn.commit()
+
         logger.info("Database initialized at %s", db_path or DB_PATH)
 
 
