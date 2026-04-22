@@ -3327,8 +3327,8 @@
         if (selected === "GUEST" && hasRole("member")) {
             return {reason: "Selected GUEST but customer IS a member"};
         }
-        if (selected === "1ST TIMER" && firstTimerEver === false) {
-            return {reason: "Selected 1st TIMER but customer has played before"};
+        if (selected === "1ST TIMER" && firstTimerEver === false && !hasRole("member")) {
+            return {reason: "Selected 1st TIMER but customer has played before (non-member)"};
         }
         return null;
     }
