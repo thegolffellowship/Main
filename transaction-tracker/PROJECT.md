@@ -1,7 +1,7 @@
 # TGF Transaction Tracker — Project Documentation
 
 > **The Golf Fellowship** — AI-powered transaction and event management platform
-> **Current Version:** v2.8.0 (April 17, 2026)
+> **Current Version:** v2.9.0 (April 22, 2026)
 > **Live URL:** https://tgf-tracker.up.railway.app
 
 ---
@@ -366,7 +366,7 @@ filterable flat view of every `acct_transactions` row.
 - **Multi-entity tracking** — TGF main + chapter accounts with balance management
 - **Chart of accounts** — IRS Schedule C categories (income, expense, asset, liability)
 - **General ledger** — Double-entry bookkeeping journal entries
-- **Expense transactions** — Categorized expense management with approval workflow
+- **Expense transactions** — Categorized expense management with approval workflow; approved expenses are auto-promoted to `acct_transactions` with `entry_type='expense'` so they appear in the Inline Match Queue for bank reconciliation
 - **Revenue auto-sync** — Automatic revenue entries from registration items
 - **Bank reconciliation** — CSV import (Chase, Frost Bank, Venmo), PDF via Claude, two-way matching
 - **Month-end close** — Locks period, generates income/expense/net/tax summary
@@ -721,22 +721,33 @@ Each row represents one player's cost allocation for one event.
 
 ### `acct_transactions` table (accounting ledger)
 
-Income/expense/transfer entries — the accounting system's general ledger.
+Single source of truth for all financial events. Every GoDaddy order, external payment,
+credit transfer, refund, and approved expense writes a row here.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | INTEGER PK | Auto-increment |
-| date | TEXT NOT NULL | Transaction date |
-| description | TEXT NOT NULL | Human-readable description |
+| date | TEXT NOT NULL | Transaction date (YYYY-MM-DD) |
+| description | TEXT NOT NULL | Human-readable description / merchant name |
 | total_amount | REAL NOT NULL | Absolute amount |
+| amount | REAL | Canonical amount used for reconciliation (set = total_amount for expenses) |
 | type | TEXT NOT NULL | `income` / `expense` / `transfer` |
-| account_id | INTEGER | FK to `acct_accounts(id)` |
+| entry_type | TEXT | `income` / `expense` / `contra` / `liability` — filters for reconciliation |
+| category | TEXT | `registration`, `processing_fee`, `comp`, `addon`, `refund`, `credit_issued`, `transfer_in`, `transfer_out`, `godaddy_order`, `godaddy_batch` |
+| account_id | INTEGER | FK to `bank_accounts(id)` |
 | transfer_to_account_id | INTEGER | FK for inter-account transfers |
 | notes | TEXT | |
-| receipt_path | TEXT | |
-| source | TEXT | `manual`, `godaddy_allocation`, `external_payment`, `credit_transfer`, `refund`, `add_payment` |
-| source_ref | TEXT | Unique reference (e.g., `xfer-{id}-out`, `refund-{id}`, `ext-{id}`) for idempotency |
-| is_reconciled | INTEGER | 0 or 1 |
+| source | TEXT | `godaddy`, `venmo`, `zelle`, `cash`, `manual` |
+| source_ref | TEXT | Unique idempotency key (e.g., `expense-{id}`, `godaddy-order-{order_id}`) |
+| status | TEXT | `active`, `reversed`, `reconciled`, `merged` |
+| item_id | INTEGER | FK to `items.id` (links to registration item) |
+| event_name | TEXT | Event name for GoDaddy / income entries |
+| customer | TEXT | Customer name string |
+| customer_id | TEXT | FK to `customers.customer_id` |
+| order_id | TEXT | GoDaddy order / synthetic order ID |
+| merchant_fee | REAL | GoDaddy merchant fee for this entry |
+| net_deposit | REAL | Amount actually deposited (gross − merchant_fee); used for reconciliation |
+| reconciled_batch_id | INTEGER | FK to bank batch when matched |
 | created_at | TEXT | |
 | updated_at | TEXT | |
 
@@ -751,6 +762,41 @@ Income/expense/transfer entries — the accounting system's general ledger.
 | amount | REAL NOT NULL | |
 | memo | TEXT | |
 | event_id | INTEGER | FK to `events(id)` — links accounting entries to events |
+
+### `expense_transactions` table (AI-parsed CC/bank alerts — staging)
+
+Staging table for expense alerts parsed by the AI bookkeeper. Rows are created automatically
+when bank/CC alert emails arrive and require human approval before being promoted to the ledger.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| txn_date | TEXT | Transaction date (YYYY-MM-DD) |
+| merchant | TEXT | Merchant name from the alert email |
+| amount | REAL | Transaction amount |
+| category | TEXT | AI-assigned category (editable) |
+| review_status | TEXT | `pending` / `approved` / `corrected` / `rejected` |
+| account_name | TEXT | Bank/CC account name from the alert |
+| account_last4 | TEXT | Last 4 digits of the card/account |
+| account_id | INTEGER | FK to `bank_accounts(id)` (backfilled from account_last4 or account_name) |
+| customer_id | TEXT | FK to `customers.customer_id` (Vendor/Customer typeahead) |
+| acct_transaction_id | INTEGER | FK to `acct_transactions.id` — set when approved and promoted to ledger |
+| notes | TEXT | |
+| created_at | TEXT | |
+| updated_at | TEXT | |
+
+### `acct_keyword_rules` table (auto-categorization rules)
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| keyword | TEXT NOT NULL | Keyword to match against merchant name |
+| match_type | TEXT | `contains` (case-insensitive COLLATE NOCASE) |
+| category | TEXT | Category to auto-assign when keyword matches |
+| created_at | TEXT | |
+
+Auto-populated when an expense is approved with a category. Future alerts whose merchant
+name contains the keyword get the category pre-assigned before the AI bookkeeper runs.
 
 ---
 
@@ -1232,6 +1278,41 @@ The app is installable as a Progressive Web App:
 ---
 
 ## Version History
+
+### v2.9.0 — April 22, 2026 — "Expense ↔ Bank Reconciliation"
+
+**Goal:** close the loop between AI-parsed expense alerts and actual bank debits so
+admins can reconcile CC/bank charges the same way they reconcile GoDaddy deposits.
+
+**Expense → Ledger promotion:**
+- `_sync_expense_ledger_entry(conn, exp)` — called by `update_expense_transaction()` whenever
+  an expense's `review_status` becomes `approved` or `corrected`. Creates/updates an
+  `acct_transactions` row with `entry_type='expense'` and the correct `amount` column set.
+  Sets `expense_transactions.acct_transaction_id` back to the ledger row ID for linking.
+- `_backfill_approved_expenses_to_ledger(conn)` — runs at startup in `init_db()` to promote
+  all already-approved expenses that predate this feature (one-time catch-up, idempotent).
+
+**Bank reconciliation fixes (three compounding bugs corrected):**
+1. `entry_type='expense'` now set in `_sync_expense_ledger_entry` — previously NULL, which
+   caused `get_match_suggestions` to filter out expense rows entirely.
+2. Amount comparison in `get_match_suggestions` now uses `abs(dep_amt)` when the deposit is
+   negative (a bank debit), so a -$21.37 charge correctly matches a $21.34 expense entry
+   (diff 0.03) instead of comparing -21.37 vs 21.34 = 42.71.
+3. `run_deposit_auto_match` now has an `elif dep_amt < 0` branch that matches negative deposits
+   against `entry_type='expense'` ledger rows within ±$1 / ±10 days (confidence 0.85/0.65/0.55).
+
+**Expense modal — Vendor/Customer typeahead:**
+- Expense review modal now includes the same Vendor/Customer typeahead as the income ledger
+  modal. Uses `exp-*` ID prefix. `+ New Vendor` button opens the same vendor creation flow.
+- `saveNewVendor()` routes to `setExpCustomer` vs `setTxnCustomer` based on which modal is open.
+
+**GoDaddy merchant fee split fix:**
+- Edit modal for GoDaddy transactions previously showed only 2 splits (registration + tx_fee)
+  when the stored DB splits lacked the negative merchant_fee row. Fixed by checking
+  `hasMerchantFeeSplit = splits.some(s => s.amount < 0)` and falling back to `_buildSmartSplit`
+  for GoDaddy transactions that lack the negative split.
+
+---
 
 ### v2.8.0 — April 17, 2026 — "Inline Match Queue in the Ledger"
 

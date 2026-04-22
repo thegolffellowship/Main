@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.8.0";
+window.TGF_VERSION = "2.9.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.9.0",
+    date: "2026-04-22",
+    title: "Expense ↔ Bank Reconciliation — approved expenses now match bank debits",
+    changes: [
+      "Approved expense transactions are now auto-promoted to the accounting ledger (acct_transactions) with entry_type='expense', so they appear as candidates in the Inline Match Queue",
+      "Startup backfill promotes all previously-approved expenses that were missing a ledger entry (_backfill_approved_expenses_to_ledger runs in init_db)",
+      "Auto-match now handles negative bank deposits (credit card / bank debits) — matches them against entry_type='expense' ledger entries within ±$1 and ±10 days",
+      "get_match_suggestions fixed for expense deposits: amount comparison now uses abs(dep_amt) so a -$21.37 bank debit correctly matches a $21.34 expense (diff 0.03, not 42.71)",
+      "Description scoring added to get_match_suggestions: substring containment gives +12 score so same-merchant matches rise to the top even when amounts differ slightly",
+      "Expense modal now has the same Vendor / Customer typeahead as the income modal — start typing to search, + New Vendor button to create on the fly",
+      "GoDaddy edit modal fix: existing transactions with only 2 splits (registration + tx_fee) now correctly regenerate the third negative merchant_fee split from stored data",
+    ],
+  },
   {
     version: "2.8.0",
     date: "2026-04-17",
