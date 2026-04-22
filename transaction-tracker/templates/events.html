@@ -526,9 +526,9 @@
                 </div>
                 <!-- Tee Time Advisor Panel -->
                 <div id="edit-advisor-panel" class="advisor-panel" style="display:none; margin-top:1rem;"></div>
-                <!-- Aliases display -->
-                <div id="edit-aliases-section" style="display:none; margin-top:1rem; border-top:1px solid var(--border); padding-top:0.75rem;">
-                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Aliases</label>
+                <!-- Aliases management -->
+                <div id="edit-aliases-section" style="margin-top:1rem; border-top:1px solid var(--border); padding-top:0.75rem;">
+                    <label style="font-weight:600; font-size:0.82rem; display:block; margin-bottom:0.3rem;">Aliases <span style="font-weight:400; color:var(--text-muted); font-size:0.75rem;">— payments matching these names link to this event</span></label>
                     <div id="edit-aliases-list" style="display:flex; gap:0.25rem; flex-wrap:wrap;"></div>
                 </div>
                 </div><!-- end GENERAL tab -->
@@ -3315,6 +3315,7 @@
         if (!info) return null;
         const roles = info.roles || [];
         const firstTimerEver = info.first_timer_ever;
+        const firstTimerUsed = info.first_timer_used || 0;
         const selected = (_cleanStatus(item.user_status) || "").toUpperCase();
         const hasRole = (r) => roles.includes(r);
 
@@ -3327,8 +3328,13 @@
         if (selected === "GUEST" && hasRole("member")) {
             return {reason: "Selected GUEST but customer IS a member"};
         }
+        // Members get exactly one 1ST TIMER opportunity
+        if (selected === "1ST TIMER" && hasRole("member") && firstTimerUsed > 1) {
+            return {reason: "Member has already used their 1st Timer registration"};
+        }
+        // Non-members: warn if they've played before
         if (selected === "1ST TIMER" && firstTimerEver === false && !hasRole("member")) {
-            return {reason: "Selected 1st TIMER but customer has played before (non-member)"};
+            return {reason: "Selected 1st TIMER but customer has played before"};
         }
         return null;
     }
@@ -5995,13 +6001,78 @@
         const section = document.getElementById("edit-aliases-section");
         const list = document.getElementById("edit-aliases-list");
         if (!section || !list) return;
-        if (ev.aliases && ev.aliases.length) {
-            list.innerHTML = ev.aliases.map(a =>
-                `<span style="display:inline-block; background:#e0e7ff; color:#3730a3; padding:0.15rem 0.4rem; border-radius:4px; font-size:0.72rem; font-weight:500; line-height:1.3;">${escapeHtml(a)}</span>`
-            ).join("");
-            section.style.display = "";
-        } else {
-            section.style.display = "none";
+        section.style.display = "";
+
+        const aliases = (ev && ev.aliases) || [];
+        const canEdit = currentRole === "admin" || currentRole === "manager";
+
+        let tagsHtml = aliases.map(a =>
+            `<span style="display:inline-flex; align-items:center; gap:0.2rem; background:#e0e7ff; color:#3730a3; padding:0.15rem 0.4rem; border-radius:4px; font-size:0.72rem; font-weight:500; line-height:1.3;">
+                ${escapeHtml(a)}
+                ${canEdit ? `<button type="button" class="btn-remove-alias" data-alias="${escapeHtml(a)}" data-event-id="${ev.id}" style="background:none;border:none;color:#6b7280;cursor:pointer;padding:0 0 0 0.1rem;font-size:0.85rem;line-height:1;" title="Remove alias">&times;</button>` : ""}
+            </span>`
+        ).join(" ");
+
+        if (canEdit) {
+            tagsHtml += `<div style="display:flex; gap:0.25rem; align-items:center; margin-top:0.4rem; width:100%;">
+                <input type="text" id="new-alias-input" placeholder="Add alias (e.g. 2026 HILL COUNTRY MATCHES)..." style="flex:1; padding:0.25rem 0.4rem; border:1px solid var(--border); border-radius:4px; font-size:0.78rem; min-width:0;">
+                <button type="button" id="btn-add-alias" data-event-id="${ev.id}" style="padding:0.25rem 0.6rem; background:var(--primary); color:#fff; border:none; border-radius:4px; font-size:0.78rem; cursor:pointer; white-space:nowrap;">Add</button>
+            </div>`;
+        }
+
+        list.innerHTML = tagsHtml;
+
+        list.querySelectorAll(".btn-remove-alias").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const aliasName = btn.dataset.alias;
+                const eid = parseInt(btn.dataset.eventId);
+                try {
+                    const res = await fetch(`/api/events/${eid}/aliases`, {
+                        method: "DELETE",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({alias_name: aliasName})
+                    });
+                    if (!res.ok) throw new Error("Request failed");
+                    const evObj = allEvents.find(e => e.id === eid);
+                    if (evObj) {
+                        evObj.aliases = (evObj.aliases || []).filter(a => a !== aliasName);
+                        updateEditAliases(evObj);
+                    }
+                    showToast("Alias removed");
+                } catch (e) {
+                    showToast("Failed to remove alias", "error");
+                }
+            });
+        });
+
+        const addBtn = list.querySelector("#btn-add-alias");
+        if (addBtn) {
+            addBtn.addEventListener("click", async () => {
+                const input = document.getElementById("new-alias-input");
+                const alias = (input ? input.value : "").trim();
+                if (!alias) return;
+                const eid = parseInt(addBtn.dataset.eventId);
+                try {
+                    const res = await fetch(`/api/events/${eid}/aliases`, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({alias_name: alias})
+                    });
+                    if (!res.ok) throw new Error("Request failed");
+                    const evObj = allEvents.find(e => e.id === eid);
+                    if (evObj) {
+                        evObj.aliases = [...(evObj.aliases || []), alias];
+                        updateEditAliases(evObj);
+                    }
+                    showToast("Alias added — payments for this name will now link to this event");
+                } catch (e) {
+                    showToast("Failed to add alias", "error");
+                }
+            });
+
+            list.querySelector("#new-alias-input")?.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") { e.preventDefault(); addBtn.click(); }
+            });
         }
     }
 

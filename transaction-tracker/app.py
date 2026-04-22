@@ -60,6 +60,8 @@ from email_parser.database import (
     dismiss_parse_warning,
     resolve_parse_warning,
     get_all_event_aliases,
+    add_event_alias,
+    delete_event_alias,
     get_known_rsvp_uids,
     save_rsvps,
     get_rsvps_for_event,
@@ -2447,6 +2449,19 @@ def api_customer_roles():
                 name_to_id[name_key] = cid
         result["_by_name"] = name_to_id
 
+        # Count 1ST TIMER registrations per customer for second-use detection
+        timer_rows = conn.execute(
+            "SELECT customer_id, COUNT(*) as cnt FROM items "
+            "WHERE customer_id IS NOT NULL "
+            "AND UPPER(user_status) LIKE '%TIMER%' "
+            "AND COALESCE(transaction_status, 'active') IN ('active', 'transferred', 'wd') "
+            "GROUP BY customer_id"
+        ).fetchall()
+        for t in timer_rows:
+            cid = str(t["customer_id"])
+            if cid in result:
+                result[cid]["first_timer_used"] = t["cnt"]
+
     return jsonify(result)
 
 
@@ -2812,6 +2827,34 @@ def api_events():
 def api_event_aliases():
     """Return alias_name → canonical_event_name map."""
     return jsonify(get_all_event_aliases())
+
+
+@app.route("/api/events/<int:event_id>/aliases", methods=["POST"])
+@require_role("manager")
+def api_add_event_alias_to_event(event_id):
+    """Add an alias pointing to this event's canonical name."""
+    data = request.get_json(silent=True) or {}
+    alias_name = (data.get("alias_name") or "").strip()
+    if not alias_name:
+        return jsonify({"error": "alias_name required"}), 400
+    evs = get_all_events()
+    ev = next((e for e in evs if e["id"] == event_id), None)
+    if not ev:
+        return jsonify({"error": "Event not found"}), 404
+    inserted = add_event_alias(alias_name, ev["item_name"])
+    return jsonify({"status": "ok", "inserted": inserted, "canonical": ev["item_name"]})
+
+
+@app.route("/api/events/<int:event_id>/aliases", methods=["DELETE"])
+@require_role("manager")
+def api_delete_event_alias_from_event(event_id):
+    """Remove an alias from this event."""
+    data = request.get_json(silent=True) or {}
+    alias_name = (data.get("alias_name") or "").strip()
+    if not alias_name:
+        return jsonify({"error": "alias_name required"}), 400
+    deleted = delete_event_alias(alias_name)
+    return jsonify({"status": "ok", "deleted": deleted})
 
 
 @app.route("/api/events/sync", methods=["POST"])

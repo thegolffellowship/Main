@@ -5999,6 +5999,16 @@ def get_all_event_aliases(db_path: str | Path | None = None) -> dict:
         return {r["alias_name"]: r["canonical_event_name"] for r in rows}
 
 
+def delete_event_alias(alias_name: str, db_path: str | Path | None = None) -> bool:
+    """Delete an alias by name. Returns True if deleted, False if not found."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "DELETE FROM event_aliases WHERE alias_name = ?", (alias_name,)
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def update_aliases_canonical(old_canonical: str, new_canonical: str,
                              db_path: str | Path | None = None) -> int:
     """Update all aliases that pointed to old_canonical to now point to new_canonical."""
