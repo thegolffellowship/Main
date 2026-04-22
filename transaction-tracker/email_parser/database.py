@@ -13771,7 +13771,7 @@ def get_contractor_payouts(db_path: str | Path | None = None) -> list[dict]:
     with _connect(db_path) as conn:
         rows = conn.execute(
             """SELECT cp.id, cp.manager_customer_id,
-                      c.customer AS manager_name,
+                      (c.first_name || ' ' || c.last_name) AS manager_name,
                       ch.name AS chapter_name,
                       cp.chapter_id, cp.event_name, cp.event_date,
                       cp.amount_owed, cp.amount_paid, cp.status,
@@ -13788,13 +13788,15 @@ def get_contractor_managers(db_path: str | Path | None = None) -> list[dict]:
     """Return all customers with manager role, for the add-payout dropdown."""
     with _connect(db_path) as conn:
         rows = conn.execute(
-            """SELECT c.customer_id, c.customer AS name, c.chapter,
+            """SELECT c.customer_id,
+                      (c.first_name || ' ' || c.last_name) AS name,
+                      c.chapter,
                       ch.name AS chapter_name, ch.chapter_id
                FROM customers c
                JOIN customer_roles cr ON cr.customer_id = c.customer_id
                LEFT JOIN chapters ch ON ch.name = c.chapter
                WHERE cr.role_type = 'manager'
-               ORDER BY c.customer"""
+               ORDER BY c.last_name, c.first_name"""
         ).fetchall()
         return [dict(r) for r in rows]
 
