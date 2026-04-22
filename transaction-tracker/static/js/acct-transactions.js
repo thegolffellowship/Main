@@ -852,6 +852,7 @@ function openNewTransaction() {
     $('#receipt-filename').textContent = '';
     $('#transfer-row').style.display = 'none';
     clearTxnCustomer();
+    renderVendorChips();
 
     // Default single split
     const defaultEntity = ACCT.activeEntity || (ACCT.entities[0] && ACCT.entities[0].id);
@@ -1312,22 +1313,47 @@ function _customerDisplayName(c) {
     return `${c.last_name}, ${c.first_name}`;
 }
 
+function renderVendorChips() {
+    const container = $('#txn-vendor-chips');
+    if (!container) return;
+    const vendors = _allVendors();
+    if (!vendors.length) {
+        container.innerHTML = '<span style="font-size:0.75rem;color:#9ca3af;font-style:italic;">No vendors yet — add one above</span>';
+        return;
+    }
+    const selectedId = parseInt($('#txn-customer-id').value) || 0;
+    container.innerHTML = vendors.map(v => {
+        const active = v.customer_id === selectedId;
+        return `<button type="button" class="txn-vendor-chip" data-id="${v.customer_id}" data-name="${v.first_name} ${v.last_name}"
+            style="padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:600;cursor:pointer;border:1.5px solid ${active ? '#d97706' : '#fcd34d'};background:${active ? '#fef3c7' : '#fffbeb'};color:#92400e;transition:all .15s;">
+            ${v.first_name} ${v.last_name}
+        </button>`;
+    }).join('');
+    container.querySelectorAll('.txn-vendor-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setTxnCustomer(parseInt(btn.dataset.id), btn.dataset.name, true);
+        });
+    });
+}
+
 function setTxnCustomer(id, name, isVendor) {
     $('#txn-customer-id').value = id;
-    $('#txn-customer-search').value = name;
-    const badge = $('#txn-customer-badge');
-    badge.textContent = isVendor ? 'Vendor' : 'Customer';
-    badge.style.background = isVendor ? '#fef3c7' : '#dbeafe';
-    badge.style.color = isVendor ? '#92400e' : '#1d4ed8';
-    badge.style.display = '';
+    $('#txn-customer-search').value = '';
     $('#txn-customer-dropdown').style.display = 'none';
+    const sel = $('#txn-customer-selected');
+    $('#txn-customer-selected-name').textContent = (isVendor ? '🏷 ' : '') + name;
+    sel.style.display = 'flex';
+    sel.style.background = isVendor ? '#fffbeb' : '#f0fdf4';
+    sel.style.borderColor = isVendor ? '#fcd34d' : '#86efac';
+    renderVendorChips();
 }
 
 function clearTxnCustomer() {
     $('#txn-customer-id').value = '';
     $('#txn-customer-search').value = '';
-    $('#txn-customer-badge').style.display = 'none';
+    $('#txn-customer-selected').style.display = 'none';
     $('#txn-customer-dropdown').style.display = 'none';
+    renderVendorChips();
 }
 
 function _fuzzyMatchCustomers(query) {
@@ -1521,6 +1547,7 @@ async function saveNewVendor() {
         else ACCT.customers.push(vendor);
 
         setTxnCustomer(vendor.customer_id, `${vendor.first_name} ${vendor.last_name}`, true);
+        renderVendorChips();
         $('#vendor-modal').style.display = 'none';
     } catch (e) {
         errEl.textContent = e.message;

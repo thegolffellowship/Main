@@ -751,16 +751,33 @@
                         <input type="text" id="txn-description" placeholder="e.g. Costco, Green fee..." required>
                     </div>
                 </div>
-                <div class="acct-form-row">
-                    <div class="acct-form-group acct-form-grow" style="position:relative;">
-                        <label>Customer / Vendor</label>
-                        <input type="hidden" id="txn-customer-id">
-                        <input type="text" id="txn-customer-search" placeholder="Search by name…" autocomplete="off">
-                        <div id="txn-customer-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                <div class="acct-form-group" style="margin-bottom:0.75rem;">
+                    <label style="display:flex;align-items:center;justify-content:space-between;">
+                        <span>Customer / Vendor</span>
+                        <button type="button" id="btn-new-vendor-modal" style="font-size:0.72rem;font-weight:600;color:#2563eb;background:none;border:none;cursor:pointer;padding:0;">＋ New Vendor</button>
+                    </label>
+                    <input type="hidden" id="txn-customer-id">
+
+                    <!-- Selected display -->
+                    <div id="txn-customer-selected" style="display:none;margin-bottom:0.5rem;padding:6px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;display:none;align-items:center;justify-content:space-between;">
+                        <span id="txn-customer-selected-name" style="font-weight:600;font-size:0.875rem;"></span>
+                        <button type="button" id="txn-customer-clear" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:1rem;line-height:1;padding:0 0 0 8px;">&times;</button>
+                    </div>
+
+                    <!-- Vendors section -->
+                    <div style="margin-bottom:0.5rem;">
+                        <div style="font-size:0.65rem;font-weight:700;color:#92400e;letter-spacing:.05em;margin-bottom:0.35rem;">VENDORS</div>
+                        <div id="txn-vendor-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;">
+                            <span style="font-size:0.75rem;color:#9ca3af;font-style:italic;">No vendors yet — add one above</span>
                         </div>
                     </div>
-                    <div class="acct-form-group" style="min-width:120px;align-self:flex-end;">
-                        <span id="txn-customer-badge" style="display:none;font-size:0.7rem;padding:2px 7px;border-radius:12px;background:#dbeafe;color:#1d4ed8;font-weight:600;white-space:nowrap;"></span>
+
+                    <!-- Search all -->
+                    <div style="position:relative;">
+                        <input type="text" id="txn-customer-search" placeholder="Search customers by name…" autocomplete="off"
+                               style="width:100%;box-sizing:border-box;">
+                        <div id="txn-customer-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:180px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,0.1);margin-top:2px;">
+                        </div>
                     </div>
                 </div>
                 <div class="acct-form-row">

@@ -106,6 +106,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Customer typeahead
     initCustomerTypeahead();
 
+    // Customer clear button
+    $('#txn-customer-clear').addEventListener('click', clearTxnCustomer);
+
+    // New Vendor button (in modal label)
+    $('#btn-new-vendor-modal').addEventListener('click', openVendorModal);
+
     // Vendor modal
     $('#vendor-modal-close').addEventListener('click', () => $('#vendor-modal').style.display = 'none');
     $('#vendor-modal-cancel').addEventListener('click', () => $('#vendor-modal').style.display = 'none');
