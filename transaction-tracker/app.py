@@ -5721,6 +5721,101 @@ def api_acct_customers():
     return jsonify(result)
 
 
+@app.route("/api/accounting/smart-fill", methods=["POST"])
+@require_role("admin")
+def api_acct_smart_fill():
+    """Auto-assign accounts and default splits to unsplit transactions."""
+    from email_parser.database import _connect
+    d = request.json or {}
+    dry_run = d.get("dry_run", True)
+
+    with _connect() as conn:
+        # Find transactions with no splits
+        unsplit = conn.execute(
+            """SELECT t.id, t.type, t.source, t.total_amount, t.account_id,
+                      t.event_name, t.description
+               FROM acct_transactions t
+               WHERE t.total_amount > 0
+                 AND t.type IN ('income', 'expense')
+                 AND COALESCE(t.status, 'active') = 'active'
+                 AND NOT EXISTS (SELECT 1 FROM acct_splits s WHERE s.transaction_id = t.id)
+               ORDER BY t.date DESC"""
+        ).fetchall()
+
+        # Look up TGF Checking account id
+        tgf_checking = conn.execute(
+            "SELECT id FROM acct_accounts WHERE LOWER(name) LIKE '%tgf checking%' LIMIT 1"
+        ).fetchone()
+        tgf_checking_id = tgf_checking["id"] if tgf_checking else None
+
+        # Look up Venmo account
+        venmo_acct = conn.execute(
+            "SELECT id FROM acct_accounts WHERE LOWER(name) LIKE '%venmo%' OR account_type='venmo' LIMIT 1"
+        ).fetchone()
+        venmo_id = venmo_acct["id"] if venmo_acct else None
+
+        # Look up TGF entity
+        tgf_entity = conn.execute(
+            "SELECT id FROM acct_entities WHERE LOWER(short_name) = 'tgf' LIMIT 1"
+        ).fetchone()
+        tgf_entity_id = tgf_entity["id"] if tgf_entity else None
+
+        default_entity = conn.execute("SELECT id FROM acct_entities LIMIT 1").fetchone()
+        default_entity_id = default_entity["id"] if default_entity else None
+
+        # Look up "Event Revenue" income category
+        event_rev_cat = conn.execute(
+            "SELECT id FROM acct_categories WHERE type='income' AND LOWER(name) LIKE '%event revenue%' LIMIT 1"
+        ).fetchone()
+        event_rev_cat_id = event_rev_cat["id"] if event_rev_cat else None
+
+        applied = []
+        for t in unsplit:
+            source = (t["source"] or "").lower()
+            desc = (t["description"] or "").lower()
+
+            # Determine account to assign
+            new_account_id = t["account_id"]
+            if not new_account_id:
+                if source == "godaddy" or desc.startswith("godaddy order"):
+                    new_account_id = tgf_checking_id
+                elif source == "venmo":
+                    new_account_id = venmo_id
+
+            # Determine split params
+            entity_id = tgf_entity_id if t["type"] == "income" else default_entity_id
+            category_id = event_rev_cat_id if t["type"] == "income" else None
+
+            info = {
+                "id": t["id"],
+                "description": t["description"],
+                "amount": t["total_amount"],
+                "type": t["type"],
+                "source": t["source"],
+                "new_account_id": new_account_id,
+                "entity_id": entity_id,
+                "category_id": category_id,
+            }
+            applied.append(info)
+
+            if not dry_run:
+                # Update account if changed
+                if new_account_id and new_account_id != t["account_id"]:
+                    conn.execute("UPDATE acct_transactions SET account_id=? WHERE id=?",
+                                 (new_account_id, t["id"]))
+                # Create a single split for the full amount
+                conn.execute(
+                    """INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo)
+                       VALUES (?, ?, ?, ?, '')""",
+                    (t["id"], entity_id, category_id, t["total_amount"])
+                )
+
+        if not dry_run:
+            conn.commit()
+
+    return jsonify({"count": len(applied), "transactions": applied if dry_run else []})
+
+
 @app.route("/api/accounting/transactions")
 @require_role("admin")
 def api_acct_transactions():

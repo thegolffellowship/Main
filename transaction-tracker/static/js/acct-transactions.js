@@ -866,6 +866,37 @@ function renderTransactionList(txns, total) {
 
 // ── Transaction Modal ────────────────────────────────────
 
+function _guessAccountId(txn) {
+    const source = (txn.source || '').toLowerCase();
+    const desc = (txn.description || '').toLowerCase();
+    if (source === 'godaddy' || desc.startsWith('godaddy order')) {
+        return ACCT.accounts.find(a => a.name.toLowerCase().includes('tgf checking'))?.id || null;
+    }
+    if (source === 'venmo') {
+        return ACCT.accounts.find(a => a.account_type === 'venmo' || a.name.toLowerCase().includes('venmo'))?.id || null;
+    }
+    return null;
+}
+
+function _buildSmartSplit(txn) {
+    // Entity: prefer TGF for income, else active/first
+    const tgfEnt = ACCT.entities.find(e => e.short_name === 'TGF');
+    const entityId = (txn.type === 'income' && tgfEnt) ? tgfEnt.id
+        : (ACCT.activeEntity || ACCT.entities[0]?.id);
+
+    // Category: income → "Event Revenue"
+    const catId = txn.type === 'income'
+        ? (ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('event revenue'))?.id || '')
+        : '';
+
+    // Event: match event_name field directly against ACCT.events
+    const evId = txn.event_name
+        ? (ACCT.events.find(e => e.item_name === txn.event_name)?.id || '')
+        : '';
+
+    return { entity_id: entityId, category_id: catId, event_id: evId, amount: txn.total_amount, memo: '' };
+}
+
 function populateDropdowns() {
     // Account dropdowns (with last 4 digits)
     const acctOpts = '<option value="">— None —</option>' +
@@ -929,6 +960,11 @@ async function openEditTransaction(id) {
         $('#txn-amount').value = txn.total_amount;
         $('#txn-type').value = txn.type;
         $('#txn-account').value = txn.account_id || '';
+        // Auto-assign account if not set
+        if (!txn.account_id) {
+            const guessedAcct = _guessAccountId(txn);
+            if (guessedAcct) $('#txn-account').value = guessedAcct;
+        }
         $('#txn-notes').value = txn.notes || '';
         $('#receipt-filename').textContent = txn.receipt_path ? txn.receipt_path.split('/').pop() : '';
         $('#transfer-row').style.display = txn.type === 'transfer' ? '' : 'none';
@@ -941,9 +977,10 @@ async function openEditTransaction(id) {
             clearTxnCustomer();
         }
 
-        renderSplitRows(txn.splits.map(s => ({
-            entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || ''
-        })));
+        const splitsData = txn.splits.length > 0
+            ? txn.splits.map(s => ({ entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || '' }))
+            : [_buildSmartSplit(txn)];
+        renderSplitRows(splitsData);
         renderTagChips(txn.tags.map(t => t.id));
 
         $('#txn-modal').style.display = 'flex';
@@ -1573,6 +1610,31 @@ function openVendorModal() {
     $('#vendor-modal-error').style.display = 'none';
     $('#vendor-modal').style.display = 'flex';
     setTimeout(() => $('#vendor-name').focus(), 50);
+}
+
+async function runSmartFill() {
+    // First do a dry run to show preview
+    try {
+        const preview = await api('/accounting/smart-fill', { method: 'POST', body: { dry_run: true } });
+        if (preview.count === 0) {
+            alert('All transactions already have categories assigned.');
+            return;
+        }
+        const ok = confirm(
+            `Smart Fill found ${preview.count} transaction(s) without a category split.\n\n` +
+            `This will:\n` +
+            `• Auto-assign TGF Checking account to GoDaddy income\n` +
+            `• Create a default "Event Revenue" split for each income transaction\n` +
+            `• You can still edit individual transactions to adjust\n\n` +
+            `Apply to all ${preview.count} transactions?`
+        );
+        if (!ok) return;
+        const result = await api('/accounting/smart-fill', { method: 'POST', body: { dry_run: false } });
+        alert(`Done! Applied smart defaults to ${result.count} transaction(s).`);
+        loadTransactions();
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
 }
 
 async function saveNewVendor() {

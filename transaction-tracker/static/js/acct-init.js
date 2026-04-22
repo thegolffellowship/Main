@@ -111,6 +111,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#txn-modal-save').addEventListener('click', saveTransaction);
     $('#btn-add-split').addEventListener('click', addSplitRow);
     $('#txn-amount').addEventListener('input', updateSplitTotal);
+    $('#txn-amount').addEventListener('change', () => {
+        const firstSplit = document.querySelector('#splits-list .split-amount');
+        if (firstSplit && !parseFloat(firstSplit.value)) {
+            firstSplit.value = $('#txn-amount').value;
+            updateSplitTotal();
+        }
+    });
     $('#txn-type').addEventListener('change', () => {
         $('#transfer-row').style.display = $('#txn-type').value === 'transfer' ? '' : 'none';
     });
@@ -214,6 +221,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#category-modal-close').addEventListener('click', () => $('#category-modal').style.display = 'none');
     $('#category-modal-cancel').addEventListener('click', () => $('#category-modal').style.display = 'none');
     $('#category-modal-save').addEventListener('click', saveCategory);
+
+    // Smart Fill
+    $('#btn-smart-fill')?.addEventListener('click', runSmartFill);
 
     // Inline Match Queue (Ledger — Unreconciled pill) buttons
     document.getElementById('btn-lmq-automatch')?.addEventListener('click', runInlineAutoMatch);

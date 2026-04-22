@@ -10317,7 +10317,7 @@ def get_acct_transaction(txn_id: int, db_path: str | Path | None = None) -> dict
     with _connect(db_path) as conn:
         row = conn.execute(
             """SELECT t.*, a.name as account_name,
-                      (c.first_name || ' ' || c.last_name) as customer_name
+                      COALESCE(NULLIF(c.company_name,''), NULLIF(TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')),'' )) as customer_name
                FROM acct_transactions t
                LEFT JOIN acct_accounts a ON a.id = t.account_id
                LEFT JOIN customers c ON c.customer_id = t.customer_id
