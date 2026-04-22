@@ -1100,8 +1100,12 @@
 
         // Member Status section (read-only)
         const statusLabels = {
-            active_member: 'Active Member', expired_member: 'Expired Member',
-            active_guest: 'Active Guest', inactive: 'Inactive', first_timer: 'First Timer'
+            first_timer: '1ST TIMER',
+            active_guest: 'GUEST',
+            active_member: 'MEMBER',
+            member_plus: 'MEMBER+',
+            inactive: 'FORMER',
+            expired_member: 'FORMER',
         };
         const cps = customer.current_player_status;
         html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
@@ -1156,11 +1160,11 @@
             <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Member Status</div>
             <select class="modal-input cust-edit-input" data-field="current_player_status" style="width:auto; padding:0.3rem; font-size:0.82rem;">
                 <option value="">— Not Set —</option>
-                <option value="active_member" ${(customer.current_player_status === 'active_member') ? 'selected' : ''}>Active Member</option>
-                <option value="expired_member" ${(customer.current_player_status === 'expired_member') ? 'selected' : ''}>Expired Member</option>
-                <option value="active_guest" ${(customer.current_player_status === 'active_guest') ? 'selected' : ''}>Active Guest</option>
-                <option value="inactive" ${(customer.current_player_status === 'inactive') ? 'selected' : ''}>Inactive</option>
-                <option value="first_timer" ${(customer.current_player_status === 'first_timer') ? 'selected' : ''}>First Timer</option>
+                <option value="first_timer" ${(customer.current_player_status === 'first_timer') ? 'selected' : ''}>1ST TIMER</option>
+                <option value="active_guest" ${(customer.current_player_status === 'active_guest') ? 'selected' : ''}>GUEST</option>
+                <option value="active_member" ${(customer.current_player_status === 'active_member') ? 'selected' : ''}>MEMBER</option>
+                <option value="member_plus" ${(customer.current_player_status === 'member_plus') ? 'selected' : ''}>MEMBER+</option>
+                <option value="inactive" ${(['inactive','expired_member'].includes(customer.current_player_status)) ? 'selected' : ''}>FORMER</option>
             </select>
         </div>`;
 
@@ -2765,9 +2769,15 @@
             try {
                 const rolesRes = await fetch("/api/customer-roles");
                 const rolesData = await rolesRes.json();
+                const byName = rolesData._by_name || {};
                 allCustomers.forEach(c => {
-                    if (c.customer_id) {
-                        const info = rolesData[String(c.customer_id)];
+                    let cid = c.customer_id ? String(c.customer_id) : null;
+                    if (!cid) {
+                        // Fallback: look up by canonical name
+                        cid = byName[c.name.toLowerCase()] || null;
+                    }
+                    if (cid) {
+                        const info = rolesData[cid];
                         if (info) {
                             c.roles = info.roles || [];
                             c.first_timer_ever = info.first_timer_ever;

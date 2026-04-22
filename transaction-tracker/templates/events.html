@@ -3327,8 +3327,8 @@
         if (selected === "GUEST" && hasRole("member")) {
             return {reason: "Selected GUEST but customer IS a member"};
         }
-        if (selected === "1ST TIMER" && firstTimerEver === false) {
-            return {reason: "Selected 1st TIMER but customer has played before"};
+        if (selected === "1ST TIMER" && firstTimerEver === false && !hasRole("member")) {
+            return {reason: "Selected 1st TIMER but customer has played before (non-member)"};
         }
         return null;
     }
@@ -8418,7 +8418,7 @@
             let creditsHtml = (info.credits || []).map(c => `
                 <tr>
                     <td style="padding:0.2rem 0.5rem;">${escapeHtml(c.item_name || '')}</td>
-                    <td style="padding:0.2rem 0.5rem;font-weight:600;">${fmt(c.item_price)}</td>
+                    <td style="padding:0.2rem 0.5rem;font-weight:600;">${fmt(c.credit_amount !== undefined ? c.credit_amount : parseFloat((c.item_price || '0').replace(/[^0-9.-]/g, '')))}</td>
                     <td style="padding:0.2rem 0.5rem;color:#6b7280;font-size:0.78rem;">${escapeHtml(c.order_date || '')}</td>
                 </tr>`).join('');
 
