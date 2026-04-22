@@ -47,6 +47,11 @@
         /* Fade out matched rows */
         .acct-txn-row.lmq-matched,.acct-mobile-card.lmq-matched{opacity:.3;transition:opacity .4s;}
         @media(max-width:900px){ #ledger-split.split-on{grid-template-columns:1fr;} #ledger-deposits-pane{max-height:45vh;} }
+        /* Ledger column visibility — toggled via class on the table */
+        .acct-table-full.acct-hide-customer .col-customer{display:none;}
+        .acct-table-full.acct-hide-splits .col-splits{display:none;}
+        .acct-table-full.acct-hide-type .col-type{display:none;}
+        .acct-table-full.acct-hide-account .col-account{display:none;}
     </style>
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
@@ -281,6 +286,10 @@
                 </div>
                 <div class="ledger-filter-right">
                     <input type="text" id="txn-search" class="acct-search" placeholder="Search ledger..." style="width:160px;">
+                    <div style="position:relative;">
+                        <button class="btn btn-secondary btn-sm" id="btn-ledger-cols" title="Show/hide columns">Columns &#9660;</button>
+                        <div id="ledger-col-dropdown" style="display:none;position:absolute;right:0;top:100%;margin-top:2px;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:300;min-width:160px;padding:4px 0;"></div>
+                    </div>
                     <button class="btn btn-secondary btn-sm" id="btn-ledger-adv" title="Advanced filters">&#9881; Filters</button>
                     <button class="btn btn-secondary btn-sm" id="btn-import-csv" title="Import bank statement CSV">Import CSV</button>
                 </div>

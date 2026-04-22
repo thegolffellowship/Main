@@ -2,6 +2,54 @@
    Accounting Module — Transactions Tab & Modal
    ========================================================= */
 
+// ── Ledger Column Visibility ──────────────────────────────
+
+const LEDGER_COLS = [
+    { key: 'customer', label: 'Customer / Vendor', def: true },
+    { key: 'splits',   label: 'Category',          def: true },
+    { key: 'type',     label: 'Type',               def: true },
+    { key: 'account',  label: 'Account',            def: true },
+];
+let _ledgerColPrefs = null;
+
+function _loadLedgerColPrefs() {
+    if (_ledgerColPrefs) return;
+    try {
+        const s = localStorage.getItem('acct_visible_cols');
+        if (s) { _ledgerColPrefs = JSON.parse(s); return; }
+    } catch(e) {}
+    _ledgerColPrefs = {};
+    LEDGER_COLS.forEach(c => { _ledgerColPrefs[c.key] = c.def; });
+}
+
+function _saveLedgerColPrefs() {
+    try { localStorage.setItem('acct_visible_cols', JSON.stringify(_ledgerColPrefs)); } catch(e) {}
+}
+
+function applyLedgerColVisibility() {
+    _loadLedgerColPrefs();
+    const table = document.querySelector('#txn-list .acct-table-full');
+    if (!table) return;
+    LEDGER_COLS.forEach(c => table.classList.toggle(`acct-hide-${c.key}`, !_ledgerColPrefs[c.key]));
+}
+
+function buildLedgerColumnToggle() {
+    _loadLedgerColPrefs();
+    const drop = $('#ledger-col-dropdown');
+    if (!drop) return;
+    drop.innerHTML = LEDGER_COLS.map(c => `
+        <label style="display:flex;align-items:center;gap:6px;padding:5px 12px;cursor:pointer;font-size:0.82rem;white-space:nowrap;">
+            <input type="checkbox" data-col="${c.key}" ${_ledgerColPrefs[c.key] ? 'checked' : ''}> ${c.label}
+        </label>`).join('');
+    drop.querySelectorAll('input[type=checkbox]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            _ledgerColPrefs[cb.dataset.col] = cb.checked;
+            _saveLedgerColPrefs();
+            applyLedgerColVisibility();
+        });
+    });
+}
+
 // ── Inline Match Queue state ──
 const LMQ = {
     selectedDepositId: null,
@@ -342,8 +390,13 @@ function renderTransactionList(txns, total) {
     // Desktop table
     const tableHTML = `<table class="acct-table acct-table-full acct-table-mobile-hide">
         <thead><tr>
-            <th>Date</th><th>Description</th><th>Splits</th>
-            <th class="text-right">Amount</th><th>Type</th><th>Account</th>
+            <th>Date</th>
+            <th class="col-customer">Customer / Vendor</th>
+            <th>Description</th>
+            <th class="col-splits">Category</th>
+            <th class="text-right">Amount</th>
+            <th class="col-type">Type</th>
+            <th class="col-account">Account</th>
             <th></th>
         </tr></thead>
         <tbody>${txns.map(t => {
@@ -354,17 +407,19 @@ function renderTransactionList(txns, total) {
             const rowData = m.isExp
                 ? `data-id="${t.id}" data-expense-id="${t.expense_id}"`
                 : `data-id="${t.id}"`;
+            const custName = t.customer_name || '';
 
             return `<tr class="${rowClass}" ${rowData}>
                 <td style="white-space:nowrap;">${_ledgerDot(t)}${t.date || ''}</td>
+                <td class="col-customer" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.8rem;color:#6b7280;" title="${custName}">${custName}</td>
                 <td>
                     ${t.description || ''}
                     ${m.sourceBadge}${m.reviewBadge}${m.tagBadges}
                 </td>
-                <td class="acct-split-cell">${m.splitBadges}</td>
+                <td class="col-splits acct-split-cell">${m.splitBadges}</td>
                 <td class="text-right ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</td>
-                <td><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></td>
-                <td>${t.account_name || '—'}</td>
+                <td class="col-type"><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></td>
+                <td class="col-account">${t.account_name || '—'}</td>
                 <td>
                     ${m.isExp ? '' : `<button class="btn-icon-sm acct-btn-del" data-id="${t.id}" title="Delete">&times;</button>`}
                 </td>
@@ -791,6 +846,9 @@ function renderTransactionList(txns, total) {
             loadTransactions();
         });
     });
+
+    // Apply column visibility after render
+    applyLedgerColVisibility();
 
     // Pagination
     const pages = Math.ceil(total / ACCT.txnLimit);

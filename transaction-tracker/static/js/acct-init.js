@@ -83,6 +83,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 
+    // Ledger column toggle
+    buildLedgerColumnToggle();
+    const _colBtn = $('#btn-ledger-cols');
+    const _colDrop = $('#ledger-col-dropdown');
+    if (_colBtn && _colDrop) {
+        _colBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _colDrop.style.display = _colDrop.style.display === 'none' ? '' : 'none';
+        });
+        document.addEventListener('click', () => { _colDrop.style.display = 'none'; });
+    }
+
     // Category type toggle
     $$('.acct-cat-type-toggle .acct-subtab').forEach(btn => {
         btn.addEventListener('click', () => {
