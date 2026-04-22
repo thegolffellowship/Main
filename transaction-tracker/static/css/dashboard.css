@@ -2031,6 +2031,12 @@ div.mobile-card.row-rsvp-only {
     display: inline-block; padding: 0.15rem 0.4rem; margin: 0.1rem;
     border: 1px solid; border-radius: var(--radius); font-size: 0.7rem; white-space: nowrap;
 }
+.acct-split-label {
+    font-size: 0.78rem; color: #374151;
+}
+.acct-split-multi {
+    font-size: 0.72rem; color: #6b7280; font-style: italic;
+}
 
 /* ---- Source Badges (email-parsed transactions) ---- */
 .acct-source-badge {

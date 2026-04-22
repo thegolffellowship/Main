@@ -368,11 +368,13 @@ function renderTransactionList(txns, total) {
     // Shared helpers
     function _txnMeta(t) {
         const isExp = t._is_expense;
-        const splitBadges = t.splits.map(s =>
-            `<span class="acct-split-badge" style="border-color:${s.entity_color || '#6b7280'}">
-                <strong>${s.entity_name || '?'}</strong> ${s.category_name || ''}${s.event_name ? ' <em>' + s.event_name + '</em>' : ''} ${fmt(s.amount)}
-            </span>`
-        ).join(' ');
+        const cats = t.splits.map(s => s.category_name).filter(Boolean);
+        const uniqueCats = [...new Set(cats)];
+        const splitBadges = t.splits.length === 0
+            ? ''
+            : uniqueCats.length > 1
+                ? '<span class="acct-split-label acct-split-multi">[split]</span>'
+                : `<span class="acct-split-label">${uniqueCats[0] || '—'}</span>`;
         const srcLabel = _SOURCE_LABELS[t.source];
         const sourceBadge = srcLabel
             ? `<span class="acct-source-badge acct-source-${t.source}">${srcLabel}</span>`
@@ -963,6 +965,9 @@ function openNewTransaction() {
     renderSplitRows([{ entity_id: defaultEntity, category_id: '', amount: '', memo: '' }]);
     renderTagChips([]);
 
+    const mfNote = $('#txn-merchant-fee-note');
+    if (mfNote) mfNote.style.display = 'none';
+
     $('#txn-modal').style.display = 'flex';
 }
 
@@ -998,6 +1003,17 @@ async function openEditTransaction(id) {
             : _buildSmartSplit(txn);
         renderSplitRows(splitsData);
         renderTagChips(txn.tags.map(t => t.id));
+
+        const mfNote = $('#txn-merchant-fee-note');
+        if (mfNote) {
+            if (txn.merchant_fee && txn.merchant_fee > 0) {
+                const netDep = txn.net_deposit != null ? txn.net_deposit : (txn.total_amount - txn.merchant_fee);
+                mfNote.textContent = `GoDaddy fee: −${fmt(txn.merchant_fee)}  →  Net deposit: ${fmt(netDep)}`;
+                mfNote.style.display = '';
+            } else {
+                mfNote.style.display = 'none';
+            }
+        }
 
         $('#txn-modal').style.display = 'flex';
     } catch (e) {
