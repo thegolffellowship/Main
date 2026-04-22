@@ -7143,7 +7143,7 @@ def get_player_credits(customer_name: str, db_path: str | Path | None = None) ->
     result = []
     for r in rows:
         d = dict(r)
-        d["credit_amount"] = _parse_dollar(d.get("item_price"))
+        d["credit_amount"] = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
         result.append(d)
     return result
 

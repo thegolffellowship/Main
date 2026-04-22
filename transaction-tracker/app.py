@@ -2996,7 +2996,7 @@ def api_rsvp_credit_info_by_item(item_id):
             {
                 "id": c["id"],
                 "item_name": c.get("item_name") or "",
-                "item_price": c.get("item_price") or "",
+                "item_price": f"${c.get('credit_amount', 0):.2f}",
                 "order_date": c.get("order_date") or "",
             }
             for c in credits
