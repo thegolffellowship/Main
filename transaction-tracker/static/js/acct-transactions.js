@@ -1310,7 +1310,11 @@ function closeExpenseModal() {
 // ── Customer / Vendor Typeahead ───────────────────────────
 
 function _customerDisplayName(c) {
-    return `${c.last_name}, ${c.first_name}`;
+    if (c.company_name) return c.company_name;
+    if (c.display_name) return c.display_name;
+    const fn = (c.first_name || '').trim();
+    const ln = (c.last_name || '').trim();
+    return fn && ln ? `${ln}, ${fn}` : (ln || fn);
 }
 
 function renderVendorChips() {
@@ -1324,9 +1328,10 @@ function renderVendorChips() {
     const selectedId = parseInt($('#txn-customer-id').value) || 0;
     container.innerHTML = vendors.map(v => {
         const active = v.customer_id === selectedId;
-        return `<button type="button" class="txn-vendor-chip" data-id="${v.customer_id}" data-name="${v.first_name} ${v.last_name}"
+        const vName = _customerDisplayName(v);
+        return `<button type="button" class="txn-vendor-chip" data-id="${v.customer_id}" data-name="${vName}"
             style="padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:600;cursor:pointer;border:1.5px solid ${active ? '#d97706' : '#fcd34d'};background:${active ? '#fef3c7' : '#fffbeb'};color:#92400e;transition:all .15s;">
-            ${v.first_name} ${v.last_name}
+            ${vName}
         </button>`;
     }).join('');
     container.querySelectorAll('.txn-vendor-chip').forEach(btn => {
@@ -1360,10 +1365,10 @@ function _fuzzyMatchCustomers(query) {
     if (!query) return [];
     const q = query.toLowerCase();
     return ACCT.customers.filter(c => {
-        const full = `${c.first_name} ${c.last_name}`.toLowerCase();
-        const rev = `${c.last_name} ${c.first_name}`.toLowerCase();
-        const last = c.last_name.toLowerCase();
-        return full.includes(q) || rev.includes(q) || last.startsWith(q);
+        const display = _customerDisplayName(c).toLowerCase();
+        const full = `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase();
+        const rev = `${c.last_name || ''} ${c.first_name || ''}`.toLowerCase();
+        return display.includes(q) || full.includes(q) || rev.includes(q);
     }).slice(0, 8);
 }
 
@@ -1420,7 +1425,7 @@ function _renderCustomerDropdown(matches, showVendorSection) {
 function _customerItemHTML(c) {
     const label = c.is_vendor ? '<span style="font-size:0.65rem;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:8px;margin-left:4px;">Vendor</span>' : '';
     const sub = [c.chapter, c.current_player_status].filter(Boolean).join(' · ');
-    return `<div class="acct-cust-item" data-id="${c.customer_id}" data-name="${c.first_name} ${c.last_name}" data-vendor="${c.is_vendor ? '1' : '0'}"
+    return `<div class="acct-cust-item" data-id="${c.customer_id}" data-name="${_customerDisplayName(c)}" data-vendor="${c.is_vendor ? '1' : '0'}"
                  style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;">
         <div style="font-weight:500;font-size:0.875rem;">${_customerDisplayName(c)}${label}</div>
         ${sub ? `<div style="font-size:0.75rem;color:#6b7280;">${sub}</div>` : ''}
@@ -1432,8 +1437,8 @@ function suggestCustomerFromDescription(desc) {
     const words = desc.toLowerCase().split(/\s+/);
     let best = null, bestScore = 0;
     for (const c of ACCT.customers) {
-        const full = `${c.first_name} ${c.last_name}`.toLowerCase();
-        const last = c.last_name.toLowerCase();
+        const full = _customerDisplayName(c).toLowerCase();
+        const last = (c.last_name || '').toLowerCase();
         let score = 0;
         for (const w of words) {
             if (w.length < 3) continue;
@@ -1445,7 +1450,7 @@ function suggestCustomerFromDescription(desc) {
     if (best && bestScore >= 2) {
         const search = $('#txn-customer-search');
         search.value = '';
-        search.placeholder = `Suggested: ${best.first_name} ${best.last_name} — press Enter to accept`;
+        search.placeholder = `Suggested: ${_customerDisplayName(best)} — press Enter to accept`;
         search._suggested = best;
     }
 }
@@ -1474,7 +1479,7 @@ function initCustomerTypeahead() {
         if (e.key === 'Enter') {
             e.preventDefault();
             if (input._suggested) {
-                setTxnCustomer(input._suggested.customer_id, `${input._suggested.first_name} ${input._suggested.last_name}`, input._suggested.is_vendor);
+                setTxnCustomer(input._suggested.customer_id, _customerDisplayName(input._suggested), input._suggested.is_vendor);
                 input._suggested = null;
             } else {
                 const first = dd.querySelector('.acct-cust-item');
@@ -1508,22 +1513,20 @@ function initCustomerTypeahead() {
 // ── Vendor Modal ─────────────────────────────────────────
 
 function openVendorModal() {
-    $('#vendor-first-name').value = '';
-    $('#vendor-last-name').value = '';
+    $('#vendor-name').value = '';
     $('#vendor-phone').value = '';
     $('#vendor-modal-error').style.display = 'none';
     $('#vendor-modal').style.display = 'flex';
-    setTimeout(() => $('#vendor-first-name').focus(), 50);
+    setTimeout(() => $('#vendor-name').focus(), 50);
 }
 
 async function saveNewVendor() {
-    const firstName = $('#vendor-first-name').value.trim();
-    const lastName = $('#vendor-last-name').value.trim();
+    const name = $('#vendor-name').value.trim();
     const phone = $('#vendor-phone').value.trim();
     const errEl = $('#vendor-modal-error');
 
-    if (!firstName && !lastName) {
-        errEl.textContent = 'Enter at least a first or last name.';
+    if (!name) {
+        errEl.textContent = 'Enter a vendor name.';
         errEl.style.display = '';
         return;
     }
@@ -1532,7 +1535,7 @@ async function saveNewVendor() {
         const vendor = await fetch('/api/accounting/vendors', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ first_name: firstName, last_name: lastName, phone }),
+            body: JSON.stringify({ name, phone }),
         }).then(async r => {
             if (!r.ok) {
                 const e = await r.json().catch(() => ({}));
@@ -1546,7 +1549,7 @@ async function saveNewVendor() {
         if (existing >= 0) ACCT.customers[existing] = vendor;
         else ACCT.customers.push(vendor);
 
-        setTxnCustomer(vendor.customer_id, `${vendor.first_name} ${vendor.last_name}`, true);
+        setTxnCustomer(vendor.customer_id, vendor.display_name, true);
         renderVendorChips();
         $('#vendor-modal').style.display = 'none';
     } catch (e) {

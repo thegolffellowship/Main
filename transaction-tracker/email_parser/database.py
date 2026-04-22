@@ -2033,6 +2033,12 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass
 
+        # Add company_name column for vendor/company customers
+        try:
+            conn.execute("ALTER TABLE customers ADD COLUMN company_name VARCHAR(200)")
+        except sqlite3.OperationalError:
+            pass
+
         # One-time migration: eliminate tgf_golfers table, unify into customers.
         # - Adds customer_id column to tgf_payouts
         # - Backfills customer_id from golfer→customer mapping (creates missing customers)

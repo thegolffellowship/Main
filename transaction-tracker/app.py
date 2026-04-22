@@ -5388,20 +5388,16 @@ def api_acct_create_vendor():
     """Create a new vendor (customer with vendor role) for transaction linking."""
     from email_parser.database import _connect
     d = request.json or {}
-    first_name = (d.get("first_name") or "").strip()
-    last_name = (d.get("last_name") or "").strip()
+    name = (d.get("name") or "").strip()
     phone = (d.get("phone") or "").strip() or None
-    if not first_name and not last_name:
-        return jsonify({"error": "first_name or last_name is required"}), 400
+    if not name:
+        return jsonify({"error": "name is required"}), 400
 
     with _connect() as conn:
-        # Check if a customer with this name already exists in the customers table
+        # Check if a vendor with this company name already exists
         existing = conn.execute(
-            """SELECT customer_id FROM customers
-               WHERE LOWER(COALESCE(first_name,'')) = LOWER(?)
-                 AND LOWER(COALESCE(last_name,'')) = LOWER(?)
-               LIMIT 1""",
-            (first_name, last_name),
+            "SELECT customer_id FROM customers WHERE LOWER(COALESCE(company_name,'')) = LOWER(?) LIMIT 1",
+            (name,),
         ).fetchone()
 
         if existing:
@@ -5409,9 +5405,9 @@ def api_acct_create_vendor():
         else:
             cursor = conn.execute(
                 """INSERT INTO customers
-                       (first_name, last_name, phone, acquisition_source, account_status)
-                   VALUES (?, ?, ?, 'vendor', 'active')""",
-                (first_name or None, last_name or None, phone),
+                       (first_name, last_name, company_name, phone, acquisition_source, account_status)
+                   VALUES ('', ?, ?, ?, 'vendor', 'active')""",
+                (name, name, phone),
             )
             cid = cursor.lastrowid
 
@@ -5422,13 +5418,15 @@ def api_acct_create_vendor():
         conn.commit()
 
         row = conn.execute(
-            """SELECT c.customer_id, c.first_name, c.last_name,
+            """SELECT c.customer_id, c.first_name, c.last_name, c.company_name,
                       c.current_player_status, c.chapter, 1 as is_vendor
                FROM customers c WHERE c.customer_id = ?""",
             (cid,),
         ).fetchone()
 
-    return jsonify(dict(row)), 201
+    data = dict(row)
+    data["display_name"] = data.get("company_name") or f"{data.get('first_name','')} {data.get('last_name','')}".strip()
+    return jsonify(data), 201
 
 
 @app.route("/api/accounting/customers")
@@ -5439,7 +5437,7 @@ def api_acct_customers():
     with _connect() as conn:
         rows = conn.execute(
             """SELECT c.customer_id, c.first_name, c.last_name,
-                      c.current_player_status, c.chapter,
+                      c.company_name, c.current_player_status, c.chapter,
                       EXISTS(
                           SELECT 1 FROM customer_roles r
                           WHERE r.customer_id = c.customer_id AND r.role_type = 'vendor'
@@ -5448,7 +5446,13 @@ def api_acct_customers():
                WHERE c.account_status = 'active'
                ORDER BY c.last_name COLLATE NOCASE, c.first_name COLLATE NOCASE"""
         ).fetchall()
-    return jsonify([dict(r) for r in rows])
+
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["display_name"] = d.get("company_name") or f"{d.get('first_name','')} {d.get('last_name','')}".strip()
+        result.append(d)
+    return jsonify(result)
 
 
 @app.route("/api/accounting/transactions")

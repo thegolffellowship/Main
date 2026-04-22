@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#vendor-modal-close').addEventListener('click', () => $('#vendor-modal').style.display = 'none');
     $('#vendor-modal-cancel').addEventListener('click', () => $('#vendor-modal').style.display = 'none');
     $('#vendor-modal-save').addEventListener('click', saveNewVendor);
-    $('#vendor-last-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveNewVendor(); });
+    $('#vendor-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveNewVendor(); });
 
     // Auto-suggest customer from description
     $('#txn-description').addEventListener('blur', () => {
