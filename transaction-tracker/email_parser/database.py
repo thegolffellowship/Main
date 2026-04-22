@@ -1577,6 +1577,15 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_rsvps_matched_event ON rsvps(matched_event)"
         )
+
+        # rsvps migration — columns added after initial release
+        for col, col_type in [
+            ("credit_notified_at", "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE rsvps ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_rsvps_player_email ON rsvps(player_email)"
         )
@@ -7109,6 +7118,396 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
                 return rows[0]["id"]
 
         return None
+
+
+# ---------------------------------------------------------------------------
+# Credit detection helpers
+# ---------------------------------------------------------------------------
+
+_PER_GAME_ADDON = 16.0  # $ per game (NET or GROSS)
+
+
+def get_player_credits(customer_name: str, db_path: str | Path | None = None) -> list[dict]:
+    """Return all unredeemed credited items for a player, most recent first."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT i.*, e.item_name as event_canonical
+               FROM items i
+               LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
+               WHERE i.customer = ? COLLATE NOCASE
+                 AND i.transaction_status = 'credited'
+                 AND i.parent_item_id IS NULL
+               ORDER BY i.order_date DESC""",
+            (customer_name,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["credit_amount"] = _parse_dollar(d.get("item_price"))
+        result.append(d)
+    return result
+
+
+def _calc_event_price_for_player(
+    event: dict,
+    user_status: str,
+    holes: str,
+    side_games: str,
+) -> float | None:
+    """Server-side pricing formula matching the JS calcPricingLine in events.html.
+
+    Returns the full player-facing total (including tx fee), or None if the event
+    has no pricing configured.
+    """
+    import math
+
+    # Normalise inputs
+    holes_str = str(holes or "").strip()
+    status_upper = (user_status or "").upper()
+    games_upper = (side_games or "").upper()
+    fmt = (event.get("format") or "").lower()
+    is_combo = "combo" in fmt or "9/18" in fmt
+
+    # Pick course cost / markup / side-game-fee based on holes
+    if is_combo and holes_str == "18":
+        cc = event.get("course_cost_18")
+        mu_member = event.get("tgf_markup_18") or event.get("tgf_markup")
+        sg = event.get("side_game_fee_18") or event.get("side_game_fee")
+    elif is_combo or holes_str == "9":
+        cc = event.get("course_cost_9") or event.get("course_cost")
+        mu_member = event.get("tgf_markup_9") or event.get("tgf_markup")
+        sg = event.get("side_game_fee_9") or event.get("side_game_fee")
+    else:
+        cc = event.get("course_cost")
+        mu_member = event.get("tgf_markup")
+        sg = event.get("side_game_fee")
+
+    if cc is None or mu_member is None:
+        return None
+
+    cc = float(cc or 0)
+    mu_member = float(mu_member or 0)
+    sg = float(sg or 0)
+    tf = float(event.get("transaction_fee_pct") or 3.5)
+
+    # Player-type markup adjustment
+    if "GUEST" in status_upper:
+        extra = 15.0 if (holes_str == "18" and not is_combo) else 10.0
+        mu = mu_member + extra
+    elif "1ST" in status_upper or "FIRST" in status_upper:
+        extra = 15.0 if (holes_str == "18" and not is_combo) else 10.0
+        mu = mu_member + extra - 25.0
+    else:
+        mu = mu_member
+
+    # Game addon
+    if games_upper in ("BOTH",):
+        game_addon = _PER_GAME_ADDON * 2
+    elif games_upper in ("NET", "GROSS"):
+        game_addon = _PER_GAME_ADDON
+    else:
+        game_addon = 0.0
+
+    rounded_cc = math.ceil(cc)
+    event_charge = rounded_cc + mu + sg + game_addon
+    actual_charge = math.ceil(event_charge)
+    tx_fee = round(actual_charge * tf / 100, 2)
+    return round(actual_charge + tx_fee, 2)
+
+
+def get_rsvp_credit_info(rsvp_id: int, db_path: str | Path | None = None) -> dict | None:
+    """Full credit analysis for a single RSVP row.
+
+    Returns None if the RSVP isn't matched to an event, or the player has no credits.
+    Returns a dict with:
+        player_name, player_email, event_name, credits (list), total_credit,
+        new_event_price (or None), amount_owed (positive = owes, negative = excess),
+        can_calculate, selections (holes/games/tee/status from most recent credit)
+    """
+    with _connect(db_path) as conn:
+        rsvp = conn.execute("SELECT * FROM rsvps WHERE id = ?", (rsvp_id,)).fetchone()
+        if not rsvp:
+            return None
+        rsvp = dict(rsvp)
+
+        if not rsvp.get("matched_event"):
+            return None
+
+        # Resolve player name from matched item or RSVP row itself
+        customer_name = rsvp.get("player_name") or ""
+        if rsvp.get("matched_item_id"):
+            item_row = conn.execute(
+                "SELECT customer, customer_email FROM items WHERE id = ?",
+                (rsvp["matched_item_id"],),
+            ).fetchone()
+            if item_row:
+                customer_name = item_row["customer"] or customer_name
+
+        credits = get_player_credits(customer_name, db_path)
+        if not credits:
+            return None
+
+        total_credit = sum(c["credit_amount"] for c in credits)
+
+        # Previous selections from the most recent credited item
+        most_recent = credits[0]
+        selections = {
+            "user_status": most_recent.get("user_status") or "MEMBER",
+            "holes":       most_recent.get("holes") or "9",
+            "side_games":  most_recent.get("side_games") or "NONE",
+            "tee_choice":  most_recent.get("tee_choice") or "",
+        }
+
+        # New event pricing
+        event_row = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (rsvp["matched_event"],),
+        ).fetchone()
+        event = dict(event_row) if event_row else {}
+
+        new_event_price = _calc_event_price_for_player(
+            event,
+            selections["user_status"],
+            selections["holes"],
+            selections["side_games"],
+        )
+        can_calculate = new_event_price is not None
+
+        amount_owed = round((new_event_price or 0) - total_credit, 2)
+
+        return {
+            "rsvp_id": rsvp_id,
+            "player_name": customer_name,
+            "player_email": rsvp.get("player_email") or "",
+            "event_name": rsvp["matched_event"],
+            "event_date": event.get("event_date") or "",
+            "course": event.get("course") or "",
+            "credits": [
+                {
+                    "item_id": c["id"],
+                    "event_name": c["item_name"],
+                    "credit_amount": c["credit_amount"],
+                    "user_status": c.get("user_status") or "",
+                    "holes": c.get("holes") or "",
+                    "side_games": c.get("side_games") or "",
+                    "tee_choice": c.get("tee_choice") or "",
+                }
+                for c in credits
+            ],
+            "total_credit": total_credit,
+            "new_event_price": new_event_price,
+            "amount_owed": amount_owed,
+            "can_calculate": can_calculate,
+            "selections": selections,
+        }
+
+
+def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None) -> dict:
+    """Return {customer_name: credit_info} for all RSVP-only players in an event."""
+    with _connect(db_path) as conn:
+        rsvp_items = conn.execute(
+            """SELECT id, customer FROM items
+               WHERE item_name = ? COLLATE NOCASE
+                 AND COALESCE(transaction_status, 'active') IN ('rsvp_only', 'gg_rsvp')
+                 AND parent_item_id IS NULL""",
+            (event_name,),
+        ).fetchall()
+
+        # Also check unmatched GG RSVPs
+        rsvp_rows = conn.execute(
+            """SELECT r.id, r.player_name, r.player_email FROM rsvps r
+               WHERE r.matched_event = ? COLLATE NOCASE
+                 AND r.response = 'PLAYING'""",
+            (event_name,),
+        ).fetchall()
+
+    result = {}
+
+    # For item-based RSVPs (rsvp_only / gg_rsvp items)
+    for row in rsvp_items:
+        customer = row["customer"]
+        if not customer:
+            continue
+        credits = get_player_credits(customer, db_path)
+        if credits:
+            result[customer] = {
+                "total_credit": sum(c["credit_amount"] for c in credits),
+                "credits": [
+                    {"item_id": c["id"], "event_name": c["item_name"],
+                     "credit_amount": c["credit_amount"]}
+                    for c in credits
+                ],
+                "item_id": row["id"],
+            }
+
+    return result
+
+
+def mark_rsvp_credit_notified(rsvp_id: int, db_path: str | Path | None = None) -> None:
+    """Stamp credit_notified_at on the rsvp row so we don't re-send."""
+    import datetime as _dt
+    with _connect(db_path) as conn:
+        conn.execute(
+            "UPDATE rsvps SET credit_notified_at = ? WHERE id = ?",
+            (_dt.datetime.utcnow().isoformat(), rsvp_id),
+        )
+        conn.commit()
+
+
+def apply_credit_to_rsvp(
+    rsvp_item_id: int,
+    credited_item_ids: list[int],
+    excess_action: str = "keep",
+    holes: str = "",
+    side_games: str = "",
+    tee_choice: str = "",
+    user_status: str = "",
+    db_path: str | Path | None = None,
+) -> dict:
+    """Apply player credits to an RSVP-only item, converting it to an active registration.
+
+    - Carries selections (holes, side_games, tee_choice, user_status) onto the item.
+    - Marks credited items as 'transferred'.
+    - Creates accounting transfer entries.
+    - excess_action='keep': leftover credit stays as a new credited item.
+    - excess_action='note': just records the excess amount, admin handles manually.
+    Returns dict with ok, amount_applied, excess.
+    """
+    import time as _time
+    import datetime as _dt
+
+    with _connect(db_path) as conn:
+        # Load the RSVP item
+        rsvp_item = conn.execute("SELECT * FROM items WHERE id = ?", (rsvp_item_id,)).fetchone()
+        if not rsvp_item:
+            return {"ok": False, "error": "RSVP item not found"}
+        rsvp_item = dict(rsvp_item)
+
+        # Load the credited items to sum
+        credited_items = []
+        total_credit = 0.0
+        for cid in credited_item_ids:
+            row = conn.execute("SELECT * FROM items WHERE id = ?", (cid,)).fetchone()
+            if not row:
+                continue
+            d = dict(row)
+            if d.get("transaction_status") != "credited":
+                continue
+            amt = _parse_dollar(d.get("item_price"))
+            total_credit += amt
+            credited_items.append(d)
+
+        if not credited_items:
+            return {"ok": False, "error": "No valid credited items found"}
+
+        # Determine new event price
+        event_row = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (rsvp_item["item_name"],),
+        ).fetchone()
+        event = dict(event_row) if event_row else {}
+
+        u_status = user_status or credited_items[0].get("user_status") or "MEMBER"
+        u_holes = holes or credited_items[0].get("holes") or "9"
+        u_games = side_games or credited_items[0].get("side_games") or "NONE"
+        u_tee = tee_choice or credited_items[0].get("tee_choice") or ""
+
+        new_price = _calc_event_price_for_player(event, u_status, u_holes, u_games)
+        applied = min(total_credit, new_price) if new_price else total_credit
+        excess = round(total_credit - (new_price or total_credit), 2)
+
+        # Update the RSVP item → active registration
+        price_str = f"${applied:.2f} (credit transfer)"
+        conn.execute(
+            """UPDATE items
+               SET transaction_status = 'active',
+                   merchant = 'Paid Separately (Credit Transfer)',
+                   item_price = ?,
+                   holes = ?,
+                   side_games = ?,
+                   tee_choice = ?,
+                   user_status = ?,
+                   transferred_from_id = ?
+               WHERE id = ?""",
+            (price_str, u_holes, u_games, u_tee, u_status,
+             credited_items[0]["id"], rsvp_item_id),
+        )
+
+        # Mark all credited items as transferred
+        now_str = _dt.datetime.utcnow().isoformat()
+        for ci in credited_items:
+            conn.execute(
+                """UPDATE items
+                   SET transaction_status = 'transferred',
+                       credit_note = ?,
+                       transferred_to_id = ?
+                   WHERE id = ?""",
+                (f"Applied to {rsvp_item['item_name']} on {now_str[:10]}",
+                 rsvp_item_id, ci["id"]),
+            )
+            # Accounting: transfer_out on source
+            try:
+                _write_acct_entry(
+                    conn,
+                    item_id=ci["id"],
+                    event_name=ci["item_name"],
+                    customer=ci.get("customer", ""),
+                    order_id=ci.get("order_id", ""),
+                    entry_type="contra",
+                    category="transfer_out",
+                    source="manual",
+                    amount=_parse_dollar(ci.get("item_price")),
+                    description=f"Credit transfer out → {rsvp_item['item_name']}",
+                    account="TGF Checking",
+                    source_ref=f"xfer-flat-{ci['id']}-out",
+                    date=now_str[:10],
+                )
+            except Exception:
+                logger.warning("Failed to write transfer_out for credit %s", ci["id"], exc_info=True)
+
+        # Accounting: transfer_in on target
+        try:
+            _write_acct_entry(
+                conn,
+                item_id=rsvp_item_id,
+                event_name=rsvp_item["item_name"],
+                customer=rsvp_item.get("customer", ""),
+                order_id=rsvp_item.get("order_id", ""),
+                entry_type="income",
+                category="transfer_in",
+                source="credit_transfer",
+                amount=applied,
+                description=f"Credit transfer in from {credited_items[0]['item_name']}",
+                account="TGF Checking",
+                source_ref=f"xfer-flat-{rsvp_item_id}-in",
+                date=now_str[:10],
+            )
+        except Exception:
+            logger.warning("Failed to write transfer_in for rsvp item %s", rsvp_item_id, exc_info=True)
+
+        # If excess and keep: create a new credited item for the remainder
+        if excess > 0 and excess_action == "keep":
+            uid = f"credit-excess-{rsvp_item_id}-{int(_time.time() * 1000)}"
+            conn.execute(
+                """INSERT INTO items
+                   (email_uid, merchant, customer, customer_email, item_name,
+                    item_price, transaction_status, credit_note,
+                    order_date, chapter)
+                   VALUES (?, 'Manual Entry', ?, ?, ?,
+                    ?, 'credited', ?,
+                    date('now'), ?)""",
+                (
+                    uid,
+                    rsvp_item.get("customer"), rsvp_item.get("customer_email"),
+                    rsvp_item["item_name"],
+                    f"${excess:.2f}",
+                    f"Excess credit from transfer — ${excess:.2f} remaining",
+                    rsvp_item.get("chapter") or "",
+                ),
+            )
+
+        conn.commit()
+        return {"ok": True, "amount_applied": applied, "excess": excess, "new_price": new_price}
 
 
 def save_rsvp(rsvp: dict, db_path: str | Path | None = None) -> int | None:

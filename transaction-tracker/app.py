@@ -115,6 +115,11 @@ from email_parser.database import (
     set_event_status,
     can_restore_event,
     get_cancellation_players,
+    get_player_credits,
+    get_rsvp_credit_info,
+    get_event_rsvp_credit_map,
+    mark_rsvp_credit_notified,
+    apply_credit_to_rsvp,
     get_app_setting,
     set_app_setting,
     # Accounting module
@@ -703,6 +708,153 @@ def check_rsvp_inbox():
 
     # Also re-run matching for any previously unmatched RSVPs
     rematch_rsvps()
+
+    # Check for credited players who just RSVPd and send admin alert emails
+    _send_rsvp_credit_alerts()
+
+
+def _send_rsvp_credit_alerts():
+    """Find newly matched RSVPs for credited players and send admin alert emails."""
+    from email_parser.database import _connect as _db_connect
+    from email_parser.fetcher import send_mail_graph
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    # All credit alerts go here during testing — remove override to go live
+    alert_to = os.getenv("CREDIT_ALERT_EMAIL_OVERRIDE", "kerry@thegolffellowship.com")
+
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        logger.warning("Email credentials not configured — skipping credit alerts")
+        return
+
+    # Find RSVPs that: (a) are matched to an event, (b) haven't been notified yet
+    with _db_connect() as conn:
+        pending = conn.execute(
+            """SELECT id FROM rsvps
+               WHERE matched_event IS NOT NULL
+                 AND response = 'PLAYING'
+                 AND credit_notified_at IS NULL""",
+        ).fetchall()
+
+    for row in pending:
+        rsvp_id = row["id"]
+        try:
+            info = get_rsvp_credit_info(rsvp_id)
+            if not info:
+                # No credits — stamp it anyway so we skip next time
+                mark_rsvp_credit_notified(rsvp_id)
+                continue
+
+            # Build email
+            player = info["player_name"]
+            event_name = info["event_name"]
+            event_date = info["event_date"]
+            course = info["course"]
+            total_credit = info["total_credit"]
+            new_price = info["new_event_price"]
+            amount_owed = info["amount_owed"]
+            can_calc = info["can_calculate"]
+            sel = info["selections"]
+
+            credit_lines = "".join(
+                f"<li>${c['credit_amount']:.2f} from <em>{c['event_name']}</em></li>"
+                for c in info["credits"]
+            )
+
+            if can_calc:
+                scenario = (
+                    f"<strong style='color:#dc2626;'>Balance due: ${amount_owed:.2f}</strong>"
+                    if amount_owed > 0
+                    else f"<strong style='color:#16a34a;'>Excess credit: ${abs(amount_owed):.2f}</strong>"
+                    if amount_owed < 0
+                    else "<strong style='color:#6b7280;'>Credit covers exactly</strong>"
+                )
+                price_table = f"""
+                <table style="border-collapse:collapse; margin:0.75rem 0; font-size:0.9rem;">
+                  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">New event cost</td>
+                      <td style="padding:3px 0;"><strong>${new_price:.2f}</strong></td></tr>
+                  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">Credit applied</td>
+                      <td style="padding:3px 0;">−${total_credit:.2f}</td></tr>
+                  <tr style="border-top:1px solid #e5e7eb;">
+                      <td style="padding:6px 12px 3px 0;">Result</td>
+                      <td style="padding:6px 0;">{scenario}</td></tr>
+                </table>"""
+                action_note = (
+                    f"<p><strong>Action:</strong> Player owes ${amount_owed:.2f} — "
+                    f"apply credit in the admin UI and request Venmo payment of "
+                    f"<strong>${amount_owed:.2f} to @tgf-payments</strong>.</p>"
+                    if amount_owed > 0
+                    else f"<p><strong>Action:</strong> Credit more than covers this event. "
+                    f"Apply credit in admin UI. Excess ${abs(amount_owed):.2f} stays on account.</p>"
+                    if amount_owed < 0
+                    else "<p><strong>Action:</strong> Credit covers exactly — apply in admin UI.</p>"
+                )
+            else:
+                price_table = "<p style='color:#d97706;'>⚠ Event pricing not configured — calculate manually.</p>"
+                action_note = "<p>Apply credit manually via the Events admin page.</p>"
+
+            subject = (
+                f"[CREDIT ALERT] {player} RSVPd for {event_name}"
+                + (" — owes ${:.2f}".format(amount_owed) if (can_calc and amount_owed > 0) else
+                   " — credit covers it" if can_calc else " — pricing unknown")
+            )
+
+            html_body = f"""
+<p>Hi Kerry,</p>
+<p>A credited player has RSVPd for an upcoming event.</p>
+<table style="border-collapse:collapse; background:#f9fafb; border:1px solid #e5e7eb;
+              border-radius:6px; padding:0.75rem; margin:0.75rem 0; font-size:0.9rem; width:100%;">
+  <tr><td style="padding:3px 12px 3px 0; color:#6b7280; width:130px;">Player</td>
+      <td><strong>{player}</strong></td></tr>
+  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">Event</td>
+      <td><strong>{event_name}</strong></td></tr>
+  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">Date / Course</td>
+      <td>{event_date} &bull; {course}</td></tr>
+  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">Previous selections</td>
+      <td>{sel['holes']}h &bull; {sel['side_games']} &bull; {sel['user_status']}</td></tr>
+</table>
+<p><strong>Credits on account:</strong></p>
+<ul>{credit_lines}</ul>
+<p><strong>Total credit: ${total_credit:.2f}</strong></p>
+{price_table}
+{action_note}
+<p style="font-size:0.8rem; color:#9ca3af;">
+  This alert was sent to kerry@thegolffellowship.com instead of the player for testing.
+  Remove CREDIT_ALERT_EMAIL_OVERRIDE env var to route to players.
+</p>
+<p>— TGF System</p>"""
+
+            ok = send_mail_graph(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret,
+                from_address=from_address,
+                to_address=alert_to,
+                subject=subject,
+                html_body=html_body,
+            )
+            if ok:
+                logger.info("Credit alert sent for RSVP %s (%s)", rsvp_id, player)
+                from email_parser.database import log_message
+                log_message({
+                    "event_name": event_name,
+                    "channel": "email",
+                    "recipient_name": player,
+                    "recipient_address": alert_to,
+                    "subject": subject,
+                    "body_preview": f"Credit alert: {player} RSVPd for {event_name}. Credit: ${total_credit:.2f}",
+                    "status": "sent",
+                    "sent_by": "system",
+                })
+            else:
+                logger.warning("Credit alert email failed for RSVP %s", rsvp_id)
+
+            mark_rsvp_credit_notified(rsvp_id)
+        except Exception:
+            logger.warning("Credit alert check failed for RSVP %s", rsvp_id, exc_info=True)
+            mark_rsvp_credit_notified(rsvp_id)  # stamp it to avoid retry loops
 
 
 def _check_inbox_background():
@@ -2782,6 +2934,120 @@ def api_cancel_apply(event_id):
             results["failed"].append({"id": item_id, "reason": str(e)})
 
     return jsonify({"status": "ok", "results": results})
+
+
+@app.route("/api/players/<path:customer_name>/credits", methods=["GET"])
+@require_role("manager")
+def api_player_credits(customer_name):
+    """Return all credited items for a player."""
+    credits = get_player_credits(customer_name)
+    total = sum(c["credit_amount"] for c in credits)
+    return jsonify({"credits": credits, "total_credit": total})
+
+
+@app.route("/api/events/<path:event_name>/rsvp-credits", methods=["GET"])
+@require_role("manager")
+def api_event_rsvp_credits(event_name):
+    """Return credit info for all RSVP-only players in an event."""
+    credit_map = get_event_rsvp_credit_map(event_name)
+    return jsonify(credit_map)
+
+
+@app.route("/api/rsvps/<int:item_id>/credit-info", methods=["GET"])
+@require_role("manager")
+def api_rsvp_credit_info_by_item(item_id):
+    """Return full credit analysis for an RSVP-only item (by items.id)."""
+    from email_parser.database import _connect, _calc_event_price_for_player
+    with _connect() as conn:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        item = dict(item)
+
+        credits = get_player_credits(item["customer"])
+        if not credits:
+            return jsonify({"error": "No credits on file for this player"}), 404
+
+        total_credit = sum(c["credit_amount"] for c in credits)
+
+        event_row = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (item["item_name"],),
+        ).fetchone()
+        event = dict(event_row) if event_row else {}
+
+        most_recent = credits[0]
+        prev = {
+            "user_status": most_recent.get("user_status") or "MEMBER",
+            "holes": most_recent.get("holes") or "9",
+            "side_games": most_recent.get("side_games") or "NONE",
+            "tee_choice": most_recent.get("tee_choice") or "",
+        }
+
+        event_price = _calc_event_price_for_player(
+            event, prev["user_status"], prev["holes"], prev["side_games"]
+        )
+        amount_owed = round((event_price or 0.0) - total_credit, 2) if event_price is not None else None
+
+    return jsonify({
+        "item_id": item_id,
+        "customer": item["customer"],
+        "credits": [
+            {
+                "id": c["id"],
+                "item_name": c.get("item_name") or "",
+                "item_price": c.get("item_price") or "",
+                "order_date": c.get("order_date") or "",
+            }
+            for c in credits
+        ],
+        "total_credit": total_credit,
+        "event_price": event_price,
+        "amount_owed": amount_owed,
+        "previous_selections": prev,
+    })
+
+
+@app.route("/api/rsvps/<int:item_id>/apply-credit", methods=["POST"])
+@require_role("admin")
+def api_apply_credit_to_rsvp(item_id):
+    """Apply a player's credits to their RSVP-only registration."""
+    data = request.get_json(silent=True) or {}
+    credited_item_ids = data.get("credited_item_ids", [])
+    excess_action = data.get("excess_action", "keep")
+    holes = data.get("holes", "")
+    side_games = data.get("side_games", "")
+    tee_choice = data.get("tee_choice", "")
+    user_status = data.get("user_status", "")
+
+    if not credited_item_ids:
+        return jsonify({"error": "credited_item_ids required"}), 400
+    if excess_action not in ("keep", "note"):
+        return jsonify({"error": "excess_action must be 'keep' or 'note'"}), 400
+
+    result = apply_credit_to_rsvp(
+        rsvp_item_id=item_id,
+        credited_item_ids=credited_item_ids,
+        excess_action=excess_action,
+        holes=holes,
+        side_games=side_games,
+        tee_choice=tee_choice,
+        user_status=user_status,
+    )
+    if not result.get("ok"):
+        return jsonify({"error": result.get("error", "Failed")}), 400
+    return jsonify(result)
+
+
+@app.route("/api/rsvps/trigger-credit-alerts", methods=["POST"])
+@require_role("admin")
+def api_trigger_credit_alerts():
+    """Manually trigger credit alert email scan (for testing)."""
+    try:
+        _send_rsvp_credit_alerts()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/events", methods=["POST"])
