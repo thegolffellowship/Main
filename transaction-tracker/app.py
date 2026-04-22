@@ -164,6 +164,7 @@ from email_parser.database import (
     backfill_financial_entries,
     backfill_acct_transactions,
     migrate_item_to_order_entries,
+    cleanup_duplicate_godaddy_entries,
     backup_database,
     scan_price_games_mismatches,
     save_expense_transaction,
@@ -7289,6 +7290,14 @@ def api_migrate_to_order_level():
     return jsonify(results)
 
 
+@app.route("/api/reconciliation/cleanup-godaddy-duplicates", methods=["POST"])
+@require_role("admin")
+def api_cleanup_godaddy_duplicates():
+    """Reverse old per-item GoDaddy entries that coexist with newer order-level entries."""
+    results = cleanup_duplicate_godaddy_entries()
+    return jsonify(results)
+
+
 @app.route("/api/reconciliation/merge-transactions", methods=["POST"])
 @require_role("admin")
 def api_merge_transactions():
@@ -7835,6 +7844,28 @@ try:
             logger.info("No old-format GoDaddy entries — order-level migration not needed")
     except Exception:
         logger.warning("Order-level migration check failed", exc_info=True)
+
+    # ── Clean up duplicate GoDaddy per-item entries (coexisting with order entries) ──
+    try:
+        with _startup_connect() as _dup_conn:
+            _dup_count = _dup_conn.execute(
+                """SELECT COUNT(*) as cnt FROM acct_transactions
+                   WHERE COALESCE(status, 'active') = 'active'
+                   AND (
+                       description LIKE 'GoDaddy registration:%'
+                       OR description LIKE 'GoDaddy merchant fee:%'
+                       OR source_ref LIKE 'godaddy-income-%'
+                       OR source_ref LIKE 'godaddy-fee-%'
+                   )"""
+            ).fetchone()["cnt"]
+        if _dup_count > 0:
+            logger.info("Found %d duplicate GoDaddy per-item entries — running cleanup", _dup_count)
+            _dup_result = cleanup_duplicate_godaddy_entries()
+            logger.info("GoDaddy cleanup: %s", _dup_result)
+        else:
+            logger.info("No duplicate GoDaddy per-item entries found")
+    except Exception:
+        logger.warning("GoDaddy duplicate cleanup failed", exc_info=True)
 
     # ── One-time fix: recalculate merchant fees from 2.7% to 2.9% ──
     try:

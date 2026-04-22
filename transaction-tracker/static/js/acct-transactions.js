@@ -891,7 +891,8 @@ function _buildSmartSplit(txn) {
         const m = txn.description.match(/—\s*(.+)$/);
         if (m && !m[1].trim().endsWith('events')) evName = m[1].trim();
     }
-    const evId = evName ? (ACCT.events.find(e => e.item_name === evName)?.id || '') : '';
+    const evNameLc = evName ? evName.toLowerCase() : null;
+    const evId = evNameLc ? (ACCT.events.find(e => e.item_name.toLowerCase() === evNameLc)?.id || '') : '';
 
     // GoDaddy income with order_splits → two splits: registration + transaction fee
     if (txn.type === 'income' && txn.order_splits && txn.order_splits.registration != null) {

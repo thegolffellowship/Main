@@ -10039,8 +10039,11 @@ def get_acct_transactions(entity_id: int | None = None, account_id: int | None =
             clauses.append("t.type = ?")
             params.append(txn_type)
         if acct_status:
-            clauses.append("t.status = ?")
+            clauses.append("COALESCE(t.status, 'active') = ?")
             params.append(acct_status)
+        else:
+            # Default: hide reversed/merged (internal/historical) entries
+            clauses.append("COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')")
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
 
@@ -13245,6 +13248,117 @@ def migrate_item_to_order_entries(db_path: str | Path | None = None) -> dict:
         "Migration complete: %d orders migrated, %d old entries reversed, %d matches relinked, %d skipped, %d errors",
         results["orders_migrated"], results["old_entries_reversed"],
         results["matches_relinked"], results["skipped_already_migrated"], results["errors"],
+    )
+    return results
+
+
+def cleanup_duplicate_godaddy_entries(db_path: str | Path | None = None) -> dict:
+    """Reverse old per-item GoDaddy entries superseded by order-level entries.
+
+    The existing migrate_item_to_order_entries() skips orders that already have a
+    godaddy-order-{order_id} entry.  This function handles those skipped cases:
+    it finds old-style 'GoDaddy registration:' / 'GoDaddy merchant fee:' entries
+    (or source_ref godaddy-income-* / godaddy-fee-*) that coexist with a new
+    order-level entry and reverses them.  For orders with no order-level entry,
+    it creates one then reverses the old per-item entries.
+
+    Safe to run multiple times (idempotent).
+    """
+    results = {
+        "reversed_duplicates": 0,
+        "migrated_then_reversed": 0,
+        "skipped": 0,
+        "errors": 0,
+    }
+
+    with _connect(db_path) as conn:
+        old_entries = conn.execute(
+            """SELECT t.*, i.order_id
+               FROM acct_transactions t
+               LEFT JOIN items i ON i.id = t.item_id
+               WHERE COALESCE(t.status, 'active') = 'active'
+               AND (
+                   t.source_ref LIKE 'godaddy-income-%'
+                   OR t.source_ref LIKE 'godaddy-fee-%'
+                   OR t.description LIKE 'GoDaddy registration:%'
+                   OR t.description LIKE 'GoDaddy merchant fee:%'
+               )
+               ORDER BY t.date ASC""",
+        ).fetchall()
+
+        if not old_entries:
+            return results
+
+        by_order: dict = defaultdict(list)
+        no_order = []
+        for row in old_entries:
+            r = dict(row)
+            oid = r.get("order_id")
+            if oid:
+                by_order[oid].append(r)
+            else:
+                no_order.append(r)
+
+        for oid, entries in by_order.items():
+            try:
+                existing = conn.execute(
+                    "SELECT id FROM acct_transactions WHERE source_ref = ? AND COALESCE(status, 'active') != 'reversed'",
+                    (f"godaddy-order-{oid}",),
+                ).fetchone()
+
+                if existing:
+                    for e in entries:
+                        conn.execute(
+                            "UPDATE acct_transactions SET status = 'reversed' WHERE id = ?",
+                            (e["id"],),
+                        )
+                        results["reversed_duplicates"] += 1
+                else:
+                    item_ids = [e["item_id"] for e in entries if e.get("item_id")]
+                    if not item_ids:
+                        results["skipped"] += len(entries)
+                        continue
+                    placeholders = ",".join(["?"] * len(item_ids))
+                    items = [
+                        dict(r) for r in conn.execute(
+                            f"SELECT * FROM items WHERE id IN ({placeholders})", item_ids
+                        ).fetchall()
+                    ]
+                    valid_items = [
+                        i for i in items
+                        if _parse_dollar(i.get("item_price")) > 0
+                        and i.get("transaction_status") not in ("credited", "refunded", "transferred")
+                    ]
+                    if valid_items:
+                        date = valid_items[0].get("order_date") or entries[0]["date"]
+                        _write_godaddy_order_entry(conn, order_id=oid, items=valid_items, date=date)
+                    for e in entries:
+                        conn.execute(
+                            "UPDATE acct_transactions SET status = 'reversed' WHERE id = ?",
+                            (e["id"],),
+                        )
+                        results["migrated_then_reversed"] += 1
+            except Exception:
+                logger.warning("Cleanup duplicate GoDaddy: failed order %s", oid, exc_info=True)
+                results["errors"] += 1
+
+        # Entries without a linked order_id — just reverse them
+        for e in no_order:
+            try:
+                conn.execute(
+                    "UPDATE acct_transactions SET status = 'reversed' WHERE id = ?",
+                    (e["id"],),
+                )
+                results["skipped"] += 1
+            except Exception:
+                results["errors"] += 1
+
+        conn.commit()
+
+    logger.info(
+        "GoDaddy cleanup: %d reversed (order existed), %d migrated+reversed, %d skipped, %d errors",
+        results["reversed_duplicates"], results["migrated_then_reversed"],
+        results["skipped"], results["errors"],
     )
     return results
 
