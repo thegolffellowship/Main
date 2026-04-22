@@ -13896,13 +13896,17 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
 
     existing_id = exp.get("acct_transaction_id")
 
+    # entry_type drives reconciliation matching; always 'expense' for promoted expenses
+    entry_type = "expense"
+
     if existing_id:
         conn.execute(
             """UPDATE acct_transactions
-               SET date=?, description=?, total_amount=?, type=?, account_id=?,
-                   notes=?, customer_id=?, updated_at=datetime('now')
+               SET date=?, description=?, total_amount=?, amount=?, type=?, entry_type=?,
+                   account_id=?, notes=?, customer_id=?, updated_at=datetime('now')
                WHERE id=?""",
-            (txn_date, merchant, amount, txn_type, account_id, notes, customer_id, existing_id),
+            (txn_date, merchant, amount, amount, txn_type, entry_type,
+             account_id, notes, customer_id, existing_id),
         )
         split = conn.execute(
             "SELECT id FROM acct_splits WHERE transaction_id = ? LIMIT 1", (existing_id,)
@@ -13921,9 +13925,11 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
     else:
         cur = conn.execute(
             """INSERT INTO acct_transactions
-               (date, description, total_amount, type, account_id, source, source_ref, notes, customer_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (txn_date, merchant, amount, txn_type, account_id, source, source_ref, notes, customer_id),
+               (date, description, total_amount, amount, type, entry_type,
+                account_id, source, source_ref, notes, customer_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (txn_date, merchant, amount, amount, txn_type, entry_type,
+             account_id, source, source_ref, notes, customer_id),
         )
         new_id = cur.lastrowid
         conn.execute(
@@ -16232,6 +16238,50 @@ def run_deposit_auto_match(account_id: int | None = None,
                     confidence = 0.70
                     detail = f"Venmo amount match (no name): {candidates[0]['customer']}"
 
+            elif dep_amt < 0:
+                # Negative deposit = bank debit → match against expense ledger entries.
+                # Chase alerts arrive days after posting, so use a wider date window (±10 days).
+                # Amount may differ by a few cents, so use ±$1 tolerance.
+                abs_dep = abs(dep_amt)
+                candidates = conn.execute(
+                    """SELECT id, COALESCE(amount, total_amount, 0) as amt,
+                              date, description, customer
+                       FROM acct_transactions
+                       WHERE entry_type = 'expense'
+                       AND COALESCE(status, 'active') NOT IN ('reversed', 'merged', 'reconciled')
+                       AND ABS(COALESCE(amount, total_amount, 0) - ?) < 1.00
+                       AND ABS(julianday(date) - julianday(?)) <= 10
+                       AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
+                       ORDER BY ABS(COALESCE(amount, total_amount, 0) - ?),
+                                ABS(julianday(date) - julianday(?))""",
+                    (abs_dep, dep_date, abs_dep, dep_date),
+                ).fetchall()
+                candidates = [dict(c) for c in candidates]
+
+                for c in candidates:
+                    c_desc_up = (c.get("description") or "").upper()
+                    c_cust_up = (c.get("customer") or "").upper()
+                    # Boost confidence when description/merchant appears in bank desc or vice versa
+                    desc_match = (c_desc_up and c_desc_up in dep_desc) or \
+                                 (c_cust_up and c_cust_up in dep_desc) or \
+                                 (dep_desc and c_desc_up and dep_desc in c_desc_up)
+                    amt_exact = abs(c["amt"] - abs_dep) < 0.02
+                    if desc_match and amt_exact:
+                        matched_txn_ids = [c["id"]]
+                        confidence = 0.85
+                        detail = f"Expense match: {c['description']} (desc+amount)"
+                        break
+                    elif desc_match:
+                        matched_txn_ids = [c["id"]]
+                        confidence = 0.65
+                        detail = f"Expense match: {c['description']} (desc, amount ~${c['amt']:.2f})"
+                        break
+
+                if not matched_txn_ids and len(candidates) == 1:
+                    matched_txn_ids = [candidates[0]["id"]]
+                    confidence = 0.55
+                    detail = f"Expense amount match: {candidates[0]['description']} (needs confirm)"
+
             else:
                 # Zelle/other: match by amount + date ± 1 day, always flag
                 candidates = conn.execute(
@@ -16744,14 +16794,19 @@ def get_match_suggestions(bank_deposit_id: int,
         results = []
         for c in candidates:
             c = dict(c)
-            # Use net_deposit for GoDaddy orders (actual bank amount)
-            c_amt = c.get("net_deposit") or c.get("amount", 0) or 0
+            # Use net_deposit for GoDaddy orders; fall back to amount then total_amount
+            c_amt = c.get("net_deposit") or c.get("amount") or c.get("total_amount", 0) or 0
             c_date = c.get("date", "")
             c_customer = (c.get("customer") or "").upper()
             c_event = (c.get("event_name") or "").upper()
+            c_desc = (c.get("description") or "").upper()
+
+            # For expense ledger entries (positive) matched to negative bank deposits,
+            # compare absolute values so a $21.34 expense matches a -$21.37 debit.
+            compare_dep_amt = abs(dep_amt) if is_expense_deposit else dep_amt
 
             # Score: amount proximity (0-50 points)
-            amt_diff = abs(dep_amt - c_amt)
+            amt_diff = abs(compare_dep_amt - c_amt)
             if amt_diff < 0.01:
                 amt_score = 50
             elif amt_diff < 1.00:
@@ -16779,6 +16834,8 @@ def get_match_suggestions(bank_deposit_id: int,
             desc_score = 0
             if c_customer and c_customer in dep_desc:
                 desc_score += 15
+            elif c_desc and (c_desc in dep_desc or dep_desc in c_desc):
+                desc_score += 12
             if c_event and c_event in dep_desc:
                 desc_score += 5
             if "GODADDY" in dep_desc and c.get("source") == "godaddy":
