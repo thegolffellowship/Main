@@ -1341,19 +1341,41 @@ function _fuzzyMatchCustomers(query) {
     }).slice(0, 8);
 }
 
-function _renderCustomerDropdown(matches) {
+function _allVendors() {
+    return ACCT.customers.filter(c => c.is_vendor);
+}
+
+function _renderCustomerDropdown(matches, showVendorSection) {
     const dd = $('#txn-customer-dropdown');
-    if (!matches.length) { dd.style.display = 'none'; return; }
-    dd.innerHTML = matches.map(c => {
-        const label = c.is_vendor ? '<span style="font-size:0.65rem;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:8px;margin-left:4px;">Vendor</span>' : '';
-        const sub = [c.chapter, c.current_player_status].filter(Boolean).join(' · ');
-        return `<div class="acct-cust-item" data-id="${c.customer_id}" data-name="${c.first_name} ${c.last_name}" data-vendor="${c.is_vendor}"
-                     style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;">
-            <div style="font-weight:500;font-size:0.875rem;">${_customerDisplayName(c)}${label}</div>
-            ${sub ? `<div style="font-size:0.75rem;color:#6b7280;">${sub}</div>` : ''}
-        </div>`;
-    }).join('');
+
+    let html = '';
+
+    if (showVendorSection) {
+        const vendors = _allVendors();
+        if (vendors.length) {
+            html += `<div style="padding:4px 12px;font-size:0.65rem;font-weight:700;color:#92400e;background:#fffbeb;letter-spacing:.05em;border-bottom:1px solid #fde68a;">VENDORS</div>`;
+            html += vendors.map(c => _customerItemHTML(c)).join('');
+            if (matches.length) {
+                html += `<div style="padding:4px 12px;font-size:0.65rem;font-weight:700;color:#6b7280;background:#f9fafb;letter-spacing:.05em;border-bottom:1px solid #f3f4f6;">CUSTOMERS</div>`;
+            }
+        }
+    }
+
+    html += matches.map(c => _customerItemHTML(c)).join('');
+
+    if (!html) {
+        dd.style.display = 'none';
+        return;
+    }
+
+    // Always append + New Vendor footer
+    html += `<div id="btn-new-vendor-inline" style="padding:8px 12px;cursor:pointer;font-size:0.8rem;color:#2563eb;font-weight:600;border-top:1px solid #e5e7eb;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:1rem;line-height:1;">＋</span> New Vendor
+    </div>`;
+
+    dd.innerHTML = html;
     dd.style.display = '';
+
     dd.querySelectorAll('.acct-cust-item').forEach(el => {
         el.addEventListener('mousedown', (e) => {
             e.preventDefault();
@@ -1362,6 +1384,21 @@ function _renderCustomerDropdown(matches) {
         el.addEventListener('mouseover', () => el.style.background = '#f9fafb');
         el.addEventListener('mouseout', () => el.style.background = '');
     });
+    dd.querySelector('#btn-new-vendor-inline')?.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        dd.style.display = 'none';
+        openVendorModal();
+    });
+}
+
+function _customerItemHTML(c) {
+    const label = c.is_vendor ? '<span style="font-size:0.65rem;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:8px;margin-left:4px;">Vendor</span>' : '';
+    const sub = [c.chapter, c.current_player_status].filter(Boolean).join(' · ');
+    return `<div class="acct-cust-item" data-id="${c.customer_id}" data-name="${c.first_name} ${c.last_name}" data-vendor="${c.is_vendor ? '1' : '0'}"
+                 style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;">
+        <div style="font-weight:500;font-size:0.875rem;">${_customerDisplayName(c)}${label}</div>
+        ${sub ? `<div style="font-size:0.75rem;color:#6b7280;">${sub}</div>` : ''}
+    </div>`;
 }
 
 function suggestCustomerFromDescription(desc) {
@@ -1396,8 +1433,14 @@ function initCustomerTypeahead() {
         input._suggested = null;
         input.placeholder = 'Search by name…';
         const q = input.value.trim();
-        if (!q) { $('#txn-customer-id').value = ''; $('#txn-customer-badge').style.display = 'none'; dd.style.display = 'none'; return; }
-        _renderCustomerDropdown(_fuzzyMatchCustomers(q));
+        if (!q) {
+            $('#txn-customer-id').value = '';
+            $('#txn-customer-badge').style.display = 'none';
+            // Show vendors on empty input
+            _renderCustomerDropdown([], true);
+            return;
+        }
+        _renderCustomerDropdown(_fuzzyMatchCustomers(q), false);
     });
 
     input.addEventListener('keydown', (e) => {
@@ -1421,7 +1464,6 @@ function initCustomerTypeahead() {
 
     input.addEventListener('blur', () => {
         setTimeout(() => { dd.style.display = 'none'; }, 150);
-        // If no customer selected, reset placeholder
         if (!$('#txn-customer-id').value) {
             input.placeholder = 'Search by name…';
         }
@@ -1429,6 +1471,59 @@ function initCustomerTypeahead() {
 
     input.addEventListener('focus', () => {
         const q = input.value.trim();
-        if (q && !$('#txn-customer-id').value) _renderCustomerDropdown(_fuzzyMatchCustomers(q));
+        if (q && !$('#txn-customer-id').value) {
+            _renderCustomerDropdown(_fuzzyMatchCustomers(q), false);
+        } else if (!q) {
+            _renderCustomerDropdown([], true);
+        }
     });
+}
+
+// ── Vendor Modal ─────────────────────────────────────────
+
+function openVendorModal() {
+    $('#vendor-first-name').value = '';
+    $('#vendor-last-name').value = '';
+    $('#vendor-phone').value = '';
+    $('#vendor-modal-error').style.display = 'none';
+    $('#vendor-modal').style.display = 'flex';
+    setTimeout(() => $('#vendor-first-name').focus(), 50);
+}
+
+async function saveNewVendor() {
+    const firstName = $('#vendor-first-name').value.trim();
+    const lastName = $('#vendor-last-name').value.trim();
+    const phone = $('#vendor-phone').value.trim();
+    const errEl = $('#vendor-modal-error');
+
+    if (!firstName && !lastName) {
+        errEl.textContent = 'Enter at least a first or last name.';
+        errEl.style.display = '';
+        return;
+    }
+
+    try {
+        const vendor = await fetch('/api/accounting/vendors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ first_name: firstName, last_name: lastName, phone }),
+        }).then(async r => {
+            if (!r.ok) {
+                const e = await r.json().catch(() => ({}));
+                throw new Error(e.error || 'Failed to create vendor');
+            }
+            return r.json();
+        });
+
+        // Add to local list and select
+        const existing = ACCT.customers.findIndex(c => c.customer_id === vendor.customer_id);
+        if (existing >= 0) ACCT.customers[existing] = vendor;
+        else ACCT.customers.push(vendor);
+
+        setTxnCustomer(vendor.customer_id, `${vendor.first_name} ${vendor.last_name}`, true);
+        $('#vendor-modal').style.display = 'none';
+    } catch (e) {
+        errEl.textContent = e.message;
+        errEl.style.display = '';
+    }
 }

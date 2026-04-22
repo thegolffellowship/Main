@@ -831,6 +831,37 @@
         </div>
     </div>
 
+    <!-- ═══ NEW VENDOR MODAL ═══ -->
+    <div class="modal-overlay" id="vendor-modal" style="display:none;">
+        <div class="modal acct-modal" style="max-width:400px;">
+            <div class="modal-header">
+                <h2>Add Vendor</h2>
+                <button class="modal-close" id="vendor-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="acct-form-row">
+                    <div class="acct-form-group">
+                        <label>First Name</label>
+                        <input type="text" id="vendor-first-name" placeholder="e.g. Costco" autocomplete="off">
+                    </div>
+                    <div class="acct-form-group">
+                        <label>Last Name / Company</label>
+                        <input type="text" id="vendor-last-name" placeholder="e.g. Wholesale" autocomplete="off">
+                    </div>
+                </div>
+                <div class="acct-form-group">
+                    <label>Phone <span style="font-weight:400;color:#6b7280;">(optional)</span></label>
+                    <input type="text" id="vendor-phone" placeholder="(555) 555-5555" autocomplete="off">
+                </div>
+                <p id="vendor-modal-error" style="display:none;color:#dc2626;font-size:0.8rem;margin:0.5rem 0 0;"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="vendor-modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="vendor-modal-save">Add Vendor</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ═══ EXPENSE REVIEW MODAL (Unified) ═══ -->
     <div class="modal-overlay" id="expense-review-modal" style="display:none;">
         <div class="modal acct-modal">
