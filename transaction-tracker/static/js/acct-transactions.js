@@ -896,16 +896,22 @@ function _buildSmartSplit(txn) {
     const evNameLc = evName ? evName.toLowerCase() : null;
     const evId = evNameLc ? (ACCT.events.find(e => e.item_name.toLowerCase() === evNameLc)?.id || '') : '';
 
-    // GoDaddy income with order_splits → two splits: registration + transaction fee
+    // GoDaddy income with order_splits → registration + transaction fee + merchant fee (negative)
     if (txn.type === 'income' && txn.order_splits && txn.order_splits.registration != null) {
         const regCatId = ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('event revenue'))?.id || '';
         const txFeeCatId = ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('transaction fee'))?.id || '';
+        const mfCatId = ACCT.categories.find(c => c.type === 'expense' && c.name.toLowerCase().includes('processing'))?.id || '';
         const regAmt = +(txn.order_splits.registration || 0).toFixed(2);
         const txFeeAmt = +(txn.order_splits.transaction_fee || 0).toFixed(2);
-        return [
+        const mfAmt = +(txn.merchant_fee || 0).toFixed(2);
+        const splits = [
             { entity_id: entityId, category_id: regCatId, event_id: evId, amount: regAmt, memo: 'Registration' },
             { entity_id: entityId, category_id: txFeeCatId, event_id: evId, amount: txFeeAmt, memo: 'Transaction fee' },
         ];
+        if (mfAmt > 0) {
+            splits.push({ entity_id: entityId, category_id: mfCatId, event_id: evId, amount: -mfAmt, memo: 'GoDaddy fee' });
+        }
+        return splits;
     }
 
     // Default: single split for full amount
@@ -965,9 +971,6 @@ function openNewTransaction() {
     renderSplitRows([{ entity_id: defaultEntity, category_id: '', amount: '', memo: '' }]);
     renderTagChips([]);
 
-    const mfNote = $('#txn-merchant-fee-note');
-    if (mfNote) mfNote.style.display = 'none';
-
     $('#txn-modal').style.display = 'flex';
 }
 
@@ -1003,17 +1006,6 @@ async function openEditTransaction(id) {
             : _buildSmartSplit(txn);
         renderSplitRows(splitsData);
         renderTagChips(txn.tags.map(t => t.id));
-
-        const mfNote = $('#txn-merchant-fee-note');
-        if (mfNote) {
-            if (txn.merchant_fee && txn.merchant_fee > 0) {
-                const netDep = txn.net_deposit != null ? txn.net_deposit : (txn.total_amount - txn.merchant_fee);
-                mfNote.textContent = `GoDaddy fee: −${fmt(txn.merchant_fee)}  →  Net deposit: ${fmt(netDep)}`;
-                mfNote.style.display = '';
-            } else {
-                mfNote.style.display = 'none';
-            }
-        }
 
         $('#txn-modal').style.display = 'flex';
     } catch (e) {

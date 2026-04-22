@@ -3012,6 +3012,19 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_acct_transactions(conn)
         _backfill_customer_id_on_player_links(conn)
 
+        # Migrate GoDaddy order transactions: set total_amount = net_deposit so the
+        # ledger Amount column matches bank statement deposits directly.
+        _n = conn.execute("""
+            UPDATE acct_transactions
+            SET total_amount = net_deposit
+            WHERE category = 'godaddy_order'
+              AND net_deposit IS NOT NULL
+              AND ABS(total_amount - net_deposit) > 0.005
+        """).rowcount
+        if _n:
+            logger.info("Migrated %d GoDaddy transactions: total_amount → net_deposit", _n)
+            conn.commit()
+
         logger.info("Database initialized at %s", db_path or DB_PATH)
 
 
@@ -9885,6 +9898,7 @@ def _seed_unified_financial_categories(conn: sqlite3.Connection) -> None:
         ("External Payment", "income", tgf_id),
         ("Player Refunds", "expense", tgf_id),
         ("Transaction Fee Income", "income", tgf_id),
+        ("Payment Processing Fees", "expense", tgf_id),
         # General expense categories (entity_id=None → available for all entities)
         ("Internet & Utilities", "expense", None),
     ]
@@ -10521,7 +10535,7 @@ def get_acct_transaction(txn_id: int, db_path: str | Path | None = None) -> dict
         ).fetchall()
         txn["tags"] = [dict(tg) for tg in tags]
         order_split_rows = conn.execute(
-            "SELECT split_type, amount FROM godaddy_order_splits WHERE transaction_id = ?",
+            "SELECT split_type, SUM(amount) as amount FROM godaddy_order_splits WHERE transaction_id = ? GROUP BY split_type",
             (txn_id,),
         ).fetchall()
         txn["order_splits"] = {r["split_type"]: r["amount"] for r in order_split_rows}
@@ -12023,7 +12037,7 @@ def _write_godaddy_order_entry(
         entry_type="income",
         category="godaddy_order",
         source="godaddy",
-        amount=order_total,
+        amount=net_deposit_val,
         description=description,
         account="TGF Checking",
         source_ref=source_ref,
