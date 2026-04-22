@@ -2431,8 +2431,9 @@ def api_customer_roles():
 
         # Add first_timer_ever and current_player_status for every customer (even those without roles)
         customer_rows = conn.execute(
-            "SELECT customer_id, first_timer_ever, current_player_status FROM customers"
+            "SELECT customer_id, first_name, last_name, first_timer_ever, current_player_status FROM customers"
         ).fetchall()
+        name_to_id = {}
         for c in customer_rows:
             cid = str(c["customer_id"])
             if cid not in result:
@@ -2440,6 +2441,11 @@ def api_customer_roles():
             else:
                 result[cid]["first_timer_ever"] = bool(c["first_timer_ever"])
             result[cid]["current_player_status"] = c["current_player_status"]
+            # Build name→id map for frontend fallback when items.customer_id is null
+            name_key = f"{(c['first_name'] or '')} {(c['last_name'] or '')}".strip().lower()
+            if name_key:
+                name_to_id[name_key] = cid
+        result["_by_name"] = name_to_id
 
     return jsonify(result)
 
@@ -3028,6 +3034,7 @@ def api_rsvp_credit_info_by_item(item_id):
                 "id": c["id"],
                 "item_name": c.get("item_name") or "",
                 "item_price": f"${c.get('credit_amount', 0):.2f}",
+                "credit_amount": round(c.get("credit_amount") or 0, 2),
                 "order_date": c.get("order_date") or "",
             }
             for c in credits
@@ -3140,6 +3147,7 @@ def api_gg_rsvp_credit_info(rsvp_id):
                 "id": c["id"],
                 "item_name": c.get("item_name") or "",
                 "item_price": f"${c.get('credit_amount', 0):.2f}",
+                "credit_amount": round(c.get("credit_amount") or 0, 2),
                 "order_date": c.get("order_date") or "",
             }
             for c in credits

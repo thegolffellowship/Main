@@ -1078,6 +1078,45 @@ def _migrate_seed_customer_roles(conn: sqlite3.Connection) -> None:
     logger.info("first_timer_ever backfill: %d set to FALSE (played), %d defaulted to TRUE", updated, defaulted)
 
 
+def _migrate_add_member_plus_status(conn: sqlite3.Connection) -> None:
+    """Add 'member_plus' to the customers.current_player_status CHECK constraint."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='customers'"
+    ).fetchone()
+    if not row or "member_plus" in (row["sql"] or ""):
+        return
+    logger.info("Migrating customers table: adding member_plus to CHECK constraint")
+    conn.executescript("""
+        PRAGMA foreign_keys = OFF;
+        CREATE TABLE customers_new (
+            customer_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            platform_user_id     INTEGER,
+            first_name           VARCHAR(100) NOT NULL,
+            last_name            VARCHAR(100) NOT NULL,
+            phone                VARCHAR(30),
+            chapter              VARCHAR(50),
+            ghin_number          VARCHAR(20),
+            current_player_status VARCHAR(30)
+                CHECK (current_player_status IN (
+                    'active_member', 'member_plus', 'expired_member',
+                    'active_guest', 'inactive', 'first_timer'
+                )),
+            first_timer_ever     INTEGER,
+            acquisition_source   VARCHAR(50),
+            account_status       VARCHAR(20) NOT NULL DEFAULT 'active'
+                CHECK (account_status IN ('active', 'inactive', 'banned')),
+            venmo_username       VARCHAR(50),
+            created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO customers_new SELECT * FROM customers;
+        DROP TABLE customers;
+        ALTER TABLE customers_new RENAME TO customers;
+        PRAGMA foreign_keys = ON;
+    """)
+    logger.info("customers table migrated: member_plus status added")
+
+
 def _migrate_dedup_expense_transactions(conn: sqlite3.Connection) -> None:
     """Remove duplicate expense_transactions rows.
 
@@ -2101,6 +2140,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_dedup_expense_transactions(conn)
         except Exception as e:
             logger.warning("Expense transaction dedup migration failed: %s", e)
+
+        # Add member_plus to customers.current_player_status CHECK constraint
+        try:
+            _migrate_add_member_plus_status(conn)
+        except Exception as e:
+            logger.warning("member_plus status migration failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
@@ -4873,7 +4918,7 @@ def update_customer_info(customer_name: str, fields: dict,
     # current_player_status is stored on the customers table, not items — extract it
     current_player_status = safe.pop("current_player_status", None)
     if current_player_status is not None:
-        allowed_ps = {"active_member", "expired_member", "active_guest", "inactive", "first_timer", ""}
+        allowed_ps = {"active_member", "member_plus", "expired_member", "active_guest", "inactive", "first_timer", ""}
         if current_player_status and current_player_status not in allowed_ps:
             raise ValueError(f"Invalid current_player_status: {current_player_status}")
 
@@ -7596,7 +7641,7 @@ def apply_credit_to_rsvp(
             d = dict(row)
             if d.get("transaction_status") != "credited":
                 continue
-            amt = _parse_dollar(d.get("item_price"))
+            amt = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
             total_credit += amt
             credited_items.append(d)
 
