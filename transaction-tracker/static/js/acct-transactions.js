@@ -2,6 +2,54 @@
    Accounting Module — Transactions Tab & Modal
    ========================================================= */
 
+// ── Ledger Column Visibility ──────────────────────────────
+
+const LEDGER_COLS = [
+    { key: 'customer', label: 'Customer / Vendor', def: true },
+    { key: 'splits',   label: 'Category',          def: true },
+    { key: 'type',     label: 'Type',               def: true },
+    { key: 'account',  label: 'Account',            def: true },
+];
+let _ledgerColPrefs = null;
+
+function _loadLedgerColPrefs() {
+    if (_ledgerColPrefs) return;
+    try {
+        const s = localStorage.getItem('acct_visible_cols');
+        if (s) { _ledgerColPrefs = JSON.parse(s); return; }
+    } catch(e) {}
+    _ledgerColPrefs = {};
+    LEDGER_COLS.forEach(c => { _ledgerColPrefs[c.key] = c.def; });
+}
+
+function _saveLedgerColPrefs() {
+    try { localStorage.setItem('acct_visible_cols', JSON.stringify(_ledgerColPrefs)); } catch(e) {}
+}
+
+function applyLedgerColVisibility() {
+    _loadLedgerColPrefs();
+    const table = document.querySelector('#txn-list .acct-table-full');
+    if (!table) return;
+    LEDGER_COLS.forEach(c => table.classList.toggle(`acct-hide-${c.key}`, !_ledgerColPrefs[c.key]));
+}
+
+function buildLedgerColumnToggle() {
+    _loadLedgerColPrefs();
+    const drop = $('#ledger-col-dropdown');
+    if (!drop) return;
+    drop.innerHTML = LEDGER_COLS.map(c => `
+        <label style="display:flex;align-items:center;gap:6px;padding:5px 12px;cursor:pointer;font-size:0.82rem;white-space:nowrap;">
+            <input type="checkbox" data-col="${c.key}" ${_ledgerColPrefs[c.key] ? 'checked' : ''}> ${c.label}
+        </label>`).join('');
+    drop.querySelectorAll('input[type=checkbox]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            _ledgerColPrefs[cb.dataset.col] = cb.checked;
+            _saveLedgerColPrefs();
+            applyLedgerColVisibility();
+        });
+    });
+}
+
 // ── Inline Match Queue state ──
 const LMQ = {
     selectedDepositId: null,
@@ -342,8 +390,13 @@ function renderTransactionList(txns, total) {
     // Desktop table
     const tableHTML = `<table class="acct-table acct-table-full acct-table-mobile-hide">
         <thead><tr>
-            <th>Date</th><th>Description</th><th>Splits</th>
-            <th class="text-right">Amount</th><th>Type</th><th>Account</th>
+            <th>Date</th>
+            <th class="col-customer">Customer / Vendor</th>
+            <th>Description</th>
+            <th class="col-splits">Category</th>
+            <th class="text-right">Amount</th>
+            <th class="col-type">Type</th>
+            <th class="col-account">Account</th>
             <th></th>
         </tr></thead>
         <tbody>${txns.map(t => {
@@ -354,17 +407,19 @@ function renderTransactionList(txns, total) {
             const rowData = m.isExp
                 ? `data-id="${t.id}" data-expense-id="${t.expense_id}"`
                 : `data-id="${t.id}"`;
+            const custName = t.customer_name || '';
 
             return `<tr class="${rowClass}" ${rowData}>
                 <td style="white-space:nowrap;">${_ledgerDot(t)}${t.date || ''}</td>
+                <td class="col-customer" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.8rem;color:#6b7280;" title="${custName}">${custName}</td>
                 <td>
                     ${t.description || ''}
                     ${m.sourceBadge}${m.reviewBadge}${m.tagBadges}
                 </td>
-                <td class="acct-split-cell">${m.splitBadges}</td>
+                <td class="col-splits acct-split-cell">${m.splitBadges}</td>
                 <td class="text-right ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</td>
-                <td><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></td>
-                <td>${t.account_name || '—'}</td>
+                <td class="col-type"><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></td>
+                <td class="col-account">${t.account_name || '—'}</td>
                 <td>
                     ${m.isExp ? '' : `<button class="btn-icon-sm acct-btn-del" data-id="${t.id}" title="Delete">&times;</button>`}
                 </td>
@@ -792,6 +847,9 @@ function renderTransactionList(txns, total) {
         });
     });
 
+    // Apply column visibility after render
+    applyLedgerColVisibility();
+
     // Pagination
     const pages = Math.ceil(total / ACCT.txnLimit);
     const pagEl = $('#txn-pagination');
@@ -807,6 +865,52 @@ function renderTransactionList(txns, total) {
 }
 
 // ── Transaction Modal ────────────────────────────────────
+
+function _guessAccountId(txn) {
+    const source = (txn.source || '').toLowerCase();
+    const desc = (txn.description || '').toLowerCase();
+    if (source === 'godaddy' || desc.startsWith('godaddy order')) {
+        return ACCT.accounts.find(a => a.name.toLowerCase().includes('tgf checking'))?.id || null;
+    }
+    if (source === 'venmo') {
+        return ACCT.accounts.find(a => a.account_type === 'venmo' || a.name.toLowerCase().includes('venmo'))?.id || null;
+    }
+    return null;
+}
+
+function _buildSmartSplit(txn) {
+    // Entity: prefer TGF for income, else active/first
+    const tgfEnt = ACCT.entities.find(e => e.short_name === 'TGF');
+    const entityId = (txn.type === 'income' && tgfEnt) ? tgfEnt.id
+        : (ACCT.activeEntity || ACCT.entities[0]?.id);
+
+    // Event: try event_name field; fall back to parsing " — Event Name" from description
+    // Description format: "GoDaddy order RXXXXXX: Customer Name — Event Name"
+    let evName = txn.event_name;
+    if (!evName && txn.description) {
+        const m = txn.description.match(/—\s*(.+)$/);
+        if (m && !m[1].trim().endsWith('events')) evName = m[1].trim();
+    }
+    const evId = evName ? (ACCT.events.find(e => e.item_name === evName)?.id || '') : '';
+
+    // GoDaddy income with order_splits → two splits: registration + transaction fee
+    if (txn.type === 'income' && txn.order_splits && txn.order_splits.registration != null) {
+        const regCatId = ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('event revenue'))?.id || '';
+        const txFeeCatId = ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('transaction fee'))?.id || '';
+        const regAmt = +(txn.order_splits.registration || 0).toFixed(2);
+        const txFeeAmt = +(txn.order_splits.transaction_fee || 0).toFixed(2);
+        return [
+            { entity_id: entityId, category_id: regCatId, event_id: evId, amount: regAmt, memo: 'Registration' },
+            { entity_id: entityId, category_id: txFeeCatId, event_id: evId, amount: txFeeAmt, memo: 'Transaction fee' },
+        ];
+    }
+
+    // Default: single split for full amount
+    const catId = txn.type === 'income'
+        ? (ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('event revenue'))?.id || '')
+        : '';
+    return [{ entity_id: entityId, category_id: catId, event_id: evId, amount: txn.total_amount, memo: '' }];
+}
 
 function populateDropdowns() {
     // Account dropdowns (with last 4 digits)
@@ -871,6 +975,11 @@ async function openEditTransaction(id) {
         $('#txn-amount').value = txn.total_amount;
         $('#txn-type').value = txn.type;
         $('#txn-account').value = txn.account_id || '';
+        // Auto-assign account if not set
+        if (!txn.account_id) {
+            const guessedAcct = _guessAccountId(txn);
+            if (guessedAcct) $('#txn-account').value = guessedAcct;
+        }
         $('#txn-notes').value = txn.notes || '';
         $('#receipt-filename').textContent = txn.receipt_path ? txn.receipt_path.split('/').pop() : '';
         $('#transfer-row').style.display = txn.type === 'transfer' ? '' : 'none';
@@ -883,9 +992,10 @@ async function openEditTransaction(id) {
             clearTxnCustomer();
         }
 
-        renderSplitRows(txn.splits.map(s => ({
-            entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || ''
-        })));
+        const splitsData = txn.splits.length > 0
+            ? txn.splits.map(s => ({ entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || '' }))
+            : _buildSmartSplit(txn);
+        renderSplitRows(splitsData);
         renderTagChips(txn.tags.map(t => t.id));
 
         $('#txn-modal').style.display = 'flex';
@@ -1309,24 +1419,52 @@ function closeExpenseModal() {
 // ── Customer / Vendor Typeahead ───────────────────────────
 
 function _customerDisplayName(c) {
-    return `${c.last_name}, ${c.first_name}`;
+    if (c.company_name) return c.company_name;
+    if (c.display_name) return c.display_name;
+    const fn = (c.first_name || '').trim();
+    const ln = (c.last_name || '').trim();
+    return fn && ln ? `${ln}, ${fn}` : (ln || fn);
+}
+
+function renderVendorChips() {
+    const container = $('#txn-vendor-chips');
+    if (!container) return;
+    const vendors = _allVendors();
+    if (!vendors.length) {
+        container.innerHTML = '<span style="font-size:0.75rem;color:#9ca3af;font-style:italic;">No vendors yet — add one above</span>';
+        return;
+    }
+    const selectedId = parseInt($('#txn-customer-id').value) || 0;
+    container.innerHTML = vendors.map(v => {
+        const active = v.customer_id === selectedId;
+        const vName = _customerDisplayName(v);
+        return `<button type="button" class="txn-vendor-chip" data-id="${v.customer_id}" data-name="${vName}"
+            style="padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:600;cursor:pointer;border:1.5px solid ${active ? '#d97706' : '#fcd34d'};background:${active ? '#fef3c7' : '#fffbeb'};color:#92400e;transition:all .15s;">
+            ${vName}
+        </button>`;
+    }).join('');
+    container.querySelectorAll('.txn-vendor-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setTxnCustomer(parseInt(btn.dataset.id), btn.dataset.name, true);
+        });
+    });
 }
 
 function setTxnCustomer(id, name, isVendor) {
     $('#txn-customer-id').value = id;
-    $('#txn-customer-search').value = name;
-    const badge = $('#txn-customer-badge');
-    badge.textContent = isVendor ? 'Vendor' : 'Customer';
-    badge.style.background = isVendor ? '#fef3c7' : '#dbeafe';
-    badge.style.color = isVendor ? '#92400e' : '#1d4ed8';
-    badge.style.display = '';
+    $('#txn-customer-search').value = '';
     $('#txn-customer-dropdown').style.display = 'none';
+    const sel = $('#txn-customer-selected');
+    $('#txn-customer-selected-name').textContent = (isVendor ? '🏷 ' : '') + name;
+    sel.style.display = 'flex';
+    sel.style.background = isVendor ? '#fffbeb' : '#f0fdf4';
+    sel.style.borderColor = isVendor ? '#fcd34d' : '#86efac';
 }
 
 function clearTxnCustomer() {
     $('#txn-customer-id').value = '';
     $('#txn-customer-search').value = '';
-    $('#txn-customer-badge').style.display = 'none';
+    $('#txn-customer-selected').style.display = 'none';
     $('#txn-customer-dropdown').style.display = 'none';
 }
 
@@ -1334,10 +1472,10 @@ function _fuzzyMatchCustomers(query) {
     if (!query) return [];
     const q = query.toLowerCase();
     return ACCT.customers.filter(c => {
-        const full = `${c.first_name} ${c.last_name}`.toLowerCase();
-        const rev = `${c.last_name} ${c.first_name}`.toLowerCase();
-        const last = c.last_name.toLowerCase();
-        return full.includes(q) || rev.includes(q) || last.startsWith(q);
+        const display = _customerDisplayName(c).toLowerCase();
+        const full = `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase();
+        const rev = `${c.last_name || ''} ${c.first_name || ''}`.toLowerCase();
+        return display.includes(q) || full.includes(q) || rev.includes(q);
     }).slice(0, 8);
 }
 
@@ -1394,7 +1532,7 @@ function _renderCustomerDropdown(matches, showVendorSection) {
 function _customerItemHTML(c) {
     const label = c.is_vendor ? '<span style="font-size:0.65rem;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:8px;margin-left:4px;">Vendor</span>' : '';
     const sub = [c.chapter, c.current_player_status].filter(Boolean).join(' · ');
-    return `<div class="acct-cust-item" data-id="${c.customer_id}" data-name="${c.first_name} ${c.last_name}" data-vendor="${c.is_vendor ? '1' : '0'}"
+    return `<div class="acct-cust-item" data-id="${c.customer_id}" data-name="${_customerDisplayName(c)}" data-vendor="${c.is_vendor ? '1' : '0'}"
                  style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;">
         <div style="font-weight:500;font-size:0.875rem;">${_customerDisplayName(c)}${label}</div>
         ${sub ? `<div style="font-size:0.75rem;color:#6b7280;">${sub}</div>` : ''}
@@ -1406,8 +1544,8 @@ function suggestCustomerFromDescription(desc) {
     const words = desc.toLowerCase().split(/\s+/);
     let best = null, bestScore = 0;
     for (const c of ACCT.customers) {
-        const full = `${c.first_name} ${c.last_name}`.toLowerCase();
-        const last = c.last_name.toLowerCase();
+        const full = _customerDisplayName(c).toLowerCase();
+        const last = (c.last_name || '').toLowerCase();
         let score = 0;
         for (const w of words) {
             if (w.length < 3) continue;
@@ -1419,7 +1557,7 @@ function suggestCustomerFromDescription(desc) {
     if (best && bestScore >= 2) {
         const search = $('#txn-customer-search');
         search.value = '';
-        search.placeholder = `Suggested: ${best.first_name} ${best.last_name} — press Enter to accept`;
+        search.placeholder = `Suggested: ${_customerDisplayName(best)} — press Enter to accept`;
         search._suggested = best;
     }
 }
@@ -1448,7 +1586,7 @@ function initCustomerTypeahead() {
         if (e.key === 'Enter') {
             e.preventDefault();
             if (input._suggested) {
-                setTxnCustomer(input._suggested.customer_id, `${input._suggested.first_name} ${input._suggested.last_name}`, input._suggested.is_vendor);
+                setTxnCustomer(input._suggested.customer_id, _customerDisplayName(input._suggested), input._suggested.is_vendor);
                 input._suggested = null;
             } else {
                 const first = dd.querySelector('.acct-cust-item');
@@ -1482,22 +1620,45 @@ function initCustomerTypeahead() {
 // ── Vendor Modal ─────────────────────────────────────────
 
 function openVendorModal() {
-    $('#vendor-first-name').value = '';
-    $('#vendor-last-name').value = '';
+    $('#vendor-name').value = '';
     $('#vendor-phone').value = '';
     $('#vendor-modal-error').style.display = 'none';
     $('#vendor-modal').style.display = 'flex';
-    setTimeout(() => $('#vendor-first-name').focus(), 50);
+    setTimeout(() => $('#vendor-name').focus(), 50);
+}
+
+async function runSmartFill() {
+    // First do a dry run to show preview
+    try {
+        const preview = await api('/accounting/smart-fill', { method: 'POST', body: { dry_run: true } });
+        if (preview.count === 0) {
+            alert('All transactions already have categories assigned.');
+            return;
+        }
+        const ok = confirm(
+            `Smart Fill found ${preview.count} transaction(s) without a category split.\n\n` +
+            `This will:\n` +
+            `• Auto-assign TGF Checking account to GoDaddy income\n` +
+            `• Create a default "Event Revenue" split for each income transaction\n` +
+            `• You can still edit individual transactions to adjust\n\n` +
+            `Apply to all ${preview.count} transactions?`
+        );
+        if (!ok) return;
+        const result = await api('/accounting/smart-fill', { method: 'POST', body: { dry_run: false } });
+        alert(`Done! Applied smart defaults to ${result.count} transaction(s).`);
+        loadTransactions();
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
 }
 
 async function saveNewVendor() {
-    const firstName = $('#vendor-first-name').value.trim();
-    const lastName = $('#vendor-last-name').value.trim();
+    const name = $('#vendor-name').value.trim();
     const phone = $('#vendor-phone').value.trim();
     const errEl = $('#vendor-modal-error');
 
-    if (!firstName && !lastName) {
-        errEl.textContent = 'Enter at least a first or last name.';
+    if (!name) {
+        errEl.textContent = 'Enter a vendor name.';
         errEl.style.display = '';
         return;
     }
@@ -1506,7 +1667,7 @@ async function saveNewVendor() {
         const vendor = await fetch('/api/accounting/vendors', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ first_name: firstName, last_name: lastName, phone }),
+            body: JSON.stringify({ name, phone }),
         }).then(async r => {
             if (!r.ok) {
                 const e = await r.json().catch(() => ({}));
@@ -1520,7 +1681,7 @@ async function saveNewVendor() {
         if (existing >= 0) ACCT.customers[existing] = vendor;
         else ACCT.customers.push(vendor);
 
-        setTxnCustomer(vendor.customer_id, `${vendor.first_name} ${vendor.last_name}`, true);
+        setTxnCustomer(vendor.customer_id, vendor.display_name, true);
         $('#vendor-modal').style.display = 'none';
     } catch (e) {
         errEl.textContent = e.message;

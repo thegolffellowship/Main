@@ -47,6 +47,11 @@
         /* Fade out matched rows */
         .acct-txn-row.lmq-matched,.acct-mobile-card.lmq-matched{opacity:.3;transition:opacity .4s;}
         @media(max-width:900px){ #ledger-split.split-on{grid-template-columns:1fr;} #ledger-deposits-pane{max-height:45vh;} }
+        /* Ledger column visibility — toggled via class on the table */
+        .acct-table-full.acct-hide-customer .col-customer{display:none;}
+        .acct-table-full.acct-hide-splits .col-splits{display:none;}
+        .acct-table-full.acct-hide-type .col-type{display:none;}
+        .acct-table-full.acct-hide-account .col-account{display:none;}
     </style>
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
@@ -281,6 +286,11 @@
                 </div>
                 <div class="ledger-filter-right">
                     <input type="text" id="txn-search" class="acct-search" placeholder="Search ledger..." style="width:160px;">
+                    <div style="position:relative;">
+                        <button class="btn btn-secondary btn-sm" id="btn-ledger-cols" title="Show/hide columns">Columns &#9660;</button>
+                        <div id="ledger-col-dropdown" style="display:none;position:absolute;right:0;top:100%;margin-top:2px;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:300;min-width:160px;padding:4px 0;"></div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="btn-smart-fill" title="Auto-assign accounts and categories to uncategorized transactions" style="background:#f0fdf4;border-color:#86efac;color:#166534;">&#9889; Smart Fill</button>
                     <button class="btn btn-secondary btn-sm" id="btn-ledger-adv" title="Advanced filters">&#9881; Filters</button>
                     <button class="btn btn-secondary btn-sm" id="btn-import-csv" title="Import bank statement CSV">Import CSV</button>
                 </div>
@@ -751,16 +761,25 @@
                         <input type="text" id="txn-description" placeholder="e.g. Costco, Green fee..." required>
                     </div>
                 </div>
-                <div class="acct-form-row">
-                    <div class="acct-form-group acct-form-grow" style="position:relative;">
-                        <label>Customer / Vendor</label>
-                        <input type="hidden" id="txn-customer-id">
-                        <input type="text" id="txn-customer-search" placeholder="Search by name…" autocomplete="off">
-                        <div id="txn-customer-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-                        </div>
+                <div class="acct-form-group" style="margin-bottom:0.75rem;">
+                    <label style="display:flex;align-items:center;justify-content:space-between;">
+                        <span>Customer / Vendor</span>
+                        <button type="button" id="btn-new-vendor-modal" style="font-size:0.72rem;font-weight:600;color:#2563eb;background:none;border:none;cursor:pointer;padding:0;">＋ New Vendor</button>
+                    </label>
+                    <input type="hidden" id="txn-customer-id">
+
+                    <!-- Selected display -->
+                    <div id="txn-customer-selected" style="display:none;margin-bottom:0.5rem;padding:6px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;display:none;align-items:center;justify-content:space-between;">
+                        <span id="txn-customer-selected-name" style="font-weight:600;font-size:0.875rem;"></span>
+                        <button type="button" id="txn-customer-clear" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:1rem;line-height:1;padding:0 0 0 8px;">&times;</button>
                     </div>
-                    <div class="acct-form-group" style="min-width:120px;align-self:flex-end;">
-                        <span id="txn-customer-badge" style="display:none;font-size:0.7rem;padding:2px 7px;border-radius:12px;background:#dbeafe;color:#1d4ed8;font-weight:600;white-space:nowrap;"></span>
+
+                    <!-- Search all -->
+                    <div style="position:relative;">
+                        <input type="text" id="txn-customer-search" placeholder="Search customers by name…" autocomplete="off"
+                               style="width:100%;box-sizing:border-box;">
+                        <div id="txn-customer-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:180px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,0.1);margin-top:2px;">
+                        </div>
                     </div>
                 </div>
                 <div class="acct-form-row">
@@ -839,15 +858,9 @@
                 <button class="modal-close" id="vendor-modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="acct-form-row">
-                    <div class="acct-form-group">
-                        <label>First Name</label>
-                        <input type="text" id="vendor-first-name" placeholder="e.g. Costco" autocomplete="off">
-                    </div>
-                    <div class="acct-form-group">
-                        <label>Last Name / Company</label>
-                        <input type="text" id="vendor-last-name" placeholder="e.g. Wholesale" autocomplete="off">
-                    </div>
+                <div class="acct-form-group">
+                    <label>Vendor / Company Name</label>
+                    <input type="text" id="vendor-name" placeholder="e.g. Costco" autocomplete="off">
                 </div>
                 <div class="acct-form-group">
                     <label>Phone <span style="font-weight:400;color:#6b7280;">(optional)</span></label>

@@ -83,6 +83,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 
+    // Ledger column toggle
+    buildLedgerColumnToggle();
+    const _colBtn = $('#btn-ledger-cols');
+    const _colDrop = $('#ledger-col-dropdown');
+    if (_colBtn && _colDrop) {
+        _colBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _colDrop.style.display = _colDrop.style.display === 'none' ? '' : 'none';
+        });
+        document.addEventListener('click', () => { _colDrop.style.display = 'none'; });
+    }
+
     // Category type toggle
     $$('.acct-cat-type-toggle .acct-subtab').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -99,6 +111,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#txn-modal-save').addEventListener('click', saveTransaction);
     $('#btn-add-split').addEventListener('click', addSplitRow);
     $('#txn-amount').addEventListener('input', updateSplitTotal);
+    $('#txn-amount').addEventListener('change', () => {
+        const firstSplit = document.querySelector('#splits-list .split-amount');
+        if (firstSplit && !parseFloat(firstSplit.value)) {
+            firstSplit.value = $('#txn-amount').value;
+            updateSplitTotal();
+        }
+    });
     $('#txn-type').addEventListener('change', () => {
         $('#transfer-row').style.display = $('#txn-type').value === 'transfer' ? '' : 'none';
     });
@@ -106,11 +125,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Customer typeahead
     initCustomerTypeahead();
 
+    // Customer clear button
+    $('#txn-customer-clear').addEventListener('click', clearTxnCustomer);
+
+    // New Vendor button (in modal label)
+    $('#btn-new-vendor-modal').addEventListener('click', openVendorModal);
+
     // Vendor modal
     $('#vendor-modal-close').addEventListener('click', () => $('#vendor-modal').style.display = 'none');
     $('#vendor-modal-cancel').addEventListener('click', () => $('#vendor-modal').style.display = 'none');
     $('#vendor-modal-save').addEventListener('click', saveNewVendor);
-    $('#vendor-last-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveNewVendor(); });
+    $('#vendor-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveNewVendor(); });
 
     // Auto-suggest customer from description
     $('#txn-description').addEventListener('blur', () => {
@@ -196,6 +221,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#category-modal-close').addEventListener('click', () => $('#category-modal').style.display = 'none');
     $('#category-modal-cancel').addEventListener('click', () => $('#category-modal').style.display = 'none');
     $('#category-modal-save').addEventListener('click', saveCategory);
+
+    // Smart Fill
+    $('#btn-smart-fill')?.addEventListener('click', runSmartFill);
 
     // Inline Match Queue (Ledger — Unreconciled pill) buttons
     document.getElementById('btn-lmq-automatch')?.addEventListener('click', runInlineAutoMatch);

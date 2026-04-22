@@ -112,6 +112,14 @@ from email_parser.database import (
     mark_email_processed,
     clear_failed_processed,
     refund_item,
+    set_event_status,
+    can_restore_event,
+    get_cancellation_players,
+    get_player_credits,
+    get_rsvp_credit_info,
+    get_event_rsvp_credit_map,
+    mark_rsvp_credit_notified,
+    apply_credit_to_rsvp,
     get_app_setting,
     set_app_setting,
     # Accounting module
@@ -700,6 +708,153 @@ def check_rsvp_inbox():
 
     # Also re-run matching for any previously unmatched RSVPs
     rematch_rsvps()
+
+    # Check for credited players who just RSVPd and send admin alert emails
+    _send_rsvp_credit_alerts()
+
+
+def _send_rsvp_credit_alerts():
+    """Find newly matched RSVPs for credited players and send admin alert emails."""
+    from email_parser.database import _connect as _db_connect
+    from email_parser.fetcher import send_mail_graph
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    # All credit alerts go here during testing — remove override to go live
+    alert_to = os.getenv("CREDIT_ALERT_EMAIL_OVERRIDE", "kerry@thegolffellowship.com")
+
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        logger.warning("Email credentials not configured — skipping credit alerts")
+        return
+
+    # Find RSVPs that: (a) are matched to an event, (b) haven't been notified yet
+    with _db_connect() as conn:
+        pending = conn.execute(
+            """SELECT id FROM rsvps
+               WHERE matched_event IS NOT NULL
+                 AND response = 'PLAYING'
+                 AND credit_notified_at IS NULL""",
+        ).fetchall()
+
+    for row in pending:
+        rsvp_id = row["id"]
+        try:
+            info = get_rsvp_credit_info(rsvp_id)
+            if not info:
+                # No credits — stamp it anyway so we skip next time
+                mark_rsvp_credit_notified(rsvp_id)
+                continue
+
+            # Build email
+            player = info["player_name"]
+            event_name = info["event_name"]
+            event_date = info["event_date"]
+            course = info["course"]
+            total_credit = info["total_credit"]
+            new_price = info["new_event_price"]
+            amount_owed = info["amount_owed"]
+            can_calc = info["can_calculate"]
+            sel = info["selections"]
+
+            credit_lines = "".join(
+                f"<li>${c['credit_amount']:.2f} from <em>{c['event_name']}</em></li>"
+                for c in info["credits"]
+            )
+
+            if can_calc:
+                scenario = (
+                    f"<strong style='color:#dc2626;'>Balance due: ${amount_owed:.2f}</strong>"
+                    if amount_owed > 0
+                    else f"<strong style='color:#16a34a;'>Excess credit: ${abs(amount_owed):.2f}</strong>"
+                    if amount_owed < 0
+                    else "<strong style='color:#6b7280;'>Credit covers exactly</strong>"
+                )
+                price_table = f"""
+                <table style="border-collapse:collapse; margin:0.75rem 0; font-size:0.9rem;">
+                  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">New event cost</td>
+                      <td style="padding:3px 0;"><strong>${new_price:.2f}</strong></td></tr>
+                  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">Credit applied</td>
+                      <td style="padding:3px 0;">−${total_credit:.2f}</td></tr>
+                  <tr style="border-top:1px solid #e5e7eb;">
+                      <td style="padding:6px 12px 3px 0;">Result</td>
+                      <td style="padding:6px 0;">{scenario}</td></tr>
+                </table>"""
+                action_note = (
+                    f"<p><strong>Action:</strong> Player owes ${amount_owed:.2f} — "
+                    f"apply credit in the admin UI and request Venmo payment of "
+                    f"<strong>${amount_owed:.2f} to @tgf-payments</strong>.</p>"
+                    if amount_owed > 0
+                    else f"<p><strong>Action:</strong> Credit more than covers this event. "
+                    f"Apply credit in admin UI. Excess ${abs(amount_owed):.2f} stays on account.</p>"
+                    if amount_owed < 0
+                    else "<p><strong>Action:</strong> Credit covers exactly — apply in admin UI.</p>"
+                )
+            else:
+                price_table = "<p style='color:#d97706;'>⚠ Event pricing not configured — calculate manually.</p>"
+                action_note = "<p>Apply credit manually via the Events admin page.</p>"
+
+            subject = (
+                f"[CREDIT ALERT] {player} RSVPd for {event_name}"
+                + (" — owes ${:.2f}".format(amount_owed) if (can_calc and amount_owed > 0) else
+                   " — credit covers it" if can_calc else " — pricing unknown")
+            )
+
+            html_body = f"""
+<p>Hi Kerry,</p>
+<p>A credited player has RSVPd for an upcoming event.</p>
+<table style="border-collapse:collapse; background:#f9fafb; border:1px solid #e5e7eb;
+              border-radius:6px; padding:0.75rem; margin:0.75rem 0; font-size:0.9rem; width:100%;">
+  <tr><td style="padding:3px 12px 3px 0; color:#6b7280; width:130px;">Player</td>
+      <td><strong>{player}</strong></td></tr>
+  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">Event</td>
+      <td><strong>{event_name}</strong></td></tr>
+  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">Date / Course</td>
+      <td>{event_date} &bull; {course}</td></tr>
+  <tr><td style="padding:3px 12px 3px 0; color:#6b7280;">Previous selections</td>
+      <td>{sel['holes']}h &bull; {sel['side_games']} &bull; {sel['user_status']}</td></tr>
+</table>
+<p><strong>Credits on account:</strong></p>
+<ul>{credit_lines}</ul>
+<p><strong>Total credit: ${total_credit:.2f}</strong></p>
+{price_table}
+{action_note}
+<p style="font-size:0.8rem; color:#9ca3af;">
+  This alert was sent to kerry@thegolffellowship.com instead of the player for testing.
+  Remove CREDIT_ALERT_EMAIL_OVERRIDE env var to route to players.
+</p>
+<p>— TGF System</p>"""
+
+            ok = send_mail_graph(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret,
+                from_address=from_address,
+                to_address=alert_to,
+                subject=subject,
+                html_body=html_body,
+            )
+            if ok:
+                logger.info("Credit alert sent for RSVP %s (%s)", rsvp_id, player)
+                from email_parser.database import log_message
+                log_message({
+                    "event_name": event_name,
+                    "channel": "email",
+                    "recipient_name": player,
+                    "recipient_address": alert_to,
+                    "subject": subject,
+                    "body_preview": f"Credit alert: {player} RSVPd for {event_name}. Credit: ${total_credit:.2f}",
+                    "status": "sent",
+                    "sent_by": "system",
+                })
+            else:
+                logger.warning("Credit alert email failed for RSVP %s", rsvp_id)
+
+            mark_rsvp_credit_notified(rsvp_id)
+        except Exception:
+            logger.warning("Credit alert check failed for RSVP %s", rsvp_id, exc_info=True)
+            mark_rsvp_credit_notified(rsvp_id)  # stamp it to avoid retry loops
 
 
 def _check_inbox_background():
@@ -2656,6 +2811,243 @@ def api_delete_event(event_id):
     if delete_event(event_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "not found"}), 404
+
+
+@app.route("/api/events/<int:event_id>/cancel", methods=["POST"])
+@require_role("admin")
+def api_cancel_event(event_id):
+    """Cancel or postpone an event, silently removing comps and RSVP-only players."""
+    data = request.get_json(silent=True) or {}
+    status = data.get("status", "cancelled")
+    reason = data.get("reason", "").strip()
+    if status not in ("cancelled", "postponed"):
+        return jsonify({"error": "status must be 'cancelled' or 'postponed'"}), 400
+    if not reason:
+        return jsonify({"error": "reason is required"}), 400
+
+    # Set the event status
+    if not set_event_status(event_id, status, reason):
+        return jsonify({"error": "Event not found"}), 404
+
+    # Silently credit comps and RSVP-only players
+    players = get_cancellation_players(event_id)
+    silent_note = f"Event {status} — {reason}"
+    silent_count = 0
+    for item in players.get("silent", []):
+        try:
+            credit_item(item["id"], note=silent_note)
+            silent_count += 1
+        except Exception:
+            pass
+
+    return jsonify({
+        "status": "ok",
+        "silent_removed": silent_count,
+        "paid_players": len(players.get("paid", [])),
+    })
+
+
+@app.route("/api/events/<int:event_id>/restore", methods=["POST"])
+@require_role("admin")
+def api_restore_event(event_id):
+    """Restore a cancelled/postponed event to active. Only allowed if no player actions taken."""
+    if not can_restore_event(event_id):
+        return jsonify({"error": "Cannot restore: player actions have already been applied."}), 400
+    if set_event_status(event_id, "active", ""):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Event not found"}), 404
+
+
+@app.route("/api/events/<int:event_id>/cancellation-players", methods=["GET"])
+@require_role("admin")
+def api_get_cancellation_players(event_id):
+    """Return paid players who need a credit/refund action after cancellation."""
+    players = get_cancellation_players(event_id)
+    return jsonify(players.get("paid", []))
+
+
+@app.route("/api/events/<int:event_id>/cancel-bulk", methods=["POST"])
+@require_role("admin")
+def api_cancel_bulk(event_id):
+    """Apply credit or refund to all eligible paid players for a cancelled event."""
+    data = request.get_json(silent=True) or {}
+    action = data.get("action")  # 'credit' or 'refund'
+    note = data.get("note", "").strip() or "Event cancelled"
+    if action not in ("credit", "refund"):
+        return jsonify({"error": "action must be 'credit' or 'refund'"}), 400
+
+    players = get_cancellation_players(event_id)
+    results = {"ok": [], "failed": []}
+    for item in players.get("paid", []):
+        item_id = item["id"]
+        try:
+            if action == "credit":
+                success = credit_item(item_id, note=note)
+            else:
+                method = item.get("auto_refund_method", "")
+                success = refund_item(item_id, method=method, note=note)
+            if success:
+                results["ok"].append(item_id)
+            else:
+                results["failed"].append({"id": item_id, "reason": "already actioned"})
+        except Exception as e:
+            results["failed"].append({"id": item_id, "reason": str(e)})
+
+    return jsonify({"status": "ok", "results": results})
+
+
+@app.route("/api/events/<int:event_id>/cancel-apply", methods=["POST"])
+@require_role("admin")
+def api_cancel_apply(event_id):
+    """Apply per-player actions from the one-by-one staging list.
+
+    Body: { "actions": [{"item_id": 123, "action": "credit"|"refund"|"skip", "note": "..."}] }
+    """
+    data = request.get_json(silent=True) or {}
+    actions = data.get("actions", [])
+    if not actions:
+        return jsonify({"error": "No actions provided"}), 400
+
+    results = {"ok": [], "skipped": [], "failed": []}
+    for entry in actions:
+        item_id = entry.get("item_id")
+        action = entry.get("action")
+        note = (entry.get("note") or "Event cancelled").strip()
+        method = (entry.get("method") or "").strip()
+
+        if action == "skip":
+            results["skipped"].append(item_id)
+            continue
+        try:
+            if action == "credit":
+                success = credit_item(item_id, note=note)
+            elif action == "refund":
+                success = refund_item(item_id, method=method, note=note)
+            else:
+                results["skipped"].append(item_id)
+                continue
+            if success:
+                results["ok"].append(item_id)
+            else:
+                results["failed"].append({"id": item_id, "reason": "already actioned or not found"})
+        except Exception as e:
+            results["failed"].append({"id": item_id, "reason": str(e)})
+
+    return jsonify({"status": "ok", "results": results})
+
+
+@app.route("/api/players/<path:customer_name>/credits", methods=["GET"])
+@require_role("manager")
+def api_player_credits(customer_name):
+    """Return all credited items for a player."""
+    credits = get_player_credits(customer_name)
+    total = sum(c["credit_amount"] for c in credits)
+    return jsonify({"credits": credits, "total_credit": total})
+
+
+@app.route("/api/events/<path:event_name>/rsvp-credits", methods=["GET"])
+@require_role("manager")
+def api_event_rsvp_credits(event_name):
+    """Return credit info for all RSVP-only players in an event."""
+    credit_map = get_event_rsvp_credit_map(event_name)
+    return jsonify(credit_map)
+
+
+@app.route("/api/rsvps/<int:item_id>/credit-info", methods=["GET"])
+@require_role("manager")
+def api_rsvp_credit_info_by_item(item_id):
+    """Return full credit analysis for an RSVP-only item (by items.id)."""
+    from email_parser.database import _connect, _calc_event_price_for_player
+    with _connect() as conn:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        item = dict(item)
+
+        credits = get_player_credits(item["customer"])
+        if not credits:
+            return jsonify({"error": "No credits on file for this player"}), 404
+
+        total_credit = sum(c["credit_amount"] for c in credits)
+
+        event_row = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (item["item_name"],),
+        ).fetchone()
+        event = dict(event_row) if event_row else {}
+
+        most_recent = credits[0]
+        prev = {
+            "user_status": most_recent.get("user_status") or "MEMBER",
+            "holes": most_recent.get("holes") or "9",
+            "side_games": most_recent.get("side_games") or "NONE",
+            "tee_choice": most_recent.get("tee_choice") or "",
+        }
+
+        event_price = _calc_event_price_for_player(
+            event, prev["user_status"], prev["holes"], prev["side_games"]
+        )
+        amount_owed = round((event_price or 0.0) - total_credit, 2) if event_price is not None else None
+
+    return jsonify({
+        "item_id": item_id,
+        "customer": item["customer"],
+        "credits": [
+            {
+                "id": c["id"],
+                "item_name": c.get("item_name") or "",
+                "item_price": c.get("item_price") or "",
+                "order_date": c.get("order_date") or "",
+            }
+            for c in credits
+        ],
+        "total_credit": total_credit,
+        "event_price": event_price,
+        "amount_owed": amount_owed,
+        "previous_selections": prev,
+    })
+
+
+@app.route("/api/rsvps/<int:item_id>/apply-credit", methods=["POST"])
+@require_role("admin")
+def api_apply_credit_to_rsvp(item_id):
+    """Apply a player's credits to their RSVP-only registration."""
+    data = request.get_json(silent=True) or {}
+    credited_item_ids = data.get("credited_item_ids", [])
+    excess_action = data.get("excess_action", "keep")
+    holes = data.get("holes", "")
+    side_games = data.get("side_games", "")
+    tee_choice = data.get("tee_choice", "")
+    user_status = data.get("user_status", "")
+
+    if not credited_item_ids:
+        return jsonify({"error": "credited_item_ids required"}), 400
+    if excess_action not in ("keep", "note"):
+        return jsonify({"error": "excess_action must be 'keep' or 'note'"}), 400
+
+    result = apply_credit_to_rsvp(
+        rsvp_item_id=item_id,
+        credited_item_ids=credited_item_ids,
+        excess_action=excess_action,
+        holes=holes,
+        side_games=side_games,
+        tee_choice=tee_choice,
+        user_status=user_status,
+    )
+    if not result.get("ok"):
+        return jsonify({"error": result.get("error", "Failed")}), 400
+    return jsonify(result)
+
+
+@app.route("/api/rsvps/trigger-credit-alerts", methods=["POST"])
+@require_role("admin")
+def api_trigger_credit_alerts():
+    """Manually trigger credit alert email scan (for testing)."""
+    try:
+        _send_rsvp_credit_alerts()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/events", methods=["POST"])
@@ -5260,49 +5652,47 @@ def api_acct_account_balances():
 @require_role("admin")
 def api_acct_create_vendor():
     """Create a new vendor (customer with vendor role) for transaction linking."""
-    from email_parser.database import _connect, create_customer
+    from email_parser.database import _connect
     d = request.json or {}
-    first_name = (d.get("first_name") or "").strip()
-    last_name = (d.get("last_name") or "").strip()
-    if not first_name and not last_name:
-        return jsonify({"error": "first_name or last_name is required"}), 400
-    name = " ".join(filter(None, [first_name, last_name]))
-    result = create_customer(
-        name, phone=d.get("phone", ""),
-        first_name=first_name, last_name=last_name,
-    )
-    if result is None:
-        # Already exists — look them up and just add the vendor role
-        with _connect() as conn:
-            row = conn.execute(
-                "SELECT customer_id FROM customers WHERE first_name=? AND last_name=? COLLATE NOCASE",
-                (first_name, last_name),
-            ).fetchone()
-            if not row:
-                return jsonify({"error": "Customer already exists but could not be found"}), 409
-            cid = row["customer_id"]
-            conn.execute(
-                "INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?, 'vendor')",
-                (cid,),
-            )
-            conn.commit()
-    else:
-        cid = result["customer_id"]
-        with _connect() as conn:
-            conn.execute(
-                "INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?, 'vendor')",
-                (cid,),
-            )
-            conn.commit()
-    # Return the full customer record
+    name = (d.get("name") or "").strip()
+    phone = (d.get("phone") or "").strip() or None
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+
     with _connect() as conn:
+        # Check if a vendor with this company name already exists
+        existing = conn.execute(
+            "SELECT customer_id FROM customers WHERE LOWER(COALESCE(company_name,'')) = LOWER(?) LIMIT 1",
+            (name,),
+        ).fetchone()
+
+        if existing:
+            cid = existing["customer_id"]
+        else:
+            cursor = conn.execute(
+                """INSERT INTO customers
+                       (first_name, last_name, company_name, phone, acquisition_source, account_status)
+                   VALUES ('', ?, ?, ?, 'vendor', 'active')""",
+                (name, name, phone),
+            )
+            cid = cursor.lastrowid
+
+        conn.execute(
+            "INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?, 'vendor')",
+            (cid,),
+        )
+        conn.commit()
+
         row = conn.execute(
-            """SELECT c.customer_id, c.first_name, c.last_name,
+            """SELECT c.customer_id, c.first_name, c.last_name, c.company_name,
                       c.current_player_status, c.chapter, 1 as is_vendor
                FROM customers c WHERE c.customer_id = ?""",
             (cid,),
         ).fetchone()
-    return jsonify(dict(row)), 201
+
+    data = dict(row)
+    data["display_name"] = data.get("company_name") or f"{data.get('first_name','')} {data.get('last_name','')}".strip()
+    return jsonify(data), 201
 
 
 @app.route("/api/accounting/customers")
@@ -5313,7 +5703,7 @@ def api_acct_customers():
     with _connect() as conn:
         rows = conn.execute(
             """SELECT c.customer_id, c.first_name, c.last_name,
-                      c.current_player_status, c.chapter,
+                      c.company_name, c.current_player_status, c.chapter,
                       EXISTS(
                           SELECT 1 FROM customer_roles r
                           WHERE r.customer_id = c.customer_id AND r.role_type = 'vendor'
@@ -5322,7 +5712,108 @@ def api_acct_customers():
                WHERE c.account_status = 'active'
                ORDER BY c.last_name COLLATE NOCASE, c.first_name COLLATE NOCASE"""
         ).fetchall()
-    return jsonify([dict(r) for r in rows])
+
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["display_name"] = d.get("company_name") or f"{d.get('first_name','')} {d.get('last_name','')}".strip()
+        result.append(d)
+    return jsonify(result)
+
+
+@app.route("/api/accounting/smart-fill", methods=["POST"])
+@require_role("admin")
+def api_acct_smart_fill():
+    """Auto-assign accounts and default splits to unsplit transactions."""
+    from email_parser.database import _connect
+    d = request.json or {}
+    dry_run = d.get("dry_run", True)
+
+    with _connect() as conn:
+        # Find transactions with no splits
+        unsplit = conn.execute(
+            """SELECT t.id, t.type, t.source, t.total_amount, t.account_id,
+                      t.event_name, t.description
+               FROM acct_transactions t
+               WHERE t.total_amount > 0
+                 AND t.type IN ('income', 'expense')
+                 AND COALESCE(t.status, 'active') = 'active'
+                 AND NOT EXISTS (SELECT 1 FROM acct_splits s WHERE s.transaction_id = t.id)
+               ORDER BY t.date DESC"""
+        ).fetchall()
+
+        # Look up TGF Checking account id
+        tgf_checking = conn.execute(
+            "SELECT id FROM acct_accounts WHERE LOWER(name) LIKE '%tgf checking%' LIMIT 1"
+        ).fetchone()
+        tgf_checking_id = tgf_checking["id"] if tgf_checking else None
+
+        # Look up Venmo account
+        venmo_acct = conn.execute(
+            "SELECT id FROM acct_accounts WHERE LOWER(name) LIKE '%venmo%' OR account_type='venmo' LIMIT 1"
+        ).fetchone()
+        venmo_id = venmo_acct["id"] if venmo_acct else None
+
+        # Look up TGF entity
+        tgf_entity = conn.execute(
+            "SELECT id FROM acct_entities WHERE LOWER(short_name) = 'tgf' LIMIT 1"
+        ).fetchone()
+        tgf_entity_id = tgf_entity["id"] if tgf_entity else None
+
+        default_entity = conn.execute("SELECT id FROM acct_entities LIMIT 1").fetchone()
+        default_entity_id = default_entity["id"] if default_entity else None
+
+        # Look up "Event Revenue" income category
+        event_rev_cat = conn.execute(
+            "SELECT id FROM acct_categories WHERE type='income' AND LOWER(name) LIKE '%event revenue%' LIMIT 1"
+        ).fetchone()
+        event_rev_cat_id = event_rev_cat["id"] if event_rev_cat else None
+
+        applied = []
+        for t in unsplit:
+            source = (t["source"] or "").lower()
+            desc = (t["description"] or "").lower()
+
+            # Determine account to assign
+            new_account_id = t["account_id"]
+            if not new_account_id:
+                if source == "godaddy" or desc.startswith("godaddy order"):
+                    new_account_id = tgf_checking_id
+                elif source == "venmo":
+                    new_account_id = venmo_id
+
+            # Determine split params
+            entity_id = tgf_entity_id if t["type"] == "income" else default_entity_id
+            category_id = event_rev_cat_id if t["type"] == "income" else None
+
+            info = {
+                "id": t["id"],
+                "description": t["description"],
+                "amount": t["total_amount"],
+                "type": t["type"],
+                "source": t["source"],
+                "new_account_id": new_account_id,
+                "entity_id": entity_id,
+                "category_id": category_id,
+            }
+            applied.append(info)
+
+            if not dry_run:
+                # Update account if changed
+                if new_account_id and new_account_id != t["account_id"]:
+                    conn.execute("UPDATE acct_transactions SET account_id=? WHERE id=?",
+                                 (new_account_id, t["id"]))
+                # Create a single split for the full amount
+                conn.execute(
+                    """INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, memo)
+                       VALUES (?, ?, ?, ?, '')""",
+                    (t["id"], entity_id, category_id, t["total_amount"])
+                )
+
+        if not dry_run:
+            conn.commit()
+
+    return jsonify({"count": len(applied), "transactions": applied if dry_run else []})
 
 
 @app.route("/api/accounting/transactions")

@@ -687,6 +687,107 @@
         </div>
     </div>
 
+    <!-- Apply Credit Modal -->
+    <div id="apply-credit-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal" style="max-width:520px;">
+            <div class="modal-header">
+                <h2>Apply Credit</h2>
+                <button id="apply-credit-close" class="modal-close">&times;</button>
+            </div>
+            <div id="apply-credit-body">
+                <!-- filled dynamically -->
+            </div>
+            <div class="modal-actions" id="apply-credit-actions" style="display:none;">
+                <button type="button" id="apply-credit-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="apply-credit-submit" class="btn btn-primary" style="background:#16a34a;">Apply Credit &amp; Register</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cancel / Postpone Event Modal -->
+    <div id="cancel-event-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal" style="max-width:600px;">
+            <div class="modal-header">
+                <h2 id="cancel-event-modal-title">Cancel Event</h2>
+                <button id="cancel-event-close" class="modal-close">&times;</button>
+            </div>
+
+            <!-- Step 1: Choose status + enter reason -->
+            <div id="cancel-step-1">
+                <div style="margin-bottom:1rem;">
+                    <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.5rem;">Status</div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button type="button" class="cancel-status-btn active" data-status="cancelled" style="flex:1; padding:0.5rem; border:2px solid #dc2626; border-radius:6px; background:#fee2e2; color:#dc2626; font-weight:600; cursor:pointer; font-size:0.85rem;">Cancelled</button>
+                        <button type="button" class="cancel-status-btn" data-status="postponed" style="flex:1; padding:0.5rem; border:2px solid #d97706; border-radius:6px; background:#fff; color:#d97706; font-weight:600; cursor:pointer; font-size:0.85rem;">Postponed</button>
+                    </div>
+                </div>
+                <div style="margin-bottom:1rem;">
+                    <label style="font-weight:600; font-size:0.85rem;">Reason <span style="color:#dc2626;">*</span>
+                        <input type="text" id="cancel-event-reason" class="modal-input" placeholder="e.g. Rained out, course unavailable..." style="margin-top:0.25rem;">
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-step1-back" class="btn btn-secondary">Cancel</button>
+                    <button type="button" id="cancel-step1-next" class="btn btn-primary" style="background:#dc2626;">Next</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Choose bulk vs one-by-one -->
+            <div id="cancel-step-2" style="display:none;">
+                <div id="cancel-step2-summary" style="padding:0.6rem 0.75rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:1rem; font-size:0.85rem;"></div>
+                <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.75rem;">How would you like to handle paid players?</div>
+                <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">
+                    <button type="button" id="cancel-bulk-credit" class="btn" style="padding:0.6rem 1rem; background:#f0fdf4; border:2px solid #16a34a; color:#15803d; font-weight:600; font-size:0.85rem; text-align:left; border-radius:8px; cursor:pointer;">
+                        <strong>Credit All</strong><br>
+                        <span style="font-weight:400; font-size:0.78rem; color:#6b7280;">Hold payment as a credit toward a future event</span>
+                    </button>
+                    <button type="button" id="cancel-bulk-refund" class="btn" style="padding:0.6rem 1rem; background:#eff6ff; border:2px solid #2563eb; color:#1d4ed8; font-weight:600; font-size:0.85rem; text-align:left; border-radius:8px; cursor:pointer;">
+                        <strong>Refund All</strong><br>
+                        <span style="font-weight:400; font-size:0.78rem; color:#6b7280;">Issue refund via original payment method (auto-detected)</span>
+                    </button>
+                    <button type="button" id="cancel-one-by-one" class="btn" style="padding:0.6rem 1rem; background:#fafafa; border:2px solid #9ca3af; color:#374151; font-weight:600; font-size:0.85rem; text-align:left; border-radius:8px; cursor:pointer;">
+                        <strong>One by One</strong><br>
+                        <span style="font-weight:400; font-size:0.78rem; color:#6b7280;">Review each player and choose Credit, Refund, or Skip</span>
+                    </button>
+                </div>
+                <div class="modal-actions" style="padding-top:0;">
+                    <button type="button" id="cancel-step2-back" class="btn btn-secondary">Back</button>
+                </div>
+            </div>
+
+            <!-- Step 3: One-by-one staging list -->
+            <div id="cancel-step-3" style="display:none;">
+                <div style="font-size:0.82rem; color:#6b7280; margin-bottom:0.75rem;" id="cancel-step3-hint">
+                    Choose an action for each player, then click Apply All.
+                </div>
+                <div id="cancel-staging-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:320px; overflow-y:auto; margin-bottom:0.75rem;"></div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-step3-back" class="btn btn-secondary">Back</button>
+                    <button type="button" id="cancel-step3-apply" class="btn btn-primary" style="background:#dc2626;">Apply All</button>
+                </div>
+            </div>
+
+            <!-- Step 4: Complete — optional email -->
+            <div id="cancel-step-4" style="display:none;">
+                <div style="text-align:center; padding:1rem 0;">
+                    <div style="font-size:2rem; margin-bottom:0.5rem;">&#10003;</div>
+                    <div id="cancel-step4-summary" style="font-weight:600; font-size:0.95rem; margin-bottom:0.5rem;"></div>
+                    <div style="font-size:0.82rem; color:#6b7280; margin-bottom:1.25rem;" id="cancel-step4-detail"></div>
+                    <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.5rem;">Would you like to send the cancellation email now?</div>
+                    <div style="display:flex; gap:0.75rem; justify-content:center;">
+                        <button type="button" id="cancel-send-email" class="btn" style="background:#7c3aed; color:#fff; border:none; border-radius:6px; padding:0.5rem 1.25rem; font-weight:600; cursor:pointer;">Send Email</button>
+                        <button type="button" id="cancel-skip-email" class="btn btn-secondary">Skip</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading state -->
+            <div id="cancel-loading" style="display:none; text-align:center; padding:2rem 0; color:var(--text-muted); font-size:0.9rem;">
+                Processing...
+            </div>
+        </div>
+    </div>
+
     <!-- Add Player Modal -->
     <div id="add-player-overlay" class="modal-overlay" style="display:none;">
         <div class="modal add-player-modal">
@@ -1352,6 +1453,7 @@
     let allRsvpEmailOverrides = {};  // keyed by event_name → {email: status}
     let handicapIndexMap = {};  // keyed by lowercase customer_name → {index_9, index_18}
     let expandedEventId = null;
+    let rsvpCreditMap = {};  // keyed by event_name → { customerName: creditInfo }
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
@@ -2004,6 +2106,8 @@
             <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
                 <td>
                     <strong>${escapeHtml(ev.item_name)}</strong>
+                    ${(ev.status === 'cancelled') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">Cancelled</span>` : ''}
+                    ${(ev.status === 'postponed') ? `<span style="margin-left:0.4rem; font-size:0.65rem; font-weight:700; background:#fef3c7; color:#d97706; border:1px solid #fde68a; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">Postponed</span>` : ''}
                 </td>
                 <td>${escapeHtml(ev.event_date || "\u2014")}</td>
                 <td>${escapeHtml(ev.course || "\u2014")}</td>
@@ -3630,7 +3734,23 @@
         const pairingsView = pairingsOpenForEvent[ev.id];
         const financialView = financialOpenForEvent[ev.id];
         const payoutsView = payoutsOpenForEvent[ev.id];
-        let html = '<div class="event-game-stats">';
+        let html = '';
+
+        // Status banner for cancelled/postponed events
+        const evStatus = ev.status || 'active';
+        if (evStatus === 'cancelled') {
+            html += `<div style="display:flex; align-items:center; gap:0.5rem; background:#fee2e2; border:1px solid #fecaca; border-radius:6px; padding:0.5rem 0.75rem; margin-bottom:0.5rem; font-size:0.82rem;">
+                <span style="font-weight:700; color:#dc2626; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">&#x26A0; Cancelled</span>
+                ${ev.status_reason ? `<span style="color:#7f1d1d;">${escapeHtml(ev.status_reason)}</span>` : ''}
+            </div>`;
+        } else if (evStatus === 'postponed') {
+            html += `<div style="display:flex; align-items:center; gap:0.5rem; background:#fef3c7; border:1px solid #fde68a; border-radius:6px; padding:0.5rem 0.75rem; margin-bottom:0.5rem; font-size:0.82rem;">
+                <span style="font-weight:700; color:#d97706; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">&#x23F8; Postponed</span>
+                ${ev.status_reason ? `<span style="color:#92400e;">${escapeHtml(ev.status_reason)}</span>` : ''}
+            </div>`;
+        }
+
+        html += '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
         html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
@@ -3754,6 +3874,14 @@
         }
         html += `<button class="btn btn-message-players" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Send email to event players">Message Players</button>`;
         html += `<button class="btn btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#6366f1; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Audit and fix RSVP matches for this event">Audit RSVPs</button>`;
+        if (currentRole === 'admin') {
+            const evStatus = ev.status || 'active';
+            if (evStatus === 'active') {
+                html += `<button class="btn btn-cancel-event" data-event-id="${ev.id}" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#dc2626; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Cancel or postpone this event">Cancel Event</button>`;
+            } else {
+                html += `<button class="btn btn-restore-event" data-event-id="${ev.id}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#6b7280; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Restore event to active">Restore Event</button>`;
+            }
+        }
         html += '<div class="column-toggle-wrapper">';
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
@@ -3866,6 +3994,15 @@
                             tag += ` <span class="status-tag btn-assign-guest" style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Click to enter the guest player's name">Guest?</span>`;
                         }
                     }
+                    // Credit badge for RSVP-only players with outstanding credits
+                    if (isRsvpOnly) {
+                        const evCreditMap = rsvpCreditMap[ev.item_name] || {};
+                        const creditInfo = evCreditMap[r.customer];
+                        if (creditInfo) {
+                            const amt = creditInfo.total_credit.toFixed(2);
+                            tag += ` <span class="status-tag btn-apply-credit-badge" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" title="Click to apply credit">Credit: $${amt}</span>`;
+                        }
+                    }
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
@@ -3875,7 +4012,12 @@
                     if (isSynthetic) {
                         btns = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
-                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        const evCreditMapAct = rsvpCreditMap[ev.item_name] || {};
+                        const creditInfoAct = isRsvpOnly ? evCreditMapAct[r.customer] : null;
+                        if (creditInfoAct) {
+                            btns = `<button class="btn btn-apply-credit" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Apply Credit</button> `;
+                        }
+                        btns += `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isCompRow) {
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "active") {
@@ -4103,6 +4245,9 @@
 
         // Fetch RSVPs first (needed for both desktop and mobile)
         if (ev) await fetchRsvps(ev.item_name);
+
+        // Fetch credit map for RSVP-only players
+        if (ev) await fetchRsvpCreditMap(ev.item_name);
 
         // Desktop: render detail into table row
         const row = document.querySelector(`.event-row-clickable[data-id="${eventId}"]`);
@@ -4670,6 +4815,14 @@
                     btn.disabled = false;
                     btn.textContent = "Audit RSVPs";
                 }
+            });
+        });
+
+        // Cancel Event button
+        container.querySelectorAll(".btn-cancel-event").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openCancelEventModal(parseInt(btn.dataset.eventId), btn.dataset.eventName);
             });
         });
 
@@ -7912,7 +8065,8 @@
                 const anyModalOpen = [
                     "edit-event-overlay", "ev-credit-overlay", "wd-overlay", "add-event-overlay",
                     "add-player-overlay", "upgrade-rsvp-overlay", "login-overlay",
-                    "merge-event-overlay", "resolve-orphan-overlay"
+                    "merge-event-overlay", "resolve-orphan-overlay", "cancel-event-overlay",
+                    "apply-credit-overlay"
                 ].some(id => {
                     const el = document.getElementById(id);
                     return el && el.style.display === "flex";
@@ -7928,6 +8082,465 @@
             }
         }, 30000);
     });
+
+    // ─── Cancel / Postpone Event ───────────────────────────────────────────────
+
+    let cancelEventState = {
+        eventId: null,
+        eventName: null,
+        status: 'cancelled',
+        reason: '',
+        paidPlayers: [],
+        stagedActions: {},
+    };
+
+    function showCancelStep(step) {
+        [1, 2, 3, 4].forEach(n => {
+            document.getElementById(`cancel-step-${n}`).style.display = n === step ? '' : 'none';
+        });
+        document.getElementById('cancel-loading').style.display = 'none';
+    }
+
+    function openCancelEventModal(eventId, eventName) {
+        cancelEventState = { eventId, eventName, status: 'cancelled', reason: '', paidPlayers: [], stagedActions: {} };
+        document.getElementById('cancel-event-modal-title').textContent = 'Cancel / Postpone Event';
+        document.getElementById('cancel-event-reason').value = '';
+        // Reset status buttons
+        document.querySelectorAll('.cancel-status-btn').forEach(b => {
+            const active = b.dataset.status === 'cancelled';
+            b.style.background = active ? '#fee2e2' : '#fff';
+            b.style.borderColor = active ? '#dc2626' : '#d97706';
+            b.classList.toggle('active', active);
+        });
+        showCancelStep(1);
+        document.getElementById('cancel-event-overlay').style.display = 'flex';
+    }
+
+    function closeCancelModal() {
+        document.getElementById('cancel-event-overlay').style.display = 'none';
+    }
+
+    // Status toggle
+    document.querySelectorAll('.cancel-status-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            cancelEventState.status = btn.dataset.status;
+            document.querySelectorAll('.cancel-status-btn').forEach(b => {
+                const isThis = b === btn;
+                b.style.background = isThis ? (btn.dataset.status === 'cancelled' ? '#fee2e2' : '#fef3c7') : '#fff';
+                b.style.borderColor = isThis ? (btn.dataset.status === 'cancelled' ? '#dc2626' : '#d97706') : '#d1d5db';
+                b.style.color = isThis ? (btn.dataset.status === 'cancelled' ? '#dc2626' : '#d97706') : '#6b7280';
+            });
+        });
+    });
+
+    document.getElementById('cancel-event-close').addEventListener('click', closeCancelModal);
+    document.getElementById('cancel-event-overlay').addEventListener('click', e => { if (e.target === document.getElementById('cancel-event-overlay')) closeCancelModal(); });
+    document.getElementById('cancel-step1-back').addEventListener('click', closeCancelModal);
+
+    document.getElementById('cancel-step1-next').addEventListener('click', async () => {
+        const reason = document.getElementById('cancel-event-reason').value.trim();
+        if (!reason) { alert('Please enter a reason.'); return; }
+        cancelEventState.reason = reason;
+
+        // Show loading
+        document.getElementById('cancel-step-1').style.display = 'none';
+        document.getElementById('cancel-loading').style.display = 'block';
+        document.getElementById('cancel-loading').textContent = 'Cancelling event...';
+
+        try {
+            // Cancel the event (silently removes comps/RSVP players)
+            const resp = await fetch(`/api/events/${cancelEventState.eventId}/cancel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: cancelEventState.status, reason: cancelEventState.reason }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) { alert(data.error || 'Failed to cancel event.'); showCancelStep(1); return; }
+
+            // Fetch paid players
+            const pResp = await fetch(`/api/events/${cancelEventState.eventId}/cancellation-players`);
+            cancelEventState.paidPlayers = pResp.ok ? await pResp.json() : [];
+
+            if (!cancelEventState.paidPlayers.length) {
+                // No paid players — go straight to done
+                showCancelComplete(0, 0, 0);
+                return;
+            }
+
+            // Show step 2 — choose bulk vs one-by-one
+            const label = cancelEventState.status === 'cancelled' ? 'Cancelled' : 'Postponed';
+            document.getElementById('cancel-step2-summary').innerHTML =
+                `<strong>${escapeHtml(cancelEventState.eventName)}</strong> marked as <strong>${label}</strong>. ` +
+                `<strong>${cancelEventState.paidPlayers.length}</strong> paid player(s) need attention. ` +
+                (data.silent_removed > 0 ? `${data.silent_removed} comp/RSVP player(s) silently removed.` : '');
+            showCancelStep(2);
+        } catch (err) {
+            alert('Error: ' + err.message);
+            showCancelStep(1);
+        }
+    });
+
+    document.getElementById('cancel-step2-back').addEventListener('click', () => {
+        // Note: event is already cancelled at this point; back just goes back for email or admin to handle separately
+        closeCancelModal();
+    });
+
+    async function doBulkAction(action) {
+        document.getElementById('cancel-step-2').style.display = 'none';
+        document.getElementById('cancel-loading').style.display = 'block';
+        document.getElementById('cancel-loading').textContent = `Applying ${action === 'credit' ? 'credits' : 'refunds'}...`;
+
+        try {
+            const resp = await fetch(`/api/events/${cancelEventState.eventId}/cancel-bulk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, note: `Event ${cancelEventState.status} — ${cancelEventState.reason}` }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) { alert(data.error || 'Failed.'); showCancelStep(2); return; }
+            const ok = (data.results?.ok || []).length;
+            const failed = (data.results?.failed || []).length;
+            showCancelComplete(ok, failed, 0);
+        } catch (err) {
+            alert('Error: ' + err.message);
+            showCancelStep(2);
+        }
+    }
+
+    document.getElementById('cancel-bulk-credit').addEventListener('click', () => doBulkAction('credit'));
+    document.getElementById('cancel-bulk-refund').addEventListener('click', () => doBulkAction('refund'));
+
+    document.getElementById('cancel-one-by-one').addEventListener('click', () => {
+        // Build staging list
+        const list = document.getElementById('cancel-staging-list');
+        cancelEventState.stagedActions = {};
+        cancelEventState.paidPlayers.forEach(p => { cancelEventState.stagedActions[p.id] = 'credit'; });
+
+        list.innerHTML = cancelEventState.paidPlayers.map(p => {
+            const method = p.auto_refund_method ? ` (${p.auto_refund_method})` : '';
+            const price = escapeHtml(p.item_price || '');
+            return `<div data-staging-id="${p.id}" style="display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0.5rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; font-size:0.82rem;">
+                <span style="flex:1; font-weight:600;">${escapeHtml(displayName(p.customer || 'Unknown'))}</span>
+                <span style="color:#6b7280; font-size:0.75rem;">${price}</span>
+                <button type="button" class="staging-btn staging-credit active" data-id="${p.id}" data-action="credit" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #16a34a; background:#f0fdf4; color:#15803d; font-size:0.72rem; font-weight:600; cursor:pointer;">Credit</button>
+                <button type="button" class="staging-btn staging-refund" data-id="${p.id}" data-action="refund" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #2563eb; background:#fff; color:#1d4ed8; font-size:0.72rem; font-weight:600; cursor:pointer;">Refund${method}</button>
+                <button type="button" class="staging-btn staging-skip" data-id="${p.id}" data-action="skip" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #9ca3af; background:#fff; color:#6b7280; font-size:0.72rem; font-weight:600; cursor:pointer;">Skip</button>
+            </div>`;
+        }).join('');
+
+        // Attach toggle handlers
+        list.querySelectorAll('.staging-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = parseInt(btn.dataset.id);
+                const action = btn.dataset.action;
+                cancelEventState.stagedActions[id] = action;
+                // Update styles on all three buttons for this player
+                list.querySelectorAll(`.staging-btn[data-id="${id}"]`).forEach(b => {
+                    const isActive = b.dataset.action === action;
+                    if (b.classList.contains('staging-credit')) {
+                        b.style.background = isActive ? '#f0fdf4' : '#fff';
+                        b.style.borderColor = isActive ? '#16a34a' : '#d1d5db';
+                        b.style.color = isActive ? '#15803d' : '#9ca3af';
+                    } else if (b.classList.contains('staging-refund')) {
+                        b.style.background = isActive ? '#eff6ff' : '#fff';
+                        b.style.borderColor = isActive ? '#2563eb' : '#d1d5db';
+                        b.style.color = isActive ? '#1d4ed8' : '#9ca3af';
+                    } else {
+                        b.style.background = isActive ? '#f3f4f6' : '#fff';
+                        b.style.borderColor = isActive ? '#6b7280' : '#d1d5db';
+                        b.style.color = isActive ? '#374151' : '#9ca3af';
+                    }
+                });
+            });
+        });
+
+        showCancelStep(3);
+    });
+
+    document.getElementById('cancel-step3-back').addEventListener('click', () => showCancelStep(2));
+
+    document.getElementById('cancel-step3-apply').addEventListener('click', async () => {
+        const actions = cancelEventState.paidPlayers.map(p => ({
+            item_id: p.id,
+            action: cancelEventState.stagedActions[p.id] || 'skip',
+            method: p.auto_refund_method || '',
+            note: `Event ${cancelEventState.status} — ${cancelEventState.reason}`,
+        }));
+
+        document.getElementById('cancel-step-3').style.display = 'none';
+        document.getElementById('cancel-loading').style.display = 'block';
+        document.getElementById('cancel-loading').textContent = 'Applying actions...';
+
+        try {
+            const resp = await fetch(`/api/events/${cancelEventState.eventId}/cancel-apply`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actions }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) { alert(data.error || 'Failed.'); showCancelStep(3); return; }
+            const ok = (data.results?.ok || []).length;
+            const failed = (data.results?.failed || []).length;
+            const skipped = (data.results?.skipped || []).length;
+            showCancelComplete(ok, failed, skipped);
+        } catch (err) {
+            alert('Error: ' + err.message);
+            showCancelStep(3);
+        }
+    });
+
+    function showCancelComplete(ok, failed, skipped) {
+        const label = cancelEventState.status === 'cancelled' ? 'Cancelled' : 'Postponed';
+        document.getElementById('cancel-step4-summary').textContent = `Event ${label} Successfully`;
+        let detail = '';
+        if (ok > 0) detail += `${ok} player(s) actioned. `;
+        if (skipped > 0) detail += `${skipped} skipped. `;
+        if (failed > 0) detail += `${failed} failed — review individually. `;
+        if (!ok && !skipped && !failed) detail = 'No paid players to action.';
+        document.getElementById('cancel-step4-detail').textContent = detail.trim();
+        document.getElementById('cancel-loading').style.display = 'none';
+        showCancelStep(4);
+        // Refresh events data
+        fetchEvents();
+    }
+
+    document.getElementById('cancel-send-email').addEventListener('click', () => {
+        closeCancelModal();
+        // Open the compose modal and pre-select the cancellation template
+        if (cancelEventState.eventName) {
+            openComposeModal(cancelEventState.eventName);
+            // Pre-select Event Cancellation template if it exists
+            setTimeout(() => {
+                const tplSelect = document.getElementById('compose-template');
+                if (tplSelect) {
+                    const opt = Array.from(tplSelect.options).find(o => o.textContent.toLowerCase().includes('cancellation'));
+                    if (opt) {
+                        tplSelect.value = opt.value;
+                        tplSelect.dispatchEvent(new Event('change'));
+                    }
+                }
+            }, 50);
+        }
+    });
+
+    document.getElementById('cancel-skip-email').addEventListener('click', closeCancelModal);
+
+    // Restore event handler
+    document.addEventListener('click', async e => {
+        const restoreBtn = e.target.closest('.btn-restore-event');
+        if (restoreBtn && currentRole === 'admin') {
+            e.stopPropagation();
+            if (!confirm('Restore this event to active?')) return;
+            const eventId = parseInt(restoreBtn.dataset.eventId);
+            try {
+                const resp = await fetch(`/api/events/${eventId}/restore`, { method: 'POST' });
+                const data = await resp.json();
+                if (!resp.ok) { alert(data.error || 'Cannot restore.'); return; }
+                await fetchEvents();
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+    });
+
+    // ─── End Cancel Event ──────────────────────────────────────────────────────
+
+    // =========================================================================
+    // Apply Credit — RSVP player credit application
+    // =========================================================================
+
+    async function fetchRsvpCreditMap(eventName) {
+        try {
+            const resp = await fetch(`/api/events/${encodeURIComponent(eventName)}/rsvp-credits`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            rsvpCreditMap[eventName] = data;  // { customerName: creditInfo }
+        } catch (err) {
+            console.warn('fetchRsvpCreditMap error:', err);
+        }
+    }
+
+    let applyCreditState = {};
+
+    async function openApplyCreditModal(itemId, customer, eventName) {
+        const overlay = document.getElementById('apply-credit-overlay');
+        const body = document.getElementById('apply-credit-body');
+        const actions = document.getElementById('apply-credit-actions');
+        body.innerHTML = '<div style="padding:1rem;text-align:center;color:#6b7280;">Loading credit info…</div>';
+        actions.style.display = 'none';
+        overlay.style.display = 'flex';
+
+        try {
+            const resp = await fetch(`/api/rsvps/${itemId}/credit-info`);
+            if (!resp.ok) { body.innerHTML = '<div style="color:#dc2626;padding:1rem;">Failed to load credit info.</div>'; return; }
+            const info = await resp.json();
+
+            applyCreditState = { itemId, customer, eventName, info };
+
+            const fmt = v => '$' + parseFloat(v || 0).toFixed(2);
+            const scenarioColor = info.amount_owed > 0 ? '#d97706' : info.amount_owed < 0 ? '#16a34a' : '#6b7280';
+            const scenarioLabel = info.amount_owed > 0
+                ? `Player owes an additional <strong style="color:#d97706;">${fmt(info.amount_owed)}</strong>`
+                : info.amount_owed < 0
+                ? `Credit covers cost — <strong style="color:#16a34a;">${fmt(Math.abs(info.amount_owed))}</strong> excess`
+                : `Credit covers cost exactly`;
+
+            let creditsHtml = (info.credits || []).map(c => `
+                <tr>
+                    <td style="padding:0.2rem 0.5rem;">${escapeHtml(c.item_name || '')}</td>
+                    <td style="padding:0.2rem 0.5rem;font-weight:600;">${fmt(c.item_price)}</td>
+                    <td style="padding:0.2rem 0.5rem;color:#6b7280;font-size:0.78rem;">${escapeHtml(c.order_date || '')}</td>
+                </tr>`).join('');
+
+            let excessHtml = '';
+            if (info.amount_owed < 0) {
+                const excessAmt = Math.abs(info.amount_owed).toFixed(2);
+                excessHtml = `
+                <div style="margin-top:0.75rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:0.6rem 0.75rem;">
+                    <div style="font-weight:600;font-size:0.82rem;color:#065f46;margin-bottom:0.4rem;">Excess Credit: ${fmt(Math.abs(info.amount_owed))}</div>
+                    <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;">
+                        <input type="radio" name="excess-action" value="keep" checked style="margin-right:0.3rem;">
+                        Keep as credit in player's account
+                    </label>
+                    <label style="display:block;font-size:0.82rem;">
+                        <input type="radio" name="excess-action" value="venmo" style="margin-right:0.3rem;">
+                        Venmo back to player ($${excessAmt} — handle manually)
+                    </label>
+                </div>`;
+            }
+
+            let priceRow = '';
+            if (info.event_price !== null && info.event_price !== undefined) {
+                priceRow = `<tr style="border-top:1px solid #e5e7eb;">
+                    <td style="padding:0.3rem 0.5rem;font-weight:600;">New Event Price</td>
+                    <td style="padding:0.3rem 0.5rem;font-weight:700;">${fmt(info.event_price)}</td>
+                    <td style="padding:0.3rem 0.5rem;"></td>
+                </tr>`;
+            }
+
+            body.innerHTML = `
+            <div style="padding:1rem;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+                    <h3 style="margin:0;font-size:1rem;">Apply Credit</h3>
+                    <button id="apply-credit-close" class="modal-close">&times;</button>
+                </div>
+                <div style="font-size:0.88rem;color:#374151;margin-bottom:0.5rem;">
+                    Player: <strong>${escapeHtml(displayName(customer))}</strong> &bull; Event: <strong>${escapeHtml(eventName)}</strong>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:0.5rem;">
+                    <thead><tr style="background:#f3f4f6;">
+                        <th style="text-align:left;padding:0.3rem 0.5rem;">Source Credit</th>
+                        <th style="text-align:left;padding:0.3rem 0.5rem;">Amount</th>
+                        <th style="text-align:left;padding:0.3rem 0.5rem;">Date</th>
+                    </tr></thead>
+                    <tbody>${creditsHtml}</tbody>
+                    <tfoot>
+                        <tr style="border-top:2px solid #e5e7eb;">
+                            <td style="padding:0.3rem 0.5rem;font-weight:600;">Total Credit</td>
+                            <td style="padding:0.3rem 0.5rem;font-weight:700;color:#16a34a;">${fmt(info.total_credit)}</td>
+                            <td></td>
+                        </tr>
+                        ${priceRow}
+                    </tfoot>
+                </table>
+                <div style="margin-bottom:0.75rem;font-size:0.85rem;padding:0.5rem 0.75rem;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+                    ${scenarioLabel}
+                </div>
+                ${info.previous_selections ? `
+                <div style="margin-bottom:0.75rem;font-size:0.8rem;color:#6b7280;">
+                    Previous selections: ${escapeHtml(info.previous_selections.holes || '—')} holes &bull;
+                    ${escapeHtml(info.previous_selections.side_games || '—')} &bull;
+                    ${escapeHtml(info.previous_selections.tee_choice || '—')} tee &bull;
+                    Status: ${escapeHtml(info.previous_selections.user_status || '—')}
+                </div>` : ''}
+                ${excessHtml}
+                ${info.amount_owed > 0 ? `
+                <div style="margin-top:0.5rem;font-size:0.82rem;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:0.5rem 0.75rem;">
+                    <strong>Note:</strong> Collect remaining ${fmt(info.amount_owed)} from player before or after applying.
+                </div>` : ''}
+            </div>`;
+
+            document.getElementById('apply-credit-close').addEventListener('click', closeApplyCreditModal);
+            actions.style.display = 'flex';
+        } catch (err) {
+            body.innerHTML = `<div style="color:#dc2626;padding:1rem;">Error: ${escapeHtml(err.message)}</div>`;
+        }
+    }
+
+    function closeApplyCreditModal() {
+        document.getElementById('apply-credit-overlay').style.display = 'none';
+        applyCreditState = {};
+    }
+
+    document.getElementById('apply-credit-overlay').addEventListener('click', e => {
+        if (e.target === document.getElementById('apply-credit-overlay')) closeApplyCreditModal();
+    });
+    document.getElementById('apply-credit-cancel-btn').addEventListener('click', closeApplyCreditModal);
+
+    document.getElementById('apply-credit-submit').addEventListener('click', async () => {
+        const { itemId, customer, eventName, info } = applyCreditState;
+        if (!itemId || !info) return;
+
+        const excessRadio = document.querySelector('input[name="excess-action"]:checked');
+        const excessAction = excessRadio ? excessRadio.value : 'keep';
+        const prev = info.previous_selections || {};
+
+        const submitBtn = document.getElementById('apply-credit-submit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Applying…';
+
+        try {
+            const resp = await fetch(`/api/rsvps/${itemId}/apply-credit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    credited_item_ids: (info.credits || []).map(c => c.id),
+                    excess_action: excessAction,
+                    holes: prev.holes || '',
+                    side_games: prev.side_games || '',
+                    tee_choice: prev.tee_choice || '',
+                    user_status: prev.user_status || '',
+                })
+            });
+            const data = await resp.json();
+            if (!resp.ok) { alert(data.error || 'Failed to apply credit.'); return; }
+
+            closeApplyCreditModal();
+
+            // Refresh credit map and re-render detail for the event
+            delete rsvpCreditMap[eventName];
+            await fetchRsvpCreditMap(eventName);
+            await fetchItems();
+            const ev = allEvents.find(e => e.item_name === eventName);
+            if (ev) {
+                const container = document.getElementById(`detail-content-${ev.id}`);
+                if (container) {
+                    container.innerHTML = renderDetailContent(ev);
+                    attachDetailHandlers(container, ev);
+                }
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Apply Credit & Register';
+        }
+    });
+
+    // Delegate click on Apply Credit badges and buttons
+    document.addEventListener('click', async e => {
+        const badge = e.target.closest('.btn-apply-credit-badge, .btn-apply-credit');
+        if (badge) {
+            e.stopPropagation();
+            const itemId = badge.dataset.itemId;
+            const customer = badge.dataset.customer;
+            const eventName = badge.dataset.eventName || (applyCreditState.eventName || '');
+            await openApplyCreditModal(itemId, customer, eventName);
+        }
+    });
+
+    // ─── End Apply Credit ──────────────────────────────────────────────────────
+
     </script>
 </body>
 </html>
