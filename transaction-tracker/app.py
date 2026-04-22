@@ -5256,6 +5256,55 @@ def api_acct_account_balances():
 
 # ── Transactions ──────────────────────────────────────────────────────────
 
+@app.route("/api/accounting/vendors", methods=["POST"])
+@require_role("admin")
+def api_acct_create_vendor():
+    """Create a new vendor (customer with vendor role) for transaction linking."""
+    from email_parser.database import _connect, create_customer
+    d = request.json or {}
+    first_name = (d.get("first_name") or "").strip()
+    last_name = (d.get("last_name") or "").strip()
+    if not first_name and not last_name:
+        return jsonify({"error": "first_name or last_name is required"}), 400
+    name = " ".join(filter(None, [first_name, last_name]))
+    result = create_customer(
+        name, phone=d.get("phone", ""),
+        first_name=first_name, last_name=last_name,
+    )
+    if result is None:
+        # Already exists — look them up and just add the vendor role
+        with _connect() as conn:
+            row = conn.execute(
+                "SELECT customer_id FROM customers WHERE first_name=? AND last_name=? COLLATE NOCASE",
+                (first_name, last_name),
+            ).fetchone()
+            if not row:
+                return jsonify({"error": "Customer already exists but could not be found"}), 409
+            cid = row["customer_id"]
+            conn.execute(
+                "INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?, 'vendor')",
+                (cid,),
+            )
+            conn.commit()
+    else:
+        cid = result["customer_id"]
+        with _connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?, 'vendor')",
+                (cid,),
+            )
+            conn.commit()
+    # Return the full customer record
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT c.customer_id, c.first_name, c.last_name,
+                      c.current_player_status, c.chapter, 1 as is_vendor
+               FROM customers c WHERE c.customer_id = ?""",
+            (cid,),
+        ).fetchone()
+    return jsonify(dict(row)), 201
+
+
 @app.route("/api/accounting/customers")
 @require_role("admin")
 def api_acct_customers():
