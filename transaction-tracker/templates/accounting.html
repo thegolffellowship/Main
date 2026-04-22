@@ -941,6 +941,22 @@
                     </div>
                 </div>
                 <hr style="margin: 0.75rem 0; border-color: var(--border);">
+                <div class="acct-form-group" style="margin-bottom:0.75rem;">
+                    <label style="display:flex;align-items:center;justify-content:space-between;">
+                        <span>Vendor / Customer</span>
+                        <button type="button" id="exp-btn-new-vendor" style="font-size:0.72rem;font-weight:600;color:#2563eb;background:none;border:none;cursor:pointer;padding:0;">＋ New Vendor</button>
+                    </label>
+                    <input type="hidden" id="exp-customer-id">
+                    <div id="exp-customer-selected" style="display:none;margin-bottom:0.5rem;padding:6px 10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;align-items:center;justify-content:space-between;">
+                        <span id="exp-customer-selected-name" style="font-weight:600;font-size:0.875rem;"></span>
+                        <button type="button" id="exp-customer-clear" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:1rem;line-height:1;padding:0 0 0 8px;">&times;</button>
+                    </div>
+                    <div style="position:relative;">
+                        <input type="text" id="exp-customer-search" placeholder="Search vendors and customers…" autocomplete="off"
+                               style="width:100%;box-sizing:border-box;">
+                        <div id="exp-customer-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:180px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,0.1);margin-top:2px;"></div>
+                    </div>
+                </div>
                 <div class="acct-form-row">
                     <div class="acct-form-group">
                         <label>Entity</label>

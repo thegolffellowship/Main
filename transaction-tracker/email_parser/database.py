@@ -13740,6 +13740,102 @@ def get_expense_transactions(date_from: str | None = None, date_to: str | None =
     return [dict(r) for r in rows]
 
 
+def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
+    """Create or update the acct_transactions row linked to an expense_transaction.
+
+    Called whenever an expense is saved in approved/corrected state.  Returns
+    the acct_transaction id (new or existing), or None if amount is missing.
+    """
+    amount = float(exp.get("amount") or 0)
+    if not amount:
+        return None
+    merchant = exp.get("merchant") or "(unknown)"
+    txn_date = exp.get("transaction_date") or datetime.utcnow().strftime("%Y-%m-%d")
+    txn_type = exp.get("transaction_type") or "expense"
+    source = exp.get("source_type") or "expense_alert"
+    expense_id = exp["id"]
+    source_ref = f"exp-promoted-{expense_id}"
+    notes = exp.get("notes")
+    customer_id = exp.get("customer_id")
+    account_id = exp.get("account_id")
+    category_name = exp.get("category")
+    entity_name = exp.get("entity")
+    event_name = exp.get("event_name")
+
+    # Resolve FKs
+    category_id = None
+    if category_name:
+        row = conn.execute(
+            "SELECT id FROM acct_categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
+            (category_name,),
+        ).fetchone()
+        category_id = row["id"] if row else None
+
+    entity_id = None
+    if entity_name:
+        row = conn.execute(
+            "SELECT id FROM acct_entities WHERE LOWER(short_name) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1",
+            (entity_name, entity_name),
+        ).fetchone()
+        entity_id = row["id"] if row else None
+
+    event_id = None
+    if event_name:
+        row = conn.execute(
+            "SELECT id FROM events WHERE LOWER(item_name) = LOWER(?) LIMIT 1",
+            (event_name,),
+        ).fetchone()
+        event_id = row["id"] if row else None
+
+    if not account_id:
+        row = conn.execute(
+            "SELECT id FROM acct_accounts WHERE account_type = 'checking' AND is_active = 1 LIMIT 1"
+        ).fetchone()
+        account_id = row["id"] if row else None
+
+    existing_id = exp.get("acct_transaction_id")
+
+    if existing_id:
+        conn.execute(
+            """UPDATE acct_transactions
+               SET date=?, description=?, total_amount=?, type=?, account_id=?,
+                   notes=?, customer_id=?, updated_at=datetime('now')
+               WHERE id=?""",
+            (txn_date, merchant, amount, txn_type, account_id, notes, customer_id, existing_id),
+        )
+        split = conn.execute(
+            "SELECT id FROM acct_splits WHERE transaction_id = ? LIMIT 1", (existing_id,)
+        ).fetchone()
+        if split:
+            conn.execute(
+                "UPDATE acct_splits SET entity_id=?, category_id=?, amount=?, event_id=? WHERE id=?",
+                (entity_id, category_id, amount, event_id, split["id"]),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, event_id) VALUES (?,?,?,?,?)",
+                (existing_id, entity_id, category_id, amount, event_id),
+            )
+        return existing_id
+    else:
+        cur = conn.execute(
+            """INSERT INTO acct_transactions
+               (date, description, total_amount, type, account_id, source, source_ref, notes, customer_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (txn_date, merchant, amount, txn_type, account_id, source, source_ref, notes, customer_id),
+        )
+        new_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, event_id) VALUES (?,?,?,?,?)",
+            (new_id, entity_id, category_id, amount, event_id),
+        )
+        conn.execute(
+            "UPDATE expense_transactions SET acct_transaction_id = ? WHERE id = ?",
+            (new_id, expense_id),
+        )
+        return new_id
+
+
 def update_expense_transaction(txn_id: int, fields: dict,
                                db_path: str | Path | None = None) -> dict:
     """Update expense transaction and record corrections for learning."""
@@ -13825,6 +13921,20 @@ def update_expense_transaction(txn_id: int, fields: dict,
                         )
 
         conn.commit()
+
+        # Sync approved expenses into the main ledger for reconciliation
+        fresh = conn.execute(
+            "SELECT * FROM expense_transactions WHERE id = ?", (txn_id,)
+        ).fetchone()
+        if fresh:
+            fresh_dict = dict(fresh)
+            if fresh_dict.get("review_status") in ("approved", "corrected"):
+                try:
+                    _sync_expense_ledger_entry(conn, fresh_dict)
+                    conn.commit()
+                except Exception:
+                    logger.warning("_sync_expense_ledger_entry failed for expense %s", txn_id, exc_info=True)
+
         row = conn.execute("SELECT * FROM expense_transactions WHERE id = ?", (txn_id,)).fetchone()
     return dict(row) if row else {}
 
