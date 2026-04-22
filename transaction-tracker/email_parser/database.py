@@ -9869,6 +9869,7 @@ def _seed_unified_financial_categories(conn: sqlite3.Connection) -> None:
         ("Credit Transfer In", "income", tgf_id),
         ("External Payment", "income", tgf_id),
         ("Player Refunds", "expense", tgf_id),
+        ("Transaction Fee Income", "income", tgf_id),
         # General expense categories (entity_id=None → available for all entities)
         ("Internet & Utilities", "expense", None),
     ]
@@ -10501,6 +10502,11 @@ def get_acct_transaction(txn_id: int, db_path: str | Path | None = None) -> dict
             (txn_id,),
         ).fetchall()
         txn["tags"] = [dict(tg) for tg in tags]
+        order_split_rows = conn.execute(
+            "SELECT split_type, amount FROM godaddy_order_splits WHERE transaction_id = ?",
+            (txn_id,),
+        ).fetchall()
+        txn["order_splits"] = {r["split_type"]: r["amount"] for r in order_split_rows}
     return txn
 
 

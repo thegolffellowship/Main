@@ -884,17 +884,32 @@ function _buildSmartSplit(txn) {
     const entityId = (txn.type === 'income' && tgfEnt) ? tgfEnt.id
         : (ACCT.activeEntity || ACCT.entities[0]?.id);
 
-    // Category: income → "Event Revenue"
+    // Event: try event_name field; fall back to parsing " — Event Name" from description
+    // Description format: "GoDaddy order RXXXXXX: Customer Name — Event Name"
+    let evName = txn.event_name;
+    if (!evName && txn.description) {
+        const m = txn.description.match(/—\s*(.+)$/);
+        if (m && !m[1].trim().endsWith('events')) evName = m[1].trim();
+    }
+    const evId = evName ? (ACCT.events.find(e => e.item_name === evName)?.id || '') : '';
+
+    // GoDaddy income with order_splits → two splits: registration + transaction fee
+    if (txn.type === 'income' && txn.order_splits && txn.order_splits.registration != null) {
+        const regCatId = ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('event revenue'))?.id || '';
+        const txFeeCatId = ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('transaction fee'))?.id || '';
+        const regAmt = +(txn.order_splits.registration || 0).toFixed(2);
+        const txFeeAmt = +(txn.order_splits.transaction_fee || 0).toFixed(2);
+        return [
+            { entity_id: entityId, category_id: regCatId, event_id: evId, amount: regAmt, memo: 'Registration' },
+            { entity_id: entityId, category_id: txFeeCatId, event_id: evId, amount: txFeeAmt, memo: 'Transaction fee' },
+        ];
+    }
+
+    // Default: single split for full amount
     const catId = txn.type === 'income'
         ? (ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('event revenue'))?.id || '')
         : '';
-
-    // Event: match event_name field directly against ACCT.events
-    const evId = txn.event_name
-        ? (ACCT.events.find(e => e.item_name === txn.event_name)?.id || '')
-        : '';
-
-    return { entity_id: entityId, category_id: catId, event_id: evId, amount: txn.total_amount, memo: '' };
+    return [{ entity_id: entityId, category_id: catId, event_id: evId, amount: txn.total_amount, memo: '' }];
 }
 
 function populateDropdowns() {
@@ -979,7 +994,7 @@ async function openEditTransaction(id) {
 
         const splitsData = txn.splits.length > 0
             ? txn.splits.map(s => ({ entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || '' }))
-            : [_buildSmartSplit(txn)];
+            : _buildSmartSplit(txn);
         renderSplitRows(splitsData);
         renderTagChips(txn.tags.map(t => t.id));
 
