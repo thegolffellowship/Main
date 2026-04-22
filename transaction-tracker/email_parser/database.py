@@ -4859,7 +4859,7 @@ def update_customer_info(customer_name: str, fields: dict,
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
                "address", "address2", "city", "state", "zip",
-               "venmo_username"}
+               "venmo_username", "current_player_status"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return 0
@@ -4869,6 +4869,13 @@ def update_customer_info(customer_name: str, fields: dict,
     if venmo_username is not None:
         # Normalize: strip leading @ if provided
         venmo_username = venmo_username.lstrip("@").strip()
+
+    # current_player_status is stored on the customers table, not items — extract it
+    current_player_status = safe.pop("current_player_status", None)
+    if current_player_status is not None:
+        allowed_ps = {"active_member", "expired_member", "active_guest", "inactive", "first_timer", ""}
+        if current_player_status and current_player_status not in allowed_ps:
+            raise ValueError(f"Invalid current_player_status: {current_player_status}")
 
     # Validate email and phone if provided
     if "customer_email" in safe and safe["customer_email"]:
@@ -4926,6 +4933,16 @@ def update_customer_info(customer_name: str, fields: dict,
                        LIMIT 1
                    )""",
                 (venmo_username or None, customer_name),
+            )
+            rowcount = max(rowcount, 1)
+
+        # Update current_player_status on the customers table (customer-level field)
+        if current_player_status is not None:
+            val = current_player_status or None
+            conn.execute(
+                """UPDATE customers SET current_player_status = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)""",
+                (val, customer_name),
             )
             rowcount = max(rowcount, 1)
 
@@ -7519,7 +7536,8 @@ def reverse_credit_application(item_id: int, db_path: str | Path | None = None) 
                        side_games = '',
                        tee_choice = '',
                        user_status = '',
-                       transferred_from_id = NULL
+                       transferred_from_id = NULL,
+                       credit_note = NULL
                    WHERE id = ?""",
                 (item_id,),
             )
@@ -7603,6 +7621,8 @@ def apply_credit_to_rsvp(
 
         # Update the RSVP item → active registration
         price_str = f"${applied:.2f} (credit transfer)"
+        amount_owed = round((new_price or 0) - applied, 2)
+        balance_note = f"balance_due:{amount_owed:.2f}" if amount_owed > 0 else None
         conn.execute(
             """UPDATE items
                SET transaction_status = 'active',
@@ -7612,10 +7632,11 @@ def apply_credit_to_rsvp(
                    side_games = ?,
                    tee_choice = ?,
                    user_status = ?,
-                   transferred_from_id = ?
+                   transferred_from_id = ?,
+                   credit_note = ?
                WHERE id = ?""",
             (price_str, u_holes, u_games, u_tee, u_status,
-             credited_items[0]["id"], rsvp_item_id),
+             credited_items[0]["id"], balance_note, rsvp_item_id),
         )
 
         # Mark all credited items as transferred

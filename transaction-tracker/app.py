@@ -2360,7 +2360,7 @@ def api_update_customer():
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
-               "archived", "venmo_username"}
+               "archived", "venmo_username", "current_player_status"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return jsonify({"error": "No valid fields to update"}), 400
@@ -2378,6 +2378,33 @@ def api_customer_venmo_handles():
     """Return all customers with Venmo handles set."""
     from email_parser.database import get_customer_venmo_handles
     return jsonify(get_customer_venmo_handles())
+
+
+@app.route("/api/customers/sync-roles", methods=["POST"])
+@require_role("admin")
+def api_sync_customer_roles():
+    """Replace all roles for a customer."""
+    from email_parser.database import _connect
+    data = request.get_json(force=True)
+    customer_name = (data.get("customer_name") or "").strip()
+    roles = data.get("roles", [])
+    if not customer_name:
+        return jsonify({"error": "customer_name required"}), 400
+    valid_roles = {"member", "manager", "admin", "owner", "course_contact", "sponsor", "vendor"}
+    roles = [r for r in roles if r in valid_roles]
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT customer_id FROM customers WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)",
+            (customer_name,)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Customer not found"}), 404
+        cid = row["customer_id"]
+        conn.execute("DELETE FROM customer_roles WHERE customer_id = ?", (cid,))
+        for r in roles:
+            conn.execute("INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?,?)", (cid, r))
+        conn.commit()
+    return jsonify({"status": "ok", "roles": roles})
 
 
 @app.route("/api/customer-roles")
@@ -2402,9 +2429,9 @@ def api_customer_roles():
                 result[cid] = {"roles": [], "first_timer_ever": True}
             result[cid]["roles"].append(r["role_type"])
 
-        # Add first_timer_ever for every customer (even those without roles)
+        # Add first_timer_ever and current_player_status for every customer (even those without roles)
         customer_rows = conn.execute(
-            "SELECT customer_id, first_timer_ever FROM customers"
+            "SELECT customer_id, first_timer_ever, current_player_status FROM customers"
         ).fetchall()
         for c in customer_rows:
             cid = str(c["customer_id"])
@@ -2412,6 +2439,7 @@ def api_customer_roles():
                 result[cid] = {"roles": [], "first_timer_ever": bool(c["first_timer_ever"])}
             else:
                 result[cid]["first_timer_ever"] = bool(c["first_timer_ever"])
+            result[cid]["current_player_status"] = c["current_player_status"]
 
     return jsonify(result)
 
@@ -3192,6 +3220,115 @@ def api_reverse_credit_application(item_id):
     if not result.get("ok"):
         return jsonify({"error": result.get("error", "Failed")}), 400
     return jsonify(result)
+
+
+@app.route("/api/items/<int:credit_item_id>/apply-credit-info")
+@require_role("manager")
+def api_credit_item_apply_info(credit_item_id):
+    """Return price info for applying a credit item to a selected event."""
+    from email_parser.database import _connect, _calc_event_price_for_player, _parse_dollar
+    event_name = request.args.get("event_name", "").strip()
+    with _connect() as conn:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (credit_item_id,)).fetchone()
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        item = dict(item)
+        if item.get("transaction_status") != "credited":
+            return jsonify({"error": "Item is not a credit"}), 400
+        credit_amount = _parse_dollar(item.get("item_price")) + _parse_dollar(item.get("transaction_fees") or "0")
+        event_price = None
+        amount_owed = None
+        if event_name:
+            ev_row = conn.execute(
+                "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
+            ).fetchone()
+            event = dict(ev_row) if ev_row else {}
+            event_price = _calc_event_price_for_player(
+                event,
+                item.get("user_status") or "MEMBER",
+                item.get("holes") or "9",
+                item.get("side_games") or "NONE",
+            )
+            if event_price is not None:
+                amount_owed = round(event_price - credit_amount, 2)
+    return jsonify({
+        "credit_item_id": credit_item_id,
+        "customer": item.get("customer"),
+        "source_event": item.get("item_name"),
+        "credit_amount": credit_amount,
+        "event_price": event_price,
+        "amount_owed": amount_owed,
+        "previous_selections": {
+            "user_status": item.get("user_status") or "MEMBER",
+            "holes": item.get("holes") or "9",
+            "side_games": item.get("side_games") or "NONE",
+            "tee_choice": item.get("tee_choice") or "",
+        },
+    })
+
+
+@app.route("/api/items/<int:credit_item_id>/apply-to-event", methods=["POST"])
+@require_role("admin")
+def api_apply_credit_item_to_event(credit_item_id):
+    """Apply an existing credit item to register a player in a different event."""
+    from email_parser.database import _connect
+    data = request.get_json(silent=True) or {}
+    event_name = (data.get("event_name") or "").strip()
+    if not event_name:
+        return jsonify({"error": "event_name required"}), 400
+    excess_action = data.get("excess_action", "keep")
+    holes = data.get("holes", "")
+    side_games = data.get("side_games", "")
+    tee_choice = data.get("tee_choice", "")
+    user_status = data.get("user_status", "")
+
+    with _connect() as conn:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (credit_item_id,)).fetchone()
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        item = dict(item)
+        if item.get("transaction_status") != "credited":
+            return jsonify({"error": "Item is not a credit"}), 400
+
+    player_name = item.get("customer") or ""
+    player_email = item.get("customer_email") or ""
+    uid = f"manual-credit-{credit_item_id}"
+
+    with _connect() as conn:
+        existing = conn.execute("SELECT id FROM items WHERE email_uid = ?", (uid,)).fetchone()
+        if existing:
+            new_item_id = existing["id"]
+        else:
+            ev_row = conn.execute(
+                "SELECT chapter FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
+            ).fetchone()
+            chapter = (ev_row["chapter"] if ev_row else "") or ""
+            conn.execute(
+                """INSERT INTO items (email_uid, merchant, customer, customer_email, item_name,
+                   item_price, transaction_status, order_date, chapter)
+                   VALUES (?, 'Golf Genius RSVP', ?, ?, ?, '', 'rsvp_only', date('now'), ?)""",
+                (uid, player_name, player_email, event_name, chapter),
+            )
+            conn.commit()
+            new_item_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+
+    result = apply_credit_to_rsvp(
+        rsvp_item_id=new_item_id,
+        credited_item_ids=[credit_item_id],
+        excess_action=excess_action,
+        holes=holes or item.get("holes") or "",
+        side_games=side_games or item.get("side_games") or "",
+        tee_choice=tee_choice or item.get("tee_choice") or "",
+        user_status=user_status or item.get("user_status") or "",
+    )
+    if not result.get("ok"):
+        with _connect() as conn:
+            conn.execute(
+                "DELETE FROM items WHERE email_uid = ? AND transaction_status = 'rsvp_only'", (uid,)
+            )
+            conn.commit()
+        return jsonify({"error": result.get("error", "Failed")}), 400
+    return jsonify({**result, "item_id": new_item_id})
 
 
 @app.route("/api/events", methods=["POST"])

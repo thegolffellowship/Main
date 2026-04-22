@@ -3995,11 +3995,21 @@
                             tag += ` <span class="status-tag btn-assign-guest" style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Click to enter the guest player's name">Guest?</span>`;
                         }
                     }
+                    // Balance-due badge for active credit-transfer rows where credit didn't fully cover the price
+                    if (r.transferred_from_id && r.merchant === 'Paid Separately (Credit Transfer)') {
+                        const cnote = r.credit_note || '';
+                        if (cnote.startsWith('balance_due:')) {
+                            const owed = parseFloat(cnote.split(':')[1]) || 0;
+                            if (owed > 0) {
+                                tag += ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Additional payment required">Owes: $${owed.toFixed(2)}</span>`;
+                            }
+                        }
+                    }
                     // Credit badge for all RSVP players with outstanding credits
                     if (isRsvpOnly || isGgRsvp) {
                         const evCreditMap = rsvpCreditMap[ev.item_name] || {};
                         const creditInfo = evCreditMap[r.customer];
-                        if (creditInfo) {
+                        if (creditInfo && creditInfo.total_credit > 0) {
                             const amt = creditInfo.total_credit.toFixed(2);
                             const isSyn = String(r.id).startsWith("gg-rsvp");
                             const idAttr = isSyn
@@ -4017,14 +4027,14 @@
                     if (isSynthetic) {
                         const evCreditMapSyn = rsvpCreditMap[ev.item_name] || {};
                         const creditInfoSyn = evCreditMapSyn[r.customer];
-                        if (creditInfoSyn) {
+                        if (creditInfoSyn && creditInfoSyn.total_credit > 0) {
                             btns = `<button class="btn btn-apply-credit" data-rsvp-id="${r.rsvp_id || ''}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Apply Credit</button> `;
                         }
                         btns += `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
                         const evCreditMapAct = rsvpCreditMap[ev.item_name] || {};
                         const creditInfoAct = evCreditMapAct[r.customer] || null;
-                        if (creditInfoAct) {
+                        if (creditInfoAct && creditInfoAct.total_credit > 0) {
                             btns = `<button class="btn btn-apply-credit" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Apply Credit</button> `;
                         }
                         btns += `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;

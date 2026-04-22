@@ -727,7 +727,9 @@
             let actionBtn = '';
             if (txStatus === "active" && !item.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
-            } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "wd") {
+            } else if (txStatus === "credited") {
+                actionBtn = `<button class="btn btn-apply-cust-credit" data-cust-apply-id="${item.id}" data-customer="${escapeHtml(item.customer || '')}" data-source-event="${escapeHtml(item.item_name || '')}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Apply</button> <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+            } else if (txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
 
@@ -822,6 +824,12 @@
                         reverseCustCredit(parseInt(btn.dataset.custReverseId));
                     });
                 });
+                expandedCard.querySelectorAll(".btn-apply-cust-credit").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        openCustApplyCreditModal(parseInt(btn.dataset.custApplyId), btn.dataset.customer, btn.dataset.sourceEvent);
+                    });
+                });
 
                 // Tab switching (Transactions / Info)
                 expandedCard.querySelectorAll(".cust-tab").forEach(tab => {
@@ -885,6 +893,16 @@
                             if (!resp.ok) {
                                 const data = await resp.json().catch(() => ({}));
                                 throw new Error(data.error || `Server returned ${resp.status}`);
+                            }
+                            // Sync roles separately
+                            const roleCheckboxes = expandedCard.querySelectorAll(".cust-role-checkbox");
+                            if (roleCheckboxes.length > 0) {
+                                const roles = Array.from(roleCheckboxes).filter(cb => cb.checked).map(cb => cb.dataset.role);
+                                await fetch("/api/customers/sync-roles", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ customer_name: customerName, roles }),
+                                });
                             }
                             saveBtn.textContent = "Saved!";
                             saveBtn.style.background = "#16a34a";
@@ -1080,6 +1098,17 @@
             <div style="font-size:0.82rem; min-height:1.2em;">${rolesHtml}</div>
         </div>`;
 
+        // Member Status section (read-only)
+        const statusLabels = {
+            active_member: 'Active Member', expired_member: 'Expired Member',
+            active_guest: 'Active Guest', inactive: 'Inactive', first_timer: 'First Timer'
+        };
+        const cps = customer.current_player_status;
+        html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
+            <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Member Status</div>
+            <div style="font-size:0.82rem;">${cps ? escapeHtml(statusLabels[cps] || cps) : '<span style="color:var(--text-muted);">—</span>'}</div>
+        </div>`;
+
         // Address section (read-only)
         const formattedAddr = formatShippingAddress(customer);
         html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
@@ -1121,6 +1150,35 @@
             `</label>`
         ).join("");
         html += '</div></div>';
+
+        // Member Status dropdown (edit view)
+        html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
+            <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Member Status</div>
+            <select class="modal-input cust-edit-input" data-field="current_player_status" style="width:auto; padding:0.3rem; font-size:0.82rem;">
+                <option value="">— Not Set —</option>
+                <option value="active_member" ${(customer.current_player_status === 'active_member') ? 'selected' : ''}>Active Member</option>
+                <option value="expired_member" ${(customer.current_player_status === 'expired_member') ? 'selected' : ''}>Expired Member</option>
+                <option value="active_guest" ${(customer.current_player_status === 'active_guest') ? 'selected' : ''}>Active Guest</option>
+                <option value="inactive" ${(customer.current_player_status === 'inactive') ? 'selected' : ''}>Inactive</option>
+                <option value="first_timer" ${(customer.current_player_status === 'first_timer') ? 'selected' : ''}>First Timer</option>
+            </select>
+        </div>`;
+
+        // Roles editor (checkboxes)
+        const ALL_ROLES = ['member','manager','admin','owner','course_contact','sponsor','vendor'];
+        const custRoles = customer.roles || [];
+        html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
+            <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Roles</div>
+            <div class="cust-roles-edit" style="display:flex; flex-wrap:wrap; gap:0.35rem;">
+            ${ALL_ROLES.map(role => {
+                const checked = custRoles.includes(role);
+                return `<label style="display:inline-flex; align-items:center; gap:0.25rem; font-size:0.8rem; cursor:pointer; background:${checked ? '#dcfce7' : '#f3f4f6'}; border:1px solid ${checked ? '#86efac' : '#d1d5db'}; border-radius:99px; padding:0.15rem 0.6rem;">
+                    <input type="checkbox" class="cust-role-checkbox" data-role="${role}" ${checked ? 'checked' : ''} style="accent-color:#16a34a;">
+                    ${role.replace(/_/g,' ')}
+                </label>`;
+            }).join('')}
+            </div>
+        </div>`;
 
         // Aliases editor
         html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border);">
@@ -1269,7 +1327,9 @@
             let actionBtn = "";
             if (txStatus === "active" && !item.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
-            } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "wd") {
+            } else if (txStatus === "credited") {
+                actionBtn = `<button class="btn btn-apply-cust-credit" data-cust-apply-id="${item.id}" data-customer="${escapeHtml(item.customer || '')}" data-source-event="${escapeHtml(item.item_name || '')}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Apply</button> <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+            } else if (txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
             html += `<tr${rowClass} data-txn-id="${item.id}" style="cursor:pointer;">
@@ -1436,6 +1496,12 @@
                 reverseCustCredit(parseInt(btn.dataset.custReverseId));
             });
         });
+        container.querySelectorAll(".btn-apply-cust-credit").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openCustApplyCreditModal(parseInt(btn.dataset.custApplyId), btn.dataset.customer, btn.dataset.sourceEvent);
+            });
+        });
         // Merge customer button
         container.querySelectorAll("[data-merge-customer]").forEach(btn => {
             btn.addEventListener("click", (e) => {
@@ -1591,6 +1657,16 @@
                         const data = await resp.json().catch(() => ({}));
                         throw new Error(data.error || `Server returned ${resp.status}`);
                     }
+                    // Sync roles separately
+                    const roleCheckboxes = container.querySelectorAll(".cust-role-checkbox");
+                    if (roleCheckboxes.length > 0) {
+                        const roles = Array.from(roleCheckboxes).filter(cb => cb.checked).map(cb => cb.dataset.role);
+                        await fetch("/api/customers/sync-roles", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ customer_name: customerName, roles }),
+                        });
+                    }
                     saveBtn.textContent = "Saved!";
                     saveBtn.style.background = "#16a34a";
                     setTimeout(() => init(), 800);
@@ -1733,7 +1809,9 @@
                 let actionBtn = "";
                 if (txStatus === "active" && !item.transferred_from_id) {
                     actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
-                } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "wd") {
+                } else if (txStatus === "credited") {
+                    actionBtn = `<button class="btn btn-apply-cust-credit" data-cust-apply-id="${item.id}" data-customer="${escapeHtml(item.customer || '')}" data-source-event="${escapeHtml(item.item_name || '')}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Apply</button> <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+                } else if (txStatus === "transferred" || txStatus === "wd") {
                     actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                 }
                 panelHtml += `<tr${rowClass}>
@@ -1895,6 +1973,130 @@
             custCachedEvents = null;
             await init();
         } catch (err) { alert(err.message); }
+    }
+
+    // ---- Apply Credit to Event (from Customers page) ----
+    let custApplyCreditState = {};
+    let custApplyUpcomingEvents = [];
+
+    async function openCustApplyCreditModal(creditItemId, customerName, sourceEvent) {
+        const overlay = document.getElementById('cust-apply-credit-overlay');
+        const body = document.getElementById('cust-apply-credit-body');
+        body.innerHTML = '<div style="padding:1rem;text-align:center;color:#6b7280;">Loading events…</div>';
+        overlay.style.display = 'flex';
+        custApplyCreditState = { creditItemId, customerName, sourceEvent, info: null, eventName: '' };
+
+        try {
+            const res = await fetch('/api/events');
+            const events = await res.json();
+            const today = new Date().toISOString().split('T')[0];
+            custApplyUpcomingEvents = events
+                .filter(e => e.event_date && e.event_date >= today)
+                .sort((a, b) => a.event_date.localeCompare(b.event_date));
+        } catch (e) { custApplyUpcomingEvents = []; }
+
+        renderCustApplyCreditModal(null);
+    }
+
+    function renderCustApplyCreditModal(info) {
+        const { customerName, sourceEvent, eventName } = custApplyCreditState;
+        const body = document.getElementById('cust-apply-credit-body');
+        const fmt = v => '$' + parseFloat(v || 0).toFixed(2);
+
+        let infoHtml = '';
+        if (info) {
+            const scenarioLabel = info.amount_owed > 0
+                ? `Player owes an additional <strong style="color:#d97706;">${fmt(info.amount_owed)}</strong>`
+                : info.amount_owed < 0
+                ? `Credit covers cost — <strong style="color:#16a34a;">${fmt(Math.abs(info.amount_owed))}</strong> excess`
+                : `Credit covers cost exactly`;
+            let excessHtml = '';
+            if (info.amount_owed < 0) {
+                const ea = Math.abs(info.amount_owed).toFixed(2);
+                excessHtml = `<div style="margin-top:0.5rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:0.5rem 0.75rem;font-size:0.82rem;">
+                    <div style="font-weight:600;color:#065f46;margin-bottom:0.3rem;">Excess: ${fmt(Math.abs(info.amount_owed))}</div>
+                    <label style="display:block;margin-bottom:0.2rem;"><input type="radio" name="cust-excess-action" value="keep" checked style="margin-right:0.3rem;">Keep as credit</label>
+                    <label style="display:block;"><input type="radio" name="cust-excess-action" value="venmo" style="margin-right:0.3rem;">Venmo back ($${ea} — handle manually)</label>
+                </div>`;
+            }
+            infoHtml = `<div style="margin-top:0.6rem;font-size:0.85rem;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:0.6rem 0.75rem;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;">
+                    <span>Credit (from ${escapeHtml(sourceEvent)}):</span><strong style="color:#16a34a;">${fmt(info.credit_amount)}</strong>
+                </div>
+                ${info.event_price !== null && info.event_price !== undefined ? `<div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;"><span>New Event Price:</span><strong>${fmt(info.event_price)}</strong></div>` : ''}
+                <div style="border-top:1px solid #e5e7eb;margin-top:0.25rem;padding-top:0.25rem;">${scenarioLabel}</div>
+            </div>${excessHtml}`;
+        }
+
+        body.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+            <h3 style="margin:0;font-size:1rem;">Apply Credit to Event</h3>
+            <button id="cac-close" style="background:none;border:none;font-size:1.3rem;cursor:pointer;line-height:1;color:#6b7280;">&times;</button>
+        </div>
+        <div style="font-size:0.88rem;color:#374151;margin-bottom:0.75rem;">
+            Player: <strong>${escapeHtml(displayName(customerName))}</strong><br>
+            <span style="color:#6b7280;font-size:0.8rem;">Source credit: ${escapeHtml(sourceEvent)}</span>
+        </div>
+        <label style="display:block;font-weight:600;font-size:0.82rem;margin-bottom:0.3rem;">Select Upcoming Event</label>
+        <select id="cac-event-select" class="modal-input" style="width:100%;margin-bottom:0.5rem;">
+            <option value="">Choose event…</option>
+            ${custApplyUpcomingEvents.map(e => `<option value="${escapeHtml(e.item_name)}" ${eventName === e.item_name ? 'selected' : ''}>${escapeHtml(e.item_name)} (${e.event_date})</option>`).join('')}
+        </select>
+        ${infoHtml}
+        <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+            <button id="cac-submit" class="btn btn-primary" ${!info ? 'disabled' : ''} style="background:#16a34a;">Apply Credit</button>
+            <button id="cac-cancel" class="btn btn-secondary">Cancel</button>
+        </div>`;
+
+        const close = () => { document.getElementById('cust-apply-credit-overlay').style.display = 'none'; };
+        document.getElementById('cac-close').onclick = close;
+        document.getElementById('cac-cancel').onclick = close;
+
+        document.getElementById('cac-event-select').addEventListener('change', async (e) => {
+            const evName = e.target.value;
+            custApplyCreditState.eventName = evName;
+            custApplyCreditState.info = null;
+            if (!evName) { renderCustApplyCreditModal(null); return; }
+            try {
+                const res = await fetch(`/api/items/${custApplyCreditState.creditItemId}/apply-credit-info?event_name=${encodeURIComponent(evName)}`);
+                const data = await res.json();
+                if (res.ok) { custApplyCreditState.info = data; renderCustApplyCreditModal(data); }
+            } catch (err) {}
+        });
+
+        const submitBtn = document.getElementById('cac-submit');
+        if (submitBtn && !submitBtn.disabled) {
+            submitBtn.addEventListener('click', async () => {
+                const { creditItemId, eventName: evName, info: evInfo } = custApplyCreditState;
+                if (!evName || !evInfo) return;
+                const excessRadio = document.querySelector('input[name="cust-excess-action"]:checked');
+                const prev = evInfo.previous_selections || {};
+                submitBtn.disabled = true; submitBtn.textContent = 'Applying…';
+                try {
+                    const resp = await fetch(`/api/items/${creditItemId}/apply-to-event`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            event_name: evName,
+                            excess_action: excessRadio ? excessRadio.value : 'keep',
+                            holes: prev.holes || '',
+                            side_games: prev.side_games || '',
+                            tee_choice: prev.tee_choice || '',
+                            user_status: prev.user_status || '',
+                        }),
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok) { alert(data.error || 'Failed to apply credit.'); return; }
+                    document.getElementById('cust-apply-credit-overlay').style.display = 'none';
+                    custCachedEvents = null;
+                    await init();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                } finally {
+                    submitBtn.disabled = false; submitBtn.textContent = 'Apply Credit';
+                }
+            });
+        }
     }
 
     // ---- Customer Merge ----
@@ -2569,6 +2771,7 @@
                         if (info) {
                             c.roles = info.roles || [];
                             c.first_timer_ever = info.first_timer_ever;
+                            c.current_player_status = info.current_player_status || null;
                         }
                     }
                 });
@@ -2757,5 +2960,11 @@
         }, 30000);
     });
     </script>
+
+<div id="cust-apply-credit-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:10px; padding:1.25rem; max-width:480px; width:95%; max-height:90vh; overflow-y:auto;">
+        <div id="cust-apply-credit-body"></div>
+    </div>
+</div>
 </body>
 </html>
