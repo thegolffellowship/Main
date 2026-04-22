@@ -112,6 +112,9 @@ from email_parser.database import (
     mark_email_processed,
     clear_failed_processed,
     refund_item,
+    set_event_status,
+    can_restore_event,
+    get_cancellation_players,
     get_app_setting,
     set_app_setting,
     # Accounting module
@@ -2656,6 +2659,129 @@ def api_delete_event(event_id):
     if delete_event(event_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "not found"}), 404
+
+
+@app.route("/api/events/<int:event_id>/cancel", methods=["POST"])
+@require_role("admin")
+def api_cancel_event(event_id):
+    """Cancel or postpone an event, silently removing comps and RSVP-only players."""
+    data = request.get_json(silent=True) or {}
+    status = data.get("status", "cancelled")
+    reason = data.get("reason", "").strip()
+    if status not in ("cancelled", "postponed"):
+        return jsonify({"error": "status must be 'cancelled' or 'postponed'"}), 400
+    if not reason:
+        return jsonify({"error": "reason is required"}), 400
+
+    # Set the event status
+    if not set_event_status(event_id, status, reason):
+        return jsonify({"error": "Event not found"}), 404
+
+    # Silently credit comps and RSVP-only players
+    players = get_cancellation_players(event_id)
+    silent_note = f"Event {status} — {reason}"
+    silent_count = 0
+    for item in players.get("silent", []):
+        try:
+            credit_item(item["id"], note=silent_note)
+            silent_count += 1
+        except Exception:
+            pass
+
+    return jsonify({
+        "status": "ok",
+        "silent_removed": silent_count,
+        "paid_players": len(players.get("paid", [])),
+    })
+
+
+@app.route("/api/events/<int:event_id>/restore", methods=["POST"])
+@require_role("admin")
+def api_restore_event(event_id):
+    """Restore a cancelled/postponed event to active. Only allowed if no player actions taken."""
+    if not can_restore_event(event_id):
+        return jsonify({"error": "Cannot restore: player actions have already been applied."}), 400
+    if set_event_status(event_id, "active", ""):
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Event not found"}), 404
+
+
+@app.route("/api/events/<int:event_id>/cancellation-players", methods=["GET"])
+@require_role("admin")
+def api_get_cancellation_players(event_id):
+    """Return paid players who need a credit/refund action after cancellation."""
+    players = get_cancellation_players(event_id)
+    return jsonify(players.get("paid", []))
+
+
+@app.route("/api/events/<int:event_id>/cancel-bulk", methods=["POST"])
+@require_role("admin")
+def api_cancel_bulk(event_id):
+    """Apply credit or refund to all eligible paid players for a cancelled event."""
+    data = request.get_json(silent=True) or {}
+    action = data.get("action")  # 'credit' or 'refund'
+    note = data.get("note", "").strip() or "Event cancelled"
+    if action not in ("credit", "refund"):
+        return jsonify({"error": "action must be 'credit' or 'refund'"}), 400
+
+    players = get_cancellation_players(event_id)
+    results = {"ok": [], "failed": []}
+    for item in players.get("paid", []):
+        item_id = item["id"]
+        try:
+            if action == "credit":
+                success = credit_item(item_id, note=note)
+            else:
+                method = item.get("auto_refund_method", "")
+                success = refund_item(item_id, method=method, note=note)
+            if success:
+                results["ok"].append(item_id)
+            else:
+                results["failed"].append({"id": item_id, "reason": "already actioned"})
+        except Exception as e:
+            results["failed"].append({"id": item_id, "reason": str(e)})
+
+    return jsonify({"status": "ok", "results": results})
+
+
+@app.route("/api/events/<int:event_id>/cancel-apply", methods=["POST"])
+@require_role("admin")
+def api_cancel_apply(event_id):
+    """Apply per-player actions from the one-by-one staging list.
+
+    Body: { "actions": [{"item_id": 123, "action": "credit"|"refund"|"skip", "note": "..."}] }
+    """
+    data = request.get_json(silent=True) or {}
+    actions = data.get("actions", [])
+    if not actions:
+        return jsonify({"error": "No actions provided"}), 400
+
+    results = {"ok": [], "skipped": [], "failed": []}
+    for entry in actions:
+        item_id = entry.get("item_id")
+        action = entry.get("action")
+        note = (entry.get("note") or "Event cancelled").strip()
+        method = (entry.get("method") or "").strip()
+
+        if action == "skip":
+            results["skipped"].append(item_id)
+            continue
+        try:
+            if action == "credit":
+                success = credit_item(item_id, note=note)
+            elif action == "refund":
+                success = refund_item(item_id, method=method, note=note)
+            else:
+                results["skipped"].append(item_id)
+                continue
+            if success:
+                results["ok"].append(item_id)
+            else:
+                results["failed"].append({"id": item_id, "reason": "already actioned or not found"})
+        except Exception as e:
+            results["failed"].append({"id": item_id, "reason": str(e)})
+
+    return jsonify({"status": "ok", "results": results})
 
 
 @app.route("/api/events", methods=["POST"])
