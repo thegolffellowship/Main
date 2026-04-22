@@ -3146,13 +3146,26 @@ def api_gg_rsvp_apply_credit(rsvp_id):
         rsvp = dict(rsvp)
 
     event_name = rsvp.get("matched_event") or ""
-    player_email = rsvp.get("player_email") or ""
+    player_email = (rsvp.get("player_email") or "").strip().lower()
     player_name = rsvp.get("player_name") or ""
+
+    # Resolve canonical customer name via email so the created item uses the proper name
+    canonical_name = player_name
+    if player_email:
+        with _connect() as conn:
+            card = conn.execute(
+                """SELECT customer FROM items WHERE LOWER(customer_email) = ?
+                   AND customer IS NOT NULL AND customer != ''
+                   ORDER BY order_date DESC LIMIT 1""",
+                (player_email,),
+            ).fetchone()
+            if card:
+                canonical_name = card["customer"]
 
     # Create the rsvp_only item (idempotent)
     new_item_id = create_rsvp_only_item(
         event_name=event_name,
-        player_name=player_name,
+        player_name=canonical_name,
         player_email=player_email,
         rsvp_id=rsvp_id,
     )
