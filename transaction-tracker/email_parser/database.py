@@ -3057,6 +3057,10 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_acct_transactions(conn)
         _backfill_customer_id_on_player_links(conn)
 
+        # Promote approved expense_transactions that have not yet been linked
+        # to acct_transactions (e.g. expenses approved before this feature shipped).
+        _backfill_approved_expenses_to_ledger(conn)
+
         # Migrate GoDaddy order transactions: set total_amount = net_deposit so the
         # ledger Amount column matches bank statement deposits directly.
         _n = conn.execute("""
@@ -3638,6 +3642,36 @@ def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
     if updated:
         logger.info("Backfilled customer_id for %d item rows", updated)
     return updated
+
+
+def _backfill_approved_expenses_to_ledger(conn: sqlite3.Connection) -> int:
+    """Promote approved expense_transactions that aren't yet linked to acct_transactions.
+
+    Safe to call on every startup — skips rows that already have acct_transaction_id.
+    """
+    rows = conn.execute(
+        """SELECT * FROM expense_transactions
+           WHERE review_status IN ('approved', 'corrected')
+             AND (acct_transaction_id IS NULL)
+             AND amount IS NOT NULL AND amount > 0"""
+    ).fetchall()
+    if not rows:
+        return 0
+    count = 0
+    for row in rows:
+        try:
+            result = _sync_expense_ledger_entry(conn, dict(row))
+            if result:
+                count += 1
+        except Exception:
+            logger.warning(
+                "_backfill_approved_expenses_to_ledger: failed for expense id=%s", row["id"],
+                exc_info=True,
+            )
+    if count:
+        conn.commit()
+        logger.info("Backfilled %d approved expenses into acct_transactions", count)
+    return count
 
 
 def _backfill_customer_id_on_acct_transactions(conn: sqlite3.Connection) -> int:
