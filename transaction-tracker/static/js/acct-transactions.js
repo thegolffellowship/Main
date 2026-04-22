@@ -2,6 +2,54 @@
    Accounting Module — Transactions Tab & Modal
    ========================================================= */
 
+// ── Ledger Column Visibility ──────────────────────────────
+
+const LEDGER_COLS = [
+    { key: 'customer', label: 'Customer / Vendor', def: true },
+    { key: 'splits',   label: 'Category',          def: true },
+    { key: 'type',     label: 'Type',               def: true },
+    { key: 'account',  label: 'Account',            def: true },
+];
+let _ledgerColPrefs = null;
+
+function _loadLedgerColPrefs() {
+    if (_ledgerColPrefs) return;
+    try {
+        const s = localStorage.getItem('acct_visible_cols');
+        if (s) { _ledgerColPrefs = JSON.parse(s); return; }
+    } catch(e) {}
+    _ledgerColPrefs = {};
+    LEDGER_COLS.forEach(c => { _ledgerColPrefs[c.key] = c.def; });
+}
+
+function _saveLedgerColPrefs() {
+    try { localStorage.setItem('acct_visible_cols', JSON.stringify(_ledgerColPrefs)); } catch(e) {}
+}
+
+function applyLedgerColVisibility() {
+    _loadLedgerColPrefs();
+    const table = document.querySelector('#txn-list .acct-table-full');
+    if (!table) return;
+    LEDGER_COLS.forEach(c => table.classList.toggle(`acct-hide-${c.key}`, !_ledgerColPrefs[c.key]));
+}
+
+function buildLedgerColumnToggle() {
+    _loadLedgerColPrefs();
+    const drop = $('#ledger-col-dropdown');
+    if (!drop) return;
+    drop.innerHTML = LEDGER_COLS.map(c => `
+        <label style="display:flex;align-items:center;gap:6px;padding:5px 12px;cursor:pointer;font-size:0.82rem;white-space:nowrap;">
+            <input type="checkbox" data-col="${c.key}" ${_ledgerColPrefs[c.key] ? 'checked' : ''}> ${c.label}
+        </label>`).join('');
+    drop.querySelectorAll('input[type=checkbox]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            _ledgerColPrefs[cb.dataset.col] = cb.checked;
+            _saveLedgerColPrefs();
+            applyLedgerColVisibility();
+        });
+    });
+}
+
 // ── Inline Match Queue state ──
 const LMQ = {
     selectedDepositId: null,
@@ -342,8 +390,13 @@ function renderTransactionList(txns, total) {
     // Desktop table
     const tableHTML = `<table class="acct-table acct-table-full acct-table-mobile-hide">
         <thead><tr>
-            <th>Date</th><th>Description</th><th>Splits</th>
-            <th class="text-right">Amount</th><th>Type</th><th>Account</th>
+            <th>Date</th>
+            <th class="col-customer">Customer / Vendor</th>
+            <th>Description</th>
+            <th class="col-splits">Category</th>
+            <th class="text-right">Amount</th>
+            <th class="col-type">Type</th>
+            <th class="col-account">Account</th>
             <th></th>
         </tr></thead>
         <tbody>${txns.map(t => {
@@ -354,17 +407,19 @@ function renderTransactionList(txns, total) {
             const rowData = m.isExp
                 ? `data-id="${t.id}" data-expense-id="${t.expense_id}"`
                 : `data-id="${t.id}"`;
+            const custName = t.customer_name || '';
 
             return `<tr class="${rowClass}" ${rowData}>
                 <td style="white-space:nowrap;">${_ledgerDot(t)}${t.date || ''}</td>
+                <td class="col-customer" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.8rem;color:#6b7280;" title="${custName}">${custName}</td>
                 <td>
                     ${t.description || ''}
                     ${m.sourceBadge}${m.reviewBadge}${m.tagBadges}
                 </td>
-                <td class="acct-split-cell">${m.splitBadges}</td>
+                <td class="col-splits acct-split-cell">${m.splitBadges}</td>
                 <td class="text-right ${t.type === 'income' ? 'acct-positive' : 'acct-negative'}">${fmt(t.total_amount)}</td>
-                <td><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></td>
-                <td>${t.account_name || '—'}</td>
+                <td class="col-type"><span class="acct-type-badge acct-type-${t.type}">${t.type}</span></td>
+                <td class="col-account">${t.account_name || '—'}</td>
                 <td>
                     ${m.isExp ? '' : `<button class="btn-icon-sm acct-btn-del" data-id="${t.id}" title="Delete">&times;</button>`}
                 </td>
@@ -792,6 +847,9 @@ function renderTransactionList(txns, total) {
         });
     });
 
+    // Apply column visibility after render
+    applyLedgerColVisibility();
+
     // Pagination
     const pages = Math.ceil(total / ACCT.txnLimit);
     const pagEl = $('#txn-pagination');
@@ -807,6 +865,37 @@ function renderTransactionList(txns, total) {
 }
 
 // ── Transaction Modal ────────────────────────────────────
+
+function _guessAccountId(txn) {
+    const source = (txn.source || '').toLowerCase();
+    const desc = (txn.description || '').toLowerCase();
+    if (source === 'godaddy' || desc.startsWith('godaddy order')) {
+        return ACCT.accounts.find(a => a.name.toLowerCase().includes('tgf checking'))?.id || null;
+    }
+    if (source === 'venmo') {
+        return ACCT.accounts.find(a => a.account_type === 'venmo' || a.name.toLowerCase().includes('venmo'))?.id || null;
+    }
+    return null;
+}
+
+function _buildSmartSplit(txn) {
+    // Entity: prefer TGF for income, else active/first
+    const tgfEnt = ACCT.entities.find(e => e.short_name === 'TGF');
+    const entityId = (txn.type === 'income' && tgfEnt) ? tgfEnt.id
+        : (ACCT.activeEntity || ACCT.entities[0]?.id);
+
+    // Category: income → "Event Revenue"
+    const catId = txn.type === 'income'
+        ? (ACCT.categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('event revenue'))?.id || '')
+        : '';
+
+    // Event: match event_name field directly against ACCT.events
+    const evId = txn.event_name
+        ? (ACCT.events.find(e => e.item_name === txn.event_name)?.id || '')
+        : '';
+
+    return { entity_id: entityId, category_id: catId, event_id: evId, amount: txn.total_amount, memo: '' };
+}
 
 function populateDropdowns() {
     // Account dropdowns (with last 4 digits)
@@ -871,6 +960,11 @@ async function openEditTransaction(id) {
         $('#txn-amount').value = txn.total_amount;
         $('#txn-type').value = txn.type;
         $('#txn-account').value = txn.account_id || '';
+        // Auto-assign account if not set
+        if (!txn.account_id) {
+            const guessedAcct = _guessAccountId(txn);
+            if (guessedAcct) $('#txn-account').value = guessedAcct;
+        }
         $('#txn-notes').value = txn.notes || '';
         $('#receipt-filename').textContent = txn.receipt_path ? txn.receipt_path.split('/').pop() : '';
         $('#transfer-row').style.display = txn.type === 'transfer' ? '' : 'none';
@@ -883,9 +977,10 @@ async function openEditTransaction(id) {
             clearTxnCustomer();
         }
 
-        renderSplitRows(txn.splits.map(s => ({
-            entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || ''
-        })));
+        const splitsData = txn.splits.length > 0
+            ? txn.splits.map(s => ({ entity_id: s.entity_id, category_id: s.category_id || '', event_id: s.event_id || '', amount: s.amount, memo: s.memo || '' }))
+            : [_buildSmartSplit(txn)];
+        renderSplitRows(splitsData);
         renderTagChips(txn.tags.map(t => t.id));
 
         $('#txn-modal').style.display = 'flex';
@@ -1515,6 +1610,31 @@ function openVendorModal() {
     $('#vendor-modal-error').style.display = 'none';
     $('#vendor-modal').style.display = 'flex';
     setTimeout(() => $('#vendor-name').focus(), 50);
+}
+
+async function runSmartFill() {
+    // First do a dry run to show preview
+    try {
+        const preview = await api('/accounting/smart-fill', { method: 'POST', body: { dry_run: true } });
+        if (preview.count === 0) {
+            alert('All transactions already have categories assigned.');
+            return;
+        }
+        const ok = confirm(
+            `Smart Fill found ${preview.count} transaction(s) without a category split.\n\n` +
+            `This will:\n` +
+            `• Auto-assign TGF Checking account to GoDaddy income\n` +
+            `• Create a default "Event Revenue" split for each income transaction\n` +
+            `• You can still edit individual transactions to adjust\n\n` +
+            `Apply to all ${preview.count} transactions?`
+        );
+        if (!ok) return;
+        const result = await api('/accounting/smart-fill', { method: 'POST', body: { dry_run: false } });
+        alert(`Done! Applied smart defaults to ${result.count} transaction(s).`);
+        loadTransactions();
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
 }
 
 async function saveNewVendor() {
