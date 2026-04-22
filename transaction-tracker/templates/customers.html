@@ -886,6 +886,16 @@
                                 const data = await resp.json().catch(() => ({}));
                                 throw new Error(data.error || `Server returned ${resp.status}`);
                             }
+                            // Sync roles separately
+                            const roleCheckboxes = expandedCard.querySelectorAll(".cust-role-checkbox");
+                            if (roleCheckboxes.length > 0) {
+                                const roles = Array.from(roleCheckboxes).filter(cb => cb.checked).map(cb => cb.dataset.role);
+                                await fetch("/api/customers/sync-roles", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ customer_name: customerName, roles }),
+                                });
+                            }
                             saveBtn.textContent = "Saved!";
                             saveBtn.style.background = "#16a34a";
                             setTimeout(() => init(), 800);
@@ -1630,6 +1640,16 @@
                     if (!resp.ok) {
                         const data = await resp.json().catch(() => ({}));
                         throw new Error(data.error || `Server returned ${resp.status}`);
+                    }
+                    // Sync roles separately
+                    const roleCheckboxes = container.querySelectorAll(".cust-role-checkbox");
+                    if (roleCheckboxes.length > 0) {
+                        const roles = Array.from(roleCheckboxes).filter(cb => cb.checked).map(cb => cb.dataset.role);
+                        await fetch("/api/customers/sync-roles", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ customer_name: customerName, roles }),
+                        });
                     }
                     saveBtn.textContent = "Saved!";
                     saveBtn.style.background = "#16a34a";
