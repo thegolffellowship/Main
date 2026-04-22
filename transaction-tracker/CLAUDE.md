@@ -206,6 +206,51 @@ When a new transaction arrives, the system resolves the customer in this order:
 - Creates name alias for old name
 - Deletes orphaned source `customers` row
 
+### Vendor Customers
+
+Vendors (suppliers, payment processors, etc.) are stored in the `customers` table with
+a `vendor` role in `customer_roles`.
+
+**Key columns:**
+- `company_name` VARCHAR(200) — single-name field for vendors/companies (migration-added).
+  Display logic: `COALESCE(NULLIF(company_name,''), NULLIF(TRIM(first_name||' '||last_name),''))`.
+  Backend stores vendor name in `company_name` + `last_name`; `first_name=''`.
+
+**API endpoints:**
+- `GET  /api/accounting/customers` — all customers, returns `display_name` (prefers company_name)
+- `GET  /api/accounting/vendors` — customers with `vendor` role, returns `display_name`
+- `POST /api/accounting/vendors` — create vendor; body: `{name}`. Creates customer row +
+  assigns vendor role. Idempotent (adds role if customer already exists by name).
+
+**Vendor typeahead in accounting modals:**
+- All vendors shown at top of dropdown when field is focused (empty) — discoverable without typing
+- Type to filter from all customers/vendors
+- "＋ New Vendor" option always visible at bottom of dropdown; opens New Vendor modal
+- After save, new vendor is immediately selected in the form
+- Vendors appear with amber chip color (vs. green for non-vendor customers)
+- Applies to: income/ledger modal (`#customer-id`), expense modal (`#exp-customer-id`)
+
+### Customer Status and Role Editing (Info Tab)
+
+Admins can edit a customer's **Member Status** and **Roles** from the Info tab
+on any customer profile (all three rendering paths: inline expand, detail panel, mobile card).
+
+**Member Status dropdown options:**
+`1ST TIMER` / `GUEST` / `MEMBER` / `MEMBER+` / `FORMER`
+- `member_plus` — new status (migration-adds to CHECK constraint); displayed as "MEMBER+"
+- `expired_member` kept in DB for backward compat; displayed as "FORMER"
+
+**Roles checkboxes:** `member`, `manager`, `admin`, `vendor`, `course_contact`, `sponsor`
+
+**Save flow:**
+1. `PATCH /api/customers/<id>` — updates `current_player_status` via `update_customer_info()`
+2. `POST /api/customers/sync-roles` — `{customer_id, roles[]}` replaces all roles atomically
+
+**API:**
+- `GET  /api/customer-roles` — returns roles per customer + `_by_name` map (name→customer_id);
+  frontend uses `_by_name` as fallback when `items.customer_id` is null (pre-identity items)
+- `POST /api/customers/sync-roles` — `{customer_id, roles}` replaces full role set
+
 ## Architecture
 
 - **Flask app** in `transaction-tracker/app.py` (~5900 lines, 200+ routes)
@@ -290,7 +335,7 @@ Order: RSVP circle → Customer → HCP → Holes → Games → Tee → Status �
 ### Status normalization
 The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - Strips parenthetical notes like "($25 Off + FREE Drink)"
-- Normalizes to: "1st TIMER", "MEMBER", "GUEST", or "MANAGER"
+- Normalizes to: "1st TIMER", "MEMBER", "MEMBER+", "GUEST", or "MANAGER"
 
 ### Holes field
 - Parsed from emails: "9 or 18 HOLES?" field → stored as `holes` TEXT column
@@ -352,6 +397,98 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - **Delete** now preserves the deleted name as an alias (→ `_DELETED_`) when
   items still reference it, preventing `sync_events_from_items()` from recreating
 - `seed_events()` also checks aliases before inserting
+
+### Event Cancellation / Postponement
+
+Events can be cancelled or postponed from the event detail view (admin only).
+New columns on `events` table: `status` TEXT (`active`/`cancelled`/`postponed`),
+`status_reason` TEXT, `rescheduled_to_event_id` INTEGER, `status_changed_at` TEXT.
+
+**Cancel Event modal — 4 steps:**
+1. Choose `Cancelled` or `Postponed` + enter reason text (required).
+2. Choose refund/credit mode: **Bulk** (Credit All / Refund All in one click) or **One-by-One**.
+3. (One-by-One) Staging list with per-row Credit / Refund / Skip buttons → Apply All.
+4. Completion summary + optional "Send Cancellation Email" prompt.
+
+**Key behaviors:**
+- Refund method auto-detected from original payment (`godaddy` → GoDaddy, `venmo` → Venmo, etc.)
+- Add-on payments cascade automatically via existing `credit_item` / `refund_item` logic
+- Comp and RSVP-only players are silently removed (no credit/refund needed)
+- **Restore Event** button appears on cancelled/postponed events until the first player
+  action is taken (`can_restore_event(conn, event_name)` checks for any credited/refunded items)
+- Cancelled/postponed badges shown on the event list rows
+- Status banner shown at top of event detail view
+
+**API endpoints (all admin):**
+- `POST /api/events/<name>/cancel` — `{status, reason}` → sets event status
+- `POST /api/events/<name>/restore` — clears status back to active
+- `GET  /api/events/<name>/cancellation-players` — list of active players with payment info
+- `POST /api/events/<name>/cancel-bulk` — `{action: 'credit'|'refund', method?}` → bulk apply
+- `POST /api/events/<name>/cancel-apply` — `{actions: [{item_id, action, method?}]}` → one-by-one apply
+
+**Key DB functions:**
+- `set_event_status(conn, event_name, status, reason)` — writes status + timestamp
+- `can_restore_event(conn, event_name)` — returns True if no credited/refunded items yet
+- `get_cancellation_players(conn, event_name)` — returns active players with payment method
+
+### RSVP Credit Application (from Events page)
+
+When an event is cancelled, players who had credits from that event and are now RSVPing
+to a future event can have their credit applied directly from the RSVP row.
+
+**How it works:**
+- After RSVP inbox check, `_send_rsvp_credit_alerts()` auto-sends email alerts to players
+  with outstanding credits who have RSVPed to an upcoming event.
+- Green **Credit** badge appears on RSVP-only rows in the event detail view when the player
+  has an outstanding credit (checked via `get_rsvp_credit_info`).
+- **Apply Credit** button opens a modal showing: previous selections, event price table for
+  their player type, amount owed (if price > credit) or excess credit (if credit > price),
+  and disposition choice for excess (keep vs. Venmo note).
+- On confirm, calls `apply_credit_to_rsvp(conn, rsvp_id, item_id, disposition)` which:
+  - Creates the transferred registration item linking credit source → new event
+  - Marks the credit item as used
+  - Calculates and records any balance-due or excess
+- `rsvps` table new column: `credit_notified_at` TEXT — tracks when the alert email was sent.
+
+**Key DB functions:**
+- `get_player_credits(conn, customer_id)` — player's outstanding credit items
+- `get_rsvp_credit_info(conn, rsvp_id)` — credit info for a single RSVP row
+- `get_event_rsvp_credit_map(conn, event_name)` — map of rsvp_id → credit info for all RSVPs in an event
+- `apply_credit_to_rsvp(conn, rsvp_id, item_id, disposition)` — executes the credit transfer
+- `mark_rsvp_credit_notified(conn, rsvp_id)` — records credit_notified_at timestamp
+
+**GG RSVP synthetic row support:**
+- `get_event_rsvp_credit_map` queries both `items` table rows AND unmatched `rsvps`
+  table rows (GG RSVPs without a linked items row). Resolves canonical customer name
+  via email lookup so name-keyed map matches frontend JS.
+- `create_rsvp_only_item()` — promotes a GG RSVP to a real `items` row (idempotent
+  via `email_uid`) before credit application runs.
+- `GET  /api/rsvps/gg/<id>/credit-info` — credit-info for a synthetic GG RSVP row
+- `POST /api/rsvps/gg/<id>/apply-credit` — apply credit to a synthetic GG RSVP row
+
+**API endpoints:**
+- `GET  /api/rsvps/<id>/credit-info` — credit info for a specific RSVP
+- `GET  /api/events/<name>/rsvp-credits` — all RSVP credit info for an event
+- `POST /api/rsvps/<id>/apply-credit` — `{item_id, disposition}` → apply credit
+
+**Undo Credit Application:**
+- `reverse_credit_application(conn, item_id)` — restores transferred source credits
+  to `credited`, removes any excess credit item, reverses accounting entries, reverts
+  target item to `rsvp_only` (or deletes if it was a promoted GG RSVP item).
+- `POST /api/items/<id>/reverse-credit-application` (admin only)
+
+### Apply Credit to Event from Customers Page
+
+Credited items in customer detail views have an **Apply** button (alongside Reverse).
+Clicking opens a modal to select an upcoming event, shows a price preview (credit vs. event
+price, balance-due or excess handling), and applies the credit.
+
+**API endpoints:**
+- `GET  /api/items/<id>/apply-credit-info?event_name=<name>` — preview amount owed / excess
+- `POST /api/items/<id>/apply-to-event` — `{event_name, disposition}` → apply credit
+
+Uses idempotent uid `manual-credit-{credit_item_id}` to prevent double-apply.
+All three rendering paths on the Customers page (inline expand, detail panel, mobile card) updated.
 
 ## Event Pricing Architecture
 
@@ -911,6 +1048,35 @@ Runs after every import and on-demand via "Auto-match All" button.
   Confidence: 0.85 (desc+amount), 0.65 (desc only), 0.55 (amount only).
 - **Zelle/other**: amount + date ±1 day, always flagged for manual confirm (0.60).
 - Matched transactions get `status = 'reconciled'` in `acct_transactions`.
+
+### GoDaddy Reconciliation — net_deposit as amount
+Bank statements show the net deposit (after merchant fee). `acct_transactions` rows for
+GoDaddy orders now use `net_deposit` (= `total_amount - merchant_fee`) as the comparison
+amount in auto-matching, so a $222.53 order with a $6.75 fee matches the $215.78 bank credit.
+
+### Accounting Ledger Improvements
+
+**Customer/Vendor column:**
+- Ledger table has a Customer/Vendor column (between Date and Description).
+- `get_acct_transactions()` LEFT JOINs `customers`, returns `customer_name`
+  using `COALESCE(NULLIF(company_name,''), NULLIF(TRIM(first_name||' '||last_name),''), legacy_customer_text)`.
+- **Column visibility toggle:** "Columns" button in filter bar opens a dropdown with checkboxes
+  for Customer/Vendor, Category, Type, Account. Choices persisted in localStorage.
+  CSS class toggle on the table element (`acct-hide-X`) so visibility survives re-renders.
+
+**Smart Fill:**
+- `POST /api/accounting/smart-fill` with `{dry_run: true}` previews changes; `dry_run: false` applies.
+- For all unsplit active `acct_transactions`: assigns `account_id` via `_guessAccountId()`
+  (matches "GODADDY" → TGF Checking, "VENMO" → Venmo, etc.) and creates a default single split
+  via `_buildSmartSplit()` (uses `Event Revenue` category for income).
+- **Smart Fill button** in the ledger filter bar runs dry-run first, shows confirm dialog with counts, then applies.
+- `openEditTransaction()` also auto-assigns account and pre-populates a smart split when
+  creating/editing a transaction with no splits.
+
+**Ledger display changes:**
+- Category column shows just the category name (e.g. "Event Revenue") not a verbose badge;
+  multi-split rows show `[split]`.
+- Edit modal shows GoDaddy fee and net deposit below split total when `merchant_fee > 0`.
 
 ### Reconciliation UI (`/accounting/reconcile`)
 Three tabs — the standalone page, kept for power-user workflows and the

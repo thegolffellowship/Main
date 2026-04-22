@@ -3,15 +3,29 @@ window.TGF_CHANGELOG = [
   {
     version: "2.9.0",
     date: "2026-04-22",
-    title: "Expense ↔ Bank Reconciliation — approved expenses now match bank debits",
+    title: "Event Cancellation, Credit Flows, Vendor System, and Expense Reconciliation",
     changes: [
-      "Approved expense transactions are now auto-promoted to the accounting ledger (acct_transactions) with entry_type='expense', so they appear as candidates in the Inline Match Queue",
-      "Startup backfill promotes all previously-approved expenses that were missing a ledger entry (_backfill_approved_expenses_to_ledger runs in init_db)",
-      "Auto-match now handles negative bank deposits (credit card / bank debits) — matches them against entry_type='expense' ledger entries within ±$1 and ±10 days",
-      "get_match_suggestions fixed for expense deposits: amount comparison now uses abs(dep_amt) so a -$21.37 bank debit correctly matches a $21.34 expense (diff 0.03, not 42.71)",
-      "Description scoring added to get_match_suggestions: substring containment gives +12 score so same-merchant matches rise to the top even when amounts differ slightly",
-      "Expense modal now has the same Vendor / Customer typeahead as the income modal — start typing to search, + New Vendor button to create on the fly",
-      "GoDaddy edit modal fix: existing transactions with only 2 splits (registration + tx_fee) now correctly regenerate the third negative merchant_fee split from stored data",
+      // Event Cancellation
+      "Event Cancellation: Cancel or Postpone any event via a 4-step modal (choose status + reason → bulk or one-by-one → stage credits/refunds → send cancellation email). Refund method auto-detected from original payment method.",
+      "Comp and RSVP-only players silently removed on cancel; add-on payments cascade via existing credit/refund logic. Restore Event available until first player action is taken.",
+      "New event columns: status (active/cancelled/postponed), status_reason, rescheduled_to_event_id, status_changed_at. Cancelled/postponed badges on event list and detail view.",
+      // RSVP Credit Application
+      "RSVP Credit Application: green Credit badge on RSVP-only rows when the player has an outstanding credit. Apply Credit modal shows price breakdown, balance-due or excess, and disposition choice.",
+      "After RSVP inbox check, credit alert emails are auto-sent to players with credits who are RSVPing to upcoming events.",
+      "Undo Credit Application: reverse_credit_application restores source credits, removes excess item, reverses accounting entries, reverts target back to rsvp_only.",
+      "Apply Credit from Customers page: Apply button on credited items opens event picker with price preview; idempotent via manual-credit-{id} uid.",
+      // Vendor system
+      "Vendor System: vendors stored in customers table with vendor role and company_name field. Vendor typeahead shows all vendors when focused (empty); + New Vendor creates and immediately selects.",
+      "Ledger Customer/Vendor column with column visibility toggle (Customer/Vendor, Category, Type, Account) — persisted in localStorage via CSS class toggle on table element.",
+      "Smart Fill: POST /api/accounting/smart-fill bulk-assigns accounts and default splits for all unsplit ledger entries. Dry-run preview before apply.",
+      // Customer editing
+      "Info tab: admins can edit Member Status (1ST TIMER / GUEST / MEMBER / MEMBER+ / FORMER) and Roles (member, manager, admin, vendor, etc.) directly on any customer profile.",
+      "New member_plus status (DB migration adds to CHECK constraint); expired_member displays as FORMER for backward compat.",
+      // Expense reconciliation
+      "Approved expense transactions auto-promoted to acct_transactions with entry_type='expense' and amount set, so they appear in the Inline Match Queue.",
+      "Auto-match handles negative bank deposits (debits): matches against entry_type='expense' entries within ±$1 / ±10 days. Confidence 0.85 (desc+amount), 0.65 (desc only), 0.55 (amount only).",
+      "get_match_suggestions amount comparison fixed for expense deposits: uses abs(dep_amt) so -$21.37 debit correctly matches $21.34 expense.",
+      "GoDaddy auto-match uses net_deposit (gross minus merchant fee) as comparison amount so bank credits match correctly.",
     ],
   },
   {

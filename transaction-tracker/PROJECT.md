@@ -180,6 +180,14 @@ Shows all events with registration details. Events are auto-created from transac
 - **Transactions/Info tabs** — Toggle between transaction details and player info on mobile cards
 - **NET/GROSS/NONE toggle** — Connected button bar for side games filter (replaces separate dropdowns)
 - **Delete manual player** — Remove manually-added entries
+- **Cancel Event** — Admin-only 4-step modal: set status (cancelled/postponed) + reason,
+  choose bulk vs. one-by-one credit/refund, stage per-player actions, send cancellation email.
+  Restore Event button available until first player action taken.
+- **RSVP Credit badge** — Green Credit badge on RSVP-only rows when the player has an outstanding
+  credit. Apply Credit modal shows price breakdown and excess disposition. Credit alert emails
+  auto-sent after RSVP inbox check.
+- **Undo Credit Application** — `POST /api/items/<id>/reverse-credit-application` restores
+  credited items and reverts the target registration.
 - **Sync Events** — Auto-detect and create events from transaction item names
 - **Check RSVPs** — Trigger manual RSVP inbox check
 - **Search** — Filter events by name, course, chapter
@@ -366,15 +374,18 @@ filterable flat view of every `acct_transactions` row.
 - **Multi-entity tracking** — TGF main + chapter accounts with balance management
 - **Chart of accounts** — IRS Schedule C categories (income, expense, asset, liability)
 - **General ledger** — Double-entry bookkeeping journal entries
-- **Expense transactions** — Categorized expense management with approval workflow; approved expenses are auto-promoted to `acct_transactions` with `entry_type='expense'` so they appear in the Inline Match Queue for bank reconciliation
+- **Expense transactions** — Categorized expense management with approval workflow; approved expenses auto-promoted to `acct_transactions` with `entry_type='expense'` for bank reconciliation matching
+- **Vendor/Customer column** — Ledger shows Customer/Vendor name per row; column visibility toggle (Customer/Vendor, Category, Type, Account) persisted in localStorage
+- **Smart Fill** — Bulk-assigns accounts and default splits for all unsplit ledger entries; dry-run preview before apply (`POST /api/accounting/smart-fill`)
+- **Vendor typeahead** — All vendors shown when field is focused; ＋ New Vendor creates and immediately selects
 - **Revenue auto-sync** — Automatic revenue entries from registration items
-- **Bank reconciliation** — CSV import (Chase, Frost Bank, Venmo), PDF via Claude, two-way matching
+- **Bank reconciliation** — CSV import (Chase, Frost Bank, Venmo), PDF via Claude, two-way matching; negative deposits matched against approved expense entries
 - **Month-end close** — Locks period, generates income/expense/net/tax summary
 - **Action items** — Financial action items with urgency and resolution tracking
 - **Liabilities Dashboard** — Prize pools owed, HIO pot, season contests, chapter manager payouts,
   tax reserve, investor debt, member credits 2025 (manual + calculated buckets)
 - **Contractor Payouts** — Chapter manager revenue-share ledger per event
-- **Keyword Rules** — Auto-categorization rules checked before the AI bookkeeper
+- **Keyword Rules** — Auto-categorization rules checked before the AI bookkeeper; auto-populated when expense is approved
 - **Unified financial model (Issue #242)** — Accounting is the single source of truth:
   - Credit transfers create contra-revenue on source event + revenue on target event
   - External payments (Venmo/cash) create `acct_allocations` rows + `acct_transactions` entries
@@ -632,7 +643,8 @@ Operations Command Center with AI-powered strategic advisor.
 | phone | TEXT | |
 | chapter | TEXT | Primary chapter affiliation |
 | ghin_number | TEXT | GHIN handicap number |
-| current_player_status | TEXT | `active_member` / `expired_member` / `active_guest` / `inactive` / `first_timer` |
+| company_name | TEXT | Vendor/company name (single field; display prefers this over first+last) |
+| current_player_status | TEXT | `active_member` / `expired_member` / `member_plus` / `active_guest` / `inactive` / `first_timer` |
 | first_timer_ever | INTEGER | Whether this customer was ever a first timer |
 | acquisition_source | TEXT | How they found TGF |
 | account_status | TEXT | `active` / `inactive` / `banned` |
@@ -1279,38 +1291,74 @@ The app is installable as a Progressive Web App:
 
 ## Version History
 
-### v2.9.0 — April 22, 2026 — "Expense ↔ Bank Reconciliation"
+### v2.9.0 — April 22, 2026 — "Event Cancellation, Credit Flows, Vendor System, Expense Reconciliation"
 
-**Goal:** close the loop between AI-parsed expense alerts and actual bank debits so
-admins can reconcile CC/bank charges the same way they reconcile GoDaddy deposits.
+#### Event Cancellation and Postponement
 
-**Expense → Ledger promotion:**
-- `_sync_expense_ledger_entry(conn, exp)` — called by `update_expense_transaction()` whenever
-  an expense's `review_status` becomes `approved` or `corrected`. Creates/updates an
-  `acct_transactions` row with `entry_type='expense'` and the correct `amount` column set.
-  Sets `expense_transactions.acct_transaction_id` back to the ledger row ID for linking.
-- `_backfill_approved_expenses_to_ledger(conn)` — runs at startup in `init_db()` to promote
-  all already-approved expenses that predate this feature (one-time catch-up, idempotent).
+New event lifecycle states: `cancelled` and `postponed`.
 
-**Bank reconciliation fixes (three compounding bugs corrected):**
-1. `entry_type='expense'` now set in `_sync_expense_ledger_entry` — previously NULL, which
-   caused `get_match_suggestions` to filter out expense rows entirely.
-2. Amount comparison in `get_match_suggestions` now uses `abs(dep_amt)` when the deposit is
-   negative (a bank debit), so a -$21.37 charge correctly matches a $21.34 expense entry
-   (diff 0.03) instead of comparing -21.37 vs 21.34 = 42.71.
-3. `run_deposit_auto_match` now has an `elif dep_amt < 0` branch that matches negative deposits
-   against `entry_type='expense'` ledger rows within ±$1 / ±10 days (confidence 0.85/0.65/0.55).
+- **Cancel Event modal (4 steps):** choose status + required reason → choose Bulk vs One-by-One
+  → stage per-player Credit / Refund / Skip actions → completion summary + optional cancellation email.
+- **Bulk path:** Credit All or Refund All with auto-detected method (GoDaddy/Venmo/Zelle) in one click.
+- **One-by-One path:** per-player staging list with individual choices before Apply All.
+- Comp and RSVP-only players silently removed; add-on payments cascade via existing credit/refund logic.
+- **Restore Event** button available until the first player action is taken.
+- Cancelled/postponed badges on event list rows and status banner in event detail.
 
-**Expense modal — Vendor/Customer typeahead:**
-- Expense review modal now includes the same Vendor/Customer typeahead as the income ledger
-  modal. Uses `exp-*` ID prefix. `+ New Vendor` button opens the same vendor creation flow.
-- `saveNewVendor()` routes to `setExpCustomer` vs `setTxnCustomer` based on which modal is open.
+New DB columns on `events`: `status`, `status_reason`, `rescheduled_to_event_id`, `status_changed_at`.
 
-**GoDaddy merchant fee split fix:**
-- Edit modal for GoDaddy transactions previously showed only 2 splits (registration + tx_fee)
-  when the stored DB splits lacked the negative merchant_fee row. Fixed by checking
-  `hasMerchantFeeSplit = splits.some(s => s.amount < 0)` and falling back to `_buildSmartSplit`
-  for GoDaddy transactions that lack the negative split.
+New API endpoints (all admin):
+`POST /api/events/<name>/cancel` · `POST /api/events/<name>/restore` ·
+`GET /api/events/<name>/cancellation-players` · `POST /api/events/<name>/cancel-bulk` ·
+`POST /api/events/<name>/cancel-apply`
+
+#### RSVP Credit Application
+
+- Green **Credit** badge on RSVP-only rows in event detail when the player has an outstanding credit.
+- **Apply Credit** modal: shows previous selections, event price for player type, amount owed/excess,
+  and excess credit disposition (keep vs. Venmo note). Applies via `apply_credit_to_rsvp()`.
+- After each RSVP inbox check, `_send_rsvp_credit_alerts()` auto-emails players with credits
+  who are RSVPing to upcoming events. `rsvps.credit_notified_at` tracks when alert was sent.
+- **GG RSVP synthetic rows:** badge and Apply Credit button work for unmatched GG RSVP rows
+  (not just items table rows). `create_rsvp_only_item()` promotes the GG RSVP to a real items
+  row before credit application.
+- **Undo Credit Application:** `POST /api/items/<id>/reverse-credit-application` restores source
+  credits, removes excess item, reverses accounting entries, reverts target to `rsvp_only`.
+- **Apply Credit from Customers page:** Apply button on credited items in customer detail; opens
+  event picker with price preview. Endpoints: `GET /api/items/<id>/apply-credit-info`,
+  `POST /api/items/<id>/apply-to-event`.
+
+#### Vendor System
+
+- Vendors stored in `customers` table with `vendor` role + new `company_name` column.
+- Vendor typeahead in accounting modals: all vendors shown when focused (empty input),
+  "＋ New Vendor" option at bottom. `POST /api/accounting/vendors` creates vendor idempotently.
+
+#### Accounting Ledger Improvements
+
+- **Customer/Vendor column** in ledger with column visibility toggle (Customer/Vendor, Category,
+  Type, Account) — persisted in localStorage via CSS class toggle.
+- **Smart Fill** (`POST /api/accounting/smart-fill`): bulk-assigns accounts and default splits for
+  all unsplit ledger entries. Dry-run preview + confirm dialog before apply.
+- Edit modal auto-assigns account and pre-populates default split when no splits exist.
+- Category column simplified to just category name; GoDaddy fee + net deposit shown in edit modal.
+- GoDaddy auto-match uses `net_deposit` (gross − merchant fee) as comparison amount.
+
+#### Customer Info Tab Editing
+
+Admins can edit Member Status and Roles from the Info tab on any customer profile.
+- **Member Status:** 1ST TIMER / GUEST / MEMBER / MEMBER+ / FORMER (new `member_plus` DB value)
+- **Roles:** member, manager, admin, vendor, course_contact, sponsor via checkboxes
+- New `POST /api/customers/sync-roles` replaces full role set atomically.
+
+#### Expense ↔ Bank Reconciliation
+
+- Approved expenses auto-promoted to `acct_transactions` with `entry_type='expense'` + `amount` set.
+- `_backfill_approved_expenses_to_ledger()` startup catch-up for existing approved expenses.
+- `run_deposit_auto_match` new `elif dep_amt < 0` branch: matches negative deposits against
+  expense ledger entries (±$1 / ±10 days; confidence 0.85/0.65/0.55 by desc+amount match).
+- `get_match_suggestions` amount fix: uses `abs(dep_amt)` for expense deposits.
+- GoDaddy merchant fee split fix in edit modal: regenerates all 3 splits when DB only has 2.
 
 ---
 
