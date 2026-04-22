@@ -1529,6 +1529,10 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("side_game_fee_9", "REAL"), ("side_game_fee_18", "REAL"),
             ("course_surcharge", "REAL DEFAULT 0"),
             ("course_cost_breakdown", "TEXT"), ("course_cost_breakdown_9", "TEXT"), ("course_cost_breakdown_18", "TEXT"),
+            ("status", "TEXT DEFAULT 'active'"),
+            ("status_reason", "TEXT"),
+            ("rescheduled_to_event_id", "INTEGER"),
+            ("status_changed_at", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
@@ -4410,7 +4414,8 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "side_game_fee_9", "side_game_fee_18",
                 "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18",
                 "course_surcharge",
-                "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18"}
+                "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
+                "rescheduled_to_event_id"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return False
@@ -6307,6 +6312,100 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
         )
         conn.commit()
         return True
+
+
+def _detect_refund_method(item: dict) -> str:
+    """Auto-detect the appropriate refund method from the item's merchant field."""
+    merchant = (item.get("merchant") or "").lower()
+    if merchant == "the golf fellowship":
+        return "GoDaddy"
+    if "venmo" in merchant:
+        return "Venmo"
+    if "zelle" in merchant:
+        return "Zelle"
+    return ""
+
+
+def set_event_status(event_id: int, status: str, reason: str = "",
+                     rescheduled_to_id: int | None = None,
+                     db_path: str | Path | None = None) -> bool:
+    """Set an event's status to 'cancelled', 'postponed', or 'active'."""
+    if status not in ("active", "cancelled", "postponed"):
+        return False
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT id FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not row:
+            return False
+        import datetime as _dt
+        conn.execute(
+            """UPDATE events
+               SET status = ?, status_reason = ?, rescheduled_to_event_id = ?,
+                   status_changed_at = ?
+               WHERE id = ?""",
+            (status, reason or None, rescheduled_to_id,
+             _dt.datetime.utcnow().isoformat(), event_id),
+        )
+        conn.commit()
+        return True
+
+
+def can_restore_event(event_id: int, db_path: str | Path | None = None) -> bool:
+    """Return True if no player action (credit/refund/wd) has been taken yet for this event."""
+    with _connect(db_path) as conn:
+        event = conn.execute("SELECT item_name FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not event:
+            return False
+        event_name = event["item_name"]
+        # Check for any items with non-active status that were changed (excluding rsvp_only/gg_rsvp)
+        row = conn.execute(
+            """SELECT COUNT(*) as cnt FROM items
+               WHERE item_name = ? COLLATE NOCASE
+               AND transaction_status IN ('credited', 'refunded', 'transferred', 'wd')""",
+            (event_name,),
+        ).fetchone()
+        return row["cnt"] == 0
+
+
+def get_cancellation_players(event_id: int, db_path: str | Path | None = None) -> dict:
+    """Return players split into 'paid' (need action) and 'silent' (auto-remove) groups."""
+    SILENT_MERCHANTS = (
+        "Manual Entry", "RSVP Only", "Roster Import",
+        "Customer Entry", "RSVP Import", "RSVP Email Link",
+    )
+    SILENT_STATUSES = ("rsvp_only", "gg_rsvp")
+    with _connect(db_path) as conn:
+        event = conn.execute("SELECT item_name FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not event:
+            return {"paid": [], "silent": []}
+        event_name = event["item_name"]
+        rows = conn.execute(
+            """SELECT i.* FROM items i
+               WHERE i.item_name = ? COLLATE NOCASE
+               AND i.parent_item_id IS NULL
+               AND COALESCE(i.transaction_status, 'active') = 'active'
+               ORDER BY i.customer""",
+            (event_name,),
+        ).fetchall()
+
+        paid = []
+        silent = []
+        for r in rows:
+            d = dict(r)
+            merchant = d.get("merchant") or ""
+            status = d.get("transaction_status") or "active"
+            is_silent_merchant = any(merchant == m or merchant.startswith(f"Paid Separately (Cash") for m in SILENT_MERCHANTS)
+            # Check if truly a comp (price is $0 or $0.00 (comp))
+            price_str = (d.get("item_price") or "").strip().lower()
+            is_zero_price = price_str in ("$0.00", "$0.00 (comp)", "$0", "0", "")
+            is_rsvp = status in SILENT_STATUSES or merchant == "RSVP Only"
+
+            if is_rsvp or (is_silent_merchant and is_zero_price):
+                silent.append(d)
+            else:
+                d["auto_refund_method"] = _detect_refund_method(d)
+                paid.append(d)
+
+        return {"paid": paid, "silent": silent}
 
 
 def create_event(item_name: str, event_date: str = None, course: str = None,
