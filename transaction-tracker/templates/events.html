@@ -8394,7 +8394,8 @@
             if (!resp.ok) { body.innerHTML = '<div style="color:#dc2626;padding:1rem;">Failed to load credit info.</div>'; return; }
             const info = await resp.json();
 
-            applyCreditState = { itemId, rsvpId, customer, eventName, info };
+            const resolvedCustomer = info.customer || customer;
+            applyCreditState = { itemId, rsvpId, customer: resolvedCustomer, eventName, info };
 
             const fmt = v => '$' + parseFloat(v || 0).toFixed(2);
             const scenarioColor = info.amount_owed > 0 ? '#d97706' : info.amount_owed < 0 ? '#16a34a' : '#6b7280';
@@ -8444,7 +8445,7 @@
                     <button id="apply-credit-close" class="modal-close">&times;</button>
                 </div>
                 <div style="font-size:0.88rem;color:#374151;margin-bottom:0.5rem;">
-                    Player: <strong>${escapeHtml(displayName(customer))}</strong> &bull; Event: <strong>${escapeHtml(eventName)}</strong>
+                    Player: <strong>${escapeHtml(displayName(resolvedCustomer))}</strong> &bull; Event: <strong>${escapeHtml(eventName)}</strong>
                 </div>
                 <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:0.5rem;">
                     <thead><tr style="background:#f3f4f6;">
