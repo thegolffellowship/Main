@@ -2360,7 +2360,7 @@ def api_update_customer():
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
-               "archived", "venmo_username"}
+               "archived", "venmo_username", "current_player_status"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return jsonify({"error": "No valid fields to update"}), 400
@@ -2378,6 +2378,33 @@ def api_customer_venmo_handles():
     """Return all customers with Venmo handles set."""
     from email_parser.database import get_customer_venmo_handles
     return jsonify(get_customer_venmo_handles())
+
+
+@app.route("/api/customers/sync-roles", methods=["POST"])
+@require_role("admin")
+def api_sync_customer_roles():
+    """Replace all roles for a customer."""
+    from email_parser.database import _connect
+    data = request.get_json(force=True)
+    customer_name = (data.get("customer_name") or "").strip()
+    roles = data.get("roles", [])
+    if not customer_name:
+        return jsonify({"error": "customer_name required"}), 400
+    valid_roles = {"member", "manager", "admin", "owner", "course_contact", "sponsor", "vendor"}
+    roles = [r for r in roles if r in valid_roles]
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT customer_id FROM customers WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)",
+            (customer_name,)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Customer not found"}), 404
+        cid = row["customer_id"]
+        conn.execute("DELETE FROM customer_roles WHERE customer_id = ?", (cid,))
+        for r in roles:
+            conn.execute("INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?,?)", (cid, r))
+        conn.commit()
+    return jsonify({"status": "ok", "roles": roles})
 
 
 @app.route("/api/customer-roles")
@@ -2402,9 +2429,9 @@ def api_customer_roles():
                 result[cid] = {"roles": [], "first_timer_ever": True}
             result[cid]["roles"].append(r["role_type"])
 
-        # Add first_timer_ever for every customer (even those without roles)
+        # Add first_timer_ever and current_player_status for every customer (even those without roles)
         customer_rows = conn.execute(
-            "SELECT customer_id, first_timer_ever FROM customers"
+            "SELECT customer_id, first_timer_ever, current_player_status FROM customers"
         ).fetchall()
         for c in customer_rows:
             cid = str(c["customer_id"])
@@ -2412,6 +2439,7 @@ def api_customer_roles():
                 result[cid] = {"roles": [], "first_timer_ever": bool(c["first_timer_ever"])}
             else:
                 result[cid]["first_timer_ever"] = bool(c["first_timer_ever"])
+            result[cid]["current_player_status"] = c["current_player_status"]
 
     return jsonify(result)
 
