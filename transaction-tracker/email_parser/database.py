@@ -7506,7 +7506,8 @@ def reverse_credit_application(item_id: int, db_path: str | Path | None = None) 
                        side_games = '',
                        tee_choice = '',
                        user_status = '',
-                       transferred_from_id = NULL
+                       transferred_from_id = NULL,
+                       credit_note = NULL
                    WHERE id = ?""",
                 (item_id,),
             )
@@ -7590,6 +7591,8 @@ def apply_credit_to_rsvp(
 
         # Update the RSVP item → active registration
         price_str = f"${applied:.2f} (credit transfer)"
+        amount_owed = round((new_price or 0) - applied, 2)
+        balance_note = f"balance_due:{amount_owed:.2f}" if amount_owed > 0 else None
         conn.execute(
             """UPDATE items
                SET transaction_status = 'active',
@@ -7599,10 +7602,11 @@ def apply_credit_to_rsvp(
                    side_games = ?,
                    tee_choice = ?,
                    user_status = ?,
-                   transferred_from_id = ?
+                   transferred_from_id = ?,
+                   credit_note = ?
                WHERE id = ?""",
             (price_str, u_holes, u_games, u_tee, u_status,
-             credited_items[0]["id"], rsvp_item_id),
+             credited_items[0]["id"], balance_note, rsvp_item_id),
         )
 
         # Mark all credited items as transferred
