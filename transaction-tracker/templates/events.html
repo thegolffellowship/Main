@@ -3713,6 +3713,7 @@
         // Create synthetic rows for unmatched GG RSVP players so they appear in the main table
         const ggRsvpRows = unmatchedPlaying.map((r, i) => ({
             id: `gg-rsvp-${i}`,
+            rsvp_id: r.id,  // actual rsvps table id for credit application
             customer: r.resolved_name || r.player_name || 'Unknown',
             customer_email: r.player_email || '',
             item_name: ev.item_name,
@@ -3994,13 +3995,17 @@
                             tag += ` <span class="status-tag btn-assign-guest" style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Click to enter the guest player's name">Guest?</span>`;
                         }
                     }
-                    // Credit badge for RSVP-only players with outstanding credits (real DB rows only)
-                    if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
+                    // Credit badge for all RSVP players with outstanding credits
+                    if (isRsvpOnly || isGgRsvp) {
                         const evCreditMap = rsvpCreditMap[ev.item_name] || {};
                         const creditInfo = evCreditMap[r.customer];
                         if (creditInfo) {
                             const amt = creditInfo.total_credit.toFixed(2);
-                            tag += ` <span class="status-tag btn-apply-credit-badge" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" title="Click to apply credit">Credit: $${amt}</span>`;
+                            const isSyn = String(r.id).startsWith("gg-rsvp");
+                            const idAttr = isSyn
+                                ? `data-rsvp-id="${r.rsvp_id || ''}"`
+                                : `data-item-id="${r.id}"`;
+                            tag += ` <span class="status-tag btn-apply-credit-badge" ${idAttr} data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" title="Click to apply credit">Credit: $${amt}</span>`;
                         }
                     }
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
@@ -4010,7 +4015,12 @@
                 } else if (c.key === "actions") {
                     let btns = "";
                     if (isSynthetic) {
-                        btns = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        const evCreditMapSyn = rsvpCreditMap[ev.item_name] || {};
+                        const creditInfoSyn = evCreditMapSyn[r.customer];
+                        if (creditInfoSyn) {
+                            btns = `<button class="btn btn-apply-credit" data-rsvp-id="${r.rsvp_id || ''}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Apply Credit</button> `;
+                        }
+                        btns += `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
                         const evCreditMapAct = rsvpCreditMap[ev.item_name] || {};
                         const creditInfoAct = evCreditMapAct[r.customer] || null;
@@ -4021,9 +4031,15 @@
                     } else if (isCompRow) {
                         btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                     } else if (txStatus === "active") {
-                        btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
-                        btns += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
-                        if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        const isCreditTransfer = (r.merchant || "") === "Paid Separately (Credit Transfer)";
+                        if (isCreditTransfer) {
+                            btns = `<button class="btn btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#7c3aed;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Undo Credit</button>`;
+                            btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        } else {
+                            btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
+                            btns += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
+                            if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        }
                     } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
                         btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
                     }
@@ -8362,7 +8378,7 @@
 
     let applyCreditState = {};
 
-    async function openApplyCreditModal(itemId, customer, eventName) {
+    async function openApplyCreditModal(itemId, rsvpId, customer, eventName) {
         const overlay = document.getElementById('apply-credit-overlay');
         const body = document.getElementById('apply-credit-body');
         const actions = document.getElementById('apply-credit-actions');
@@ -8371,11 +8387,14 @@
         overlay.style.display = 'flex';
 
         try {
-            const resp = await fetch(`/api/rsvps/${itemId}/credit-info`);
+            const infoUrl = rsvpId
+                ? `/api/rsvps/gg/${rsvpId}/credit-info`
+                : `/api/rsvps/${itemId}/credit-info`;
+            const resp = await fetch(infoUrl);
             if (!resp.ok) { body.innerHTML = '<div style="color:#dc2626;padding:1rem;">Failed to load credit info.</div>'; return; }
             const info = await resp.json();
 
-            applyCreditState = { itemId, customer, eventName, info };
+            applyCreditState = { itemId, rsvpId, customer, eventName, info };
 
             const fmt = v => '$' + parseFloat(v || 0).toFixed(2);
             const scenarioColor = info.amount_owed > 0 ? '#d97706' : info.amount_owed < 0 ? '#16a34a' : '#6b7280';
@@ -8478,8 +8497,8 @@
     document.getElementById('apply-credit-cancel-btn').addEventListener('click', closeApplyCreditModal);
 
     document.getElementById('apply-credit-submit').addEventListener('click', async () => {
-        const { itemId, customer, eventName, info } = applyCreditState;
-        if (!itemId || !info) return;
+        const { itemId, rsvpId, customer, eventName, info } = applyCreditState;
+        if ((!itemId && !rsvpId) || !info) return;
 
         const excessRadio = document.querySelector('input[name="excess-action"]:checked');
         const excessAction = excessRadio ? excessRadio.value : 'keep';
@@ -8490,7 +8509,10 @@
         submitBtn.textContent = 'Applying…';
 
         try {
-            const resp = await fetch(`/api/rsvps/${itemId}/apply-credit`, {
+            const applyUrl = rsvpId
+                ? `/api/rsvps/gg/${rsvpId}/apply-credit`
+                : `/api/rsvps/${itemId}/apply-credit`;
+            const resp = await fetch(applyUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -8532,10 +8554,39 @@
         const badge = e.target.closest('.btn-apply-credit-badge, .btn-apply-credit');
         if (badge) {
             e.stopPropagation();
-            const itemId = badge.dataset.itemId;
+            const itemId = badge.dataset.itemId || null;
+            const rsvpId = badge.dataset.rsvpId || null;
             const customer = badge.dataset.customer;
-            const eventName = badge.dataset.eventName || (applyCreditState.eventName || '');
-            await openApplyCreditModal(itemId, customer, eventName);
+            const eventName = badge.dataset.eventName;
+            await openApplyCreditModal(itemId, rsvpId, customer, eventName);
+        }
+    });
+
+    // Undo Credit Application handler
+    document.addEventListener('click', async e => {
+        const undoBtn = e.target.closest('.btn-undo-credit-apply');
+        if (undoBtn && currentRole === 'admin') {
+            e.stopPropagation();
+            const customer = undoBtn.dataset.customer || 'this player';
+            const itemId = undoBtn.dataset.itemId;
+            const eventName = undoBtn.dataset.eventName;
+            if (!confirm(`Undo credit application for ${displayName(customer)}?\n\nThis will restore their original credits and revert the registration to RSVP-only.`)) return;
+            try {
+                const resp = await fetch(`/api/items/${itemId}/reverse-credit-application`, { method: 'POST' });
+                const data = await resp.json();
+                if (!resp.ok) { alert(data.error || 'Failed to reverse credit application.'); return; }
+                // Refresh and re-render
+                delete rsvpCreditMap[eventName];
+                await Promise.all([fetchItems(), fetchRsvpCreditMap(eventName)]);
+                const ev = allEvents.find(ev2 => ev2.item_name === eventName);
+                if (ev) {
+                    await fetchRsvps(eventName);
+                    const container = document.getElementById(`detail-content-${ev.id}`);
+                    if (container) { container.innerHTML = renderDetailContent(ev); attachDetailHandlers(container, ev); }
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
         }
     });
 

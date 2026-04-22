@@ -7303,7 +7303,11 @@ def get_rsvp_credit_info(rsvp_id: int, db_path: str | Path | None = None) -> dic
 
 
 def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None) -> dict:
-    """Return {customer_name: credit_info} for all RSVP-only players in an event."""
+    """Return {customer_name: credit_info} for all RSVP-only players in an event.
+
+    Covers both items-table RSVPs (rsvp_only / gg_rsvp) and unmatched GG RSVPs
+    from the rsvps table (synthetic rows on the frontend).
+    """
     with _connect(db_path) as conn:
         rsvp_items = conn.execute(
             """SELECT id, customer FROM items
@@ -7313,17 +7317,39 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
             (event_name,),
         ).fetchall()
 
-        # Also check unmatched GG RSVPs
+        # GG RSVPs not matched to an active item (these become synthetic JS rows)
         rsvp_rows = conn.execute(
-            """SELECT r.id, r.player_name, r.player_email FROM rsvps r
+            """SELECT r.id, r.player_name, r.player_email
+               FROM rsvps r
                WHERE r.matched_event = ? COLLATE NOCASE
-                 AND r.response = 'PLAYING'""",
+                 AND r.response = 'PLAYING'
+                 AND (r.matched_item_id IS NULL
+                      OR NOT EXISTS (
+                          SELECT 1 FROM items i
+                          WHERE i.id = r.matched_item_id
+                            AND COALESCE(i.transaction_status, 'active') = 'active'
+                      ))""",
             (event_name,),
         ).fetchall()
 
+        # Build email → canonical customer name lookup for rsvp rows
+        email_to_customer = {}
+        for rr in rsvp_rows:
+            email = (rr["player_email"] or "").strip().lower()
+            if email and email not in email_to_customer:
+                card = conn.execute(
+                    """SELECT customer FROM items
+                       WHERE LOWER(customer_email) = ?
+                         AND customer IS NOT NULL AND customer != ''
+                       ORDER BY order_date DESC LIMIT 1""",
+                    (email,),
+                ).fetchone()
+                if card:
+                    email_to_customer[email] = card["customer"]
+
     result = {}
 
-    # For item-based RSVPs (rsvp_only / gg_rsvp items)
+    # Item-based RSVPs (rsvp_only / gg_rsvp items in the items table)
     for row in rsvp_items:
         customer = row["customer"]
         if not customer:
@@ -7338,9 +7364,140 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
                     for c in credits
                 ],
                 "item_id": row["id"],
+                "rsvp_id": None,
+            }
+
+    # GG RSVPs from rsvps table (synthetic frontend rows)
+    for rr in rsvp_rows:
+        email = (rr["player_email"] or "").strip().lower()
+        customer = email_to_customer.get(email) or rr["player_name"] or ""
+        if not customer or customer in result:
+            continue
+        credits = get_player_credits(customer, db_path)
+        if credits:
+            result[customer] = {
+                "total_credit": sum(c["credit_amount"] for c in credits),
+                "credits": [
+                    {"item_id": c["id"], "event_name": c["item_name"],
+                     "credit_amount": c["credit_amount"]}
+                    for c in credits
+                ],
+                "item_id": None,
+                "rsvp_id": rr["id"],
             }
 
     return result
+
+
+def create_rsvp_only_item(
+    event_name: str,
+    player_name: str,
+    player_email: str,
+    rsvp_id: int | None = None,
+    db_path: str | Path | None = None,
+) -> int:
+    """Create a rsvp_only items row for a GG RSVP player so credits can be applied.
+
+    Idempotent — returns existing item_id if the row was already created for this rsvp_id.
+    """
+    import datetime as _dt
+
+    with _connect(db_path) as conn:
+        uid = f"manual-gg-rsvp-{rsvp_id}" if rsvp_id else f"manual-gg-rsvp-name-{player_name}"
+        existing = conn.execute(
+            "SELECT id FROM items WHERE email_uid = ?", (uid,)
+        ).fetchone()
+        if existing:
+            return existing["id"]
+
+        event_row = conn.execute(
+            "SELECT chapter FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,),
+        ).fetchone()
+        chapter = event_row["chapter"] if event_row else ""
+
+        conn.execute(
+            """INSERT INTO items
+               (email_uid, merchant, customer, customer_email, item_name,
+                item_price, transaction_status, order_date, chapter)
+               VALUES (?, 'Golf Genius RSVP', ?, ?, ?, '', 'rsvp_only', date('now'), ?)""",
+            (uid, player_name, player_email or "", event_name, chapter or ""),
+        )
+        conn.commit()
+        return conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+
+
+def reverse_credit_application(item_id: int, db_path: str | Path | None = None) -> dict:
+    """Undo a credit application: restore source credits and revert the registration.
+
+    - Finds items that were transferred to item_id and reverts them to 'credited'.
+    - Removes the excess credit item if one was created.
+    - Marks the transfer accounting entries as reversed.
+    - Reverts the target item to 'rsvp_only' (or deletes it if it was a synthetic GG item).
+    """
+    with _connect(db_path) as conn:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return {"ok": False, "error": "Item not found"}
+        item = dict(item)
+
+        if item.get("merchant") != "Paid Separately (Credit Transfer)":
+            return {"ok": False, "error": "Not a credit-transfer registration"}
+
+        sources = conn.execute(
+            "SELECT * FROM items WHERE transferred_to_id = ? AND transaction_status = 'transferred'",
+            (item_id,),
+        ).fetchall()
+        if not sources:
+            return {"ok": False, "error": "No transferred source items found — may already be reversed"}
+
+        for s in sources:
+            conn.execute(
+                """UPDATE items
+                   SET transaction_status = 'credited',
+                       credit_note = NULL,
+                       transferred_to_id = NULL
+                   WHERE id = ?""",
+                (s["id"],),
+            )
+            conn.execute(
+                "UPDATE acct_transactions SET status = 'reversed' WHERE source_ref = ?",
+                (f"xfer-flat-{s['id']}-out",),
+            )
+
+        # Remove excess credit item if created
+        conn.execute(
+            "DELETE FROM items WHERE email_uid LIKE ?",
+            (f"credit-excess-{item_id}-%",),
+        )
+
+        # Reverse transfer_in accounting entry
+        conn.execute(
+            "UPDATE acct_transactions SET status = 'reversed' WHERE source_ref = ?",
+            (f"xfer-flat-{item_id}-in",),
+        )
+
+        # Revert or delete target item
+        email_uid = item.get("email_uid") or ""
+        if email_uid.startswith("manual-gg-rsvp-"):
+            conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+        else:
+            conn.execute(
+                """UPDATE items
+                   SET transaction_status = 'rsvp_only',
+                       merchant = '',
+                       item_price = '',
+                       holes = '',
+                       side_games = '',
+                       tee_choice = '',
+                       user_status = '',
+                       transferred_from_id = NULL
+                   WHERE id = ?""",
+                (item_id,),
+            )
+
+        conn.commit()
+        return {"ok": True, "sources_restored": len(sources)}
 
 
 def mark_rsvp_credit_notified(rsvp_id: int, db_path: str | Path | None = None) -> None:
