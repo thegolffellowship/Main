@@ -5386,48 +5386,48 @@ def api_acct_account_balances():
 @require_role("admin")
 def api_acct_create_vendor():
     """Create a new vendor (customer with vendor role) for transaction linking."""
-    from email_parser.database import _connect, create_customer
+    from email_parser.database import _connect
     d = request.json or {}
     first_name = (d.get("first_name") or "").strip()
     last_name = (d.get("last_name") or "").strip()
+    phone = (d.get("phone") or "").strip() or None
     if not first_name and not last_name:
         return jsonify({"error": "first_name or last_name is required"}), 400
-    name = " ".join(filter(None, [first_name, last_name]))
-    result = create_customer(
-        name, phone=d.get("phone", ""),
-        first_name=first_name, last_name=last_name,
-    )
-    if result is None:
-        # Already exists — look them up and just add the vendor role
-        with _connect() as conn:
-            row = conn.execute(
-                "SELECT customer_id FROM customers WHERE first_name=? AND last_name=? COLLATE NOCASE",
-                (first_name, last_name),
-            ).fetchone()
-            if not row:
-                return jsonify({"error": "Customer already exists but could not be found"}), 409
-            cid = row["customer_id"]
-            conn.execute(
-                "INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?, 'vendor')",
-                (cid,),
-            )
-            conn.commit()
-    else:
-        cid = result["customer_id"]
-        with _connect() as conn:
-            conn.execute(
-                "INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?, 'vendor')",
-                (cid,),
-            )
-            conn.commit()
-    # Return the full customer record
+
     with _connect() as conn:
+        # Check if a customer with this name already exists in the customers table
+        existing = conn.execute(
+            """SELECT customer_id FROM customers
+               WHERE LOWER(COALESCE(first_name,'')) = LOWER(?)
+                 AND LOWER(COALESCE(last_name,'')) = LOWER(?)
+               LIMIT 1""",
+            (first_name, last_name),
+        ).fetchone()
+
+        if existing:
+            cid = existing["customer_id"]
+        else:
+            cursor = conn.execute(
+                """INSERT INTO customers
+                       (first_name, last_name, phone, acquisition_source, account_status)
+                   VALUES (?, ?, ?, 'vendor', 'active')""",
+                (first_name or None, last_name or None, phone),
+            )
+            cid = cursor.lastrowid
+
+        conn.execute(
+            "INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?, 'vendor')",
+            (cid,),
+        )
+        conn.commit()
+
         row = conn.execute(
             """SELECT c.customer_id, c.first_name, c.last_name,
                       c.current_player_status, c.chapter, 1 as is_vendor
                FROM customers c WHERE c.customer_id = ?""",
             (cid,),
         ).fetchone()
+
     return jsonify(dict(row)), 201
 
 
