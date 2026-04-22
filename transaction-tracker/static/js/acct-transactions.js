@@ -1311,6 +1311,13 @@ async function openExpenseReview(expenseId) {
             }
         }
 
+        // Vendor / Customer typeahead
+        clearExpCustomer();
+        if (exp.customer_id) {
+            const cust = ACCT.customers.find(c => c.customer_id === exp.customer_id);
+            if (cust) setExpCustomer(cust.customer_id, _customerDisplayName(cust), cust.is_vendor);
+        }
+
         // Notes
         $('#expense-notes').value = exp.notes || '';
 
@@ -1389,6 +1396,7 @@ async function saveExpenseReview(action) {
         transaction_date: $('#expense-date-input').value || null,
         transaction_type: $('#expense-type').value || 'expense',
         account_name: newAcct,
+        customer_id: parseInt($('#exp-customer-id').value) || null,
         entity: $('#expense-entity').value || null,
         category: $('#expense-category').value || null,
         event_name: $('#expense-event').value || null,
@@ -1617,6 +1625,88 @@ function initCustomerTypeahead() {
     });
 }
 
+// ── Expense Modal Customer Typeahead ─────────────────────
+
+function setExpCustomer(id, name, isVendor) {
+    $('#exp-customer-id').value = id;
+    $('#exp-customer-search').value = '';
+    $('#exp-customer-dropdown').style.display = 'none';
+    const sel = $('#exp-customer-selected');
+    $('#exp-customer-selected-name').textContent = (isVendor ? '🏷 ' : '') + name;
+    sel.style.display = 'flex';
+    sel.style.background = isVendor ? '#fffbeb' : '#f0fdf4';
+    sel.style.borderColor = isVendor ? '#fcd34d' : '#86efac';
+}
+
+function clearExpCustomer() {
+    $('#exp-customer-id').value = '';
+    $('#exp-customer-search').value = '';
+    $('#exp-customer-selected').style.display = 'none';
+    $('#exp-customer-dropdown').style.display = 'none';
+}
+
+function _renderExpCustomerDropdown(matches, showVendorSection) {
+    const dd = $('#exp-customer-dropdown');
+    let html = '';
+    if (showVendorSection) {
+        const vendors = _allVendors();
+        if (vendors.length) {
+            html += `<div style="padding:4px 12px;font-size:0.65rem;font-weight:700;color:#92400e;background:#fffbeb;letter-spacing:.05em;border-bottom:1px solid #fde68a;">VENDORS</div>`;
+            html += vendors.map(c => _customerItemHTML(c)).join('');
+            if (matches.length) {
+                html += `<div style="padding:4px 12px;font-size:0.65rem;font-weight:700;color:#6b7280;background:#f9fafb;letter-spacing:.05em;border-bottom:1px solid #f3f4f6;">CUSTOMERS</div>`;
+            }
+        }
+    }
+    html += matches.map(c => _customerItemHTML(c)).join('');
+    if (!html) { dd.style.display = 'none'; return; }
+    html += `<div id="exp-btn-new-vendor-inline" style="padding:8px 12px;cursor:pointer;font-size:0.8rem;color:#2563eb;font-weight:600;border-top:1px solid #e5e7eb;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:1rem;line-height:1;">＋</span> New Vendor
+    </div>`;
+    dd.innerHTML = html;
+    dd.style.display = '';
+    dd.querySelectorAll('.acct-cust-item').forEach(el => {
+        el.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            setExpCustomer(parseInt(el.dataset.id), el.dataset.name, el.dataset.vendor === '1');
+        });
+        el.addEventListener('mouseover', () => el.style.background = '#f9fafb');
+        el.addEventListener('mouseout', () => el.style.background = '');
+    });
+    dd.querySelector('#exp-btn-new-vendor-inline')?.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        dd.style.display = 'none';
+        openVendorModal();
+    });
+}
+
+function initExpCustomerTypeahead() {
+    const input = $('#exp-customer-search');
+    const dd = $('#exp-customer-dropdown');
+    if (!input) return;
+    input.addEventListener('input', () => {
+        const q = input.value.trim();
+        if (!q) { _renderExpCustomerDropdown([], true); return; }
+        _renderExpCustomerDropdown(_fuzzyMatchCustomers(q), false);
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { dd.style.display = 'none'; }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const first = dd.querySelector('.acct-cust-item');
+            if (first) first.dispatchEvent(new Event('mousedown'));
+        }
+    });
+    input.addEventListener('blur', () => {
+        setTimeout(() => { dd.style.display = 'none'; }, 150);
+    });
+    input.addEventListener('focus', () => {
+        const q = input.value.trim();
+        if (q) _renderExpCustomerDropdown(_fuzzyMatchCustomers(q), false);
+        else _renderExpCustomerDropdown([], true);
+    });
+}
+
 // ── Vendor Modal ─────────────────────────────────────────
 
 function openVendorModal() {
@@ -1681,7 +1771,11 @@ async function saveNewVendor() {
         if (existing >= 0) ACCT.customers[existing] = vendor;
         else ACCT.customers.push(vendor);
 
-        setTxnCustomer(vendor.customer_id, vendor.display_name, true);
+        if ($('#expense-review-modal').style.display !== 'none') {
+            setExpCustomer(vendor.customer_id, vendor.display_name, true);
+        } else {
+            setTxnCustomer(vendor.customer_id, vendor.display_name, true);
+        }
         $('#vendor-modal').style.display = 'none';
     } catch (e) {
         errEl.textContent = e.message;

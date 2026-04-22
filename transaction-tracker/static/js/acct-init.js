@@ -122,14 +122,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         $('#transfer-row').style.display = $('#txn-type').value === 'transfer' ? '' : 'none';
     });
 
-    // Customer typeahead
+    // Customer typeahead (income/ledger modal)
     initCustomerTypeahead();
-
-    // Customer clear button
     $('#txn-customer-clear').addEventListener('click', clearTxnCustomer);
-
-    // New Vendor button (in modal label)
     $('#btn-new-vendor-modal').addEventListener('click', openVendorModal);
+
+    // Customer typeahead (expense modal)
+    initExpCustomerTypeahead();
+    $('#exp-customer-clear').addEventListener('click', clearExpCustomer);
+    $('#exp-btn-new-vendor').addEventListener('click', openVendorModal);
 
     // Vendor modal
     $('#vendor-modal-close').addEventListener('click', () => $('#vendor-modal').style.display = 'none');
