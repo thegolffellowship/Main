@@ -3088,6 +3088,18 @@ def _lookup_customer_id(conn: sqlite3.Connection,
             if row:
                 return row["customer_id"]
 
+    # 3a. Company name lookup — matches vendor/company records (single-word or multi-word)
+    if customer_name:
+        row = conn.execute(
+            """SELECT customer_id FROM customers
+               WHERE company_name IS NOT NULL AND company_name != ''
+                 AND LOWER(TRIM(company_name)) = LOWER(?)
+               LIMIT 1""",
+            (customer_name.strip(),),
+        ).fetchone()
+        if row:
+            return row["customer_id"]
+
     # 4. Alias name lookup — the incoming customer_name matches a known alias
     if customer_name:
         row = conn.execute(
@@ -3534,6 +3546,7 @@ def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
            FROM items
            WHERE customer_id IS NULL
              AND (customer IS NOT NULL AND customer != '')
+             AND merchant NOT IN ('Customer Entry', 'Roster Import', 'RSVP Import', 'RSVP Email Link')
            GROUP BY customer"""
     ).fetchall()
 
@@ -4979,6 +4992,8 @@ def create_customer(name: str, email: str = "", phone: str = "",
         new_values["chapter"] = chapter or None
         new_values["merchant"] = "Customer Entry"
         new_values["item_name"] = "Customer Entry"
+        # Link to customers record if one already exists (e.g. vendor created via vendor modal)
+        new_values["customer_id"] = _lookup_customer_id(conn, name, email or None)
         new_values["order_date"] = today
         new_values["email_uid"] = f"customer_entry_{name}_{today}"
         new_values["item_index"] = 0
