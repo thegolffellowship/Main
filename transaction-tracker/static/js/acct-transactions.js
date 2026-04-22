@@ -852,7 +852,6 @@ function openNewTransaction() {
     $('#receipt-filename').textContent = '';
     $('#transfer-row').style.display = 'none';
     clearTxnCustomer();
-    renderVendorChips();
 
     // Default single split
     const defaultEntity = ACCT.activeEntity || (ACCT.entities[0] && ACCT.entities[0].id);
@@ -1350,7 +1349,6 @@ function setTxnCustomer(id, name, isVendor) {
     sel.style.display = 'flex';
     sel.style.background = isVendor ? '#fffbeb' : '#f0fdf4';
     sel.style.borderColor = isVendor ? '#fcd34d' : '#86efac';
-    renderVendorChips();
 }
 
 function clearTxnCustomer() {
@@ -1358,7 +1356,6 @@ function clearTxnCustomer() {
     $('#txn-customer-search').value = '';
     $('#txn-customer-selected').style.display = 'none';
     $('#txn-customer-dropdown').style.display = 'none';
-    renderVendorChips();
 }
 
 function _fuzzyMatchCustomers(query) {
@@ -1550,7 +1547,6 @@ async function saveNewVendor() {
         else ACCT.customers.push(vendor);
 
         setTxnCustomer(vendor.customer_id, vendor.display_name, true);
-        renderVendorChips();
         $('#vendor-modal').style.display = 'none';
     } catch (e) {
         errEl.textContent = e.message;
