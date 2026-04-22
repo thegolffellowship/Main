@@ -120,6 +120,8 @@ from email_parser.database import (
     get_event_rsvp_credit_map,
     mark_rsvp_credit_notified,
     apply_credit_to_rsvp,
+    create_rsvp_only_item,
+    reverse_credit_application,
     get_app_setting,
     set_app_setting,
     # Accounting module
@@ -3048,6 +3050,134 @@ def api_trigger_credit_alerts():
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rsvps/gg/<int:rsvp_id>/credit-info", methods=["GET"])
+@require_role("manager")
+def api_gg_rsvp_credit_info(rsvp_id):
+    """Return full credit analysis for a GG RSVP (by rsvps.id, not items.id)."""
+    from email_parser.database import _connect, _calc_event_price_for_player
+    with _connect() as conn:
+        rsvp = conn.execute("SELECT * FROM rsvps WHERE id = ?", (rsvp_id,)).fetchone()
+        if not rsvp:
+            return jsonify({"error": "RSVP not found"}), 404
+        rsvp = dict(rsvp)
+
+        event_name = rsvp.get("matched_event") or ""
+        player_email = (rsvp.get("player_email") or "").strip().lower()
+        player_name = rsvp.get("player_name") or ""
+
+        # Resolve canonical customer name via email
+        customer = player_name
+        if player_email:
+            card = conn.execute(
+                """SELECT customer FROM items WHERE LOWER(customer_email) = ?
+                   AND customer IS NOT NULL AND customer != ''
+                   ORDER BY order_date DESC LIMIT 1""",
+                (player_email,),
+            ).fetchone()
+            if card:
+                customer = card["customer"]
+
+        credits = get_player_credits(customer)
+        if not credits:
+            return jsonify({"error": "No credits on file for this player"}), 404
+
+        total_credit = sum(c["credit_amount"] for c in credits)
+
+        event_row = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
+        ).fetchone()
+        event = dict(event_row) if event_row else {}
+
+        most_recent = credits[0]
+        prev = {
+            "user_status": most_recent.get("user_status") or "MEMBER",
+            "holes": most_recent.get("holes") or "9",
+            "side_games": most_recent.get("side_games") or "NONE",
+            "tee_choice": most_recent.get("tee_choice") or "",
+        }
+
+        event_price = _calc_event_price_for_player(
+            event, prev["user_status"], prev["holes"], prev["side_games"]
+        )
+        amount_owed = round((event_price or 0.0) - total_credit, 2) if event_price is not None else None
+
+    return jsonify({
+        "rsvp_id": rsvp_id,
+        "customer": customer,
+        "credits": [
+            {
+                "id": c["id"],
+                "item_name": c.get("item_name") or "",
+                "item_price": f"${c.get('credit_amount', 0):.2f}",
+                "order_date": c.get("order_date") or "",
+            }
+            for c in credits
+        ],
+        "total_credit": total_credit,
+        "event_price": event_price,
+        "amount_owed": amount_owed,
+        "previous_selections": prev,
+    })
+
+
+@app.route("/api/rsvps/gg/<int:rsvp_id>/apply-credit", methods=["POST"])
+@require_role("admin")
+def api_gg_rsvp_apply_credit(rsvp_id):
+    """Apply credits for a GG RSVP (synthetic row): creates rsvp_only item then applies credit."""
+    from email_parser.database import _connect
+    data = request.get_json(silent=True) or {}
+    credited_item_ids = data.get("credited_item_ids", [])
+    excess_action = data.get("excess_action", "keep")
+    holes = data.get("holes", "")
+    side_games = data.get("side_games", "")
+    tee_choice = data.get("tee_choice", "")
+    user_status = data.get("user_status", "")
+
+    if not credited_item_ids:
+        return jsonify({"error": "credited_item_ids required"}), 400
+
+    with _connect() as conn:
+        rsvp = conn.execute("SELECT * FROM rsvps WHERE id = ?", (rsvp_id,)).fetchone()
+        if not rsvp:
+            return jsonify({"error": "RSVP not found"}), 404
+        rsvp = dict(rsvp)
+
+    event_name = rsvp.get("matched_event") or ""
+    player_email = rsvp.get("player_email") or ""
+    player_name = rsvp.get("player_name") or ""
+
+    # Create the rsvp_only item (idempotent)
+    new_item_id = create_rsvp_only_item(
+        event_name=event_name,
+        player_name=player_name,
+        player_email=player_email,
+        rsvp_id=rsvp_id,
+    )
+
+    result = apply_credit_to_rsvp(
+        rsvp_item_id=new_item_id,
+        credited_item_ids=credited_item_ids,
+        excess_action=excess_action,
+        holes=holes,
+        side_games=side_games,
+        tee_choice=tee_choice,
+        user_status=user_status,
+    )
+    if not result.get("ok"):
+        return jsonify({"error": result.get("error", "Failed")}), 400
+    return jsonify({**result, "item_id": new_item_id})
+
+
+@app.route("/api/items/<int:item_id>/reverse-credit-application", methods=["POST"])
+@require_role("admin")
+def api_reverse_credit_application(item_id):
+    """Undo a credit application: restore source credits, revert registration to RSVP."""
+    result = reverse_credit_application(item_id)
+    if not result.get("ok"):
+        return jsonify({"error": result.get("error", "Failed")}), 400
+    return jsonify(result)
 
 
 @app.route("/api/events", methods=["POST"])
