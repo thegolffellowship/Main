@@ -5691,7 +5691,7 @@
     // ---- Pricing Defaults by Format ----
     const PRICING_DEFAULTS = {
         "9 Holes":    { tgf_markup: 8,  side_game_fee: 7 },
-        "18 Holes":   { tgf_markup: 15, side_game_fee: 15 },
+        "18 Holes":   { tgf_markup: 15, side_game_fee: 14 },
         "9/18 Combo": {
             tgf_markup_9: 8,   side_game_fee_9: 7,
             tgf_markup_18: 15, side_game_fee_18: 7  // combo 18-hole side game = same as 9
@@ -5747,13 +5747,16 @@
     }
 
     // Per-game add-on cost (added for With One Game / With Both Games tiers)
-    const PER_GAME_ADDON = 16;
+    // Standalone 18 Hole events: $30/game. 9 Holes and 9/18 Combo: $16/game.
+    function getPerGameAddon(format) {
+        return (format === "18 Holes") ? 30 : 16;
+    }
 
     function renderPlayerPricingGrid(cc, memberMarkup, sg, tf, format, opts) {
         const markups = getPlayerMarkups(memberMarkup, format);
         const memberOnly = !!(opts && opts.memberOnly);
         const compact = !!(opts && opts.compact);
-        const addon = PER_GAME_ADDON;
+        const addon = getPerGameAddon(format);
         const players = [
             { key: 'member',     label: 'Member',    mu: markups.member },
             { key: 'guest',      label: 'Guest',     mu: markups.guest },

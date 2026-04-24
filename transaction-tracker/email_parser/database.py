@@ -7270,7 +7270,8 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
 # Credit detection helpers
 # ---------------------------------------------------------------------------
 
-_PER_GAME_ADDON = 16.0  # $ per game (NET or GROSS)
+_PER_GAME_ADDON = 16.0  # $ per game (NET or GROSS) — 9 Holes and 9/18 Combo
+_PER_GAME_ADDON_18 = 30.0  # $ per game for standalone 18 Hole events
 
 
 def get_player_credits(customer_name: str, db_path: str | Path | None = None) -> list[dict]:
@@ -7346,11 +7347,12 @@ def _calc_event_price_for_player(
     else:
         mu = mu_member
 
-    # Game addon
+    # Game addon — standalone 18 Hole events are $30/game, everything else is $16
+    per_game = _PER_GAME_ADDON_18 if (holes_str == "18" and not is_combo) else _PER_GAME_ADDON
     if games_upper in ("BOTH",):
-        game_addon = _PER_GAME_ADDON * 2
+        game_addon = per_game * 2
     elif games_upper in ("NET", "GROSS"):
-        game_addon = _PER_GAME_ADDON
+        game_addon = per_game
     else:
         game_addon = 0.0
 
