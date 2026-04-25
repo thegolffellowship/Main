@@ -3331,9 +3331,10 @@ def _build_balance_due_email(item_id: int) -> dict | None:
 </div>"""
 
     intended_recipient = player_email
-    override_recipient = os.getenv(
-        "CREDIT_ALERT_EMAIL_OVERRIDE", "kerry@thegolffellowship.com"
-    )
+    # Set BALANCE_DUE_EMAIL_OVERRIDE in Railway env to redirect all balance-due
+    # emails to a testing address. Unset = live (sends to the player).
+    override_recipient = (os.getenv("BALANCE_DUE_EMAIL_OVERRIDE") or "").strip()
+    override_active = bool(override_recipient)
 
     return {
         "item_id": item_id,
@@ -3349,7 +3350,7 @@ def _build_balance_due_email(item_id: int) -> dict | None:
         "html_body": html_body,
         "intended_recipient": intended_recipient,
         "override_recipient": override_recipient,
-        "override_active": True,  # During testing all balance-due emails go to admin
+        "override_active": override_active,
     }
 
 

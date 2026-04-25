@@ -715,7 +715,7 @@
                 <div id="venmo-email-meta" style="font-size:0.85rem; color:#475569; margin-bottom:0.75rem; padding:0.6rem 0.85rem; background:#f8fafc; border-radius:6px;">
                     <div><strong>Player:</strong> <span id="venmo-email-player">—</span></div>
                     <div><strong>Intended recipient:</strong> <span id="venmo-email-intended">—</span></div>
-                    <div><strong>Sending to (testing):</strong> <span id="venmo-email-to" style="color:#b45309; font-weight:600;">—</span></div>
+                    <div><strong>Sending to:</strong> <span id="venmo-email-to" style="font-weight:600;">—</span></div>
                     <div><strong>Subject:</strong> <span id="venmo-email-subject">—</span></div>
                     <div><strong>Venmo link:</strong> <a id="venmo-email-link" href="#" target="_blank" rel="noopener" style="color:#3D95CE;">—</a></div>
                 </div>
@@ -8644,13 +8644,25 @@
             }
             document.getElementById('venmo-email-player').textContent = data.player_name || '—';
             document.getElementById('venmo-email-intended').textContent = data.intended_recipient || '(no email on file)';
-            document.getElementById('venmo-email-to').textContent = data.override_recipient + (data.override_active ? ' (testing override)' : '');
+            const toEl = document.getElementById('venmo-email-to');
+            const sendTo = data.override_active ? data.override_recipient : data.intended_recipient;
+            if (data.override_active) {
+                toEl.textContent = sendTo + ' (testing override)';
+                toEl.style.color = '#b45309';
+            } else {
+                toEl.textContent = sendTo || '(no email on file)';
+                toEl.style.color = sendTo ? '#0f172a' : '#dc2626';
+            }
             document.getElementById('venmo-email-subject').textContent = data.subject || '—';
             const linkEl = document.getElementById('venmo-email-link');
             linkEl.href = data.venmo_link;
             linkEl.textContent = data.venmo_link;
             document.getElementById('venmo-email-frame').srcdoc = data.html_body;
-            document.getElementById('venmo-email-send').disabled = false;
+            const canSend = !!sendTo;
+            document.getElementById('venmo-email-send').disabled = !canSend;
+            if (!canSend) {
+                _showVenmoResult('No email on file for this player. Add an email or set BALANCE_DUE_EMAIL_OVERRIDE to send.', true);
+            }
         } catch (err) {
             _showVenmoResult('Error: ' + err.message, true);
         }
