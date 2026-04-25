@@ -3921,7 +3921,6 @@
         const rsvpOnlyCount = registrants.filter(r => (r.transaction_status || "active") === "rsvp_only" && r.customer_email).length;
         html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; flex-wrap:wrap;">';
         html += `<h4 style="margin:0;">Registrations (${filtered.length}${activeFilter ? ' \u2014 ' + activeFilter : ''})</h4>`;
-        const evStatus = ev.status || 'active';
         html += `<div class="ev-actions-wrap">
             <button class="btn ev-actions-toggle" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#374151; color:#fff; border:none; border-radius:6px; cursor:pointer;">\u2699 Actions \u25be</button>
             <div class="ev-actions-menu">
