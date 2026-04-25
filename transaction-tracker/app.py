@@ -756,7 +756,8 @@ def _send_rsvp_credit_alerts():
             event_date = info["event_date"]
             course = info["course"]
             total_credit = info["total_credit"]
-            new_price = info["new_event_price"]
+            # Use subtotal (pre-tx-fee) — balance is paid via Venmo with no tx fee
+            new_price = info.get("new_event_subtotal") or info["new_event_price"]
             amount_owed = info["amount_owed"]
             can_calc = info["can_calculate"]
             sel = info["selections"]

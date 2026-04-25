@@ -2023,11 +2023,15 @@
                     <label style="display:block;"><input type="radio" name="cust-excess-action" value="venmo" style="margin-right:0.3rem;">Venmo back ($${ea} — handle manually)</label>
                 </div>`;
             }
+            // Display subtotal (pre-tx-fee) — balance due is paid via Venmo with no tx fee
+            const priceForDisplay = (info.event_subtotal !== null && info.event_subtotal !== undefined)
+                ? info.event_subtotal
+                : info.event_price;
             infoHtml = `<div style="margin-top:0.6rem;font-size:0.85rem;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:0.6rem 0.75rem;">
                 <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;">
                     <span>Credit (from ${escapeHtml(sourceEvent)}):</span><strong style="color:#16a34a;">${fmt(info.credit_amount)}</strong>
                 </div>
-                ${info.event_price !== null && info.event_price !== undefined ? `<div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;"><span>New Event Price:</span><strong>${fmt(info.event_price)}</strong></div>` : ''}
+                ${priceForDisplay !== null && priceForDisplay !== undefined ? `<div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;"><span>New Event Price:</span><strong>${fmt(priceForDisplay)}</strong></div>` : ''}
                 <div style="border-top:1px solid #e5e7eb;margin-top:0.25rem;padding-top:0.25rem;">${scenarioLabel}</div>
             </div>${excessHtml}`;
         }

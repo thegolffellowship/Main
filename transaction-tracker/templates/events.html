@@ -8480,10 +8480,14 @@
             }
 
             let priceRow = '';
-            if (info.event_price !== null && info.event_price !== undefined) {
+            // Display subtotal (pre-tx-fee) since balance due is paid via Venmo without tx fee
+            const priceForDisplay = (info.event_subtotal !== null && info.event_subtotal !== undefined)
+                ? info.event_subtotal
+                : info.event_price;
+            if (priceForDisplay !== null && priceForDisplay !== undefined) {
                 priceRow = `<tr style="border-top:1px solid #e5e7eb;">
                     <td style="padding:0.3rem 0.5rem;font-weight:600;">New Event Price</td>
-                    <td style="padding:0.3rem 0.5rem;font-weight:700;">${fmt(info.event_price)}</td>
+                    <td style="padding:0.3rem 0.5rem;font-weight:700;">${fmt(priceForDisplay)}</td>
                     <td style="padding:0.3rem 0.5rem;"></td>
                 </tr>`;
             }
