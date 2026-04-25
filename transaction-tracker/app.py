@@ -635,9 +635,8 @@ def check_expense_inbox(force=False, days_back=14):
                             logger.warning("capture_venmo_handle_for_customer failed for exp %s",
                                            saved.get("id"), exc_info=True)
                     # Auto-match incoming Venmo payments against open balance-due credit-transfers
-                    if (saved
-                            and saved.get("review_status") == "approved"
-                            and saved.get("transaction_type") == "received"):
+                    # (runs for both approved and pending — matcher will auto-approve on match)
+                    if saved and saved.get("transaction_type") == "received":
                         try:
                             from email_parser.database import auto_match_venmo_inbound_to_balance_due
                             auto_match_venmo_inbound_to_balance_due([saved["id"]])
