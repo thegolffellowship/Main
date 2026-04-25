@@ -7963,19 +7963,35 @@ def auto_match_venmo_inbound_to_balance_due(
                     summary["no_candidate"] += 1
                     continue
 
-                # Find candidate active credit-transfer items for this customer
-                # (compare against full items table; customer name match is case-insensitive)
-                candidates = [
-                    dict(r) for r in conn.execute(
-                        """SELECT id, customer, item_name, credit_note, item_price
+                # Find candidate active credit-transfer items for this customer.
+                # Try exact name first, then fall back to customer_aliases lookup
+                # so names like "Robert Callaway" match items stored as "Rob Callaway".
+                _BALANCE_DUE_SQL = """SELECT id, customer, item_name, credit_note, item_price
                            FROM items
                            WHERE merchant = 'Paid Separately (Credit Transfer)'
                              AND COALESCE(transaction_status, 'active') = 'active'
                              AND credit_note LIKE 'balance_due:%'
-                             AND customer = ? COLLATE NOCASE""",
-                        (payer_name,),
-                    ).fetchall()
+                             AND customer = ? COLLATE NOCASE"""
+                candidates = [
+                    dict(r) for r in conn.execute(_BALANCE_DUE_SQL, (payer_name,)).fetchall()
                 ]
+                if not candidates:
+                    # Try resolving payer_name through customer_aliases to canonical name
+                    alias_row = conn.execute(
+                        """SELECT TRIM(c.first_name || ' ' || c.last_name) AS canonical
+                           FROM customer_aliases ca
+                           JOIN customers c ON c.customer_id = ca.customer_id
+                           WHERE ca.alias_name = ? COLLATE NOCASE
+                             AND ca.alias_type = 'name'
+                           LIMIT 1""",
+                        (payer_name,),
+                    ).fetchone()
+                    if alias_row:
+                        candidates = [
+                            dict(r) for r in conn.execute(
+                                _BALANCE_DUE_SQL, (alias_row["canonical"],)
+                            ).fetchall()
+                        ]
                 # Filter by amount tolerance (±$1.00)
                 matched: list[dict] = []
                 for c in candidates:
