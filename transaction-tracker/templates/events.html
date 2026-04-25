@@ -8671,6 +8671,10 @@
     function closeVenmoEmailModal() {
         document.getElementById('venmo-email-overlay').style.display = 'none';
         _venmoEmailItemId = null;
+        // Reset send button so it's ready for the next open
+        const sendBtn = document.getElementById('venmo-email-send');
+        sendBtn.textContent = 'Send Email';
+        sendBtn.disabled = true;
     }
 
     document.getElementById('venmo-email-close').addEventListener('click', closeVenmoEmailModal);
@@ -8687,6 +8691,7 @@
             if (resp.ok) {
                 _showVenmoResult(`Sent to ${data.sent_to}` + (data.override_active ? ' (testing override)' : ''), false);
                 sendBtn.textContent = 'Sent';
+                setTimeout(closeVenmoEmailModal, 1200);
             } else {
                 _showVenmoResult(data.error || 'Failed to send', true);
                 sendBtn.textContent = 'Send Email';
