@@ -2549,6 +2549,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
         except sqlite3.OperationalError:
             pass  # column already exists
+        # Capture the OTHER party's Venmo @handle from the notification email (sender for IN, recipient for OUT)
+        try:
+            conn.execute(
+                "ALTER TABLE expense_transactions ADD COLUMN other_party_handle TEXT"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
         # Backfill account_id: match by last_four first (reliable), then by name
         try:
             conn.execute("""
@@ -7863,6 +7870,35 @@ def apply_credit_to_rsvp(
         }
 
 
+def capture_venmo_handle_for_customer(
+    expense_id: int,
+    db_path: str | Path | None = None,
+) -> bool:
+    """If the expense has both a customer_id and an other_party_handle, set the
+    customer's venmo_username (only when currently empty). Returns True if updated.
+    Idempotent — safe to call multiple times for the same expense."""
+    with _connect(db_path) as conn:
+        exp = conn.execute(
+            """SELECT customer_id, other_party_handle FROM expense_transactions
+               WHERE id = ?""",
+            (expense_id,),
+        ).fetchone()
+        if not exp:
+            return False
+        cust_id = exp["customer_id"]
+        handle = (exp["other_party_handle"] or "").strip().lstrip("@")
+        if not cust_id or not handle:
+            return False
+        cur = conn.execute(
+            """UPDATE customers SET venmo_username = ?
+               WHERE customer_id = ?
+                 AND (venmo_username IS NULL OR venmo_username = '')""",
+            (handle, cust_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def auto_match_venmo_inbound_to_balance_due(
     expense_ids: list[int] | None = None,
     db_path: str | Path | None = None,
@@ -8076,6 +8112,15 @@ def auto_match_venmo_inbound_to_balance_due(
                     )
 
                 conn.commit()
+                # Also stamp the player's Venmo @handle on their customer record if not set.
+                # Best-effort; ignore failures.
+                try:
+                    capture_venmo_handle_for_customer(exp["id"], db_path=db_path)
+                except Exception:
+                    logger.warning(
+                        "capture_venmo_handle_for_customer failed for exp %s",
+                        exp["id"], exc_info=True,
+                    )
                 summary["matched"] += 1
                 summary["matches"].append({
                     "expense_id": exp["id"],
@@ -14008,8 +14053,9 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
                 """INSERT INTO expense_transactions
                    (email_uid, source_type, merchant, amount, transaction_date,
                     account_last4, account_name, transaction_type, category, entity,
-                    event_name, customer_id, confidence, review_status, notes, raw_extract)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    event_name, customer_id, confidence, review_status, notes, raw_extract,
+                    other_party_handle)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(email_uid) DO UPDATE SET
                     merchant=excluded.merchant, amount=excluded.amount,
                     transaction_date=excluded.transaction_date,
@@ -14021,7 +14067,8 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
                                        THEN expense_transactions.review_status
                                        ELSE excluded.review_status END,
                     notes=excluded.notes,
-                    raw_extract=excluded.raw_extract""",
+                    raw_extract=excluded.raw_extract,
+                    other_party_handle=COALESCE(expense_transactions.other_party_handle, excluded.other_party_handle)""",
                 (email_uid, data.get("source_type"), data.get("merchant"),
                  data.get("amount"), data.get("transaction_date"),
                  data.get("account_last4"), data.get("account_name"),
@@ -14029,7 +14076,7 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
                  data.get("entity", "TGF"), data.get("event_name"),
                  data.get("customer_id"), data.get("confidence", 0),
                  data.get("review_status", "pending"), data.get("notes"),
-                 data.get("raw_extract")),
+                 data.get("raw_extract"), data.get("other_party_handle")),
             )
             conn.commit()
             row = conn.execute(

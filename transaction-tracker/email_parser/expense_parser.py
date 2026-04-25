@@ -182,6 +182,32 @@ Return ONLY the JSON object."""
 # Venmo Payment Parser
 # ---------------------------------------------------------------------------
 
+# Matches venmo.com/u/<handle> and venmo.com/code?...&user_id=<handle>... in URLs.
+# The /u/ form is what avatar/name links use; we ignore /code links (transaction-specific).
+_VENMO_HANDLE_URL_RE = re.compile(
+    r"venmo\.com/u/([A-Za-z0-9_.\-]{1,30})", re.IGNORECASE
+)
+
+
+def extract_venmo_other_party_handle(html_body: str, our_handle: str = "tgf-payments") -> str | None:
+    """Find the OTHER party's Venmo @handle in a notification email's raw HTML.
+
+    Venmo emails embed venmo.com/u/<handle> links on the sender's avatar and name.
+    We collect all unique handles from those links and return the one that isn't
+    ours. Returns None if zero or multiple non-self handles are found (ambiguous).
+    """
+    if not html_body:
+        return None
+    matches = _VENMO_HANDLE_URL_RE.findall(html_body)
+    if not matches:
+        return None
+    our = (our_handle or "").lower().lstrip("@")
+    handles = {h.lower() for h in matches if h.lower() != our}
+    if len(handles) == 1:
+        return handles.pop()
+    return None
+
+
 def parse_venmo_payment(subject: str, from_addr: str, body_text: str) -> dict:
     """Extract payment data from a Venmo notification email."""
     body_preview = (body_text or "")[:2000]

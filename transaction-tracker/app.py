@@ -601,6 +601,15 @@ def check_expense_inbox(force=False, days_back=14):
                         event_name = match_event_from_customer(customer_id, conn)
                     review_status = "approved" if extracted["confidence"] >= 95 else "pending"
                     venmo_email_date = (email_data.get("date") or "")[:10]
+                    # Pull the OTHER party's @handle out of the raw HTML — _strip_html drops
+                    # link URLs so the LLM never sees it. For received payments this is the
+                    # payer (player), for payouts it's the recipient (player).
+                    other_handle = None
+                    try:
+                        from email_parser.expense_parser import extract_venmo_other_party_handle
+                        other_handle = extract_venmo_other_party_handle(email_data.get("html") or "")
+                    except Exception:
+                        logger.warning("venmo handle extraction failed", exc_info=True)
                     saved = save_expense_transaction({
                         "email_uid": email_data["uid"],
                         "source_type": "venmo",
@@ -614,8 +623,17 @@ def check_expense_inbox(force=False, days_back=14):
                         "review_status": review_status,
                         "notes": extracted.get("memo"),
                         "raw_extract": json.dumps(extracted),
+                        "other_party_handle": other_handle,
                     })
                     processed += 1
+                    # Stamp the player's Venmo @handle on their customer record if not set
+                    if saved and saved.get("id") and saved.get("customer_id"):
+                        try:
+                            from email_parser.database import capture_venmo_handle_for_customer
+                            capture_venmo_handle_for_customer(saved["id"])
+                        except Exception:
+                            logger.warning("capture_venmo_handle_for_customer failed for exp %s",
+                                           saved.get("id"), exc_info=True)
                     # Auto-match incoming Venmo payments against open balance-due credit-transfers
                     if (saved
                             and saved.get("review_status") == "approved"
@@ -3300,7 +3318,7 @@ def _build_balance_due_email(item_id: int) -> dict | None:
     (testing destination), venmo_link, amount_owed, player_name, event_name.
     Returns None if the item is not a credit-transfer with a positive balance_due.
     """
-    from urllib.parse import quote
+    from urllib.parse import quote_plus
     from email_parser.database import _connect as _db_connect
 
     with _db_connect() as conn:
@@ -3333,10 +3351,12 @@ def _build_balance_due_email(item_id: int) -> dict | None:
     event_date = event.get("event_date") or ""
     course = event.get("course") or ""
 
-    memo = f"{player_name} - {event_name} balance due"
+    memo = f"{player_name} {event_name} balance due"
+    # Venmo's URL handler treats note as form-encoded — spaces must be '+',
+    # not '%20', or they render as literal '+' chars in the prefilled memo.
     venmo_link = (
         f"https://venmo.com/{VENMO_RECIPIENT_USERNAME}"
-        f"?txn=pay&amount={amount_owed:.2f}&note={quote(memo)}"
+        f"?txn=pay&amount={amount_owed:.2f}&note={quote_plus(memo)}"
     )
 
     subject = f"Balance due for {event_name} — ${amount_owed:.2f}"
@@ -7046,13 +7066,18 @@ def api_get_expense_transaction(tid):
 def api_update_expense_transaction(tid):
     d = request.json or {}
     result = update_expense_transaction(tid, d)
-    # If this update flipped a Venmo IN expense to approved, try the balance-due matcher.
+    # If this update flipped a Venmo IN expense to approved, try the balance-due matcher
+    # AND stamp the player's Venmo @handle on their customer record (best-effort).
     if (result
             and result.get("source_type") == "venmo"
             and result.get("transaction_type") == "received"
             and result.get("review_status") in ("approved", "corrected")):
         try:
-            from email_parser.database import auto_match_venmo_inbound_to_balance_due
+            from email_parser.database import (
+                auto_match_venmo_inbound_to_balance_due,
+                capture_venmo_handle_for_customer,
+            )
+            capture_venmo_handle_for_customer(tid)
             match_result = auto_match_venmo_inbound_to_balance_due([tid])
             if match_result.get("matched"):
                 result["balance_due_match"] = match_result
