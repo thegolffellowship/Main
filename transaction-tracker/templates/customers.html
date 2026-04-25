@@ -2054,11 +2054,59 @@
         <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
             <button id="cac-submit" class="btn btn-primary" ${!info ? 'disabled' : ''} style="background:#16a34a;">Apply Credit</button>
             <button id="cac-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+        <div style="margin-top:0.75rem;border-top:1px solid #e5e7eb;padding-top:0.75rem;">
+            <div id="cac-refund-toggle-row" style="display:flex;align-items:center;gap:0.5rem;">
+                <button id="cac-refund-toggle" type="button" style="background:none;border:none;padding:0;color:#dc2626;font-size:0.8rem;cursor:pointer;text-decoration:underline;">Issue refund instead →</button>
+            </div>
+            <div id="cac-refund-form" style="display:none;margin-top:0.6rem;">
+                <label style="display:block;font-weight:600;font-size:0.82rem;margin-bottom:0.3rem;">Refund method</label>
+                <select id="cac-refund-method" class="modal-input" style="width:100%;margin-bottom:0.6rem;">
+                    <option value="Venmo">Venmo</option>
+                    <option value="Zelle">Zelle</option>
+                    <option value="GoDaddy">GoDaddy</option>
+                </select>
+                <div style="display:flex;gap:0.5rem;">
+                    <button id="cac-refund-submit" type="button" class="btn btn-primary" style="background:#dc2626;">Confirm Refund</button>
+                    <button id="cac-refund-cancel" type="button" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
         </div>`;
 
         const close = () => { document.getElementById('cust-apply-credit-overlay').style.display = 'none'; };
         document.getElementById('cac-close').onclick = close;
         document.getElementById('cac-cancel').onclick = close;
+
+        document.getElementById('cac-refund-toggle').onclick = () => {
+            document.getElementById('cac-refund-form').style.display = 'block';
+            document.getElementById('cac-refund-toggle-row').style.display = 'none';
+        };
+        document.getElementById('cac-refund-cancel').onclick = () => {
+            document.getElementById('cac-refund-form').style.display = 'none';
+            document.getElementById('cac-refund-toggle-row').style.display = 'flex';
+        };
+        document.getElementById('cac-refund-submit').addEventListener('click', async () => {
+            const { creditItemId } = custApplyCreditState;
+            const method = document.getElementById('cac-refund-method').value;
+            const btn = document.getElementById('cac-refund-submit');
+            btn.disabled = true; btn.textContent = 'Refunding…';
+            try {
+                const resp = await fetch(`/api/items/${creditItemId}/refund`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ method }),
+                });
+                const data = await resp.json();
+                if (!resp.ok) { alert(data.error || 'Refund failed.'); return; }
+                document.getElementById('cust-apply-credit-overlay').style.display = 'none';
+                custCachedEvents = null;
+                await init();
+            } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Confirm Refund';
+            }
+        });
 
         document.getElementById('cac-event-select').addEventListener('change', async (e) => {
             const evName = e.target.value;
