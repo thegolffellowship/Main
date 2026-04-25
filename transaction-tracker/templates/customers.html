@@ -2018,7 +2018,7 @@
             if (info.amount_owed < 0) {
                 const ea = Math.abs(info.amount_owed).toFixed(2);
                 const handle = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
-                const venmoNote = encodeURIComponent(`Excess credit refund`);
+                const venmoNote = encodeURIComponent(`${customerName} Excess credit refund`);
                 const venmoPayUrl = handle
                     ? `https://venmo.com/${handle}?txn=pay&amount=${ea}&note=${venmoNote}`
                     : '';

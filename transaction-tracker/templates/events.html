@@ -8613,7 +8613,7 @@
             if (info.amount_owed < 0) {
                 const excessAmt = Math.abs(info.amount_owed).toFixed(2);
                 const venmoHandle = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
-                const venmoNote = encodeURIComponent('Excess credit refund');
+                const venmoNote = encodeURIComponent(`${resolvedCustomer} Excess credit refund`);
                 const venmoPayUrl = venmoHandle
                     ? `https://venmo.com/${venmoHandle}?txn=pay&amount=${excessAmt}&note=${venmoNote}`
                     : '';
