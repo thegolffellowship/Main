@@ -704,6 +704,35 @@
         </div>
     </div>
 
+    <!-- Balance-due Venmo Email Preview Modal -->
+    <div id="venmo-email-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:760px; width:95vw;">
+            <div class="modal-header">
+                <h2>Send Venmo Balance-Due Email</h2>
+                <button id="venmo-email-close" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="venmo-email-meta" style="font-size:0.85rem; color:#475569; margin-bottom:0.75rem; padding:0.6rem 0.85rem; background:#f8fafc; border-radius:6px;">
+                    <div><strong>Player:</strong> <span id="venmo-email-player">—</span></div>
+                    <div><strong>Intended recipient:</strong> <span id="venmo-email-intended">—</span></div>
+                    <div><strong>Sending to (testing):</strong> <span id="venmo-email-to" style="color:#b45309; font-weight:600;">—</span></div>
+                    <div><strong>Subject:</strong> <span id="venmo-email-subject">—</span></div>
+                    <div><strong>Venmo link:</strong> <a id="venmo-email-link" href="#" target="_blank" rel="noopener" style="color:#3D95CE;">—</a></div>
+                </div>
+                <div style="border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#f1f5f9;">
+                    <iframe id="venmo-email-frame" style="width:100%; min-height:360px; border:none; background:#fff;"
+                            sandbox="allow-same-origin allow-popups"
+                            onload="requestAnimationFrame(function(){try{var f=document.getElementById('venmo-email-frame');var h=f.contentDocument.documentElement.scrollHeight;if(h>100)f.style.height=h+'px';}catch(e){}})"></iframe>
+                </div>
+                <div id="venmo-email-result" style="display:none; margin-top:0.75rem; padding:0.6rem 0.85rem; border-radius:6px; font-size:0.88rem;"></div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="venmo-email-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="venmo-email-send" class="btn btn-primary" style="background:#3D95CE;" disabled>Send Email</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Cancel / Postpone Event Modal -->
     <div id="cancel-event-overlay" class="modal-overlay" style="display:none;">
         <div class="modal credit-modal" style="max-width:600px;">
@@ -4043,7 +4072,15 @@
                     } else if (txStatus === "active") {
                         const isCreditTransfer = (r.merchant || "") === "Paid Separately (Credit Transfer)";
                         if (isCreditTransfer) {
-                            btns = `<button class="btn btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#7c3aed;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Undo Credit</button>`;
+                            // Send Venmo Email button — only when balance_due > 0
+                            const cnoteAct = r.credit_note || '';
+                            if (cnoteAct.startsWith('balance_due:')) {
+                                const owedAct = parseFloat(cnoteAct.split(':')[1]) || 0;
+                                if (owedAct > 0) {
+                                    btns += `<button class="btn btn-venmo-email" data-item-id="${r.id}" style="background:#3D95CE;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;" title="Preview & send Venmo balance-due email">Send Venmo Email</button> `;
+                                }
+                            }
+                            btns += `<button class="btn btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#7c3aed;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Undo Credit</button>`;
                             btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                         } else {
                             btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
@@ -8575,6 +8612,86 @@
             await openApplyCreditModal(itemId, rsvpId, customer, eventName);
         }
     });
+
+    // ─── Send Venmo Balance-Due Email ──────────────────────────────────────
+    let _venmoEmailItemId = null;
+
+    function _showVenmoResult(msg, isError) {
+        const el = document.getElementById('venmo-email-result');
+        el.style.display = '';
+        el.textContent = msg;
+        el.style.background = isError ? '#fee2e2' : '#dcfce7';
+        el.style.color = isError ? '#991b1b' : '#166534';
+        el.style.border = isError ? '1px solid #fca5a5' : '1px solid #86efac';
+    }
+
+    async function openVenmoEmailModal(itemId) {
+        _venmoEmailItemId = itemId;
+        document.getElementById('venmo-email-result').style.display = 'none';
+        document.getElementById('venmo-email-send').disabled = true;
+        document.getElementById('venmo-email-frame').srcdoc = '<div style="padding:2rem;color:#94a3b8;">Loading…</div>';
+        document.getElementById('venmo-email-overlay').style.display = '';
+        try {
+            const resp = await fetch(`/api/items/${itemId}/balance-due-email/preview`);
+            const data = await resp.json();
+            if (!resp.ok) {
+                _showVenmoResult(data.error || 'Failed to load preview', true);
+                return;
+            }
+            document.getElementById('venmo-email-player').textContent = data.player_name || '—';
+            document.getElementById('venmo-email-intended').textContent = data.intended_recipient || '(no email on file)';
+            document.getElementById('venmo-email-to').textContent = data.override_recipient + (data.override_active ? ' (testing override)' : '');
+            document.getElementById('venmo-email-subject').textContent = data.subject || '—';
+            const linkEl = document.getElementById('venmo-email-link');
+            linkEl.href = data.venmo_link;
+            linkEl.textContent = data.venmo_link;
+            document.getElementById('venmo-email-frame').srcdoc = data.html_body;
+            document.getElementById('venmo-email-send').disabled = false;
+        } catch (err) {
+            _showVenmoResult('Error: ' + err.message, true);
+        }
+    }
+
+    function closeVenmoEmailModal() {
+        document.getElementById('venmo-email-overlay').style.display = 'none';
+        _venmoEmailItemId = null;
+    }
+
+    document.getElementById('venmo-email-close').addEventListener('click', closeVenmoEmailModal);
+    document.getElementById('venmo-email-cancel').addEventListener('click', closeVenmoEmailModal);
+
+    document.getElementById('venmo-email-send').addEventListener('click', async () => {
+        if (!_venmoEmailItemId) return;
+        const sendBtn = document.getElementById('venmo-email-send');
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending…';
+        try {
+            const resp = await fetch(`/api/items/${_venmoEmailItemId}/balance-due-email/send`, { method: 'POST' });
+            const data = await resp.json();
+            if (resp.ok) {
+                _showVenmoResult(`Sent to ${data.sent_to}` + (data.override_active ? ' (testing override)' : ''), false);
+                sendBtn.textContent = 'Sent';
+            } else {
+                _showVenmoResult(data.error || 'Failed to send', true);
+                sendBtn.textContent = 'Send Email';
+                sendBtn.disabled = false;
+            }
+        } catch (err) {
+            _showVenmoResult('Error: ' + err.message, true);
+            sendBtn.textContent = 'Send Email';
+            sendBtn.disabled = false;
+        }
+    });
+
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('.btn-venmo-email');
+        if (btn) {
+            e.stopPropagation();
+            const itemId = btn.dataset.itemId;
+            if (itemId) openVenmoEmailModal(itemId);
+        }
+    });
+    // ─── End Send Venmo Balance-Due Email ──────────────────────────────────
 
     // Undo Credit Application handler
     document.addEventListener('click', async e => {

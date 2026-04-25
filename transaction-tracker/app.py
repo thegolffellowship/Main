@@ -3237,6 +3237,191 @@ def api_reverse_credit_application(item_id):
     return jsonify(result)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Balance-due email (Venmo prefilled link)
+# ─────────────────────────────────────────────────────────────────────────────
+
+VENMO_RECIPIENT_USERNAME = "tgf-payments"
+
+
+def _build_balance_due_email(item_id: int) -> dict | None:
+    """Assemble the balance-due email payload for a credit-transfer item.
+
+    Returns a dict with subject, html_body, recipient (intended), override_recipient
+    (testing destination), venmo_link, amount_owed, player_name, event_name.
+    Returns None if the item is not a credit-transfer with a positive balance_due.
+    """
+    from urllib.parse import quote
+    from email_parser.database import _connect as _db_connect
+
+    with _db_connect() as conn:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return {"error": "Item not found"}
+        item = dict(item)
+
+        if (item.get("merchant") or "") != "Paid Separately (Credit Transfer)":
+            return {"error": "Item is not a credit transfer"}
+        cnote = item.get("credit_note") or ""
+        if not cnote.startswith("balance_due:"):
+            return {"error": "No balance due on this item"}
+        try:
+            amount_owed = float(cnote.split(":", 1)[1])
+        except (ValueError, IndexError):
+            return {"error": "Could not parse balance amount"}
+        if amount_owed <= 0:
+            return {"error": "Balance is zero — nothing owed"}
+
+        event_name = item.get("item_name") or ""
+        ev_row = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
+        ).fetchone()
+        event = dict(ev_row) if ev_row else {}
+
+    player_name = (item.get("customer") or "").strip()
+    player_email = (item.get("customer_email") or "").strip()
+    first_name = player_name.split(" ", 1)[0] if player_name else "there"
+    event_date = event.get("event_date") or ""
+    course = event.get("course") or ""
+
+    memo = f"{player_name} - {event_name} balance due"
+    venmo_link = (
+        f"https://venmo.com/{VENMO_RECIPIENT_USERNAME}"
+        f"?txn=pay&amount={amount_owed:.2f}&note={quote(memo)}"
+    )
+
+    subject = f"Balance due for {event_name} — ${amount_owed:.2f}"
+
+    when_line = ""
+    if event_date or course:
+        bits = [b for b in [event_date, course] if b]
+        when_line = f"<p style='color:#475569; margin:0.25rem 0;'>{' &middot; '.join(bits)}</p>"
+
+    html_body = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+            max-width:560px; color:#0f172a; line-height:1.5;">
+  <p>Hi {first_name},</p>
+  <p>Thanks for RSVPing to <strong>{event_name}</strong>!</p>
+  {when_line}
+  <p>We applied your existing credit toward this event. There&apos;s a small balance
+  remaining of <strong style="color:#b45309;">${amount_owed:.2f}</strong>.</p>
+
+  <p>Please send <strong>${amount_owed:.2f}</strong> via Venmo to
+  <strong>@{VENMO_RECIPIENT_USERNAME}</strong>. Tap the button below to open Venmo
+  with the amount and memo prefilled:</p>
+
+  <p style="margin:1.25rem 0;">
+    <a href="{venmo_link}"
+       style="display:inline-block; background:#3D95CE; color:#fff; text-decoration:none;
+              padding:0.75rem 1.5rem; border-radius:6px; font-weight:600;
+              font-size:1rem;">
+      Pay ${amount_owed:.2f} on Venmo
+    </a>
+  </p>
+
+  <p style="font-size:0.85rem; color:#64748b;">
+    If the button doesn&apos;t open Venmo, send the payment manually to
+    <strong>@{VENMO_RECIPIENT_USERNAME}</strong> with the memo:<br>
+    <code style="background:#f1f5f9; padding:2px 6px; border-radius:4px;">{memo}</code>
+  </p>
+
+  <p>See you on the course!</p>
+  <p style="color:#64748b;">— The Golf Fellowship</p>
+</div>"""
+
+    intended_recipient = player_email
+    override_recipient = os.getenv(
+        "CREDIT_ALERT_EMAIL_OVERRIDE", "kerry@thegolffellowship.com"
+    )
+
+    return {
+        "item_id": item_id,
+        "player_name": player_name,
+        "player_email": player_email,
+        "event_name": event_name,
+        "event_date": event_date,
+        "course": course,
+        "amount_owed": amount_owed,
+        "venmo_link": venmo_link,
+        "memo": memo,
+        "subject": subject,
+        "html_body": html_body,
+        "intended_recipient": intended_recipient,
+        "override_recipient": override_recipient,
+        "override_active": True,  # During testing all balance-due emails go to admin
+    }
+
+
+@app.route("/api/items/<int:item_id>/balance-due-email/preview", methods=["GET"])
+@require_role("manager")
+def api_balance_due_email_preview(item_id):
+    """Preview the balance-due Venmo email for a credit-transfer item."""
+    result = _build_balance_due_email(item_id)
+    if not result:
+        return jsonify({"error": "Failed to build email"}), 400
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/items/<int:item_id>/balance-due-email/send", methods=["POST"])
+@require_role("manager")
+def api_balance_due_email_send(item_id):
+    """Send the balance-due Venmo email. During testing, sends to override recipient."""
+    payload = _build_balance_due_email(item_id)
+    if not payload:
+        return jsonify({"error": "Failed to build email"}), 400
+    if "error" in payload:
+        return jsonify(payload), 400
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return jsonify({"error": "Email credentials not configured on server"}), 500
+
+    # During testing, route to admin override; remove env var to send to player.
+    to_address = payload["override_recipient"] if payload["override_active"] else payload["intended_recipient"]
+    if not to_address:
+        return jsonify({"error": "No recipient address available"}), 400
+
+    ok = send_mail_graph(
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+        from_address=from_address,
+        to_address=to_address,
+        subject=payload["subject"],
+        html_body=payload["html_body"],
+    )
+
+    status = "sent" if ok else "failed"
+    try:
+        from email_parser.database import log_message
+        log_message({
+            "event_name": payload["event_name"],
+            "channel": "email",
+            "recipient_name": payload["player_name"],
+            "recipient_address": to_address,
+            "subject": payload["subject"],
+            "body_preview": f"Balance due ${payload['amount_owed']:.2f} via Venmo",
+            "status": status,
+            "sent_by": session.get("role", "unknown"),
+        })
+    except Exception:
+        logger.warning("Failed to log balance-due email", exc_info=True)
+
+    if ok:
+        return jsonify({
+            "status": "ok",
+            "sent_to": to_address,
+            "intended_recipient": payload["intended_recipient"],
+            "override_active": payload["override_active"],
+        })
+    return jsonify({"error": "Failed to send email — check server logs"}), 500
+
+
 @app.route("/api/items/<int:credit_item_id>/apply-credit-info")
 @require_role("manager")
 def api_credit_item_apply_info(credit_item_id):
