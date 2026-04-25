@@ -1799,9 +1799,10 @@
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (txStatus === "refunded") tag = '<span class="status-tag status-tag-refunded">Refunded</span>';
             else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${r.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>` : ''}`;
-            else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer" title="Registered via credit transfer">Transfer</span>';
             if (isComp || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
-            else if (isManual && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
+            // Suppress Manual tag on credit-transfer rows — already implied by the Transfer tag
+            else if (isManual && !isRsvpOnly && !isGgRsvp && !r.transferred_from_id) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
             // GUEST tag: "Purchased by" badge if already swapped, or "Guest?" prompt only for multi-item orders with no guest info
             if (_cleanStatus(r.user_status) === "GUEST") {
                 const pbMatch = (r.notes || "").match(/Purchased by (.+)/i);
@@ -4002,9 +4003,10 @@
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (txStatus === "refunded") tag = '<span class="status-tag status-tag-refunded">Refunded</span>';
                     else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${r.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>` : ''}`;
-                    else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+                    else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer" title="Registered via credit transfer">Transfer</span>';
                     if (isCompRow || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
-                    else if (isManualRow && !isRsvpOnly && !isGgRsvp) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
+                    // Suppress Manual tag on credit-transfer rows — already implied by the Transfer tag
+                    else if (isManualRow && !isRsvpOnly && !isGgRsvp && !r.transferred_from_id) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
                     // "Purchased by" badge — show for ANY player status, not just GUEST
                     const pbMatch = (r.notes || "").match(/Purchased by (.+)/i);
                     if (pbMatch) {
@@ -4030,7 +4032,7 @@
                         if (cnote.startsWith('balance_due:')) {
                             const owed = parseFloat(cnote.split(':')[1]) || 0;
                             if (owed > 0) {
-                                tag += ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Additional payment required">Owes: $${owed.toFixed(2)}</span>`;
+                                tag += ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Additional payment required">$${owed.toFixed(2)} due</span>`;
                             }
                         } else if (cnote.startsWith('paid_at:')) {
                             const paidDate = cnote.split(':', 2)[1] || '';
