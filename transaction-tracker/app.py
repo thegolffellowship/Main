@@ -601,7 +601,7 @@ def check_expense_inbox(force=False, days_back=14):
                         event_name = match_event_from_customer(customer_id, conn)
                     review_status = "approved" if extracted["confidence"] >= 95 else "pending"
                     venmo_email_date = (email_data.get("date") or "")[:10]
-                    save_expense_transaction({
+                    saved = save_expense_transaction({
                         "email_uid": email_data["uid"],
                         "source_type": "venmo",
                         "merchant": extracted.get("recipient_name"),
@@ -616,6 +616,16 @@ def check_expense_inbox(force=False, days_back=14):
                         "raw_extract": json.dumps(extracted),
                     })
                     processed += 1
+                    # Auto-match incoming Venmo payments against open balance-due credit-transfers
+                    if (saved
+                            and saved.get("review_status") == "approved"
+                            and saved.get("transaction_type") == "received"):
+                        try:
+                            from email_parser.database import auto_match_venmo_inbound_to_balance_due
+                            auto_match_venmo_inbound_to_balance_due([saved["id"]])
+                        except Exception:
+                            logger.warning("venmo balance-due auto-match failed for exp %s",
+                                           saved.get("id"), exc_info=True)
 
             elif email_type == "expense_receipt":
                 raw_email_date = (email_data.get("date") or "")[:10]
@@ -7035,7 +7045,30 @@ def api_get_expense_transaction(tid):
 @require_role("admin")
 def api_update_expense_transaction(tid):
     d = request.json or {}
-    return jsonify(update_expense_transaction(tid, d))
+    result = update_expense_transaction(tid, d)
+    # If this update flipped a Venmo IN expense to approved, try the balance-due matcher.
+    if (result
+            and result.get("source_type") == "venmo"
+            and result.get("transaction_type") == "received"
+            and result.get("review_status") in ("approved", "corrected")):
+        try:
+            from email_parser.database import auto_match_venmo_inbound_to_balance_due
+            match_result = auto_match_venmo_inbound_to_balance_due([tid])
+            if match_result.get("matched"):
+                result["balance_due_match"] = match_result
+        except Exception:
+            logger.warning("venmo balance-due auto-match failed for exp %s", tid, exc_info=True)
+    return jsonify(result)
+
+
+@app.route("/api/accounting/auto-match-venmo-balance-due", methods=["POST"])
+@require_role("admin")
+def api_auto_match_venmo_balance_due():
+    """Manually trigger the Venmo IN → balance-due matcher across all approved
+    Venmo IN expense_transactions. Useful for backfilling after enabling the feature
+    or after manually approving a batch."""
+    from email_parser.database import auto_match_venmo_inbound_to_balance_due
+    return jsonify(auto_match_venmo_inbound_to_balance_due())
 
 
 @app.route("/api/accounting/expense-transactions/<int:tid>", methods=["DELETE"])

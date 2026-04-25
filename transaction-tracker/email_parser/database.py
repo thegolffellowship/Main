@@ -2542,6 +2542,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             )
         except sqlite3.OperationalError:
             pass  # column already exists
+        # Track when a Venmo IN payment is auto-matched to a credit-transfer balance-due item
+        try:
+            conn.execute(
+                "ALTER TABLE expense_transactions ADD COLUMN matched_item_id INTEGER REFERENCES items(id)"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
         # Backfill account_id: match by last_four first (reliable), then by name
         try:
             conn.execute("""
@@ -7854,6 +7861,238 @@ def apply_credit_to_rsvp(
             "new_price": breakdown["total"] if breakdown else None,
             "new_subtotal": new_subtotal,
         }
+
+
+def auto_match_venmo_inbound_to_balance_due(
+    expense_ids: list[int] | None = None,
+    db_path: str | Path | None = None,
+) -> dict:
+    """Match incoming Venmo payments to open credit-transfer balance-due items.
+
+    For each approved Venmo IN expense_transaction (optionally limited to
+    `expense_ids`), find the unique active credit-transfer item that:
+      - belongs to the same customer (case-insensitive name match)
+      - has a credit_note starting with 'balance_due:'
+      - has a balance amount within ±$1.00 of the expense amount
+
+    On a unique match: create a +PAY child item via add_payment_to_event,
+    flip the parent's credit_note from 'balance_due:X.XX' to
+    'paid_at:YYYY-MM-DD', and stamp expense_transactions.matched_item_id.
+
+    Returns {matched, ambiguous, no_candidate, already_matched, errors}.
+    """
+    import time as _time
+    summary = {
+        "matched": 0,
+        "ambiguous": 0,
+        "no_candidate": 0,
+        "already_matched": 0,
+        "errors": 0,
+        "matches": [],
+    }
+    with _connect(db_path) as conn:
+        # Pull approved Venmo IN expenses, optionally filtered to specific IDs
+        params: list = ["venmo", "received", "approved"]
+        sql = (
+            "SELECT * FROM expense_transactions "
+            "WHERE source_type = ? AND transaction_type = ? AND review_status = ? "
+            "AND COALESCE(matched_item_id, 0) = 0"
+        )
+        if expense_ids:
+            placeholders = ",".join(["?"] * len(expense_ids))
+            sql += f" AND id IN ({placeholders})"
+            params.extend(expense_ids)
+        expenses = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+        for exp in expenses:
+            try:
+                exp_amount = float(exp.get("amount") or 0)
+                if exp_amount <= 0:
+                    summary["no_candidate"] += 1
+                    continue
+                payer_name = (exp.get("merchant") or "").strip()
+                if not payer_name:
+                    summary["no_candidate"] += 1
+                    continue
+
+                # Find candidate active credit-transfer items for this customer
+                # (compare against full items table; customer name match is case-insensitive)
+                candidates = [
+                    dict(r) for r in conn.execute(
+                        """SELECT id, customer, item_name, credit_note, item_price
+                           FROM items
+                           WHERE merchant = 'Paid Separately (Credit Transfer)'
+                             AND COALESCE(transaction_status, 'active') = 'active'
+                             AND credit_note LIKE 'balance_due:%'
+                             AND customer = ? COLLATE NOCASE""",
+                        (payer_name,),
+                    ).fetchall()
+                ]
+                # Filter by amount tolerance (±$1.00)
+                matched: list[dict] = []
+                for c in candidates:
+                    cnote = c.get("credit_note") or ""
+                    try:
+                        owed = float(cnote.split(":", 1)[1])
+                    except (ValueError, IndexError):
+                        continue
+                    if abs(owed - exp_amount) <= 1.00:
+                        c["_owed"] = owed
+                        matched.append(c)
+
+                if not matched:
+                    summary["no_candidate"] += 1
+                    continue
+                if len(matched) > 1:
+                    # Ambiguous — leave for manual handling
+                    summary["ambiguous"] += 1
+                    continue
+
+                target = matched[0]
+                target_id = target["id"]
+                event_name = target["item_name"]
+                customer_name = target["customer"]
+
+                # Idempotency safety net: skip if any +PAY child already references this expense
+                already = conn.execute(
+                    """SELECT id FROM items
+                       WHERE parent_item_id = ?
+                         AND notes LIKE ? LIMIT 1""",
+                    (target_id, f"%[venmo-bd-exp:{exp['id']}]%"),
+                ).fetchone()
+                if already:
+                    summary["already_matched"] += 1
+                    # Backfill the matched_item_id pointer if missing
+                    conn.execute(
+                        "UPDATE expense_transactions SET matched_item_id = ? WHERE id = ?",
+                        (target_id, exp["id"]),
+                    )
+                    conn.commit()
+                    continue
+
+                # Create the +PAY child item
+                txn_date = exp.get("transaction_date") or _dt.datetime.utcnow().strftime("%Y-%m-%d")
+                amount_str = f"${exp_amount:.2f}"
+                # Marker stays in notes so the match is auditable later
+                note = f"Balance due — Venmo {amount_str} [venmo-bd-exp:{exp['id']}]"
+                # We bypass add_payment_to_event() to set our own email_uid
+                # (add_payment_to_event uses a timestamp uid; we want a deterministic one
+                # so re-running the matcher is naturally idempotent on the items table too).
+                event = dict(conn.execute(
+                    "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+                    (event_name,),
+                ).fetchone() or {})
+                parent_full = dict(conn.execute(
+                    "SELECT * FROM items WHERE id = ?", (target_id,),
+                ).fetchone() or {})
+                parent_snap = {}
+                for fld in ("side_games", "holes", "tee_choice", "user_status"):
+                    if parent_full.get(fld) is not None:
+                        parent_snap[fld] = parent_full[fld]
+
+                uid = f"venmo-bd-{exp['id']}"
+                new_values = {col: None for col in ITEM_COLUMNS}
+                new_values["email_uid"] = uid
+                new_values["item_index"] = 0
+                new_values["customer"] = customer_name
+                new_values["customer_email"] = parent_full.get("customer_email")
+                new_values["customer_phone"] = parent_full.get("customer_phone")
+                new_values["item_name"] = event_name
+                new_values["order_date"] = txn_date
+                new_values["course"] = event.get("course") or parent_full.get("course") or ""
+                new_values["chapter"] = event.get("chapter") or parent_full.get("chapter") or ""
+                new_values["transaction_status"] = "active"
+                new_values["merchant"] = "Manual Entry (venmo)"
+                new_values["item_price"] = amount_str
+                new_values["side_games"] = ""
+                new_values["notes"] = note
+                new_values["parent_item_id"] = target_id
+                new_values["parent_snapshot"] = json.dumps(parent_snap) if parent_snap else None
+
+                # Resolve customer_id from customers table for FK linking
+                cust_id = _resolve_or_create_customer(
+                    conn,
+                    customer_name=customer_name,
+                    customer_email=parent_full.get("customer_email") or "",
+                    phone=parent_full.get("customer_phone") or "",
+                )
+                if cust_id:
+                    new_values["customer_id"] = cust_id
+
+                cols = ", ".join(new_values.keys())
+                placeholders = ", ".join(["?"] * len(new_values))
+                try:
+                    cur = conn.execute(
+                        f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+                        list(new_values.values()),
+                    )
+                    new_item_id = cur.lastrowid
+                except sqlite3.IntegrityError:
+                    # Race: a previous run already created this +PAY. Look it up.
+                    row = conn.execute(
+                        "SELECT id FROM items WHERE email_uid = ? AND item_index = 0",
+                        (uid,),
+                    ).fetchone()
+                    if row:
+                        new_item_id = row["id"]
+                        summary["already_matched"] += 1
+                    else:
+                        summary["errors"] += 1
+                        continue
+
+                # Flip parent's credit_note from balance_due:X.XX to paid_at:YYYY-MM-DD
+                conn.execute(
+                    "UPDATE items SET credit_note = ? WHERE id = ?",
+                    (f"paid_at:{txn_date}", target_id),
+                )
+
+                # Stamp the expense as matched
+                conn.execute(
+                    "UPDATE expense_transactions SET matched_item_id = ? WHERE id = ?",
+                    (new_item_id, exp["id"]),
+                )
+
+                # Write accounting entries (income/addon + allocation) for the +PAY child
+                try:
+                    _write_acct_entry(
+                        conn,
+                        item_id=new_item_id,
+                        event_name=event_name,
+                        customer=customer_name,
+                        order_id=f"VENMO-BD-{new_item_id}",
+                        entry_type="income",
+                        category="addon",
+                        source="venmo",
+                        amount=exp_amount,
+                        description=f"Venmo balance-due payment from {customer_name}",
+                        account="Venmo",
+                        source_ref=f"venmo-bd-{exp['id']}",
+                        date=txn_date,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to write acct entry for venmo balance-due match (exp %s)",
+                        exp["id"], exc_info=True,
+                    )
+
+                conn.commit()
+                summary["matched"] += 1
+                summary["matches"].append({
+                    "expense_id": exp["id"],
+                    "item_id": new_item_id,
+                    "parent_item_id": target_id,
+                    "customer": customer_name,
+                    "event_name": event_name,
+                    "amount": exp_amount,
+                })
+            except Exception:
+                logger.warning(
+                    "auto_match_venmo_inbound_to_balance_due failed for expense %s",
+                    exp.get("id"), exc_info=True,
+                )
+                summary["errors"] += 1
+
+    return summary
 
 
 def save_rsvp(rsvp: dict, db_path: str | Path | None = None) -> int | None:
