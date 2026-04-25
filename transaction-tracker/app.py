@@ -3526,6 +3526,15 @@ def api_credit_item_apply_info(credit_item_id):
                 event_subtotal = breakdown["subtotal"]
                 # Balance due is computed against subtotal — paid via Venmo (no tx fee)
                 amount_owed = round(event_subtotal - credit_amount, 2)
+        # Look up the customer's Venmo handle for excess-refund link generation
+        venmo_username = None
+        cust_id = item.get("customer_id")
+        if cust_id:
+            row = conn.execute(
+                "SELECT venmo_username FROM customers WHERE customer_id = ?", (cust_id,)
+            ).fetchone()
+            if row:
+                venmo_username = row["venmo_username"] or None
     return jsonify({
         "credit_item_id": credit_item_id,
         "customer": item.get("customer"),
@@ -3534,6 +3543,7 @@ def api_credit_item_apply_info(credit_item_id):
         "event_price": event_price,
         "event_subtotal": event_subtotal,
         "amount_owed": amount_owed,
+        "venmo_username": venmo_username,
         "previous_selections": {
             "user_status": item.get("user_status") or "MEMBER",
             "holes": item.get("holes") or "9",

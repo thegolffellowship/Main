@@ -2017,10 +2017,18 @@
             let excessHtml = '';
             if (info.amount_owed < 0) {
                 const ea = Math.abs(info.amount_owed).toFixed(2);
+                const handle = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
+                const venmoNote = encodeURIComponent(`Excess credit refund`);
+                const venmoPayUrl = handle
+                    ? `https://venmo.com/${handle}?txn=pay&amount=${ea}&note=${venmoNote}`
+                    : '';
+                const venmoLabel = handle
+                    ? `Venmo back ($${ea}) — <a href="${venmoPayUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link</a>`
+                    : `Venmo back ($${ea} — no handle on file)`;
                 excessHtml = `<div style="margin-top:0.5rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:0.5rem 0.75rem;font-size:0.82rem;">
                     <div style="font-weight:600;color:#065f46;margin-bottom:0.3rem;">Excess: ${fmt(Math.abs(info.amount_owed))}</div>
                     <label style="display:block;margin-bottom:0.2rem;"><input type="radio" name="cust-excess-action" value="keep" checked style="margin-right:0.3rem;">Keep as credit</label>
-                    <label style="display:block;"><input type="radio" name="cust-excess-action" value="venmo" style="margin-right:0.3rem;">Venmo back ($${ea} — handle manually)</label>
+                    <label style="display:block;"><input type="radio" name="cust-excess-action" value="venmo" style="margin-right:0.3rem;">${venmoLabel}</label>
                 </div>`;
             }
             // Display subtotal (pre-tx-fee) — balance due is paid via Venmo with no tx fee
