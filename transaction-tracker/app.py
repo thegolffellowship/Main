@@ -2994,7 +2994,7 @@ def api_event_rsvp_credits(event_name):
 @require_role("manager")
 def api_rsvp_credit_info_by_item(item_id):
     """Return full credit analysis for an RSVP-only item (by items.id)."""
-    from email_parser.database import _connect, _calc_event_price_for_player
+    from email_parser.database import _connect, _calc_event_pricing_breakdown
     with _connect() as conn:
         item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
         if not item:
@@ -3021,10 +3021,13 @@ def api_rsvp_credit_info_by_item(item_id):
             "tee_choice": most_recent.get("tee_choice") or "",
         }
 
-        event_price = _calc_event_price_for_player(
+        breakdown = _calc_event_pricing_breakdown(
             event, prev["user_status"], prev["holes"], prev["side_games"]
         )
-        amount_owed = round((event_price or 0.0) - total_credit, 2) if event_price is not None else None
+        event_price = breakdown["total"] if breakdown else None
+        event_subtotal = breakdown["subtotal"] if breakdown else None
+        # Balance due is computed against subtotal — difference is paid via Venmo (no tx fee)
+        amount_owed = round((event_subtotal or 0.0) - total_credit, 2) if event_subtotal is not None else None
 
     return jsonify({
         "item_id": item_id,
@@ -3041,6 +3044,7 @@ def api_rsvp_credit_info_by_item(item_id):
         ],
         "total_credit": total_credit,
         "event_price": event_price,
+        "event_subtotal": event_subtotal,
         "amount_owed": amount_owed,
         "previous_selections": prev,
     })
@@ -3092,7 +3096,7 @@ def api_trigger_credit_alerts():
 @require_role("manager")
 def api_gg_rsvp_credit_info(rsvp_id):
     """Return full credit analysis for a GG RSVP (by rsvps.id, not items.id)."""
-    from email_parser.database import _connect, _calc_event_price_for_player
+    from email_parser.database import _connect, _calc_event_pricing_breakdown
     with _connect() as conn:
         rsvp = conn.execute("SELECT * FROM rsvps WHERE id = ?", (rsvp_id,)).fetchone()
         if not rsvp:
@@ -3134,10 +3138,12 @@ def api_gg_rsvp_credit_info(rsvp_id):
             "tee_choice": most_recent.get("tee_choice") or "",
         }
 
-        event_price = _calc_event_price_for_player(
+        breakdown = _calc_event_pricing_breakdown(
             event, prev["user_status"], prev["holes"], prev["side_games"]
         )
-        amount_owed = round((event_price or 0.0) - total_credit, 2) if event_price is not None else None
+        event_price = breakdown["total"] if breakdown else None
+        event_subtotal = breakdown["subtotal"] if breakdown else None
+        amount_owed = round((event_subtotal or 0.0) - total_credit, 2) if event_subtotal is not None else None
 
     return jsonify({
         "rsvp_id": rsvp_id,
@@ -3154,6 +3160,7 @@ def api_gg_rsvp_credit_info(rsvp_id):
         ],
         "total_credit": total_credit,
         "event_price": event_price,
+        "event_subtotal": event_subtotal,
         "amount_owed": amount_owed,
         "previous_selections": prev,
     })
@@ -3234,7 +3241,7 @@ def api_reverse_credit_application(item_id):
 @require_role("manager")
 def api_credit_item_apply_info(credit_item_id):
     """Return price info for applying a credit item to a selected event."""
-    from email_parser.database import _connect, _calc_event_price_for_player, _parse_dollar
+    from email_parser.database import _connect, _calc_event_pricing_breakdown, _parse_dollar
     event_name = request.args.get("event_name", "").strip()
     with _connect() as conn:
         item = conn.execute("SELECT * FROM items WHERE id = ?", (credit_item_id,)).fetchone()
@@ -3245,26 +3252,31 @@ def api_credit_item_apply_info(credit_item_id):
             return jsonify({"error": "Item is not a credit"}), 400
         credit_amount = _parse_dollar(item.get("item_price")) + _parse_dollar(item.get("transaction_fees") or "0")
         event_price = None
+        event_subtotal = None
         amount_owed = None
         if event_name:
             ev_row = conn.execute(
                 "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
             ).fetchone()
             event = dict(ev_row) if ev_row else {}
-            event_price = _calc_event_price_for_player(
+            breakdown = _calc_event_pricing_breakdown(
                 event,
                 item.get("user_status") or "MEMBER",
                 item.get("holes") or "9",
                 item.get("side_games") or "NONE",
             )
-            if event_price is not None:
-                amount_owed = round(event_price - credit_amount, 2)
+            if breakdown is not None:
+                event_price = breakdown["total"]
+                event_subtotal = breakdown["subtotal"]
+                # Balance due is computed against subtotal — paid via Venmo (no tx fee)
+                amount_owed = round(event_subtotal - credit_amount, 2)
     return jsonify({
         "credit_item_id": credit_item_id,
         "customer": item.get("customer"),
         "source_event": item.get("item_name"),
         "credit_amount": credit_amount,
         "event_price": event_price,
+        "event_subtotal": event_subtotal,
         "amount_owed": amount_owed,
         "previous_selections": {
             "user_status": item.get("user_status") or "MEMBER",

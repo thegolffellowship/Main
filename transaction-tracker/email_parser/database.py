@@ -7295,16 +7295,21 @@ def get_player_credits(customer_name: str, db_path: str | Path | None = None) ->
     return result
 
 
-def _calc_event_price_for_player(
+def _calc_event_pricing_breakdown(
     event: dict,
     user_status: str,
     holes: str,
     side_games: str,
-) -> float | None:
-    """Server-side pricing formula matching the JS calcPricingLine in events.html.
+) -> dict | None:
+    """Server-side pricing breakdown matching the JS calcPricingLine in events.html.
 
-    Returns the full player-facing total (including tx fee), or None if the event
-    has no pricing configured.
+    Returns a dict with:
+        subtotal:     ceil(course_cost) + markup + side_game_fee + game_addon
+                      (the whole-dollar charge BEFORE the transaction fee)
+        tx_fee:       transaction fee on subtotal (typically 3.5%)
+        total:        subtotal + tx_fee (full player-facing price)
+
+    Returns None if the event has no pricing configured.
     """
     import math
 
@@ -7358,9 +7363,26 @@ def _calc_event_price_for_player(
 
     rounded_cc = math.ceil(cc)
     event_charge = rounded_cc + mu + sg + game_addon
-    actual_charge = math.ceil(event_charge)
-    tx_fee = round(actual_charge * tf / 100, 2)
-    return round(actual_charge + tx_fee, 2)
+    subtotal = float(math.ceil(event_charge))
+    tx_fee = round(subtotal * tf / 100, 2)
+    return {
+        "subtotal": subtotal,
+        "tx_fee": tx_fee,
+        "total": round(subtotal + tx_fee, 2),
+    }
+
+
+def _calc_event_price_for_player(
+    event: dict,
+    user_status: str,
+    holes: str,
+    side_games: str,
+) -> float | None:
+    """Returns the full player-facing total (including tx fee), or None if the event
+    has no pricing configured. Thin wrapper around _calc_event_pricing_breakdown.
+    """
+    breakdown = _calc_event_pricing_breakdown(event, user_status, holes, side_games)
+    return breakdown["total"] if breakdown else None
 
 
 def get_rsvp_credit_info(rsvp_id: int, db_path: str | Path | None = None) -> dict | None:
@@ -7413,15 +7435,19 @@ def get_rsvp_credit_info(rsvp_id: int, db_path: str | Path | None = None) -> dic
         ).fetchone()
         event = dict(event_row) if event_row else {}
 
-        new_event_price = _calc_event_price_for_player(
+        breakdown = _calc_event_pricing_breakdown(
             event,
             selections["user_status"],
             selections["holes"],
             selections["side_games"],
         )
-        can_calculate = new_event_price is not None
+        can_calculate = breakdown is not None
+        new_event_price = breakdown["total"] if breakdown else None
+        new_event_subtotal = breakdown["subtotal"] if breakdown else None
 
-        amount_owed = round((new_event_price or 0) - total_credit, 2)
+        # Balance due is computed against the pre-tx-fee subtotal — the difference
+        # will be paid via Venmo (no merchant fee), so charging tx fee on it is unnecessary.
+        amount_owed = round((new_event_subtotal or 0) - total_credit, 2)
 
         return {
             "rsvp_id": rsvp_id,
@@ -7444,6 +7470,7 @@ def get_rsvp_credit_info(rsvp_id: int, db_path: str | Path | None = None) -> dic
             ],
             "total_credit": total_credit,
             "new_event_price": new_event_price,
+            "new_event_subtotal": new_event_subtotal,
             "amount_owed": amount_owed,
             "can_calculate": can_calculate,
             "selections": selections,
@@ -7718,13 +7745,16 @@ def apply_credit_to_rsvp(
         u_games = side_games or credited_items[0].get("side_games") or "NONE"
         u_tee = tee_choice or credited_items[0].get("tee_choice") or ""
 
-        new_price = _calc_event_price_for_player(event, u_status, u_holes, u_games)
-        applied = min(total_credit, new_price) if new_price else total_credit
-        excess = round(total_credit - (new_price or total_credit), 2)
+        breakdown = _calc_event_pricing_breakdown(event, u_status, u_holes, u_games)
+        # Compare credit against the pre-tx-fee subtotal: any balance due is paid via
+        # Venmo (no merchant fee), so we don't charge tx fee on it.
+        new_subtotal = breakdown["subtotal"] if breakdown else None
+        applied = min(total_credit, new_subtotal) if new_subtotal else total_credit
+        excess = round(total_credit - (new_subtotal or total_credit), 2)
 
         # Update the RSVP item → active registration
         price_str = f"${applied:.2f} (credit transfer)"
-        amount_owed = round((new_price or 0) - applied, 2)
+        amount_owed = round((new_subtotal or 0) - applied, 2)
         balance_note = f"balance_due:{amount_owed:.2f}" if amount_owed > 0 else None
         conn.execute(
             """UPDATE items
@@ -7816,7 +7846,14 @@ def apply_credit_to_rsvp(
             )
 
         conn.commit()
-        return {"ok": True, "amount_applied": applied, "excess": excess, "new_price": new_price}
+        return {
+            "ok": True,
+            "amount_applied": applied,
+            "excess": excess,
+            "amount_owed": amount_owed,
+            "new_price": breakdown["total"] if breakdown else None,
+            "new_subtotal": new_subtotal,
+        }
 
 
 def save_rsvp(rsvp: dict, db_path: str | Path | None = None) -> int | None:
