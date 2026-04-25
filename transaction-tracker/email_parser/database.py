@@ -7977,12 +7977,12 @@ def auto_match_venmo_inbound_to_balance_due(
                 ]
                 if not candidates:
                     # Try resolving payer_name through customer_aliases to canonical name
+                    # (e.g. Venmo email says "James Baker" but customer stored as "Adam Baker")
                     alias_row = conn.execute(
-                        """SELECT TRIM(c.first_name || ' ' || c.last_name) AS canonical
-                           FROM customer_aliases ca
-                           JOIN customers c ON c.customer_id = ca.customer_id
-                           WHERE ca.alias_name = ? COLLATE NOCASE
-                             AND ca.alias_type = 'name'
+                        """SELECT customer_name AS canonical
+                           FROM customer_aliases
+                           WHERE alias_value = ? COLLATE NOCASE
+                             AND alias_type = 'name'
                            LIMIT 1""",
                         (payer_name,),
                     ).fetchone()
