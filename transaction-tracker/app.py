@@ -3138,6 +3138,25 @@ def api_rsvp_credit_info_by_item(item_id):
         # Balance due is computed against subtotal — difference is paid via Venmo (no tx fee)
         amount_owed = round((event_subtotal or 0.0) - total_credit, 2) if event_subtotal is not None else None
 
+        venmo_username = None
+        cust_id = item.get("customer_id")
+        if cust_id:
+            row = conn.execute(
+                "SELECT venmo_username FROM customers WHERE customer_id = ?", (cust_id,)
+            ).fetchone()
+            if row:
+                venmo_username = row["venmo_username"] or None
+        if not venmo_username:
+            row = conn.execute(
+                """SELECT venmo_username FROM customers
+                   WHERE TRIM(first_name||' '||last_name) = ? COLLATE NOCASE
+                   AND venmo_username IS NOT NULL AND venmo_username != ''
+                   LIMIT 1""",
+                (item.get("customer", ""),),
+            ).fetchone()
+            if row:
+                venmo_username = row["venmo_username"]
+
     return jsonify({
         "item_id": item_id,
         "customer": item["customer"],
@@ -3156,6 +3175,7 @@ def api_rsvp_credit_info_by_item(item_id):
         "event_subtotal": event_subtotal,
         "amount_owed": amount_owed,
         "previous_selections": prev,
+        "venmo_username": venmo_username,
     })
 
 
@@ -3254,6 +3274,28 @@ def api_gg_rsvp_credit_info(rsvp_id):
         event_subtotal = breakdown["subtotal"] if breakdown else None
         amount_owed = round((event_subtotal or 0.0) - total_credit, 2) if event_subtotal is not None else None
 
+        venmo_username = None
+        row = conn.execute(
+            """SELECT venmo_username FROM customers
+               WHERE TRIM(first_name||' '||last_name) = ? COLLATE NOCASE
+               AND venmo_username IS NOT NULL AND venmo_username != ''
+               LIMIT 1""",
+            (customer,),
+        ).fetchone()
+        if row:
+            venmo_username = row["venmo_username"]
+        if not venmo_username and player_email:
+            row = conn.execute(
+                """SELECT c.venmo_username FROM customers c
+                   JOIN customer_emails ce ON ce.customer_id = c.customer_id
+                   WHERE LOWER(ce.email) = ?
+                   AND c.venmo_username IS NOT NULL AND c.venmo_username != ''
+                   LIMIT 1""",
+                (player_email,),
+            ).fetchone()
+            if row:
+                venmo_username = row["venmo_username"]
+
     return jsonify({
         "rsvp_id": rsvp_id,
         "customer": customer,
@@ -3272,6 +3314,7 @@ def api_gg_rsvp_credit_info(rsvp_id):
         "event_subtotal": event_subtotal,
         "amount_owed": amount_owed,
         "previous_selections": prev,
+        "venmo_username": venmo_username,
     })
 
 
