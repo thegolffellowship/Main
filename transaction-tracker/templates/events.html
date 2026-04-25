@@ -276,6 +276,22 @@
             .parse-warning-header { font-size: 0.82rem; }
             .parse-warning-subtitle { display: none; }
         }
+        /* Actions dropdown */
+        .ev-actions-wrap { position: relative; display: inline-block; }
+        .ev-actions-menu {
+            display: none; position: absolute; top: calc(100% + 3px); left: 0;
+            z-index: 300; background: #fff; border: 1px solid #e5e7eb;
+            border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.13);
+            min-width: 185px; padding: 0.3rem 0; white-space: nowrap;
+        }
+        .ev-menu-item {
+            display: block; width: 100%; padding: 0.45rem 1rem;
+            font-size: 0.82rem; text-align: left; background: none;
+            border: none; cursor: pointer; color: #374151;
+        }
+        .ev-menu-item:hover { background: #f3f4f6; }
+        .ev-menu-item-danger { color: #dc2626; }
+        .ev-menu-divider { height: 1px; background: #e5e7eb; margin: 0.25rem 0; }
     </style>
 </head>
 <body>
@@ -2062,15 +2078,22 @@
 
                     const mRsvpOnlyCount = mobileActive.filter(r => (r.transaction_status || "active") === "rsvp_only" && r.customer_email).length;
                     detailHtml = badgesHtml + `
-                    <div style="display:flex; gap:0.5rem; margin-bottom:0.65rem; flex-wrap:wrap;">
-                        <button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">+ Add Player</button>
-                        <button class="btn btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#059669; color:#fff; border:none; border-radius:6px; cursor:pointer;">+ Add Payment</button>
-                        ${mRsvpOnlyCount > 0 ? `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Remind All (${mRsvpOnlyCount})</button>` : ''}
-                        <button class="btn btn-message-players" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;">Message Players</button>
-                        <button class="btn btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#6366f1; color:#fff; border:none; border-radius:6px; cursor:pointer;">Audit RSVPs</button>
-                        <button class="btn btn-edit btn-mobile-edit-event" data-edit-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Edit</button>
-                        ${currentRole === "admin" ? `<button class="btn btn-edit btn-mobile-merge-event" data-merge-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Merge</button>` : ''}
-                        ${currentRole === "admin" ? `<button class="btn btn-danger btn-mobile-delete-event" data-delete-event="${ev.id}" style="font-size:0.82rem; padding:0.4rem 0.85rem;">Delete</button>` : ''}
+                    <div style="margin-bottom:0.65rem;">
+                        <div class="ev-actions-wrap">
+                            <button class="btn ev-actions-toggle" style="font-size:0.82rem; padding:0.4rem 0.85rem; background:#374151; color:#fff; border:none; border-radius:6px; cursor:pointer;">⚙ Actions ▾</button>
+                            <div class="ev-actions-menu">
+                                <button class="ev-menu-item btn-add-player" data-event-name="${escapeHtml(ev.item_name)}">+ Add Player</button>
+                                <button class="ev-menu-item btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}">+ Add Payment</button>
+                                ${mRsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${mRsvpOnlyCount})</button>` : ''}
+                                <div class="ev-menu-divider"></div>
+                                <button class="ev-menu-item btn-message-players" data-event-name="${escapeHtml(ev.item_name)}">Message Players</button>
+                                <button class="ev-menu-item btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}">Audit RSVPs</button>
+                                <div class="ev-menu-divider"></div>
+                                <button class="ev-menu-item btn-mobile-edit-event" data-edit-event="${ev.id}">Edit</button>
+                                ${currentRole === "admin" ? `<button class="ev-menu-item btn-mobile-merge-event" data-merge-event="${ev.id}">Merge</button>` : ''}
+                                ${currentRole === "admin" ? `<button class="ev-menu-item ev-menu-item-danger btn-mobile-delete-event" data-delete-event="${ev.id}">Delete</button>` : ''}
+                            </div>
+                        </div>
                     </div>
                     ${filteredRegs.length ? renderRegistrantsMobile(filteredRegs, ev) : '<div style="color:var(--text-muted); font-style:italic; font-size:0.85rem;">No registrations.</div>'}
                     ${mobileInactiveHtml}`;
@@ -3898,21 +3921,21 @@
         const rsvpOnlyCount = registrants.filter(r => (r.transaction_status || "active") === "rsvp_only" && r.customer_email).length;
         html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; flex-wrap:wrap;">';
         html += `<h4 style="margin:0;">Registrations (${filtered.length}${activeFilter ? ' \u2014 ' + activeFilter : ''})</h4>`;
-        html += `<button class="btn btn-primary btn-add-player" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">+ Add Player</button>`;
-        html += `<button class="btn btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#059669; color:#fff; border:none; border-radius:6px; cursor:pointer;">+ Add Payment</button>`;
-        if (rsvpOnlyCount > 0) {
-            html += `<button class="btn btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Send payment reminder to all ${rsvpOnlyCount} RSVP-only player(s)">Remind All (${rsvpOnlyCount})</button>`;
-        }
-        html += `<button class="btn btn-message-players" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Send email to event players">Message Players</button>`;
-        html += `<button class="btn btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#6366f1; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Audit and fix RSVP matches for this event">Audit RSVPs</button>`;
-        if (currentRole === 'admin') {
-            const evStatus = ev.status || 'active';
-            if (evStatus === 'active') {
-                html += `<button class="btn btn-cancel-event" data-event-id="${ev.id}" data-event-name="${escapeHtml(ev.item_name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#dc2626; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Cancel or postpone this event">Cancel Event</button>`;
-            } else {
-                html += `<button class="btn btn-restore-event" data-event-id="${ev.id}" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#6b7280; color:#fff; border:none; border-radius:6px; cursor:pointer;" title="Restore event to active">Restore Event</button>`;
-            }
-        }
+        const evStatus = ev.status || 'active';
+        html += `<div class="ev-actions-wrap">
+            <button class="btn ev-actions-toggle" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:#374151; color:#fff; border:none; border-radius:6px; cursor:pointer;">\u2699 Actions \u25be</button>
+            <div class="ev-actions-menu">
+                <button class="ev-menu-item btn-add-player" data-event-name="${escapeHtml(ev.item_name)}">+ Add Player</button>
+                <button class="ev-menu-item btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}">+ Add Payment</button>
+                ${rsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${rsvpOnlyCount})</button>` : ''}
+                <div class="ev-menu-divider"></div>
+                <button class="ev-menu-item btn-message-players" data-event-name="${escapeHtml(ev.item_name)}">Message Players</button>
+                <button class="ev-menu-item btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}">Audit RSVPs</button>
+                ${currentRole === 'admin' ? `<div class="ev-menu-divider"></div>${evStatus === 'active'
+                    ? `<button class="ev-menu-item ev-menu-item-danger btn-cancel-event" data-event-id="${ev.id}" data-event-name="${escapeHtml(ev.item_name)}">Cancel Event</button>`
+                    : `<button class="ev-menu-item btn-restore-event" data-event-id="${ev.id}">Restore Event</button>`}` : ''}
+            </div>
+        </div>`;
         html += '<div class="column-toggle-wrapper">';
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
@@ -4363,6 +4386,22 @@
     }
 
     function attachDetailHandlers(container, ev) {
+        // Actions dropdown toggle
+        container.querySelectorAll('.ev-actions-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const menu = btn.nextElementSibling;
+                const isOpen = menu.style.display === 'block';
+                document.querySelectorAll('.ev-actions-menu').forEach(m => { m.style.display = 'none'; });
+                if (!isOpen) menu.style.display = 'block';
+            });
+        });
+        container.querySelectorAll('.ev-menu-item').forEach(item => {
+            item.addEventListener('click', () => {
+                container.querySelectorAll('.ev-actions-menu').forEach(m => { m.style.display = 'none'; });
+            });
+        });
+
         // Expandable player detail rows
         container.querySelectorAll("tr[data-expand-player]").forEach(row => {
             row.addEventListener("click", (e) => {
@@ -8042,6 +8081,10 @@
         document.addEventListener("click", (e) => {
             if (!colDrop.contains(e.target) && e.target !== colBtn) {
                 colDrop.classList.remove("open");
+            }
+            // Close actions dropdown when clicking outside
+            if (!e.target.closest('.ev-actions-wrap')) {
+                document.querySelectorAll('.ev-actions-menu').forEach(m => { m.style.display = 'none'; });
             }
             // Also close detail column dropdowns
             document.querySelectorAll(".detail-col-dropdown.open").forEach(d => {
