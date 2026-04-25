@@ -2991,6 +2991,44 @@ def api_event_rsvp_credits(event_name):
     return jsonify(credit_map)
 
 
+@app.route("/api/events/<path:event_name>/balance-due-sends", methods=["GET"])
+@require_role("manager")
+def api_event_balance_due_sends(event_name):
+    """Return {item_id: {sent_at, status, count}} map of balance-due email sends
+    for this event. Frontend uses this to switch the button label from
+    'Send Venmo Email' to 'Remind' on items that have already been emailed."""
+    from email_parser.database import _connect as _db_connect
+    out: dict[str, dict] = {}
+    with _db_connect() as conn:
+        rows = conn.execute(
+            """SELECT body_preview, status, sent_at FROM message_log
+               WHERE event_name = ?
+                 AND body_preview LIKE 'Balance due%(item:%'
+               ORDER BY sent_at ASC""",
+            (event_name,),
+        ).fetchall()
+    for r in rows:
+        bp = r["body_preview"] or ""
+        # Extract "(item:N)" tag
+        marker = bp.rfind("(item:")
+        if marker < 0:
+            continue
+        end = bp.find(")", marker)
+        if end < 0:
+            continue
+        item_id = bp[marker + 6:end].strip()
+        if not item_id:
+            continue
+        cur = out.get(item_id)
+        if cur is None:
+            out[item_id] = {"sent_at": r["sent_at"], "status": r["status"], "count": 1}
+        else:
+            cur["count"] += 1
+            cur["sent_at"] = r["sent_at"]  # keep latest
+            cur["status"] = r["status"]
+    return jsonify(out)
+
+
 @app.route("/api/rsvps/<int:item_id>/credit-info", methods=["GET"])
 @require_role("manager")
 def api_rsvp_credit_info_by_item(item_id):
@@ -3407,7 +3445,8 @@ def api_balance_due_email_send(item_id):
             "recipient_name": payload["player_name"],
             "recipient_address": to_address,
             "subject": payload["subject"],
-            "body_preview": f"Balance due ${payload['amount_owed']:.2f} via Venmo",
+            # item_id tag enables per-item lookup in get_balance_due_sends_for_event
+            "body_preview": f"Balance due ${payload['amount_owed']:.2f} via Venmo (item:{item_id})",
             "status": status,
             "sent_by": session.get("role", "unknown"),
         })

@@ -4073,11 +4073,22 @@
                         const isCreditTransfer = (r.merchant || "") === "Paid Separately (Credit Transfer)";
                         if (isCreditTransfer) {
                             // Send Venmo Email button — only when balance_due > 0
+                            // Switches to "Remind" once an email has been logged for this item
                             const cnoteAct = r.credit_note || '';
                             if (cnoteAct.startsWith('balance_due:')) {
                                 const owedAct = parseFloat(cnoteAct.split(':')[1]) || 0;
                                 if (owedAct > 0) {
-                                    btns += `<button class="btn btn-venmo-email" data-item-id="${r.id}" style="background:#3D95CE;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;" title="Preview & send Venmo balance-due email">Send Venmo Email</button> `;
+                                    const sendInfo = (balanceDueSendMap[ev.item_name] || {})[String(r.id)];
+                                    const alreadySent = !!(sendInfo && sendInfo.status === 'sent');
+                                    const label = alreadySent ? 'Remind' : 'Send Venmo Email';
+                                    const bg = alreadySent ? '#d97706' : '#3D95CE';
+                                    const tipDate = alreadySent && sendInfo.sent_at
+                                        ? ` (last sent ${escapeHtml(sendInfo.sent_at)}, ${sendInfo.count}x)`
+                                        : '';
+                                    const tip = alreadySent
+                                        ? `Send another reminder${tipDate}`
+                                        : 'Preview & send Venmo balance-due email';
+                                    btns += `<button class="btn btn-venmo-email" data-item-id="${r.id}" style="background:${bg};color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;" title="${tip}">${label}</button> `;
                                 }
                             }
                             btns += `<button class="btn btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#7c3aed;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Undo Credit</button>`;
@@ -4309,8 +4320,11 @@
         // Fetch RSVPs first (needed for both desktop and mobile)
         if (ev) await fetchRsvps(ev.item_name);
 
-        // Fetch credit map for RSVP-only players
-        if (ev) await fetchRsvpCreditMap(ev.item_name);
+        // Fetch credit map for RSVP-only players + balance-due send history
+        if (ev) await Promise.all([
+            fetchRsvpCreditMap(ev.item_name),
+            fetchBalanceDueSendMap(ev.item_name),
+        ]);
 
         // Desktop: render detail into table row
         const row = document.querySelector(`.event-row-clickable[data-id="${eventId}"]`);
@@ -8426,6 +8440,21 @@
         }
     }
 
+    // Per-event map of item_id → {sent_at, status, count} for balance-due emails sent.
+    // Used to switch the button label from 'Send Venmo Email' to 'Remind' on items
+    // that have already been emailed.
+    let balanceDueSendMap = {};
+    async function fetchBalanceDueSendMap(eventName) {
+        try {
+            const resp = await fetch(`/api/events/${encodeURIComponent(eventName)}/balance-due-sends`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            balanceDueSendMap[eventName] = data;  // { item_id: {sent_at, status, count} }
+        } catch (err) {
+            console.warn('fetchBalanceDueSendMap error:', err);
+        }
+    }
+
     let applyCreditState = {};
 
     async function openApplyCreditModal(itemId, rsvpId, customer, eventName) {
@@ -8586,7 +8615,11 @@
 
             // Refresh credit map and re-render detail for the event
             delete rsvpCreditMap[eventName];
-            await fetchRsvpCreditMap(eventName);
+            delete balanceDueSendMap[eventName];
+            await Promise.all([
+                fetchRsvpCreditMap(eventName),
+                fetchBalanceDueSendMap(eventName),
+            ]);
             await fetchItems();
             const ev = allEvents.find(e => e.item_name === eventName);
             if (ev) {
@@ -8619,6 +8652,7 @@
 
     // ─── Send Venmo Balance-Due Email ──────────────────────────────────────
     let _venmoEmailItemId = null;
+    let _venmoEmailEventName = null;
 
     function _showVenmoResult(msg, isError) {
         const el = document.getElementById('venmo-email-result');
@@ -8642,6 +8676,7 @@
                 _showVenmoResult(data.error || 'Failed to load preview', true);
                 return;
             }
+            _venmoEmailEventName = data.event_name || null;
             document.getElementById('venmo-email-player').textContent = data.player_name || '—';
             document.getElementById('venmo-email-intended').textContent = data.intended_recipient || '(no email on file)';
             const toEl = document.getElementById('venmo-email-to');
@@ -8671,6 +8706,7 @@
     function closeVenmoEmailModal() {
         document.getElementById('venmo-email-overlay').style.display = 'none';
         _venmoEmailItemId = null;
+        _venmoEmailEventName = null;
         // Reset send button so it's ready for the next open
         const sendBtn = document.getElementById('venmo-email-send');
         sendBtn.textContent = 'Send Email';
@@ -8691,6 +8727,20 @@
             if (resp.ok) {
                 _showVenmoResult(`Sent to ${data.sent_to}` + (data.override_active ? ' (testing override)' : ''), false);
                 sendBtn.textContent = 'Sent';
+                // Refresh send map + re-render the event detail so the button switches to "Remind"
+                const evName = _venmoEmailEventName;
+                if (evName) {
+                    fetchBalanceDueSendMap(evName).then(() => {
+                        const ev = allEvents.find(e => e.item_name === evName);
+                        if (ev) {
+                            const container = document.getElementById(`detail-content-${ev.id}`);
+                            if (container) {
+                                container.innerHTML = renderDetailContent(ev);
+                                attachDetailHandlers(container, ev);
+                            }
+                        }
+                    });
+                }
                 setTimeout(closeVenmoEmailModal, 1200);
             } else {
                 _showVenmoResult(data.error || 'Failed to send', true);
@@ -8729,7 +8779,12 @@
                 if (!resp.ok) { alert(data.error || 'Failed to reverse credit application.'); return; }
                 // Refresh and re-render
                 delete rsvpCreditMap[eventName];
-                await Promise.all([fetchItems(), fetchRsvpCreditMap(eventName)]);
+                delete balanceDueSendMap[eventName];
+                await Promise.all([
+                    fetchItems(),
+                    fetchRsvpCreditMap(eventName),
+                    fetchBalanceDueSendMap(eventName),
+                ]);
                 const ev = allEvents.find(ev2 => ev2.item_name === eventName);
                 if (ev) {
                     await fetchRsvps(eventName);
