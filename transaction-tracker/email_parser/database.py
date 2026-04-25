@@ -7927,11 +7927,13 @@ def auto_match_venmo_inbound_to_balance_due(
         "matches": [],
     }
     with _connect(db_path) as conn:
-        # Pull approved Venmo IN expenses, optionally filtered to specific IDs
-        params: list = ["venmo", "received", "approved"]
+        # Pull approved or pending Venmo IN expenses, optionally filtered to specific IDs
+        # pending Venmo INs are auto-approved when they match a balance-due item
+        params: list = ["venmo", "received"]
         sql = (
             "SELECT * FROM expense_transactions "
-            "WHERE source_type = ? AND transaction_type = ? AND review_status = ? "
+            "WHERE source_type = ? AND transaction_type = ? "
+            "AND review_status IN ('approved', 'pending') "
             "AND COALESCE(matched_item_id, 0) = 0"
         )
         if expense_ids:
@@ -8082,9 +8084,13 @@ def auto_match_venmo_inbound_to_balance_due(
                     (f"paid_at:{txn_date}", target_id),
                 )
 
-                # Stamp the expense as matched
+                # Stamp the expense as matched and auto-approve if still pending
                 conn.execute(
-                    "UPDATE expense_transactions SET matched_item_id = ? WHERE id = ?",
+                    """UPDATE expense_transactions
+                       SET matched_item_id = ?,
+                           review_status = CASE WHEN review_status = 'pending'
+                                                THEN 'approved' ELSE review_status END
+                       WHERE id = ?""",
                     (new_item_id, exp["id"]),
                 )
 
