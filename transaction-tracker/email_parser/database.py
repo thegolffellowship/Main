@@ -3121,9 +3121,18 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_season_contests(conn)
         _backfill_customer_id_on_handicap_rounds(conn)
         _backfill_customer_id_on_gd_splits(conn)
-        _backfill_events_id_on_tgf_events(conn)
-        _backfill_event_id_on_items(conn)
-        _backfill_event_id_on_string_tables(conn)
+        try:
+            _backfill_events_id_on_tgf_events(conn)
+        except Exception:
+            logger.exception("Non-fatal: _backfill_events_id_on_tgf_events failed")
+        try:
+            _backfill_event_id_on_items(conn)
+        except Exception:
+            logger.exception("Non-fatal: _backfill_event_id_on_items failed")
+        try:
+            _backfill_event_id_on_string_tables(conn)
+        except Exception:
+            logger.exception("Non-fatal: _backfill_event_id_on_string_tables failed")
 
         # Promote approved expense_transactions that have not yet been linked
         # to acct_transactions (e.g. expenses approved before this feature shipped).
