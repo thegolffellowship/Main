@@ -2425,6 +2425,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("rsvps",                "INTEGER REFERENCES events(id)"),
             ("expense_transactions", "INTEGER REFERENCES events(id)"),
             ("message_log",          "INTEGER REFERENCES events(id)"),
+            ("contractor_payouts",   "INTEGER REFERENCES events(id)"),
         ]
         for tbl, col_type in _event_id_migrations:
             try:
@@ -4127,6 +4128,7 @@ def _backfill_event_id_on_string_tables(conn: sqlite3.Connection) -> None:
         ("rsvps",                "id", "matched_event"),
         ("expense_transactions", "id", "event_name"),
         ("message_log",          "id", "event_name"),
+        ("contractor_payouts",   "id", "event_name"),
     ]
     for tbl, pk, name_col in table_cfg:
         try:
