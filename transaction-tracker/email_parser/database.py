@@ -2928,7 +2928,10 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_event ON tgf_payouts(event_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_customer ON tgf_payouts(customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_events_events_id ON tgf_events(events_id)")
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_events_events_id ON tgf_events(events_id)")
+        except sqlite3.OperationalError:
+            pass  # events_id column added via migration below; index created after ALTER TABLE
 
         # Contractor payout ledger (chapter managers, per-event revenue-share)
         conn.execute(
