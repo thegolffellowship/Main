@@ -2418,6 +2418,20 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.OperationalError:
                 pass
 
+        # ── event_id FK on tables that reference events by string name ──
+        _event_id_migrations = [
+            ("acct_allocations",     "INTEGER REFERENCES events(id)"),
+            ("godaddy_order_splits", "INTEGER REFERENCES events(id)"),
+            ("rsvps",                "INTEGER REFERENCES events(id)"),
+            ("expense_transactions", "INTEGER REFERENCES events(id)"),
+            ("message_log",          "INTEGER REFERENCES events(id)"),
+        ]
+        for tbl, col_type in _event_id_migrations:
+            try:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN event_id {col_type}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         # Seed unified financial model categories if missing
         _seed_unified_financial_categories(conn)
 
@@ -3108,6 +3122,7 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_gd_splits(conn)
         _backfill_events_id_on_tgf_events(conn)
         _backfill_event_id_on_items(conn)
+        _backfill_event_id_on_string_tables(conn)
 
         # Promote approved expense_transactions that have not yet been linked
         # to acct_transactions (e.g. expenses approved before this feature shipped).
@@ -4072,6 +4087,66 @@ def _backfill_event_id_on_items(conn: sqlite3.Connection) -> int:
     if updated:
         logger.info("Backfilled event_id for %d items rows", updated)
     return updated
+
+
+def _backfill_event_id_on_string_tables(conn: sqlite3.Connection) -> None:
+    """Populate event_id on tables that reference events via a string name column.
+
+    Covers: acct_allocations (event_name), godaddy_order_splits (event_name),
+    rsvps (matched_event), expense_transactions (event_name), message_log (event_name).
+
+    Each table has its own event name column; we resolve via events table
+    then event_aliases for renamed events.
+    """
+    # Build name→event_id map
+    ev_map: dict[str, int] = {}
+    for e in conn.execute("SELECT id, item_name FROM events").fetchall():
+        if e["item_name"]:
+            ev_map[e["item_name"].strip().lower()] = e["id"]
+
+    alias_map: dict[str, str] = {}
+    for a in conn.execute("SELECT alias_name, canonical_name FROM event_aliases").fetchall():
+        if a["alias_name"] and a["canonical_name"]:
+            alias_map[a["alias_name"].strip().lower()] = a["canonical_name"].strip().lower()
+
+    def _resolve(name: str | None) -> int | None:
+        if not name:
+            return None
+        key = name.strip().lower()
+        ev_id = ev_map.get(key)
+        if ev_id is None:
+            canonical = alias_map.get(key)
+            if canonical:
+                ev_id = ev_map.get(canonical)
+        return ev_id
+
+    table_cfg = [
+        # (table, pk_col, name_col)
+        ("acct_allocations",     "id", "event_name"),
+        ("godaddy_order_splits", "id", "event_name"),
+        ("rsvps",                "id", "matched_event"),
+        ("expense_transactions", "id", "event_name"),
+        ("message_log",          "id", "event_name"),
+    ]
+    for tbl, pk, name_col in table_cfg:
+        try:
+            rows = conn.execute(
+                f"SELECT {pk}, {name_col} FROM {tbl} WHERE event_id IS NULL"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            continue  # table or column missing — skip
+        updated = 0
+        for row in rows:
+            ev_id = _resolve(row[name_col])
+            if ev_id is not None:
+                cur = conn.execute(
+                    f"UPDATE {tbl} SET event_id = ? WHERE {pk} = ? AND event_id IS NULL",
+                    (ev_id, row[pk]),
+                )
+                updated += cur.rowcount
+        conn.commit()
+        if updated:
+            logger.info("Backfilled event_id for %d %s rows", updated, tbl)
 
 
 def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
