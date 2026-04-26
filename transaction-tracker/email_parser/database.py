@@ -2502,7 +2502,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 category          TEXT,
                 entity            TEXT DEFAULT 'TGF',
                 event_name        TEXT,
-                customer_id       INTEGER,
+                customer_id       INTEGER REFERENCES customers(customer_id),
                 confidence        INTEGER DEFAULT 0,
                 review_status     TEXT DEFAULT 'pending'
                     CHECK(review_status IN ('pending', 'approved', 'corrected', 'ignored')),
@@ -3062,6 +3062,21 @@ def init_db(db_path: str | Path | None = None) -> None:
                 (last4, acct_name),
             )
 
+        # ── Add customer_id FK to tables that store customer-identity data ──
+        # Each table gets a nullable customer_id with a REFERENCES constraint.
+        # Backfill functions below populate it for existing rows at startup.
+        _customer_id_migrations = [
+            ("customer_aliases",    "INTEGER REFERENCES customers(customer_id)"),
+            ("season_contests",     "INTEGER REFERENCES customers(customer_id)"),
+            ("handicap_rounds",     "INTEGER REFERENCES customers(customer_id)"),
+            ("godaddy_order_splits","INTEGER REFERENCES customers(customer_id)"),
+        ]
+        for tbl, col_type in _customer_id_migrations:
+            try:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN customer_id {col_type}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         # ── One-time duplicate customer merge (idempotent) ──────────
         _merge_duplicate_customers(conn)
 
@@ -3070,11 +3085,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         # created.  On fresh databases this is a no-op.
         _backfill_customer_ids(conn)
 
-        # Backfill customer_id FK on acct_transactions, handicap_player_links,
-        # and rsvps so direct joins work without string-matching on names.
+        # Backfill customer_id FK on all tables that store customer-identity data.
         _backfill_customer_id_on_acct_transactions(conn)
         _backfill_customer_id_on_player_links(conn)
         _backfill_customer_id_on_rsvps(conn)
+        _backfill_customer_id_on_aliases(conn)
+        _backfill_customer_id_on_season_contests(conn)
+        _backfill_customer_id_on_handicap_rounds(conn)
+        _backfill_customer_id_on_gd_splits(conn)
 
         # Promote approved expense_transactions that have not yet been linked
         # to acct_transactions (e.g. expenses approved before this feature shipped).
@@ -3805,6 +3823,123 @@ def _backfill_customer_id_on_rsvps(conn: sqlite3.Connection) -> int:
     conn.commit()
     if updated:
         logger.info("Backfilled customer_id for %d rsvps rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_aliases(conn: sqlite3.Connection) -> int:
+    """Populate customer_id on customer_aliases rows that lack it.
+
+    Resolves via name match in customers table (aliases are keyed by customer_name).
+    """
+    rows = conn.execute(
+        "SELECT id, customer_name FROM customer_aliases WHERE customer_id IS NULL"
+    ).fetchall()
+    if not rows:
+        return 0
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, row["customer_name"], None)
+        if cid is not None:
+            cur = conn.execute(
+                "UPDATE customer_aliases SET customer_id = ? WHERE id = ? AND customer_id IS NULL",
+                (cid, row["id"]),
+            )
+            updated += cur.rowcount
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d customer_aliases rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_season_contests(conn: sqlite3.Connection) -> int:
+    """Populate customer_id on season_contests rows that lack it."""
+    rows = conn.execute(
+        "SELECT id, customer_name FROM season_contests WHERE customer_id IS NULL"
+    ).fetchall()
+    if not rows:
+        return 0
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, row["customer_name"], None)
+        if cid is not None:
+            cur = conn.execute(
+                "UPDATE season_contests SET customer_id = ? WHERE id = ? AND customer_id IS NULL",
+                (cid, row["id"]),
+            )
+            updated += cur.rowcount
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d season_contests rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_handicap_rounds(conn: sqlite3.Connection) -> int:
+    """Populate customer_id on handicap_rounds rows that lack it.
+
+    Resolves via handicap_player_links (player_name → customer_id) rather than
+    direct name lookup, since GG player names often differ from customer names.
+    """
+    rows = conn.execute(
+        "SELECT id, player_name FROM handicap_rounds WHERE customer_id IS NULL"
+    ).fetchall()
+    if not rows:
+        return 0
+    # Build a player_name → customer_id map from handicap_player_links
+    link_rows = conn.execute(
+        "SELECT player_name, customer_id FROM handicap_player_links WHERE customer_id IS NOT NULL"
+    ).fetchall()
+    link_map = {r["player_name"].lower(): r["customer_id"] for r in link_rows}
+
+    updated = 0
+    for row in rows:
+        cid = link_map.get((row["player_name"] or "").lower())
+        if cid is None:
+            # Fall back to direct name lookup via customers table
+            cid = _lookup_customer_id(conn, row["player_name"], None)
+        if cid is not None:
+            cur = conn.execute(
+                "UPDATE handicap_rounds SET customer_id = ? WHERE id = ? AND customer_id IS NULL",
+                (cid, row["id"]),
+            )
+            updated += cur.rowcount
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d handicap_rounds rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_gd_splits(conn: sqlite3.Connection) -> int:
+    """Populate customer_id on godaddy_order_splits rows that lack it.
+
+    Resolves via the linked item_id → items.customer_id (most reliable),
+    falling back to customer text match for splits without an item_id.
+    """
+    rows = conn.execute(
+        "SELECT id, item_id, customer FROM godaddy_order_splits WHERE customer_id IS NULL"
+    ).fetchall()
+    if not rows:
+        return 0
+    updated = 0
+    for row in rows:
+        cid = None
+        if row["item_id"]:
+            item_row = conn.execute(
+                "SELECT customer_id FROM items WHERE id = ? AND customer_id IS NOT NULL",
+                (row["item_id"],),
+            ).fetchone()
+            if item_row:
+                cid = item_row["customer_id"]
+        if cid is None and row["customer"]:
+            cid = _lookup_customer_id(conn, row["customer"], None)
+        if cid is not None:
+            cur = conn.execute(
+                "UPDATE godaddy_order_splits SET customer_id = ? WHERE id = ? AND customer_id IS NULL",
+                (cid, row["id"]),
+            )
+            updated += cur.rowcount
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d godaddy_order_splits rows", updated)
     return updated
 
 
