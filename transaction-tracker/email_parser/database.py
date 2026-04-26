@@ -7298,44 +7298,57 @@ _PER_GAME_ADDON = 16.0  # $ per game (NET or GROSS) — 9 Holes and 9/18 Combo
 _PER_GAME_ADDON_18 = 30.0  # $ per game for standalone 18 Hole events
 
 
-def get_player_credits(customer_name: str, db_path: str | Path | None = None, customer_id: int | None = None) -> list[dict]:
+def get_player_credits(
+    customer_name: str,
+    db_path: str | Path | None = None,
+    customer_id: int | None = None,
+    player_email: str | None = None,
+) -> list[dict]:
     """Return all unredeemed credited items for a player, most recent first.
 
     Includes both parent items and child add-on items (e.g. game add-ons that
     were credited when an event was cancelled via credit_item cascade).
+
+    Lookup priority:
+    1. customer_id → items.customer_id
+    2. Name fallback → items.customer COLLATE NOCASE
+    3. Email fallback via customer_emails → resolve customer_id → retry #1
     """
+    _CREDIT_SQL = """SELECT i.*, e.item_name as event_canonical
+                     FROM items i
+                     LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
+                     WHERE {where}
+                       AND i.transaction_status = 'credited'
+                     ORDER BY i.order_date DESC"""
+
     with _connect(db_path) as conn:
+        rows = []
         if customer_id:
             rows = conn.execute(
-                """SELECT i.*, e.item_name as event_canonical
-                   FROM items i
-                   LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
-                   WHERE i.customer_id = ?
-                     AND i.transaction_status = 'credited'
-                   ORDER BY i.order_date DESC""",
+                _CREDIT_SQL.format(where="i.customer_id = ?"),
                 (customer_id,),
             ).fetchall()
-            if not rows:
-                # Fall back to name lookup in case some items predate customer_id backfill
-                rows = conn.execute(
-                    """SELECT i.*, e.item_name as event_canonical
-                       FROM items i
-                       LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
-                       WHERE i.customer = ? COLLATE NOCASE
-                         AND i.transaction_status = 'credited'
-                       ORDER BY i.order_date DESC""",
-                    (customer_name,),
-                ).fetchall()
-        else:
+
+        if not rows:
+            # Name lookup (case-insensitive)
             rows = conn.execute(
-                """SELECT i.*, e.item_name as event_canonical
-                   FROM items i
-                   LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
-                   WHERE i.customer = ? COLLATE NOCASE
-                     AND i.transaction_status = 'credited'
-                   ORDER BY i.order_date DESC""",
+                _CREDIT_SQL.format(where="i.customer = ? COLLATE NOCASE"),
                 (customer_name,),
             ).fetchall()
+
+        # If still empty and we have an email, try resolving via customer_emails table
+        if not rows and player_email:
+            email_lc = player_email.strip().lower()
+            ce_row = conn.execute(
+                "SELECT customer_id FROM customer_emails WHERE LOWER(email) = ? LIMIT 1",
+                (email_lc,),
+            ).fetchone()
+            if ce_row and ce_row["customer_id"]:
+                rows = conn.execute(
+                    _CREDIT_SQL.format(where="i.customer_id = ?"),
+                    (ce_row["customer_id"],),
+                ).fetchall()
+
     result = []
     for r in rows:
         d = dict(r)
@@ -7558,6 +7571,8 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
 
         # Build email → canonical customer name lookup for rsvp rows
         email_to_customer = {}
+        email_to_customer_id: dict[str, int] = {}
+        email_to_canonical_name: dict[str, str] = {}
         for rr in rsvp_rows:
             email = (rr["player_email"] or "").strip().lower()
             if email and email not in email_to_customer:
@@ -7570,6 +7585,22 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
                 ).fetchone()
                 if card:
                     email_to_customer[email] = card["customer"]
+            # Also look up customer_id via customer_emails table for robust credit matching
+            if email and email not in email_to_customer_id:
+                ce_row = conn.execute(
+                    """SELECT ce.customer_id,
+                              TRIM(c.first_name || ' ' || c.last_name) AS full_name
+                       FROM customer_emails ce
+                       JOIN customers c ON c.customer_id = ce.customer_id
+                       WHERE LOWER(ce.email) = ?
+                       LIMIT 1""",
+                    (email,),
+                ).fetchone()
+                if ce_row:
+                    email_to_customer_id[email] = ce_row["customer_id"]
+                    cname = (ce_row["full_name"] or "").strip()
+                    if cname:
+                        email_to_canonical_name[email] = cname
 
     result = {}
 
@@ -7595,10 +7626,20 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
     # GG RSVPs from rsvps table (synthetic frontend rows)
     for rr in rsvp_rows:
         email = (rr["player_email"] or "").strip().lower()
-        customer = email_to_customer.get(email) or rr["player_name"] or ""
+        # Prefer name from GoDaddy items (matches frontend resolved_name), then customers
+        # table, then raw GG player name as last resort
+        customer = (
+            email_to_customer.get(email)
+            or email_to_canonical_name.get(email)
+            or rr["player_name"]
+            or ""
+        )
+        cust_id = email_to_customer_id.get(email) if email else None
         if not customer or customer in result:
             continue
-        credits = get_player_credits(customer, db_path)
+        credits = get_player_credits(
+            customer, db_path, customer_id=cust_id, player_email=email or None
+        )
         if credits:
             result[customer] = {
                 "total_credit": sum(c["credit_amount"] for c in credits),
