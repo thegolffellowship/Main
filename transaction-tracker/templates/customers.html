@@ -2811,6 +2811,29 @@
                 });
             } catch (e) { /* handicap data optional */ }
 
+            // Overlay canonical email/phone/customer_id from the customers table
+            // (source of truth — wins over transaction-derived items data)
+            try {
+                const canonRes = await fetch("/api/customers");
+                const canonList = await canonRes.json();
+                const canonById = {};   // customer_id → canonical record
+                const canonByName = {}; // lowercase name → canonical record
+                canonList.forEach(c => {
+                    if (c.customer_id) canonById[c.customer_id] = c;
+                    if (c.customer_name) canonByName[c.customer_name.toLowerCase()] = c;
+                });
+                allCustomers.forEach(c => {
+                    const canon = (c.customer_id && canonById[c.customer_id])
+                        || canonByName[c.name.toLowerCase()];
+                    if (!canon) return;
+                    // Canonical email and phone always win
+                    if (canon.primary_email) c.email = canon.primary_email;
+                    if (canon.phone) c.phone = canon.phone;
+                    // Ensure customer_id is populated
+                    if (canon.customer_id && !c.customer_id) c.customer_id = canon.customer_id;
+                });
+            } catch (e) { /* canonical data optional — items-derived values used as fallback */ }
+
             // Fetch Venmo handles and merge into customer objects
             try {
                 const venmoRes = await fetch("/api/customers/venmo-handles");

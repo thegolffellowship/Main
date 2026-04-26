@@ -2370,6 +2370,19 @@ def customers_page():
     return render_template("customers.html")
 
 
+@app.route("/api/customers")
+@require_role("view-only")
+def api_customers_canonical():
+    """Return all customer records from the canonical customers + customer_emails tables.
+
+    This is the source-of-truth endpoint for customer identity data (email,
+    phone, name).  The Customers page overlays this onto transaction-derived
+    data so canonical contact details always win.
+    """
+    from email_parser.database import get_all_customers
+    return jsonify(get_all_customers())
+
+
 @app.route("/api/customers/update", methods=["POST"])
 @require_role("manager")
 def api_update_customer():
