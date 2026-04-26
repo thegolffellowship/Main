@@ -7547,10 +7547,13 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
     """
     with _connect(db_path) as conn:
         rsvp_items = conn.execute(
-            """SELECT id, customer, customer_id FROM items
-               WHERE item_name = ? COLLATE NOCASE
-                 AND COALESCE(transaction_status, 'active') IN ('rsvp_only', 'gg_rsvp')
-                 AND parent_item_id IS NULL""",
+            """SELECT i.id, i.customer, i.customer_id,
+                      r.player_email AS gg_email
+               FROM items i
+               LEFT JOIN rsvps r ON r.matched_item_id = i.id
+               WHERE i.item_name = ? COLLATE NOCASE
+                 AND COALESCE(i.transaction_status, 'active') IN ('rsvp_only', 'gg_rsvp')
+                 AND i.parent_item_id IS NULL""",
             (event_name,),
         ).fetchall()
 
@@ -7610,7 +7613,8 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
         if not customer:
             continue
         cust_id = row["customer_id"] if row["customer_id"] else None
-        credits = get_player_credits(customer, db_path, customer_id=cust_id)
+        gg_email = (row["gg_email"] or "").strip().lower() or None
+        credits = get_player_credits(customer, db_path, customer_id=cust_id, player_email=gg_email)
         if credits:
             result[customer] = {
                 "total_credit": sum(c["credit_amount"] for c in credits),
