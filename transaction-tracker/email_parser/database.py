@@ -1482,6 +1482,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("customer_id", "INTEGER"),
             ("archived", "INTEGER DEFAULT 0"),
             ("coupon_code", "TEXT"), ("coupon_amount", "TEXT"),
+            ("event_id", "INTEGER REFERENCES events(id)"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE items ADD COLUMN {col} {col_type}")
@@ -1609,6 +1610,9 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_items_transaction_status ON items(transaction_status)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_event_id ON items(event_id)"
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_event_date ON events(event_date DESC)"
@@ -3103,6 +3107,7 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_handicap_rounds(conn)
         _backfill_customer_id_on_gd_splits(conn)
         _backfill_events_id_on_tgf_events(conn)
+        _backfill_event_id_on_items(conn)
 
         # Promote approved expense_transactions that have not yet been linked
         # to acct_transactions (e.g. expenses approved before this feature shipped).
@@ -4005,6 +4010,67 @@ def _backfill_events_id_on_tgf_events(conn: sqlite3.Connection) -> int:
     conn.commit()
     if updated:
         logger.info("Backfilled events_id for %d tgf_events rows", updated)
+    return updated
+
+
+def _backfill_event_id_on_items(conn: sqlite3.Connection) -> int:
+    """Populate event_id on items rows that lack it.
+
+    Matches items.item_name → events.item_name (case-insensitive), then
+    checks event_aliases for renamed events. Child payment rows (parent_item_id
+    IS NOT NULL) are resolved via their parent's event_id to avoid re-querying.
+    """
+    rows = conn.execute(
+        "SELECT id, item_name, parent_item_id FROM items WHERE event_id IS NULL"
+    ).fetchall()
+    if not rows:
+        return 0
+
+    # Build name→event_id map from events table
+    ev_map: dict[str, int] = {}
+    for e in conn.execute("SELECT id, item_name FROM events").fetchall():
+        if e["item_name"]:
+            ev_map[e["item_name"].strip().lower()] = e["id"]
+
+    # Build alias→event name map
+    alias_map: dict[str, str] = {}
+    for a in conn.execute("SELECT alias_name, canonical_name FROM event_aliases").fetchall():
+        if a["alias_name"] and a["canonical_name"]:
+            alias_map[a["alias_name"].strip().lower()] = a["canonical_name"].strip().lower()
+
+    # Cache parent event_id to avoid re-querying for child rows
+    parent_cache: dict[int, int | None] = {}
+
+    updated = 0
+    for row in rows:
+        ev_id: int | None = None
+
+        if row["parent_item_id"] is not None:
+            # Child payment row — use parent's event_id
+            pid = row["parent_item_id"]
+            if pid not in parent_cache:
+                pr = conn.execute("SELECT event_id FROM items WHERE id = ?", (pid,)).fetchone()
+                parent_cache[pid] = pr["event_id"] if pr else None
+            ev_id = parent_cache[pid]
+        else:
+            name_key = (row["item_name"] or "").strip().lower()
+            ev_id = ev_map.get(name_key)
+            if ev_id is None:
+                # Try alias lookup
+                canonical = alias_map.get(name_key)
+                if canonical:
+                    ev_id = ev_map.get(canonical)
+
+        if ev_id is not None:
+            cur = conn.execute(
+                "UPDATE items SET event_id = ? WHERE id = ? AND event_id IS NULL",
+                (ev_id, row["id"]),
+            )
+            updated += cur.rowcount
+
+    conn.commit()
+    if updated:
+        logger.info("Backfilled event_id for %d items rows", updated)
     return updated
 
 
