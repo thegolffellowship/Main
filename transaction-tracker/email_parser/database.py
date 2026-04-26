@@ -2909,6 +2909,7 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_event ON tgf_payouts(event_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_payouts_customer ON tgf_payouts(customer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tgf_events_events_id ON tgf_events(events_id)")
 
         # Contractor payout ledger (chapter managers, per-event revenue-share)
         conn.execute(
@@ -3077,6 +3078,14 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.OperationalError:
                 pass  # column already exists
 
+        # ── Bridge tgf_events → events (main event registry) ────────
+        try:
+            conn.execute(
+                "ALTER TABLE tgf_events ADD COLUMN events_id INTEGER REFERENCES events(id)"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
         # ── One-time duplicate customer merge (idempotent) ──────────
         _merge_duplicate_customers(conn)
 
@@ -3093,6 +3102,7 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_season_contests(conn)
         _backfill_customer_id_on_handicap_rounds(conn)
         _backfill_customer_id_on_gd_splits(conn)
+        _backfill_events_id_on_tgf_events(conn)
 
         # Promote approved expense_transactions that have not yet been linked
         # to acct_transactions (e.g. expenses approved before this feature shipped).
@@ -3940,6 +3950,61 @@ def _backfill_customer_id_on_gd_splits(conn: sqlite3.Connection) -> int:
     conn.commit()
     if updated:
         logger.info("Backfilled customer_id for %d godaddy_order_splits rows", updated)
+    return updated
+
+
+def _backfill_events_id_on_tgf_events(conn: sqlite3.Connection) -> int:
+    """Populate events_id on tgf_events rows that lack it.
+
+    Matches tgf_events.name → events.item_name using COLLATE NOCASE, then
+    falls back to a date-narrowed LIKE search when an exact match isn't found.
+    This bridges the two separate event universes so prize payouts can be
+    joined to registration/financial data in the main events table.
+    """
+    rows = conn.execute(
+        "SELECT id, name, event_date FROM tgf_events WHERE events_id IS NULL"
+    ).fetchall()
+    if not rows:
+        return 0
+
+    updated = 0
+    for row in rows:
+        ev_id = None
+
+        # 1. Exact name match (case-insensitive)
+        match = conn.execute(
+            "SELECT id FROM events WHERE item_name = ? COLLATE NOCASE",
+            (row["name"],),
+        ).fetchone()
+        if match:
+            ev_id = match["id"]
+
+        # 2. Partial name match: tgf_events.name contained in events.item_name
+        #    (handles cases like "Quicksand" matching "Quicksand Golf Club — May 2025")
+        if ev_id is None:
+            matches = conn.execute(
+                "SELECT id, item_name FROM events WHERE item_name LIKE ? COLLATE NOCASE",
+                (f"%{row['name']}%",),
+            ).fetchall()
+            if len(matches) == 1:
+                ev_id = matches[0]["id"]
+            elif len(matches) > 1 and row["event_date"]:
+                # Narrow by year+month when multiple events share a name fragment
+                ym = row["event_date"][:7]  # e.g. "2025-05"
+                dated = [m for m in matches if (m["item_name"] or "").find(ym[:4]) >= 0]
+                if len(dated) == 1:
+                    ev_id = dated[0]["id"]
+
+        if ev_id is not None:
+            cur = conn.execute(
+                "UPDATE tgf_events SET events_id = ? WHERE id = ? AND events_id IS NULL",
+                (ev_id, row["id"]),
+            )
+            updated += cur.rowcount
+
+    conn.commit()
+    if updated:
+        logger.info("Backfilled events_id for %d tgf_events rows", updated)
     return updated
 
 
