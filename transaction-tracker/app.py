@@ -3435,25 +3435,28 @@ def _build_balance_due_email(item_id: int) -> dict | None:
 
     # If the item has no email (e.g. manually-added RSVP), fall back to customer_emails table
     if not player_email:
-        with _db_connect() as conn:
-            cust_id = item.get("customer_id")
-            if cust_id:
-                row = conn.execute(
-                    "SELECT email FROM customer_emails WHERE customer_id = ? ORDER BY is_primary DESC, id ASC LIMIT 1",
-                    (cust_id,),
-                ).fetchone()
-                if row:
-                    player_email = (row["email"] or "").strip()
-            if not player_email and player_name:
-                row = conn.execute(
-                    """SELECT ce.email FROM customer_emails ce
-                       JOIN customers c ON c.customer_id = ce.customer_id
-                       WHERE TRIM(c.first_name || ' ' || c.last_name) = ? COLLATE NOCASE
-                       ORDER BY ce.is_primary DESC, ce.id ASC LIMIT 1""",
-                    (player_name,),
-                ).fetchone()
-                if row:
-                    player_email = (row["email"] or "").strip()
+        try:
+            with _db_connect() as conn:
+                cust_id = item.get("customer_id")
+                if cust_id:
+                    row = conn.execute(
+                        "SELECT email FROM customer_emails WHERE customer_id = ? ORDER BY is_primary DESC, email_id ASC LIMIT 1",
+                        (cust_id,),
+                    ).fetchone()
+                    if row:
+                        player_email = (row["email"] or "").strip()
+                if not player_email and player_name:
+                    row = conn.execute(
+                        """SELECT ce.email FROM customer_emails ce
+                           JOIN customers c ON c.customer_id = ce.customer_id
+                           WHERE TRIM(c.first_name || ' ' || c.last_name) = ? COLLATE NOCASE
+                           ORDER BY ce.is_primary DESC, ce.email_id ASC LIMIT 1""",
+                        (player_name,),
+                    ).fetchone()
+                    if row:
+                        player_email = (row["email"] or "").strip()
+        except Exception:
+            logger.warning("_build_balance_due_email: email lookup fallback failed for %s", player_name, exc_info=True)
 
     first_name = player_name.split(" ", 1)[0] if player_name else "there"
     event_date = event.get("event_date") or ""
