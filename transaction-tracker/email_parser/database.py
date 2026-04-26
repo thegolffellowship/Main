@@ -7298,19 +7298,43 @@ _PER_GAME_ADDON = 16.0  # $ per game (NET or GROSS) — 9 Holes and 9/18 Combo
 _PER_GAME_ADDON_18 = 30.0  # $ per game for standalone 18 Hole events
 
 
-def get_player_credits(customer_name: str, db_path: str | Path | None = None) -> list[dict]:
+def get_player_credits(customer_name: str, db_path: str | Path | None = None, customer_id: int | None = None) -> list[dict]:
     """Return all unredeemed credited items for a player, most recent first."""
     with _connect(db_path) as conn:
-        rows = conn.execute(
-            """SELECT i.*, e.item_name as event_canonical
-               FROM items i
-               LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
-               WHERE i.customer = ? COLLATE NOCASE
-                 AND i.transaction_status = 'credited'
-                 AND i.parent_item_id IS NULL
-               ORDER BY i.order_date DESC""",
-            (customer_name,),
-        ).fetchall()
+        if customer_id:
+            rows = conn.execute(
+                """SELECT i.*, e.item_name as event_canonical
+                   FROM items i
+                   LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
+                   WHERE i.customer_id = ?
+                     AND i.transaction_status = 'credited'
+                     AND i.parent_item_id IS NULL
+                   ORDER BY i.order_date DESC""",
+                (customer_id,),
+            ).fetchall()
+            if not rows:
+                # Fall back to name lookup in case some items predate customer_id backfill
+                rows = conn.execute(
+                    """SELECT i.*, e.item_name as event_canonical
+                       FROM items i
+                       LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
+                       WHERE i.customer = ? COLLATE NOCASE
+                         AND i.transaction_status = 'credited'
+                         AND i.parent_item_id IS NULL
+                       ORDER BY i.order_date DESC""",
+                    (customer_name,),
+                ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT i.*, e.item_name as event_canonical
+                   FROM items i
+                   LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
+                   WHERE i.customer = ? COLLATE NOCASE
+                     AND i.transaction_status = 'credited'
+                     AND i.parent_item_id IS NULL
+                   ORDER BY i.order_date DESC""",
+                (customer_name,),
+            ).fetchall()
     result = []
     for r in rows:
         d = dict(r)
@@ -7509,7 +7533,7 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
     """
     with _connect(db_path) as conn:
         rsvp_items = conn.execute(
-            """SELECT id, customer FROM items
+            """SELECT id, customer, customer_id FROM items
                WHERE item_name = ? COLLATE NOCASE
                  AND COALESCE(transaction_status, 'active') IN ('rsvp_only', 'gg_rsvp')
                  AND parent_item_id IS NULL""",
@@ -7553,7 +7577,8 @@ def get_event_rsvp_credit_map(event_name: str, db_path: str | Path | None = None
         customer = row["customer"]
         if not customer:
             continue
-        credits = get_player_credits(customer, db_path)
+        cust_id = row["customer_id"] if row["customer_id"] else None
+        credits = get_player_credits(customer, db_path, customer_id=cust_id)
         if credits:
             result[customer] = {
                 "total_credit": sum(c["credit_amount"] for c in credits),
