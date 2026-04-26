@@ -8595,7 +8595,6 @@
             applyCreditState = { itemId, rsvpId, customer: resolvedCustomer, eventName, info };
 
             const fmt = v => '$' + parseFloat(v || 0).toFixed(2);
-            const scenarioColor = info.amount_owed > 0 ? '#d97706' : info.amount_owed < 0 ? '#16a34a' : '#6b7280';
             const scenarioLabel = info.amount_owed > 0
                 ? `Player owes an additional <strong style="color:#d97706;">${fmt(info.amount_owed)}</strong>`
                 : info.amount_owed < 0
@@ -8609,43 +8608,61 @@
                     <td style="padding:0.2rem 0.5rem;color:#6b7280;font-size:0.78rem;">${escapeHtml(c.order_date || '')}</td>
                 </tr>`).join('');
 
-            let excessHtml = '';
-            if (info.amount_owed < 0) {
-                const excessAmt = Math.abs(info.amount_owed).toFixed(2);
-                const venmoHandle = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
-                const venmoNote = encodeURIComponent(`${resolvedCustomer} Excess credit refund`);
-                const venmoPayUrl = venmoHandle
-                    ? `https://venmo.com/${venmoHandle}?txn=pay&amount=${excessAmt}&note=${venmoNote}`
-                    : '';
-                const venmoLabel = venmoHandle
-                    ? `Venmo back ($${excessAmt}) — <a href="${venmoPayUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link</a>`
-                    : `Venmo back ($${excessAmt} — no handle on file)`;
-                excessHtml = `
-                <div style="margin-top:0.75rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:0.6rem 0.75rem;">
-                    <div style="font-weight:600;font-size:0.82rem;color:#065f46;margin-bottom:0.4rem;">Excess Credit: ${fmt(Math.abs(info.amount_owed))}</div>
-                    <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;">
-                        <input type="radio" name="excess-action" value="keep" checked style="margin-right:0.3rem;">
-                        Keep as credit in player's account
-                    </label>
-                    <label style="display:block;font-size:0.82rem;">
-                        <input type="radio" name="excess-action" value="venmo" style="margin-right:0.3rem;">
-                        ${venmoLabel}
-                    </label>
-                </div>`;
-            }
+            // Find event data for live price recalculation
+            const selEvent = allEvents.find(e => e.item_name === eventName);
+            const evFmt = selEvent ? (selEvent.format || '') : '';
+            const isComboEvt = evFmt.toLowerCase().includes('combo') || evFmt.toLowerCase().includes('9/18');
+            const prev = info.previous_selections || {};
+            const initHoles = (prev.holes || '9').toString();
+            const initGames = (prev.side_games || 'NONE').toUpperCase();
+            const _rawStatus = (prev.user_status || 'MEMBER').toUpperCase();
+            const initStatus = _rawStatus.includes('GUEST') ? 'GUEST' : (_rawStatus.includes('1ST') || _rawStatus.includes('FIRST')) ? '1ST TIMER' : 'MEMBER';
+            const initTee = prev.tee_choice || '';
 
-            let priceRow = '';
-            // Display subtotal (pre-tx-fee) since balance due is paid via Venmo without tx fee
+            const _acs = 'cursor:pointer;display:inline-block;padding:0.15rem 0.45rem;margin-right:0.25rem;margin-bottom:0.2rem;font-size:0.72rem;border-radius:4px;border:1.5px solid #1e40af;background:#1e40af;color:#fff;font-weight:700;';
+            const _ics = 'cursor:pointer;display:inline-block;padding:0.15rem 0.45rem;margin-right:0.25rem;margin-bottom:0.2rem;font-size:0.72rem;border-radius:4px;border:1.5px solid #d1d5db;background:#f9fafb;color:#374151;font-weight:400;';
+            const _ch = (grp, val, lbl, init) =>
+                `<span class="crd-chip" data-group="${grp}" data-val="${escapeHtml(val)}" style="${init===val ? _acs : _ics}">${lbl}</span>`;
+
+            const holesChipsHtml = isComboEvt ? `
+                    <div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:0.25rem;">
+                        <span style="font-size:0.72rem;color:#6b7280;width:52px;flex-shrink:0;">Holes:</span>
+                        ${_ch('holes','9','9',initHoles)}
+                        ${_ch('holes','18','18',initHoles)}
+                    </div>` : '';
+            const gamesChipsHtml = `
+                    <div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:0.25rem;">
+                        <span style="font-size:0.72rem;color:#6b7280;width:52px;flex-shrink:0;">Games:</span>
+                        ${_ch('games','NET','NET',initGames)}
+                        ${_ch('games','GROSS','GROSS',initGames)}
+                        ${_ch('games','BOTH','BOTH',initGames)}
+                        ${_ch('games','NONE','NONE',initGames)}
+                    </div>`;
+            const statusChipsHtml = `
+                    <div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:0.25rem;">
+                        <span style="font-size:0.72rem;color:#6b7280;width:52px;flex-shrink:0;">Status:</span>
+                        ${_ch('status','MEMBER','MEMBER',initStatus)}
+                        ${_ch('status','GUEST','GUEST',initStatus)}
+                        ${_ch('status','1ST TIMER','1ST TIMER',initStatus)}
+                    </div>`;
+            const teeOpts = ['', '<50', '50-64', '65+', 'Forward'];
+            const teeSelectHtml = `
+                    <div style="display:flex;align-items:center;">
+                        <span style="font-size:0.72rem;color:#6b7280;width:52px;flex-shrink:0;">Tee:</span>
+                        <select id="credit-tee-sel" style="font-size:0.72rem;padding:0.1rem 0.25rem;border:1px solid #d1d5db;border-radius:4px;color:#374151;">
+                            ${teeOpts.map(v => `<option value="${v}"${initTee===v?' selected':''}>${v||'—'}</option>`).join('')}
+                        </select>
+                    </div>`;
+
+            // Always emit price row with ID for live update; always emit excess + balance-note containers
             const priceForDisplay = (info.event_subtotal !== null && info.event_subtotal !== undefined)
                 ? info.event_subtotal
                 : info.event_price;
-            if (priceForDisplay !== null && priceForDisplay !== undefined) {
-                priceRow = `<tr style="border-top:1px solid #e5e7eb;">
+            const priceRow = `<tr id="credit-price-row" style="border-top:1px solid #e5e7eb;${selEvent||priceForDisplay!=null?'':'display:none;'}">
                     <td style="padding:0.3rem 0.5rem;font-weight:600;">New Event Price</td>
-                    <td style="padding:0.3rem 0.5rem;font-weight:700;">${fmt(priceForDisplay)}</td>
+                    <td id="credit-price-val" style="padding:0.3rem 0.5rem;font-weight:700;">${priceForDisplay!=null ? fmt(priceForDisplay) : '—'}</td>
                     <td style="padding:0.3rem 0.5rem;"></td>
                 </tr>`;
-            }
 
             body.innerHTML = `
             <div style="padding:1rem;">
@@ -8672,24 +8689,135 @@
                         ${priceRow}
                     </tfoot>
                 </table>
-                <div style="margin-bottom:0.75rem;font-size:0.85rem;padding:0.5rem 0.75rem;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+                <div id="credit-scenario-display" style="margin-bottom:0.75rem;font-size:0.85rem;padding:0.5rem 0.75rem;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
                     ${scenarioLabel}
                 </div>
-                ${info.previous_selections ? `
-                <div style="margin-bottom:0.75rem;font-size:0.8rem;color:#6b7280;">
-                    Previous selections: ${escapeHtml(info.previous_selections.holes || '—')} holes &bull;
-                    ${escapeHtml(info.previous_selections.side_games || '—')} &bull;
-                    ${escapeHtml(info.previous_selections.tee_choice || '—')} tee &bull;
-                    Status: ${escapeHtml(info.previous_selections.user_status || '—')}
-                </div>` : ''}
-                ${excessHtml}
-                ${info.amount_owed > 0 ? `
-                <div style="margin-top:0.5rem;font-size:0.82rem;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:0.5rem 0.75rem;">
-                    <strong>Note:</strong> Collect remaining ${fmt(info.amount_owed)} from player before or after applying.
-                </div>` : ''}
+                <div id="credit-selections" data-holes="${escapeHtml(initHoles)}" data-games="${escapeHtml(initGames)}" data-status="${escapeHtml(initStatus)}" data-tee="${escapeHtml(initTee)}" style="margin-bottom:0.75rem;padding:0.5rem 0.75rem;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+                    <div style="font-size:0.72rem;font-weight:600;color:#374151;margin-bottom:0.35rem;">Event Selections</div>
+                    ${holesChipsHtml}${gamesChipsHtml}${statusChipsHtml}${teeSelectHtml}
+                </div>
+                <div id="credit-excess-section" style="margin-top:0.75rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:0.6rem 0.75rem;display:none;"></div>
+                <div id="credit-balance-note" style="display:none;margin-top:0.5rem;font-size:0.82rem;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:0.5rem 0.75rem;"></div>
             </div>`;
 
             document.getElementById('apply-credit-close').addEventListener('click', closeApplyCreditModal);
+
+            // ── Interactive selections + live price recalc ──────────────────
+            function _activateCrdChip(group, val) {
+                const acs = 'cursor:pointer;display:inline-block;padding:0.15rem 0.45rem;margin-right:0.25rem;margin-bottom:0.2rem;font-size:0.72rem;border-radius:4px;border:1.5px solid #1e40af;background:#1e40af;color:#fff;font-weight:700;';
+                const ics = 'cursor:pointer;display:inline-block;padding:0.15rem 0.45rem;margin-right:0.25rem;margin-bottom:0.2rem;font-size:0.72rem;border-radius:4px;border:1.5px solid #d1d5db;background:#f9fafb;color:#374151;font-weight:400;';
+                document.querySelectorAll(`.crd-chip[data-group="${group}"]`).forEach(c => {
+                    c.style.cssText = c.dataset.val === val ? acs : ics;
+                });
+            }
+
+            function _updateCrdCalc() {
+                const container = document.getElementById('credit-selections');
+                if (!container) return;
+                const curHoles = container.dataset.holes || '9';
+                const curGames = (container.dataset.games || 'NONE').toUpperCase();
+                const curStatus = container.dataset.status || 'MEMBER';
+                const curTee = container.dataset.tee || '';
+                const fmt2 = v => '$' + parseFloat(v || 0).toFixed(2);
+
+                let newSubtotal = null;
+                if (selEvent) {
+                    const ef = selEvent.format || '';
+                    const isC = ef.toLowerCase().includes('combo') || ef.toLowerCase().includes('9/18');
+                    let cc, muM, sg;
+                    if (isC && curHoles === '18') {
+                        cc = selEvent.course_cost_18; muM = selEvent.tgf_markup_18 ?? selEvent.tgf_markup; sg = selEvent.side_game_fee_18 ?? selEvent.side_game_fee;
+                    } else if (isC || curHoles === '9') {
+                        cc = selEvent.course_cost_9 ?? selEvent.course_cost; muM = selEvent.tgf_markup_9 ?? selEvent.tgf_markup; sg = selEvent.side_game_fee_9 ?? selEvent.side_game_fee;
+                    } else {
+                        cc = selEvent.course_cost; muM = selEvent.tgf_markup; sg = selEvent.side_game_fee;
+                    }
+                    if (cc != null && muM != null) {
+                        const tf = selEvent.transaction_fee_pct ?? 3.5;
+                        const markups = getPlayerMarkups(parseFloat(muM), ef);
+                        const addon = getPerGameAddon(ef);
+                        const sUp = curStatus.toUpperCase();
+                        let mu = markups.member;
+                        if (sUp.includes('GUEST')) mu = markups.guest;
+                        else if (sUp.includes('1ST') || sUp.includes('FIRST')) mu = markups.firstTimer;
+                        let gAddon = 0;
+                        if (curGames === 'BOTH') gAddon = addon * 2;
+                        else if (curGames === 'NET' || curGames === 'GROSS') gAddon = addon;
+                        const line = calcPricingLine(parseFloat(cc), mu, parseFloat(sg || 0) + gAddon, tf);
+                        newSubtotal = line.actualCharge;
+                    }
+                }
+
+                const displaySubtotal = newSubtotal ?? (info.event_subtotal ?? info.event_price);
+                const priceVal = document.getElementById('credit-price-val');
+                if (priceVal && displaySubtotal != null) {
+                    priceVal.textContent = fmt2(displaySubtotal);
+                    document.getElementById('credit-price-row').style.display = '';
+                }
+
+                const amtOwed = displaySubtotal != null
+                    ? Math.round((displaySubtotal - info.total_credit) * 100) / 100
+                    : (info.amount_owed ?? null);
+
+                const scenEl = document.getElementById('credit-scenario-display');
+                if (scenEl && amtOwed != null) {
+                    if (amtOwed > 0.005) scenEl.innerHTML = `Player owes an additional <strong style="color:#d97706;">${fmt2(amtOwed)}</strong>`;
+                    else if (amtOwed < -0.005) scenEl.innerHTML = `Credit covers cost — <strong style="color:#16a34a;">${fmt2(Math.abs(amtOwed))}</strong> excess`;
+                    else scenEl.innerHTML = 'Credit covers cost exactly';
+                }
+
+                const excessEl = document.getElementById('credit-excess-section');
+                if (excessEl) {
+                    if (amtOwed != null && amtOwed < -0.005) {
+                        const eAmt = Math.abs(amtOwed).toFixed(2);
+                        const vH = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
+                        const vNote = encodeURIComponent(`${resolvedCustomer} Excess credit refund`);
+                        const vUrl = vH ? `https://venmo.com/${vH}?txn=pay&amount=${eAmt}&note=${vNote}` : '';
+                        const vLbl = vH
+                            ? `Venmo back ($${eAmt}) — <a href="${vUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link</a>`
+                            : `Venmo back ($${eAmt} — no handle on file)`;
+                        excessEl.innerHTML = `<div style="font-weight:600;font-size:0.82rem;color:#065f46;margin-bottom:0.4rem;">Excess Credit: $${eAmt}</div>
+                            <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;"><input type="radio" name="excess-action" value="keep" checked style="margin-right:0.3rem;">Keep as credit in player's account</label>
+                            <label style="display:block;font-size:0.82rem;"><input type="radio" name="excess-action" value="venmo" style="margin-right:0.3rem;">${vLbl}</label>`;
+                        excessEl.style.display = '';
+                    } else {
+                        excessEl.style.display = 'none';
+                    }
+                }
+
+                const noteEl = document.getElementById('credit-balance-note');
+                if (noteEl) {
+                    if (amtOwed != null && amtOwed > 0.005) {
+                        noteEl.innerHTML = `<strong>Note:</strong> Collect remaining ${fmt2(amtOwed)} from player before or after applying.`;
+                        noteEl.style.display = '';
+                    } else {
+                        noteEl.style.display = 'none';
+                    }
+                }
+
+                applyCreditState.currentSelections = { holes: curHoles, side_games: curGames, tee_choice: curTee, user_status: curStatus };
+            }
+
+            document.querySelectorAll('.crd-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    const grp = chip.dataset.group;
+                    const val = chip.dataset.val;
+                    const c = document.getElementById('credit-selections');
+                    if (c) { if (grp==='holes') c.dataset.holes=val; else if (grp==='games') c.dataset.games=val; else if (grp==='status') c.dataset.status=val; }
+                    _activateCrdChip(grp, val);
+                    _updateCrdCalc();
+                });
+            });
+            const _teeSel = document.getElementById('credit-tee-sel');
+            if (_teeSel) {
+                _teeSel.addEventListener('change', () => {
+                    const c = document.getElementById('credit-selections');
+                    if (c) c.dataset.tee = _teeSel.value;
+                    _updateCrdCalc();
+                });
+            }
+            _updateCrdCalc();
+
             actions.style.display = 'flex';
         } catch (err) {
             body.innerHTML = `<div style="color:#dc2626;padding:1rem;">Error: ${escapeHtml(err.message)}</div>`;
@@ -8713,6 +8841,7 @@
         const excessRadio = document.querySelector('input[name="excess-action"]:checked');
         const excessAction = excessRadio ? excessRadio.value : 'keep';
         const prev = info.previous_selections || {};
+        const curSel = applyCreditState.currentSelections || {};
 
         const submitBtn = document.getElementById('apply-credit-submit');
         submitBtn.disabled = true;
@@ -8728,10 +8857,10 @@
                 body: JSON.stringify({
                     credited_item_ids: (info.credits || []).map(c => c.id),
                     excess_action: excessAction,
-                    holes: prev.holes || '',
-                    side_games: prev.side_games || '',
-                    tee_choice: prev.tee_choice || '',
-                    user_status: prev.user_status || '',
+                    holes: curSel.holes || prev.holes || '',
+                    side_games: curSel.side_games || prev.side_games || '',
+                    tee_choice: curSel.tee_choice || prev.tee_choice || '',
+                    user_status: curSel.user_status || prev.user_status || '',
                 })
             });
             const data = await resp.json();
