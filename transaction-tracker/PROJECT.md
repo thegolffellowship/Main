@@ -1,7 +1,7 @@
 # TGF Transaction Tracker — Project Documentation
 
 > **The Golf Fellowship** — AI-powered transaction and event management platform
-> **Current Version:** v2.9.0 (April 22, 2026)
+> **Current Version:** v2.10.0 (April 26, 2026)
 > **Live URL:** https://tgf-tracker.up.railway.app
 
 ---
@@ -100,21 +100,29 @@ Main/
     │
     ├── templates/                      # Jinja2/HTML templates
     │   ├── index.html                  # Transactions dashboard (main page)
-    │   ├── events.html                 # Events management page
-    │   ├── customers.html              # Customer directory page
+    │   ├── events.html                 # Events management + Financial tab + Tee Time Advisor
+    │   ├── customers.html              # Customer directory + 5-tab detail + roster import
     │   ├── rsvps.html                  # RSVP log page
+    │   ├── handicaps.html              # 9-hole WHS handicap index calculator (manager)
     │   ├── matrix.html                 # Side Games prize matrix (admin)
     │   ├── audit.html                  # Email audit / QA page (admin)
+    │   ├── accounting.html             # Accounting ledger + bank reconciliation UI
+    │   ├── reconcile.html              # Standalone bank reconciliation + monthly summary
+    │   ├── cashflow.html               # 90-day rolling cash flow view
+    │   ├── coo.html                    # COO Dashboard: action items + AI chat
+    │   ├── tgf.html                    # TGF Payouts: tournament prize tracking
     │   ├── database.html               # Admin database browser
     │   └── changelog.html              # Version history page (admin)
     │
     └── static/
         ├── css/dashboard.css           # All app styling (single file)
         ├── js/
-        │   ├── auth.js                 # Shared PIN auth, login modal, role management
+        │   ├── auth.js                 # Shared PIN auth, login modal, role management, sticky nav
         │   ├── dashboard.js            # Transactions page logic (largest JS file)
+        │   ├── acct-transactions.js    # Accounting/reconciliation page logic + inline match queue
+        │   ├── coo-dashboard.js        # COO Dashboard logic: chat, agents, action items
         │   ├── games-matrix.js         # Prize matrix data (9-hole & 18-hole, 2-64 players)
-        │   ├── chat-widget.js         # Support/feedback chat widget
+        │   ├── chat-widget.js          # Support/feedback chat widget
         │   └── version.js              # Version number + changelog data
         ├── manifest.json               # PWA manifest
         ├── icon.svg                    # App icon (SVG)
@@ -462,16 +470,23 @@ Operations Command Center with AI-powered strategic advisor.
 | last_name | TEXT | Parsed last name |
 | middle_name | TEXT | Parsed middle name |
 | suffix | TEXT | Name suffix (Jr., Sr., III, etc.) |
-| transferred_from_id | INTEGER | FK to originating item |
-| transferred_to_id | INTEGER | FK to destination item |
+| transferred_from_id | INTEGER | Self-ref FK to originating item (no DB constraint — app-managed) |
+| transferred_to_id | INTEGER | Self-ref FK to destination item (no DB constraint — app-managed) |
+| parent_item_id | INTEGER | Self-ref FK to parent registration (for add-on child payments) |
+| parent_snapshot | TEXT | JSON snapshot of parent item at the time add-on was created |
 | wd_reason | TEXT | Reason for withdrawal |
 | wd_note | TEXT | Additional withdrawal notes |
 | wd_credits | TEXT | JSON object of partial credit components |
 | credit_amount | TEXT | Dollar amount credited on WD |
+| customer_id | INTEGER | FK to `customers.customer_id` (backfilled via 5-step cascade) |
+| event_id | INTEGER | FK to `events.id` (backfilled from item_name → events.item_name) |
+| archived | INTEGER DEFAULT 0 | Soft-delete flag |
+| coupon_code | TEXT | Coupon code applied at checkout |
+| coupon_amount | TEXT | Dollar value of applied coupon |
 | created_at | TEXT | Auto-set to datetime('now') |
 
 **Constraint:** `UNIQUE(email_uid, item_index)` — prevents duplicate parsing
-**Indexes:** `order_date DESC`, `item_name`, `customer`
+**Indexes:** `order_date DESC`, `item_name`, `customer`, `event_id`
 
 ### `events` table
 
@@ -490,11 +505,28 @@ Operations Command Center with AI-powered strategic advisor.
 | start_time_18 | TEXT | 18-hole start time (combo mode only) |
 | start_type_18 | TEXT | 18-hole start type (combo mode only) |
 | tee_time_count_18 | INTEGER | 18-hole tee time count (combo mode only) |
-| course_cost | REAL | Course/vendor cost per player (rounds up to nearest dollar) |
-| tgf_markup | REAL | TGF markup per player — Member rate (Guest = +$10/+$15, 1st Timer = Guest−$25) |
-| side_game_fee | REAL | Included games admin fee ("Inc. Games") — part of base Event Only price |
-| transaction_fee_pct | REAL | Transaction processing fee percentage (default: 3.5%) |
+| course_cost | REAL | Course/vendor cost per player (9-hole standalone or unified) |
+| course_cost_9 | REAL | 9-hole course cost for 9/18 Combo events |
+| course_cost_18 | REAL | 18-hole course cost for 9/18 Combo events |
+| course_cost_breakdown | TEXT | JSON of 5 cost line items (Green Fees, Cart, Range, Printing, Other) |
+| course_cost_breakdown_9 | TEXT | 9-hole breakdown JSON |
+| course_cost_breakdown_18 | TEXT | 18-hole breakdown JSON |
+| course_surcharge | REAL | Per-player surcharge (e.g. $1 ACGT printing fee) |
+| tgf_markup | REAL | TGF markup per player — Member rate (unified/9-hole) |
+| tgf_markup_9 | REAL | Member markup for 9-hole in combo mode |
+| tgf_markup_18 | REAL | Member markup for 18-hole in combo mode |
+| tgf_markup_final | REAL | Locked-in final markup (prevents recalc after event runs) |
+| side_game_fee | REAL | Included games admin fee ("Inc. Games") — part of base price |
+| side_game_fee_9 | REAL | 9-hole inc. games fee for combo mode |
+| side_game_fee_18 | REAL | 18-hole inc. games fee for combo mode |
+| transaction_fee_pct | REAL | Payment processor fee percentage (default: 3.5%) |
+| status | TEXT | `active` / `cancelled` / `postponed` |
+| status_reason | TEXT | Required when status ≠ active |
+| rescheduled_to_event_id | INTEGER | FK to events.id (if postponed to specific future event) |
+| status_changed_at | TEXT | Timestamp of last status change |
 | event_type | TEXT | Default 'event' |
+| chapter_id | INTEGER | FK to `chapters.chapter_id` |
+| course_id | INTEGER | FK to `courses.course_id` |
 | created_at | TEXT | |
 
 ### `rsvps` table
@@ -512,6 +544,9 @@ Operations Command Center with AI-powered strategic advisor.
 | received_at | TEXT | When the RSVP email was received |
 | matched_event | TEXT | Matched items.item_name (or null if unmatched) |
 | matched_item_id | INTEGER | FK to items.id of the matched registrant |
+| customer_id | INTEGER | FK to `customers.customer_id` (backfilled at startup) |
+| event_id | INTEGER | FK to `events.id` (backfilled from matched_event) |
+| credit_notified_at | TEXT | Timestamp when credit-alert email was sent to this player |
 | created_at | TEXT | |
 
 ### `rsvp_overrides` table
@@ -653,14 +688,16 @@ Operations Command Center with AI-powered strategic advisor.
 
 ### `customer_emails` table
 
+Canonical source of truth for customer email addresses. Supports multiple emails per customer.
+
 | Column | Type | Notes |
 |--------|------|-------|
-| email_id | TEXT PK | UUID-style identifier |
-| customer_id | TEXT NOT NULL | FK to customers.customer_id (CASCADE) |
+| email_id | INTEGER PK | Auto-increment |
+| customer_id | INTEGER NOT NULL | FK to `customers.customer_id` ON DELETE CASCADE |
 | email | TEXT NOT NULL | Email address |
-| is_primary | INTEGER DEFAULT 0 | Primary email flag |
+| is_primary | INTEGER DEFAULT 0 | Primary email flag (1 = primary) |
 | is_golf_genius | INTEGER DEFAULT 0 | Golf Genius email flag |
-| label | TEXT | Optional label |
+| label | TEXT | Optional label (e.g. `'manual'`, `'import'`, `'gg'`) |
 | created_at | TEXT | |
 
 **Constraints:** UNIQUE(customer_id, email), unique index on (customer_id, is_primary) WHERE is_primary=1
@@ -712,7 +749,8 @@ Each row represents one player's cost allocation for one event.
 | id | INTEGER PK | Auto-increment |
 | order_id | TEXT NOT NULL | GoDaddy order ID or synthetic (`EXT-{id}`, `XFER-{id}`, `MANUAL-PAY-{id}`, `COMP-{id}`) |
 | item_id | INTEGER | FK to `items(id)` |
-| event_name | TEXT | Event item name |
+| event_name | TEXT | String copy of event name (denormalized display cache) |
+| event_id | INTEGER | FK to `events.id` (backfilled from event_name) |
 | chapter | TEXT | TGF chapter |
 | allocation_date | TEXT | Date of the transaction |
 | player_count | INTEGER | Default 1 |
@@ -809,6 +847,175 @@ when bank/CC alert emails arrive and require human approval before being promote
 
 Auto-populated when an expense is approved with a category. Future alerts whose merchant
 name contains the keyword get the category pre-assigned before the AI bookkeeper runs.
+
+### `chapters` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| chapter_id | INTEGER PK | Auto-increment |
+| name | TEXT UNIQUE | e.g. "San Antonio", "Austin", "DFW", "Houston" |
+| short_code | TEXT | e.g. "SA", "AUS", "DFW", "HOU" |
+| created_at | TEXT | |
+
+### `courses` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| course_id | INTEGER PK | Auto-increment |
+| name | TEXT UNIQUE | Canonical course name (e.g. "La Cantera") |
+| chapter_id | INTEGER | FK to `chapters.chapter_id` (nullable — some courses serve multiple chapters) |
+| city | TEXT | |
+| state | TEXT | |
+| created_at | TEXT | |
+
+### `course_aliases` table
+
+Maps spelling variants and abbreviations to the canonical course name.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| alias | TEXT NOT NULL | Variant spelling (e.g. "la cantera", "LaCANTERA") |
+| course_id | INTEGER NOT NULL | FK to `courses.course_id` ON DELETE CASCADE |
+
+**Constraint:** UNIQUE(alias)
+
+### `tgf_events` table
+
+Tournament prize events. Separate from the main `events` table — bridged via `events_id`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| code | TEXT UNIQUE NOT NULL | Short identifier (e.g. "SA-2025-05") |
+| name | TEXT NOT NULL | Event name (matches events.item_name when bridged) |
+| event_date | TEXT | YYYY-MM-DD |
+| course | TEXT | |
+| chapter | TEXT | |
+| total_purse | REAL DEFAULT 0 | Total prize pool paid out |
+| winners_count | INTEGER DEFAULT 0 | Unique winners |
+| payouts_count | INTEGER DEFAULT 0 | Total payout rows |
+| events_id | INTEGER | FK to `events.id` — bridge to the main event registry |
+| created_at | TEXT | |
+
+**Index:** `tgf_events(events_id)`
+
+### `tgf_payouts` table
+
+Individual prize payouts linked to tournament events.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| event_id | INTEGER NOT NULL | FK to `tgf_events(id)` ON DELETE CASCADE |
+| customer_id | INTEGER NOT NULL | FK to `customers.customer_id` — golfer identity unified in customers |
+| category | TEXT NOT NULL | `team_net` / `individual_net` / `individual_gross` / `skins` / `closest_to_pin` / `hole_in_one` / `mvp` / `other` |
+| amount | REAL NOT NULL | |
+| description | TEXT | |
+| acct_transaction_id | INTEGER | FK to `acct_transactions.id` |
+| paid_at | TIMESTAMP | |
+| created_at | TEXT | |
+
+### `contractor_payouts` table
+
+Revenue-share payouts to chapter managers.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| manager_customer_id | INTEGER NOT NULL | FK to `customers.customer_id` |
+| chapter_id | INTEGER | FK to `chapters.chapter_id` |
+| event_name | TEXT | String copy of event name |
+| event_id | INTEGER | FK to `events.id` (backfilled from event_name) |
+| event_date | TEXT | |
+| amount_owed | REAL NOT NULL DEFAULT 0 | |
+| amount_paid | REAL NOT NULL DEFAULT 0 | |
+| status | TEXT | `pending` / `partial` / `paid` |
+| payment_method | TEXT | |
+| notes | TEXT | |
+| created_at | TEXT | |
+| updated_at | TEXT | |
+
+### `godaddy_order_splits` table
+
+Per-player split breakdown for GoDaddy orders within the unified financial model.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| transaction_id | INTEGER | FK to `acct_transactions.id` |
+| item_id | INTEGER | FK to `items.id` |
+| event_name | TEXT | String copy of event name |
+| event_id | INTEGER | FK to `events.id` (backfilled from event_name) |
+| customer | TEXT | |
+| customer_id | INTEGER | FK to `customers.customer_id` |
+| split_type | TEXT | `registration` / `transaction_fee` / `merchant_fee` / `coupon` |
+| amount | REAL | Positive for income; negative for deductions |
+
+### `bank_accounts` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| name | TEXT NOT NULL | e.g. "TGF Checking", "Venmo" |
+| account_type | TEXT | `checking` / `venmo` / `credit` |
+| last_four | TEXT | Last 4 digits |
+| institution | TEXT | Bank name |
+| created_at | TEXT | |
+
+### `bank_deposits` table
+
+Imported bank statement rows. Deduped on account + date + amount + description.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| account_id | INTEGER NOT NULL | FK to `bank_accounts.id` |
+| deposit_date | TEXT | YYYY-MM-DD |
+| amount | REAL | Positive = credit; negative = debit |
+| description | TEXT | |
+| status | TEXT | `unmatched` / `partial` / `matched` |
+| imported_at | TEXT | |
+
+### `reconciliation_matches` table
+
+Links bank deposits to accounting entries. Supports 1:many (batch deposits).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| bank_deposit_id | INTEGER NOT NULL | FK to `bank_deposits.id` |
+| acct_transaction_id | INTEGER NOT NULL | FK to `acct_transactions.id` |
+| match_type | TEXT | `auto` / `manual` |
+| confidence | REAL | 0.0–1.0 |
+| matched_at | TEXT | |
+
+**Constraint:** UNIQUE(bank_deposit_id, acct_transaction_id)
+
+### `customer_aliases` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| alias_name | TEXT NOT NULL | The alternate name/email |
+| canonical_name | TEXT | The canonical `customers.first_name + last_name` form |
+| customer_id | INTEGER | FK to `customers.customer_id` |
+| alias_type | TEXT | `name` / `email` |
+| created_at | TEXT | |
+
+### `customer_roles` table
+
+Multi-role junction table. A customer can have multiple roles simultaneously.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| customer_id | INTEGER NOT NULL | FK to `customers.customer_id` |
+| role_type | TEXT NOT NULL | `member` / `manager` / `admin` / `owner` / `course_contact` / `sponsor` / `vendor` |
+| granted_by | INTEGER | FK to `customers.customer_id` of granting admin |
+| granted_at | TEXT | |
+
+**Constraint:** UNIQUE(customer_id, role_type)
 
 ---
 
@@ -1291,6 +1498,70 @@ The app is installable as a Progressive Web App:
 
 ## Version History
 
+### v2.10.0 — April 26, 2026 — "Full Data Connectivity: Customer Identity & Event FK Integrity"
+
+Major data-integrity release. No new user-facing features — focuses on closing every structural
+gap in the schema so financial reporting and customer data are fully connected and trustworthy.
+
+#### Customer Identity — Single Source of Truth
+
+- **`customers` + `customer_emails` are the canonical source of truth** for all customer data.
+  Previously the Customers page read email/phone from `items.*` (transaction copies), causing
+  stale data when edits were made.
+- **`update_customer_info()` now syncs to canonical tables:** edits to email, phone, first/last
+  name propagate to `customers` and `customer_emails` immediately, not just to `items`.
+- **New `get_all_customers()` function** reads from `customers LEFT JOIN customer_emails`
+  (canonical), returned by new `GET /api/customers` endpoint.
+- **Customers page overlay:** after building the items-based customer map, the page fetches
+  canonical data and overlays `primary_email` and `phone` from `customer_emails`/`customers`,
+  ensuring the Customers page always shows authoritative contact info.
+
+#### GG RSVP Credit Badge Fix
+
+- **Root cause:** `get_event_rsvp_credit_map()` was calling `get_player_credits()` without
+  passing the GG player's email, so the email-tier credit lookup always missed.
+- **Fix:** `rsvp_items` query now LEFT JOINs `rsvps` on `matched_item_id` to retrieve
+  `player_email` (the Golf Genius email), passed as `player_email=` to `get_player_credits()`.
+
+#### Customer ID FK — All Remaining Tables
+
+Added `customer_id INTEGER REFERENCES customers(customer_id)` to:
+`rsvps`, `customer_aliases`, `season_contests`, `handicap_rounds`, `godaddy_order_splits`.
+
+Each table has a corresponding startup backfill function that resolves via the 5-step
+customer lookup cascade and populates `customer_id` for all existing rows.
+
+#### tgf_events → events Bridge
+
+Added `events_id INTEGER REFERENCES events(id)` to `tgf_events` + index.
+`_backfill_events_id_on_tgf_events()` matches by exact name, partial LIKE, then
+year-narrowed LIKE. Prize payout data (`tgf_payouts`) can now be joined to registration
+and financial data in the main `events` table.
+
+#### event_id FK — All String-Reference Tables
+
+All tables that previously referenced events only via a string copy of the event name
+now have `event_id INTEGER REFERENCES events(id)`, backfilled via `events` table exact
+match then `event_aliases` for renamed events:
+
+| Table | String column replaced |
+|-------|----------------------|
+| `items` | `item_name` |
+| `acct_allocations` | `event_name` |
+| `godaddy_order_splits` | `event_name` |
+| `rsvps` | `matched_event` |
+| `expense_transactions` | `event_name` |
+| `message_log` | `event_name` |
+| `contractor_payouts` | `event_name` |
+
+#### Technical Debt Documentation
+
+Added "Technical Debt & Known Concessions" section to `PLATFORM_SPEC.md` covering:
+SQLite ALTER TABLE limitations, unenforced REFERENCES clauses, two-event-universe gap,
+string-based event references, and a full migration checklist for Supabase/PostgreSQL.
+
+---
+
 ### v2.9.0 — April 22, 2026 — "Event Cancellation, Credit Flows, Vendor System, Expense Reconciliation"
 
 #### Event Cancellation and Postponement
@@ -1710,11 +1981,25 @@ Highlights:
 
 Features discussed or planned but not yet implemented:
 
+### Infrastructure / Migration (Critical)
+- **Migrate to Supabase / PostgreSQL** — SQLite is a deliberate concession for the bridge phase.
+  PostgreSQL will enforce FK constraints natively, support row-level security, concurrent writes,
+  and proper schema versioning. See `PLATFORM_SPEC.md → Technical Debt & Known Concessions`
+  for the full migration checklist.
+- **Rebuild items self-referential FK constraints** — `parent_item_id`, `transferred_from_id`,
+  `transferred_to_id` have no DB-level FK declarations (SQLite limitation). Only fixable with a
+  full table rebuild, which is planned as part of the Supabase migration.
+- **Unresolved customer_id flagging** — rows with `customer_id IS NULL` after backfill should be
+  surfaced in the Audit page so admins can manually resolve unknown customers.
+
 ### High Priority
 - ~~**Bulk Event Communications (Email + SMS)**~~ — **DONE** (v1.3.0). Email messaging implemented with audience filtering, reusable templates, preview, and message log. SMS (Twilio) still pending.
 - ~~**SUPPORT button**~~ — **DONE** (v1.3.0). Support feedback system with bug/feature submission, admin review, and daily digest.
 - **Player-facing event page** — Public page where players can see their upcoming events, RSVP status, and payment status without needing a PIN
 - ~~**Bulk email reminders**~~ — **DONE** (v1.2.0). "Remind All" button on event detail sends to all RSVP-only players at once.
+- **Financial reconciliation across event universes** — Now that `tgf_events.events_id` bridges to
+  `events`, build a combined P&L view showing registration revenue + TGF payout costs side-by-side
+  for each event.
 
 ### Medium Priority
 - **Event flyer / details section** — Attach course info, directions, tee times, and event notes to each event

@@ -4,21 +4,20 @@ Scans your email inbox for Golf Fellowship order emails, uses **Claude AI** to p
 
 ## What It Does
 
-- **AI-powered parsing** — sends each "New Order" email from mysimplestore.com to Claude, which extracts every field automatically. No brittle regex. If the store changes their email format, the AI adapts.
-- **Multi-item orders** — one email with 3 items becomes 3 separate rows, each with its own data. Quantity expansion splits x2 purchases into separate rows for buyer and partner.
-- **Dedicated columns** — Item Name, Chapter, Course, Handicap, Side Games, Tee Choice, User Status, Holes, etc. All filterable and sortable.
-- **Event management** — auto-detects events from transactions, tracks registrations, supports manual player additions, RSVP tracking, payment reminders, tee time planning with sunset advisor.
-- **Customer directory** — derives member status, chapter affiliation, purchase history from transactions. Roster import, alias management, customer merging.
-- **Accounting & bank reconciliation** — multi-entity ledger, chart of accounts, CSV/PDF bank statement import (Chase, Frost Bank, Venmo), auto-match by amount + date + description. The Ledger tab's "Unreconciled" pill splits into a two-pane match queue so you can reconcile without leaving the page (v2.8.0).
-- **COO Dashboard** — action items, financial snapshot, liabilities dashboard, Claude-powered AI chat with six specialist agents (Chief of Staff, Financial, Operations, Course Correspondent, Member Relations, Compliance).
-- **Cash flow** — 90-day rolling weekly view with expected/confirmed income vs. projected/actual expenses and running balance.
-- **Handicap management** — 9-hole WHS handicap index calculator with Golf Genius sync, round history, and export.
+- **AI-powered parsing** — sends each "New Order" email to Claude, which extracts every field automatically. No brittle regex. Adapts if the store changes email format.
+- **Multi-item orders** — one email with 3 items becomes 3 separate rows; quantity expansion splits x2 purchases into individual rows for buyer and partner.
+- **Event management** — auto-detects events from transactions, tracks registrations, supports manual player additions, RSVP tracking, payment reminders, tee time planning with sunset advisor. Cancel/postpone with bulk credit/refund flow.
+- **Customer identity** — canonical `customers`/`customer_emails` tables as single source of truth. 5-step lookup cascade resolves returning customers by email, alias, or name. Roster import, alias management, customer merging.
+- **Accounting & bank reconciliation** — flat `acct_transactions` ledger as single source of truth for every financial event. CSV/PDF bank statement import (Chase, Frost Bank, Venmo), auto-match by amount + date + description. Inline match queue in Ledger tab (v2.8.0). Cash flow 90-day view.
+- **COO Dashboard** — action items, financial snapshot, Claude-powered AI chat with six specialist agents (Chief of Staff, Financial, Operations, Course Correspondent, Member Relations, Compliance).
+- **Handicap management** — 9-hole WHS index calculator with Golf Genius sync, round history, and export.
+- **TGF Payouts** — tournament prize tracking with screenshot import via Claude Vision. Now bridged to the main events table via `events_id` FK.
 - **Side games matrix** — interactive prize calculator for NET/GROSS/Skins games by player count (9h and 18h).
-- **RSVP integration** — Golf Genius RSVP email parsing with auto-matching to registered players.
+- **RSVP integration** — Golf Genius RSVP email parsing with auto-matching to registered players. Credit badge shows outstanding credits on RSVP rows.
 - **Bulk messaging** — compose and send event communications with templates, audience filtering, and message log.
 - **Admin database browser** — browse and inspect the full database from the web UI.
 - **Webhook connector** — external systems can push order data in via API.
-- **MCP server** — 21 tools for Claude (Desktop or Code) to directly query and modify the database.
+- **MCP server** — 31 tools for Claude (Desktop or Code) to directly query and modify the database.
 - **Daily email report** — automated summary of new transactions sent to you every morning.
 - **CSV export** — download everything as a spreadsheet at any time.
 
@@ -396,38 +395,47 @@ SQLite, stored at `transaction-tracker/transactions.db`. Each row is a single li
 
 ```
 transaction-tracker/
-├── app.py                    # Flask app, all routes, scheduler, webhook (~3900 lines)
+├── app.py                    # Flask app, all routes, scheduler, webhook (~6200 lines, 200+ routes)
 ├── asgi_app.py               # ASGI wrapper for Railway deployment
-├── mcp_server.py             # MCP server (21 tools for Claude integration)
+├── mcp_server.py             # MCP server (31 tools for Claude integration)
 ├── mcp_auth.py               # MCP OAuth 2.0 authentication
 ├── golf_genius_sync.py       # Golf Genius handicap sync via HTTP
 ├── requirements.txt          # Python dependencies
 ├── .env.example              # Configuration template
 ├── test_parser.py            # Parser tests (uses mocked AI responses)
+├── PROJECT.md                # Full documentation + API reference + version history
+├── PLATFORM_SPEC.md          # Architecture spec, technical debt, migration notes
 ├── email_parser/
 │   ├── __init__.py
 │   ├── fetcher.py            # Microsoft Graph email fetching
 │   ├── parser.py             # Claude AI email parsing
-│   ├── database.py           # SQLite storage layer (~3500 lines)
+│   ├── database.py           # SQLite schema, CRUD, financials, customer matching (~12000 lines)
 │   ├── report.py             # Daily digest email (Graph API)
 │   └── rsvp_parser.py        # Golf Genius RSVP parsing
 ├── templates/
 │   ├── index.html            # Transactions dashboard
-│   ├── events.html           # Events management + Tee Time Advisor
-│   ├── customers.html        # Customer directory + roster import
+│   ├── events.html           # Events management + Financial tab + Tee Time Advisor
+│   ├── customers.html        # Customer directory + 5-tab detail + roster import
 │   ├── handicaps.html        # Handicap management (manager)
 │   ├── audit.html            # Email audit/QA (admin)
 │   ├── rsvps.html            # RSVP management
 │   ├── matrix.html           # Side games prize matrix
+│   ├── accounting.html       # Accounting ledger + inline bank reconciliation
+│   ├── reconcile.html        # Standalone reconciliation + monthly summary
+│   ├── cashflow.html         # 90-day rolling cash flow
+│   ├── coo.html              # COO Dashboard + AI chat
+│   ├── tgf.html              # TGF Payouts: tournament prize tracking
 │   ├── database.html         # Admin database browser
 │   └── changelog.html        # Version changelog
 └── static/
     ├── css/
     │   └── dashboard.css     # All app styling (single file)
     └── js/
-        ├── auth.js           # PIN-based auth + sticky nav
-        ├── dashboard.js      # Transactions page logic
-        ├── games-matrix.js   # Prize matrix data (9h & 18h)
+        ├── auth.js           # PIN-based auth + sticky nav offsets
+        ├── dashboard.js      # Transactions page logic (largest JS file)
+        ├── acct-transactions.js  # Accounting + reconciliation logic
+        ├── coo-dashboard.js  # COO Dashboard: chat, agents, action items
+        ├── games-matrix.js   # Prize matrix data (9h & 18h, 2-64 players)
         ├── chat-widget.js    # Support/feedback chat widget
         └── version.js        # Version number + changelog
 ```
