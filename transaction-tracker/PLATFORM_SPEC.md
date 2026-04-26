@@ -608,3 +608,126 @@ DATABASE_PATH=/data/transactions.db
 - **Gunicorn:** `gunicorn app:app --bind 0.0.0.0:5000 --workers 2 --timeout 120`
 - Supports Railway (railway.toml), Render/Heroku (Procfile), systemd, launchd
 - SQLite DB needs persistent volume in cloud deployments
+
+---
+
+## Technical Debt & Known Concessions
+
+This section documents architectural gaps and deliberate compromises made while
+operating on SQLite. All items should be addressed when migrating to Supabase /
+TGF Platform (PostgreSQL).
+
+### SQLite Limitation: No Retroactive FK Constraints
+
+**Problem:** SQLite's `ALTER TABLE ADD COLUMN` can declare a `REFERENCES` clause on the
+new column, but it cannot add a foreign key constraint to an *existing* column — and it
+cannot enforce any FK constraints without setting `PRAGMA foreign_keys = ON` per connection.
+
+The app does not set this PRAGMA, so all `REFERENCES` clauses are documentation/intent only.
+They are not enforced at the database layer.
+
+**Full table rebuild** (create new table → copy → drop old → rename) is the only way to
+retroactively add a FK constraint, but that risks data loss on a live production database.
+We chose not to do this during the bridge phase.
+
+**Concessions made:**
+
+| Table | Column | Status | Notes |
+|-------|--------|--------|-------|
+| `items` | `customer_id` | No REFERENCES clause | Added pre-migration; app code maintains integrity |
+| `items` | `parent_item_id` | No REFERENCES clause | Self-referential; app code enforces |
+| `items` | `transferred_from_id` | No REFERENCES clause | Self-referential; app code enforces |
+| `items` | `transferred_to_id` | No REFERENCES clause | Self-referential; app code enforces |
+| `acct_transactions` | `customer_id` | No REFERENCES clause | Added pre-migration; backfilled via 5-step cascade |
+| `handicap_player_links` | `customer_id` | No REFERENCES clause | Added pre-migration; backfilled at startup |
+| `rsvps` | `customer_id` | REFERENCES clause added | New column — FK declared but not runtime-enforced |
+| `customer_aliases` | `customer_id` | REFERENCES clause added | New column — FK declared but not runtime-enforced |
+| `season_contests` | `customer_id` | REFERENCES clause added | New column — FK declared but not runtime-enforced |
+| `handicap_rounds` | `customer_id` | REFERENCES clause added | New column — FK declared but not runtime-enforced |
+| `godaddy_order_splits` | `customer_id` | REFERENCES clause added | New column — FK declared but not runtime-enforced |
+
+**Fix at migration:** When creating the PostgreSQL schema, define all FK constraints
+properly at table creation time and set `DEFERRABLE INITIALLY DEFERRED` where needed
+for self-referential tables.
+
+---
+
+### Two Separate Event Universes: `tgf_events` vs `events`
+
+**Problem:** The system has two completely separate event tables with no link between them:
+
+- `events` — the main event registry (registrations, RSVPs, pricing, pairings, player data)
+- `tgf_events` — tournament payout tracking (prize purses, TGF payout categories)
+
+Both tables represent the same real-world events but have no shared key. Financial
+reconciliation across both is impossible — you cannot join event revenue (from `events` +
+`acct_transactions`) with prize payouts (from `tgf_events` + `tgf_payouts`) without
+a string match on event names, which is fragile under renames.
+
+**Status:** Bridge column `events_id INTEGER REFERENCES events(id)` to be added to
+`tgf_events` with a backfill pass. Implementation pending (sequential commits).
+
+---
+
+### Event References via String Name (No Numeric FK)
+
+**Problem:** Most tables reference events by copying the event name string at write time
+rather than storing a numeric `event_id` FK. This means:
+- Event renames break historical joins silently (the old string doesn't update)
+- No referential integrity — a misspelled event name creates a dangling reference
+- Aggregation queries must use `COLLATE NOCASE` and still miss variants
+
+**Affected tables (event_id FK missing):**
+`items` (`item_name`), `acct_allocations` (`event_name`), `godaddy_order_splits`
+(`event_name`), `contractor_payouts` (`event_name`), `rsvps` (`matched_event`),
+`expense_transactions` (`event_name`), `message_log` (`event_name`)
+
+**Mitigation in place:** `event_aliases` table + `sync_events_from_items()` + deleted-name
+alias preservation. Renames propagate via alias lookup in most read paths.
+
+**Status:** Migration to add `event_id` FK columns + backfill pending (sequential commits).
+
+---
+
+### `items` Self-Referential FK Columns — Unenforced
+
+`items.parent_item_id`, `transferred_from_id`, and `transferred_to_id` reference
+other rows in the same `items` table. These columns exist and are populated correctly
+by application code, but have no `REFERENCES items(id)` declaration (they predate the
+migration strategy). Application code enforces the relationships, but the DB will not
+catch a bad write.
+
+**Fix at migration:** Declare these as `REFERENCES items(id)` with `ON DELETE SET NULL`
+in PostgreSQL.
+
+---
+
+### No `PRAGMA foreign_keys = ON`
+
+The app does not set `PRAGMA foreign_keys = ON` in its connection setup. Even columns
+that have a `REFERENCES` clause will not trigger FK violations — invalid `customer_id`
+values can be inserted without error.
+
+**Fix at migration:** PostgreSQL enforces FK constraints by default. No PRAGMA needed.
+
+---
+
+### Migration Checklist for TGF Platform / Supabase
+
+When migrating to PostgreSQL, address these items at schema creation time:
+
+1. **All customer_id columns** — declare as `REFERENCES customers(customer_id) ON DELETE SET NULL`
+2. **items self-referential columns** — `parent_item_id`, `transferred_from_id`,
+   `transferred_to_id` → `REFERENCES items(id) ON DELETE SET NULL`
+3. **event_id FK on all tables** — replace string event_name copies with a proper
+   `event_id INTEGER REFERENCES events(id)` column; keep event_name as a denormalized
+   display cache only
+4. **tgf_events → events bridge** — add `events_id REFERENCES events(id)` and enforce
+   that every tournament event maps to a main event record
+5. **Enable FK enforcement** — PostgreSQL enforces by default; no special setting needed
+6. **Add missing indexes** — `customer_id`, `event_id`, `order_id` columns on high-traffic
+   tables currently lack indexes in SQLite (check with `EXPLAIN QUERY PLAN`)
+7. **Replace COLLATE NOCASE** — PostgreSQL uses `ILIKE` and `citext` extension for
+   case-insensitive string operations; audit all queries that use COLLATE NOCASE
+8. **Row-level security** — Supabase supports RLS; design per-chapter data isolation
+   at the DB layer rather than application layer
