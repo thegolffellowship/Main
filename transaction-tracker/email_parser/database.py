@@ -7299,7 +7299,11 @@ _PER_GAME_ADDON_18 = 30.0  # $ per game for standalone 18 Hole events
 
 
 def get_player_credits(customer_name: str, db_path: str | Path | None = None, customer_id: int | None = None) -> list[dict]:
-    """Return all unredeemed credited items for a player, most recent first."""
+    """Return all unredeemed credited items for a player, most recent first.
+
+    Includes both parent items and child add-on items (e.g. game add-ons that
+    were credited when an event was cancelled via credit_item cascade).
+    """
     with _connect(db_path) as conn:
         if customer_id:
             rows = conn.execute(
@@ -7308,7 +7312,6 @@ def get_player_credits(customer_name: str, db_path: str | Path | None = None, cu
                    LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
                    WHERE i.customer_id = ?
                      AND i.transaction_status = 'credited'
-                     AND i.parent_item_id IS NULL
                    ORDER BY i.order_date DESC""",
                 (customer_id,),
             ).fetchall()
@@ -7320,7 +7323,6 @@ def get_player_credits(customer_name: str, db_path: str | Path | None = None, cu
                        LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
                        WHERE i.customer = ? COLLATE NOCASE
                          AND i.transaction_status = 'credited'
-                         AND i.parent_item_id IS NULL
                        ORDER BY i.order_date DESC""",
                     (customer_name,),
                 ).fetchall()
@@ -7331,7 +7333,6 @@ def get_player_credits(customer_name: str, db_path: str | Path | None = None, cu
                    LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
                    WHERE i.customer = ? COLLATE NOCASE
                      AND i.transaction_status = 'credited'
-                     AND i.parent_item_id IS NULL
                    ORDER BY i.order_date DESC""",
                 (customer_name,),
             ).fetchall()
