@@ -1620,6 +1620,7 @@ def init_db(db_path: str | Path | None = None) -> None:
         # rsvps migration — columns added after initial release
         for col, col_type in [
             ("credit_notified_at", "TEXT"),
+            ("customer_id", "INTEGER REFERENCES customers(customer_id)"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE rsvps ADD COLUMN {col} {col_type}")
@@ -1627,6 +1628,9 @@ def init_db(db_path: str | Path | None = None) -> None:
                 pass
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_rsvps_player_email ON rsvps(player_email)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rsvps_customer_id ON rsvps(customer_id)"
         )
 
         # Manual RSVP overrides — tap-to-change circle on event detail
@@ -3066,10 +3070,11 @@ def init_db(db_path: str | Path | None = None) -> None:
         # created.  On fresh databases this is a no-op.
         _backfill_customer_ids(conn)
 
-        # Backfill customer_id FK on acct_transactions and handicap_player_links
-        # so direct joins work without string-matching on customer names.
+        # Backfill customer_id FK on acct_transactions, handicap_player_links,
+        # and rsvps so direct joins work without string-matching on names.
         _backfill_customer_id_on_acct_transactions(conn)
         _backfill_customer_id_on_player_links(conn)
+        _backfill_customer_id_on_rsvps(conn)
 
         # Promote approved expense_transactions that have not yet been linked
         # to acct_transactions (e.g. expenses approved before this feature shipped).
@@ -3771,6 +3776,35 @@ def _backfill_customer_id_on_player_links(conn: sqlite3.Connection) -> int:
     conn.commit()
     if updated:
         logger.info("Backfilled customer_id for %d handicap_player_links rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_rsvps(conn: sqlite3.Connection) -> int:
+    """Populate customer_id on rsvps rows that lack it.
+
+    Tries email-first via customer_emails, then name via customers table.
+    Unresolved rows are left with customer_id=NULL so the admin can spot them.
+    """
+    rows = conn.execute(
+        "SELECT id, player_name, player_email FROM rsvps WHERE customer_id IS NULL"
+    ).fetchall()
+
+    if not rows:
+        return 0
+
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, row["player_name"], row["player_email"])
+        if cid is not None:
+            cur = conn.execute(
+                "UPDATE rsvps SET customer_id = ? WHERE id = ? AND customer_id IS NULL",
+                (cid, row["id"]),
+            )
+            updated += cur.rowcount
+
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d rsvps rows", updated)
     return updated
 
 
@@ -5038,6 +5072,77 @@ def update_customer_info(customer_name: str, fields: dict,
                     (safe["customer"], customer_name),
                 )
 
+        # Resolve customer_id for all canonical-table syncs below
+        cid_row = conn.execute(
+            """SELECT customer_id FROM items
+               WHERE customer = ? COLLATE NOCASE AND customer_id IS NOT NULL
+               LIMIT 1""",
+            (customer_name,),
+        ).fetchone()
+        cid = cid_row["customer_id"] if cid_row else None
+        if not cid:
+            # Fall back to name match in customers table directly
+            parts = customer_name.strip().split()
+            if len(parts) >= 2:
+                cid_row = conn.execute(
+                    """SELECT customer_id FROM customers
+                       WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)
+                       LIMIT 1""",
+                    (parts[0], parts[-1]),
+                ).fetchone()
+                cid = cid_row["customer_id"] if cid_row else None
+
+        if cid:
+            # Sync email to customer_emails (source of truth for customer contact)
+            new_email = safe.get("customer_email")
+            if new_email is not None:
+                if new_email:
+                    existing = conn.execute(
+                        "SELECT email_id FROM customer_emails WHERE customer_id = ? AND is_primary = 1",
+                        (cid,),
+                    ).fetchone()
+                    if existing:
+                        conn.execute(
+                            "UPDATE customer_emails SET email = ? WHERE customer_id = ? AND is_primary = 1",
+                            (new_email, cid),
+                        )
+                    else:
+                        try:
+                            conn.execute(
+                                """INSERT INTO customer_emails (customer_id, email, is_primary, label)
+                                   VALUES (?, ?, 1, 'manual')""",
+                                (cid, new_email),
+                            )
+                        except sqlite3.IntegrityError:
+                            pass  # email already owned by another customer
+                else:
+                    # Clearing the email — remove primary flag but leave row for audit
+                    conn.execute(
+                        "UPDATE customer_emails SET is_primary = 0 WHERE customer_id = ? AND is_primary = 1",
+                        (cid,),
+                    )
+
+            # Sync phone to customers.phone (source of truth)
+            new_phone = safe.get("customer_phone")
+            if new_phone is not None:
+                conn.execute(
+                    "UPDATE customers SET phone = ?, updated_at = CURRENT_TIMESTAMP WHERE customer_id = ?",
+                    (new_phone or None, cid),
+                )
+
+            # Sync first/last name to customers table
+            name_fields = {}
+            if "first_name" in safe:
+                name_fields["first_name"] = safe["first_name"]
+            if "last_name" in safe:
+                name_fields["last_name"] = safe["last_name"]
+            if name_fields:
+                set_parts = ", ".join(f"{k} = ?" for k in name_fields)
+                conn.execute(
+                    f"UPDATE customers SET {set_parts}, updated_at = CURRENT_TIMESTAMP WHERE customer_id = ?",
+                    list(name_fields.values()) + [cid],
+                )
+
         # Update venmo_username on the customers table (customer-level field)
         if venmo_username is not None:
             conn.execute(
@@ -5080,6 +5185,39 @@ def get_customer_venmo_handles(db_path=None) -> list[dict]:
         ).fetchall()
         return [{"customer_name": r["customer_name"],
                  "venmo_username": r["venmo_username"]} for r in rows]
+
+
+def get_all_customers(db_path=None) -> list[dict]:
+    """Return all customer records from the canonical customers + customer_emails tables.
+
+    This is the source-of-truth read path for customer identity data.  Every
+    field here comes from the customers / customer_emails tables, not from
+    items.  The Customers page should overlay this data on top of
+    transaction-derived info so canonical contact details always win.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT
+                   c.customer_id,
+                   c.first_name,
+                   c.last_name,
+                   TRIM(COALESCE(NULLIF(c.company_name,''),
+                        NULLIF(TRIM(c.first_name || ' ' || c.last_name), ''))) AS customer_name,
+                   c.phone,
+                   c.venmo_username,
+                   c.current_player_status,
+                   c.chapter,
+                   c.ghin_number,
+                   c.account_status,
+                   c.updated_at,
+                   ce.email   AS primary_email,
+                   ce.label   AS email_label
+               FROM customers c
+               LEFT JOIN customer_emails ce
+                      ON ce.customer_id = c.customer_id AND ce.is_primary = 1
+               ORDER BY c.last_name COLLATE NOCASE, c.first_name COLLATE NOCASE"""
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def create_customer(name: str, email: str = "", phone: str = "",
@@ -8265,13 +8403,18 @@ def save_rsvp(rsvp: dict, db_path: str | Path | None = None) -> int | None:
                 matched_event, db_path,
             )
 
+        # Resolve customer_id at insert time so the FK is populated immediately
+        rsvp_customer_id = _lookup_customer_id(
+            conn, rsvp.get("player_name"), rsvp.get("player_email")
+        )
+
         try:
             cursor = conn.execute(
                 """INSERT OR IGNORE INTO rsvps
                    (email_uid, player_name, player_email, gg_event_name,
                     event_identifier, event_date, response, received_at,
-                    matched_event, matched_item_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    matched_event, matched_item_id, customer_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     rsvp["email_uid"],
                     rsvp.get("player_name"),
@@ -8283,6 +8426,7 @@ def save_rsvp(rsvp: dict, db_path: str | Path | None = None) -> int | None:
                     rsvp.get("received_at"),
                     matched_event,
                     matched_item_id,
+                    rsvp_customer_id,
                 ),
             )
             conn.commit()
