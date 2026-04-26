@@ -178,13 +178,25 @@ Two visual separator rows appear in the expanded rounds table:
 
 ## Customer Identity System
 
+### Source of Truth
+`customers` + `customer_emails` are the **canonical source of truth** for all customer data.
+- `update_customer_info()` syncs edits to email/phone/name into `customers`/`customer_emails`,
+  not just into `items.*` (transaction copies).
+- `get_all_customers()` reads from `customers LEFT JOIN customer_emails WHERE is_primary=1`
+  and is served by `GET /api/customers`. The Customers page overlays this data after the
+  items-based map is built to always show authoritative contact info.
+
 ### Tables
 - `customers` — Master customer records with `customer_id`, name, phone, chapter, GHIN, status
-- `customer_emails` — Multiple emails per customer (supports primary + Golf Genius flags)
-- `customer_aliases` — Name and email aliases linking variant names to canonical customers
+- `customer_emails` — Multiple emails per customer (supports primary + Golf Genius flags); **canonical email source**
+- `customer_aliases` — Name and email aliases linking variant names to canonical customers; `customer_id` FK backfilled at startup
 - `items.customer_id` — FK linking transactions to the `customers` table
 - `acct_transactions.customer_id` — FK linking ledger entries to `customers` (backfilled via 5-step cascade)
 - `handicap_player_links.customer_id` — FK linking Golf Genius player rows to `customers`
+- `rsvps.customer_id` — FK backfilled at startup
+- `season_contests.customer_id` — FK backfilled at startup
+- `handicap_rounds.customer_id` — FK backfilled at startup
+- `godaddy_order_splits.customer_id` — FK backfilled at startup
 
 ### Customer Lookup Flow (`_lookup_customer_id` — 5-step cascade)
 When a new transaction arrives, the system resolves the customer in this order:
@@ -251,13 +263,35 @@ on any customer profile (all three rendering paths: inline expand, detail panel,
   frontend uses `_by_name` as fallback when `items.customer_id` is null (pre-identity items)
 - `POST /api/customers/sync-roles` — `{customer_id, roles}` replaces full role set
 
+## Event ID FK System
+
+All tables that reference events now have an `event_id INTEGER REFERENCES events(id)` column,
+populated at startup by backfill functions that resolve via `events.item_name` then `event_aliases`:
+
+| Table | String column | Backfill function |
+|-------|--------------|-------------------|
+| `items` | `item_name` | `_backfill_event_id_on_items()` — also resolves child rows via parent |
+| `acct_allocations` | `event_name` | `_backfill_event_id_on_string_tables()` |
+| `godaddy_order_splits` | `event_name` | `_backfill_event_id_on_string_tables()` |
+| `rsvps` | `matched_event` | `_backfill_event_id_on_string_tables()` |
+| `expense_transactions` | `event_name` | `_backfill_event_id_on_string_tables()` |
+| `message_log` | `event_name` | `_backfill_event_id_on_string_tables()` |
+| `contractor_payouts` | `event_name` | `_backfill_event_id_on_string_tables()` |
+| `tgf_events` | (name match) | `_backfill_events_id_on_tgf_events()` — stored as `events_id` |
+
+String name columns are kept as denormalized display caches. All joins should prefer `event_id`
+where available. Backfills are idempotent (skip rows where `event_id IS NOT NULL`).
+
+See `PLATFORM_SPEC.md → Technical Debt & Known Concessions` for SQLite FK limitations and
+the full migration checklist for Supabase/PostgreSQL.
+
 ## Architecture
 
-- **Flask app** in `transaction-tracker/app.py` (~5900 lines, 200+ routes)
+- **Flask app** in `transaction-tracker/app.py` (~6200 lines, 200+ routes)
 - **Email parsing** via Claude Sonnet in `email_parser/parser.py`
 - **Email fetching** via Microsoft Graph API in `email_parser/fetcher.py` — only processes emails with "New Order" subject lines; all processed email UIDs tracked in `processed_emails` table to prevent re-parsing
 - **SQLite DB** at `transaction-tracker/transactions.db` (local is empty; live data on Railway)
-- **Database layer** in `email_parser/database.py` (~10000+ lines) — schema, CRUD, allocations, COO context
+- **Database layer** in `email_parser/database.py` (~12000+ lines) — schema, CRUD, allocations, COO context
 - **Scheduler** checks inbox every 15 minutes via APScheduler
 - **Dashboard** at `/` with search, filter, sort, CSV export
 - **COO AI** — Claude-powered business intelligence chat with 6 specialist agents
@@ -732,6 +766,15 @@ The `events` table has extensive pricing columns:
 `team_net`, `individual_net`, `individual_gross`, `skins`, `closest_to_pin`,
 `hole_in_one`, `mvp`, `other`
 
+### tgf_events → events bridge
+
+`tgf_events.events_id INTEGER REFERENCES events(id)` bridges the tournament prize universe
+to the main event registry. Backfilled at startup by `_backfill_events_id_on_tgf_events()`
+via exact name match → partial LIKE → year-narrowed LIKE.
+
+This allows prize payouts (`tgf_payouts`) to be joined to registration and financial data
+in `events`/`acct_transactions` for combined P&L views.
+
 ### Key TGF endpoints
 - `GET /api/tgf` — all data (events + payouts + golfer winnings)
 - `POST /api/tgf` — actions: `add_event`, `import_payouts`, `add_golfer`,
@@ -760,6 +803,14 @@ Each rendering path has 5 tabs: **Transactions**, **Scores**, **Winnings**, **Po
 - `get_customer_winnings()` uses multi-step name matching:
   exact → case-insensitive → alias → name reversal
 - Returns `{golfer_name, total_winnings, payouts: [{event_name, date, category, amount}]}`
+
+### Canonical customer data API
+- `GET /api/customers` — returns all customers from canonical tables
+- `get_all_customers()` — `SELECT FROM customers LEFT JOIN customer_emails WHERE is_primary=1`
+  returns `customer_id`, `first_name`, `last_name`, `customer_name` (display), `phone`,
+  `primary_email`, `email_label`, and other customer fields
+- Customers page `init()` overlays this data after building the items-based map, ensuring
+  email and phone always reflect canonical values rather than stale transaction copies
 
 ## Unified Financial Model (Issue #242)
 
@@ -931,7 +982,7 @@ Each row represents one player's cost allocation for one event:
 - **Income:** "Credit Transfer In", "External Payment", "Event Revenue", "Membership Fees"
 - **Expense:** "Credit Transfer Out", "Player Refunds", "Golf Course Fees / Green Fees"
 
-## Database Tables (37+)
+## Database Tables (38+)
 
 `items`, `processed_emails`, `events`, `event_aliases`, `chapters`, `courses`, `course_aliases`,
 `rsvps`, `rsvp_overrides`,
@@ -943,7 +994,7 @@ Each row represents one player's cost allocation for one event:
 `period_closings`, `bank_accounts`, `bank_deposits`, `reconciliation_matches`,
 `expense_transactions`, `acct_keyword_rules`,
 `coo_agents`, `coo_chat_sessions`, `coo_chat_messages`, `coo_manual_values`,
-`agent_action_log`, `tgf_events`, `tgf_payouts`
+`agent_action_log`, `tgf_events`, `tgf_payouts`, `contractor_payouts`
 
 Key tables not documented elsewhere in this file:
 - `chapters` — chapter dimension table (San Antonio, Austin, DFW, Houston). Maps to Platform `org_units`. FK from `items.chapter_id` and `events.chapter_id`.
@@ -962,8 +1013,9 @@ Key tables not documented elsewhere in this file:
 - `coo_agents` — AI agent definitions with system prompts (6 specialists)
 - `coo_chat_sessions` / `coo_chat_messages` — persistent AI chat history
 - `coo_manual_values` — manually entered financial values (account balances, debts)
-- `tgf_events` — tournament events with purse totals
+- `tgf_events` — tournament events with purse totals. `events_id` FK bridges to the main `events` table (backfilled at startup by `_backfill_events_id_on_tgf_events()`).
 - `tgf_payouts` — individual prize payouts linked to events via `event_id` and to customers via `customer_id` (no separate golfer table; identity is unified in `customers`)
+- `contractor_payouts` — revenue-share payouts to chapter managers; `manager_customer_id` FK to `customers`, `chapter_id` FK to `chapters`, `event_id` FK to `events` (backfilled from `event_name`)
 - `expense_transactions` — staging table for CC/bank alert emails; rows are created by the AI bookkeeper and require human approval. Approved rows are promoted to `acct_transactions` via `_sync_expense_ledger_entry` (sets `entry_type='expense'`). Linked back via `acct_transaction_id` FK.
 - `acct_keyword_rules` — auto-categorization rules (`match_type='contains'`, `COLLATE NOCASE`). Created when an expense is approved with a category; used to pre-categorize future alerts from the same merchant before the AI bookkeeper runs.
 

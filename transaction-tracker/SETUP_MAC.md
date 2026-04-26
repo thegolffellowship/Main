@@ -1,6 +1,14 @@
 # Mac Setup Guide (No Coding Experience Needed)
 
-> **Note:** This guide was written for the initial IMAP-based email setup. The app now uses **Microsoft Graph API** with Azure AD for email access (see `.env.example` and `README.md` for current setup). Steps 6 (App Password) is outdated — you now need Azure AD app registration credentials instead. Steps 1-5 and 7-9 are still valid.
+> **OUTDATED — Local setup is no longer the recommended path.**
+> The app runs live on Railway at `https://tgf-tracker.up.railway.app`. For most users,
+> no local setup is needed at all.
+>
+> If you do need a local copy: this guide was written for the original IMAP email setup.
+> The app now uses **Microsoft Graph API** with Azure AD — see `README.md` and `.env.example`
+> for current credentials. **Step 6 (App Password) is fully outdated** — you need Azure AD
+> app registration credentials (Tenant ID, Client ID, Client Secret) instead.
+> Steps 1–5 and 7–9 are still valid for local Python setup.
 
 This guide walks you through every click and keystroke to get the TGF Transaction Tracker running on your Mac. You'll have a live dashboard showing all your Golf Fellowship orders with the ability to filter by side games, handicap, city, and more.
 
