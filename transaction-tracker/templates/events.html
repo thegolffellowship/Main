@@ -1665,6 +1665,17 @@
         return (priceStr || "").replace(/\s*\(credit transfer\)\s*$/i, "");
     }
 
+    // Coupon badge — small purple "C" circle when an item used a coupon.
+    function couponTag(row) {
+        const code = (row.coupon_code || "").trim();
+        const amt = (row.coupon_amount || "").trim();
+        if (!code && !amt) return "";
+        const parts = [];
+        if (code) parts.push(`Coupon: ${code}`);
+        if (amt) parts.push(`-${amt.startsWith("$") ? amt : "$" + amt}`);
+        return ` <span class="coupon-badge" title="${escapeHtml(parts.join(" "))}">C</span>`;
+    }
+
     function _cleanStatus(raw) {
         let s = (raw || "").trim();
         if (!s) return "\u2014";
@@ -1859,6 +1870,7 @@
                     }
                 }
             }
+            tag += couponTag(r);
             const rsvp = getRsvpForItem(r.id, ev.item_name) || getRsvpByEmail(r.customer_email, ev.item_name);
             const manualOverride = isSynthetic
                 ? (r.customer_email && emailOverrides[(r.customer_email || "").toLowerCase()])
@@ -4106,7 +4118,7 @@
                             }
                         } else if (cnote.startsWith('paid_at:')) {
                             const paidDate = cnote.split(':', 2)[1] || '';
-                            tag += ` <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Balance paid via Venmo on ${escapeHtml(paidDate)}">Paid</span>`;
+                            tag += ` <span class="status-tag status-tag-circle status-tag-paid" title="Balance paid via Venmo on ${escapeHtml(paidDate)}">$</span>`;
                         }
                     }
                     // Credit badge for all RSVP players with outstanding credits
@@ -4122,6 +4134,7 @@
                             tag += ` <span class="status-tag btn-apply-credit-badge" ${idAttr} data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;cursor:pointer;" title="Click to apply credit">Credit: $${amt}</span>`;
                         }
                     }
+                    tag += couponTag(r);
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer, r.user_status))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {

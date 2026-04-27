@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.10.8";
+window.TGF_VERSION = "2.10.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.9",
+    date: "2026-04-27",
+    title: "Coupon C-badge on Events rows + circular $-badge replaces 'Paid' pill",
+    changes: [
+      "Events page registration rows (desktop + mobile) now render the same purple 'C' coupon badge that lives on the Transactions page. Triggered when coupon_code or coupon_amount is set on the item; tooltip shows 'Coupon: <code> -$<amount>'.",
+      "The green 'Paid' pill on settled credit-transfer rows is now a circular '$' badge (mirrors the existing circular 'T' transfer badge). Same green colors, less horizontal space. Tooltip still shows 'Balance paid via Venmo on YYYY-MM-DD'. New .status-tag-paid CSS class.",
+    ],
+  },
   {
     version: "2.10.8",
     date: "2026-04-27",
