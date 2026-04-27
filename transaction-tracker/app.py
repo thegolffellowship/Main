@@ -171,6 +171,7 @@ from email_parser.database import (
     cleanup_duplicate_godaddy_entries,
     backup_database,
     scan_price_games_mismatches,
+    reconcile_orphan_venmo_payments,
     save_expense_transaction,
     get_expense_transactions,
     get_unified_transactions,
@@ -7162,6 +7163,24 @@ def api_scan_price_mismatches():
     """Scan all items for side_games / item_price mismatches and create parse warnings."""
     try:
         result = scan_price_games_mismatches()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/reconcile-orphan-venmo", methods=["POST"])
+@require_role("admin")
+def api_reconcile_orphan_venmo():
+    """Sweep credit-transfer items with balance_due and net them against
+    prior orphan Venmo / manual +PAY items by the same customer (14-day window).
+
+    Body params (optional JSON): {"days": 14, "dry_run": false}
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        days = int(data.get("days", 14))
+        dry_run = bool(data.get("dry_run", False))
+        result = reconcile_orphan_venmo_payments(max_days_back=days, dry_run=dry_run)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.10.1";
+window.TGF_VERSION = "2.10.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.2",
+    date: "2026-04-27",
+    title: "Apply Credit nets against prior unallocated Venmo +PAY (Joshua-Bartz fix)",
+    changes: [
+      "apply_credit_to_rsvp() now scans for orphan +PAY items by the same customer (Manual Entry / Manual Entry (venmo), parent_item_id IS NULL, last 14 days) and nets them against amount_owed before writing balance_due. Consumed rows are reparented onto the credit-transfer item with a [xfer-consumed:<id>] marker in notes for audit/undo.",
+      "If the prior payment exceeds the difference, the surplus is posted as a transaction_status='credited' Overpayment credit item so it shows up in the customer's available credit pool (e.g. Joshua's $0.19 surplus from his $8.00 Venmo vs $7.81 owed).",
+      "New backfill: reconcile_orphan_venmo_payments() + POST /api/admin/reconcile-orphan-venmo. Sweeps existing credit-transfer items with balance_due and applies the same netting retroactively. Idempotent; supports dry_run.",
+      "reverse_credit_application() now detaches reparented +PAY rows (clears parent_item_id, strips the marker) and deletes any overpayment-credit-* item created during apply.",
+    ],
+  },
   {
     version: "2.10.1",
     date: "2026-04-27",

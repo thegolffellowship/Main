@@ -8432,10 +8432,29 @@ def reverse_credit_application(item_id: int, db_path: str | Path | None = None) 
                 (f"xfer-flat-{s['id']}-out",),
             )
 
-        # Remove excess credit item if created
+        # Detach any +PAY rows we consumed during apply_credit_to_rsvp
+        # (matched via the [xfer-consumed:<id>] tag we appended to notes).
+        consumed_tag = _XFER_CONSUMED_TAG.format(parent_id=item_id)
+        consumed_rows = conn.execute(
+            "SELECT id, notes FROM items WHERE parent_item_id = ? AND notes LIKE ?",
+            (item_id, f"%{consumed_tag}%"),
+        ).fetchall()
+        for cr in consumed_rows:
+            cleaned = (cr["notes"] or "").replace(consumed_tag, "").strip()
+            cleaned = " ".join(cleaned.split())
+            conn.execute(
+                "UPDATE items SET parent_item_id = NULL, notes = ? WHERE id = ?",
+                (cleaned or None, cr["id"]),
+            )
+
+        # Remove excess + overpayment credit items if created
         conn.execute(
             "DELETE FROM items WHERE email_uid LIKE ?",
             (f"credit-excess-{item_id}-%",),
+        )
+        conn.execute(
+            "DELETE FROM items WHERE email_uid LIKE ?",
+            (f"overpayment-credit-{item_id}-%",),
         )
 
         # Reverse transfer_in accounting entry
@@ -8477,6 +8496,109 @@ def mark_rsvp_credit_notified(rsvp_id: int, db_path: str | Path | None = None) -
             (_dt.datetime.utcnow().isoformat(), rsvp_id),
         )
         conn.commit()
+
+
+# Tag appended to a +PAY item's `notes` when its parent_item_id was set by
+# Apply Credit / reconcile_orphan_venmo_payments. Lets undo find and detach it.
+_XFER_CONSUMED_TAG = "[xfer-consumed:{parent_id}]"
+
+
+def _consume_unallocated_payments_for_credit_transfer(
+    conn,
+    parent_item_id: int,
+    customer: str,
+    amount_owed: float,
+    max_days_back: int = 14,
+    exclude_ids: set | None = None,
+) -> dict:
+    """Find orphan manual-payment +PAY items for this customer and reparent them
+    onto the credit-transfer item, up to (and beyond) amount_owed.
+
+    Greedy: consumes oldest-first until amount_owed is covered. Continues
+    consuming any further orphans dated *after* the most recent consumed one
+    only if amount_owed > 0; otherwise stops once paid (we don't want to sweep
+    unrelated future deposits).
+
+    Returns: {"consumed_total": float, "consumed_ids": list[int], "remaining_owed": float}
+    """
+    exclude_ids = exclude_ids or set()
+    rows = conn.execute(
+        """SELECT id, item_price, notes, order_date
+           FROM items
+           WHERE customer = ? COLLATE NOCASE
+             AND parent_item_id IS NULL
+             AND COALESCE(transaction_status, 'active') = 'active'
+             AND merchant IN ('Manual Entry', 'Manual Entry (venmo)')
+             AND order_date >= date('now', ?)
+           ORDER BY order_date ASC, id ASC""",
+        (customer, f"-{int(max_days_back)} days"),
+    ).fetchall()
+
+    consumed_total = 0.0
+    consumed_ids: list[int] = []
+    remaining = max(0.0, float(amount_owed or 0))
+
+    for r in rows:
+        rid = r["id"]
+        if rid in exclude_ids or rid == parent_item_id:
+            continue
+        amt = _parse_dollar(r["item_price"])
+        if amt <= 0:
+            continue
+        # Stop once we've covered the owed amount — leaves later deposits
+        # untouched so we don't grab unrelated payments.
+        if remaining <= 0 and consumed_total >= float(amount_owed or 0):
+            break
+
+        tag = _XFER_CONSUMED_TAG.format(parent_id=parent_item_id)
+        existing_notes = r["notes"] or ""
+        new_notes = (existing_notes + " " + tag).strip() if existing_notes else tag
+        conn.execute(
+            "UPDATE items SET parent_item_id = ?, notes = ? WHERE id = ?",
+            (parent_item_id, new_notes, rid),
+        )
+        consumed_total += amt
+        consumed_ids.append(rid)
+        remaining = max(0.0, remaining - amt)
+
+    return {
+        "consumed_total": round(consumed_total, 2),
+        "consumed_ids": consumed_ids,
+        "remaining_owed": round(max(0.0, float(amount_owed or 0) - consumed_total), 2),
+    }
+
+
+def _post_overpayment_credit(
+    conn,
+    rsvp_item: dict,
+    parent_item_id: int,
+    overpayment: float,
+) -> int | None:
+    """Post a new transaction_status='credited' item for an overpayment surplus
+    so it shows up in the customer's available credit pool. Returns the new id.
+    """
+    if overpayment <= 0:
+        return None
+    import time as _time
+    uid = f"overpayment-credit-{parent_item_id}-{int(_time.time() * 1000)}"
+    cur = conn.execute(
+        """INSERT INTO items
+           (email_uid, merchant, customer, customer_email, item_name,
+            item_price, transaction_status, credit_note,
+            order_date, chapter)
+           VALUES (?, 'Manual Entry', ?, ?, ?,
+            ?, 'credited', ?,
+            date('now'), ?)""",
+        (
+            uid,
+            rsvp_item.get("customer"), rsvp_item.get("customer_email"),
+            rsvp_item.get("item_name"),
+            f"${overpayment:.2f}",
+            f"Overpayment credit — ${overpayment:.2f} from prior Venmo payment",
+            rsvp_item.get("chapter") or "",
+        ),
+    )
+    return cur.lastrowid
 
 
 def apply_credit_to_rsvp(
@@ -8547,7 +8669,33 @@ def apply_credit_to_rsvp(
         # Update the RSVP item → active registration
         price_str = f"${applied:.2f} (credit transfer)"
         amount_owed = round((new_subtotal or 0) - applied, 2)
-        balance_note = f"balance_due:{amount_owed:.2f}" if amount_owed > 0 else None
+
+        # Net any prior unallocated Venmo / manual payments by this customer
+        # against the balance due (covers "paid before RSVP" edge case).
+        consumed = {"consumed_total": 0.0, "consumed_ids": [], "remaining_owed": amount_owed}
+        overpayment_credit_id = None
+        if amount_owed > 0 and rsvp_item.get("customer"):
+            consumed = _consume_unallocated_payments_for_credit_transfer(
+                conn,
+                parent_item_id=rsvp_item_id,
+                customer=rsvp_item["customer"],
+                amount_owed=amount_owed,
+                max_days_back=14,
+                exclude_ids={rsvp_item_id, *(ci["id"] for ci in credited_items)},
+            )
+            remaining_after_payments = consumed["remaining_owed"]
+            overpayment = round(consumed["consumed_total"] - amount_owed, 2)
+            if remaining_after_payments > 0:
+                balance_note = f"balance_due:{remaining_after_payments:.2f}"
+            else:
+                balance_note = f"paid_at:{_dt.datetime.utcnow().strftime('%Y-%m-%d')}"
+                if overpayment > 0:
+                    overpayment_credit_id = _post_overpayment_credit(
+                        conn, rsvp_item, rsvp_item_id, overpayment,
+                    )
+        else:
+            balance_note = f"balance_due:{amount_owed:.2f}" if amount_owed > 0 else None
+
         conn.execute(
             """UPDATE items
                SET transaction_status = 'active',
@@ -8643,6 +8791,10 @@ def apply_credit_to_rsvp(
             "amount_applied": applied,
             "excess": excess,
             "amount_owed": amount_owed,
+            "remaining_owed": consumed["remaining_owed"],
+            "consumed_payment_ids": consumed["consumed_ids"],
+            "consumed_payment_total": consumed["consumed_total"],
+            "overpayment_credit_id": overpayment_credit_id,
             "new_price": breakdown["total"] if breakdown else None,
             "new_subtotal": new_subtotal,
         }
@@ -8937,6 +9089,110 @@ def auto_match_venmo_inbound_to_balance_due(
                 )
                 summary["errors"] += 1
 
+    return summary
+
+
+def reconcile_orphan_venmo_payments(
+    db_path: str | Path | None = None,
+    max_days_back: int = 14,
+    dry_run: bool = False,
+) -> dict:
+    """Sweep credit-transfer items with `balance_due:` notes and net them
+    against any prior orphan +PAY items (Manual Entry / Manual Entry (venmo))
+    by the same customer dated within `max_days_back` days.
+
+    Fixes the "paid via Venmo before RSVP, then Apply Credit" edge case where
+    apply_credit_to_rsvp wrote balance_due:X without seeing the prior payment.
+    Idempotent and safe to re-run.
+
+    Returns: {"scanned": N, "fixed": N, "fully_paid": N, "partially_paid": N,
+              "overpayments_posted": N, "details": [...]}
+    """
+    import datetime as _dt
+    summary = {
+        "scanned": 0, "fixed": 0, "fully_paid": 0,
+        "partially_paid": 0, "overpayments_posted": 0,
+        "details": [],
+    }
+    with _connect(db_path) as conn:
+        parents = conn.execute(
+            """SELECT id, customer, customer_email, item_name, chapter, credit_note
+               FROM items
+               WHERE merchant = 'Paid Separately (Credit Transfer)'
+                 AND COALESCE(transaction_status, 'active') = 'active'
+                 AND credit_note LIKE 'balance_due:%'"""
+        ).fetchall()
+        summary["scanned"] = len(parents)
+
+        for p in parents:
+            p = dict(p)
+            try:
+                owed = float((p["credit_note"] or "").split(":", 1)[1])
+            except (ValueError, IndexError):
+                continue
+            if owed <= 0:
+                continue
+            customer = (p.get("customer") or "").strip()
+            if not customer:
+                continue
+
+            consumed = _consume_unallocated_payments_for_credit_transfer(
+                conn,
+                parent_item_id=p["id"],
+                customer=customer,
+                amount_owed=owed,
+                max_days_back=max_days_back,
+                exclude_ids={p["id"]},
+            )
+            if not consumed["consumed_ids"]:
+                continue
+
+            remaining = consumed["remaining_owed"]
+            overpayment = round(consumed["consumed_total"] - owed, 2)
+            new_note = (
+                f"balance_due:{remaining:.2f}" if remaining > 0
+                else f"paid_at:{_dt.datetime.utcnow().strftime('%Y-%m-%d')}"
+            )
+
+            if dry_run:
+                # Roll back the reparenting we just did so dry-run is read-only.
+                tag = _XFER_CONSUMED_TAG.format(parent_id=p["id"])
+                for cid in consumed["consumed_ids"]:
+                    cur = conn.execute(
+                        "SELECT notes FROM items WHERE id = ?", (cid,)
+                    ).fetchone()
+                    cleaned = " ".join((cur["notes"] or "").replace(tag, "").split())
+                    conn.execute(
+                        "UPDATE items SET parent_item_id = NULL, notes = ? WHERE id = ?",
+                        (cleaned or None, cid),
+                    )
+            else:
+                conn.execute(
+                    "UPDATE items SET credit_note = ? WHERE id = ?",
+                    (new_note, p["id"]),
+                )
+                if overpayment > 0:
+                    _post_overpayment_credit(conn, p, p["id"], overpayment)
+                    summary["overpayments_posted"] += 1
+
+            summary["fixed"] += 1
+            if remaining > 0:
+                summary["partially_paid"] += 1
+            else:
+                summary["fully_paid"] += 1
+            summary["details"].append({
+                "parent_item_id": p["id"],
+                "customer": customer,
+                "event": p.get("item_name"),
+                "owed": owed,
+                "consumed_total": consumed["consumed_total"],
+                "consumed_ids": consumed["consumed_ids"],
+                "remaining": remaining,
+                "overpayment": max(0.0, overpayment),
+            })
+
+        if not dry_run:
+            conn.commit()
     return summary
 
 
