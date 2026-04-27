@@ -8503,6 +8503,33 @@ def mark_rsvp_credit_notified(rsvp_id: int, db_path: str | Path | None = None) -
 _XFER_CONSUMED_TAG = "[xfer-consumed:{parent_id}]"
 
 
+def _sum_existing_child_payments(conn, parent_item_id: int) -> dict:
+    """Sum active manual-entry +PAY children already attached to this parent.
+    Catches the case where a Venmo / cash payment was entered against the
+    credit-transfer parent but the parent's credit_note was never reduced.
+
+    Case-insensitive match on `merchant LIKE 'Manual Entry%'` so we accept
+    "Manual Entry", "Manual Entry (venmo)", "Manual Entry (Venmo)",
+    "Manual Entry (Cash)", etc.
+    """
+    rows = conn.execute(
+        """SELECT id, item_price
+           FROM items
+           WHERE parent_item_id = ?
+             AND COALESCE(transaction_status, 'active') = 'active'
+             AND merchant LIKE 'Manual Entry%' COLLATE NOCASE""",
+        (parent_item_id,),
+    ).fetchall()
+    total = 0.0
+    ids: list[int] = []
+    for r in rows:
+        amt = _parse_dollar(r["item_price"])
+        if amt > 0:
+            total += amt
+            ids.append(r["id"])
+    return {"total": round(total, 2), "ids": ids}
+
+
 def _consume_unallocated_payments_for_credit_transfer(
     conn,
     parent_item_id: int,
@@ -8528,7 +8555,7 @@ def _consume_unallocated_payments_for_credit_transfer(
            WHERE customer = ? COLLATE NOCASE
              AND parent_item_id IS NULL
              AND COALESCE(transaction_status, 'active') = 'active'
-             AND merchant IN ('Manual Entry', 'Manual Entry (venmo)')
+             AND merchant LIKE 'Manual Entry%' COLLATE NOCASE
              AND order_date >= date('now', ?)
            ORDER BY order_date ASC, id ASC""",
         (customer, f"-{int(max_days_back)} days"),
@@ -8670,31 +8697,38 @@ def apply_credit_to_rsvp(
         price_str = f"${applied:.2f} (credit transfer)"
         amount_owed = round((new_subtotal or 0) - applied, 2)
 
-        # Net any prior unallocated Venmo / manual payments by this customer
-        # against the balance due (covers "paid before RSVP" edge case).
+        # Net any prior payments by this customer against the balance due:
+        #   1. Existing manual-entry +PAY children already attached to this row.
+        #   2. Orphan manual-entry +PAY items dated in the last 14 days.
+        existing_children = _sum_existing_child_payments(conn, rsvp_item_id)
         consumed = {"consumed_total": 0.0, "consumed_ids": [], "remaining_owed": amount_owed}
         overpayment_credit_id = None
+        already_paid = existing_children["total"]
         if amount_owed > 0 and rsvp_item.get("customer"):
-            consumed = _consume_unallocated_payments_for_credit_transfer(
-                conn,
-                parent_item_id=rsvp_item_id,
-                customer=rsvp_item["customer"],
-                amount_owed=amount_owed,
-                max_days_back=14,
-                exclude_ids={rsvp_item_id, *(ci["id"] for ci in credited_items)},
-            )
-            remaining_after_payments = consumed["remaining_owed"]
-            overpayment = round(consumed["consumed_total"] - amount_owed, 2)
-            if remaining_after_payments > 0:
-                balance_note = f"balance_due:{remaining_after_payments:.2f}"
-            else:
-                balance_note = f"paid_at:{_dt.datetime.utcnow().strftime('%Y-%m-%d')}"
-                if overpayment > 0:
-                    overpayment_credit_id = _post_overpayment_credit(
-                        conn, rsvp_item, rsvp_item_id, overpayment,
-                    )
+            remainder = max(0.0, round(amount_owed - already_paid, 2))
+            if remainder > 0:
+                consumed = _consume_unallocated_payments_for_credit_transfer(
+                    conn,
+                    parent_item_id=rsvp_item_id,
+                    customer=rsvp_item["customer"],
+                    amount_owed=remainder,
+                    max_days_back=14,
+                    exclude_ids={rsvp_item_id, *existing_children["ids"],
+                                 *(ci["id"] for ci in credited_items)},
+                )
+        total_paid = round(already_paid + consumed["consumed_total"], 2)
+        remaining_after_payments = max(0.0, round(amount_owed - total_paid, 2))
+        overpayment = max(0.0, round(total_paid - amount_owed, 2))
+        if amount_owed <= 0:
+            balance_note = None
+        elif remaining_after_payments > 0:
+            balance_note = f"balance_due:{remaining_after_payments:.2f}"
         else:
-            balance_note = f"balance_due:{amount_owed:.2f}" if amount_owed > 0 else None
+            balance_note = f"paid_at:{_dt.datetime.utcnow().strftime('%Y-%m-%d')}"
+            if overpayment > 0:
+                overpayment_credit_id = _post_overpayment_credit(
+                    conn, rsvp_item, rsvp_item_id, overpayment,
+                )
 
         conn.execute(
             """UPDATE items
@@ -8791,9 +8825,12 @@ def apply_credit_to_rsvp(
             "amount_applied": applied,
             "excess": excess,
             "amount_owed": amount_owed,
-            "remaining_owed": consumed["remaining_owed"],
+            "already_paid_via_children": already_paid,
+            "existing_child_payment_ids": existing_children["ids"],
             "consumed_payment_ids": consumed["consumed_ids"],
             "consumed_payment_total": consumed["consumed_total"],
+            "total_paid": total_paid,
+            "remaining_owed": remaining_after_payments,
             "overpayment_credit_id": overpayment_credit_id,
             "new_price": breakdown["total"] if breakdown else None,
             "new_subtotal": new_subtotal,
@@ -9097,16 +9134,21 @@ def reconcile_orphan_venmo_payments(
     max_days_back: int = 14,
     dry_run: bool = False,
 ) -> dict:
-    """Sweep credit-transfer items with `balance_due:` notes and net them
-    against any prior orphan +PAY items (Manual Entry / Manual Entry (venmo))
-    by the same customer dated within `max_days_back` days.
+    """Sweep credit-transfer items with `balance_due:` notes and net them against:
+      1. Existing manual-entry +PAY children already attached to the parent
+         (case-insensitive match on `merchant LIKE 'Manual Entry%'`), and
+      2. Orphan +PAY items by the same customer in the last `max_days_back`
+         days (these get reparented onto the credit-transfer item).
 
-    Fixes the "paid via Venmo before RSVP, then Apply Credit" edge case where
-    apply_credit_to_rsvp wrote balance_due:X without seeing the prior payment.
+    Fixes both:
+      - "Paid via Venmo before RSVP, then Apply Credit" (orphan case)
+      - "+PAY entered against the parent but credit_note was never reduced"
+        (already-attached child case — Joshua Bartz)
+
     Idempotent and safe to re-run.
 
-    Returns: {"scanned": N, "fixed": N, "fully_paid": N, "partially_paid": N,
-              "overpayments_posted": N, "details": [...]}
+    Returns: {"scanned", "fixed", "fully_paid", "partially_paid",
+              "overpayments_posted", "details": [...]}
     """
     import datetime as _dt
     summary = {
@@ -9136,26 +9178,36 @@ def reconcile_orphan_venmo_payments(
             if not customer:
                 continue
 
-            consumed = _consume_unallocated_payments_for_credit_transfer(
-                conn,
-                parent_item_id=p["id"],
-                customer=customer,
-                amount_owed=owed,
-                max_days_back=max_days_back,
-                exclude_ids={p["id"]},
-            )
-            if not consumed["consumed_ids"]:
-                continue
+            # Pass 1: existing manual-entry children already attached.
+            existing = _sum_existing_child_payments(conn, p["id"])
+            already_paid = existing["total"]
 
-            remaining = consumed["remaining_owed"]
-            overpayment = round(consumed["consumed_total"] - owed, 2)
+            # Pass 2: any remainder consumed from orphan payments by this customer.
+            remainder_owed = max(0.0, round(owed - already_paid, 2))
+            consumed = {"consumed_total": 0.0, "consumed_ids": [], "remaining_owed": remainder_owed}
+            if remainder_owed > 0:
+                consumed = _consume_unallocated_payments_for_credit_transfer(
+                    conn,
+                    parent_item_id=p["id"],
+                    customer=customer,
+                    amount_owed=remainder_owed,
+                    max_days_back=max_days_back,
+                    exclude_ids={p["id"], *existing["ids"]},
+                )
+
+            total_paid = round(already_paid + consumed["consumed_total"], 2)
+            if total_paid <= 0:
+                continue  # nothing to apply for this parent
+
+            remaining = max(0.0, round(owed - total_paid, 2))
+            overpayment = max(0.0, round(total_paid - owed, 2))
             new_note = (
                 f"balance_due:{remaining:.2f}" if remaining > 0
                 else f"paid_at:{_dt.datetime.utcnow().strftime('%Y-%m-%d')}"
             )
 
             if dry_run:
-                # Roll back the reparenting we just did so dry-run is read-only.
+                # Roll back any reparenting so dry-run leaves the DB unchanged.
                 tag = _XFER_CONSUMED_TAG.format(parent_id=p["id"])
                 for cid in consumed["consumed_ids"]:
                     cur = conn.execute(
@@ -9185,10 +9237,13 @@ def reconcile_orphan_venmo_payments(
                 "customer": customer,
                 "event": p.get("item_name"),
                 "owed": owed,
-                "consumed_total": consumed["consumed_total"],
-                "consumed_ids": consumed["consumed_ids"],
+                "already_paid_via_children": already_paid,
+                "existing_child_ids": existing["ids"],
+                "consumed_orphan_total": consumed["consumed_total"],
+                "consumed_orphan_ids": consumed["consumed_ids"],
+                "total_paid": total_paid,
                 "remaining": remaining,
-                "overpayment": max(0.0, overpayment),
+                "overpayment": overpayment,
             })
 
         if not dry_run:

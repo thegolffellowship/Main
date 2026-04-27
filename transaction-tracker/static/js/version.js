@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.10.2";
+window.TGF_VERSION = "2.10.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.3",
+    date: "2026-04-27",
+    title: "Reconcile sweep: also net already-attached +PAY children, case-insensitive merchant",
+    changes: [
+      "reconcile_orphan_venmo_payments() now runs a two-pass netting: (1) sums existing manual-entry +PAY children already attached to each balance_due parent, then (2) consumes orphan payments for any remainder. Joshua Bartz's $8.00 +PAY was already linked to his credit-transfer parent (parent_item_id=1224) so the orphan-only sweep skipped it; the new pass picks it up.",
+      "Merchant filter is now case-insensitive (`merchant LIKE 'Manual Entry%' COLLATE NOCASE`) so it matches both 'Manual Entry (venmo)' (matcher-created) and 'Manual Entry (Venmo)' (human-entered) and any 'Manual Entry (Cash)' variants.",
+      "apply_credit_to_rsvp() mirrors the same two-pass logic for forward-going Apply Credit operations, plus exposes the breakdown in its return dict.",
+      "New helper _sum_existing_child_payments() factored out for reuse.",
+    ],
+  },
   {
     version: "2.10.2",
     date: "2026-04-27",
