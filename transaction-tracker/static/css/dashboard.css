@@ -1061,6 +1061,18 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 .status-tag-refunded { background: #fce7f3; color: #9d174d; }
 .status-tag-from-transfer { background: #ecfdf5; color: #065f46; }
 .status-tag-wd { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.status-tag-circle {
+    width: 1.1rem;
+    height: 1.1rem;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    line-height: 1;
+    border: 1px solid #6ee7b7;
+}
 
 tr.row-credited { opacity: 0.6; }
 tr.row-transferred { opacity: 0.6; }

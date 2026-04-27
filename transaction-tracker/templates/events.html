@@ -1808,14 +1808,14 @@
             const isManual = (r.email_uid || "").startsWith("manual-");
             const isComp = (r.email_uid || "").startsWith("manual-comp");
             let tag = '';
-            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
-            else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">RSVP - Remind</span>`;
-            else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
+            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+            else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
+            else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
             else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (txStatus === "refunded") tag = '<span class="status-tag status-tag-refunded">Refunded</span>';
             else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${r.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>` : ''}`;
-            else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer" title="Registered via credit transfer">Transfer</span>';
+            else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-circle status-tag-from-transfer" title="Transfer — registered via credit transfer">T</span>';
             if (isComp || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
             // Suppress Manual tag on credit-transfer rows — already implied by the Transfer tag
             else if (isManual && !isRsvpOnly && !isGgRsvp && !r.transferred_from_id) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
@@ -4024,14 +4024,14 @@
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" data-player-email="${escapeHtml(r.customer_email || '')}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
                     let tag = "";
-                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
-                    else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">RSVP - Remind</span>`;
-                    else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">RSVP - Remind</span>`;
+                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+                    else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
+                    else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
                     else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (txStatus === "refunded") tag = '<span class="status-tag status-tag-refunded">Refunded</span>';
                     else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${r.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>` : ''}`;
-                    else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer" title="Registered via credit transfer">Transfer</span>';
+                    else if (r.transferred_from_id) tag = '<span class="status-tag status-tag-circle status-tag-from-transfer" title="Transfer — registered via credit transfer">T</span>';
                     if (isCompRow || (r.user_status || "").toLowerCase() === "manager") tag += ' <span class="status-tag" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manager</span>';
                     // Suppress Manual tag on credit-transfer rows — already implied by the Transfer tag
                     else if (isManualRow && !isRsvpOnly && !isGgRsvp && !r.transferred_from_id) tag += ' <span class="status-tag" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;">Manual</span>';
@@ -4060,7 +4060,7 @@
                         if (cnote.startsWith('balance_due:')) {
                             const owed = parseFloat(cnote.split(':')[1]) || 0;
                             if (owed > 0) {
-                                tag += ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Additional payment required">$${owed.toFixed(2)} due</span>`;
+                                tag += ` <span class="status-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;" title="Additional payment required">-$${owed.toFixed(2)}</span>`;
                             }
                         } else if (cnote.startsWith('paid_at:')) {
                             const paidDate = cnote.split(':', 2)[1] || '';
@@ -4124,7 +4124,7 @@
                                     btns += `<button class="btn btn-venmo-email" data-item-id="${r.id}" style="background:${bg};color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;" title="${tip}">${label}</button> `;
                                 }
                             }
-                            btns += `<button class="btn btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#7c3aed;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Undo Credit</button>`;
+                            btns += `<button class="btn btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#7c3aed;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Undo</button>`;
                             btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
                         } else {
                             btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
