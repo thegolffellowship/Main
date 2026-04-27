@@ -1914,7 +1914,7 @@
                 if (isRsvpOnly || isGgRsvp) return 'background:#fef3c7;font-style:italic;';
                 if (isComp) return 'background:#dcfce7;';
                 if (u === 'GUEST') return 'background:#fce7f3;';
-                if (u === '1ST TIMER') return 'background:#ede9fe;';
+                if (u === '1ST TIMER') return 'background:#fed7aa;';
                 if (isManual) return 'background:#dbeafe;';
                 return '';
             })()}" data-id="${r.id}">
@@ -4045,7 +4045,7 @@
                 const rowBg = (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;'
                     : isCompRow ? 'background-color:#dcfce7;'
                     : isGuestRow ? 'background-color:#fce7f3;'
-                    : isFirstTimerRow ? 'background-color:#ede9fe;'
+                    : isFirstTimerRow ? 'background-color:#fed7aa;'
                     : isManualRow ? 'background-color:#dbeafe;'
                     : '';
                 const style = (vis ? '' : 'display:none;') + rowBg;
