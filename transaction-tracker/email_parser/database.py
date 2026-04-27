@@ -1204,6 +1204,46 @@ def _migrate_normalize_customer_name_case(conn: sqlite3.Connection) -> int:
     return updated
 
 
+def _migrate_autocorrect_player_status(conn: sqlite3.Connection) -> int:
+    """Reconcile stale customers.current_player_status with item history.
+
+    Two passes (idempotent):
+    1. Anyone who has bought a TGF Membership but is still flagged
+       first_timer / active_guest / NULL → upgrade to active_member.
+    2. Anyone still flagged first_timer who has played more than once
+       (and didn't get caught by pass 1) → demote to active_guest. They're
+       past their first event and should no longer carry the 1st TIMER tag.
+    """
+    upgraded = conn.execute(
+        """UPDATE customers
+              SET current_player_status = 'active_member',
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE customer_id IN (
+                SELECT DISTINCT i.customer_id
+                FROM items i
+                WHERE LOWER(i.item_name) LIKE '%membership%'
+                  AND i.customer_id IS NOT NULL
+            )
+              AND (current_player_status IS NULL
+                   OR current_player_status IN ('first_timer', 'active_guest'))"""
+    ).rowcount
+
+    demoted = conn.execute(
+        """UPDATE customers
+              SET current_player_status = 'active_guest',
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE current_player_status = 'first_timer'
+              AND (SELECT COUNT(*) FROM items i WHERE i.customer_id = customers.customer_id) > 1"""
+    ).rowcount
+
+    if upgraded or demoted:
+        logger.info(
+            "Auto-corrected player_status: %d upgraded to active_member, %d demoted to active_guest",
+            upgraded, demoted,
+        )
+    return upgraded + demoted
+
+
 def _migrate_dedup_expense_transactions(conn: sqlite3.Connection) -> None:
     """Remove duplicate expense_transactions rows.
 
@@ -2247,6 +2287,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_normalize_customer_name_case(conn)
         except Exception as e:
             logger.warning("Customer name case normalization failed: %s", e)
+
+        # Reconcile customers.current_player_status against item history
+        try:
+            _migrate_autocorrect_player_status(conn)
+        except Exception as e:
+            logger.warning("player_status autocorrect failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts

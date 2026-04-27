@@ -379,20 +379,23 @@
     // items are the fallback for customers we haven't yet tagged on the Info tab.
     function deriveStatus(items, roles, currentPlayerStatus) {
         roles = Array.isArray(roles) ? roles : [];
+        const itemCount = Array.isArray(items) ? items.length : 0;
         const ELEVATED = ['owner', 'admin', 'manager', 'member'];
         if (roles.some(r => ELEVATED.includes(r))) return "MEMBER";
+
+        // A TGF Membership purchase auto-promotes to MEMBER regardless of
+        // stored player_status (catches cases where the status hasn't been
+        // updated yet after the membership was bought).
+        const hasMembership = (items || []).some(item =>
+            (item.item_name || "").toLowerCase().includes("membership")
+        );
+        if (hasMembership) return "MEMBER";
+
         if (currentPlayerStatus === 'active_member') return "MEMBER";
         if (currentPlayerStatus === 'member_plus') return "MEMBER+";
-        if (currentPlayerStatus === 'first_timer') return "1st TIMER";
+        if (currentPlayerStatus === 'first_timer') return itemCount > 1 ? "GUEST" : "1st TIMER";
         if (currentPlayerStatus === 'expired_member' || currentPlayerStatus === 'inactive') return "FORMER";
         if (currentPlayerStatus === 'active_guest') return "GUEST";
-
-        // Check for membership purchase
-        const hasMembership = items.some(item => {
-            const name = (item.item_name || "").toLowerCase();
-            return name.includes("membership") || name.includes("member");
-        });
-        if (hasMembership) return "MEMBER";
 
         // Check user_status field across transactions
         const memberStatuses = items.map(i => (i.user_status || "").toUpperCase()).filter(Boolean);
@@ -400,7 +403,9 @@
 
         // Check returning_or_new
         const returningNew = items.map(i => (i.returning_or_new || "").toLowerCase()).filter(Boolean);
-        if (returningNew.some(v => v.includes("new") || v.includes("1st") || v.includes("first"))) return "1st TIMER";
+        if (returningNew.some(v => v.includes("new") || v.includes("1st") || v.includes("first"))) {
+            return itemCount > 1 ? "GUEST" : "1st TIMER";
+        }
 
         // If they have NON-MEMBER status or guest indicators
         if (memberStatuses.includes("NON-MEMBER") || memberStatuses.includes("GUEST")) return "GUEST";
