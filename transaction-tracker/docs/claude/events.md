@@ -12,8 +12,8 @@
 ## Event detail view sections (top to bottom)
 1. **Toggle bar** — PLAYERS | PAIRINGS | GAMES + 9|18 holes filter + NET | GROSS | NONE
 2. **Registrations table** — only active/rsvp players (compact rows)
-3. **Inactive section** — credited/refunded/transferred/WD players in a gray box with Reverse buttons
-4. **Not Playing section** — GG RSVP players marked as not playing (red box)
+3. **Inactive section** — credited/refunded/transferred/WD players in a gray box with Reverse buttons. Names link to `/customers?name=...` (clickable).
+4. **Not Playing section** — GG RSVP players marked as not playing (red box). Names render as full "Last, First" (resolved via `rsvps.customer_id` FK → `customers` master record), link to `/customers?name=...`, and surnames render UPPERCASE for elevated-role players. No email rendered on the row.
 5. **Message History** — collapsible section
 
 ## Columns in registrations table
@@ -64,6 +64,81 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - Click toggles between NET ↔ GROSS (no-cost swap only)
 - BOTH and NONE are NOT clickable — those involve money changes
 - Uses `PATCH /api/items/:id` (admin only) to update `side_games`
+
+## Player ACTIONS column — role boundaries
+
+Player-row action buttons hit role-gated endpoints. As of the current build,
+the following are available to **manager** (and admin):
+
+| Action button | Endpoint | Role |
+|---|---|---|
+| Credit | `POST /api/items/<id>/credit` | manager |
+| WD | `POST /api/items/<id>/wd` | manager |
+| Transfer | `POST /api/items/<id>/transfer` | manager |
+| Reverse | `POST /api/items/<id>/reverse-credit` | manager |
+| Undo (revert credit application) | `POST /api/items/<id>/reverse-credit-application` | manager |
+| Apply Credit (item) | `POST /api/items/<id>/apply-to-event` | manager |
+| Apply Credit (RSVP) | `POST /api/rsvps/<id>/apply-credit` | manager |
+| Apply Credit (GG RSVP) | `POST /api/rsvps/gg/<id>/apply-credit` | manager |
+| Delete manual player | `DELETE /api/events/delete-manual-player/<id>` | manager |
+| Send Venmo / Remind | `GET/POST /api/items/<id>/balance-due-email/{preview,send}` | manager |
+
+**Event-level** Edit / Merge / Delete (entire event) remain admin-only.
+The client-side `btn-undo-credit-apply` handler also gates on
+`currentRole === 'admin' || 'manager'` so a manager's click isn't
+silently swallowed.
+
+See `docs/claude/schema.md → Deferred / Known Concessions` for the
+`require_role` decorator caveat (only enforces `"admin"`; everything
+else is effectively "any authenticated").
+
+## Player ACTIONS — Visual conventions
+
+| Element | Rendering |
+|---|---|
+| Transfer indicator | Compact circular **T** badge (`status-tag-circle status-tag-from-transfer`) — replaced the old word "Transfer" pill |
+| RSVP reminder pill | "Remind" (was "RSVP - Remind") |
+| Balance-due pill on credit-transfer rows | `-$X.XX` (was `$X.XX DUE`) |
+| Undo Credit button | "Undo" (was "Undo Credit") |
+| Delete button | Compact red **×** icon (`.btn-delete-manual` / `.btn-danger` tightened to icon style); `title="Delete"` for hover hint |
+| Sort arrows | Hidden via `.sort-arrow { display: none }`; column headers stay clickable |
+| Check Now button | Header on Events page mirrors the Transactions page button — POSTs `/api/check-now`, polls `/api/check-status`, refreshes events on completion |
+
+## Player ACTIONS — Row tinting palette
+
+Each registration row's background is set inline (per `<td>`) to one of the
+following based on status, in this precedence:
+
+| Slot | Color | When |
+|---|---|---|
+| RSVP-only / GG RSVP | `#fef3c7` (amber, italic) | `transaction_status` is `rsvp_only` / `gg_rsvp` |
+| Comp / Manager | `#dcfce7` (mint green) | `email_uid` starts with `manual-comp` |
+| GUEST | `#fbcfe8` (pink) | cleaned `user_status === "GUEST"` |
+| 1ST TIMER | `#fdba74` (peach) | cleaned `user_status === "1ST TIMER"` |
+| Manual / Credit transfer | `#dbeafe` (light blue) | `email_uid` starts with `manual-` (catches both manual entries and credit-transfer items) |
+| WD | `#fef2f2` (light red) + 0.55 opacity + line-through | `transaction_status === "wd"` |
+| Credited / Transferred / Refunded | white + 0.6 opacity (dimmed) | corresponding `transaction_status` |
+| Active member (default) | white | otherwise |
+
+Note: GUEST and 1ST TIMER are checked **before** the manual-blue tint so a
+guest who happens to be a manually-added player still reads as Guest.
+
+## Surname Uppercase for Elevated Roles
+
+`displayName(name, status)` (events.html and dashboard.js) uppercases the
+surname when `status` is `MEMBER` / `MEMBER+` / `MANAGER` / `OWNER`
+(case-insensitive). Render-only decoration; underlying data unchanged.
+Applies to active player rows, mobile cards, Inactive section, Not
+Playing section, and the player picker dropdowns. Customers page does
+**not** apply this decoration (proper case throughout).
+
+For Not Playing rows (which lack a per-item `user_status`),
+`get_rsvps_for_event` and `get_all_rsvps_bulk` surface a `customer_status`
+field on each rsvp dict — derived from `customers.current_player_status`
++ `customer_roles` (any of `manager` / `owner` / `admin` → "MANAGER";
+`active_member` → "MEMBER"; `member_plus` → "MEMBER+"). The renderer
+passes that to `displayName()` so Not Playing surnames uppercase
+consistently with the rest of the page.
 
 ## Action Items banner
 - Red notification banner on Transactions and Events pages for admin/manager

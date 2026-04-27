@@ -15,7 +15,7 @@
 `agent_action_log`, `tgf_events`, `tgf_payouts`, `contractor_payouts`
 
 Key tables not documented elsewhere in CLAUDE sub-docs:
-- `chapters` — chapter dimension table (San Antonio, Austin, DFW, Houston). Maps to Platform `org_units`. FK from `items.chapter_id` and `events.chapter_id`.
+- `chapters` — chapter dimension table. Five canonical entries: San Antonio, Austin, DFW, Houston, Hill Country (Hill Country added via `_migrate_canonicalize_chapters` after the original seed block early-returns once initialized). Maps to Platform `org_units`. FK from `items.chapter_id` and `events.chapter_id`. **Note:** `customers.chapter` is still a `VARCHAR(50)` text column — it does **not** have a `chapter_id` FK. Chapter selection on the Customers Info tab is constrained to canonical names via the UI, and `update_customer_info` writes the chapter string to both `items.chapter` (per-row) and `customers.chapter` (master). Adding `customers.chapter_id INTEGER REFERENCES chapters(chapter_id)` and phasing out the text column is deferred — see "Deferred / Known Concessions" below.
 - `courses` — golf course directory with canonical names and chapter linkage (nullable — courses can serve multiple chapters). Maps to Platform `courses`. FK from `items.course_id` and `events.course_id`.
 - `course_aliases` — spelling variants for courses (e.g., "shadow glen" → ShadowGlen, "la cantera" → La Cantera). Used during import to normalize free-text course names to canonical IDs.
 - `customer_roles` — multi-role junction table (maps to Platform `user_types`). Roles: `member`, `manager`, `admin`, `owner` (→ Platform `super_admin`), `course_contact`, `sponsor`, `vendor`. UNIQUE(customer_id, role_type). `granted_by` tracks who assigned the role.
@@ -75,3 +75,32 @@ where available. Backfills are idempotent (skip rows where `event_id IS NOT NULL
 
 See `PROJECT.md → Technical Debt & Known Concessions` for SQLite FK limitations and
 the full migration checklist for Supabase/PostgreSQL.
+
+## Data-Hygiene Migrations (idempotent, run on every `init_db`)
+
+These run from `init_db()` and are safe to re-run on every startup. Each only touches
+rows that don't already match the canonical state.
+
+| Function | What it does |
+|----------|--------------|
+| `_migrate_normalize_customer_name_case` | Converts customer first/last names that are entirely uppercase (e.g., `HORTON`) to proper case (`Horton`). Handles `Mc`/`Mac` prefixes, apostrophes (`O'Brien`), hyphens (`Smith-Jones`), and Roman-numeral suffixes (`II`, `III`, `IV`). After updating the customers master record, it propagates the new first/last/customer values to **every** matching `items` row (both the `customer` denormalized full name and the per-row `first_name` / `last_name` fields). A second pass re-syncs items rows whose `first_name`/`last_name` are still uppercase but whose linked customers row is already proper-cased. |
+| `_migrate_autocorrect_player_status` | Reconciles `customers.current_player_status` against item history. Pass 1 — anyone with a `membership` item but flagged `first_timer` / `active_guest` / NULL → upgraded to `active_member`. Pass 2 — anyone still flagged `first_timer` who has more than one item → demoted to `active_guest`. Roles in `customer_roles` are intentionally not modified. |
+| `_migrate_canonicalize_chapters` | Inserts `Hill Country` into `chapters` if missing (the original seed block early-returns once initialized, so a code-level addition wouldn't otherwise reach a live DB). Then remaps legacy chapter strings across `items.chapter`, `events.chapter`, and `customers.chapter`: `Cedar Park` → `Austin`, `Pflugerville` → `Austin`, `August` → `NULL`, `Yes_For_Both` → `NULL`. |
+
+## Deferred / Known Concessions
+
+- **`customers.chapter` is `VARCHAR(50)` text, not an FK.** `items` and `events` got
+  `chapter_id INTEGER REFERENCES chapters(chapter_id)` columns in an earlier session,
+  but `customers` was never given a `chapter_id` column. The Info-tab chapter
+  dropdown is locked to canonical chapter names from `/api/chapters`, and saves
+  flow through `update_customer_info` which writes the chapter string to
+  `customers.chapter` (and to `items.chapter` for that customer). Eventual cleanup
+  path: add `customers.chapter_id INTEGER REFERENCES chapters(chapter_id)`,
+  backfill from the existing text via name lookup, switch reads/writes to the
+  FK, then drop the text column.
+- **`require_role` decorator only enforces `"admin"`.** For any other requirement
+  (`"manager"`, `"view-only"`), the decorator only checks that the user is
+  authenticated. So `@require_role("manager")` in practice = "any authenticated
+  user". Not exploitable today (only `admin` and `manager` logins exist), but if a
+  view-only login is ever introduced, the decorator needs a true hierarchy check
+  before extending its surface.

@@ -81,7 +81,12 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - **Email fetching** via Microsoft Graph API in `email_parser/fetcher.py` — only processes emails with "New Order" subject lines; all processed email UIDs tracked in `processed_emails` table to prevent re-parsing
 - **SQLite DB** at `transaction-tracker/transactions.db` (local is empty; live data on Railway)
 - **Database layer** in `email_parser/database.py` (~12000+ lines) — schema, CRUD, allocations, COO context
-- **Scheduler** checks inbox every 15 minutes via APScheduler
+- **Scheduler** checks inbox every 5 minutes via APScheduler (default;
+  override with `CHECK_INTERVAL_MINUTES` env var). Both the transaction
+  inbox and the RSVP inbox use a 7-day lookback window when fetching
+  from Microsoft Graph (was 90 days). Dedup via `processed_emails`
+  ensures already-parsed emails are skipped, so the lookback only
+  bounds the Graph query — Anthropic spend is unchanged.
 - **Dashboard** at `/` with search, filter, sort, CSV export
 - **COO AI** — Claude-powered business intelligence chat with 6 specialist agents
 - **TGF Payouts** — tournament payout tracking with screenshot import via Claude Vision

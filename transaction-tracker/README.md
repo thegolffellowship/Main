@@ -143,7 +143,7 @@ gunicorn app:app --bind 0.0.0.0:5000 --workers 2 --timeout 120
 
 ## Automation: Run 24/7 Without Thinking About It
 
-The app already auto-checks your inbox every 15 minutes (configurable) and sends the daily report on schedule. But you need the app itself to stay running. Here's how to make it start on boot and stay alive.
+The app already auto-checks your inbox every 5 minutes (configurable via `CHECK_INTERVAL_MINUTES`) and sends the daily report on schedule. But you need the app itself to stay running. Here's how to make it start on boot and stay alive.
 
 ### Option A: systemd (Linux servers — recommended for production)
 

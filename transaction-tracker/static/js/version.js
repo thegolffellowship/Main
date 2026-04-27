@@ -1,5 +1,39 @@
-window.TGF_VERSION = "2.9.0";
+window.TGF_VERSION = "2.10.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.0",
+    date: "2026-04-27",
+    title: "Customer & Events polish: status logic, chapter cleanup, manager actions, UI tightening",
+    changes: [
+      // Customers — status derivation
+      "deriveStatus now considers customer_roles + current_player_status authoritatively, with items as fallback. Recomputed after the /api/customer-roles fetch resolves so the badge reflects the final view.",
+      "Membership-purchase auto-promote: any item whose item_name contains 'membership' lifts the customer to MEMBER, overriding stored player_status. _migrate_autocorrect_player_status mirrors this in the DB on init.",
+      "1st TIMER cap: customers flagged first_timer with more than one purchase auto-demote to GUEST (frontend) and active_guest (DB migration).",
+      // Customers — chapters
+      "Chapter dropdown locked to the canonical chapters dim table (San Antonio, Austin, DFW, Houston, Hill Country) on the Info tab and Add-Customer modal. Legacy non-canonical values surface as a (legacy) option until an admin picks a canonical one.",
+      "Hill Country added to chapters via _migrate_canonicalize_chapters (the original seed block early-returns once initialized). Same migration remaps legacy chapter strings: Cedar Park → Austin, Pflugerville → Austin, August → NULL, Yes_For_Both → NULL — applied across items.chapter, events.chapter, customers.chapter.",
+      "update_customer_info now writes chapter to the customers master record (was only writing to items). /api/customer-roles surfaces chapter per customer, so the Customers page reads it authoritatively.",
+      // Customers — list view
+      "Activity-Year filter (default: This Year) — list filters to customers with at least one real purchase in the target calendar year. Roster Import / Customer Entry / RSVP Import / RSVP Email Link items excluded from the year match and from the customer-detail Transactions tab.",
+      "Members stat card now shows a per-chapter breakdown beneath the count, sorted by chapter size desc.",
+      "Full-row tinting on the Customers list by status: MEMBER mint, MEMBER+ teal, 1ST TIMER amber, FORMER slate, GUEST white. Mobile cards add a 4px left border accent.",
+      // Customers — name normalization
+      "_migrate_normalize_customer_name_case: converts UPPERCASE customer first/last names to proper case with Mc/Mac/O'/hyphen/Roman-numeral handling. Propagates to items.first_name / items.last_name / items.customer for every matching row, plus a second pass that re-syncs items rows where customers.* is already proper but items.* is still uppercase.",
+      // Events — manager access
+      "Manager role now has access to Event player ACTIONS: Credit, WD, Transfer, Reverse, Undo (reverse-credit-application), Apply Credit (item / RSVP / GG RSVP). Event-level Edit / Merge / Delete remain admin-only. Client-side undo handler also widened to admin || manager.",
+      // Events — UI tightening
+      "TRANSFER pill on event registrations replaced with a circular T badge.",
+      "RSVP-Remind pill shortened to Remind. Balance-due pill now shows -$X.XX (was $X.XX DUE). Undo Credit button shortened to Undo.",
+      "Delete buttons across event registrations and the Transactions table replaced with a compact red × icon (title='Delete'). Sort arrows hidden visually; column headers stay clickable.",
+      "Check Now button added to the Events page header (mirrors the Transactions page button) — POSTs /api/check-now, polls /api/check-status, refreshes events on completion.",
+      "Inactive and Not Playing player names linkable to /customers?name=... — full names rendered for Not Playing rows via the new rsvps.customer_id FK lookup (resolved_name from get_rsvps_for_event / get_all_rsvps_bulk).",
+      // Events — row tinting
+      "Row tints expanded: GUEST players render with a pink (#fbcfe8) background, 1ST TIMER players render with a peach (#fdba74) background. Distinct from the existing palette (mint comp/manager, light-blue manual/credit-transfer, amber RSVP-only, light-red WD).",
+      "Surname uppercase decoration: displayName(name, status) renders the surname in UPPERCASE when status is MEMBER / MEMBER+ / MANAGER / OWNER (events.html and dashboard.js only — not the Customers page). Render-only; underlying data unchanged.",
+      // Inbox cadence
+      "Default scheduler interval reduced from 15 to 5 minutes (CHECK_INTERVAL_MINUTES env var still overrides). Inbox lookback for both the transaction inbox and the RSVP inbox reduced from 90 days to 7 days.",
+    ],
+  },
   {
     version: "2.9.0",
     date: "2026-04-22",
