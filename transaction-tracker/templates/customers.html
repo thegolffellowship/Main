@@ -239,7 +239,9 @@
                     <input type="tel" id="add-customer-phone" class="modal-input" placeholder="(555) 123-4567">
                 </label>
                 <label>Chapter
-                    <input type="text" id="add-customer-chapter" class="modal-input" placeholder="Austin, San Antonio, Dallas...">
+                    <select id="add-customer-chapter" class="modal-input">
+                        <option value="">—</option>
+                    </select>
                 </label>
             </div>
             <div class="modal-actions">
@@ -302,6 +304,7 @@
     <script>
     let allCustomers = [];
     let allItems = [];
+    let allChapters = [];   // populated from /api/chapters; canonical names + IDs
     let selectedCustomer = null;
     let activeDetailTab = "transactions";  // track active tab across re-renders
     let currentView = "list";
@@ -441,6 +444,25 @@
         });
         if (!Object.keys(chapterCounts).length) return "";
         return Object.entries(chapterCounts).sort((a, b) => b[1] - a[1])[0][0];
+    }
+
+    // Build a <select> for chapter — locked to the canonical chapter list
+    // (San Antonio / Austin / DFW / Houston). Saves the chapter NAME so the
+    // existing customer-update endpoint keeps working unchanged.
+    function chapterSelectHtml(currentValue, extraStyle) {
+        const v = String(currentValue || "");
+        const opts = ['<option value="">—</option>']
+            .concat(allChapters.map(c =>
+                `<option value="${escapeHtml(c.name)}"${c.name === v ? ' selected' : ''}>${escapeHtml(c.name)}</option>`
+            ));
+        // Include the current value as a fallback option if it doesn't match
+        // any canonical chapter (legacy data) — keeps the existing value
+        // selectable until an admin picks a canonical one.
+        const isKnown = allChapters.some(c => c.name === v);
+        if (v && !isKnown) {
+            opts.push(`<option value="${escapeHtml(v)}" selected>${escapeHtml(v)} (legacy)</option>`);
+        }
+        return `<select class="cust-edit-input modal-input" data-field="chapter" style="${extraStyle || ''}">${opts.join('')}</select>`;
     }
 
     function statusBadgeClass(status) {
@@ -723,13 +745,12 @@
             { key: "state", label: "State", value: customer.items.map(i => i.state).find(Boolean) || "" },
             { key: "zip", label: "ZIP", value: customer.items.map(i => i.zip).find(Boolean) || "" },
         ];
-        const infoHtml = infoFields.map(f =>
-            `<div class="mc-field">` +
-            `<span class="mc-field-label">${f.label}</span>` +
-            `<input type="text" class="cust-edit-input" data-field="${f.key}" value="${escapeHtml(f.value)}" ` +
-            `style="width:100%; font-size:0.78rem; padding:0.25rem 0.4rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-card);">` +
-            `</div>`
-        ).join("");
+        const infoHtml = infoFields.map(f => {
+            const inputHtml = f.key === 'chapter'
+                ? chapterSelectHtml(f.value, 'width:100%; font-size:0.78rem; padding:0.25rem 0.4rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-card);')
+                : `<input type="text" class="cust-edit-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="width:100%; font-size:0.78rem; padding:0.25rem 0.4rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-card);">`;
+            return `<div class="mc-field"><span class="mc-field-label">${f.label}</span>${inputHtml}</div>`;
+        }).join("");
 
         return `
         <div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border); overflow-x:auto;">
@@ -1202,12 +1223,15 @@
         // Editable view (hidden by default)
         html += '<div class="cust-info-edit" style="display:none;">';
         html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; max-width:500px; font-size:0.82rem;">';
-        html += infoFields.map(f =>
-            `<label style="display:flex; flex-direction:column;">` +
-            `<span style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">${f.label}</span>` +
-            `<input type="text" class="cust-edit-input modal-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="margin-top:0.2rem; padding:0.3rem 0.5rem; font-size:0.82rem;">` +
-            `</label>`
-        ).join("");
+        html += infoFields.map(f => {
+            const inputHtml = f.key === 'chapter'
+                ? chapterSelectHtml(f.value, 'margin-top:0.2rem; padding:0.3rem 0.5rem; font-size:0.82rem;')
+                : `<input type="text" class="cust-edit-input modal-input" data-field="${f.key}" value="${escapeHtml(f.value)}" style="margin-top:0.2rem; padding:0.3rem 0.5rem; font-size:0.82rem;">`;
+            return `<label style="display:flex; flex-direction:column;">` +
+                `<span style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">${f.label}</span>` +
+                inputHtml +
+                `</label>`;
+        }).join("");
         html += '</div>';
 
         // Address fields (editable)
@@ -2862,6 +2886,18 @@
             allItems = await res.json();
             allCustomers = buildCustomers(allItems);
             populateChapterFilter();
+
+            // Canonical chapter list (San Antonio / Austin / DFW / Houston)
+            try {
+                const chRes = await fetch("/api/chapters");
+                allChapters = await chRes.json() || [];
+            } catch (e) { allChapters = []; }
+            // Populate the Add-Customer modal chapter dropdown
+            const addCh = document.getElementById("add-customer-chapter");
+            if (addCh) {
+                addCh.innerHTML = '<option value="">—</option>'
+                    + allChapters.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+            }
 
             // Fetch handicap indexes for all players and merge into customer objects
             try {
