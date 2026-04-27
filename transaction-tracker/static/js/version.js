@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.10.10";
+window.TGF_VERSION = "2.10.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.11",
+    date: "2026-04-27",
+    title: "Events page: actions dropdown, child-row truncation, hole-aware HCP",
+    changes: [
+      "Per-row registration actions on the desktop Events table are now collapsed into a single '⚙ ▾' dropdown using the existing .ev-actions-toggle / .ev-actions-menu pattern. Apply Credit, Send Venmo Email / Remind, Undo, Credit, WD, Reverse, and Delete each become an .ev-menu-item, with Delete styled as .ev-menu-item-danger. New .menu-row variant is right-aligned and narrower (140px min-width). Mobile registration actions are unchanged.",
+      "Child +PAY rows: the GAMES column for child rows (e.g. 'Difference between ShadowGlen & Teravista' on Bartz's row) now wraps in a max-width 8rem div with overflow ellipsis + title attribute, so long child-row text no longer stretches the parent column. Hover for the full text.",
+      "HCP column rule on Events rows: 9-hole-only events and mixed 9/18 events show only the 9-hole net handicap (e.g. '4.1 N'); 18-hole-only events show only the 18-hole index (e.g. '8.2'). Detection counts active registrants by holes — desktop and mobile match.",
+    ],
+  },
   {
     version: "2.10.10",
     date: "2026-04-27",

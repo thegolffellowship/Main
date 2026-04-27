@@ -292,6 +292,24 @@
         .ev-menu-item:hover { background: #f3f4f6; }
         .ev-menu-item-danger { color: #dc2626; }
         .ev-menu-divider { height: 1px; background: #e5e7eb; margin: 0.25rem 0; }
+
+        /* Per-row action dropdown variants */
+        .ev-actions-menu.menu-row {
+            min-width: 140px;
+            left: auto;
+            right: 0;
+        }
+        .row-actions-toggle {
+            font-size: 0.7rem;
+            padding: 0.15rem 0.45rem;
+            background: #374151;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .row-actions-toggle:hover { background: #1f2937; }
     </style>
 </head>
 <body>
@@ -1831,6 +1849,10 @@
     function renderRegistrantsMobile(registrants, ev) {
         const overrides = allRsvpOverrides[ev.item_name] || {};
         const emailOverrides = allRsvpEmailOverrides[ev.item_name] || {};
+        // HCP display rule: 9-only or mixed → show 9-hole net; 18-only → show 18-hole.
+        const evCount9 = registrants.filter(rr => rr.holes === "9").length;
+        const evCount18 = registrants.filter(rr => rr.holes === "18").length;
+        const showHcp18Only = evCount9 === 0 && evCount18 > 0;
         let html = '';
         registrants.forEach(r => {
             const txStatus = r.transaction_status || "active";
@@ -1925,7 +1947,11 @@
             const fields = [
                 ["Order Date", r.order_date || "\u2014"],
                 ["Price", stripPriceSuffix(r.item_price) || "\u2014"],
-                ["HCP", (() => { const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined; return lh !== undefined ? lh.index_9.toFixed(1) + 'N / ' + lh.index_18.toFixed(1) : (r.handicap || "\u2014"); })()],
+                ["HCP", (() => {
+                    const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    if (lh === undefined) return r.handicap || "\u2014";
+                    return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
+                })()],
                 ["Holes", r.holes || "\u2014"],
                 ["Status", _cleanStatus(r.user_status)],
                 ["Partner Request", r.partner_request || "\u2014"],
@@ -4017,6 +4043,10 @@
 
         const overrides = allRsvpOverrides[ev.item_name] || {};
         const emailOverrides = allRsvpEmailOverrides[ev.item_name] || {};
+        // HCP display rule: 9-only or mixed → show 9-hole net; 18-only → show 18-hole.
+        const evCount9 = registrants.filter(rr => rr.holes === "9").length;
+        const evCount18 = registrants.filter(rr => rr.holes === "18").length;
+        const showHcp18Only = evCount9 === 0 && evCount18 > 0;
         filtered.forEach(r => {
             const txStatus = r.transaction_status || "active";
             const isRsvpOnly = txStatus === "rsvp_only";
@@ -4140,28 +4170,28 @@
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(stripPriceSuffix(r.item_price) || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
-                    let btns = "";
+                    // Build the row's action items as menu entries; collapsed
+                    // into a single "⚙ ▾" dropdown for compactness.
+                    const items = [];
                     if (isSynthetic) {
                         const evCreditMapSyn = rsvpCreditMap[ev.item_name] || {};
                         const creditInfoSyn = evCreditMapSyn[r.customer];
                         if (creditInfoSyn && creditInfoSyn.total_credit > 0) {
-                            btns = `<button class="btn btn-apply-credit" data-rsvp-id="${r.rsvp_id || ''}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Apply Credit</button> `;
+                            items.push(`<button class="ev-menu-item btn-apply-credit" data-rsvp-id="${r.rsvp_id || ''}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}">Apply Credit</button>`);
                         }
-                        btns += `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
+                        items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
                     } else if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
                         const evCreditMapAct = rsvpCreditMap[ev.item_name] || {};
                         const creditInfoAct = evCreditMapAct[r.customer] || null;
                         if (creditInfoAct && creditInfoAct.total_credit > 0) {
-                            btns = `<button class="btn btn-apply-credit" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Apply Credit</button> `;
+                            items.push(`<button class="ev-menu-item btn-apply-credit" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}">Apply Credit</button>`);
                         }
-                        btns += `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
+                        items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
                     } else if (isCompRow) {
-                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
+                        items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
                     } else if (txStatus === "active") {
                         const isCreditTransfer = (r.merchant || "") === "Paid Separately (Credit Transfer)";
                         if (isCreditTransfer) {
-                            // Send Venmo Email button — only when balance_due > 0
-                            // Switches to "Remind" once an email has been logged for this item
                             const cnoteAct = r.credit_note || '';
                             if (cnoteAct.startsWith('balance_due:')) {
                                 const owedAct = parseFloat(cnoteAct.split(':')[1]) || 0;
@@ -4169,27 +4199,30 @@
                                     const sendInfo = (balanceDueSendMap[ev.item_name] || {})[String(r.id)];
                                     const alreadySent = !!(sendInfo && sendInfo.status === 'sent');
                                     const label = alreadySent ? 'Remind' : 'Send Venmo Email';
-                                    const bg = alreadySent ? '#d97706' : '#3D95CE';
                                     const tipDate = alreadySent && sendInfo.sent_at
                                         ? ` (last sent ${escapeHtml(sendInfo.sent_at)}, ${sendInfo.count}x)`
                                         : '';
                                     const tip = alreadySent
                                         ? `Send another reminder${tipDate}`
                                         : 'Preview & send Venmo balance-due email';
-                                    btns += `<button class="btn btn-venmo-email" data-item-id="${r.id}" style="background:${bg};color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;" title="${tip}">${label}</button> `;
+                                    items.push(`<button class="ev-menu-item btn-venmo-email" data-item-id="${r.id}" title="${tip}">${label}</button>`);
                                 }
                             }
-                            btns += `<button class="btn btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#7c3aed;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Undo</button>`;
-                            btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
+                            items.push(`<button class="ev-menu-item btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}">Undo</button>`);
+                            items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
                         } else {
-                            btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
-                            btns += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
-                            if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
+                            items.push(`<button class="ev-menu-item btn-credit" data-credit-id="${r.id}">Credit</button>`);
+                            items.push(`<button class="ev-menu-item btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}">WD</button>`);
+                            if (isManualRow) items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
                         }
                     } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
-                        btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
+                        items.push(`<button class="ev-menu-item btn-reverse" data-reverse-id="${r.id}">Reverse</button>`);
                     }
-                    html += `<td style="${style}">${btns}</td>`;
+                    if (items.length === 0) {
+                        html += `<td style="${style}"></td>`;
+                    } else {
+                        html += `<td style="${style}"><div class="ev-actions-wrap"><button class="btn ev-actions-toggle row-actions-toggle" title="Actions">⚙ ▾</button><div class="ev-actions-menu menu-row">${items.join('')}</div></div></td>`;
+                    }
                 } else if (c.key === "user_status") {
                     const mismatch = statusMismatchReason(r);
                     const mismatchFlag = mismatch
@@ -4197,10 +4230,15 @@
                         : "";
                     html += `<td style="${style}">${escapeHtml(_cleanStatus(r.user_status))}${mismatchFlag}</td>`;
                 } else if (c.key === "handicap") {
-                    // Show live handicap index from the handicap system, fall back to item field
+                    // Show live handicap index from the handicap system, fall back to item field.
+                    // 9-only or mixed events show 9-hole net; 18-only events show 18-hole.
                     const liveHcp = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
                     if (liveHcp !== undefined) {
-                        html += `<td style="${style}"><span style="font-weight:600;">${liveHcp.index_9.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:2px;font-weight:500;">N</span><span style="font-size:0.88em;color:#64748b;"> / ${liveHcp.index_18.toFixed(1)}</span></td>`;
+                        if (showHcp18Only) {
+                            html += `<td style="${style}"><span style="font-weight:600;">${liveHcp.index_18.toFixed(1)}</span></td>`;
+                        } else {
+                            html += `<td style="${style}"><span style="font-weight:600;">${liveHcp.index_9.toFixed(1)}</span><span style="font-size:0.72em;color:#94a3b8;margin-left:2px;font-weight:500;">N</span></td>`;
+                        }
                     } else {
                         html += `<td style="${style}">${escapeHtml(r.handicap || "\u2014")}</td>`;
                     }
@@ -4254,7 +4292,8 @@
                         const noteText = escapeHtml(child.notes || child.side_games || "Payment");
                         html += `<td style="${style}; padding-left:2rem;"><div style="max-width:0; min-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${noteText}"><span style="color:${payColor}; font-size:0.65rem; font-weight:600; margin-right:0.25rem;">${payLabel}</span> ${noteText}</div></td>`;
                     } else if (c.key === "side_games") {
-                        html += `<td style="${style}; font-weight:600;${isRefundRow ? ' color:#dc2626;' : ''}">${escapeHtml(isRefundRow ? (child.side_games || "\u2014") : (child.side_games || "\u2014"))}</td>`;
+                        const childGames = child.side_games || "\u2014";
+                        html += `<td style="${style}; font-weight:600;${isRefundRow ? ' color:#dc2626;' : ''}"><div style="max-width:8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(childGames)}">${escapeHtml(childGames)}</div></td>`;
                     } else if (c.key === "item_price") {
                         html += `<td style="${style}; font-weight:600; font-variant-numeric:tabular-nums;${isRefundRow ? ' color:#dc2626;' : ''}">${escapeHtml(stripPriceSuffix(child.item_price) || "\u2014")}</td>`;
                     } else if (c.key === "order_date") {
