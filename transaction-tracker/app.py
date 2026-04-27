@@ -1570,8 +1570,8 @@ def api_audit_emails():
     if not all([tenant_id, client_id, client_secret, address]):
         return jsonify({"error": "Azure AD / email credentials not configured."}), 400
 
-    limit = request.args.get("limit", 50, type=int)
-    days = request.args.get("days", 90, type=int)
+    limit = request.args.get("limit", 25, type=int)
+    days = request.args.get("days", 7, type=int)
 
     try:
         emails = fetch_transaction_emails(

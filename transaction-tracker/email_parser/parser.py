@@ -772,28 +772,32 @@ def _validate_parsed_items(rows: list[dict]) -> list[dict]:
                     item_name, row.get("customer"), row.get("order_id"),
                 )
 
-        # 4. item_price doesn't match total_amount - transaction_fees
+        # 4. item_price doesn't match total_amount - transaction_fees + coupon_amount
         #    (parser grabbed "MEMBER = $88" instead of Subtotal $148)
         #    Works for ALL events and pricing tiers — no hardcoded rates.
+        #    Coupon discounts reduce total_amount but not item_price, so add them back.
         raw_price = (row.get("item_price") or "").replace("$", "").replace(",", "").strip()
         raw_total = (row.get("total_amount") or "").replace("$", "").replace(",", "").strip()
         raw_fees = (row.get("transaction_fees") or "").replace("$", "").replace(",", "").strip()
+        raw_coupon = (row.get("coupon_amount") or "").replace("$", "").replace(",", "").strip()
         try:
             price = float(raw_price) if raw_price else 0
             total = float(raw_total) if raw_total else 0
             fees = float(raw_fees) if raw_fees else 0
+            coupon = abs(float(raw_coupon)) if raw_coupon else 0
         except (ValueError, TypeError):
-            price, total, fees = 0, 0, 0
+            price, total, fees, coupon = 0, 0, 0, 0
 
         if price > 0 and total > 0 and fees >= 0:
-            expected_price = round(total - fees, 2)
+            expected_price = round(total - fees + coupon, 2)
             # Allow $1 tolerance for rounding differences
             if abs(price - expected_price) > 1.0:
                 row_warnings.append({
                     "code": "price_total_mismatch",
                     "message": (
                         f"item_price=${price:.2f} does not match "
-                        f"total_amount=${total:.2f} - transaction_fees=${fees:.2f} = "
+                        f"total_amount=${total:.2f} - transaction_fees=${fees:.2f}"
+                        f"{f' + coupon=${coupon:.2f}' if coupon > 0 else ''} = "
                         f"${expected_price:.2f}. Parser may have grabbed a description "
                         f"price instead of the actual charged amount. "
                         f"Order: {row.get('order_id', '?')}"
