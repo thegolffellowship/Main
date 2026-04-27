@@ -421,6 +421,15 @@
         return "badge-guest";
     }
 
+    function statusRowClass(status) {
+        const s = String(status || "").trim().toUpperCase();
+        if (s === "MEMBER") return "cust-row-member";
+        if (s === "MEMBER+") return "cust-row-member-plus";
+        if (s === "1ST TIMER") return "cust-row-first-timer";
+        if (s === "FORMER" || s === "INACTIVE") return "cust-row-former";
+        return "cust-row-guest";
+    }
+
     /** Build a "LastName, FirstName..." key for consistent name sorting. */
     function lastNameSortKey(name) {
         const s = String(name).trim();
@@ -944,7 +953,7 @@
         filtered.forEach(c => {
             const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
             html += `
-            <tr data-name="${escapeHtml(c.name)}" class="cust-row-clickable ${isExpanded ? 'expanded' : ''}">
+            <tr data-name="${escapeHtml(c.name)}" class="cust-row-clickable ${statusRowClass(c.status)} ${isExpanded ? 'expanded' : ''}">
                 <td><strong>${escapeHtml(displayName(c.name))}</strong>${c.creditTotal > 0 ? ` <span class="status-tag status-tag-credited">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})} Credit</span>` : ''}</td>
                 <td><span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span></td>
                 <td>${escapeHtml(c.chapter || "\u2014")}</td>
@@ -997,7 +1006,7 @@
         container.innerHTML = filtered.map(c => {
             const isSelected = selectedCustomer && selectedCustomer.name === c.name;
             return `
-            <div class="customer-card ${isSelected ? 'selected' : ''}" data-name="${escapeHtml(c.name)}">
+            <div class="customer-card ${statusRowClass(c.status)} ${isSelected ? 'selected' : ''}" data-name="${escapeHtml(c.name)}">
                 <div class="customer-card-name">
                     ${escapeHtml(displayName(c.name))}
                     <span class="status-badge-sm ${statusBadgeClass(c.status)}">${escapeHtml(c.status)}</span>

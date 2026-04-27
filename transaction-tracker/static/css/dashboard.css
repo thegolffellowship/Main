@@ -670,6 +670,23 @@ tr.txn-highlight {
 .badge-guest { background: #eff6ff; color: #1e40af; }
 .badge-first-timer { background: #fef3c7; color: #92400e; }
 
+/* Customers list — full-row tinting by status (mirrors the badge palette) */
+tr.cust-row-member { background: #f0fdf4; }
+tr.cust-row-member:hover { background: #dcfce7; }
+tr.cust-row-member-plus { background: #ecfccb; }
+tr.cust-row-member-plus:hover { background: #d9f99d; }
+tr.cust-row-first-timer { background: #fefce8; }
+tr.cust-row-first-timer:hover { background: #fef9c3; }
+tr.cust-row-former { background: #f8fafc; color: #64748b; }
+tr.cust-row-former:hover { background: #f1f5f9; }
+tr.cust-row-guest { background: #ffffff; }
+tr.cust-row-guest:hover { background: #f8fafc; }
+.customer-card.cust-row-member { background: #f0fdf4; border-left: 3px solid #16a34a; }
+.customer-card.cust-row-member-plus { background: #ecfccb; border-left: 3px solid #65a30d; }
+.customer-card.cust-row-first-timer { background: #fefce8; border-left: 3px solid #d97706; }
+.customer-card.cust-row-former { background: #f8fafc; border-left: 3px solid #94a3b8; opacity: 0.85; }
+.customer-card.cust-row-guest { border-left: 3px solid #cbd5e1; }
+
 /* View toggle */
 .view-toggle {
     display: inline-flex;

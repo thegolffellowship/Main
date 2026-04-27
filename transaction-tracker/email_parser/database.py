@@ -1117,6 +1117,63 @@ def _migrate_add_member_plus_status(conn: sqlite3.Connection) -> None:
     logger.info("customers table migrated: member_plus status added")
 
 
+_ROMAN_RE = re.compile(r"^(i{1,3}|iv|v|vi{0,3}|ix|x)$")
+
+def _proper_case_word(w: str) -> str:
+    wl = w.lower()
+    if _ROMAN_RE.match(wl):
+        return wl.upper()
+    if "-" in w:
+        return "-".join(_proper_case_word(p) for p in w.split("-"))
+    if "'" in w:
+        return "'".join(p.capitalize() for p in wl.split("'"))
+    if wl.startswith("mc") and len(wl) > 2:
+        return "Mc" + wl[2].upper() + wl[3:]
+    if wl.startswith("mac") and len(wl) > 3 and wl[3] in "abcdefghijklmnopqrstuvwxyz":
+        return "Mac" + wl[3].upper() + wl[4:]
+    return wl.capitalize()
+
+
+def _proper_case(s: str | None) -> str | None:
+    if not s:
+        return s
+    return " ".join(_proper_case_word(w) for w in s.split())
+
+
+def _migrate_normalize_customer_name_case(conn: sqlite3.Connection) -> int:
+    """Convert all-uppercase customer first/last names to proper case.
+
+    Idempotent — only touches names where .isupper() is True (no
+    lowercase letters anywhere). Mixed-case names like "McDonald" are
+    left alone. Updates customers.first_name / last_name and propagates
+    the new "First Last" into items.customer for matching customer_id.
+    """
+    rows = conn.execute(
+        "SELECT customer_id, first_name, last_name FROM customers"
+    ).fetchall()
+    updated = 0
+    for r in rows:
+        f, l = r["first_name"] or "", r["last_name"] or ""
+        new_f = _proper_case(f) if (f and f.isupper() and any(ch.isalpha() for ch in f)) else f
+        new_l = _proper_case(l) if (l and l.isupper() and any(ch.isalpha() for ch in l)) else l
+        if new_f == f and new_l == l:
+            continue
+        conn.execute(
+            "UPDATE customers SET first_name = ?, last_name = ? WHERE customer_id = ?",
+            (new_f, new_l, r["customer_id"]),
+        )
+        full = f"{new_f or ''} {new_l or ''}".strip()
+        if full:
+            conn.execute(
+                "UPDATE items SET customer = ? WHERE customer_id = ? AND customer IS NOT NULL",
+                (full, r["customer_id"]),
+            )
+        updated += 1
+    if updated:
+        logger.info("Normalized name case for %d customer(s)", updated)
+    return updated
+
+
 def _migrate_dedup_expense_transactions(conn: sqlite3.Connection) -> None:
     """Remove duplicate expense_transactions rows.
 
@@ -2154,6 +2211,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_add_member_plus_status(conn)
         except Exception as e:
             logger.warning("member_plus status migration failed: %s", e)
+
+        # Normalize all-uppercase customer names to proper case (idempotent)
+        try:
+            _migrate_normalize_customer_name_case(conn)
+        except Exception as e:
+            logger.warning("Customer name case normalization failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
