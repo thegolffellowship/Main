@@ -395,7 +395,7 @@
     function deriveStatus(items, roles, currentPlayerStatus) {
         roles = Array.isArray(roles) ? roles : [];
         const itemCount = Array.isArray(items) ? items.length : 0;
-        const ELEVATED = ['owner', 'admin', 'manager', 'member'];
+        const ELEVATED = ['owner', 'admin', 'manager', 'golfer'];
         if (roles.some(r => ELEVATED.includes(r))) return "MEMBER";
 
         // A TGF Membership purchase auto-promotes to MEMBER regardless of
@@ -1264,7 +1264,7 @@
         </div>`;
 
         // Roles editor (checkboxes)
-        const ALL_ROLES = ['member','manager','admin','owner','course_contact','sponsor','vendor'];
+        const ALL_ROLES = ['golfer','manager','admin','owner','course_contact','sponsor','vendor'];
         const custRoles = customer.roles || [];
         html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
             <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Roles</div>

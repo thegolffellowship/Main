@@ -3400,21 +3400,21 @@
         const selected = (_cleanStatus(item.user_status) || "").toUpperCase();
         const hasRole = (r) => roles.includes(r);
 
-        if (selected === "MEMBER" && !hasRole("member")) {
-            return {reason: "Selected MEMBER but customer record has no 'member' role"};
+        if (selected === "MEMBER" && !hasRole("golfer")) {
+            return {reason: "Selected MEMBER but customer record has no 'golfer' role"};
         }
         if (selected === "MANAGER" && !hasRole("manager")) {
             return {reason: "Selected MANAGER but customer record has no 'manager' role"};
         }
-        if (selected === "GUEST" && hasRole("member")) {
+        if (selected === "GUEST" && hasRole("golfer")) {
             return {reason: "Selected GUEST but customer IS a member"};
         }
         // Members get exactly one 1ST TIMER opportunity
-        if (selected === "1ST TIMER" && hasRole("member") && firstTimerUsed > 1) {
+        if (selected === "1ST TIMER" && hasRole("golfer") && firstTimerUsed > 1) {
             return {reason: "Member has already used their 1st Timer registration"};
         }
         // Non-members: warn if they've played before
-        if (selected === "1ST TIMER" && firstTimerEver === false && !hasRole("member")) {
+        if (selected === "1ST TIMER" && firstTimerEver === false && !hasRole("golfer")) {
             return {reason: "Selected 1st TIMER but customer has played before"};
         }
         return null;

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.10.6";
+window.TGF_VERSION = "2.10.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.7",
+    date: "2026-04-27",
+    title: "Rename user role 'member' → 'golfer' (avoids collision with player_status MEMBER)",
+    changes: [
+      "Customer roles: the lowercase 'member' user-role has been renamed to 'golfer' so it no longer collides with the uppercase player_status display value 'MEMBER'. Player_status values (MEMBER, MEMBER+, 1ST TIMER, GUEST, FORMER, active_member, expired_member) are unchanged.",
+      "New _migrate_rename_member_role_to_golfer() runs at startup, recreates customer_roles with the updated CHECK constraint (golfer, manager, admin, owner, course_contact, sponsor, vendor) and maps existing role_type='member' rows to 'golfer'. Idempotent.",
+      "Updated callers: customer_roles seed in _migrate_seed_customer_roles, valid_roles set in /api/replace-customer-roles, ELEVATED + ALL_ROLES arrays in customers.html, and four hasRole() business-rule guards in events.html.",
+    ],
+  },
   {
     version: "2.10.6",
     date: "2026-04-27",

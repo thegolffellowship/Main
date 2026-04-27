@@ -989,19 +989,70 @@ def _migrate_normalize_venmo_customer_names(conn: sqlite3.Connection) -> None:
         logger.info("Normalized %d Venmo acct_transactions.customer values to canonical names", normalized)
 
 
+def _migrate_rename_member_role_to_golfer(conn: sqlite3.Connection) -> None:
+    """Rename the 'member' user role to 'golfer' to avoid collision with the
+    player_status display value 'MEMBER'. Idempotent.
+
+    Recreates customer_roles with the new CHECK constraint, copying existing
+    rows and mapping role_type='member' → 'golfer'. Player_status values like
+    'active_member' / 'expired_member' / 'MEMBER' are NOT touched — those are
+    a different field.
+    """
+    # Cheap probe: does the existing CHECK still allow 'member'?
+    sql_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='customer_roles'"
+    ).fetchone()
+    if not sql_row:
+        return  # Table doesn't exist yet — fresh CREATE TABLE will use 'golfer'.
+    if "'member'" not in (sql_row["sql"] or ""):
+        return  # Already migrated.
+
+    logger.info("Migrating customer_roles: renaming role 'member' → 'golfer'")
+    conn.executescript(
+        """
+        CREATE TABLE customer_roles_new (
+            role_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL
+                        REFERENCES customers(customer_id)
+                        ON DELETE CASCADE,
+            role_type   VARCHAR(30) NOT NULL
+                        CHECK (role_type IN (
+                            'golfer', 'manager', 'admin', 'owner',
+                            'course_contact', 'sponsor', 'vendor'
+                        )),
+            granted_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            granted_by  INTEGER REFERENCES customers(customer_id),
+            UNIQUE(customer_id, role_type)
+        );
+        INSERT OR IGNORE INTO customer_roles_new
+            (role_id, customer_id, role_type, granted_at, granted_by)
+        SELECT role_id, customer_id,
+               CASE WHEN role_type = 'member' THEN 'golfer' ELSE role_type END,
+               granted_at, granted_by
+        FROM customer_roles;
+        DROP TABLE customer_roles;
+        ALTER TABLE customer_roles_new RENAME TO customer_roles;
+        """
+    )
+    renamed = conn.execute(
+        "SELECT COUNT(*) as c FROM customer_roles WHERE role_type = 'golfer'"
+    ).fetchone()["c"]
+    logger.info("customer_roles migration complete; %d rows now have role 'golfer'", renamed)
+
+
 def _migrate_seed_customer_roles(conn: sqlite3.Connection) -> None:
     """One-time seed of customer_roles junction table + first_timer_ever backfill.
 
     Idempotent — skips if customer_roles already has rows.
 
     Maps to Platform user_types table:
-      'member', 'manager', 'admin', 'owner' (→ super_admin at migration),
+      'golfer', 'manager', 'admin', 'owner' (→ super_admin at migration),
       'course_contact', 'sponsor', 'vendor'
 
     Seed logic:
-      - Kerry Niester → owner + admin + member
-      - Robert Straiton, James Jones → manager + member
-      - All customers with current_player_status in (active_member, expired_member) → member
+      - Kerry Niester → owner + admin + golfer
+      - Robert Straiton, James Jones → manager + golfer
+      - All customers with current_player_status in (active_member, expired_member) → golfer
       - first_timer_ever backfilled: 0 for anyone with paid registrations, 1 for all others
     """
     existing = conn.execute("SELECT COUNT(*) as c FROM customer_roles").fetchone()["c"]
@@ -1031,28 +1082,28 @@ def _migrate_seed_customer_roles(conn: sqlite3.Connection) -> None:
     james_id = _find_customer(conn, "James", "Jones")
 
     if kerry_id:
-        for role in ("owner", "admin", "member"):
+        for role in ("owner", "admin", "golfer"):
             _add_role(conn, kerry_id, role)
-        logger.info("Assigned owner+admin+member to Kerry Niester (customer_id=%s)", kerry_id)
+        logger.info("Assigned owner+admin+golfer to Kerry Niester (customer_id=%s)", kerry_id)
 
     if robert_id:
-        for role in ("manager", "member"):
+        for role in ("manager", "golfer"):
             _add_role(conn, robert_id, role, granted_by=kerry_id)
-        logger.info("Assigned manager+member to Robert Straiton (customer_id=%s)", robert_id)
+        logger.info("Assigned manager+golfer to Robert Straiton (customer_id=%s)", robert_id)
 
     if james_id:
-        for role in ("manager", "member"):
+        for role in ("manager", "golfer"):
             _add_role(conn, james_id, role, granted_by=kerry_id)
-        logger.info("Assigned manager+member to James Jones (customer_id=%s)", james_id)
+        logger.info("Assigned manager+golfer to James Jones (customer_id=%s)", james_id)
 
-    # Bulk-assign 'member' role to all active/expired members
-    member_ids = conn.execute(
+    # Bulk-assign 'golfer' role to all active/expired members
+    golfer_ids = conn.execute(
         """SELECT customer_id FROM customers
            WHERE current_player_status IN ('active_member', 'expired_member')
-             AND customer_id NOT IN (SELECT customer_id FROM customer_roles WHERE role_type = 'member')"""
+             AND customer_id NOT IN (SELECT customer_id FROM customer_roles WHERE role_type = 'golfer')"""
     ).fetchall()
-    for row in member_ids:
-        _add_role(conn, row["customer_id"], "member")
+    for row in golfer_ids:
+        _add_role(conn, row["customer_id"], "golfer")
 
     total_roles = conn.execute("SELECT COUNT(*) as c FROM customer_roles").fetchone()["c"]
     logger.info("Seeded %d customer_roles entries", total_roles)
@@ -2112,7 +2163,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                             ON DELETE CASCADE,
                 role_type   VARCHAR(30) NOT NULL
                             CHECK (role_type IN (
-                                'member', 'manager', 'admin', 'owner',
+                                'golfer', 'manager', 'admin', 'owner',
                                 'course_contact', 'sponsor', 'vendor'
                             )),
                 granted_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2289,6 +2340,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_dedupe_payout_customers(conn)
         except Exception as e:
             logger.warning("Payout customer dedup migration failed: %s", e)
+
+        # Rename 'member' role → 'golfer' (no-op if already migrated).
+        # Must run before the seed so the seed sees the new CHECK constraint.
+        try:
+            _migrate_rename_member_role_to_golfer(conn)
+        except Exception as e:
+            logger.warning("Member→golfer role rename migration failed: %s", e)
 
         # Seed customer_roles junction + backfill first_timer_ever
         try:

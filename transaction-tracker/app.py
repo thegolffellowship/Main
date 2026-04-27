@@ -2434,7 +2434,7 @@ def api_sync_customer_roles():
     roles = data.get("roles", [])
     if not customer_name:
         return jsonify({"error": "customer_name required"}), 400
-    valid_roles = {"member", "manager", "admin", "owner", "course_contact", "sponsor", "vendor"}
+    valid_roles = {"golfer", "manager", "admin", "owner", "course_contact", "sponsor", "vendor"}
     roles = [r for r in roles if r in valid_roles]
     with _connect() as conn:
         row = conn.execute(
