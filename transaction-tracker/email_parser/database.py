@@ -744,6 +744,7 @@ def _migrate_create_dim_tables(conn: sqlite3.Connection) -> None:
         ("Austin", "AUS", "America/Chicago"),
         ("DFW", "DFW", "America/Chicago"),
         ("Houston", "HOU", "America/Chicago"),
+        ("Hill Country", "HC", "America/Chicago"),
     ]
     for name, code, tz in chapter_data:
         conn.execute(
@@ -1242,6 +1243,56 @@ def _migrate_autocorrect_player_status(conn: sqlite3.Connection) -> int:
             upgraded, demoted,
         )
     return upgraded + demoted
+
+
+def _migrate_canonicalize_chapters(conn: sqlite3.Connection) -> int:
+    """Ensure the canonical chapters list includes Hill Country, then remap
+    legacy items.chapter / events.chapter / customers.chapter values to the
+    canonical chapter list. Idempotent — only touches non-canonical strings.
+
+    Cedar Park → Austin (Austin-area sub-locale)
+    Pflugerville → Austin (Austin-area sub-locale)
+    August → NULL (likely a truncated/typo entry — clear so an admin can re-tag)
+    Yes_For_Both → NULL (form-quirk garbage)
+    """
+    # Ensure Hill Country exists in the chapters dim table — the original
+    # seed block early-returns once initialized, so a code-level addition
+    # to chapter_data wouldn't otherwise hit the live DB.
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO chapters (name, short_code, timezone) VALUES (?, ?, ?)",
+            ("Hill Country", "HC", "America/Chicago"),
+        )
+    except sqlite3.OperationalError:
+        pass  # chapters table not yet created on a brand-new DB — handled by full seed
+
+    REMAP = {
+        "Cedar Park": "Austin",
+        "Pflugerville": "Austin",
+        "August": None,
+        "Yes_For_Both": None,
+    }
+    total = 0
+    for table in ("items", "events", "customers"):
+        # Skip tables that don't have a chapter column (defensive)
+        cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "chapter" not in cols:
+            continue
+        for legacy, canonical in REMAP.items():
+            if canonical is None:
+                rc = conn.execute(
+                    f"UPDATE {table} SET chapter = NULL WHERE chapter = ?",
+                    (legacy,),
+                ).rowcount
+            else:
+                rc = conn.execute(
+                    f"UPDATE {table} SET chapter = ? WHERE chapter = ?",
+                    (canonical, legacy),
+                ).rowcount
+            total += rc
+    if total:
+        logger.info("Canonicalized chapter values across items/events/customers (%d rows updated)", total)
+    return total
 
 
 def _migrate_dedup_expense_transactions(conn: sqlite3.Connection) -> None:
@@ -2293,6 +2344,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_autocorrect_player_status(conn)
         except Exception as e:
             logger.warning("player_status autocorrect failed: %s", e)
+
+        # Remap legacy chapter values to the canonical chapter list
+        try:
+            _migrate_canonicalize_chapters(conn)
+        except Exception as e:
+            logger.warning("chapter canonicalization failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts

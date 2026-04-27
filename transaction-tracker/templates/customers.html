@@ -585,11 +585,15 @@
     }
 
     function populateChapterFilter() {
-        const chapters = [...new Set(allCustomers.map(c => c.chapter).filter(Boolean))].sort();
+        // Use the canonical chapter list when available, falling back to
+        // distinct values from customer data on first paint (before the
+        // /api/chapters fetch resolves).
         const select = document.getElementById("filter-chapter");
-        // Keep the "All Chapters" option, remove old dynamic options
+        const canonical = (allChapters && allChapters.length)
+            ? allChapters.map(c => c.name)
+            : [...new Set(allCustomers.map(c => c.chapter).filter(Boolean))].sort();
         select.innerHTML = '<option value="">All Chapters</option>';
-        chapters.forEach(ch => {
+        canonical.forEach(ch => {
             const opt = document.createElement("option");
             opt.value = ch;
             opt.textContent = ch;
@@ -2887,11 +2891,13 @@
             allCustomers = buildCustomers(allItems);
             populateChapterFilter();
 
-            // Canonical chapter list (San Antonio / Austin / DFW / Houston)
+            // Canonical chapter list (San Antonio / Austin / DFW / Houston / Hill Country)
             try {
                 const chRes = await fetch("/api/chapters");
                 allChapters = await chRes.json() || [];
             } catch (e) { allChapters = []; }
+            // Re-populate the chapter filter dropdown with the canonical list
+            populateChapterFilter();
             // Populate the Add-Customer modal chapter dropdown
             const addCh = document.getElementById("add-customer-chapter");
             if (addCh) {
