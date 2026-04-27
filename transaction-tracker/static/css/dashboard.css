@@ -1084,7 +1084,7 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 .status-tag-credited { background: #fef3c7; color: #92400e; }
 .status-tag-transferred { background: #dbeafe; color: #1e40af; }
 .status-tag-refunded { background: #fce7f3; color: #9d174d; }
-.status-tag-from-transfer { background: #ecfdf5; color: #065f46; }
+.status-tag-from-transfer { background: #1e40af; color: #ffffff; border-color: #1e3a8a; }
 .status-tag-wd { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
 .coupon-badge {
     display: inline-flex;
@@ -1118,6 +1118,11 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
     background: #dcfce7;
     color: #166534;
     border: 1px solid #86efac;
+}
+/* Tighten spacing when two circular status tags appear side-by-side
+   (e.g. circled T transfer + circled $ paid) — group them visually. */
+.status-tag-circle + .status-tag-circle {
+    margin-left: 0;
 }
 
 tr.row-credited { opacity: 0.6; }

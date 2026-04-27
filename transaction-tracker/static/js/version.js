@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.10.9";
+window.TGF_VERSION = "2.10.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.10",
+    date: "2026-04-27",
+    title: "Tighter T+$ badge spacing; T badge re-tinted to deeper navy",
+    changes: [
+      "The circled 'T' (credit transfer) badge was mint green (#ecfdf5/#065f46) which clashed with the light-blue (#dbeafe) row tint applied to credit-transfer rows. Re-tinted to a deeper navy (#1e40af bg, white text, #1e3a8a border) so it harmonizes with the row color and reads cleanly.",
+      "Added .status-tag-circle + .status-tag-circle adjacent-sibling rule to remove the inter-margin between two circular badges (e.g. T+$ on a paid credit-transfer row). They now group visually instead of looking like two unrelated tags.",
+    ],
+  },
   {
     version: "2.10.9",
     date: "2026-04-27",
