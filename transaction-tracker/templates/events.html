@@ -1909,7 +1909,15 @@
             ];
 
             html += `
-            <div class="mobile-card${statusClass}" style="${(isRsvpOnly || isGgRsvp) ? 'background:#fef3c7;font-style:italic;' : isComp ? 'background:#dcfce7;' : isManual ? 'background:#dbeafe;' : ''}" data-id="${r.id}">
+            <div class="mobile-card${statusClass}" style="${(() => {
+                const u = (_cleanStatus(r.user_status) || '').toUpperCase();
+                if (isRsvpOnly || isGgRsvp) return 'background:#fef3c7;font-style:italic;';
+                if (isComp) return 'background:#dcfce7;';
+                if (u === 'GUEST') return 'background:#fce7f3;';
+                if (u === '1ST TIMER') return 'background:#ede9fe;';
+                if (isManual) return 'background:#dbeafe;';
+                return '';
+            })()}" data-id="${r.id}">
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         ${circleHtml}
@@ -4031,7 +4039,15 @@
 
             DETAIL_COLUMNS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
-                const rowBg = (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;' : isCompRow ? 'background-color:#dcfce7;' : isManualRow ? 'background-color:#dbeafe;' : '';
+                const _ustat = (_cleanStatus(r.user_status) || '').toUpperCase();
+                const isGuestRow = _ustat === 'GUEST';
+                const isFirstTimerRow = _ustat === '1ST TIMER';
+                const rowBg = (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;'
+                    : isCompRow ? 'background-color:#dcfce7;'
+                    : isGuestRow ? 'background-color:#fce7f3;'
+                    : isFirstTimerRow ? 'background-color:#ede9fe;'
+                    : isManualRow ? 'background-color:#dbeafe;'
+                    : '';
                 const style = (vis ? '' : 'display:none;') + rowBg;
                 if (c.key === "rsvp") {
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" data-player-email="${escapeHtml(r.customer_email || '')}" title="${circleTitle}"></span></td>`;
