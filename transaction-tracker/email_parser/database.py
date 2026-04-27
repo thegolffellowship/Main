@@ -989,6 +989,44 @@ def _migrate_normalize_venmo_customer_names(conn: sqlite3.Connection) -> None:
         logger.info("Normalized %d Venmo acct_transactions.customer values to canonical names", normalized)
 
 
+def _migrate_move_noncanonical_side_games_to_notes(conn: sqlite3.Connection) -> int:
+    """Move free-form text out of items.side_games into items.notes so the
+    Side Games column stays canonical (NET / GROSS / BOTH / NONE).
+
+    Triggered when admins typed descriptions like 'Difference between ShadowGlen
+    & Teravista' into side_games on a manual +PAY because there was no Notes
+    column at the time. Naturally idempotent — once moved, side_games is set
+    to NULL so subsequent runs find nothing to migrate.
+    """
+    canonical = ("NET", "GROSS", "BOTH", "NONE")
+    rows = conn.execute(
+        f"""SELECT id, side_games, notes FROM items
+            WHERE side_games IS NOT NULL
+              AND TRIM(side_games) != ''
+              AND UPPER(TRIM(side_games)) NOT IN ({','.join('?' * len(canonical))})"""
+        , canonical,
+    ).fetchall()
+    moved = 0
+    for r in rows:
+        text = (r["side_games"] or "").strip()
+        if not text:
+            continue
+        existing = (r["notes"] or "").strip()
+        # Skip if the same text is already in notes (avoid duplication on re-runs)
+        if existing and text in existing:
+            new_notes = existing
+        else:
+            new_notes = (existing + " — " + text).strip(" —") if existing else text
+        conn.execute(
+            "UPDATE items SET notes = ?, side_games = NULL WHERE id = ?",
+            (new_notes, r["id"]),
+        )
+        moved += 1
+    if moved:
+        logger.info("Moved non-canonical side_games text to notes on %d items", moved)
+    return moved
+
+
 def _migrate_relabel_credit_pool_items(conn: sqlite3.Connection) -> int:
     """Rewrite item_name on credit-pool rows so they read as 'Excess credit — <event>'
     or 'Overpayment credit — <event>' instead of looking like a registration on
@@ -2376,6 +2414,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_relabel_credit_pool_items(conn)
         except Exception as e:
             logger.warning("Credit-pool relabel migration failed: %s", e)
+
+        # Move non-canonical text from items.side_games to items.notes so the
+        # Side Games column stays NET/GROSS/BOTH/NONE only.
+        try:
+            _migrate_move_noncanonical_side_games_to_notes(conn)
+        except Exception as e:
+            logger.warning("side_games → notes migration failed: %s", e)
 
         # Seed customer_roles junction + backfill first_timer_ever
         try:

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.10.14";
+window.TGF_VERSION = "2.10.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.15",
+    date: "2026-04-27",
+    title: "Migrate non-canonical side_games text into notes (one-time, idempotent)",
+    changes: [
+      "New startup migration _migrate_move_noncanonical_side_games_to_notes() finds items where side_games has free-form text (anything other than NET / GROSS / BOTH / NONE / empty) and moves that text into the notes column, then sets side_games = NULL. If notes already had content, the moved text is appended with ' — ' as a separator; if notes already contains the same string, no change. Naturally idempotent — once side_games is NULL, the row no longer matches the SELECT.",
+      "Concrete cleanup: Bartz's two '+PAY Difference between ...' rows and any similar manual entries get the descriptive text moved out of Side Games and into Notes at the data layer (matching what v2.10.14 was already doing in display).",
+    ],
+  },
   {
     version: "2.10.14",
     date: "2026-04-27",
