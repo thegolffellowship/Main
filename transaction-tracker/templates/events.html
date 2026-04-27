@@ -1684,6 +1684,15 @@
     }
 
     // Coupon badge — small purple "C" circle when an item used a coupon.
+    // Credit-pool rows (excess credit from a transfer, overpayment credit from
+    // an overpaid balance-due) are credited items not tied to an event
+    // registration. Reverse on these silently flips status → 'active' and clears
+    // credit_note, leaving a phantom player row, so we hide Reverse on them.
+    function isCreditPoolRow(row) {
+        const uid = (row && row.email_uid) || "";
+        return uid.startsWith("credit-excess-") || uid.startsWith("overpayment-credit-");
+    }
+
     function couponTag(row) {
         const code = (row.coupon_code || "").trim();
         const amt = (row.coupon_amount || "").trim();
@@ -1941,7 +1950,7 @@
                 actionBtn += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
                 if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
-                actionBtn = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
+                actionBtn = isCreditPoolRow(r) ? '' : `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
             }
 
             const fields = [
@@ -2142,7 +2151,9 @@
                                 ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer)}"><strong>${escapeHtml(displayName(mInactiveName, r.user_status))}</strong></a>`
                                 : `<strong>${escapeHtml(displayName(mInactiveName, r.user_status))}</strong>`;
                             if (r.credit_amount) mobileInactiveHtml += ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>`;
-                            mobileInactiveHtml += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
+                            if (!isCreditPoolRow(r)) {
+                                mobileInactiveHtml += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
+                            }
                             mobileInactiveHtml += `</div>`;
                         });
                         mobileInactiveHtml += '</div></div>';
@@ -4216,7 +4227,9 @@
                             if (isManualRow) items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
                         }
                     } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
-                        items.push(`<button class="ev-menu-item btn-reverse" data-reverse-id="${r.id}">Reverse</button>`);
+                        if (!isCreditPoolRow(r)) {
+                            items.push(`<button class="ev-menu-item btn-reverse" data-reverse-id="${r.id}">Reverse</button>`);
+                        }
                     }
                     if (items.length === 0) {
                         html += `<td style="${style}"></td>`;
@@ -4351,8 +4364,10 @@
                     ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer)}"><strong>${escapeHtml(displayName(inactiveName, r.user_status))}</strong></a>`
                     : `<strong>${escapeHtml(displayName(inactiveName, r.user_status))}</strong>`;
                 if (r.credit_amount) html += ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>`;
-                // Reverse button
-                html += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
+                // Reverse button — hidden on credit-pool rows; reverse the parent transfer instead.
+                if (!isCreditPoolRow(r)) {
+                    html += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
+                }
                 html += `</div>`;
             });
             html += '</div></div>';

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.10.11";
+window.TGF_VERSION = "2.10.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.12",
+    date: "2026-04-27",
+    title: "Credit-pool rows: hide Reverse + descriptive item_name",
+    changes: [
+      "Reverse button is hidden on credit-pool rows (excess credit from a transfer, overpayment credit from a Venmo overpayment) on both desktop and mobile, in the Players action dropdown and the Inactive section. Reverse on these rows used to silently flip transaction_status from 'credited' → 'active' and clear credit_note, leaving a phantom player on the event (the Todd McConahy ghost). To unwind a credit pool row now, reverse the parent credit-transfer instead, which deletes the excess via reverse_credit_application's existing cleanup.",
+      "apply_credit_to_rsvp() and _post_overpayment_credit() now write item_name as 'Excess credit — <event>' / 'Overpayment credit — <event>' so the row visibly differentiates from a registration. New _migrate_relabel_credit_pool_items() backfills existing rows on startup; idempotent.",
+      "New JS helper isCreditPoolRow(row) (events.html) detects credit-pool rows by email_uid prefix (credit-excess- / overpayment-credit-).",
+    ],
+  },
   {
     version: "2.10.11",
     date: "2026-04-27",

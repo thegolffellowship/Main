@@ -989,6 +989,29 @@ def _migrate_normalize_venmo_customer_names(conn: sqlite3.Connection) -> None:
         logger.info("Normalized %d Venmo acct_transactions.customer values to canonical names", normalized)
 
 
+def _migrate_relabel_credit_pool_items(conn: sqlite3.Connection) -> int:
+    """Rewrite item_name on credit-pool rows so they read as 'Excess credit — <event>'
+    or 'Overpayment credit — <event>' instead of looking like a registration on
+    the event itself. Idempotent — only touches rows that haven't been relabeled.
+    """
+    updated = 0
+    rows = conn.execute(
+        """SELECT id, email_uid, item_name FROM items
+           WHERE (email_uid LIKE 'credit-excess-%' OR email_uid LIKE 'overpayment-credit-%')
+             AND item_name IS NOT NULL
+             AND item_name NOT LIKE 'Excess credit %'
+             AND item_name NOT LIKE 'Overpayment credit %'"""
+    ).fetchall()
+    for r in rows:
+        prefix = "Overpayment credit" if (r["email_uid"] or "").startswith("overpayment-credit-") else "Excess credit"
+        new_name = f"{prefix} — {r['item_name']}".strip(" —")
+        conn.execute("UPDATE items SET item_name = ? WHERE id = ?", (new_name, r["id"]))
+        updated += 1
+    if updated:
+        logger.info("Relabeled %d credit-pool items with descriptive item_name", updated)
+    return updated
+
+
 def _migrate_rename_member_role_to_golfer(conn: sqlite3.Connection) -> None:
     """Rename the 'member' user role to 'golfer' to avoid collision with the
     player_status display value 'MEMBER'. Idempotent.
@@ -2347,6 +2370,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_rename_member_role_to_golfer(conn)
         except Exception as e:
             logger.warning("Member→golfer role rename migration failed: %s", e)
+
+        # Relabel credit-pool items (excess + overpayment) with descriptive names.
+        try:
+            _migrate_relabel_credit_pool_items(conn)
+        except Exception as e:
+            logger.warning("Credit-pool relabel migration failed: %s", e)
 
         # Seed customer_roles junction + backfill first_timer_ever
         try:
@@ -8677,7 +8706,7 @@ def _post_overpayment_credit(
         (
             uid,
             rsvp_item.get("customer"), rsvp_item.get("customer_email"),
-            rsvp_item.get("item_name"),
+            f"Overpayment credit — {rsvp_item.get('item_name') or ''}".strip(" —"),
             f"${overpayment:.2f}",
             f"Overpayment credit — ${overpayment:.2f} from prior Venmo payment",
             rsvp_item.get("chapter") or "",
@@ -8870,7 +8899,7 @@ def apply_credit_to_rsvp(
                 (
                     uid,
                     rsvp_item.get("customer"), rsvp_item.get("customer_email"),
-                    rsvp_item["item_name"],
+                    f"Excess credit — {rsvp_item['item_name'] or ''}".strip(" —"),
                     f"${excess:.2f}",
                     f"Excess credit from transfer — ${excess:.2f} remaining",
                     rsvp_item.get("chapter") or "",
