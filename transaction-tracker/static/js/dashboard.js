@@ -450,7 +450,7 @@ function cellForChildPayment(key, row) {
             btns += `<button class="btn btn-reverse" data-action="reverse" data-id="${row.id}" style="font-size:0.65rem;">Reverse</button>`;
         }
         if (currentRole === "admin") {
-            btns += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}" style="font-size:0.65rem;">Delete</button>`;
+            btns += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}" style="font-size:0.65rem;" title="Delete">&times;</button>`;
         }
         return btns;
     }
@@ -494,7 +494,7 @@ function cellForColumn(key, row) {
             btns += ` <button class="btn btn-reverse" data-action="reverse" data-id="${row.id}">Reverse</button>`;
         }
         if (currentRole === "admin") {
-            btns += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}">Delete</button>`;
+            btns += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}" title="Delete">&times;</button>`;
         }
         return btns;
     }
@@ -559,7 +559,7 @@ function renderMobileCard(row) {
         actionHtml += ` <button class="btn btn-reverse" data-action="reverse" data-id="${row.id}">Reverse</button>`;
     }
     if (currentRole === "admin") {
-        actionHtml += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}">Delete</button>`;
+        actionHtml += ` <button class="btn btn-danger" data-action="delete" data-id="${row.id}" title="Delete">&times;</button>`;
     }
 
     return `
@@ -592,7 +592,7 @@ function renderMobileChildCard(child) {
         actionHtml += `<button class="btn btn-reverse" data-action="reverse" data-id="${child.id}" style="font-size:0.65rem;">Reverse</button>`;
     }
     if (currentRole === "admin") {
-        actionHtml += ` <button class="btn btn-danger" data-action="delete" data-id="${child.id}" style="font-size:0.65rem;">Delete</button>`;
+        actionHtml += ` <button class="btn btn-danger" data-action="delete" data-id="${child.id}" style="font-size:0.65rem;" title="Delete">&times;</button>`;
     }
     return `
     <div class="mobile-card child-payment-card${statusCls}" data-id="${child.id}" style="margin-left:1.2rem;border-left:3px solid #059669;background:#f0fdf4;${opacity}">

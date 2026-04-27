@@ -309,6 +309,9 @@
             <button id="btn-check-rsvps" class="btn btn-secondary" title="Check Golf Genius RSVPs" style="display:none;">
                 <span class="btn-icon">&#9745;</span> Check RSVPs
             </button>
+            <button id="btn-check-now" class="btn btn-primary" title="Check inbox for new transactions">
+                <span class="btn-icon">&#8635;</span> Check Now
+            </button>
             <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">
                 Log Out
             </button>
@@ -1873,15 +1876,15 @@
 
             let actionBtn = '';
             if (isSynthetic) {
-                actionBtn = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                actionBtn = `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
             } else if (isRsvpOnly) {
-                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
             } else if (isComp) {
-                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                actionBtn = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
             } else if (txStatus === "active") {
                 actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                 actionBtn += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
-                if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
             }
@@ -2093,7 +2096,7 @@
                                 <div class="ev-menu-divider"></div>
                                 <button class="ev-menu-item btn-mobile-edit-event" data-edit-event="${ev.id}">Edit</button>
                                 ${currentRole === "admin" ? `<button class="ev-menu-item btn-mobile-merge-event" data-merge-event="${ev.id}">Merge</button>` : ''}
-                                ${currentRole === "admin" ? `<button class="ev-menu-item ev-menu-item-danger btn-mobile-delete-event" data-delete-event="${ev.id}">Delete</button>` : ''}
+                                ${currentRole === "admin" ? `<button class="ev-menu-item ev-menu-item-danger btn-mobile-delete-event" data-delete-event="${ev.id}" title="Delete">&times;</button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -2171,7 +2174,7 @@
                 <td>
                     <button class="btn btn-edit" data-edit-event="${ev.id}">Edit</button>
                     ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-event="${ev.id}" title="Merge into another event">Merge</button>` : ''}
-                    ${currentRole === "admin" ? `<button class="btn btn-danger" data-delete-event="${ev.id}">Delete</button>` : ''}
+                    ${currentRole === "admin" ? `<button class="btn btn-danger" data-delete-event="${ev.id}" title="Delete">&times;</button>` : ''}
                 </td>
             </tr>`;
 
@@ -4094,16 +4097,16 @@
                         if (creditInfoSyn && creditInfoSyn.total_credit > 0) {
                             btns = `<button class="btn btn-apply-credit" data-rsvp-id="${r.rsvp_id || ''}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Apply Credit</button> `;
                         }
-                        btns += `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        btns += `<button class="btn btn-delete-manual btn-delete-gg-rsvp" data-player-email="${escapeHtml(r.customer_email || '')}" data-event-name="${escapeHtml(ev.item_name)}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
                     } else if (isRsvpOnly || (isGgRsvp && !String(r.id).startsWith("gg-rsvp"))) {
                         const evCreditMapAct = rsvpCreditMap[ev.item_name] || {};
                         const creditInfoAct = evCreditMapAct[r.customer] || null;
                         if (creditInfoAct && creditInfoAct.total_credit > 0) {
                             btns = `<button class="btn btn-apply-credit" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Apply Credit</button> `;
                         }
-                        btns += `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        btns += `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
                     } else if (isCompRow) {
-                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                        btns = `<button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
                     } else if (txStatus === "active") {
                         const isCreditTransfer = (r.merchant || "") === "Paid Separately (Credit Transfer)";
                         if (isCreditTransfer) {
@@ -4127,11 +4130,11 @@
                                 }
                             }
                             btns += `<button class="btn btn-undo-credit-apply" data-item-id="${r.id}" data-customer="${escapeHtml(r.customer || '')}" data-event-name="${escapeHtml(ev.item_name)}" style="background:#7c3aed;color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;">Undo</button>`;
-                            btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                            btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
                         } else {
                             btns = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                             btns += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
-                            if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`;
+                            if (isManualRow) btns += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
                         }
                     } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
                         btns = `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
@@ -4214,7 +4217,7 @@
                         } else if (childStatus === "credited" || childStatus === "refunded") {
                             childBtns += `<button class="btn btn-reverse" data-reverse-id="${child.id}" style="font-size:0.6rem;">Reverse</button> `;
                         }
-                        childBtns += `<button class="btn btn-delete-manual" data-delete-id="${child.id}" data-player-name="${escapeHtml(child.customer || '')} payment" style="font-size:0.6rem;">Delete</button>`;
+                        childBtns += `<button class="btn btn-delete-manual" data-delete-id="${child.id}" data-player-name="${escapeHtml(child.customer || '')} payment" style="font-size:0.6rem;" title="Delete">&times;</button>`;
                         html += `<td style="${style}">${childBtns}</td>`;
                     } else {
                         html += `<td style="${style}">\u2014</td>`;
@@ -8002,6 +8005,55 @@
                 document.getElementById("btn-check-rsvps").style.display = "";
             }
         }).catch(() => {});
+
+        document.getElementById("btn-check-now").addEventListener("click", async () => {
+            const btn = document.getElementById("btn-check-now");
+            btn.disabled = true;
+            const origHtml = btn.innerHTML;
+            btn.textContent = "Checking...";
+            try {
+                const res = await fetch("/api/check-now", { method: "POST" });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                // Poll status until done
+                await new Promise((resolve) => {
+                    const poll = setInterval(async () => {
+                        try {
+                            const sres = await fetch("/api/check-status");
+                            const sdata = await sres.json();
+                            if (sdata.status === "running") {
+                                const p = sdata.progress || {};
+                                if (p.emails_fetched > 0) {
+                                    btn.textContent = `Parsing ${p.emails_parsed || 0}/${p.emails_fetched}...`;
+                                }
+                                return;
+                            }
+                            clearInterval(poll);
+                            if (sdata.status === "error") {
+                                alert("Inbox check failed:\n\n" + sdata.error);
+                            } else if (sdata.message) {
+                                const p = sdata.progress || {};
+                                if (p.items_saved > 0) {
+                                    alert(`Done! Saved ${p.items_saved} item(s) from ${p.emails_fetched} email(s).`);
+                                } else {
+                                    alert(sdata.message);
+                                }
+                            }
+                            resolve();
+                        } catch (err) {
+                            clearInterval(poll);
+                            resolve();
+                        }
+                    }, 2000);
+                });
+                await fetchEvents();
+            } catch (err) {
+                alert("Check failed: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+        });
 
         document.getElementById("btn-check-rsvps").addEventListener("click", async () => {
             const btn = document.getElementById("btn-check-rsvps");

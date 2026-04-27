@@ -365,14 +365,14 @@ def check_inbox():
         client_id=client_id,
         client_secret=client_secret,
         email_address=address,
-        since_date=datetime.now() - timedelta(days=90),
+        since_date=datetime.now() - timedelta(days=7),
     )
 
     _inbox_check_status["emails_fetched"] = len(emails)
 
     if not emails:
         logger.info("No new transaction emails found")
-        _inbox_check_status["message"] = "No transaction emails matched filters in the last 90 days"
+        _inbox_check_status["message"] = "No transaction emails matched filters in the last 7 days"
         return
 
     # Skip emails already parsed — avoids burning AI credits on duplicates
@@ -712,7 +712,7 @@ def check_rsvp_inbox():
     logger.info("Checking RSVP inbox for %s ...", rsvp_address)
     try:
         emails = fetch_rsvp_emails(
-            since_date=datetime.now() - timedelta(days=90),
+            since_date=datetime.now() - timedelta(days=7),
         )
     except Exception as e:
         logger.exception("Failed to fetch RSVP emails: %s", e)
@@ -980,7 +980,7 @@ scheduler = BackgroundScheduler(daemon=True)
 
 
 def start_scheduler():
-    interval = int(os.getenv("CHECK_INTERVAL_MINUTES", "15"))
+    interval = int(os.getenv("CHECK_INTERVAL_MINUTES", "5"))
     scheduler.add_job(
         check_inbox,
         "interval",
