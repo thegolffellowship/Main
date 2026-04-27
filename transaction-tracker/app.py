@@ -2472,9 +2472,11 @@ def api_customer_roles():
                 result[cid] = {"roles": [], "first_timer_ever": True}
             result[cid]["roles"].append(r["role_type"])
 
-        # Add first_timer_ever and current_player_status for every customer (even those without roles)
+        # Add first_timer_ever, current_player_status, and chapter for every
+        # customer (even those without roles). Chapter is read from the
+        # customers master record so the Info-tab edit is authoritative.
         customer_rows = conn.execute(
-            "SELECT customer_id, first_name, last_name, first_timer_ever, current_player_status FROM customers"
+            "SELECT customer_id, first_name, last_name, first_timer_ever, current_player_status, chapter FROM customers"
         ).fetchall()
         name_to_id = {}
         for c in customer_rows:
@@ -2484,6 +2486,7 @@ def api_customer_roles():
             else:
                 result[cid]["first_timer_ever"] = bool(c["first_timer_ever"])
             result[cid]["current_player_status"] = c["current_player_status"]
+            result[cid]["chapter"] = c["chapter"]
             # Build name→id map for frontend fallback when items.customer_id is null
             name_key = f"{(c['first_name'] or '')} {(c['last_name'] or '')}".strip().lower()
             if name_key:

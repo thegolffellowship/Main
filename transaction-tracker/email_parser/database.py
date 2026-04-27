@@ -5681,12 +5681,17 @@ def update_customer_info(customer_name: str, fields: dict,
                     (new_phone or None, cid),
                 )
 
-            # Sync first/last name to customers table
+            # Sync first/last name + chapter to the customers master record.
+            # The customers row is the authoritative source for chapter — items
+            # is denormalized and per-row, so the customers page now reads
+            # chapter directly via /api/customer-roles.
             name_fields = {}
             if "first_name" in safe:
                 name_fields["first_name"] = safe["first_name"]
             if "last_name" in safe:
                 name_fields["last_name"] = safe["last_name"]
+            if "chapter" in safe:
+                name_fields["chapter"] = safe["chapter"] or None
             if name_fields:
                 set_parts = ", ".join(f"{k} = ?" for k in name_fields)
                 conn.execute(

@@ -2976,6 +2976,9 @@
                             c.roles = info.roles || [];
                             c.first_timer_ever = info.first_timer_ever;
                             c.current_player_status = info.current_player_status || null;
+                            // Authoritative chapter from customers master record
+                            // (overrides the items-derived fallback).
+                            if (info.chapter) c.chapter = info.chapter;
                         }
                     }
                     // Recompute status now that roles + player_status are known
