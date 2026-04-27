@@ -1086,6 +1086,22 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 .status-tag-refunded { background: #fce7f3; color: #9d174d; }
 .status-tag-from-transfer { background: #ecfdf5; color: #065f46; }
 .status-tag-wd { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.coupon-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 50%;
+    background: #ede9fe;
+    color: #5b21b6;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+    cursor: help;
+    border: 1px solid #c4b5fd;
+}
 .status-tag-circle {
     width: 1.1rem;
     height: 1.1rem;

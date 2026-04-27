@@ -420,6 +420,17 @@ function statusTag(row) {
     return "";
 }
 
+function couponTag(row) {
+    const code = (row.coupon_code || "").trim();
+    const amt = (row.coupon_amount || "").trim();
+    if (!code && !amt) return "";
+    const parts = [];
+    if (code) parts.push(`Coupon: ${code}`);
+    if (amt) parts.push(`-${amt.startsWith("$") ? amt : "$" + amt}`);
+    const tip = parts.join(" ");
+    return ` <span class="coupon-badge" title="${escapeHtml(tip)}">C</span>`;
+}
+
 function formatOrderDateTime(row) {
     const date = row.order_date || "\u2014";
     if (!row.order_time) return date;
@@ -479,7 +490,7 @@ function cellForColumn(key, row) {
         return `${_reconDot(row)}<span class="cell-value" data-field="order_date" data-id="${row.id}" data-original="${row.order_date || ""}">${display}</span>`;
     }
     if (key === "customer") return linkedCell(row.customer, "customer", row.id, row.user_status);
-    if (key === "item_name") return linkedCell(row.item_name, "item_name", row.id) + statusTag(row);
+    if (key === "item_name") return linkedCell(row.item_name, "item_name", row.id) + statusTag(row) + couponTag(row);
     if (key === "item_price") return cell(row.item_price, "item_price", row.id);
     if (key === "order_id") return `<span class="order-id">${cell(row.order_id, "order_id", row.id)}</span>`;
     if (key === "actions") {
@@ -567,7 +578,7 @@ function renderMobileCard(row) {
         <div class="mobile-card-top" data-action="toggle-expand">
             <div class="mc-primary">
                 <span class="mc-customer">${escapeHtml(row.customer || "Unknown")}</span>
-                ${topTags} ${tag}
+                ${topTags} ${tag}${couponTag(row)}
                 <br><span class="mc-event">${escapeHtml(row.item_name || "\u2014")}</span>
             </div>
             <span class="mc-chevron">&#9656;</span>

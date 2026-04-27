@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.10.5";
+window.TGF_VERSION = "2.10.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.6",
+    date: "2026-04-27",
+    title: "Coupon badge ('C') on transaction rows",
+    changes: [
+      "Items with a non-empty coupon_code or coupon_amount now render a small purple 'C' circle next to the item-name status tags (desktop table) and the top-tags row (mobile card). Hover tooltip shows 'Coupon: <code> -$<amount>'.",
+    ],
+  },
   {
     version: "2.10.5",
     date: "2026-04-27",
