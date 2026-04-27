@@ -312,6 +312,9 @@
             <button id="btn-check-now" class="btn btn-primary" title="Check inbox for new transactions">
                 <span class="btn-icon">&#8635;</span> Check Now
             </button>
+            <button id="btn-match-venmo" class="btn btn-secondary" title="Re-run the Venmo IN → balance-due matcher (admin)" style="display:none;">
+                <span class="btn-icon">&#128178;</span> Match Venmo
+            </button>
             <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">
                 Log Out
             </button>
@@ -1567,6 +1570,10 @@
     function onAuthReady() {
         renderEvents();
         fetchOrphanedItems();
+        if (currentRole === "admin") {
+            const mv = document.getElementById("btn-match-venmo");
+            if (mv) mv.style.display = "";
+        }
     }
 
     // Column definitions for Events table
@@ -8029,6 +8036,30 @@
                 document.getElementById("btn-check-rsvps").style.display = "";
             }
         }).catch(() => {});
+
+        document.getElementById("btn-match-venmo").addEventListener("click", async () => {
+            const btn = document.getElementById("btn-match-venmo");
+            btn.disabled = true;
+            const origHtml = btn.innerHTML;
+            btn.textContent = "Matching...";
+            try {
+                const res = await fetch("/api/accounting/auto-match-venmo-balance-due", {method: "POST"});
+                const data = await res.json();
+                if (!res.ok) {
+                    alert("Match failed: " + (data.error || res.status));
+                } else {
+                    const m = data.matched || 0, a = data.ambiguous || 0,
+                          n = data.no_candidate || 0, am = data.already_matched || 0;
+                    alert(`Venmo match complete\n\nMatched: ${m}\nAmbiguous: ${a}\nNo candidate: ${n}\nAlready matched: ${am}`);
+                    if (m > 0) renderEvents();
+                }
+            } catch (err) {
+                alert("Match error: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+        });
 
         document.getElementById("btn-check-now").addEventListener("click", async () => {
             const btn = document.getElementById("btn-check-now");

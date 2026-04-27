@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.10.4";
+window.TGF_VERSION = "2.10.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.5",
+    date: "2026-04-27",
+    title: "Match Venmo button on Events page (admin)",
+    changes: [
+      "Added a 'Match Venmo' button next to Check Now on the Events page header (admin-only). Triggers POST /api/accounting/auto-match-venmo-balance-due and reports counts. Useful after adding a customer alias (e.g. William Needles → Bill Needles) so a stuck Venmo IN gets re-matched without waiting for the 5-minute scheduler tick.",
+    ],
+  },
   {
     version: "2.10.4",
     date: "2026-04-27",
