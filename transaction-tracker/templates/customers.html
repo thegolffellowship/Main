@@ -419,6 +419,24 @@
         return merchant || "—";
     }
 
+    // Side games column: only canonical values render here.
+    // Anything else (e.g. "Difference between ShadowGlen & Teravista" stuffed
+    // into side_games on a manual +PAY) gets folded into the Notes column instead.
+    const _CANONICAL_SIDE_GAMES = new Set(["NET", "GROSS", "BOTH", "NONE"]);
+    function displaySideGames(item) {
+        const sg = (item.side_games || "").trim();
+        return sg && _CANONICAL_SIDE_GAMES.has(sg.toUpperCase()) ? sg : "—";
+    }
+    function displayItemNotes(item) {
+        const parts = [];
+        // Strip internal markers like [venmo-bd-exp:42] / [xfer-consumed:1224]
+        let n = (item.notes || "").replace(/\s*\[(?:venmo-bd-exp|xfer-consumed):[^\]]+\]\s*/g, "").trim();
+        if (n) parts.push(n);
+        const sg = (item.side_games || "").trim();
+        if (sg && !_CANONICAL_SIDE_GAMES.has(sg.toUpperCase())) parts.push(sg);
+        return parts.join(" — ");
+    }
+
     // Derive customer status from roles + current_player_status + transaction history.
     // Roles and player_status are the authoritative inputs (set on the customer record);
     // items are the fallback for customers we haven't yet tagged on the Info tab.
@@ -1431,7 +1449,7 @@
         // Transactions tab content
         html += `<div class="cust-tab-content cust-tab-transactions" style="${_at !== 'transactions' ? 'display:none;' : ''}">`;
         html += '<table class="registrants-table"><thead><tr>';
-        html += '<th>Order Date</th><th>Item</th><th>Account</th><th>Price</th><th>Total / Fees</th><th>Side Games</th><th>Actions</th>';
+        html += '<th>Order Date</th><th>Item</th><th>Account</th><th>Price</th><th>Total / Fees</th><th>Side Games</th><th>Notes</th><th>Actions</th>';
         html += '</tr></thead><tbody>';
 
         const sorted = [...customer.items]
@@ -1479,13 +1497,18 @@
             } else if (txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
+            const notesText = displayItemNotes(item);
+            const notesCell = notesText
+                ? `<div style="max-width:14rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.78rem;color:#475569;" title="${escapeHtml(notesText)}">${escapeHtml(notesText)}</div>`
+                : '<span style="color:#cbd5e1;">\u2014</span>';
             html += `<tr${rowClass} data-txn-id="${item.id}" style="cursor:pointer;">
                 <td>${escapeHtml(item.order_date || "\u2014")}</td>
                 <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}${purchasedByTag}${orderHint}</td>
                 <td style="font-size:0.78rem;color:#64748b;">${escapeHtml(accountLabel(item.merchant))}</td>
                 <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(stripPriceSuffix(item.item_price) || "\u2014")}</td>
                 <td style="font-size:0.82rem; font-variant-numeric:tabular-nums;">${totalFees}</td>
-                <td>${escapeHtml(item.side_games || "\u2014")}</td>
+                <td>${escapeHtml(displaySideGames(item))}</td>
+                <td>${notesCell}</td>
                 <td>${actionBtn}</td>
             </tr>`;
         });
@@ -1943,7 +1966,7 @@
         // Transactions tab
         panelHtml += `<div class="cust-tab-content cust-tab-transactions" style="${!_panelTxnActive ? 'display:none;' : ''}">`;
         panelHtml += '<table style="width:100%; border-collapse:collapse;"><thead><tr>';
-        panelHtml += '<th>Order Date</th><th>Item</th><th>Account</th><th>Price</th><th>Total / Fees</th><th>Side Games</th><th>Actions</th>';
+        panelHtml += '<th>Order Date</th><th>Item</th><th>Account</th><th>Price</th><th>Total / Fees</th><th>Side Games</th><th>Notes</th><th>Actions</th>';
         panelHtml += '</tr></thead><tbody>';
         const _panelSorted = customer.items
             .filter(i => !PLACEHOLDER_MERCHANTS.has(i.merchant))
@@ -1977,13 +2000,18 @@
                 } else if (txStatus === "transferred" || txStatus === "wd") {
                     actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                 }
+                const _panelNotesText = displayItemNotes(item);
+                const _panelNotesCell = _panelNotesText
+                    ? `<div style="max-width:14rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.78rem;color:#475569;" title="${escapeHtml(_panelNotesText)}">${escapeHtml(_panelNotesText)}</div>`
+                    : '<span style="color:#cbd5e1;">\u2014</span>';
                 panelHtml += `<tr${rowClass}>
                     <td>${escapeHtml(item.order_date || "\u2014")}</td>
                     <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}${orderHint}</td>
                     <td style="font-size:0.78rem;color:#64748b;">${escapeHtml(accountLabel(item.merchant))}</td>
                     <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(stripPriceSuffix(item.item_price) || "\u2014")}</td>
                     <td style="font-size:0.82rem; font-variant-numeric:tabular-nums;">${totalFees}</td>
-                    <td>${escapeHtml(item.side_games || "\u2014")}</td>
+                    <td>${escapeHtml(displaySideGames(item))}</td>
+                    <td>${_panelNotesCell}</td>
                     <td>${actionBtn}</td>
                 </tr>`;
             });

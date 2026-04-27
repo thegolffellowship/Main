@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.10.13";
+window.TGF_VERSION = "2.10.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.14",
+    date: "2026-04-27",
+    title: "Customer Transactions tab: Notes column, Side Games kept canonical",
+    changes: [
+      "Added a Notes column to the Customer detail Transactions tab. Pulls from item.notes (with internal markers like [venmo-bd-exp:N] and [xfer-consumed:N] stripped for display).",
+      "Side Games column is now restricted to the canonical values NET / GROSS / BOTH / NONE. Free-form text that had been stuffed into side_games (e.g. 'Difference between ShadowGlen & Teravista' on Bartz's manual +PAY rows) now surfaces in the Notes column instead, where it belongs. Storage is unchanged — this is display-only.",
+      "Long notes truncate to 14rem with overflow ellipsis + title tooltip for the full text on hover.",
+    ],
+  },
   {
     version: "2.10.13",
     date: "2026-04-27",
