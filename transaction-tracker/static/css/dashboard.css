@@ -671,21 +671,21 @@ tr.txn-highlight {
 .badge-first-timer { background: #fef3c7; color: #92400e; }
 
 /* Customers list — full-row tinting by status (mirrors the badge palette) */
-tr.cust-row-member { background: #f0fdf4; }
-tr.cust-row-member:hover { background: #dcfce7; }
-tr.cust-row-member-plus { background: #ecfccb; }
-tr.cust-row-member-plus:hover { background: #d9f99d; }
-tr.cust-row-first-timer { background: #fefce8; }
-tr.cust-row-first-timer:hover { background: #fef9c3; }
-tr.cust-row-former { background: #f8fafc; color: #64748b; }
-tr.cust-row-former:hover { background: #f1f5f9; }
+tr.cust-row-member { background: #d1fae5; }
+tr.cust-row-member:hover { background: #a7f3d0; }
+tr.cust-row-member-plus { background: #99f6e4; }
+tr.cust-row-member-plus:hover { background: #5eead4; }
+tr.cust-row-first-timer { background: #fde68a; }
+tr.cust-row-first-timer:hover { background: #fcd34d; }
+tr.cust-row-former { background: #e2e8f0; color: #475569; }
+tr.cust-row-former:hover { background: #cbd5e1; }
 tr.cust-row-guest { background: #ffffff; }
-tr.cust-row-guest:hover { background: #f8fafc; }
-.customer-card.cust-row-member { background: #f0fdf4; border-left: 3px solid #16a34a; }
-.customer-card.cust-row-member-plus { background: #ecfccb; border-left: 3px solid #65a30d; }
-.customer-card.cust-row-first-timer { background: #fefce8; border-left: 3px solid #d97706; }
-.customer-card.cust-row-former { background: #f8fafc; border-left: 3px solid #94a3b8; opacity: 0.85; }
-.customer-card.cust-row-guest { border-left: 3px solid #cbd5e1; }
+tr.cust-row-guest:hover { background: #f1f5f9; }
+.customer-card.cust-row-member { background: #d1fae5; border-left: 4px solid #059669; }
+.customer-card.cust-row-member-plus { background: #99f6e4; border-left: 4px solid #0d9488; }
+.customer-card.cust-row-first-timer { background: #fde68a; border-left: 4px solid #d97706; }
+.customer-card.cust-row-former { background: #e2e8f0; border-left: 4px solid #64748b; opacity: 0.85; }
+.customer-card.cust-row-guest { border-left: 4px solid #cbd5e1; }
 
 /* View toggle */
 .view-toggle {
