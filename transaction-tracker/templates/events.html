@@ -2067,8 +2067,10 @@
                             const bc = sBadge[st] || sBadge.credited;
                             mobileInactiveHtml += `<div class="rsvp-player-card">`;
                             mobileInactiveHtml += `<span class="rsvp-badge" style="background:${bc.bg};color:${bc.color};border:1px solid ${bc.border};">${sLabels[st] || st}</span> `;
-                            mobileInactiveHtml += `<strong>${escapeHtml(displayName(r.customer || 'Unknown'))}</strong>`;
-                            if (r.customer_email) mobileInactiveHtml += ` <span class="rsvp-email">${escapeHtml(r.customer_email)}</span>`;
+                            const mInactiveName = r.customer || 'Unknown';
+                            mobileInactiveHtml += r.customer
+                                ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer)}"><strong>${escapeHtml(displayName(mInactiveName))}</strong></a>`
+                                : `<strong>${escapeHtml(displayName(mInactiveName))}</strong>`;
                             if (r.credit_amount) mobileInactiveHtml += ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>`;
                             mobileInactiveHtml += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
                             mobileInactiveHtml += `</div>`;
@@ -4252,8 +4254,10 @@
                 const bc = badgeColors[st] || badgeColors.credited;
                 html += `<div class="rsvp-player-card">`;
                 html += `<span class="rsvp-badge" style="background:${bc.bg};color:${bc.color};border:1px solid ${bc.border};">${statusLabels[st] || st}</span> `;
-                html += `<strong>${escapeHtml(displayName(r.customer || 'Unknown'))}</strong>`;
-                if (r.customer_email) html += ` <span class="rsvp-email">${escapeHtml(r.customer_email)}</span>`;
+                const inactiveName = r.customer || 'Unknown';
+                html += r.customer
+                    ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer)}"><strong>${escapeHtml(displayName(inactiveName))}</strong></a>`
+                    : `<strong>${escapeHtml(displayName(inactiveName))}</strong>`;
                 if (r.credit_amount) html += ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>`;
                 // Reverse button
                 html += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
@@ -4270,10 +4274,13 @@
                 html += `<h4 style="color:var(--red);">Not Playing (${notPlayingRsvps.length})</h4>`;
                 html += '<div class="rsvp-player-list">';
                 notPlayingRsvps.forEach(r => {
+                    const fullName = (r.resolved_name || r.player_name || '').trim();
+                    const labelName = fullName || 'Unknown';
                     html += `<div class="rsvp-player-card rsvp-cancelled-card">`;
                     html += `<span class="rsvp-badge rsvp-not-playing">GG</span> `;
-                    html += `<strong>${escapeHtml(r.player_name || 'Unknown')}</strong>`;
-                    if (r.player_email) html += ` <span class="rsvp-email">${escapeHtml(r.player_email)}</span>`;
+                    html += fullName
+                        ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(fullName)}"><strong>${escapeHtml(displayName(labelName))}</strong></a>`
+                        : `<strong>${escapeHtml(labelName)}</strong>`;
                     html += `</div>`;
                 });
                 html += '</div></div>';
