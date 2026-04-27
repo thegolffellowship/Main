@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.10.7";
+window.TGF_VERSION = "2.10.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.8",
+    date: "2026-04-27",
+    title: "Hide '(credit transfer)' suffix on price display",
+    changes: [
+      "Item prices stored as '$76.59 (credit transfer)' now render as just '$76.59' on the Transactions page (desktop + mobile), Events page (parent and child registration rows), and the credit / WD modal info panels. The circled-T tag and row tint already convey the transfer context. Storage is unchanged; the inline-edit data-original attribute still holds the raw value, so saving an unedited cell preserves the suffix. Math is unaffected — Python _parse_dollar() and JS parseDollar() both ignore the trailing parenthetical.",
+      "Other suffixes like '(credit)' and '(comp)' are intentionally preserved.",
+    ],
+  },
   {
     version: "2.10.7",
     date: "2026-04-27",

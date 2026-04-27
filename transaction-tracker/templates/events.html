@@ -1659,6 +1659,12 @@
         return isNaN(parsed) ? defaultVal : parsed;
     }
 
+    // Display-only: strip " (credit transfer)" suffix from item_price.
+    // Math still goes through parseDollar() which is suffix-tolerant.
+    function stripPriceSuffix(priceStr) {
+        return (priceStr || "").replace(/\s*\(credit transfer\)\s*$/i, "");
+    }
+
     function _cleanStatus(raw) {
         let s = (raw || "").trim();
         if (!s) return "\u2014";
@@ -1906,7 +1912,7 @@
 
             const fields = [
                 ["Order Date", r.order_date || "\u2014"],
-                ["Price", r.item_price || "\u2014"],
+                ["Price", stripPriceSuffix(r.item_price) || "\u2014"],
                 ["HCP", (() => { const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined; return lh !== undefined ? lh.index_9.toFixed(1) + 'N / ' + lh.index_18.toFixed(1) : (r.handicap || "\u2014"); })()],
                 ["Holes", r.holes || "\u2014"],
                 ["Status", _cleanStatus(r.user_status)],
@@ -4119,7 +4125,7 @@
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer, r.user_status))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
-                    html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
+                    html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(stripPriceSuffix(r.item_price) || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
                     let btns = "";
                     if (isSynthetic) {
@@ -4237,7 +4243,7 @@
                     } else if (c.key === "side_games") {
                         html += `<td style="${style}; font-weight:600;${isRefundRow ? ' color:#dc2626;' : ''}">${escapeHtml(isRefundRow ? (child.side_games || "\u2014") : (child.side_games || "\u2014"))}</td>`;
                     } else if (c.key === "item_price") {
-                        html += `<td style="${style}; font-weight:600; font-variant-numeric:tabular-nums;${isRefundRow ? ' color:#dc2626;' : ''}">${escapeHtml(child.item_price || "\u2014")}</td>`;
+                        html += `<td style="${style}; font-weight:600; font-variant-numeric:tabular-nums;${isRefundRow ? ' color:#dc2626;' : ''}">${escapeHtml(stripPriceSuffix(child.item_price) || "\u2014")}</td>`;
                     } else if (c.key === "order_date") {
                         html += `<td style="${style}">${escapeHtml(child.order_date || "\u2014")}</td>`;
                     } else if (c.key === "actions") {
@@ -5454,7 +5460,7 @@
 
         document.getElementById("ev-credit-info").innerHTML =
             `<strong>${escapeHtml(item.customer || "Unknown")}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
-            `Price: <strong>${escapeHtml(item.item_price || "$0")}</strong>`;
+            `Price: <strong>${escapeHtml(stripPriceSuffix(item.item_price) || "$0")}</strong>`;
 
         document.querySelectorAll(".ev-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "credit"));
         document.getElementById("ev-credit-transfer-fields").style.display = "none";
@@ -6293,7 +6299,7 @@
 
         document.getElementById("wd-player-info").innerHTML =
             `<strong>${escapeHtml(item.customer || "Unknown")}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
-            `Price: <strong>${escapeHtml(item.item_price || "$0")}</strong>` +
+            `Price: <strong>${escapeHtml(stripPriceSuffix(item.item_price) || "$0")}</strong>` +
             `<span style="margin-left:0.5rem; font-size:0.8rem; color:var(--text-muted);">Games: ${escapeHtml(classifyGameType(item.side_games))}</span>`;
         document.getElementById("wd-note").value = "";
 

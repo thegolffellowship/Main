@@ -155,6 +155,14 @@ function parsePrice(priceStr) {
     return parseFloat((priceStr || "0").replace(/[$,]/g, "")) || 0;
 }
 
+// Strip the " (credit transfer)" suffix from item_price for display only.
+// Storage stays "$76.59 (credit transfer)"; merchant column + circled-T tag
+// already convey the transfer context. Other suffixes like "(credit)" and
+// "(comp)" are intentionally preserved.
+function stripPriceSuffix(priceStr) {
+    return (priceStr || "").replace(/\s*\(credit transfer\)\s*$/i, "");
+}
+
 function cell(value, field, rowId) {
     const display = escapeHtml(value || "\u2014");
     return `<span class="cell-value" data-field="${field}" data-id="${rowId}" data-original="${escapeHtml(value || "")}">${display}</span>`;
@@ -449,7 +457,7 @@ function cellForChildPayment(key, row) {
     if (key === "customer") {
         return `<span style="padding-left:1.5rem;color:#059669;font-size:0.78rem;font-weight:600;">+PAY</span> <span style="font-size:0.78rem;color:#6b7280;">${escapeHtml(row.side_games || row.notes || "Payment")}</span>`;
     }
-    if (key === "item_price") return `<span style="font-size:0.82rem;">${escapeHtml(row.item_price || "\u2014")}</span>`;
+    if (key === "item_price") return `<span style="font-size:0.82rem;">${escapeHtml(stripPriceSuffix(row.item_price) || "\u2014")}</span>`;
     if (key === "order_date") return `<span style="font-size:0.78rem;color:#6b7280;">${escapeHtml(row.order_date || "\u2014")}</span>`;
     if (key === "side_games") return `<span style="font-size:0.82rem;">${escapeHtml(row.side_games || "\u2014")}</span>`;
     if (key === "actions") {
@@ -491,7 +499,13 @@ function cellForColumn(key, row) {
     }
     if (key === "customer") return linkedCell(row.customer, "customer", row.id, row.user_status);
     if (key === "item_name") return linkedCell(row.item_name, "item_name", row.id) + statusTag(row) + couponTag(row);
-    if (key === "item_price") return cell(row.item_price, "item_price", row.id);
+    if (key === "item_price") {
+        // Display strips "(credit transfer)" suffix, but data-original keeps the
+        // raw stored value so inline-edit save doesn't clobber it.
+        const raw = row.item_price || "";
+        const shown = stripPriceSuffix(raw) || "—";
+        return `<span class="cell-value" data-field="item_price" data-id="${row.id}" data-original="${escapeHtml(raw)}">${escapeHtml(shown)}</span>`;
+    }
     if (key === "order_id") return `<span class="order-id">${cell(row.order_id, "order_id", row.id)}</span>`;
     if (key === "actions") {
         const status = row.transaction_status || "active";
@@ -545,7 +559,7 @@ function renderMobileCard(row) {
     // Detail fields
     const fields = [
         ["Order Date", formatOrderDateTime(row)],
-        ["Price", row.item_price || "\u2014"],
+        ["Price", stripPriceSuffix(row.item_price) || "\u2014"],
         ["Total Amount", row.total_amount || "\u2014"],
         ["Transaction Fees", row.transaction_fees || "\u2014"],
         ["Coupon Code", row.coupon_code || "\u2014"],
