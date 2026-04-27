@@ -161,11 +161,11 @@ function cell(value, field, rowId) {
 }
 
 // Cross-link cells: customer and item_name link to their respective pages
-function linkedCell(value, field, rowId) {
+function linkedCell(value, field, rowId, status) {
     if (!value) return cell(value, field, rowId);
     const display = escapeHtml(value);
     if (field === "customer") {
-        const dn = escapeHtml(displayName(value));
+        const dn = escapeHtml(displayName(value, status));
         return `<a class="cell-link" href="/customers?name=${encodeURIComponent(value)}" title="View all transactions for ${display}">${dn}</a>`;
     }
     if (field === "item_name") {
@@ -478,7 +478,7 @@ function cellForColumn(key, row) {
         const display = formatOrderDateTime(row);
         return `${_reconDot(row)}<span class="cell-value" data-field="order_date" data-id="${row.id}" data-original="${row.order_date || ""}">${display}</span>`;
     }
-    if (key === "customer") return linkedCell(row.customer, "customer", row.id);
+    if (key === "customer") return linkedCell(row.customer, "customer", row.id, row.user_status);
     if (key === "item_name") return linkedCell(row.item_name, "item_name", row.id) + statusTag(row);
     if (key === "item_price") return cell(row.item_price, "item_price", row.id);
     if (key === "order_id") return `<span class="order-id">${cell(row.order_id, "order_id", row.id)}</span>`;
@@ -879,19 +879,27 @@ function lastNameSortKey(name) {
 }
 
 /** Format "First Last" → "Last, First" for display. Handles suffixes. */
-function displayName(name) {
+function isElevatedStatus(status) {
+    if (!status) return false;
+    const s = String(status).trim().toUpperCase();
+    return s === "MEMBER" || s === "MEMBER+" || s === "MANAGER" || s === "OWNER";
+}
+
+function displayName(name, status) {
     const s = String(name || "").trim();
     if (!s) return "\u2014";
+    const elevated = isElevatedStatus(status);
     const parts = s.split(/\s+/);
-    if (parts.length <= 1) return s;
+    if (parts.length <= 1) return elevated ? s.toUpperCase() : s;
     const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
     const suffixParts = [];
     while (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) {
         suffixParts.unshift(parts.pop());
     }
-    if (parts.length <= 1) return s;
+    if (parts.length <= 1) return elevated ? s.toUpperCase() : s;
     const last = parts.pop();
-    return last + ", " + parts.join(" ") + (suffixParts.length ? " " + suffixParts.join(" ") : "");
+    const lastDisplay = elevated ? last.toUpperCase() : last;
+    return lastDisplay + ", " + parts.join(" ") + (suffixParts.length ? " " + suffixParts.join(" ") : "");
 }
 
 function sortItems(items, sortKey) {
@@ -1358,7 +1366,7 @@ async function openCreditModal(itemId) {
 
     // Populate info
     document.getElementById("credit-info").innerHTML =
-        `<strong>${escapeHtml(displayName(item.customer || "Unknown"))}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
+        `<strong>${escapeHtml(displayName(item.customer || "Unknown", item.user_status))}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
         `Price: <strong>${escapeHtml(item.item_price || "$0")}</strong>`;
 
     // Reset UI

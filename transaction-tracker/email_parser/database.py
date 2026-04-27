@@ -8842,15 +8842,27 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
             rsvp = dict(r)
             rsvp["resolved_name"] = rsvp.get("player_name")
             rsvp["has_player_card"] = False
+            rsvp["customer_status"] = None
             cid = rsvp.get("customer_id")
             if cid:
                 cust = conn.execute(
-                    """SELECT TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS full_name
-                       FROM customers WHERE customer_id = ?""",
+                    """SELECT TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS full_name,
+                              c.current_player_status,
+                              EXISTS(SELECT 1 FROM customer_roles r
+                                     WHERE r.customer_id = c.customer_id
+                                       AND r.role_type IN ('manager','owner','admin')) AS is_staff
+                       FROM customers c WHERE c.customer_id = ?""",
                     (cid,),
                 ).fetchone()
-                if cust and cust["full_name"]:
-                    rsvp["resolved_name"] = cust["full_name"]
+                if cust:
+                    if cust["full_name"]:
+                        rsvp["resolved_name"] = cust["full_name"]
+                    if cust["is_staff"]:
+                        rsvp["customer_status"] = "MANAGER"
+                    elif cust["current_player_status"] == "active_member":
+                        rsvp["customer_status"] = "MEMBER"
+                    elif cust["current_player_status"] == "member_plus":
+                        rsvp["customer_status"] = "MEMBER+"
             email = (rsvp.get("player_email") or "").strip().lower()
             if email:
                 card = conn.execute(
@@ -8915,22 +8927,32 @@ def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
                 if c["email"] not in name_map:
                     name_map[c["email"]] = c["customer"]
 
-        # Resolve canonical full names from customers table via customer_id FK.
+        # Resolve canonical full names + member status from customers table via customer_id FK.
         # Authoritative for RSVP-only players who never bought a ticket.
         cust_ids = {r["customer_id"] for r in rows if r["customer_id"]}
         cust_name_map = {}
+        cust_status_map = {}
         if cust_ids:
             placeholders = ",".join("?" * len(cust_ids))
             cust_rows = conn.execute(
-                f"""SELECT customer_id,
-                           TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS full_name
-                    FROM customers
-                    WHERE customer_id IN ({placeholders})""",
+                f"""SELECT c.customer_id,
+                           TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS full_name,
+                           c.current_player_status,
+                           EXISTS(SELECT 1 FROM customer_roles r
+                                  WHERE r.customer_id = c.customer_id
+                                    AND r.role_type IN ('manager','owner','admin')) AS is_staff
+                    FROM customers c
+                    WHERE c.customer_id IN ({placeholders})""",
                 list(cust_ids),
             ).fetchall()
+            status_label = {"active_member": "MEMBER", "member_plus": "MEMBER+"}
             for c in cust_rows:
                 if c["full_name"]:
                     cust_name_map[c["customer_id"]] = c["full_name"]
+                if c["is_staff"]:
+                    cust_status_map[c["customer_id"]] = "MANAGER"
+                elif c["current_player_status"] in status_label:
+                    cust_status_map[c["customer_id"]] = status_label[c["current_player_status"]]
 
         rsvps_by_event = {}
         for r in rows:
@@ -8943,6 +8965,7 @@ def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
                 or rsvp.get("player_name")
             )
             rsvp["has_player_card"] = email in name_map
+            rsvp["customer_status"] = cust_status_map.get(cid)
             evt = rsvp.get("matched_event") or ""
             rsvps_by_event.setdefault(evt, []).append(rsvp)
 

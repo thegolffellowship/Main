@@ -1528,19 +1528,27 @@
     }
 
     /** Format "First Last" → "Last, First" for display. Handles suffixes. */
-    function displayName(name) {
+    function isElevatedStatus(status) {
+        if (!status) return false;
+        const s = String(status).trim().toUpperCase();
+        return s === "MEMBER" || s === "MEMBER+" || s === "MANAGER" || s === "OWNER";
+    }
+
+    function displayName(name, status) {
         const s = String(name || "").trim();
         if (!s) return "\u2014";
+        const elevated = isElevatedStatus(status);
         const parts = s.split(/\s+/);
-        if (parts.length <= 1) return s;
+        if (parts.length <= 1) return elevated ? s.toUpperCase() : s;
         const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
         const suffixParts = [];
         while (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) {
             suffixParts.unshift(parts.pop());
         }
-        if (parts.length <= 1) return s;
+        if (parts.length <= 1) return elevated ? s.toUpperCase() : s;
         const last = parts.pop();
-        return last + ", " + parts.join(" ") + (suffixParts.length ? " " + suffixParts.join(" ") : "");
+        const lastDisplay = elevated ? last.toUpperCase() : last;
+        return lastDisplay + ", " + parts.join(" ") + (suffixParts.length ? " " + suffixParts.join(" ") : "");
     }
 
     function buildEvPickerOptions(events) {
@@ -1905,7 +1913,7 @@
                 <div class="mobile-card-top" onclick="event.stopPropagation(); this.parentElement.classList.toggle('expanded')">
                     <div class="mc-primary">
                         ${circleHtml}
-                        <span class="mc-customer"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}" onclick="event.stopPropagation()">${escapeHtml(displayName(r.customer))}</a></span>
+                        <span class="mc-customer"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}" onclick="event.stopPropagation()">${escapeHtml(displayName(r.customer, r.user_status))}</a></span>
                         ${topTags} ${tag}
                     </div>
                     <span class="mc-chevron">&#9656;</span>
@@ -2072,8 +2080,8 @@
                             mobileInactiveHtml += `<span class="rsvp-badge" style="background:${bc.bg};color:${bc.color};border:1px solid ${bc.border};">${sLabels[st] || st}</span> `;
                             const mInactiveName = r.customer || 'Unknown';
                             mobileInactiveHtml += r.customer
-                                ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer)}"><strong>${escapeHtml(displayName(mInactiveName))}</strong></a>`
-                                : `<strong>${escapeHtml(displayName(mInactiveName))}</strong>`;
+                                ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer)}"><strong>${escapeHtml(displayName(mInactiveName, r.user_status))}</strong></a>`
+                                : `<strong>${escapeHtml(displayName(mInactiveName, r.user_status))}</strong>`;
                             if (r.credit_amount) mobileInactiveHtml += ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>`;
                             mobileInactiveHtml += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
                             mobileInactiveHtml += `</div>`;
@@ -4086,7 +4094,7 @@
                         }
                     }
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
-                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer))}</a>${tag}${infoIcon}</td>`;
+                    html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer, r.user_status))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
                     html += `<td style="font-weight:600; font-variant-numeric:tabular-nums; ${style}">${escapeHtml(r.item_price || "\u2014")}</td>`;
                 } else if (c.key === "actions") {
@@ -4259,8 +4267,8 @@
                 html += `<span class="rsvp-badge" style="background:${bc.bg};color:${bc.color};border:1px solid ${bc.border};">${statusLabels[st] || st}</span> `;
                 const inactiveName = r.customer || 'Unknown';
                 html += r.customer
-                    ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer)}"><strong>${escapeHtml(displayName(inactiveName))}</strong></a>`
-                    : `<strong>${escapeHtml(displayName(inactiveName))}</strong>`;
+                    ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer)}"><strong>${escapeHtml(displayName(inactiveName, r.user_status))}</strong></a>`
+                    : `<strong>${escapeHtml(displayName(inactiveName, r.user_status))}</strong>`;
                 if (r.credit_amount) html += ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(r.credit_amount)}</span>`;
                 // Reverse button
                 html += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
@@ -4282,7 +4290,7 @@
                     html += `<div class="rsvp-player-card rsvp-cancelled-card">`;
                     html += `<span class="rsvp-badge rsvp-not-playing">GG</span> `;
                     html += fullName
-                        ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(fullName)}"><strong>${escapeHtml(displayName(labelName))}</strong></a>`
+                        ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(fullName)}"><strong>${escapeHtml(displayName(labelName, r.customer_status))}</strong></a>`
                         : `<strong>${escapeHtml(labelName)}</strong>`;
                     html += `</div>`;
                 });
@@ -5109,7 +5117,7 @@
             customList.innerHTML = allRegs.map(r =>
                 `<label style="display:flex; align-items:center; gap:0.4rem; padding:0.2rem 0; border-bottom:1px solid var(--border); cursor:pointer;">` +
                 `<input type="checkbox" class="compose-custom-cb" value="${escapeHtml(r.customer_email)}" checked>` +
-                `<strong>${escapeHtml(displayName(r.customer || "Unknown"))}</strong>` +
+                `<strong>${escapeHtml(displayName(r.customer || "Unknown", r.user_status))}</strong>` +
                 ` <span style="color:var(--text-muted);">${escapeHtml(r.customer_email || "")}</span>` +
                 `</label>`
             ).join("");
@@ -5128,7 +5136,7 @@
             countEl.textContent = `This will reach ${total} player${total !== 1 ? "s" : ""} with email addresses${extraNote}`;
             listEl.innerHTML = recipients.map(r =>
                 `<div style="padding:0.15rem 0; border-bottom:1px solid var(--border);">` +
-                `<strong>${escapeHtml(displayName(r.customer || "Unknown"))}</strong>` +
+                `<strong>${escapeHtml(displayName(r.customer || "Unknown", r.user_status))}</strong>` +
                 ` <span style="color:var(--text-muted);">${escapeHtml(r.customer_email || "")}</span>` +
                 `</div>`
             ).join("");
@@ -6710,7 +6718,7 @@
         });
         const playerSelect = document.getElementById("add-payment-player");
         playerSelect.innerHTML = '<option value="">Select player…</option>' +
-            sorted.map(r => `<option value="${escapeHtml(r.customer)}">${escapeHtml(displayName(r.customer))}</option>`).join("");
+            sorted.map(r => `<option value="${escapeHtml(r.customer)}">${escapeHtml(displayName(r.customer, r.user_status))}</option>`).join("");
         // Reset fields
         document.getElementById("add-payment-item").value = "";
         document.getElementById("add-payment-amount").value = "";
@@ -8477,7 +8485,7 @@
             const method = p.auto_refund_method ? ` (${p.auto_refund_method})` : '';
             const price = escapeHtml(p.item_price || '');
             return `<div data-staging-id="${p.id}" style="display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0.5rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; font-size:0.82rem;">
-                <span style="flex:1; font-weight:600;">${escapeHtml(displayName(p.customer || 'Unknown'))}</span>
+                <span style="flex:1; font-weight:600;">${escapeHtml(displayName(p.customer || 'Unknown', p.user_status))}</span>
                 <span style="color:#6b7280; font-size:0.75rem;">${price}</span>
                 <button type="button" class="staging-btn staging-credit active" data-id="${p.id}" data-action="credit" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #16a34a; background:#f0fdf4; color:#15803d; font-size:0.72rem; font-weight:600; cursor:pointer;">Credit</button>
                 <button type="button" class="staging-btn staging-refund" data-id="${p.id}" data-action="refund" style="padding:0.2rem 0.55rem; border-radius:4px; border:1.5px solid #2563eb; background:#fff; color:#1d4ed8; font-size:0.72rem; font-weight:600; cursor:pointer;">Refund${method}</button>
