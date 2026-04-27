@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Events row color preview</title>
+<style>
+  body { font-family: -apple-system, system-ui, Segoe UI, sans-serif; padding: 2rem; background: #f8fafc; color: #0f172a; max-width: 1100px; margin: 0 auto; }
+  h1 { margin: 0 0 0.25rem; font-size: 1.25rem; }
+  h2 { margin: 1.5rem 0 0.4rem; font-size: 0.95rem; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
+  p.note { color: #64748b; font-size: 0.85rem; margin: 0 0 1rem; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  th, td { padding: 0.55rem 0.85rem; text-align: left; font-size: 0.85rem; border-bottom: 1px solid #f1f5f9; }
+  th { background: #f8fafc; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; }
+  tr:last-child td { border-bottom: none; }
+  .swatch { display: inline-block; width: 16px; height: 16px; border-radius: 3px; vertical-align: middle; margin-right: 6px; border: 1px solid rgba(0,0,0,0.08); }
+  code { font-size: 0.78rem; color: #475569; }
+  .label { font-weight: 600; }
+  .dim { opacity: 0.6; }
+  .wd { opacity: 0.55; text-decoration: line-through; text-decoration-color: #dc2626; }
+  .italic { font-style: italic; }
+  .badge { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 8px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; margin-left: 0.25rem; }
+  .b-paid { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+  .b-remind { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; }
+  .b-t { width: 1.1rem; height: 1.1rem; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.65rem; line-height: 1; border: 1px solid #6ee7b7; background: #ecfdf5; color: #065f46; vertical-align: middle; margin-left: 0.25rem; }
+  hr.sep { border: none; border-top: 1px dashed #cbd5e1; margin: 2rem 0; }
+</style>
+</head>
+<body>
+<h1>Events page — row color audit</h1>
+<p class="note">Each row below is rendered with the actual hex used today (or the proposed bump). Compare adjacent rows to see how distinguishable they are.</p>
+
+<h2>Current palette (live on Railway right now)</h2>
+<table>
+  <thead><tr><th style="width:240px;">Slot</th><th>Sample row</th><th style="width:180px;">Hex</th></tr></thead>
+  <tbody>
+    <tr><td><span class="swatch" style="background:#ffffff;"></span><span class="label">Default active (member)</span></td><td style="background:#ffffff;">CHALFANT, Tanner — MEMBER — $139.00</td><td><code>#ffffff</code></td></tr>
+    <tr><td><span class="swatch" style="background:#dcfce7;"></span><span class="label">Comp / Manager</span></td><td style="background:#dcfce7;">STRAITON, Robert — MANAGER — $0.00 (comp)</td><td><code>#dcfce7</code></td></tr>
+    <tr><td><span class="swatch" style="background:#dbeafe;"></span><span class="label">Manual / Credit transfer</span></td><td style="background:#dbeafe;">BAKER, Adam <span class="b-t">T</span> <span class="badge b-paid">PAID</span> — MEMBER — $76.59 (credit transfer)</td><td><code>#dbeafe</code></td></tr>
+    <tr><td><span class="swatch" style="background:#fef3c7;"></span><span class="label">RSVP-only (italic)</span></td><td class="italic" style="background:#fef3c7;">Bastin, Jordan <span class="badge b-remind">Remind</span> — — — —</td><td><code>#fef3c7</code></td></tr>
+    <tr><td><span class="swatch" style="background:#fce7f3;"></span><span class="label">GUEST</span></td><td style="background:#fce7f3;">Franz, Kyle — GUEST — $96.00</td><td><code>#fce7f3</code></td></tr>
+    <tr><td><span class="swatch" style="background:#fed7aa;"></span><span class="label">1ST TIMER (current)</span></td><td style="background:#fed7aa;">Byrd, Alex — 1st TIMER — $61.07</td><td><code>#fed7aa</code></td></tr>
+    <tr><td><span class="swatch" style="background:#fef2f2;"></span><span class="label">WD (line-through, dim)</span></td><td class="wd" style="background:#fef2f2;">SOMEONE, Withdrawn — MEMBER — $76.59</td><td><code>#fef2f2</code></td></tr>
+    <tr><td><span class="swatch" style="background:#ffffff; border:1px solid #cbd5e1;"></span><span class="label">Credited / Transferred / Refunded (dim)</span></td><td class="dim" style="background:#ffffff;">SOMEONE, Credited — MEMBER — $70.00</td><td><code>#ffffff</code> · opacity 0.6</td></tr>
+  </tbody>
+</table>
+
+<h2>Adjacent pairs to compare (current)</h2>
+<table>
+  <tbody>
+    <tr><td colspan="3" style="background:#fef3c7;" class="italic">RSVP-only · <code>#fef3c7</code></td></tr>
+    <tr><td colspan="3" style="background:#fed7aa;">1ST TIMER (current) · <code>#fed7aa</code></td></tr>
+    <tr><td colspan="3" style="height:8px;background:#f8fafc;border:none;"></td></tr>
+    <tr><td colspan="3" style="background:#fce7f3;">GUEST (current) · <code>#fce7f3</code></td></tr>
+    <tr><td colspan="3" class="wd" style="background:#fef2f2;">WD · <code>#fef2f2</code></td></tr>
+  </tbody>
+</table>
+
+<hr class="sep">
+
+<h2>Proposed bumps</h2>
+<p class="note">Same row layout, with 1ST TIMER and GUEST shifted one shade deeper. RSVP-only / WD unchanged so you can see the new separation.</p>
+
+<table>
+  <thead><tr><th style="width:240px;">Slot</th><th>Sample row</th><th style="width:180px;">Hex</th></tr></thead>
+  <tbody>
+    <tr><td colspan="3" style="background:#fef3c7;" class="italic">RSVP-only (unchanged) · <code>#fef3c7</code></td></tr>
+    <tr><td><span class="swatch" style="background:#fdba74;"></span><span class="label">1ST TIMER (proposed)</span></td><td style="background:#fdba74;">Byrd, Alex — 1st TIMER — $61.07</td><td><code>#fdba74</code></td></tr>
+    <tr><td colspan="3" style="height:8px;background:#f8fafc;border:none;"></td></tr>
+    <tr><td colspan="3" class="wd" style="background:#fef2f2;">WD (unchanged) · <code>#fef2f2</code></td></tr>
+    <tr><td><span class="swatch" style="background:#fbcfe8;"></span><span class="label">GUEST (proposed)</span></td><td style="background:#fbcfe8;">Franz, Kyle — GUEST — $96.00</td><td><code>#fbcfe8</code></td></tr>
+  </tbody>
+</table>
+
+<h2>All eight row tints together (proposed)</h2>
+<table>
+  <tbody>
+    <tr><td style="background:#ffffff;">Default active (member) · <code>#ffffff</code></td></tr>
+    <tr><td style="background:#dcfce7;">Comp / Manager · <code>#dcfce7</code></td></tr>
+    <tr><td style="background:#dbeafe;">Manual / Credit transfer · <code>#dbeafe</code></td></tr>
+    <tr class="italic"><td style="background:#fef3c7;">RSVP-only · <code>#fef3c7</code></td></tr>
+    <tr><td style="background:#fbcfe8;">GUEST (new) · <code>#fbcfe8</code></td></tr>
+    <tr><td style="background:#fdba74;">1ST TIMER (new) · <code>#fdba74</code></td></tr>
+    <tr class="wd"><td style="background:#fef2f2;">WD · <code>#fef2f2</code></td></tr>
+    <tr class="dim"><td style="background:#ffffff;">Credited / Transferred / Refunded (dimmed) · <code>#ffffff</code></td></tr>
+  </tbody>
+</table>
+
+<p class="note" style="margin-top:1.25rem;">Once you've decided, tell me to apply, tweak, or revert. This file lives at <code>static/color-preview.html</code> — I can delete it after we lock in the palette.</p>
+</body>
+</html>
