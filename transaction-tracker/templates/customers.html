@@ -50,6 +50,7 @@
             <div class="stat-card">
                 <div class="stat-value" id="stat-members">—</div>
                 <div class="stat-label">Members</div>
+                <div id="stat-members-breakdown" style="margin-top:0.4rem; font-size:0.7rem; color:var(--text-muted); line-height:1.4;"></div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-total-items">—</div>
@@ -306,6 +307,12 @@
     let currentView = "list";
     let currentSortField = "name";
     let currentSortDir = "asc";
+
+    // Items with these merchants are admin/import placeholders, not real
+    // customer purchases — skip them in activity filters and transaction lists.
+    const PLACEHOLDER_MERCHANTS = new Set([
+        "Roster Import", "Customer Entry", "RSVP Import", "RSVP Email Link",
+    ]);
 
     // Column definitions for Customers table
     const CUST_COLUMNS = [
@@ -585,12 +592,14 @@
 
         // Activity year filter (default: this calendar year). Counts any
         // membership purchase or event registration in the target year;
-        // excludes RSVP-only items since those aren't actual purchases.
+        // excludes RSVP-only items and admin/roster-import placeholders.
         if (activityFilter === "this_year" || activityFilter === "last_year") {
             const targetYear = String(new Date().getFullYear() - (activityFilter === "last_year" ? 1 : 0));
             const SKIP_TX = new Set(["rsvp_only", "gg_rsvp"]);
             filtered = filtered.filter(c => (c.items || []).some(i =>
-                (i.order_date || "").startsWith(targetYear) && !SKIP_TX.has(i.transaction_status)
+                (i.order_date || "").startsWith(targetYear)
+                && !SKIP_TX.has(i.transaction_status)
+                && !PLACEHOLDER_MERCHANTS.has(i.merchant)
             ));
         }
 
@@ -678,7 +687,19 @@
 
     function renderStats() {
         document.getElementById("stat-customers").textContent = allCustomers.length;
-        document.getElementById("stat-members").textContent = allCustomers.filter(c => c.status === "MEMBER").length;
+        const members = allCustomers.filter(c => c.status === "MEMBER" || c.status === "MEMBER+");
+        document.getElementById("stat-members").textContent = members.length;
+        // Chapter breakdown for current members
+        const byChapter = {};
+        members.forEach(m => {
+            const ch = (m.chapter || "").trim() || "—";
+            byChapter[ch] = (byChapter[ch] || 0) + 1;
+        });
+        const breakdown = Object.entries(byChapter)
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .map(([ch, n]) => `<span style="display:inline-block; margin:0 0.5rem 0.15rem 0;">${escapeHtml(ch)}: <strong style="color:var(--text);">${n}</strong></span>`)
+            .join("");
+        document.getElementById("stat-members-breakdown").innerHTML = breakdown;
         document.getElementById("stat-total-items").textContent = allItems.length;
         const totalSpent = allCustomers.reduce((sum, c) => sum + c.totalSpent, 0);
         document.getElementById("stat-total-spent").textContent = "$" + Math.round(totalSpent).toLocaleString();
@@ -1355,8 +1376,9 @@
         html += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
         html += '</tr></thead><tbody>';
 
-        const sorted = [...customer.items].sort((a, b) =>
-            (b.order_date || "").localeCompare(a.order_date || ""));
+        const sorted = [...customer.items]
+            .filter(i => !PLACEHOLDER_MERCHANTS.has(i.merchant))
+            .sort((a, b) => (b.order_date || "").localeCompare(a.order_date || ""));
 
         sorted.forEach(item => {
             const txStatus = item.transaction_status || "active";
@@ -1847,6 +1869,7 @@
         panelHtml += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
         panelHtml += '</tr></thead><tbody>';
         customer.items
+            .filter(i => !PLACEHOLDER_MERCHANTS.has(i.merchant))
             .sort((a, b) => (b.order_date || "").localeCompare(a.order_date || ""))
             .forEach(item => {
                 const txStatus = item.transaction_status || "active";
