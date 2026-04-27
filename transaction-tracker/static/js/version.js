@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.10.3";
+window.TGF_VERSION = "2.10.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.4",
+    date: "2026-04-27",
+    title: "Customer credit badge shows cents",
+    changes: [
+      "Credit badges on the Customers page (mobile card, desktop table, mobile customer card) now format as $X.XX instead of whole dollars. A $0.19 overpayment credit no longer renders as $0 Credit. totalSpent formatting is unchanged (still whole dollars).",
+    ],
+  },
   {
     version: "2.10.3",
     date: "2026-04-27",
