@@ -3193,7 +3193,7 @@ def api_rsvp_credit_info_by_item(item_id):
 
 
 @app.route("/api/rsvps/<int:item_id>/apply-credit", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_apply_credit_to_rsvp(item_id):
     """Apply a player's credits to their RSVP-only registration."""
     data = request.get_json(silent=True) or {}
@@ -3332,7 +3332,7 @@ def api_gg_rsvp_credit_info(rsvp_id):
 
 
 @app.route("/api/rsvps/gg/<int:rsvp_id>/apply-credit", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_gg_rsvp_apply_credit(rsvp_id):
     """Apply credits for a GG RSVP (synthetic row): creates rsvp_only item then applies credit."""
     from email_parser.database import _connect
@@ -3393,7 +3393,7 @@ def api_gg_rsvp_apply_credit(rsvp_id):
 
 
 @app.route("/api/items/<int:item_id>/reverse-credit-application", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_reverse_credit_application(item_id):
     """Undo a credit application: restore source credits, revert registration to RSVP."""
     result = reverse_credit_application(item_id)
@@ -3678,7 +3678,7 @@ def api_credit_item_apply_info(credit_item_id):
 
 
 @app.route("/api/items/<int:credit_item_id>/apply-to-event", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_apply_credit_item_to_event(credit_item_id):
     """Apply an existing credit item to register a player in a different event."""
     from email_parser.database import _connect
@@ -4005,7 +4005,7 @@ def api_resolve_parse_warning(warning_id):
 # Routes — Credit / Transfer
 # ---------------------------------------------------------------------------
 @app.route("/api/items/<int:item_id>/credit", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_credit_item(item_id):
     """Mark an item as credited (money held for future event)."""
     data = request.get_json(silent=True) or {}
@@ -4015,7 +4015,7 @@ def api_credit_item(item_id):
 
 
 @app.route("/api/items/<int:item_id>/wd", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_wd_item(item_id):
     """Mark an item as WD (withdrawn) with optional partial credit."""
     data = request.get_json(silent=True) or {}
@@ -4142,7 +4142,7 @@ def api_partial_refund_item(item_id):
 
 
 @app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_transfer_item(item_id):
     """Transfer an item to a different event."""
     data = request.get_json(silent=True)
@@ -4155,7 +4155,7 @@ def api_transfer_item(item_id):
 
 
 @app.route("/api/items/<int:item_id>/reverse-credit", methods=["POST"])
-@require_role("admin")
+@require_role("manager")
 def api_reverse_credit(item_id):
     """Reverse a credit or transfer, restoring the original item to active."""
     if reverse_credit(item_id):

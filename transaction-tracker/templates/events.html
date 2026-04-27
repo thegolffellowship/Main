@@ -9089,7 +9089,7 @@
     // Undo Credit Application handler
     document.addEventListener('click', async e => {
         const undoBtn = e.target.closest('.btn-undo-credit-apply');
-        if (undoBtn && currentRole === 'admin') {
+        if (undoBtn && (currentRole === 'admin' || currentRole === 'manager')) {
             e.stopPropagation();
             const customer = undoBtn.dataset.customer || 'this player';
             const itemId = undoBtn.dataset.itemId;
