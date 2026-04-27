@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.10.12";
+window.TGF_VERSION = "2.10.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.13",
+    date: "2026-04-27",
+    title: "Customer Transactions tab: account, total/fees, coupon badge, T circle",
+    changes: [
+      "Customer detail Transactions tab now mirrors the badges and richness already on the Transactions and Events pages: coupon C-badge, simplified circular T (registered via credit transfer) replacing the long 'From Transfer' pill, and stripPriceSuffix() applied so '(credit transfer)' no longer trails the price.",
+      "Two new columns: Account (derived from merchant — Venmo / GoDaddy / Manual / Credit Transfer / RSVP / Roster) and Total / Fees (shows total_amount and transaction_fees when present). Helps eyeball where money came from per row.",
+      "Multi-item order hint: when an order_id appears on more than one row, the Item cell shows a small italic '<N>-item order R<id>' subtitle so it's clear when a registration was part of a bigger transaction. Single-item orders show order_id in lighter grey.",
+      "Reverse hidden on credit-excess- and overpayment-credit- rows here too (mirrors the Events page fix in v2.10.12) so accidental clicks can't ghost-flip them.",
+    ],
+  },
   {
     version: "2.10.12",
     date: "2026-04-27",

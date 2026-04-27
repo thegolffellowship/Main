@@ -389,6 +389,36 @@
         return parseFloat((priceStr || "0").replace(/[$,]/g, "")) || 0;
     }
 
+    // Display-only: strip " (credit transfer)" suffix from item_price.
+    function stripPriceSuffix(priceStr) {
+        return (priceStr || "").replace(/\s*\(credit transfer\)\s*$/i, "");
+    }
+
+    // Coupon C-badge for items with coupon_code or coupon_amount.
+    function couponTag(row) {
+        const code = (row.coupon_code || "").trim();
+        const amt = (row.coupon_amount || "").trim();
+        if (!code && !amt) return "";
+        const parts = [];
+        if (code) parts.push("Coupon: " + code);
+        if (amt) parts.push("-" + (amt.startsWith("$") ? amt : "$" + amt));
+        return ` <span class="coupon-badge" title="${escapeHtml(parts.join(" "))}">C</span>`;
+    }
+
+    // Derive a readable account/source label from the merchant string.
+    function accountLabel(merchant) {
+        const m = (merchant || "").toLowerCase();
+        if (!m) return "—";
+        if (m.includes("venmo")) return "Venmo";
+        if (m === "the golf fellowship") return "GoDaddy";
+        if (m === "manual entry") return "Manual";
+        if (m.startsWith("paid separately")) return "Credit Transfer";
+        if (m.includes("rsvp")) return "RSVP";
+        if (m.includes("roster")) return "Roster";
+        if (m.includes("customer entry")) return "Manual";
+        return merchant || "—";
+    }
+
     // Derive customer status from roles + current_player_status + transaction history.
     // Roles and player_status are the authoritative inputs (set on the customer record);
     // items are the fallback for customers we haven't yet tagged on the Info tab.
@@ -1401,12 +1431,16 @@
         // Transactions tab content
         html += `<div class="cust-tab-content cust-tab-transactions" style="${_at !== 'transactions' ? 'display:none;' : ''}">`;
         html += '<table class="registrants-table"><thead><tr>';
-        html += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
+        html += '<th>Order Date</th><th>Item</th><th>Account</th><th>Price</th><th>Total / Fees</th><th>Side Games</th><th>Actions</th>';
         html += '</tr></thead><tbody>';
 
         const sorted = [...customer.items]
             .filter(i => !PLACEHOLDER_MERCHANTS.has(i.merchant))
             .sort((a, b) => (b.order_date || "").localeCompare(a.order_date || ""));
+
+        // Count items per order_id so we can flag multi-item orders
+        const orderCounts = {};
+        sorted.forEach(it => { if (it.order_id) orderCounts[it.order_id] = (orderCounts[it.order_id] || 0) + 1; });
 
         sorted.forEach(item => {
             const txStatus = item.transaction_status || "active";
@@ -1415,7 +1449,8 @@
             if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${item.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(item.credit_amount)}</span>` : ''}`;
-            else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+            else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-circle status-tag-from-transfer" title="Registered via credit transfer">T</span>';
+            tag += couponTag(item);
             // Show "Purchased by" badge when someone else paid
             let purchasedByTag = "";
             if (item.notes) {
@@ -1424,18 +1459,32 @@
                     purchasedByTag = ` <span style="font-size:0.65rem; background:#dbeafe; color:#1e40af; padding:0.1rem 0.4rem; border-radius:3px; font-weight:500;" title="Paid for by ${escapeHtml(pbMatch[1])}">Paid by ${escapeHtml(pbMatch[1])}</span>`;
                 }
             }
+            // Multi-item order hint
+            const orderHint = (item.order_id && orderCounts[item.order_id] > 1)
+                ? `<div style="font-size:0.65rem;color:#94a3b8;font-style:italic;" title="Order ${escapeHtml(item.order_id)} contains ${orderCounts[item.order_id]} items">${orderCounts[item.order_id]}-item order ${escapeHtml(item.order_id)}</div>`
+                : (item.order_id ? `<div style="font-size:0.65rem;color:#cbd5e1;" title="Order ${escapeHtml(item.order_id)}">${escapeHtml(item.order_id)}</div>` : '');
+            const totalFees = (item.total_amount || item.transaction_fees)
+                ? `${escapeHtml(item.total_amount || "\u2014")}${item.transaction_fees ? ` <span style="font-size:0.7rem;color:#94a3b8;">(${escapeHtml(item.transaction_fees)} fee)</span>` : ''}`
+                : '<span style="color:#cbd5e1;">\u2014</span>';
             let actionBtn = "";
             if (txStatus === "active" && !item.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
             } else if (txStatus === "credited") {
-                actionBtn = `<button class="btn btn-apply-cust-credit" data-cust-apply-id="${item.id}" data-customer="${escapeHtml(item.customer || '')}" data-source-event="${escapeHtml(item.item_name || '')}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Apply</button> <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+                actionBtn = `<button class="btn btn-apply-cust-credit" data-cust-apply-id="${item.id}" data-customer="${escapeHtml(item.customer || '')}" data-source-event="${escapeHtml(item.item_name || '')}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Apply</button>`;
+                // Hide Reverse on credit-pool rows (excess + overpayment) \u2014 see v2.10.12.
+                const uid = item.email_uid || "";
+                if (!uid.startsWith("credit-excess-") && !uid.startsWith("overpayment-credit-")) {
+                    actionBtn += ` <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+                }
             } else if (txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
             html += `<tr${rowClass} data-txn-id="${item.id}" style="cursor:pointer;">
                 <td>${escapeHtml(item.order_date || "\u2014")}</td>
-                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}${purchasedByTag}</td>
-                <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
+                <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}${purchasedByTag}${orderHint}</td>
+                <td style="font-size:0.78rem;color:#64748b;">${escapeHtml(accountLabel(item.merchant))}</td>
+                <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(stripPriceSuffix(item.item_price) || "\u2014")}</td>
+                <td style="font-size:0.82rem; font-variant-numeric:tabular-nums;">${totalFees}</td>
                 <td>${escapeHtml(item.side_games || "\u2014")}</td>
                 <td>${actionBtn}</td>
             </tr>`;
@@ -1894,31 +1943,46 @@
         // Transactions tab
         panelHtml += `<div class="cust-tab-content cust-tab-transactions" style="${!_panelTxnActive ? 'display:none;' : ''}">`;
         panelHtml += '<table style="width:100%; border-collapse:collapse;"><thead><tr>';
-        panelHtml += '<th>Order Date</th><th>Item</th><th>Price</th><th>Side Games</th><th>Actions</th>';
+        panelHtml += '<th>Order Date</th><th>Item</th><th>Account</th><th>Price</th><th>Total / Fees</th><th>Side Games</th><th>Actions</th>';
         panelHtml += '</tr></thead><tbody>';
-        customer.items
+        const _panelSorted = customer.items
             .filter(i => !PLACEHOLDER_MERCHANTS.has(i.merchant))
-            .sort((a, b) => (b.order_date || "").localeCompare(a.order_date || ""))
-            .forEach(item => {
+            .sort((a, b) => (b.order_date || "").localeCompare(a.order_date || ""));
+        const _panelOrderCounts = {};
+        _panelSorted.forEach(it => { if (it.order_id) _panelOrderCounts[it.order_id] = (_panelOrderCounts[it.order_id] || 0) + 1; });
+        _panelSorted.forEach(item => {
                 const txStatus = item.transaction_status || "active";
                 const rowClass = txStatus !== "active" ? ` class="row-${txStatus}"` : (item.transferred_from_id ? ' class="row-from-transfer"' : '');
                 let tag = "";
                 if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                 else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                 else if (txStatus === "wd") tag = `<span class="status-tag status-tag-wd">WD</span>${item.credit_amount ? ` <span style="font-size:0.65rem; color:#991b1b;">${escapeHtml(item.credit_amount)}</span>` : ''}`;
-                else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-from-transfer">From Transfer</span>';
+                else if (item.transferred_from_id) tag = '<span class="status-tag status-tag-circle status-tag-from-transfer" title="Registered via credit transfer">T</span>';
+                tag += couponTag(item);
+                const orderHint = (item.order_id && _panelOrderCounts[item.order_id] > 1)
+                    ? `<div style="font-size:0.65rem;color:#94a3b8;font-style:italic;" title="Order ${escapeHtml(item.order_id)} contains ${_panelOrderCounts[item.order_id]} items">${_panelOrderCounts[item.order_id]}-item order ${escapeHtml(item.order_id)}</div>`
+                    : (item.order_id ? `<div style="font-size:0.65rem;color:#cbd5e1;" title="Order ${escapeHtml(item.order_id)}">${escapeHtml(item.order_id)}</div>` : '');
+                const totalFees = (item.total_amount || item.transaction_fees)
+                    ? `${escapeHtml(item.total_amount || "\u2014")}${item.transaction_fees ? ` <span style="font-size:0.7rem;color:#94a3b8;">(${escapeHtml(item.transaction_fees)} fee)</span>` : ''}`
+                    : '<span style="color:#cbd5e1;">\u2014</span>';
                 let actionBtn = "";
                 if (txStatus === "active" && !item.transferred_from_id) {
                     actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
                 } else if (txStatus === "credited") {
-                    actionBtn = `<button class="btn btn-apply-cust-credit" data-cust-apply-id="${item.id}" data-customer="${escapeHtml(item.customer || '')}" data-source-event="${escapeHtml(item.item_name || '')}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Apply</button> <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+                    actionBtn = `<button class="btn btn-apply-cust-credit" data-cust-apply-id="${item.id}" data-customer="${escapeHtml(item.customer || '')}" data-source-event="${escapeHtml(item.item_name || '')}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Apply</button>`;
+                    const uid = item.email_uid || "";
+                    if (!uid.startsWith("credit-excess-") && !uid.startsWith("overpayment-credit-")) {
+                        actionBtn += ` <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+                    }
                 } else if (txStatus === "transferred" || txStatus === "wd") {
                     actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                 }
                 panelHtml += `<tr${rowClass}>
                     <td>${escapeHtml(item.order_date || "\u2014")}</td>
-                    <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}</td>
-                    <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(item.item_price || "\u2014")}</td>
+                    <td><a class="cell-link" href="/events?item=${encodeURIComponent(item.item_name || "")}">${escapeHtml(item.item_name || "\u2014")}</a>${tag}${orderHint}</td>
+                    <td style="font-size:0.78rem;color:#64748b;">${escapeHtml(accountLabel(item.merchant))}</td>
+                    <td style="font-weight:600; font-variant-numeric:tabular-nums;">${escapeHtml(stripPriceSuffix(item.item_price) || "\u2014")}</td>
+                    <td style="font-size:0.82rem; font-variant-numeric:tabular-nums;">${totalFees}</td>
                     <td>${escapeHtml(item.side_games || "\u2014")}</td>
                     <td>${actionBtn}</td>
                 </tr>`;
