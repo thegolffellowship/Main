@@ -78,6 +78,11 @@
                 <option value="archived">Archived</option>
                 <option value="all">All</option>
             </select>
+            <select id="filter-activity" class="filter-select" title="Filter by year of activity">
+                <option value="this_year" selected>This Year</option>
+                <option value="last_year">Last Year</option>
+                <option value="all">All Years</option>
+            </select>
             <select id="sort-select" class="sort-select">
                 <option value="name-asc">Name (A-Z)</option>
                 <option value="name-desc">Name (Z-A)</option>
@@ -568,6 +573,7 @@
         const statusFilter = document.getElementById("filter-status").value;
         const chapterFilter = document.getElementById("filter-chapter").value;
         const archivedFilter = document.getElementById("filter-archived").value;
+        const activityFilter = document.getElementById("filter-activity").value;
         let filtered = allCustomers;
 
         // Archive filter (default: show active only)
@@ -575,6 +581,17 @@
             filtered = filtered.filter(c => !c.archived);
         } else if (archivedFilter === "archived") {
             filtered = filtered.filter(c => c.archived);
+        }
+
+        // Activity year filter (default: this calendar year). Counts any
+        // membership purchase or event registration in the target year;
+        // excludes RSVP-only items since those aren't actual purchases.
+        if (activityFilter === "this_year" || activityFilter === "last_year") {
+            const targetYear = String(new Date().getFullYear() - (activityFilter === "last_year" ? 1 : 0));
+            const SKIP_TX = new Set(["rsvp_only", "gg_rsvp"]);
+            filtered = filtered.filter(c => (c.items || []).some(i =>
+                (i.order_date || "").startsWith(targetYear) && !SKIP_TX.has(i.transaction_status)
+            ));
         }
 
         if (query) {
@@ -637,7 +654,9 @@
         const statusFilter = document.getElementById("filter-status").value;
         const chapterFilter = document.getElementById("filter-chapter").value;
         const archivedFilter = document.getElementById("filter-archived").value;
-        const hasFilters = query || statusFilter || chapterFilter || archivedFilter !== "active";
+        const activityFilter = document.getElementById("filter-activity").value;
+        const hasFilters = query || statusFilter || chapterFilter
+            || archivedFilter !== "active" || activityFilter !== "this_year";
         document.getElementById("btn-clear-filters").classList.toggle("visible", !!hasFilters);
     }
 
@@ -646,6 +665,7 @@
         document.getElementById("filter-status").value = "";
         document.getElementById("filter-chapter").value = "";
         document.getElementById("filter-archived").value = "active";
+        document.getElementById("filter-activity").value = "this_year";
         currentSortField = "name";
         currentSortDir = "asc";
         document.getElementById("sort-select").value = "name-asc";
@@ -3016,6 +3036,7 @@
         document.getElementById("filter-status").addEventListener("change", renderCustomers);
         document.getElementById("filter-chapter").addEventListener("change", renderCustomers);
         document.getElementById("filter-archived").addEventListener("change", renderCustomers);
+        document.getElementById("filter-activity").addEventListener("change", renderCustomers);
         document.getElementById("sort-select").addEventListener("change", () => {
             const val = document.getElementById("sort-select").value;
             if (val) {
