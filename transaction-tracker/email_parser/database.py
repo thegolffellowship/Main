@@ -1146,7 +1146,9 @@ def _migrate_normalize_customer_name_case(conn: sqlite3.Connection) -> int:
     Idempotent — only touches names where .isupper() is True (no
     lowercase letters anywhere). Mixed-case names like "McDonald" are
     left alone. Updates customers.first_name / last_name and propagates
-    the new "First Last" into items.customer for matching customer_id.
+    the new values to items.first_name / items.last_name / items.customer
+    so the Info-tab form (which pre-fills from items) doesn't write
+    stale uppercase back into the customers table on save.
     """
     rows = conn.execute(
         "SELECT customer_id, first_name, last_name FROM customers"
@@ -1163,14 +1165,42 @@ def _migrate_normalize_customer_name_case(conn: sqlite3.Connection) -> int:
             (new_f, new_l, r["customer_id"]),
         )
         full = f"{new_f or ''} {new_l or ''}".strip()
-        if full:
-            conn.execute(
-                "UPDATE items SET customer = ? WHERE customer_id = ? AND customer IS NOT NULL",
-                (full, r["customer_id"]),
-            )
+        conn.execute(
+            "UPDATE items SET first_name = ?, last_name = ?, customer = ? WHERE customer_id = ?",
+            (new_f or None, new_l or None, full or None, r["customer_id"]),
+        )
         updated += 1
-    if updated:
-        logger.info("Normalized name case for %d customer(s)", updated)
+
+    # Pass 2: items rows whose first_name/last_name are still uppercase but
+    # whose linked customer record is already proper-case (e.g. names that
+    # got written back via a stale Info-tab save before this fix existed).
+    # Re-sync those items to the customers master record.
+    item_rows = conn.execute(
+        """SELECT i.id, i.first_name AS i_first, i.last_name AS i_last,
+                  c.first_name AS c_first, c.last_name AS c_last
+           FROM items i
+           JOIN customers c ON c.customer_id = i.customer_id
+           WHERE (i.first_name IS NOT NULL AND LENGTH(i.first_name) > 0
+                  AND i.first_name = UPPER(i.first_name)
+                  AND i.first_name GLOB '*[A-Z]*'
+                  AND i.first_name != c.first_name)
+              OR (i.last_name IS NOT NULL AND LENGTH(i.last_name) > 0
+                  AND i.last_name = UPPER(i.last_name)
+                  AND i.last_name GLOB '*[A-Z]*'
+                  AND i.last_name != c.last_name)"""
+    ).fetchall()
+    for ir in item_rows:
+        full = f"{ir['c_first'] or ''} {ir['c_last'] or ''}".strip()
+        conn.execute(
+            "UPDATE items SET first_name = ?, last_name = ?, customer = ? WHERE id = ?",
+            (ir["c_first"], ir["c_last"], full or None, ir["id"]),
+        )
+
+    if updated or item_rows:
+        logger.info(
+            "Normalized name case for %d customer(s); resynced %d item row(s)",
+            updated, len(item_rows),
+        )
     return updated
 
 
