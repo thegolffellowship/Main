@@ -5482,7 +5482,7 @@ def scan_price_games_mismatches(db_path: str | Path | None = None) -> dict:
     with _connect(db_path) as conn:
         items = conn.execute(
             """SELECT id, email_uid, order_id, customer, item_name,
-                      item_price, total_amount, transaction_fees
+                      item_price, total_amount, transaction_fees, coupon_amount
                FROM items
                WHERE COALESCE(transaction_status, 'active') = 'active'
                AND parent_item_id IS NULL
@@ -5500,11 +5500,13 @@ def scan_price_games_mismatches(db_path: str | Path | None = None) -> dict:
             price = _parse_dollar(item["item_price"])
             total = _parse_dollar(item["total_amount"])
             fees = _parse_dollar(item["transaction_fees"])
+            coupon = abs(_parse_dollar(item["coupon_amount"]))
 
             if price <= 0 or total <= 0:
                 continue
 
-            expected_price = round(total - fees, 2)
+            # Coupon discounts reduce total_amount but not item_price; add back.
+            expected_price = round(total - fees + coupon, 2)
             if abs(price - expected_price) <= 1.0:
                 continue  # within tolerance
 
@@ -5518,8 +5520,9 @@ def scan_price_games_mismatches(db_path: str | Path | None = None) -> dict:
                 results["already_warned"] += 1
                 continue
 
+            coupon_msg = f" + coupon=${coupon:.2f}" if coupon > 0 else ""
             msg = (f"item_price=${price:.2f} does not match "
-                   f"total_amount=${total:.2f} - transaction_fees=${fees:.2f} = "
+                   f"total_amount=${total:.2f} - transaction_fees=${fees:.2f}{coupon_msg} = "
                    f"${expected_price:.2f}. Parser may have grabbed a description "
                    f"price instead of the actual charged amount. "
                    f"Order: {item['order_id'] or '?'}")

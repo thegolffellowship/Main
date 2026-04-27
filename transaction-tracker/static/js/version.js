@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.10.0";
+window.TGF_VERSION = "2.10.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.1",
+    date: "2026-04-27",
+    title: "Coupon-aware price validation + faster default Audit Log window",
+    changes: [
+      "Parse validation: price_total_mismatch now adds coupon_amount back into the expected_price formula (item_price ≈ total_amount − transaction_fees + coupon_amount). Coupon-discounted orders no longer raise false-positive action items. Applies to both the in-flight parser check and the scan_price_games_mismatches backfill.",
+      "Audit Log defaults reduced from 90 days / 100 emails to 7 days / 25 emails so Run Audit completes faster. Backend defaults on /api/audit/emails aligned to match.",
+    ],
+  },
   {
     version: "2.10.0",
     date: "2026-04-27",
