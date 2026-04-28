@@ -13950,7 +13950,7 @@ def _calc_event_allocation(item: dict, conn: sqlite3.Connection) -> dict:
             holes = "9"
     is_18 = "18" in str(holes)
     hole_key = "18" if is_18 else "9"
-    is_combo = (event.get("format") or "").lower() == "combo"
+    is_combo = "combo" in (event.get("format") or "").lower()
 
     if is_combo and is_18:
         tgf_markup = event.get("tgf_markup_18") or event.get("tgf_markup")
@@ -14408,13 +14408,20 @@ def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
 
     Instead of: per_player_post_tax × count (rounding drift),
     uses: base_rate × count × (1 + tax_rate) — totals first, tax second.
+
+    If the event has no course-cost config (no course_cost / course_cost_breakdown
+    columns set), falls back to summing the per-player course_payable values
+    stored on acct_allocations at registration time.
     """
-    is_combo = (event.get("format") or "").lower() == "combo"
+    is_combo = "combo" in (event.get("format") or "").lower()
     default_holes = "18" if event.get("format") == "18 Holes" else "9"
 
     parent_items = [i for i in all_items if not i.get("parent_item_id")]
     active_parents = [i for i in parent_items
                       if i.get("transaction_status") not in ("credited", "refunded", "transferred", "rsvp_only", "wd")]
+
+    if not active_parents:
+        return 0.0
 
     total_course_cost = 0.0
 
@@ -14462,7 +14469,24 @@ def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
         elif fallback_cost:
             total_course_cost += fallback_cost * count
 
-    # Add surcharge
+    # Fallback: event config missing → use per-player allocations from registration time.
+    # Allocation rows store course_payable (post-tax) and course_surcharge separately,
+    # so summing both gives the full per-event course cost without double-counting.
+    if total_course_cost == 0:
+        active_ids = [i["id"] for i in active_parents]
+        placeholders = ",".join("?" * len(active_ids))
+        row = conn.execute(
+            f"""SELECT
+                    COALESCE(SUM(course_payable), 0) AS payable,
+                    COALESCE(SUM(course_surcharge), 0) AS surcharge
+                FROM acct_allocations
+                WHERE item_id IN ({placeholders})""",
+            active_ids,
+        ).fetchone()
+        if row and (row["payable"] or row["surcharge"]):
+            return round(float(row["payable"]) + float(row["surcharge"]), 2)
+
+    # Add per-player surcharge from event config
     surcharge = event.get("course_surcharge") or 0
     total_course_cost += surcharge * len(active_parents)
 
