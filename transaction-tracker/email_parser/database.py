@@ -2929,6 +2929,22 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass  # skip backfill if columns not yet available (old schema)
 
+        # Backfill: promoted Venmo "received" rows were previously written with
+        # entry_type='expense' — fix them so they classify as income in P&L.
+        try:
+            conn.execute("""
+                UPDATE acct_transactions
+                SET entry_type = 'income'
+                WHERE entry_type = 'expense'
+                  AND id IN (
+                      SELECT acct_transaction_id FROM expense_transactions
+                      WHERE transaction_type = 'received'
+                        AND acct_transaction_id IS NOT NULL
+                  )
+            """)
+        except sqlite3.OperationalError:
+            pass  # skip if columns not yet available (old schema)
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS action_items (
@@ -15603,8 +15619,10 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
 
     existing_id = exp.get("acct_transaction_id")
 
-    # entry_type drives reconciliation matching; always 'expense' for promoted expenses
-    entry_type = "expense"
+    # entry_type drives reconciliation matching and P&L classification.
+    # Venmo "received" rows are inbound payments (income); everything else
+    # (expense / payout / transfer) is an outflow.
+    entry_type = "income" if txn_type == "received" else "expense"
 
     if existing_id:
         conn.execute(
