@@ -167,6 +167,7 @@ from email_parser.database import (
     get_event_financial_summary,
     backfill_financial_entries,
     backfill_acct_transactions,
+    backfill_missing_godaddy_orders,
     migrate_item_to_order_entries,
     cleanup_duplicate_godaddy_entries,
     backup_database,
@@ -8568,7 +8569,17 @@ try:
         _bf_result = backfill_acct_transactions()
         logger.info("Startup backfill: %s", _bf_result)
     else:
-        logger.info("Accounting entries exist (%d), skipping backfill", _acct_count)
+        logger.info("Accounting entries exist (%d), skipping full backfill", _acct_count)
+
+    # Always run the targeted GoDaddy-order backfill — idempotent, only
+    # touches orders that are missing an active ledger entry. Catches new
+    # events whose order rows arrived after the one-shot full backfill.
+    try:
+        _gd_added = backfill_missing_godaddy_orders()
+        if _gd_added:
+            logger.info("Startup: backfilled %d missing GoDaddy order entries", _gd_added)
+    except Exception:
+        logger.warning("Startup GoDaddy order backfill failed", exc_info=True)
 
     # ── Auto-migrate old per-item GoDaddy entries to order-level ──
     try:

@@ -14842,6 +14842,75 @@ def backfill_financial_entries(db_path: str | Path | None = None) -> dict:
     return results
 
 
+def backfill_missing_godaddy_orders(db_path: str | Path | None = None) -> int:
+    """Create order-level acct_transactions entries for GoDaddy orders that
+    have items but no active 'godaddy-order-{id}' ledger row.
+
+    Idempotent — only touches orders missing an active entry.  Use as a
+    startup hook so events that arrived after the one-shot
+    backfill_acct_transactions guard get their ledger entries automatically.
+    """
+    with _connect(db_path) as conn:
+        missing = conn.execute(
+            """SELECT DISTINCT i.order_id
+               FROM items i
+               WHERE i.merchant = 'The Golf Fellowship'
+                 AND COALESCE(i.transaction_status, 'active') NOT IN
+                     ('rsvp_only', 'credited', 'refunded', 'transferred')
+                 AND i.parent_item_id IS NULL
+                 AND i.transferred_from_id IS NULL
+                 AND i.order_id IS NOT NULL
+                 AND i.item_price IS NOT NULL
+                 AND i.item_price NOT LIKE '$0.00%'
+                 AND NOT EXISTS (
+                     SELECT 1 FROM acct_transactions t
+                     WHERE t.source_ref = 'godaddy-order-' || i.order_id
+                       AND COALESCE(t.status, 'active') = 'active'
+                 )"""
+        ).fetchall()
+        if not missing:
+            return 0
+
+        created = 0
+        for row in missing:
+            oid = row["order_id"]
+            try:
+                order_items = conn.execute(
+                    """SELECT * FROM items
+                       WHERE order_id = ? AND merchant = 'The Golf Fellowship'
+                         AND COALESCE(transaction_status, 'active') NOT IN ('rsvp_only')
+                         AND parent_item_id IS NULL
+                         AND transferred_from_id IS NULL""",
+                    (oid,),
+                ).fetchall()
+                valid_items = [
+                    dict(r) for r in order_items
+                    if _parse_dollar(dict(r).get("item_price")) > 0
+                    and dict(r).get("transaction_status") not in ("credited", "refunded", "transferred")
+                ]
+                if not valid_items:
+                    continue
+                txn_id = _write_godaddy_order_entry(
+                    conn,
+                    order_id=oid,
+                    items=valid_items,
+                    date=valid_items[0].get("order_date") or "",
+                )
+                if txn_id:
+                    created += 1
+            except Exception:
+                logger.warning(
+                    "backfill_missing_godaddy_orders: failed for order %s", oid, exc_info=True
+                )
+
+        if created:
+            conn.commit()
+            logger.info(
+                "Backfilled %d missing GoDaddy order entries", created,
+            )
+        return created
+
+
 def backfill_acct_transactions(db_path: str | Path | None = None) -> dict:
     """Backfill flat acct_transactions entries for all 2026 items missing them.
 
