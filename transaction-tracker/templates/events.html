@@ -1871,7 +1871,12 @@
             const statusClass = (isRsvpOnly || isGgRsvp) ? ' row-rsvp-only'
                 : txStatus !== "active" ? ` row-${txStatus}`
                 : (r.transferred_from_id ? ' row-from-transfer' : '');
-            const isManual = (r.email_uid || "").startsWith("manual-");
+            // True manual rows (where the user added the player) — gates the
+            // Delete action and the "Manual" badge.
+            const isManualEmailUid = (r.email_uid || "").startsWith("manual-");
+            // Blue-tint also applies to credit-transfer rows; apply_credit_to_rsvp
+            // doesn't rewrite email_uid, so transferred_from_id is the signal.
+            const isManual = isManualEmailUid || !!r.transferred_from_id;
             const isComp = (r.email_uid || "").startsWith("manual-comp");
             let tag = '';
             if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
@@ -1948,7 +1953,7 @@
             } else if (txStatus === "active") {
                 actionBtn = `<button class="btn btn-credit" data-credit-id="${r.id}">Credit</button>`;
                 actionBtn += ` <button class="btn btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}" style="background:#dc2626;color:#fff;font-size:0.6rem;padding:0.15rem 0.35rem;line-height:1;">WD</button>`;
-                if (isManual) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
+                if (isManualEmailUid) actionBtn += ` <button class="btn btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}" title="Delete">&times;</button>`;
             } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
                 actionBtn = isCreditPoolRow(r) ? '' : `<button class="btn btn-reverse" data-reverse-id="${r.id}">Reverse</button>`;
             }
@@ -4110,7 +4115,12 @@
             }
             const circleClass = circleState !== "none" ? ` rsvp-circle-${circleState.replace("_", "-")}` : "";
             const circleTitle = circleState === "playing" ? "Playing (GG)" : circleState === "not_playing" ? `Not Playing (${circleSource === "auto" ? "GG" : "manual"})` : circleState === "manual_green" ? "RSVP (manual)" : "No RSVP";
-            const isManualRow = (r.email_uid || "").startsWith("manual-");
+            // True manual rows — gates the Delete action and "Manual" badge.
+            const isManualEmailUidRow = (r.email_uid || "").startsWith("manual-");
+            // Blue-tint applies to manual entries AND credit-transfer rows.
+            // apply_credit_to_rsvp updates the RSVP item in place without
+            // changing email_uid, so transferred_from_id is the signal there.
+            const isManualRow = isManualEmailUidRow || !!r.transferred_from_id;
             const isCompRow = (r.email_uid || "").startsWith("manual-comp");
             const hasExtraInfo = !!(r.partner_request || r.fellowship || r.notes);
             let rowClasses = [];
@@ -4242,7 +4252,7 @@
                         } else {
                             items.push(`<button class="ev-menu-item btn-credit" data-credit-id="${r.id}">Credit</button>`);
                             items.push(`<button class="ev-menu-item btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}">WD</button>`);
-                            if (isManualRow) items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
+                            if (isManualEmailUidRow) items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
                         }
                     } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
                         if (!isCreditPoolRow(r)) {
