@@ -8967,7 +8967,12 @@ def apply_credit_to_rsvp(
         event = dict(event_row) if event_row else {}
 
         u_status = user_status or credited_items[0].get("user_status") or "MEMBER"
-        u_holes = holes or credited_items[0].get("holes") or "9"
+        # Default holes from the *target* event's format. Hardcoded "9" was
+        # writing 9 into the HOLES column for 18-hole events and producing a
+        # 9-hole subtotal in the balance-due math.
+        _evt_fmt = (event.get("format") or "")
+        _default_holes = "18" if _evt_fmt == "18 Holes" else "9"
+        u_holes = holes or credited_items[0].get("holes") or _default_holes
         u_games = side_games or credited_items[0].get("side_games") or "NONE"
         u_tee = tee_choice or credited_items[0].get("tee_choice") or ""
 

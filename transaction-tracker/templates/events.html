@@ -8828,19 +8828,28 @@
                 ? `Credit covers cost — <strong style="color:#16a34a;">${fmt(Math.abs(info.amount_owed))}</strong> excess`
                 : `Credit covers cost exactly`;
 
-            let creditsHtml = (info.credits || []).map(c => `
-                <tr>
+            // Multi-credit selection — checkbox per row, defaults all checked.
+            // Lets the manager apply a subset of credits with running totals.
+            let creditsHtml = (info.credits || []).map(c => {
+                const amt = c.credit_amount !== undefined ? c.credit_amount : parseFloat((c.item_price || '0').replace(/[^0-9.-]/g, ''));
+                return `
+                <tr data-credit-row data-credit-id="${c.id}" data-credit-amount="${amt}">
+                    <td style="padding:0.2rem 0.5rem;width:24px;"><input type="checkbox" class="crd-credit-cb" data-credit-id="${c.id}" data-credit-amount="${amt}" checked></td>
                     <td style="padding:0.2rem 0.5rem;">${escapeHtml(c.item_name || '')}</td>
-                    <td style="padding:0.2rem 0.5rem;font-weight:600;">${fmt(c.credit_amount !== undefined ? c.credit_amount : parseFloat((c.item_price || '0').replace(/[^0-9.-]/g, '')))}</td>
+                    <td style="padding:0.2rem 0.5rem;font-weight:600;">${fmt(amt)}</td>
                     <td style="padding:0.2rem 0.5rem;color:#6b7280;font-size:0.78rem;">${escapeHtml(c.order_date || '')}</td>
-                </tr>`).join('');
+                </tr>`;
+            }).join('');
 
             // Find event data for live price recalculation
             const selEvent = allEvents.find(e => e.item_name === eventName);
             const evFmt = selEvent ? (selEvent.format || '') : '';
             const isComboEvt = evFmt.toLowerCase().includes('combo') || evFmt.toLowerCase().includes('9/18');
+            // Default holes from the event format itself, not a hardcoded "9".
+            // Otherwise an 18-hole event was producing 9-hole subtotals + writing 9 into the HOLES column.
+            const evtDefaultHoles = (evFmt === '18 Holes') ? '18' : '9';
             const prev = info.previous_selections || {};
-            const initHoles = (prev.holes || '9').toString();
+            const initHoles = (prev.holes || evtDefaultHoles).toString();
             const initGames = (prev.side_games || 'NONE').toUpperCase();
             const _rawStatus = (prev.user_status || 'MEMBER').toUpperCase();
             const initStatus = _rawStatus.includes('GUEST') ? 'GUEST' : (_rawStatus.includes('1ST') || _rawStatus.includes('FIRST')) ? '1ST TIMER' : 'MEMBER';
@@ -8886,6 +8895,7 @@
                 ? info.event_subtotal
                 : info.event_price;
             const priceRow = `<tr id="credit-price-row" style="border-top:1px solid #e5e7eb;${selEvent||priceForDisplay!=null?'':'display:none;'}">
+                    <td></td>
                     <td style="padding:0.3rem 0.5rem;font-weight:600;">New Event Price</td>
                     <td id="credit-price-val" style="padding:0.3rem 0.5rem;font-weight:700;">${priceForDisplay!=null ? fmt(priceForDisplay) : '—'}</td>
                     <td style="padding:0.3rem 0.5rem;"></td>
@@ -8902,6 +8912,7 @@
                 </div>
                 <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:0.5rem;">
                     <thead><tr style="background:#f3f4f6;">
+                        <th style="text-align:left;padding:0.3rem 0.5rem;width:24px;"></th>
                         <th style="text-align:left;padding:0.3rem 0.5rem;">Source Credit</th>
                         <th style="text-align:left;padding:0.3rem 0.5rem;">Amount</th>
                         <th style="text-align:left;padding:0.3rem 0.5rem;">Date</th>
@@ -8909,8 +8920,9 @@
                     <tbody>${creditsHtml}</tbody>
                     <tfoot>
                         <tr style="border-top:2px solid #e5e7eb;">
-                            <td style="padding:0.3rem 0.5rem;font-weight:600;">Total Credit</td>
-                            <td style="padding:0.3rem 0.5rem;font-weight:700;color:#16a34a;">${fmt(info.total_credit)}</td>
+                            <td></td>
+                            <td style="padding:0.3rem 0.5rem;font-weight:600;">Total Credit (selected)</td>
+                            <td id="credit-total-val" style="padding:0.3rem 0.5rem;font-weight:700;color:#16a34a;">${fmt(info.total_credit)}</td>
                             <td></td>
                         </tr>
                         ${priceRow}
@@ -8982,8 +8994,15 @@
                     document.getElementById('credit-price-row').style.display = '';
                 }
 
+                // Sum only the credits whose checkbox is currently ticked.
+                const selectedTotal = Array.from(document.querySelectorAll('.crd-credit-cb'))
+                    .filter(cb => cb.checked)
+                    .reduce((s, cb) => s + parseFloat(cb.dataset.creditAmount || 0), 0);
+                const totalCreditEl = document.getElementById('credit-total-val');
+                if (totalCreditEl) totalCreditEl.textContent = fmt2(selectedTotal);
+
                 const amtOwed = displaySubtotal != null
-                    ? Math.round((displaySubtotal - info.total_credit) * 100) / 100
+                    ? Math.round((displaySubtotal - selectedTotal) * 100) / 100
                     : (info.amount_owed ?? null);
 
                 const scenEl = document.getElementById('credit-scenario-display');
@@ -9043,6 +9062,17 @@
                     _updateCrdCalc();
                 });
             }
+
+            // Recalc on credit-checkbox toggle. Block unchecking the last
+            // remaining credit — at least one must be selected.
+            document.querySelectorAll('.crd-credit-cb').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const anyChecked = Array.from(document.querySelectorAll('.crd-credit-cb')).some(c => c.checked);
+                    if (!anyChecked) { cb.checked = true; return; }
+                    _updateCrdCalc();
+                });
+            });
+
             _updateCrdCalc();
 
             actions.style.display = 'flex';
@@ -9078,11 +9108,16 @@
             const applyUrl = rsvpId
                 ? `/api/rsvps/gg/${rsvpId}/apply-credit`
                 : `/api/rsvps/${itemId}/apply-credit`;
+            // Send only the credits the manager actually selected.
+            const selectedIds = Array.from(document.querySelectorAll('.crd-credit-cb'))
+                .filter(cb => cb.checked)
+                .map(cb => parseInt(cb.dataset.creditId, 10))
+                .filter(n => !isNaN(n));
             const resp = await fetch(applyUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    credited_item_ids: (info.credits || []).map(c => c.id),
+                    credited_item_ids: selectedIds.length ? selectedIds : (info.credits || []).map(c => c.id),
                     excess_action: excessAction,
                     holes: curSel.holes || prev.holes || '',
                     side_games: curSel.side_games || prev.side_games || '',
