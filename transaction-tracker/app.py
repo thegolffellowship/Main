@@ -3142,13 +3142,20 @@ def api_rsvp_credit_info_by_item(item_id):
         event = dict(event_row) if event_row else {}
 
         most_recent = credits[0]
-        # Default holes from event format — "18 Holes" → "18", everything else → "9".
-        # Fixes wrong subtotal & wrong HOLES column on the resulting registration.
+        # For non-combo events the holes value is locked to the event format.
+        # Inheriting from the credited source item (e.g. a 9-hole credit applied
+        # at an 18-hole event) was producing the wrong subtotal because the
+        # PER_GAME_ADDON differs ($16 vs $30) — see _calc_event_pricing_breakdown.
         _evt_fmt = (event.get("format") or "")
-        _default_holes = "18" if _evt_fmt == "18 Holes" else "9"
+        if _evt_fmt == "18 Holes":
+            _holes = "18"
+        elif _evt_fmt == "9 Holes":
+            _holes = "9"
+        else:
+            _holes = most_recent.get("holes") or "9"
         prev = {
             "user_status": most_recent.get("user_status") or "MEMBER",
-            "holes": most_recent.get("holes") or _default_holes,
+            "holes": _holes,
             "side_games": most_recent.get("side_games") or "NONE",
             "tee_choice": most_recent.get("tee_choice") or "",
         }
@@ -3283,12 +3290,18 @@ def api_gg_rsvp_credit_info(rsvp_id):
         event = dict(event_row) if event_row else {}
 
         most_recent = credits[0]
-        # Default holes from event format — same fix as the by-item endpoint.
+        # Force holes to match event format on non-combo events (same as the
+        # by-item endpoint). See that function's comment for the why.
         _evt_fmt = (event.get("format") or "")
-        _default_holes = "18" if _evt_fmt == "18 Holes" else "9"
+        if _evt_fmt == "18 Holes":
+            _holes = "18"
+        elif _evt_fmt == "9 Holes":
+            _holes = "9"
+        else:
+            _holes = most_recent.get("holes") or "9"
         prev = {
             "user_status": most_recent.get("user_status") or "MEMBER",
-            "holes": most_recent.get("holes") or _default_holes,
+            "holes": _holes,
             "side_games": most_recent.get("side_games") or "NONE",
             "tee_choice": most_recent.get("tee_choice") or "",
         }

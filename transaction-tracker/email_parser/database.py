@@ -8967,12 +8967,20 @@ def apply_credit_to_rsvp(
         event = dict(event_row) if event_row else {}
 
         u_status = user_status or credited_items[0].get("user_status") or "MEMBER"
-        # Default holes from the *target* event's format. Hardcoded "9" was
-        # writing 9 into the HOLES column for 18-hole events and producing a
-        # 9-hole subtotal in the balance-due math.
+        # For non-combo events the holes value is fully determined by the event
+        # format — must NOT inherit from the credited source item (which can be
+        # a 9-hole credit applied at an 18-hole event). Inheriting was producing
+        # wrong subtotals (PER_GAME_ADDON $16 vs $30) and writing 9 into the
+        # HOLES column on 18-hole registrations.
         _evt_fmt = (event.get("format") or "")
-        _default_holes = "18" if _evt_fmt == "18 Holes" else "9"
-        u_holes = holes or credited_items[0].get("holes") or _default_holes
+        _is_combo = "combo" in _evt_fmt.lower() or "9/18" in _evt_fmt
+        if _evt_fmt == "18 Holes":
+            u_holes = "18"
+        elif _evt_fmt == "9 Holes":
+            u_holes = "9"
+        else:
+            # Combo — override > credited source > 9 fallback
+            u_holes = holes or credited_items[0].get("holes") or "9"
         u_games = side_games or credited_items[0].get("side_games") or "NONE"
         u_tee = tee_choice or credited_items[0].get("tee_choice") or ""
 
@@ -15911,7 +15919,19 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
         return None
     merchant = exp.get("merchant") or "(unknown)"
     txn_date = exp.get("transaction_date") or datetime.utcnow().strftime("%Y-%m-%d")
-    txn_type = exp.get("transaction_type") or "expense"
+    raw_txn_type = exp.get("transaction_type") or "expense"
+    # acct_transactions.type has a CHECK constraint: only income/expense/transfer.
+    # Map the raw expense_transactions.transaction_type (which can be 'received',
+    # 'payout', etc.) to one of the three allowed values. Without this every
+    # Venmo "received" promotion failed with a CHECK constraint error and the
+    # ledger sync silently lost rows.
+    _type_map = {
+        "received": "income",
+        "payout": "expense",
+        "expense": "expense",
+        "transfer": "transfer",
+    }
+    txn_type = _type_map.get(raw_txn_type, "expense")
     source = exp.get("source_type") or "expense_alert"
     expense_id = exp["id"]
     source_ref = f"exp-promoted-{expense_id}"
@@ -20133,7 +20153,13 @@ def promote_expense_to_ledger(expense_id: int, category_name: str | None,
             if acc_row:
                 account_id = acc_row["id"]
 
-        txn_type = exp.get("transaction_type") or "expense"
+        # Map raw transaction_type to the CHECK-allowed type values
+        # ('income', 'expense', 'transfer'). Same map as in
+        # _sync_expense_ledger_entry — kept in sync.
+        _raw_txn_type = exp.get("transaction_type") or "expense"
+        _type_map = {"received": "income", "payout": "expense",
+                     "expense": "expense", "transfer": "transfer"}
+        txn_type = _type_map.get(_raw_txn_type, "expense")
         amount = float(exp.get("amount") or 0)
         merchant = exp.get("merchant") or "(unknown)"
         txn_date = exp.get("transaction_date") or datetime.utcnow().strftime("%Y-%m-%d")
