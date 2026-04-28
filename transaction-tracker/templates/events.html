@@ -5557,6 +5557,18 @@
             `<strong>${escapeHtml(item.customer || "Unknown")}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
             `Price: <strong>${escapeHtml(stripPriceSuffix(item.item_price) || "$0")}</strong>`;
 
+        // Transfer / Partial Refund don't make sense on +PAY children — they're
+        // top-up payments tied to a parent registration, not standalone purchases.
+        const isChildPay = !!item.parent_item_id;
+        document.querySelectorAll('.ev-credit-type-btn').forEach(b => {
+            const t = b.dataset.type;
+            if (isChildPay && (t === "transfer" || t === "partial")) {
+                b.style.display = "none";
+            } else {
+                b.style.display = "";
+            }
+        });
+
         document.querySelectorAll(".ev-credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "credit"));
         document.getElementById("ev-credit-transfer-fields").style.display = "none";
         document.getElementById("ev-credit-refund-fields").style.display = "none";
