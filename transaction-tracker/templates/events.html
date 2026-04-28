@@ -8845,11 +8845,15 @@
             const selEvent = allEvents.find(e => e.item_name === eventName);
             const evFmt = selEvent ? (selEvent.format || '') : '';
             const isComboEvt = evFmt.toLowerCase().includes('combo') || evFmt.toLowerCase().includes('9/18');
-            // Default holes from the event format itself, not a hardcoded "9".
-            // Otherwise an 18-hole event was producing 9-hole subtotals + writing 9 into the HOLES column.
-            const evtDefaultHoles = (evFmt === '18 Holes') ? '18' : '9';
             const prev = info.previous_selections || {};
-            const initHoles = (prev.holes || evtDefaultHoles).toString();
+            // Non-combo events: holes is locked by the event format. Don't
+            // inherit from prev.holes (which can be the credited source item's
+            // holes — a 9-hole credit applied at an 18-hole event would
+            // otherwise produce a 9-hole subtotal here).
+            let initHoles;
+            if (evFmt === '18 Holes') initHoles = '18';
+            else if (evFmt === '9 Holes') initHoles = '9';
+            else initHoles = (prev.holes || '9').toString();
             const initGames = (prev.side_games || 'NONE').toUpperCase();
             const _rawStatus = (prev.user_status || 'MEMBER').toUpperCase();
             const initStatus = _rawStatus.includes('GUEST') ? 'GUEST' : (_rawStatus.includes('1ST') || _rawStatus.includes('FIRST')) ? '1ST TIMER' : 'MEMBER';
