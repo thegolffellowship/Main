@@ -2945,6 +2945,48 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass  # skip if columns not yet available (old schema)
 
+        # Backfill: deduplicate Venmo balance-due ledger entries.
+        # _sync_expense_ledger_entry historically promoted the expense_transaction
+        # to an exp-promoted-{id} row, then auto_match_venmo_inbound_to_balance_due
+        # wrote a SECOND venmo-bd-{id} row, so each matched payment was income twice.
+        # Soft-delete the exp-promoted row and re-point expense_transactions at the
+        # venmo-bd row.
+        try:
+            conn.execute("""
+                UPDATE acct_transactions
+                SET status = 'reversed', updated_at = datetime('now')
+                WHERE COALESCE(status, 'active') = 'active'
+                  AND source_ref LIKE 'exp-promoted-%'
+                  AND id IN (
+                      SELECT et.acct_transaction_id
+                      FROM expense_transactions et
+                      WHERE et.matched_item_id IS NOT NULL
+                        AND et.acct_transaction_id IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM acct_transactions vbd
+                            WHERE vbd.source_ref = 'venmo-bd-' || et.id
+                              AND COALESCE(vbd.status, 'active') = 'active'
+                        )
+                  )
+            """)
+            conn.execute("""
+                UPDATE expense_transactions
+                SET acct_transaction_id = (
+                    SELECT vbd.id FROM acct_transactions vbd
+                    WHERE vbd.source_ref = 'venmo-bd-' || expense_transactions.id
+                      AND COALESCE(vbd.status, 'active') = 'active'
+                    LIMIT 1
+                )
+                WHERE matched_item_id IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1 FROM acct_transactions vbd
+                      WHERE vbd.source_ref = 'venmo-bd-' || expense_transactions.id
+                        AND COALESCE(vbd.status, 'active') = 'active'
+                  )
+            """)
+        except sqlite3.OperationalError:
+            pass  # skip if columns not yet available (old schema)
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS action_items (
@@ -4094,12 +4136,16 @@ def _backfill_approved_expenses_to_ledger(conn: sqlite3.Connection) -> int:
     """Promote approved expense_transactions that aren't yet linked to acct_transactions.
 
     Safe to call on every startup — skips rows that already have acct_transaction_id.
+    Also skips Venmo "received" rows that are already matched to a balance-due
+    item (auto_match_venmo_inbound_to_balance_due owns the ledger entry for
+    those — promoting here would create a duplicate).
     """
     rows = conn.execute(
         """SELECT * FROM expense_transactions
            WHERE review_status IN ('approved', 'corrected')
              AND (acct_transaction_id IS NULL)
-             AND amount IS NOT NULL AND amount > 0"""
+             AND amount IS NOT NULL AND amount > 0
+             AND NOT (transaction_type = 'received' AND matched_item_id IS NOT NULL)"""
     ).fetchall()
     if not rows:
         return 0
@@ -9225,9 +9271,20 @@ def auto_match_venmo_inbound_to_balance_due(
                     (new_item_id, exp["id"]),
                 )
 
+                # If _sync_expense_ledger_entry already promoted this expense
+                # to acct_transactions (description=merchant, no event/category),
+                # soft-delete that row so the venmo-bd entry below is the single
+                # source of truth — otherwise we double-count the same payment.
+                old_acct_id = exp.get("acct_transaction_id")
+                if old_acct_id:
+                    conn.execute(
+                        "UPDATE acct_transactions SET status = 'reversed', updated_at = datetime('now') WHERE id = ?",
+                        (old_acct_id,),
+                    )
+
                 # Write accounting entries (income/addon + allocation) for the +PAY child
                 try:
-                    _write_acct_entry(
+                    new_acct_id = _write_acct_entry(
                         conn,
                         item_id=new_item_id,
                         event_name=event_name,
@@ -9242,6 +9299,13 @@ def auto_match_venmo_inbound_to_balance_due(
                         source_ref=f"venmo-bd-{exp['id']}",
                         date=txn_date,
                     )
+                    # Re-point the expense_transaction at the venmo-bd row so
+                    # subsequent sync calls don't recreate the exp-promoted dup.
+                    if new_acct_id:
+                        conn.execute(
+                            "UPDATE expense_transactions SET acct_transaction_id = ? WHERE id = ?",
+                            (new_acct_id, exp["id"]),
+                        )
                 except Exception:
                     logger.warning(
                         "Failed to write acct entry for venmo balance-due match (exp %s)",
