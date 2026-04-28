@@ -3048,7 +3048,13 @@
         html += `<div>`;
         html += `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.5rem; color:#dc2626; border-bottom:2px solid #fecaca; padding-bottom:0.3rem;">Expenses (Projected)</h4>`;
         html += `<div style="display:grid; grid-template-columns:1fr auto; gap:0.15rem 0.5rem; font-size:0.8rem;">`;
-        html += `<span>Course Fees (${pc.total_active} players)</span><span style="text-align:right;">$${exp.course_fees.toFixed(2)}</span>`;
+        html += `<span style="font-weight:600;">Course Fees (${pc.total_active} players)</span><span style="text-align:right; font-weight:600;">$${exp.course_fees.toFixed(2)}</span>`;
+        const courseByHoles = Array.isArray(exp.course_fees_by_holes) ? exp.course_fees_by_holes : [];
+        if (courseByHoles.length > 1) {
+            courseByHoles.forEach(b => {
+                html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">${b.holes}-Hole Players (${b.count} × $${b.per_player.toFixed(2)})</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${b.total.toFixed(2)}</span>`;
+            });
+        }
         html += `<span style="font-weight:600;">Prize Fund</span><span style="text-align:right; font-weight:600;">$${prizeFund.toFixed(2)}</span>`;
         if (gamePots.hio > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Hole-In-One Pot</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.hio.toFixed(2)}</span>`;
         html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Included Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.included.toFixed(2)}</span>`;
