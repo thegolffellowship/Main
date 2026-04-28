@@ -14230,7 +14230,9 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             net_revenue = round(total_revenue - contra_total, 2)
 
             # Course fees from aggregate calculation (most accurate)
-            aggregate_course_cost = _calc_aggregate_course_cost(event, all_items, conn)
+            course_cost_calc = _calc_aggregate_course_cost(event, all_items, conn)
+            aggregate_course_cost = course_cost_calc["total"]
+            course_fees_by_holes = course_cost_calc["by_holes"]
 
             # Prize fund: set to 0 so the client uses its game matrix calculation.
             # Allocations only have partial coverage for prize_pool data — the client-side
@@ -14315,7 +14317,9 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             contra_total = round(xfer_out + refund_total, 2)
             net_revenue = round(total_revenue - contra_total, 2)
 
-            aggregate_course_cost = _calc_aggregate_course_cost(event, all_items, conn)
+            course_cost_calc = _calc_aggregate_course_cost(event, all_items, conn)
+            aggregate_course_cost = course_cost_calc["total"]
+            course_fees_by_holes = course_cost_calc["by_holes"]
             total_prize_pool = round(sum(a.get("prize_pool", 0) for a in allocs), 2)
             total_processing = round(sum(a.get("godaddy_fee", 0) for a in allocs), 2)
             total_tgf_operating = round(sum(a.get("tgf_operating", 0) for a in allocs), 2)
@@ -14381,6 +14385,7 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
         "net_revenue": net_revenue,
         "expenses": {
             "course_fees": aggregate_course_cost,
+            "course_fees_by_holes": course_fees_by_holes,
             "prize_fund": total_prize_pool,
             "processing_fees": total_processing,
             "tgf_operating": total_tgf_operating,
@@ -14403,7 +14408,7 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
 
 
 def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
-                                conn: sqlite3.Connection) -> float:
+                                conn: sqlite3.Connection) -> dict:
     """Calculate aggregate course cost with correct rounding (Issue #242).
 
     Instead of: per_player_post_tax × count (rounding drift),
@@ -14412,6 +14417,10 @@ def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
     If the event has no course-cost config (no course_cost / course_cost_breakdown
     columns set), falls back to summing the per-player course_payable values
     stored on acct_allocations at registration time.
+
+    Returns ``{"total": float, "by_holes": [{"holes": "9"|"18", "count": int,
+    "per_player": float, "total": float}]}``.  ``by_holes`` only contains the
+    hole buckets that actually have players.
     """
     is_combo = "combo" in (event.get("format") or "").lower()
     default_holes = "18" if event.get("format") == "18 Holes" else "9"
@@ -14421,8 +14430,10 @@ def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
                       if i.get("transaction_status") not in ("credited", "refunded", "transferred", "rsvp_only", "wd")]
 
     if not active_parents:
-        return 0.0
+        return {"total": 0.0, "by_holes": []}
 
+    surcharge_per_player = float(event.get("course_surcharge") or 0)
+    by_holes: list[dict] = []
     total_course_cost = 0.0
 
     # Try breakdown JSON first (most accurate)
@@ -14454,6 +14465,7 @@ def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
             bd_col = "course_cost_breakdown"
             fallback_cost = event.get("course_cost")
 
+        bucket_cost = 0.0
         breakdown_json = event.get(bd_col)
         if breakdown_json:
             try:
@@ -14462,12 +14474,23 @@ def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
                 for val in breakdown.values():
                     base = val["amount"] * count
                     tax = base * (val["tax_pct"] / 100)
-                    total_course_cost += base + tax
+                    bucket_cost += base + tax
             except (json.JSONDecodeError, KeyError, TypeError):
                 if fallback_cost:
-                    total_course_cost += fallback_cost * count
+                    bucket_cost = fallback_cost * count
         elif fallback_cost:
-            total_course_cost += fallback_cost * count
+            bucket_cost = fallback_cost * count
+
+        # Per-player surcharge belongs to whichever hole bucket the player is in
+        bucket_cost += surcharge_per_player * count
+        total_course_cost += bucket_cost
+
+        by_holes.append({
+            "holes": holes_key,
+            "count": count,
+            "per_player": round(bucket_cost / count, 2) if count else 0.0,
+            "total": round(bucket_cost, 2),
+        })
 
     # Fallback: event config missing → use per-player allocations from registration time.
     # Allocation rows store course_payable (post-tax) and course_surcharge separately,
@@ -14484,13 +14507,42 @@ def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
             active_ids,
         ).fetchone()
         if row and (row["payable"] or row["surcharge"]):
-            return round(float(row["payable"]) + float(row["surcharge"]), 2)
+            fallback_total = round(float(row["payable"]) + float(row["surcharge"]), 2)
+            # Bucketise the fallback by summing per-allocation amounts within each hole group
+            fallback_buckets = []
+            for holes_key in ("9", "18"):
+                bucket_ids = []
+                for item in active_parents:
+                    h = str(item.get("holes") or "")
+                    if "18" in h:
+                        ph = "18"
+                    elif "9" in h:
+                        ph = "9"
+                    else:
+                        ph = default_holes
+                    if ph == holes_key:
+                        bucket_ids.append(item["id"])
+                if not bucket_ids:
+                    continue
+                bp = ",".join("?" * len(bucket_ids))
+                br = conn.execute(
+                    f"""SELECT
+                            COALESCE(SUM(course_payable), 0) AS payable,
+                            COALESCE(SUM(course_surcharge), 0) AS surcharge
+                        FROM acct_allocations
+                        WHERE item_id IN ({bp})""",
+                    bucket_ids,
+                ).fetchone()
+                btot = round(float(br["payable"]) + float(br["surcharge"]), 2)
+                fallback_buckets.append({
+                    "holes": holes_key,
+                    "count": len(bucket_ids),
+                    "per_player": round(btot / len(bucket_ids), 2) if bucket_ids else 0.0,
+                    "total": btot,
+                })
+            return {"total": fallback_total, "by_holes": fallback_buckets}
 
-    # Add per-player surcharge from event config
-    surcharge = event.get("course_surcharge") or 0
-    total_course_cost += surcharge * len(active_parents)
-
-    return round(total_course_cost, 2)
+    return {"total": round(total_course_cost, 2), "by_holes": by_holes}
 
 
 def backfill_financial_entries(db_path: str | Path | None = None) -> dict:
