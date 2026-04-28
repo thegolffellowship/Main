@@ -7190,8 +7190,10 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
     """
     Transfer an item to a different event.
 
-    Marks the original as 'transferred' and creates a new item
-    at the target event with $0 price (credit applied).
+    Marks the original (and any active +PAY children) as 'transferred' and
+    creates ONE new item at the target event for the combined credit. The
+    new item's item_price reflects parent + summed children so the receiving
+    event sees the full amount the player paid, not just the parent slice.
     Returns the new item dict or None on failure.
     """
     with _connect(db_path) as conn:
@@ -7211,25 +7213,50 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
         ).fetchone()
         target_event = dict(target_event) if target_event else {}
 
+        # Sum any active +PAY children so the target sees the combined credit.
+        active_children = conn.execute(
+            """SELECT id, item_price FROM items
+               WHERE parent_item_id = ?
+                 AND COALESCE(transaction_status, 'active') = 'active'""",
+            (item_id,),
+        ).fetchall()
+        children_total = sum(_parse_dollar(c["item_price"]) for c in active_children)
+
         # Mark original as transferred
         transfer_note = note or f"Transferred to {target_event_name}"
         conn.execute(
             "UPDATE items SET transaction_status = 'transferred', credit_note = ? WHERE id = ?",
             (transfer_note, item_id),
         )
+        # Cascade transferred status to active +PAY children
+        for ch in active_children:
+            conn.execute(
+                """UPDATE items
+                   SET transaction_status = 'transferred',
+                       credit_note = ?
+                   WHERE id = ?""",
+                (f"Transferred to {target_event_name} (cascaded from parent)", ch["id"]),
+            )
 
-        # Create new item at target event
-        orig_price = orig.get("item_price") or "$0.00"
+        # Create new item at target event with COMBINED credit amount
+        orig_price_amt = _parse_dollar(orig.get("item_price"))
+        combined_amt = round(orig_price_amt + children_total, 2)
         new_values = {col: orig.get(col) for col in ITEM_COLUMNS}
         new_values["item_name"] = target_event_name
         new_values["course"] = target_event.get("course") or orig.get("course")
         new_values["chapter"] = target_event.get("chapter") or orig.get("chapter")
-        new_values["item_price"] = f"{orig_price} (credit)"
+        new_values["item_price"] = f"${combined_amt:.2f} (credit)"
         new_values["email_uid"] = f"transfer-{item_id}"
         new_values["item_index"] = 0
         new_values["order_date"] = orig.get("order_date") or ""
         new_values["transaction_status"] = "active"
-        new_values["credit_note"] = f"Transferred from {orig.get('item_name', '')} (#{item_id})"
+        if children_total > 0:
+            new_values["credit_note"] = (
+                f"Transferred from {orig.get('item_name', '')} (#{item_id}) "
+                f"— ${orig_price_amt:.2f} parent + ${children_total:.2f} +PAY"
+            )
+        else:
+            new_values["credit_note"] = f"Transferred from {orig.get('item_name', '')} (#{item_id})"
         new_values["transferred_from_id"] = item_id
         new_values["transferred_to_id"] = None
 
@@ -7246,23 +7273,28 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
             "UPDATE items SET transferred_to_id = ? WHERE id = ?",
             (new_id, item_id),
         )
+        # Link children to the same target so the chain is intact
+        for ch in active_children:
+            conn.execute(
+                "UPDATE items SET transferred_to_id = ? WHERE id = ?",
+                (new_id, ch["id"]),
+            )
 
         # ── Unified Financial Model: create accounting entries ──
         try:
-            orig_price = _parse_dollar(orig.get("item_price"))
             source_event_name = orig.get("item_name", "")
 
-            if orig_price > 0:
+            if combined_amt > 0:
                 alloc_date = orig.get("order_date") or ""
                 customer = orig.get("customer", "")
 
-                # Allocation for the new item at target event
+                # Allocation for the new item at target event (combined amount)
                 new_item_for_alloc = dict(new_values)
                 new_item_for_alloc["id"] = new_id
                 _create_allocation_for_item(
                     new_item_for_alloc, conn,
                     payment_method="credit_transfer",
-                    override_price=orig_price,
+                    override_price=combined_amt,
                     create_txn=False,
                 )
 
@@ -7276,7 +7308,7 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
                     entry_type="contra",
                     category="transfer_out",
                     source="godaddy",
-                    amount=orig_price,
+                    amount=combined_amt,
                     description=f"Credit transfer out: {customer} from {source_event_name} to {target_event_name}",
                     account="TGF Checking",
                     source_ref=f"xfer-flat-{item_id}-out",
@@ -7290,7 +7322,7 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
                     entry_type="income",
                     category="transfer_in",
                     source="godaddy",
-                    amount=orig_price,
+                    amount=combined_amt,
                     description=f"Credit transfer in: {customer} to {target_event_name} from {source_event_name}",
                     account="TGF Checking",
                     source_ref=f"xfer-flat-{item_id}-in",
@@ -14926,7 +14958,7 @@ def repair_orphan_pay_children(db_path: str | Path | None = None) -> dict:
                      OR EXISTS (
                          SELECT 1 FROM items p
                          WHERE p.id = c.parent_item_id
-                           AND p.transaction_status = 'rsvp_only'
+                           AND p.transaction_status IN ('rsvp_only', 'transferred')
                      )
                  )"""
         ).fetchall()
