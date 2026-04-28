@@ -453,6 +453,9 @@
                     <option value="500">500</option>
                 </select>
             </label>
+            <button id="btn-apply-audit-filters" class="btn btn-primary" title="Re-fetch emails using the selected window and limit">
+                Apply
+            </button>
         </div>
 
         <div id="loading" class="loading-msg">Click "Run Audit" to fetch emails and compare against parsed data.</div>
@@ -746,6 +749,16 @@
         }
 
         document.getElementById("btn-run-audit").addEventListener("click", runAudit);
+        document.getElementById("btn-apply-audit-filters").addEventListener("click", runAudit);
+        // Auto-apply when either dropdown changes (only after the first run,
+        // so the initial "Click Run Audit" prompt is preserved).
+        ["audit-days", "audit-limit"].forEach(id => {
+            document.getElementById(id).addEventListener("change", () => {
+                if (document.getElementById("audit-content").style.display !== "none") {
+                    runAudit();
+                }
+            });
+        });
 
         document.querySelectorAll(".filter-btn").forEach(btn => {
             btn.addEventListener("click", () => {
