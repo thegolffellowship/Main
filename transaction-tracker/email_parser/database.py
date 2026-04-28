@@ -8595,7 +8595,12 @@ def reverse_credit_application(item_id: int, db_path: str | Path | None = None) 
     - Removes the excess credit item if one was created.
     - Marks the transfer accounting entries as reversed.
     - Reverts the target item to 'rsvp_only' (or deletes it if it was a synthetic GG item).
+    - Detaches every +PAY child (whether tagged [xfer-consumed:<id>] or attached
+      later by auto_match_venmo_inbound_to_balance_due). Any payment-bearing child
+      is converted to a standalone 'credited' item so the player keeps the money
+      they actually paid.
     """
+    import time as _time
     with _connect(db_path) as conn:
         item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
         if not item:
@@ -8626,20 +8631,69 @@ def reverse_credit_application(item_id: int, db_path: str | Path | None = None) 
                 (f"xfer-flat-{s['id']}-out",),
             )
 
-        # Detach any +PAY rows we consumed during apply_credit_to_rsvp
-        # (matched via the [xfer-consumed:<id>] tag we appended to notes).
+        # ── Handle every +PAY child attached to this parent ──
+        # Two distinct paths put rows here:
+        #   1. apply_credit_to_rsvp's _consume_unallocated_payments path tags
+        #      the child with [xfer-consumed:<id>] (drops the tag, detaches).
+        #   2. auto_match_venmo_inbound_to_balance_due creates a fresh +PAY row
+        #      with no tag — its underlying Venmo payment is real money in.
+        # The fix: detach all of them, and for any row that carries a real
+        # item_price, convert it to a standalone 'credited' item so the player
+        # keeps the credit on their account.
         consumed_tag = _XFER_CONSUMED_TAG.format(parent_id=item_id)
-        consumed_rows = conn.execute(
-            "SELECT id, notes FROM items WHERE parent_item_id = ? AND notes LIKE ?",
-            (item_id, f"%{consumed_tag}%"),
+        children = conn.execute(
+            "SELECT * FROM items WHERE parent_item_id = ?",
+            (item_id,),
         ).fetchall()
-        for cr in consumed_rows:
-            cleaned = (cr["notes"] or "").replace(consumed_tag, "").strip()
-            cleaned = " ".join(cleaned.split())
-            conn.execute(
-                "UPDATE items SET parent_item_id = NULL, notes = ? WHERE id = ?",
-                (cleaned or None, cr["id"]),
-            )
+        converted_to_credit = []
+        detached_consumed = []
+        for cr in children:
+            cr = dict(cr)
+            notes = cr.get("notes") or ""
+            child_status = cr.get("transaction_status") or "active"
+            had_consumed_tag = consumed_tag in notes
+
+            if had_consumed_tag:
+                cleaned = " ".join(notes.replace(consumed_tag, "").split())
+                conn.execute(
+                    "UPDATE items SET parent_item_id = NULL, notes = ? WHERE id = ?",
+                    (cleaned or None, cr["id"]),
+                )
+                detached_consumed.append(cr["id"])
+                continue
+
+            # Untagged +PAY child — created by Venmo auto-match (or manual entry).
+            # Convert to a standalone credited item so the money stays as a credit.
+            price_amt = _parse_dollar(cr.get("item_price"))
+            if price_amt > 0 and child_status not in ("credited", "refunded"):
+                customer_name = cr.get("customer") or item.get("customer", "")
+                event_name = cr.get("item_name") or item.get("item_name", "")
+                credit_note = (
+                    f"Credit from cancelled credit transfer — ${price_amt:.2f} from {event_name}"
+                ).strip()
+                conn.execute(
+                    """UPDATE items
+                       SET parent_item_id = NULL,
+                           transaction_status = 'credited',
+                           credit_note = ?,
+                           merchant = COALESCE(NULLIF(merchant, ''), 'Manual Entry')
+                       WHERE id = ?""",
+                    (credit_note, cr["id"]),
+                )
+                converted_to_credit.append({"id": cr["id"], "amount": price_amt})
+                # Clear matched_item_id on any expense_transaction that pointed
+                # here so a future "Match Venmo" run can re-attach it cleanly.
+                conn.execute(
+                    "UPDATE expense_transactions SET matched_item_id = NULL WHERE matched_item_id = ?",
+                    (cr["id"],),
+                )
+            else:
+                # Zero-price or already-credited child — just detach.
+                conn.execute(
+                    "UPDATE items SET parent_item_id = NULL WHERE id = ?",
+                    (cr["id"],),
+                )
+                detached_consumed.append(cr["id"])
 
         # Remove excess + overpayment credit items if created
         conn.execute(
@@ -8678,7 +8732,12 @@ def reverse_credit_application(item_id: int, db_path: str | Path | None = None) 
             )
 
         conn.commit()
-        return {"ok": True, "sources_restored": len(sources)}
+        return {
+            "ok": True,
+            "sources_restored": len(sources),
+            "children_converted_to_credit": converted_to_credit,
+            "children_detached": detached_consumed,
+        }
 
 
 def mark_rsvp_credit_notified(rsvp_id: int, db_path: str | Path | None = None) -> None:
@@ -14840,6 +14899,113 @@ def backfill_financial_entries(db_path: str | Path | None = None) -> dict:
     results["total"] = (results["external_payments"] + results["credit_transfers"]
                         + results["add_on_payments"] + results["refunds"])
     return results
+
+
+def repair_orphan_pay_children(db_path: str | Path | None = None) -> dict:
+    """Heal +PAY child rows whose parent_item_id points to a row that no longer
+    exists or that's stuck in 'rsvp_only' (the residue from a reverse-credit-
+    application that ran before the Venmo balance-due cascade was fixed).
+
+    For each orphan:
+      - If the same customer has an active item in the same event, re-point
+        parent_item_id at it (the +PAY rejoins the player's roster row).
+      - Otherwise, convert the child into a standalone 'credited' item so the
+        money the player paid stays on their account as a credit.
+
+    Idempotent — only touches rows whose parents are missing or rsvp_only.
+    Returns counts of repairs by category.
+    """
+    repaired = {"reattached": 0, "converted_to_credit": 0, "skipped": 0}
+    with _connect(db_path) as conn:
+        orphans = conn.execute(
+            """SELECT c.* FROM items c
+               WHERE c.parent_item_id IS NOT NULL
+                 AND COALESCE(c.transaction_status, 'active') = 'active'
+                 AND (
+                     NOT EXISTS (SELECT 1 FROM items p WHERE p.id = c.parent_item_id)
+                     OR EXISTS (
+                         SELECT 1 FROM items p
+                         WHERE p.id = c.parent_item_id
+                           AND p.transaction_status = 'rsvp_only'
+                     )
+                 )"""
+        ).fetchall()
+        if not orphans:
+            return repaired
+
+        for row in orphans:
+            row = dict(row)
+            child_id = row["id"]
+            customer = row.get("customer") or ""
+            event_name = row.get("item_name") or ""
+            if not customer or not event_name:
+                repaired["skipped"] += 1
+                continue
+
+            # Try to find an active sibling parent (same customer + event).
+            sibling = conn.execute(
+                """SELECT id FROM items
+                   WHERE customer = ? COLLATE NOCASE
+                     AND item_name = ? COLLATE NOCASE
+                     AND COALESCE(transaction_status, 'active') = 'active'
+                     AND parent_item_id IS NULL
+                     AND id != ?
+                   ORDER BY id DESC LIMIT 1""",
+                (customer, event_name, child_id),
+            ).fetchone()
+
+            if sibling:
+                conn.execute(
+                    "UPDATE items SET parent_item_id = ? WHERE id = ?",
+                    (sibling["id"], child_id),
+                )
+                # Re-point any expense_transaction that was tracking the orphan.
+                conn.execute(
+                    "UPDATE expense_transactions SET matched_item_id = ? WHERE matched_item_id = ?",
+                    (child_id, child_id),  # no-op, but keeps the link consistent
+                )
+                repaired["reattached"] += 1
+                logger.info(
+                    "repair_orphan_pay_children: re-pointed item %s parent %s -> %s",
+                    child_id, row.get("parent_item_id"), sibling["id"],
+                )
+                continue
+
+            # No sibling parent — convert to standalone credited item so the
+            # money the player paid stays on their account.
+            price_amt = _parse_dollar(row.get("item_price"))
+            if price_amt <= 0:
+                conn.execute(
+                    "UPDATE items SET parent_item_id = NULL WHERE id = ?",
+                    (child_id,),
+                )
+                repaired["skipped"] += 1
+                continue
+
+            credit_note = (
+                f"Credit from cancelled credit transfer — ${price_amt:.2f} from {event_name}"
+            )
+            conn.execute(
+                """UPDATE items
+                   SET parent_item_id = NULL,
+                       transaction_status = 'credited',
+                       credit_note = ?,
+                       merchant = COALESCE(NULLIF(merchant, ''), 'Manual Entry')
+                   WHERE id = ?""",
+                (credit_note, child_id),
+            )
+            conn.execute(
+                "UPDATE expense_transactions SET matched_item_id = NULL WHERE matched_item_id = ?",
+                (child_id,),
+            )
+            repaired["converted_to_credit"] += 1
+            logger.info(
+                "repair_orphan_pay_children: converted item %s ($%.2f) to standalone credit",
+                child_id, price_amt,
+            )
+
+        conn.commit()
+        return repaired
 
 
 def backfill_missing_godaddy_orders(db_path: str | Path | None = None) -> int:

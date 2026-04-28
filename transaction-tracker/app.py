@@ -168,6 +168,7 @@ from email_parser.database import (
     backfill_financial_entries,
     backfill_acct_transactions,
     backfill_missing_godaddy_orders,
+    repair_orphan_pay_children,
     migrate_item_to_order_entries,
     cleanup_duplicate_godaddy_entries,
     backup_database,
@@ -8580,6 +8581,17 @@ try:
             logger.info("Startup: backfilled %d missing GoDaddy order entries", _gd_added)
     except Exception:
         logger.warning("Startup GoDaddy order backfill failed", exc_info=True)
+
+    # Heal +PAY children whose parent_item_id points at a row that no longer
+    # exists or was reverted to rsvp_only — the residue from a credit-transfer
+    # reversal that ran before the Venmo balance-due cascade was fixed.
+    # Idempotent: only touches genuine orphans.
+    try:
+        _orphan_repair = repair_orphan_pay_children()
+        if any(_orphan_repair.values()):
+            logger.info("Startup: orphan +PAY repair %s", _orphan_repair)
+    except Exception:
+        logger.warning("Startup orphan +PAY repair failed", exc_info=True)
 
     # ── Auto-migrate old per-item GoDaddy entries to order-level ──
     try:
