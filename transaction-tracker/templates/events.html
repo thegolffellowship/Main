@@ -3073,29 +3073,39 @@
 
         html += _renderPayoutsBudgetSection(ev, gamePots);
 
-        // Accounting verification indicator
+        // Verification panel — TWO independent checks:
+        //   1) Books posted to ledger (revenue / expenses recorded as acct_transactions)
+        //   2) Bank reconciliation (those entries matched against bank deposits)
+        html += `<div style="margin-top:0.5rem; padding:0.5rem 0.6rem; border:1px solid var(--border); border-radius:6px; background:var(--surface); font-size:0.75rem; display:flex; flex-direction:column; gap:0.25rem;">`;
         if (data.accounting_verified) {
-            html += `<div style="margin-top:0.5rem; font-size:0.75rem; color:#166534; display:flex; align-items:center; gap:0.3rem;">
-                <span style="font-size:0.85rem;">&#x2705;</span> Accounting (verified)
+            html += `<div style="color:#166534; display:flex; align-items:center; gap:0.3rem;">
+                <span style="font-size:0.85rem;">&#x1F4D2;</span> <strong>Books:</strong> entries posted to ledger
             </div>`;
         } else {
-            html += `<div style="margin-top:0.5rem; font-size:0.75rem; color:#92400e; display:flex; align-items:center; gap:0.3rem;">
-                <span style="font-size:0.85rem;">&#x26A0;&#xFE0F;</span> Calculated (estimated)
+            html += `<div style="color:#92400e; display:flex; align-items:center; gap:0.3rem;">
+                <span style="font-size:0.85rem;">&#x26A0;&#xFE0F;</span> <strong>Books:</strong> not yet posted &mdash; figures estimated from allocations
             </div>`;
         }
-
-        // Reconciliation status (async loaded)
-        html += `<div id="recon-status-${ev.id}" style="margin-top:0.3rem; font-size:0.75rem; color:var(--text-muted);"></div>`;
+        html += `<div id="recon-status-${ev.id}" style="color:var(--text-muted); display:flex; align-items:center; gap:0.3rem;">
+            <span style="font-size:0.85rem;">&#x1F3E6;</span> <strong>Bank:</strong> reconciliation pending&hellip;
+        </div>`;
+        html += `</div>`;
         setTimeout(async () => {
             try {
                 const reconRes = await fetch(`/api/reconciliation/event/${encodeURIComponent(ev.item_name)}`);
                 if (!reconRes.ok) return;
                 const recon = await reconRes.json();
                 const el = document.getElementById(`recon-status-${ev.id}`);
-                if (!el || recon.total_transactions === 0) return;
+                if (!el) return;
+                if (recon.total_transactions === 0) {
+                    el.innerHTML = `<span style="font-size:0.85rem;">&#x1F3E6;</span> <strong>Bank:</strong> no ledger entries to reconcile yet`;
+                    el.style.color = 'var(--text-muted)';
+                    return;
+                }
                 const pct = Math.round(recon.reconciled_transactions / recon.total_transactions * 100);
-                el.innerHTML = `Reconciliation: ${recon.reconciled_transactions} of ${recon.total_transactions} transactions confirmed in bank ($${recon.matched_amount.toFixed(2)} matched)`;
-                el.style.color = pct === 100 ? '#166534' : '#92400e';
+                const color = pct === 100 ? '#166534' : (pct > 0 ? '#92400e' : '#dc2626');
+                el.innerHTML = `<span style="font-size:0.85rem;">&#x1F3E6;</span> <strong>Bank:</strong> ${recon.reconciled_transactions} of ${recon.total_transactions} matched to deposits ($${recon.matched_amount.toFixed(2)} confirmed, ${pct}%)`;
+                el.style.color = color;
             } catch(e) {}
         }, 100);
 
