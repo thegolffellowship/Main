@@ -3116,8 +3116,10 @@
         try {
             const res = await fetch(`/api/accounting/expense-transactions?event_name=${encodeURIComponent(ev.item_name)}`);
             if (!res.ok) throw new Error("Failed to load");
-            const expenses = await res.json();
-            if (!expenses || expenses.length === 0) {
+            const raw = await res.json();
+            // Venmo "received" rows are inbound balance-due payments — income, not expense.
+            const expenses = (raw || []).filter(e => (e.transaction_type || "expense") !== "received");
+            if (expenses.length === 0) {
                 container.innerHTML = `<h4 style="font-size:0.82rem; font-weight:700; margin:0 0 0.4rem; color:var(--text-muted);">Actual Expenses</h4>
                     <div style="font-size:0.78rem; color:var(--text-muted);">No expense transactions recorded for this event.</div>`;
                 return;
