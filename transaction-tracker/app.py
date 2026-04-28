@@ -3522,8 +3522,8 @@ def _build_balance_due_email(item_id: int) -> dict | None:
   <p>Hi {first_name},</p>
   <p>Thanks for RSVPing to <strong>{event_name}</strong>!</p>
   {when_line}
-  <p>We applied your existing credit toward this event. There&apos;s a small balance
-  remaining of <strong style="color:#b45309;">${amount_owed:.2f}</strong>.</p>
+  <p>We applied your existing credit toward this event. The balance remaining is
+  <strong style="color:#b45309;">${amount_owed:.2f}</strong>.</p>
 
   <p>Please send <strong>${amount_owed:.2f}</strong> via Venmo to
   <strong>@{VENMO_RECIPIENT_USERNAME}</strong>. Tap the button below to open Venmo
