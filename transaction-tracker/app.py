@@ -284,64 +284,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Player-email resolution
+# Player identity resolution
 # ---------------------------------------------------------------------------
-# Customer Info card and the manager's Edit dialog are the source of truth for
-# a player's email — they read/write customer_emails.is_primary. items.customer_email
-# is a historical capture from each GoDaddy order and can carry typos or
-# alternates that the user has since corrected. Every customer-facing email
-# (reminders, balance-due, bulk sends, handicap cards) MUST prefer the primary
-# from customer_emails so an old typo'd order can't keep auto-mailing the
-# wrong address.
+# Customer Info card and the manager's Edit dialog are the source of truth
+# for a player's identity (email, phone, name, chapter, status). items.*
+# columns are historical snapshots from each order and can carry typos or
+# stale values that the manager has since corrected. Every customer-facing
+# read MUST resolve through these canonical helpers — never read items.*
+# directly. See database.py for the per-field implementations and the
+# documented priority chain.
+from email_parser.database import (
+    resolve_player_email as _resolve_player_email_db,
+    resolve_player_phone as _resolve_player_phone,
+    resolve_player_name as _resolve_player_name,
+    resolve_player_chapter as _resolve_player_chapter,
+    resolve_player_status as _resolve_player_status,
+)
+
+
 def _resolve_player_email(item: dict, conn=None) -> str:
-    """Return the canonical email for the player on this items row.
-
-    Priority:
-      1. customer_emails.is_primary for items.customer_id
-      2. customer_emails.is_primary matched by customer name
-         (handles 'First Last' or 'Last, First')
-      3. items.customer_email (historical fallback)
-    """
-    from email_parser.database import _connect as _resolve_db_connect
-
-    own_conn = conn is None
-    if own_conn:
-        conn = _resolve_db_connect().__enter__()
-
-    try:
-        cust_id = item.get("customer_id")
-        cname = (item.get("customer") or "").strip()
-
-        if cust_id:
-            row = conn.execute(
-                "SELECT email FROM customer_emails WHERE customer_id = ? AND is_primary = 1 LIMIT 1",
-                (cust_id,),
-            ).fetchone()
-            if row and row["email"]:
-                return row["email"].strip().lower()
-
-        if cname:
-            row = conn.execute(
-                """SELECT e.email FROM customer_emails e
-                   JOIN customers c ON c.customer_id = e.customer_id
-                   WHERE e.is_primary = 1
-                     AND (
-                         LOWER(TRIM(c.first_name || ' ' || c.last_name)) = LOWER(?)
-                         OR LOWER(TRIM(c.last_name || ', ' || c.first_name)) = LOWER(?)
-                     )
-                   LIMIT 1""",
-                (cname, cname),
-            ).fetchone()
-            if row and row["email"]:
-                return row["email"].strip().lower()
-
-        return (item.get("customer_email") or "").strip()
-    finally:
-        if own_conn:
-            try:
-                conn.__exit__(None, None, None)
-            except Exception:
-                pass
+    """Thin wrapper that preserves the existing app.py call signature."""
+    return _resolve_player_email_db(item, conn=conn)
 
 
 # ---------------------------------------------------------------------------

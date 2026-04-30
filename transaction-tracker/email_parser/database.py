@@ -11206,7 +11206,8 @@ def build_handicap_card_data(player_name: str,
             "status": "USED" if i in used_indices else "ACTIVE",
         })
 
-    # Resolve player metadata (email, chapter, name parts) via links
+    # Resolve player metadata via the canonical resolver helpers
+    # (customers / customer_emails first; items.* only as last-resort fallback).
     email = ""
     chapter = ""
     first_name = ""
@@ -11219,102 +11220,34 @@ def build_handicap_card_data(player_name: str,
         if link and link["customer_name"]:
             cname = link["customer_name"]
 
-            # Canonical primary email comes from customer_emails (the source of
-            # truth shown on the Customer Info page). Look up the customer_id
-            # first via the most recent items row that links to a customer,
-            # then read the primary email. items.customer_email may carry
-            # historical typos that the user has since corrected on the
-            # Customer page — never let those override the primary.
-            primary_row = conn.execute(
-                """SELECT e.email FROM customer_emails e
-                   WHERE e.is_primary = 1
-                     AND e.customer_id = (
-                         SELECT i.customer_id FROM items i
-                         WHERE LOWER(i.customer) = LOWER(?)
-                           AND i.customer_id IS NOT NULL
-                         ORDER BY i.id DESC LIMIT 1
-                     )
-                   LIMIT 1""",
+            # Find the most recent items row for this name to seed the
+            # resolvers with a customer_id (so they don't fall back to name match).
+            seed_row = conn.execute(
+                """SELECT customer, customer_id, customer_email, customer_phone,
+                          chapter, first_name, last_name, user_status
+                   FROM items
+                   WHERE LOWER(customer) = LOWER(?)
+                   ORDER BY id DESC LIMIT 1""",
                 (cname,),
             ).fetchone()
-            if primary_row and primary_row["email"]:
-                email = primary_row["email"].strip().lower()
+            seed = dict(seed_row) if seed_row else {"customer": cname, "customer_id": None}
 
-            # Fall back to a primary email matched by name when there's no
-            # customer_id link yet (rare but possible for historical records).
+            email = resolve_player_email(seed, conn=conn)
+            chapter = resolve_player_chapter(seed, conn=conn)
+            name_parts = resolve_player_name(seed, conn=conn)
+            first_name = name_parts.get("first_name", "")
+            last_name = name_parts.get("last_name", "")
+
+            # Last-resort: pick up an email alias if customers had nothing
             if not email:
-                primary_by_name = conn.execute(
-                    """SELECT e.email FROM customer_emails e
-                       JOIN customers c ON c.customer_id = e.customer_id
-                       WHERE e.is_primary = 1
-                         AND (
-                             LOWER(TRIM(c.first_name || ' ' || c.last_name)) = LOWER(?)
-                             OR LOWER(TRIM(c.last_name || ', ' || c.first_name)) = LOWER(?)
-                         )
-                       LIMIT 1""",
-                    (cname, cname),
-                ).fetchone()
-                if primary_by_name and primary_by_name["email"]:
-                    email = primary_by_name["email"].strip().lower()
-
-            meta = conn.execute(
-                """SELECT
-                    COALESCE(
-                      (SELECT LOWER(TRIM(i1.customer_email)) FROM items i1
-                       WHERE LOWER(i1.customer) = LOWER(?)
-                         AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
-                       ORDER BY i1.id DESC LIMIT 1),
-                      (SELECT LOWER(TRIM(ca.alias_value)) FROM customer_aliases ca
-                       WHERE LOWER(ca.customer_name) = LOWER(?)
-                         AND ca.alias_type = 'email'
-                       LIMIT 1),
-                      ''
-                    ) AS customer_email,
-                    COALESCE(
-                      (SELECT i2.chapter FROM items i2
-                       WHERE LOWER(i2.customer) = LOWER(?)
-                         AND i2.chapter IS NOT NULL AND TRIM(i2.chapter) != ''
-                       ORDER BY i2.id DESC LIMIT 1),
-                      ''
-                    ) AS chapter,
-                    COALESCE(
-                      (SELECT i3.first_name FROM items i3
-                       WHERE LOWER(i3.customer) = LOWER(?)
-                         AND i3.first_name IS NOT NULL AND TRIM(i3.first_name) != ''
-                       ORDER BY i3.id DESC LIMIT 1),
-                      ''
-                    ) AS first_name,
-                    COALESCE(
-                      (SELECT i4.last_name FROM items i4
-                       WHERE LOWER(i4.customer) = LOWER(?)
-                         AND i4.last_name IS NOT NULL AND TRIM(i4.last_name) != ''
-                       ORDER BY i4.id DESC LIMIT 1),
-                      ''
-                    ) AS last_name
-                """,
-                (cname, cname, cname, cname, cname),
-            ).fetchone()
-            if meta:
-                # customer_emails primary wins; only fall back to items.customer_email
-                # if no primary email is set for this customer.
-                if not email:
-                    email = (meta["customer_email"] or "").strip()
-                chapter = (meta["chapter"] or "").strip()
-                first_name = (meta["first_name"] or "").strip()
-                last_name = (meta["last_name"] or "").strip()
-
-            # Existing fallback for old records w/o name parts in items
-            if not email:
-                ce = conn.execute(
-                    """SELECT e.email FROM customer_emails e
-                       JOIN customers c ON c.customer_id = e.customer_id
-                       WHERE LOWER(c.first_name || ' ' || c.last_name) = LOWER(?)
-                         AND e.is_primary = 1
-                       LIMIT 1""",
+                alias = conn.execute(
+                    """SELECT alias_value FROM customer_aliases
+                       WHERE LOWER(customer_name) = LOWER(?)
+                         AND alias_type = 'email' LIMIT 1""",
                     (cname,),
                 ).fetchone()
-                if ce:
-                    email = (ce["email"] or "").strip().lower()
+                if alias and alias["alias_value"]:
+                    email = alias["alias_value"].strip().lower()
 
     # Gather calculation breakdown for display
     used_diffs = sorted([r["differential"] for r in annotated_rounds if r["status"] == "USED"])
@@ -14986,6 +14919,188 @@ def backfill_financial_entries(db_path: str | Path | None = None) -> dict:
     results["total"] = (results["external_payments"] + results["credit_transfers"]
                         + results["add_on_payments"] + results["refunds"])
     return results
+
+
+# ---------------------------------------------------------------------------
+# Canonical player-field resolvers
+# ---------------------------------------------------------------------------
+# The customers / customer_emails / customer_roles tables are the source of
+# truth for a player's identity. items.customer_email/phone/first_name/
+# last_name/chapter/user_status are historical snapshots from each order.
+# Anywhere a player's *current* identity is needed (display name, email send,
+# phone reminder, status badge, chapter lookup), code MUST resolve through
+# these helpers so a stale order can't override what the manager set on the
+# Customer Info page.
+#
+# Each helper accepts either:
+#   - an items-row-shaped dict (with customer_id and/or customer name), or
+#   - just a customer_id integer, or
+#   - just a customer_name string,
+# and returns "" / None when nothing canonical is available so callers can
+# fall back to whatever they were doing before.
+
+def _resolve_db(conn, db_path):
+    """Internal: yield a (conn, owns_conn) pair so resolvers can either share
+    a caller's connection or open their own."""
+    if conn is not None:
+        return conn, False
+    return _connect(db_path).__enter__(), True
+
+
+def _resolve_lookup_customer_id(conn, item_or_id, name_hint: str = "") -> int | None:
+    """Best-effort customer_id lookup from a dict-like item, raw int, or name."""
+    if isinstance(item_or_id, int):
+        return item_or_id
+    if isinstance(item_or_id, dict):
+        cid = item_or_id.get("customer_id")
+        if cid:
+            return int(cid)
+        name = (item_or_id.get("customer") or "").strip() or name_hint
+    else:
+        name = (str(item_or_id) if item_or_id is not None else "").strip() or name_hint
+    if not name:
+        return None
+    row = conn.execute(
+        """SELECT customer_id FROM customers
+           WHERE LOWER(TRIM(first_name || ' ' || last_name)) = LOWER(?)
+              OR LOWER(TRIM(last_name || ', ' || first_name)) = LOWER(?)
+           LIMIT 1""",
+        (name, name),
+    ).fetchone()
+    return int(row["customer_id"]) if row else None
+
+
+def resolve_player_email(item, conn=None, db_path=None) -> str:
+    """customer_emails.is_primary first; items.customer_email as fallback."""
+    conn, owns = _resolve_db(conn, db_path)
+    try:
+        cid = _resolve_lookup_customer_id(conn, item)
+        if cid:
+            row = conn.execute(
+                "SELECT email FROM customer_emails WHERE customer_id = ? AND is_primary = 1 LIMIT 1",
+                (cid,),
+            ).fetchone()
+            if row and row["email"]:
+                return row["email"].strip().lower()
+        if isinstance(item, dict):
+            return (item.get("customer_email") or "").strip()
+        return ""
+    finally:
+        if owns:
+            try: conn.__exit__(None, None, None)
+            except Exception: pass
+
+
+def resolve_player_phone(item, conn=None, db_path=None) -> str:
+    """customers.phone first; items.customer_phone as fallback."""
+    conn, owns = _resolve_db(conn, db_path)
+    try:
+        cid = _resolve_lookup_customer_id(conn, item)
+        if cid:
+            row = conn.execute(
+                "SELECT phone FROM customers WHERE customer_id = ? LIMIT 1",
+                (cid,),
+            ).fetchone()
+            if row and row["phone"]:
+                return row["phone"].strip()
+        if isinstance(item, dict):
+            return (item.get("customer_phone") or "").strip()
+        return ""
+    finally:
+        if owns:
+            try: conn.__exit__(None, None, None)
+            except Exception: pass
+
+
+def resolve_player_name(item, conn=None, db_path=None) -> dict:
+    """Returns {first_name, last_name} from customers; falls back to items."""
+    conn, owns = _resolve_db(conn, db_path)
+    try:
+        cid = _resolve_lookup_customer_id(conn, item)
+        if cid:
+            row = conn.execute(
+                "SELECT first_name, last_name FROM customers WHERE customer_id = ? LIMIT 1",
+                (cid,),
+            ).fetchone()
+            if row:
+                fn = (row["first_name"] or "").strip()
+                ln = (row["last_name"] or "").strip()
+                if fn or ln:
+                    return {"first_name": fn, "last_name": ln}
+        if isinstance(item, dict):
+            return {
+                "first_name": (item.get("first_name") or "").strip(),
+                "last_name": (item.get("last_name") or "").strip(),
+            }
+        return {"first_name": "", "last_name": ""}
+    finally:
+        if owns:
+            try: conn.__exit__(None, None, None)
+            except Exception: pass
+
+
+def resolve_player_chapter(item, conn=None, db_path=None) -> str:
+    """customers.chapter first; items.chapter as fallback."""
+    conn, owns = _resolve_db(conn, db_path)
+    try:
+        cid = _resolve_lookup_customer_id(conn, item)
+        if cid:
+            row = conn.execute(
+                "SELECT chapter FROM customers WHERE customer_id = ? LIMIT 1",
+                (cid,),
+            ).fetchone()
+            if row and row["chapter"]:
+                return row["chapter"].strip()
+        if isinstance(item, dict):
+            return (item.get("chapter") or "").strip()
+        return ""
+    finally:
+        if owns:
+            try: conn.__exit__(None, None, None)
+            except Exception: pass
+
+
+def resolve_player_status(item, conn=None, db_path=None) -> str:
+    """Resolve player display status from customers.current_player_status +
+    customer_roles. Falls back to items.user_status only when no canonical
+    record exists.
+
+    Mapping (matches existing UI conventions):
+      manager/owner/admin role  → 'MANAGER'
+      current_player_status='active_member' + member_plus role → 'MEMBER+'
+      current_player_status='active_member' → 'MEMBER'
+      current_player_status='active_guest'  → 'GUEST'
+      current_player_status='first_timer'   → '1ST TIMER'
+      everything else → empty (caller chooses fallback)
+    """
+    conn, owns = _resolve_db(conn, db_path)
+    try:
+        cid = _resolve_lookup_customer_id(conn, item)
+        if cid:
+            cust = conn.execute(
+                "SELECT current_player_status FROM customers WHERE customer_id = ? LIMIT 1",
+                (cid,),
+            ).fetchone()
+            roles = {r["role_type"] for r in conn.execute(
+                "SELECT role_type FROM customer_roles WHERE customer_id = ?",
+                (cid,),
+            ).fetchall()}
+            if roles & {"manager", "owner", "admin"}:
+                return "MANAGER"
+            cps = (cust["current_player_status"] if cust else "") or ""
+            if cps == "active_member":
+                return "MEMBER+" if "member_plus" in roles else "MEMBER"
+            if cps == "active_guest":
+                return "GUEST"
+            if cps == "first_timer":
+                return "1ST TIMER"
+        if isinstance(item, dict):
+            return (item.get("user_status") or "").strip()
+        return ""
+    finally:
+        if owns:
+            try: conn.__exit__(None, None, None)
+            except Exception: pass
 
 
 def capture_email_aliases_from_items(db_path: str | Path | None = None) -> int:
