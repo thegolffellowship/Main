@@ -20794,9 +20794,11 @@ def promote_expense_to_ledger(expense_id: int, category_name: str | None,
 
         cur = conn.execute(
             """INSERT INTO acct_transactions
-               (date, description, total_amount, type, account_id, source, source_ref, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (txn_date, merchant, amount, txn_type, account_id, source, source_ref, final_notes),
+               (date, description, total_amount, amount, type, entry_type,
+                account_id, source, source_ref, notes, event_name)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (txn_date, merchant, amount, amount, txn_type, txn_type,
+             account_id, source, source_ref, final_notes, lookup_event),
         )
         txn_id = cur.lastrowid
 
