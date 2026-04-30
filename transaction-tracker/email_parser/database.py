@@ -11218,6 +11218,45 @@ def build_handicap_card_data(player_name: str,
         ).fetchone()
         if link and link["customer_name"]:
             cname = link["customer_name"]
+
+            # Canonical primary email comes from customer_emails (the source of
+            # truth shown on the Customer Info page). Look up the customer_id
+            # first via the most recent items row that links to a customer,
+            # then read the primary email. items.customer_email may carry
+            # historical typos that the user has since corrected on the
+            # Customer page — never let those override the primary.
+            primary_row = conn.execute(
+                """SELECT e.email FROM customer_emails e
+                   WHERE e.is_primary = 1
+                     AND e.customer_id = (
+                         SELECT i.customer_id FROM items i
+                         WHERE LOWER(i.customer) = LOWER(?)
+                           AND i.customer_id IS NOT NULL
+                         ORDER BY i.id DESC LIMIT 1
+                     )
+                   LIMIT 1""",
+                (cname,),
+            ).fetchone()
+            if primary_row and primary_row["email"]:
+                email = primary_row["email"].strip().lower()
+
+            # Fall back to a primary email matched by name when there's no
+            # customer_id link yet (rare but possible for historical records).
+            if not email:
+                primary_by_name = conn.execute(
+                    """SELECT e.email FROM customer_emails e
+                       JOIN customers c ON c.customer_id = e.customer_id
+                       WHERE e.is_primary = 1
+                         AND (
+                             LOWER(TRIM(c.first_name || ' ' || c.last_name)) = LOWER(?)
+                             OR LOWER(TRIM(c.last_name || ', ' || c.first_name)) = LOWER(?)
+                         )
+                       LIMIT 1""",
+                    (cname, cname),
+                ).fetchone()
+                if primary_by_name and primary_by_name["email"]:
+                    email = primary_by_name["email"].strip().lower()
+
             meta = conn.execute(
                 """SELECT
                     COALESCE(
@@ -11256,12 +11295,15 @@ def build_handicap_card_data(player_name: str,
                 (cname, cname, cname, cname, cname),
             ).fetchone()
             if meta:
-                email = (meta["customer_email"] or "").strip()
+                # customer_emails primary wins; only fall back to items.customer_email
+                # if no primary email is set for this customer.
+                if not email:
+                    email = (meta["customer_email"] or "").strip()
                 chapter = (meta["chapter"] or "").strip()
                 first_name = (meta["first_name"] or "").strip()
                 last_name = (meta["last_name"] or "").strip()
 
-            # Also check customer_emails table for primary email
+            # Existing fallback for old records w/o name parts in items
             if not email:
                 ce = conn.execute(
                     """SELECT e.email FROM customer_emails e
