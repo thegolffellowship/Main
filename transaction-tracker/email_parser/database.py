@@ -3479,6 +3479,11 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("season_contests",     "INTEGER REFERENCES customers(customer_id)"),
             ("handicap_rounds",     "INTEGER REFERENCES customers(customer_id)"),
             ("godaddy_order_splits","INTEGER REFERENCES customers(customer_id)"),
+            ("parse_warnings",      "INTEGER REFERENCES customers(customer_id)"),
+            ("message_log",         "INTEGER REFERENCES customers(customer_id)"),
+            ("rsvp_email_overrides","INTEGER REFERENCES customers(customer_id)"),
+            ("action_items",        "INTEGER REFERENCES customers(customer_id)"),
+            ("feedback",            "INTEGER REFERENCES customers(customer_id)"),
         ]
         for tbl, col_type in _customer_id_migrations:
             try:
@@ -3510,6 +3515,10 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_season_contests(conn)
         _backfill_customer_id_on_handicap_rounds(conn)
         _backfill_customer_id_on_gd_splits(conn)
+        _backfill_customer_id_on_parse_warnings(conn)
+        _backfill_customer_id_on_message_log(conn)
+        _backfill_customer_id_on_rsvp_email_overrides(conn)
+        _backfill_customer_id_on_action_items(conn)
         try:
             _backfill_events_id_on_tgf_events(conn)
         except Exception:
@@ -4373,6 +4382,107 @@ def _backfill_customer_id_on_gd_splits(conn: sqlite3.Connection) -> int:
     conn.commit()
     if updated:
         logger.info("Backfilled customer_id for %d godaddy_order_splits rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_parse_warnings(conn: sqlite3.Connection) -> int:
+    """Resolve parse_warnings.customer_id from the existing customer text column."""
+    rows = conn.execute(
+        """SELECT DISTINCT customer FROM parse_warnings
+           WHERE customer_id IS NULL AND customer IS NOT NULL AND customer != ''"""
+    ).fetchall()
+    if not rows:
+        return 0
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, row["customer"], None)
+        if cid is not None:
+            cur = conn.execute(
+                "UPDATE parse_warnings SET customer_id = ? WHERE customer_id IS NULL AND customer = ?",
+                (cid, row["customer"]),
+            )
+            updated += cur.rowcount
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d parse_warnings rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_message_log(conn: sqlite3.Connection) -> int:
+    """Resolve message_log.customer_id from recipient_address (email) first,
+    falling back to recipient_name. Lets the email-history view link straight
+    back to the customer record."""
+    rows = conn.execute(
+        """SELECT DISTINCT recipient_address, recipient_name FROM message_log
+           WHERE customer_id IS NULL"""
+    ).fetchall()
+    if not rows:
+        return 0
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, row["recipient_name"], row["recipient_address"])
+        if cid is not None:
+            cur = conn.execute(
+                """UPDATE message_log SET customer_id = ?
+                   WHERE customer_id IS NULL
+                     AND COALESCE(recipient_address,'') = COALESCE(?,'')
+                     AND COALESCE(recipient_name,'') = COALESCE(?,'')""",
+                (cid, row["recipient_address"], row["recipient_name"]),
+            )
+            updated += cur.rowcount
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d message_log rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_rsvp_email_overrides(conn: sqlite3.Connection) -> int:
+    """Resolve rsvp_email_overrides.customer_id by player_email."""
+    rows = conn.execute(
+        """SELECT DISTINCT player_email FROM rsvp_email_overrides
+           WHERE customer_id IS NULL AND player_email IS NOT NULL AND player_email != ''"""
+    ).fetchall()
+    if not rows:
+        return 0
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, None, row["player_email"])
+        if cid is not None:
+            cur = conn.execute(
+                "UPDATE rsvp_email_overrides SET customer_id = ? WHERE customer_id IS NULL AND player_email = ?",
+                (cid, row["player_email"]),
+            )
+            updated += cur.rowcount
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d rsvp_email_overrides rows", updated)
+    return updated
+
+
+def _backfill_customer_id_on_action_items(conn: sqlite3.Connection) -> int:
+    """Resolve action_items.customer_id from from_email / from_name."""
+    rows = conn.execute(
+        """SELECT DISTINCT from_email, from_name FROM action_items
+           WHERE customer_id IS NULL
+             AND (from_email IS NOT NULL OR from_name IS NOT NULL)"""
+    ).fetchall()
+    if not rows:
+        return 0
+    updated = 0
+    for row in rows:
+        cid = _lookup_customer_id(conn, row["from_name"], row["from_email"])
+        if cid is not None:
+            cur = conn.execute(
+                """UPDATE action_items SET customer_id = ?
+                   WHERE customer_id IS NULL
+                     AND COALESCE(from_email,'') = COALESCE(?,'')
+                     AND COALESCE(from_name,'') = COALESCE(?,'')""",
+                (cid, row["from_email"], row["from_name"]),
+            )
+            updated += cur.rowcount
+    conn.commit()
+    if updated:
+        logger.info("Backfilled customer_id for %d action_items rows", updated)
     return updated
 
 
