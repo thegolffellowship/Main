@@ -7866,6 +7866,22 @@ def api_recon_auto_match():
     return jsonify(run_deposit_auto_match(account_id))
 
 
+@app.route("/api/admin/run-recon-drift-fix", methods=["POST"])
+@require_role("admin")
+def api_admin_run_recon_drift_fix():
+    """One-shot remediation for April-2026 reconciliation drift.
+
+    Runs the same logic as scripts/fix_recon_drift_2026_04.py and
+    returns a JSON report. Idempotent — safe to call repeatedly.
+    """
+    from email_parser.recon_drift_fix import apply_recon_drift_fix
+    try:
+        return jsonify(apply_recon_drift_fix())
+    except Exception as e:  # noqa: BLE001
+        logger.exception("recon-drift-fix failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/reconciliation/match", methods=["POST"])
 @require_role("admin")
 def api_recon_match():
