@@ -169,6 +169,7 @@ from email_parser.database import (
     backfill_acct_transactions,
     backfill_missing_godaddy_orders,
     repair_orphan_pay_children,
+    capture_email_aliases_from_items,
     migrate_item_to_order_entries,
     cleanup_duplicate_godaddy_entries,
     backup_database,
@@ -8612,6 +8613,16 @@ try:
             logger.info("Startup: orphan +PAY repair %s", _orphan_repair)
     except Exception:
         logger.warning("Startup orphan +PAY repair failed", exc_info=True)
+
+    # Surface order-time email variants as customer_aliases so historical
+    # typos on items.customer_email become visible on the Customer Info page
+    # (where the manager can review/keep/delete each one). Idempotent.
+    try:
+        _email_aliases = capture_email_aliases_from_items()
+        if _email_aliases:
+            logger.info("Startup: captured %d email aliases from items", _email_aliases)
+    except Exception:
+        logger.warning("Startup email-alias capture failed", exc_info=True)
 
     # ── Auto-migrate old per-item GoDaddy entries to order-level ──
     try:

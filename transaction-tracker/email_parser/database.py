@@ -14988,6 +14988,69 @@ def backfill_financial_entries(db_path: str | Path | None = None) -> dict:
     return results
 
 
+def capture_email_aliases_from_items(db_path: str | Path | None = None) -> int:
+    """Promote any items.customer_email value that differs from the linked
+    customer's primary email into customer_aliases (alias_type='email').
+
+    The Customer Info card reads email from customer_emails.is_primary, so a
+    typo'd address on a single old order (e.g. items.customer_email =
+    'fredwickee@att.net' while the primary is 'fredwicker@att.net') is
+    invisible to the manager — but other code paths used to read it directly.
+    Surfacing variants as aliases makes them visible on the customer page so
+    the manager can decide whether to keep them as a legitimate alternate or
+    delete them outright.
+
+    Idempotent — only inserts an alias when one with the same
+    (customer_name, 'email', alias_value) doesn't already exist.
+    Returns the number of new alias rows inserted.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT
+                  i.customer AS customer_name,
+                  LOWER(TRIM(i.customer_email)) AS email
+               FROM items i
+               WHERE i.customer IS NOT NULL AND TRIM(i.customer) != ''
+                 AND i.customer_email IS NOT NULL AND TRIM(i.customer_email) != ''
+                 AND i.customer_id IS NOT NULL
+                 AND LOWER(TRIM(i.customer_email)) != COALESCE(
+                     (SELECT LOWER(e.email) FROM customer_emails e
+                      WHERE e.customer_id = i.customer_id AND e.is_primary = 1
+                      LIMIT 1),
+                     ''
+                 )
+                 AND NOT EXISTS (
+                     SELECT 1 FROM customer_aliases ca
+                     WHERE ca.customer_name = i.customer
+                       AND ca.alias_type = 'email'
+                       AND LOWER(ca.alias_value) = LOWER(TRIM(i.customer_email))
+                 )"""
+        ).fetchall()
+
+        inserted = 0
+        for r in rows:
+            try:
+                conn.execute(
+                    """INSERT INTO customer_aliases
+                       (customer_name, alias_type, alias_value)
+                       VALUES (?, 'email', ?)""",
+                    (r["customer_name"], r["email"]),
+                )
+                inserted += 1
+            except Exception:
+                logger.warning(
+                    "capture_email_aliases_from_items: failed for %s / %s",
+                    r["customer_name"], r["email"], exc_info=True,
+                )
+        if inserted:
+            conn.commit()
+            logger.info(
+                "Captured %d email aliases from historical items.customer_email rows",
+                inserted,
+            )
+        return inserted
+
+
 def repair_orphan_pay_children(db_path: str | Path | None = None) -> dict:
     """Heal +PAY child rows whose parent_item_id points to a row that no longer
     exists or that's stuck in 'rsvp_only' (the residue from a reverse-credit-
