@@ -457,13 +457,22 @@ def get_pending_review_count() -> str:
 # ── Reconciliation Tools ─────────────────────────────────────────────
 
 @mcp.tool()
+def get_reconciliation_dashboard() -> str:
+    """Per-account reconciliation status: last import date, bank balance,
+    book balance, variance, and count of unmatched/partial deposits."""
+    return json.dumps(_get("/api/reconciliation/dashboard"), indent=2)
+
+
+@mcp.tool()
 def get_reconciliation_summary(month: str) -> str:
-    """Get bank reconciliation summary for a month.
+    """Monthly P&L summary from the reconciliation system: income by category,
+    expenses by category, total transactions, reconciled transaction count,
+    and reconciliation percentage.
 
     Args:
         month: Month in YYYY-MM format (e.g. "2026-04")
     """
-    return json.dumps(_get(f"/api/accounting/reconciliation-summary?month={month}"), indent=2)
+    return json.dumps(_get(f"/api/reconciliation/monthly?month={month}"), indent=2)
 
 
 @mcp.tool()
