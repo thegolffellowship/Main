@@ -284,6 +284,67 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Player-email resolution
+# ---------------------------------------------------------------------------
+# Customer Info card and the manager's Edit dialog are the source of truth for
+# a player's email — they read/write customer_emails.is_primary. items.customer_email
+# is a historical capture from each GoDaddy order and can carry typos or
+# alternates that the user has since corrected. Every customer-facing email
+# (reminders, balance-due, bulk sends, handicap cards) MUST prefer the primary
+# from customer_emails so an old typo'd order can't keep auto-mailing the
+# wrong address.
+def _resolve_player_email(item: dict, conn=None) -> str:
+    """Return the canonical email for the player on this items row.
+
+    Priority:
+      1. customer_emails.is_primary for items.customer_id
+      2. customer_emails.is_primary matched by customer name
+         (handles 'First Last' or 'Last, First')
+      3. items.customer_email (historical fallback)
+    """
+    from email_parser.database import _connect as _resolve_db_connect
+
+    own_conn = conn is None
+    if own_conn:
+        conn = _resolve_db_connect().__enter__()
+
+    try:
+        cust_id = item.get("customer_id")
+        cname = (item.get("customer") or "").strip()
+
+        if cust_id:
+            row = conn.execute(
+                "SELECT email FROM customer_emails WHERE customer_id = ? AND is_primary = 1 LIMIT 1",
+                (cust_id,),
+            ).fetchone()
+            if row and row["email"]:
+                return row["email"].strip().lower()
+
+        if cname:
+            row = conn.execute(
+                """SELECT e.email FROM customer_emails e
+                   JOIN customers c ON c.customer_id = e.customer_id
+                   WHERE e.is_primary = 1
+                     AND (
+                         LOWER(TRIM(c.first_name || ' ' || c.last_name)) = LOWER(?)
+                         OR LOWER(TRIM(c.last_name || ', ' || c.first_name)) = LOWER(?)
+                     )
+                   LIMIT 1""",
+                (cname, cname),
+            ).fetchone()
+            if row and row["email"]:
+                return row["email"].strip().lower()
+
+        return (item.get("customer_email") or "").strip()
+    finally:
+        if own_conn:
+            try:
+                conn.__exit__(None, None, None)
+            except Exception:
+                pass
+
+
+# ---------------------------------------------------------------------------
 # Simple in-memory rate limiter for login endpoint
 # ---------------------------------------------------------------------------
 _login_attempts: dict[str, list[float]] = {}  # IP → list of timestamps
@@ -1156,13 +1217,14 @@ def send_auto_payment_reminders():
             i for i in items
             if (i.get("item_name") or "").lower() == event_name.lower()
             and (i.get("transaction_status") or "active") in ("rsvp_only", "gg_rsvp")
-            and i.get("customer_email")
         ]
         if not rsvp_players:
             continue
 
         for player in rsvp_players:
-            to_email = player["customer_email"].strip()
+            to_email = _resolve_player_email(player)
+            if not to_email:
+                continue
             player_name = player.get("customer") or "Player"
             subject = f"Payment Reminder — {event_name}"
             html_body = (
@@ -3471,32 +3533,13 @@ def _build_balance_due_email(item_id: int) -> dict | None:
         event = dict(ev_row) if ev_row else {}
 
     player_name = (item.get("customer") or "").strip()
-    player_email = (item.get("customer_email") or "").strip()
-
-    # If the item has no email (e.g. manually-added RSVP), fall back to customer_emails table
-    if not player_email:
-        try:
-            with _db_connect() as conn:
-                cust_id = item.get("customer_id")
-                if cust_id:
-                    row = conn.execute(
-                        "SELECT email FROM customer_emails WHERE customer_id = ? ORDER BY is_primary DESC, email_id ASC LIMIT 1",
-                        (cust_id,),
-                    ).fetchone()
-                    if row:
-                        player_email = (row["email"] or "").strip()
-                if not player_email and player_name:
-                    row = conn.execute(
-                        """SELECT ce.email FROM customer_emails ce
-                           JOIN customers c ON c.customer_id = ce.customer_id
-                           WHERE TRIM(c.first_name || ' ' || c.last_name) = ? COLLATE NOCASE
-                           ORDER BY ce.is_primary DESC, ce.email_id ASC LIMIT 1""",
-                        (player_name,),
-                    ).fetchone()
-                    if row:
-                        player_email = (row["email"] or "").strip()
-        except Exception:
-            logger.warning("_build_balance_due_email: email lookup fallback failed for %s", player_name, exc_info=True)
+    # Customer Info primary email is canonical; only fall back to the
+    # historical items.customer_email if no primary is on file.
+    try:
+        player_email = _resolve_player_email(item)
+    except Exception:
+        logger.warning("_build_balance_due_email: email resolution failed for %s", player_name, exc_info=True)
+        player_email = (item.get("customer_email") or "").strip()
 
     first_name = player_name.split(" ", 1)[0] if player_name else "there"
     event_date = event.get("event_date") or ""
@@ -4345,16 +4388,19 @@ def api_send_reminder_all():
         i for i in items
         if (i.get("item_name") or "").lower() == event_name.lower()
         and (i.get("transaction_status") or "active") == "rsvp_only"
-        and i.get("customer_email")
     ]
 
     if not rsvp_players:
-        return jsonify({"error": "No RSVP-only players with emails found for this event"}), 404
+        return jsonify({"error": "No RSVP-only players found for this event"}), 404
 
     sent = 0
     failed = 0
+    skipped_no_email = 0
     for player in rsvp_players:
-        to_email = player["customer_email"].strip()
+        to_email = _resolve_player_email(player)
+        if not to_email:
+            skipped_no_email += 1
+            continue
         player_name = player.get("customer") or "Player"
         subject = f"Payment Reminder — {event_name}"
         html_body = (
@@ -4500,23 +4546,10 @@ def api_send_messages():
 
     registrants = [i for i in items if matches_event(i)]
 
-    # Build email lookup by customer name (for resolving missing customer_email)
-    email_by_name = {}
-    for it in items:
-        cname = (it.get("customer") or "").strip().lower()
-        cemail = (it.get("customer_email") or "").strip()
-        if cname and cemail and cname not in email_by_name:
-            email_by_name[cname] = cemail
-
+    # Use the canonical resolver — customer_emails.is_primary first,
+    # items.customer_email only as a fallback.
     def resolve_email(r):
-        """Return email from item row, or look up from other items by customer name."""
-        email = (r.get("customer_email") or "").strip()
-        if email:
-            return email
-        cname = (r.get("customer") or "").strip().lower()
-        if cname:
-            return email_by_name.get(cname, "")
-        return ""
+        return _resolve_player_email(r)
 
     # Get RSVP override data for playing/not_playing filtering
     rsvp_overrides = {}
