@@ -3210,6 +3210,29 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.IntegrityError:
                 pass
 
+        # One-time migration: import_venmo_statement historically wrote
+        # bank_accounts.id into bank_deposits.account_id, while every other
+        # import path stores acct_accounts.id. Rewrite the legacy rows so all
+        # bank_deposits.account_id values reference acct_accounts.
+        try:
+            ba_venmo = conn.execute(
+                "SELECT id FROM bank_accounts "
+                "WHERE LOWER(name) LIKE '%venmo%' OR account_type = 'venmo' "
+                "ORDER BY id LIMIT 1"
+            ).fetchone()
+            aa_venmo = conn.execute(
+                "SELECT id FROM acct_accounts "
+                "WHERE is_active = 1 AND (LOWER(name) LIKE 'venmo%' OR account_type = 'venmo') "
+                "ORDER BY (account_type = 'venmo') DESC, id LIMIT 1"
+            ).fetchone()
+            if ba_venmo and aa_venmo and ba_venmo["id"] != aa_venmo["id"]:
+                conn.execute(
+                    "UPDATE bank_deposits SET account_id = ? WHERE account_id = ?",
+                    (aa_venmo["id"], ba_venmo["id"]),
+                )
+        except sqlite3.OperationalError:
+            pass
+
         # Seed chart of accounts on first run
         existing_coa = conn.execute("SELECT COUNT(*) as cnt FROM chart_of_accounts").fetchone()
         if existing_coa["cnt"] == 0:
@@ -18367,20 +18390,24 @@ def import_venmo_statement(csv_text: str, account_label: str,
     categorized: dict[str, int] = {}
 
     with _connect(db_path) as conn:
-        # Look up Venmo account_id from bank_accounts
+        # Look up Venmo account_id from acct_accounts so the value stored in
+        # bank_deposits.account_id matches every other import path (Chase /
+        # generic CSV imports also store an acct_accounts.id).
         acct_row = conn.execute(
-            "SELECT id FROM bank_accounts WHERE account_type = 'venmo' LIMIT 1"
+            "SELECT id FROM acct_accounts "
+            "WHERE is_active = 1 AND LOWER(name) LIKE 'venmo%' AND account_type = 'venmo' "
+            "LIMIT 1"
         ).fetchone()
         if not acct_row:
-            # Fallback: try by name
             acct_row = conn.execute(
-                "SELECT id FROM bank_accounts WHERE LOWER(name) LIKE '%venmo%' LIMIT 1"
+                "SELECT id FROM acct_accounts "
+                "WHERE is_active = 1 AND account_type = 'venmo' LIMIT 1"
             ).fetchone()
         account_id = acct_row["id"] if acct_row else None
         if account_id is None:
             return {"imported": 0, "skipped": 0, "format": fmt,
                     "categorized": {}, "rows_preview": [],
-                    "error": "No Venmo account found in bank_accounts"}
+                    "error": "No Venmo account found in acct_accounts"}
 
         for row in data_rows:
             if not row:
@@ -18687,7 +18714,13 @@ def run_deposit_auto_match(account_id: int | None = None,
             dep_amt = dep["amount"]
             dep_desc = (dep["description"] or "").upper()
             dep_source = dep.get("source", "")
-            acct_type = dep.get("account_type", "")
+            acct_type = dep.get("account_type", "") or ""
+            # Defensive fallback: if the account join returned no row (legacy
+            # row referencing a stale id, or an as-yet-unmigrated import path),
+            # use the deposit's source field to drive branch selection so the
+            # Venmo / GoDaddy logic still fires.
+            if not acct_type and dep_source:
+                acct_type = dep_source
 
             matched_txn_ids = []
             confidence = 0.0
@@ -19156,7 +19189,7 @@ def get_bank_deposits(account_id: int | None = None, status: str | None = None,
                        GROUP_CONCAT(rm.acct_transaction_id) as matched_txn_ids,
                        GROUP_CONCAT(rm.match_confidence) as match_confidences
                 FROM bank_deposits d
-                JOIN bank_accounts ba ON ba.id = d.account_id
+                LEFT JOIN acct_accounts ba ON ba.id = d.account_id
                 LEFT JOIN reconciliation_matches rm ON rm.bank_deposit_id = d.id
                 {where}
                 GROUP BY d.id

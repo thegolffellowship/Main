@@ -569,13 +569,23 @@ def get_pending_review_count() -> str:
 # ── Reconciliation Tools ─────────────────────────────────────────────
 
 @mcp.tool()
+def get_reconciliation_dashboard() -> str:
+    """Per-account reconciliation status: last import date, bank balance,
+    book balance, variance, and count of unmatched/partial deposits."""
+    from email_parser.database import get_reconciliation_dashboard as _get
+    return json.dumps(_get(), indent=2)
+
+
+@mcp.tool()
 def get_reconciliation_summary(month: str) -> str:
-    """Get bank reconciliation summary for a month: matched/unmatched counts and dollar totals.
+    """Monthly P&L summary from the reconciliation system: income by category,
+    expenses by category, total transactions, reconciled transaction count,
+    and reconciliation percentage.
 
     Args:
         month: Month in YYYY-MM format (e.g. "2026-04")
     """
-    from email_parser.database import get_reconciliation_summary as _get
+    from email_parser.database import get_monthly_reconciliation as _get
     return json.dumps(_get(month), indent=2)
 
 
@@ -716,7 +726,7 @@ def get_bank_deposits(
                        d.deposit_date, d.description, d.amount,
                        d.status, d.raw_data as source_ref
                 FROM bank_deposits d
-                JOIN bank_accounts ba ON ba.id = d.account_id
+                LEFT JOIN acct_accounts ba ON ba.id = d.account_id
                 {where}
                 ORDER BY d.deposit_date DESC, d.id DESC LIMIT ?""",
             params,
@@ -738,7 +748,7 @@ def get_reconciliation_detail(month: str) -> str:
             """SELECT d.id, d.deposit_date, d.description, d.amount, d.status,
                       ba.name as account_name
                FROM bank_deposits d
-               JOIN bank_accounts ba ON ba.id = d.account_id
+               LEFT JOIN acct_accounts ba ON ba.id = d.account_id
                WHERE d.deposit_date LIKE ?
                ORDER BY d.deposit_date""",
             (f"{month}%",),
