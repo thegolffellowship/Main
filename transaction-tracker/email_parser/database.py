@@ -18679,11 +18679,108 @@ def _import_pdf_deposits(file_bytes, batch_id, account_id, db_path):
             "format": "PDF (AI-parsed)", "rows_preview": preview}
 
 
+_GODADDY_BATCH_DATE_RE = re.compile(r"\b(\d{2})/(\d{2})\b")
+
+
+def _parse_godaddy_batch_date(description: str, deposit_date: str) -> str:
+    """Extract MM/DD from a GoDaddy deposit description and resolve to ISO date.
+
+    GoDaddy descriptions look like "GoDaddy Payments Dep 04/26 80229e16-e5e6-4".
+    The MM/DD is the batch close date, which is typically deposit_date - 1 day.
+    Falls back to deposit_date - 1 day if the description has no MM/DD token.
+    Handles year rollover (a 12/31 batch deposited on 01/02 of the next year).
+    """
+    try:
+        dep_dt = datetime.strptime(deposit_date, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return deposit_date
+    fallback = (dep_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+    if not description:
+        return fallback
+    match = _GODADDY_BATCH_DATE_RE.search(description)
+    if not match:
+        return fallback
+    try:
+        month, day = int(match.group(1)), int(match.group(2))
+        candidate = datetime(dep_dt.year, month, day)
+        if candidate > dep_dt:
+            candidate = datetime(dep_dt.year - 1, month, day)
+        return candidate.strftime("%Y-%m-%d")
+    except ValueError:
+        return fallback
+
+
+def _subset_sum_match(values: list[float], target: float,
+                      tolerance: float = 0.50) -> list[int] | None:
+    """Find indices of a subset of `values` whose sum ≈ `target`.
+
+    Exact recursive search with suffix-sum pruning for n ≤ 25; greedy
+    descending fit for larger pools. Returns indices into the input list,
+    or None if no subset is within `tolerance` of `target`. Works in
+    integer cents internally to avoid float drift.
+    """
+    n = len(values)
+    if n == 0:
+        return None
+    for i, v in enumerate(values):
+        if abs(v - target) < tolerance:
+            return [i]
+    positive_total = sum(v for v in values if v > 0)
+    if positive_total < target - tolerance:
+        return None
+
+    if n <= 25:
+        cents = [round(v * 100) for v in values]
+        target_c = round(target * 100)
+        tol_c = round(tolerance * 100)
+        order = sorted(range(n), key=lambda i: -cents[i])
+        sc = [cents[i] for i in order]
+        suffix = [0] * (n + 1)
+        for i in range(n - 1, -1, -1):
+            suffix[i] = suffix[i + 1] + max(sc[i], 0)
+        found: list[int] = []
+
+        def dfs(idx: int, remaining: int, picked: list[int]) -> bool:
+            if abs(remaining) <= tol_c:
+                found.extend(picked)
+                return True
+            if idx >= n:
+                return False
+            if suffix[idx] < remaining - tol_c:
+                return False
+            if sc[idx] <= remaining + tol_c:
+                picked.append(idx)
+                if dfs(idx + 1, remaining - sc[idx], picked):
+                    return True
+                picked.pop()
+            return dfs(idx + 1, remaining, picked)
+
+        if dfs(0, target_c, []):
+            return [order[i] for i in found]
+        return None
+
+    indexed = sorted(range(n), key=lambda i: -values[i])
+    picked: list[int] = []
+    running = 0.0
+    for idx in indexed:
+        v = values[idx]
+        if v <= 0:
+            continue
+        if running + v <= target + tolerance:
+            picked.append(idx)
+            running += v
+            if abs(running - target) < tolerance:
+                return picked
+    return picked if abs(running - target) < tolerance else None
+
+
 def run_deposit_auto_match(account_id: int | None = None,
                            db_path: str | Path | None = None) -> dict:
     """Auto-match bank_deposits to acct_transactions.
 
-    GoDaddy batches: match by date ± 2 days, sum comparison.
+    GoDaddy batches: parse MM/DD from description, subset-sum match in a
+    2-day window around the batch date, sequentially claim orders so
+    consecutive batches don't double-count.
     Venmo: match by amount + customer name in description.
     Other: match by amount + date ± 1 day, flag for manual.
 
@@ -18708,6 +18805,11 @@ def run_deposit_auto_match(account_id: int | None = None,
         ).fetchall()
         deposits = [dict(d) for d in deposits]
 
+        # Track acct_transaction IDs claimed by earlier GoDaddy deposits in this
+        # run. Sequential claiming prevents the same order from satisfying two
+        # consecutive batch deposits.
+        claimed_txn_ids: set[int] = set()
+
         for dep in deposits:
             dep_id = dep["id"]
             dep_date = dep["deposit_date"]
@@ -18727,56 +18829,93 @@ def run_deposit_auto_match(account_id: int | None = None,
             detail = ""
 
             if dep_source == "godaddy" or "GODADDY" in dep_desc:
-                # GoDaddy batch: find order-level transactions using net_deposit
-                candidates = conn.execute(
-                    """SELECT id, amount, net_deposit, merchant_fee, date, customer, event_name, order_id
-                       FROM acct_transactions
-                       WHERE category = 'godaddy_order'
-                       AND COALESCE(status, 'active') = 'active'
-                       AND ABS(julianday(date) - julianday(?)) <= 5
-                       AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
-                       ORDER BY date""",
-                    (dep_date,),
-                ).fetchall()
-                candidates = [dict(c) for c in candidates]
+                # Parse the MM/DD batch date out of the description
+                # ("GoDaddy Payments Dep 04/26 ..."). Falls back to
+                # deposit_date - 1 day if absent.
+                batch_date = _parse_godaddy_batch_date(
+                    dep.get("description") or "", dep_date,
+                )
+                try:
+                    bd_obj = datetime.strptime(batch_date, "%Y-%m-%d")
+                except ValueError:
+                    bd_obj = None
 
-                if not candidates:
-                    # Fallback: old per-item format (category='registration')
-                    candidates = conn.execute(
-                        """SELECT id, amount, date, customer, event_name, order_id
-                           FROM acct_transactions
-                           WHERE entry_type = 'income' AND source = 'godaddy'
-                           AND category = 'registration'
-                           AND COALESCE(status, 'active') = 'active'
-                           AND ABS(julianday(date) - julianday(?)) <= 5
-                           AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
-                           ORDER BY date""",
-                        (dep_date,),
-                    ).fetchall()
-                    candidates = [dict(c) for c in candidates]
+                matched_indices: list[int] | None = None
+                candidates: list[dict] = []
+                used_widened = False
 
-                if candidates:
-                    # Use net_deposit (what actually hits the bank) when available
-                    total_net = sum(c.get("net_deposit") or c["amount"] for c in candidates)
-                    gap = abs(total_net - dep_amt)
+                if bd_obj is not None:
+                    # Two passes: a tight 2-day window keyed on the batch
+                    # date, then a 4-day fallback for delayed deposits.
+                    windows = [
+                        ((-1, 0), False),
+                        ((-2, 1), True),
+                    ]
+                    for (off_lo, off_hi), is_wide in windows:
+                        win_start = (bd_obj + timedelta(days=off_lo)).strftime("%Y-%m-%d")
+                        win_end = (bd_obj + timedelta(days=off_hi)).strftime("%Y-%m-%d")
+                        excluded = list(claimed_txn_ids)
+                        excl_clause = ""
+                        if excluded:
+                            excl_clause = (
+                                f" AND id NOT IN ({','.join('?' * len(excluded))})"
+                            )
+                        rows = conn.execute(
+                            f"""SELECT id, amount, net_deposit, merchant_fee,
+                                       date, customer, event_name, order_id
+                                FROM acct_transactions
+                                WHERE category = 'godaddy_order'
+                                  AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
+                                  AND date BETWEEN ? AND ?
+                                  AND id NOT IN (
+                                      SELECT acct_transaction_id
+                                      FROM reconciliation_matches
+                                  )
+                                  {excl_clause}
+                                ORDER BY date""",
+                            [win_start, win_end, *excluded],
+                        ).fetchall()
+                        candidates = [dict(r) for r in rows]
+                        if not candidates:
+                            continue
+                        values = [
+                            (c.get("net_deposit") or c["amount"]) for c in candidates
+                        ]
+                        matched_indices = _subset_sum_match(
+                            values, dep_amt, tolerance=0.50,
+                        )
+                        if matched_indices:
+                            used_widened = is_wide
+                            break
 
-                    if gap < 1.00:
-                        matched_txn_ids = [c["id"] for c in candidates]
-                        confidence = 0.95
-                        detail = f"Batch match: {len(candidates)} orders, gap ${gap:.2f}"
-                    elif gap < 5.00:
-                        matched_txn_ids = [c["id"] for c in candidates]
-                        confidence = 0.70
-                        detail = f"Partial batch: {len(candidates)} orders, gap ${gap:.2f}"
+                if matched_indices:
+                    matched_txn_ids = [candidates[i]["id"] for i in matched_indices]
+                    sub_sum = sum(
+                        (candidates[i].get("net_deposit") or candidates[i]["amount"])
+                        for i in matched_indices
+                    )
+                    gap = abs(sub_sum - dep_amt)
+                    if used_widened:
+                        confidence = 0.75
+                        detail = (
+                            f"Wide subset match: {len(matched_txn_ids)} orders, "
+                            f"gap ${gap:.2f}, batch {batch_date}"
+                        )
                     else:
-                        # Try individual order matching by net_deposit
-                        for c in candidates:
-                            c_net = c.get("net_deposit") or c["amount"]
-                            if abs(c_net - dep_amt) < 1.00:
-                                matched_txn_ids = [c["id"]]
-                                confidence = 0.90
-                                detail = f"Single order: {c['customer']} ${c_net:.2f}"
-                                break
+                        confidence = 0.92
+                        detail = (
+                            f"Batch subset match: {len(matched_txn_ids)} orders, "
+                            f"gap ${gap:.2f}, batch {batch_date}"
+                        )
+                    # Claim these IDs so subsequent GoDaddy deposits in this
+                    # run won't re-pull them as candidates.
+                    claimed_txn_ids.update(matched_txn_ids)
+                else:
+                    logger.info(
+                        "GoDaddy auto-match: no subset found dep_id=%s "
+                        "amt=%.2f batch=%s",
+                        dep_id, dep_amt, batch_date,
+                    )
 
             elif acct_type == "venmo" or dep_source == "venmo":
                 # Venmo: match by exact amount + customer name
