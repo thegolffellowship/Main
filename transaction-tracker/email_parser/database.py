@@ -19094,6 +19094,16 @@ def create_entry_from_deposit(deposit_id: int, txn_type: str = "expense",
             if row:
                 entity_id = row["id"]
 
+        # acct_splits.entity_id is NOT NULL. If the caller did not pass an
+        # entity_name, or the name didn't resolve, fall back to the first
+        # active entity so the split insert doesn't crash.
+        if entity_id is None:
+            row = conn.execute(
+                "SELECT id FROM acct_entities WHERE is_active = 1 ORDER BY id LIMIT 1"
+            ).fetchone()
+            if row:
+                entity_id = row["id"]
+
         # Use the deposit's bank account → map to acct_accounts by type
         account_id = dep.get("account_id")
         acct_account_id = None

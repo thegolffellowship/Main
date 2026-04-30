@@ -491,7 +491,16 @@
             const am1 = data.auto_match_1 || {};
             const am2 = data.auto_match_2 || {};
             const ce = data.create_entry || {};
+            const stepErrors = data.step_errors || [];
+            const errorBanner = stepErrors.length
+                ? `<div style="background:#fef2f2;border:1px solid #dc2626;border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.75rem;">` +
+                  `<strong style="color:#991b1b;">${stepErrors.length} step${stepErrors.length===1?"":"s"} failed:</strong>` +
+                  `<ul style="margin:0.25rem 0 0 1.25rem;padding:0;color:#991b1b;font-size:0.8rem;">` +
+                  stepErrors.map(e => `<li><code>${escapeHtml(e.step)}</code>: ${escapeHtml(e.error)}</li>`).join("") +
+                  `</ul></div>`
+                : `<div style="background:#f0fdf4;border:1px solid #16a34a;border-radius:6px;padding:0.4rem 0.75rem;margin-bottom:0.75rem;color:#15803d;font-size:0.8rem;">All steps completed without errors.</div>`;
             const summary =
+                errorBanner +
                 `<table style="border-collapse:collapse;width:100%;margin-bottom:0.75rem;">` +
                 `<thead><tr style="background:#f1f5f9;">` +
                 `<th style="padding:4px 8px;text-align:left;font-size:0.75rem;">Step</th>` +

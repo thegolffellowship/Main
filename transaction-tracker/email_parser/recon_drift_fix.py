@@ -4,6 +4,12 @@ Same logic as scripts/fix_recon_drift_2026_04.py, but returns a structured
 dict instead of printing to stdout — so it can be invoked from a Flask
 route and rendered as JSON.
 
+Each step (each UPDATE, each lookup, each module call) runs in its own
+try/except. A failure in one step is recorded in result["step_errors"]
+and execution continues with the next step. Each fix opens its own DB
+connection and commits independently — earlier fixes are not rolled
+back if a later fix raises.
+
 All UPDATEs are idempotent (predicate-guarded). create_entry_from_deposit
 short-circuits on existing source_ref. run_deposit_auto_match uses
 INSERT OR IGNORE on reconciliation_matches.
@@ -17,6 +23,7 @@ from .database import (
 )
 
 TGF_CHECKING_ACCOUNT_ID = 3
+TGF_ENTITY_NAME = "TGF"  # short_name on the seeded "The Golf Fellowship" entity
 ACCT_TXN_COLS = [
     "id", "status", "entry_type", "type", "amount", "total_amount",
     "date", "description", "source", "source_ref",
@@ -54,16 +61,36 @@ def _snapshot(conn) -> dict:
     }
 
 
+def _run_update(result: dict, step: str, sql: str) -> None:
+    """Execute one UPDATE in its own connection/transaction.
+
+    Records the SQL and rowcount on success, or the exception message on
+    failure, in result["fixes"] / result["step_errors"]. Never raises.
+    """
+    try:
+        with _connect() as conn:
+            rc = conn.execute(sql).rowcount
+            conn.commit()
+        result["fixes"].append({"step": step, "sql": sql, "rowcount": rc})
+    except Exception as e:  # noqa: BLE001
+        result["fixes"].append(
+            {"step": step, "sql": sql, "rowcount": None, "error": str(e)}
+        )
+        result["step_errors"].append({"step": step, "error": str(e)})
+
+
 def apply_recon_drift_fix() -> dict:
     """Run the entire April-2026 drift remediation.
 
     Returns a JSON-ready dict with before/after snapshots, every SQL
     statement and rowcount, both auto-match results, and the
-    create_entry_from_deposit return value.
+    create_entry_from_deposit return value. Per-step errors do not abort
+    the run — they are captured in result["step_errors"].
     """
     result: dict = {
         "before": None,
         "fixes": [],
+        "step_errors": [],
         "backfill_diagnostic": [],
         "after": None,
         "auto_match_1": None,
@@ -73,81 +100,99 @@ def apply_recon_drift_fix() -> dict:
         "auto_match_2": None,
     }
 
-    with _connect() as conn:
-        result["before"] = _snapshot(conn)
+    # Snapshot BEFORE
+    try:
+        with _connect() as conn:
+            result["before"] = _snapshot(conn)
+    except Exception as e:  # noqa: BLE001
+        result["step_errors"].append({"step": "snapshot_before", "error": str(e)})
 
-        # Fix 1a — void duplicate Municipal Golf row 2740
-        sql_1a = (
-            "UPDATE acct_transactions SET status = 'merged' "
-            "WHERE id = 2740 AND status = 'active'"
-        )
-        rc_1a = conn.execute(sql_1a).rowcount
-        result["fixes"].append({"step": "1a", "sql": sql_1a, "rowcount": rc_1a})
+    # Fix 1a — void duplicate Municipal Golf row 2740
+    _run_update(
+        result, "1a",
+        "UPDATE acct_transactions SET status = 'merged' "
+        "WHERE id = 2740 AND status = 'active'",
+    )
 
-        # Fix 1b — re-point expense_transactions FK
-        sql_1b = (
-            "UPDATE expense_transactions SET acct_transaction_id = 3037 "
-            "WHERE id = 279 AND acct_transaction_id = 2740"
-        )
-        rc_1b = conn.execute(sql_1b).rowcount
-        result["fixes"].append({"step": "1b", "sql": sql_1b, "rowcount": rc_1b})
+    # Fix 1b — re-point expense_transactions FK
+    _run_update(
+        result, "1b",
+        "UPDATE expense_transactions SET acct_transaction_id = 3037 "
+        "WHERE id = 279 AND acct_transaction_id = 2740",
+    )
 
-        # Fix 2 — restore null fields on Canyon Springs row 2742
-        sql_2 = (
-            "UPDATE acct_transactions "
-            "SET entry_type = 'expense', amount = 600.00, source = 'receipt' "
-            "WHERE id = 2742 AND entry_type IS NULL AND amount IS NULL"
-        )
-        rc_2 = conn.execute(sql_2).rowcount
-        result["fixes"].append({"step": "2", "sql": sql_2, "rowcount": rc_2})
+    # Fix 2 — restore null fields on Canyon Springs row 2742
+    _run_update(
+        result, "2",
+        "UPDATE acct_transactions "
+        "SET entry_type = 'expense', amount = 600.00, source = 'receipt' "
+        "WHERE id = 2742 AND entry_type IS NULL AND amount IS NULL",
+    )
 
-        # Fix 7 — wide backfill of entry_type/amount on every promoted row.
-        # Diagnostic: how do their `type` values break down?
-        diag_rows = conn.execute(
-            "SELECT type, COUNT(*) AS n FROM acct_transactions "
-            "WHERE source_ref LIKE 'exp-promoted-%' "
-            "  AND entry_type IS NULL "
-            "  AND total_amount IS NOT NULL "
-            "  AND COALESCE(status, 'active') != 'merged' "
-            "GROUP BY type"
-        ).fetchall()
+    # Backfill diagnostic — how do candidate rows' `type` values break down?
+    try:
+        with _connect() as conn:
+            diag_rows = conn.execute(
+                "SELECT type, COUNT(*) AS n FROM acct_transactions "
+                "WHERE source_ref LIKE 'exp-promoted-%' "
+                "  AND entry_type IS NULL "
+                "  AND total_amount IS NOT NULL "
+                "  AND COALESCE(status, 'active') != 'merged' "
+                "GROUP BY type"
+            ).fetchall()
         result["backfill_diagnostic"] = [
             {"type": r["type"], "count": r["n"]} for r in diag_rows
         ]
-
-        sql_7 = (
-            "UPDATE acct_transactions "
-            "SET entry_type = type, amount = total_amount "
-            "WHERE source_ref LIKE 'exp-promoted-%' "
-            "  AND entry_type IS NULL "
-            "  AND total_amount IS NOT NULL "
-            "  AND COALESCE(status, 'active') != 'merged'"
+    except Exception as e:  # noqa: BLE001
+        result["step_errors"].append(
+            {"step": "backfill_diagnostic", "error": str(e)}
         )
-        rc_7 = conn.execute(sql_7).rowcount
-        result["fixes"].append({"step": "7", "sql": sql_7, "rowcount": rc_7})
 
-        conn.commit()
-        result["after"] = _snapshot(conn)
+    # Fix 7 — wide backfill
+    _run_update(
+        result, "7",
+        "UPDATE acct_transactions "
+        "SET entry_type = type, amount = total_amount "
+        "WHERE source_ref LIKE 'exp-promoted-%' "
+        "  AND entry_type IS NULL "
+        "  AND total_amount IS NOT NULL "
+        "  AND COALESCE(status, 'active') != 'merged'",
+    )
+
+    # Snapshot AFTER fixes 1, 2, 7
+    try:
+        with _connect() as conn:
+            result["after"] = _snapshot(conn)
+    except Exception as e:  # noqa: BLE001
+        result["step_errors"].append({"step": "snapshot_after", "error": str(e)})
 
     # First auto-match — claims one Canyon Springs deposit for 2742, plus
     # whatever else the backfill made visible.
-    am1 = run_deposit_auto_match(account_id=TGF_CHECKING_ACCOUNT_ID)
-    result["auto_match_1"] = {
-        "auto_matched": am1.get("auto_matched"),
-        "partial": am1.get("partial"),
-        "unmatched": am1.get("unmatched"),
-        "details": am1.get("details", []),
-    }
+    try:
+        am1 = run_deposit_auto_match(account_id=TGF_CHECKING_ACCOUNT_ID)
+        result["auto_match_1"] = {
+            "auto_matched": am1.get("auto_matched"),
+            "partial": am1.get("partial"),
+            "unmatched": am1.get("unmatched"),
+            "details": am1.get("details", []),
+        }
+    except Exception as e:  # noqa: BLE001
+        result["step_errors"].append({"step": "auto_match_1", "error": str(e)})
 
     # Identify which of bank_deposits 760/761 was claimed by acct_transaction 2742.
     matched_to_2742: int | None = None
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT bank_deposit_id FROM reconciliation_matches "
-            "WHERE acct_transaction_id = 2742 LIMIT 1"
-        ).fetchone()
-    if row:
-        matched_to_2742 = row["bank_deposit_id"]
+    try:
+        with _connect() as conn:
+            row = conn.execute(
+                "SELECT bank_deposit_id FROM reconciliation_matches "
+                "WHERE acct_transaction_id = 2742 LIMIT 1"
+            ).fetchone()
+        if row:
+            matched_to_2742 = row["bank_deposit_id"]
+    except Exception as e:  # noqa: BLE001
+        result["step_errors"].append(
+            {"step": "lookup_matched_to_2742", "error": str(e)}
+        )
     result["matched_to_2742"] = matched_to_2742
 
     # The orphan Canyon Springs deposit — the one 2742 did not claim.
@@ -158,26 +203,35 @@ def apply_recon_drift_fix() -> dict:
         orphan_id = min(candidates)
     result["orphan_canyon_springs_deposit_id"] = orphan_id
 
-    # Fix 4 — create ledger entry for the orphan deposit (idempotent on
-    # source_ref = "bank-deposit-{id}").
-    create_result = create_entry_from_deposit(
-        deposit_id=orphan_id,
-        txn_type="expense",
-        entry_type="expense",
-        category_name="Course Fees",
-        description="Canyon Springs course fee — April 2026",
-        event_name="s9.7 CANYON SPRINGS",
-    )
-    result["create_entry"] = create_result
+    # Fix 4 — create ledger entry for the orphan deposit. entity_name="TGF"
+    # resolves via short_name lookup on the seeded "The Golf Fellowship"
+    # entity. create_entry_from_deposit also has a default-entity fallback
+    # since acct_splits.entity_id is NOT NULL.
+    try:
+        result["create_entry"] = create_entry_from_deposit(
+            deposit_id=orphan_id,
+            txn_type="expense",
+            entry_type="expense",
+            entity_name=TGF_ENTITY_NAME,
+            category_name="Course Fees",
+            description="Canyon Springs course fee — April 2026",
+            event_name="s9.7 CANYON SPRINGS",
+        )
+    except Exception as e:  # noqa: BLE001
+        result["create_entry"] = {"error": str(e)}
+        result["step_errors"].append({"step": "create_entry", "error": str(e)})
 
     # Final auto-match — should reconcile the new entry plus anything
     # else now visible after the backfill.
-    am2 = run_deposit_auto_match(account_id=TGF_CHECKING_ACCOUNT_ID)
-    result["auto_match_2"] = {
-        "auto_matched": am2.get("auto_matched"),
-        "partial": am2.get("partial"),
-        "unmatched": am2.get("unmatched"),
-        "details": am2.get("details", []),
-    }
+    try:
+        am2 = run_deposit_auto_match(account_id=TGF_CHECKING_ACCOUNT_ID)
+        result["auto_match_2"] = {
+            "auto_matched": am2.get("auto_matched"),
+            "partial": am2.get("partial"),
+            "unmatched": am2.get("unmatched"),
+            "details": am2.get("details", []),
+        }
+    except Exception as e:  # noqa: BLE001
+        result["step_errors"].append({"step": "auto_match_2", "error": str(e)})
 
     return result
