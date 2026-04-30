@@ -170,6 +170,7 @@ from email_parser.database import (
     backfill_missing_godaddy_orders,
     repair_orphan_pay_children,
     capture_email_aliases_from_items,
+    heal_items_from_customers,
     migrate_item_to_order_entries,
     cleanup_duplicate_godaddy_entries,
     backup_database,
@@ -8619,6 +8620,18 @@ try:
             logger.info("Startup: captured %d email aliases from items", _email_aliases)
     except Exception:
         logger.warning("Startup email-alias capture failed", exc_info=True)
+
+    # Phase 1B: flatten items.customer_email/phone/chapter/first_name/last_name
+    # to match the canonical customers / customer_emails record on every
+    # boot. Idempotent — only updates rows that still differ. Belt-and-
+    # suspenders behind the Phase-1A resolvers, in case any read site
+    # forgets to use them.
+    try:
+        _heal = heal_items_from_customers()
+        if any(v for v in _heal.values()):
+            logger.info("Startup: items heal %s", _heal)
+    except Exception:
+        logger.warning("Startup items-heal failed", exc_info=True)
 
     # ── Auto-migrate old per-item GoDaddy entries to order-level ──
     try:

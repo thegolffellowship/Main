@@ -15103,6 +15103,129 @@ def resolve_player_status(item, conn=None, db_path=None) -> str:
             except Exception: pass
 
 
+def heal_items_from_customers(db_path: str | Path | None = None) -> dict:
+    """One-shot, idempotent data heal for items.customer_email / customer_phone /
+    chapter / first_name / last_name. For every items row whose customer_id
+    is set:
+
+      - If items.<field> differs from the canonical customers / customer_emails
+        value, capture the items value as a customer_alias (alias_type='email'
+        for emails; for the others we just overwrite quietly because no alias
+        slot exists).
+      - Update items.<field> to match the canonical value.
+
+    The Phase-1A resolvers already prefer canonical-over-snapshot at read
+    time, so this heal isn't strictly required for correctness — but
+    flattening the underlying data eliminates the second-source-of-truth
+    problem for any future read site that forgets to use the resolver.
+
+    Idempotent: re-runs are no-ops because the WHERE clauses only match
+    when items.<field> still differs.
+    Returns counts of rows touched per field.
+    """
+    counts = {"emails_aliased": 0, "emails_overwritten": 0,
+              "phones_overwritten": 0, "chapters_overwritten": 0,
+              "first_names_overwritten": 0, "last_names_overwritten": 0}
+
+    with _connect(db_path) as conn:
+        # Email: capture as alias before overwriting (preserves the variant
+        # for the manager to see on the Customer Info card).
+        try:
+            counts["emails_aliased"] = capture_email_aliases_from_items(db_path)
+        except Exception:
+            logger.warning("heal_items_from_customers: email-alias capture failed", exc_info=True)
+
+        # Now flatten items.customer_email to the primary
+        cur = conn.execute("""
+            UPDATE items SET customer_email = (
+                SELECT LOWER(TRIM(e.email)) FROM customer_emails e
+                WHERE e.customer_id = items.customer_id AND e.is_primary = 1 LIMIT 1
+            )
+            WHERE customer_id IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM customer_emails e
+                  WHERE e.customer_id = items.customer_id AND e.is_primary = 1
+              )
+              AND LOWER(COALESCE(TRIM(items.customer_email), '')) != (
+                  SELECT LOWER(TRIM(e.email)) FROM customer_emails e
+                  WHERE e.customer_id = items.customer_id AND e.is_primary = 1 LIMIT 1
+              )
+        """)
+        counts["emails_overwritten"] = cur.rowcount
+
+        # Phone: overwrite to customers.phone where they differ
+        cur = conn.execute("""
+            UPDATE items SET customer_phone = (
+                SELECT TRIM(c.phone) FROM customers c
+                WHERE c.customer_id = items.customer_id LIMIT 1
+            )
+            WHERE customer_id IS NOT NULL
+              AND EXISTS (SELECT 1 FROM customers c
+                          WHERE c.customer_id = items.customer_id
+                            AND c.phone IS NOT NULL AND TRIM(c.phone) != '')
+              AND COALESCE(TRIM(items.customer_phone), '') != (
+                  SELECT TRIM(c.phone) FROM customers c
+                  WHERE c.customer_id = items.customer_id LIMIT 1
+              )
+        """)
+        counts["phones_overwritten"] = cur.rowcount
+
+        # Chapter: overwrite to customers.chapter where they differ
+        cur = conn.execute("""
+            UPDATE items SET chapter = (
+                SELECT c.chapter FROM customers c
+                WHERE c.customer_id = items.customer_id LIMIT 1
+            )
+            WHERE customer_id IS NOT NULL
+              AND EXISTS (SELECT 1 FROM customers c
+                          WHERE c.customer_id = items.customer_id
+                            AND c.chapter IS NOT NULL AND TRIM(c.chapter) != '')
+              AND COALESCE(TRIM(items.chapter), '') != (
+                  SELECT TRIM(c.chapter) FROM customers c
+                  WHERE c.customer_id = items.customer_id LIMIT 1
+              )
+        """)
+        counts["chapters_overwritten"] = cur.rowcount
+
+        # first_name / last_name: overwrite to customers.first_name / last_name
+        cur = conn.execute("""
+            UPDATE items SET first_name = (
+                SELECT c.first_name FROM customers c
+                WHERE c.customer_id = items.customer_id LIMIT 1
+            )
+            WHERE customer_id IS NOT NULL
+              AND EXISTS (SELECT 1 FROM customers c
+                          WHERE c.customer_id = items.customer_id
+                            AND c.first_name IS NOT NULL AND TRIM(c.first_name) != '')
+              AND COALESCE(TRIM(items.first_name), '') != (
+                  SELECT TRIM(c.first_name) FROM customers c
+                  WHERE c.customer_id = items.customer_id LIMIT 1
+              )
+        """)
+        counts["first_names_overwritten"] = cur.rowcount
+
+        cur = conn.execute("""
+            UPDATE items SET last_name = (
+                SELECT c.last_name FROM customers c
+                WHERE c.customer_id = items.customer_id LIMIT 1
+            )
+            WHERE customer_id IS NOT NULL
+              AND EXISTS (SELECT 1 FROM customers c
+                          WHERE c.customer_id = items.customer_id
+                            AND c.last_name IS NOT NULL AND TRIM(c.last_name) != '')
+              AND COALESCE(TRIM(items.last_name), '') != (
+                  SELECT TRIM(c.last_name) FROM customers c
+                  WHERE c.customer_id = items.customer_id LIMIT 1
+              )
+        """)
+        counts["last_names_overwritten"] = cur.rowcount
+
+        if any(v for v in counts.values()):
+            conn.commit()
+            logger.info("heal_items_from_customers: %s", counts)
+    return counts
+
+
 def capture_email_aliases_from_items(db_path: str | Path | None = None) -> int:
     """Promote any items.customer_email value that differs from the linked
     customer's primary email into customer_aliases (alias_type='email').
