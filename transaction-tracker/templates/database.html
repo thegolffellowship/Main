@@ -223,6 +223,19 @@
                 <ul class="table-list" id="table-list">
                     <li class="empty-state" style="font-size:0.8rem;">Loading tables...</li>
                 </ul>
+
+                <div class="maint-panel" style="margin-top:1rem; padding:0.75rem; border:1px solid var(--border); border-radius:6px; background:#fafafa;">
+                    <div style="font-weight:600; font-size:0.78rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.5rem;">Maintenance</div>
+                    <button id="btn-recon-drift-fix"
+                            class="btn btn-secondary"
+                            style="width:100%; font-size:0.8rem; background:#fff7ed; border-color:#f59e0b; color:#92400e;"
+                            title="One-shot remediation for April-2026 reconciliation drift. Idempotent.">
+                        Run Recon Drift Fix (April 2026)
+                    </button>
+                    <p style="font-size:0.72rem; color:var(--text-muted); margin:0.4rem 0 0;">
+                        Voids the duplicate Municipal Golf row, restores Canyon Springs null fields, backfills entry_type on every promoted row, and reruns auto-match. Safe to click more than once.
+                    </p>
+                </div>
             </aside>
 
             <section class="db-main" id="db-main">
@@ -230,6 +243,21 @@
                     <p>Select a table from the sidebar to browse its contents.</p>
                 </div>
             </section>
+        </div>
+
+        <!-- Recon-drift-fix result modal -->
+        <div id="rdf-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; align-items:flex-start; justify-content:center; overflow:auto; padding:2rem;">
+            <div style="background:#fff; border-radius:8px; max-width:920px; width:100%; padding:1.25rem; box-shadow:0 10px 40px rgba(0,0,0,0.2);">
+                <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
+                    <h3 style="margin:0; flex:1;">Recon Drift Fix — Result</h3>
+                    <button class="btn btn-secondary" onclick="document.getElementById('rdf-overlay').style.display='none';" style="font-size:0.8rem;">Close</button>
+                </div>
+                <div id="rdf-summary" style="font-size:0.85rem; line-height:1.5;"></div>
+                <details style="margin-top:0.75rem;">
+                    <summary style="cursor:pointer; font-size:0.8rem; color:var(--text-muted);">Raw JSON</summary>
+                    <pre id="rdf-raw" style="background:#0f172a; color:#e2e8f0; padding:0.75rem; border-radius:6px; font-size:0.72rem; overflow:auto; max-height:480px; margin-top:0.5rem;"></pre>
+                </details>
+            </div>
         </div>
     </main>
 
@@ -419,6 +447,81 @@
         }
 
         // Init
+        async function runReconDriftFix() {
+            const btn = document.getElementById("btn-recon-drift-fix");
+            if (!confirm(
+                "Run the April-2026 reconciliation drift fix?\n\n" +
+                "This will void the duplicate Municipal Golf row, restore " +
+                "Canyon Springs null fields, backfill entry_type on every " +
+                "promoted row, and re-run auto-match. The operation is " +
+                "idempotent and safe to repeat."
+            )) return;
+            btn.disabled = true;
+            const origText = btn.textContent;
+            btn.textContent = "Running…";
+            try {
+                const res = await fetch("/api/admin/run-recon-drift-fix", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    alert("Error: " + (data.error || res.statusText));
+                    return;
+                }
+                renderReconDriftResult(data);
+            } catch (e) {
+                alert("Request failed: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = origText;
+            }
+        }
+
+        function renderReconDriftResult(data) {
+            const fixesRows = (data.fixes || []).map(f =>
+                `<tr><td style="padding:2px 8px;font-family:monospace;">${f.step}</td>` +
+                `<td style="padding:2px 8px;font-family:monospace;font-size:0.75rem;">${escapeHtml(f.sql)}</td>` +
+                `<td style="padding:2px 8px;text-align:right;font-weight:600;">${f.rowcount}</td></tr>`
+            ).join("");
+            const diagRows = (data.backfill_diagnostic || []).map(d =>
+                `<tr><td style="padding:2px 8px;">${escapeHtml(String(d.type))}</td>` +
+                `<td style="padding:2px 8px;text-align:right;">${d.count}</td></tr>`
+            ).join("");
+            const am1 = data.auto_match_1 || {};
+            const am2 = data.auto_match_2 || {};
+            const ce = data.create_entry || {};
+            const summary =
+                `<table style="border-collapse:collapse;width:100%;margin-bottom:0.75rem;">` +
+                `<thead><tr style="background:#f1f5f9;">` +
+                `<th style="padding:4px 8px;text-align:left;font-size:0.75rem;">Step</th>` +
+                `<th style="padding:4px 8px;text-align:left;font-size:0.75rem;">SQL</th>` +
+                `<th style="padding:4px 8px;text-align:right;font-size:0.75rem;">Rows</th>` +
+                `</tr></thead><tbody>${fixesRows}</tbody></table>` +
+                (diagRows
+                    ? `<div style="margin-bottom:0.75rem;"><strong>Backfill candidates by <code>type</code>:</strong>` +
+                      `<table style="border-collapse:collapse;margin-top:0.25rem;">` +
+                      `<thead><tr style="background:#f1f5f9;">` +
+                      `<th style="padding:4px 8px;text-align:left;font-size:0.75rem;">type</th>` +
+                      `<th style="padding:4px 8px;text-align:right;font-size:0.75rem;">count</th>` +
+                      `</tr></thead><tbody>${diagRows}</tbody></table></div>`
+                    : "") +
+                `<div><strong>2742 matched to bank_deposit:</strong> ${data.matched_to_2742 ?? "(none)"}</div>` +
+                `<div><strong>Orphan Canyon Springs deposit:</strong> ${data.orphan_canyon_springs_deposit_id ?? "(n/a)"}</div>` +
+                `<div><strong>create_entry_from_deposit:</strong> ${escapeHtml(JSON.stringify(ce))}</div>` +
+                `<div style="margin-top:0.5rem;"><strong>Auto-match #1:</strong> matched=${am1.auto_matched ?? "?"}, partial=${am1.partial ?? "?"}, unmatched=${am1.unmatched ?? "?"}</div>` +
+                `<div><strong>Auto-match #2 (final):</strong> matched=${am2.auto_matched ?? "?"}, partial=${am2.partial ?? "?"}, unmatched=${am2.unmatched ?? "?"}</div>`;
+            document.getElementById("rdf-summary").innerHTML = summary;
+            document.getElementById("rdf-raw").textContent = JSON.stringify(data, null, 2);
+            document.getElementById("rdf-overlay").style.display = "flex";
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement("div");
+            d.textContent = s == null ? "" : String(s);
+            return d.innerHTML;
+        }
+
         (async function init() {
             const role = await checkRole();
             if (role !== "admin") {
@@ -429,6 +532,7 @@
             document.getElementById("role-badge").textContent = "ADMIN";
             document.getElementById("role-badge").classList.add("role-admin");
             document.getElementById("btn-logout").style.display = "";
+            document.getElementById("btn-recon-drift-fix").addEventListener("click", runReconDriftFix);
             loadTables();
         })();
     })();
