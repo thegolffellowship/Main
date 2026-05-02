@@ -15074,10 +15074,18 @@ def backfill_financial_entries(db_path: str | Path | None = None) -> dict:
 
 def _resolve_db(conn, db_path):
     """Internal: yield a (conn, owns_conn) pair so resolvers can either share
-    a caller's connection or open their own."""
+    a caller's connection or open their own.
+
+    When opening our own, use get_connection() directly rather than the
+    managed_connection contextmanager — calling .__enter__() on the latter
+    without holding a reference to the wrapper causes Python's GC to close
+    the underlying connection immediately (the generator's finally runs
+    when the wrapper is reclaimed). Callers must call conn.close() in their
+    finally when owns is True.
+    """
     if conn is not None:
         return conn, False
-    return _connect(db_path).__enter__(), True
+    return get_connection(db_path), True
 
 
 def _resolve_lookup_customer_id(conn, item_or_id, name_hint: str = "") -> int | None:
@@ -15120,7 +15128,7 @@ def resolve_player_email(item, conn=None, db_path=None) -> str:
         return ""
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
@@ -15141,7 +15149,7 @@ def resolve_player_phone(item, conn=None, db_path=None) -> str:
         return ""
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
@@ -15168,7 +15176,7 @@ def resolve_player_name(item, conn=None, db_path=None) -> dict:
         return {"first_name": "", "last_name": ""}
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
@@ -15189,7 +15197,7 @@ def resolve_player_chapter(item, conn=None, db_path=None) -> str:
         return ""
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
@@ -15232,7 +15240,7 @@ def resolve_player_status(item, conn=None, db_path=None) -> str:
         return ""
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
