@@ -258,6 +258,13 @@ from email_parser.database import (
     get_chat_master_context,
     build_coo_full_context,
     delete_chat_session,
+    # Pairings
+    get_event_pairings,
+    save_event_pairings,
+    delete_event_pairings,
+    generate_event_pairings,
+    get_pairing_history_counts,
+    _pairing_time_slots,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -2929,6 +2936,90 @@ def api_delete_event_alias_from_event(event_id):
         return jsonify({"error": "alias_name required"}), 400
     deleted = delete_event_alias(alias_name)
     return jsonify({"status": "ok", "deleted": deleted})
+
+
+@app.route("/api/events/<int:event_id>/pairings", methods=["GET"])
+@require_role("view-only")
+def api_get_pairings(event_id):
+    """Return saved pairings for an event plus the computed tee-time slots."""
+    try:
+        from email_parser.database import _connect
+        with _connect() as conn:
+            ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return jsonify({"error": "Event not found"}), 404
+        ev = dict(ev)
+        pairings = get_event_pairings(event_id)
+        slots_9 = _pairing_time_slots(ev, "9")
+        slots_18 = _pairing_time_slots(ev, "18")
+        return jsonify({
+            "pairings": pairings,
+            "slots_9": slots_9,
+            "slots_18": slots_18,
+            "event": {
+                "format": ev.get("format"),
+                "start_type": ev.get("start_type"),
+                "start_type_18": ev.get("start_type_18"),
+                "tee_time_count": ev.get("tee_time_count"),
+                "tee_time_count_18": ev.get("tee_time_count_18"),
+            },
+        })
+    except Exception as e:
+        logger.exception("Failed to get pairings for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings/generate", methods=["POST"])
+@require_role("manager")
+def api_generate_pairings(event_id):
+    """Run the pairing generator and return proposed groups (not saved)."""
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode", "random")
+    protect = bool(data.get("protect_partner_requests", True))
+    seeds = data.get("seeds", [])
+    if mode not in ("random", "abcd"):
+        return jsonify({"error": "mode must be 'random' or 'abcd'"}), 400
+    try:
+        result = generate_event_pairings(
+            event_id,
+            mode=mode,
+            protect_partner_requests=protect,
+            seeds=seeds,
+        )
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.exception("Pairing generation failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings/save", methods=["POST"])
+@require_role("manager")
+def api_save_pairings(event_id):
+    """Save pairings for an event (replaces any previous save)."""
+    data = request.get_json(silent=True) or {}
+    groups_by_holes = data.get("groups_by_holes")
+    if not groups_by_holes or not isinstance(groups_by_holes, dict):
+        return jsonify({"error": "groups_by_holes required"}), 400
+    try:
+        save_event_pairings(event_id, groups_by_holes)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.exception("Failed to save pairings for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings", methods=["DELETE"])
+@require_role("manager")
+def api_delete_pairings(event_id):
+    """Clear saved pairings (and their history) for an event."""
+    try:
+        delete_event_pairings(event_id)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.exception("Failed to delete pairings for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/events/sync", methods=["POST"])

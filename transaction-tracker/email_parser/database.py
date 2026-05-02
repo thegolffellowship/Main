@@ -3594,6 +3594,49 @@ def init_db(db_path: str | Path | None = None) -> None:
             logger.info("Backfilled merchant_fee on %d GoDaddy transactions", _mf)
             conn.commit()
 
+        # ── Pairings ─────────────────────────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS event_pairings (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id       INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                holes          TEXT NOT NULL CHECK(holes IN ('9', '18')),
+                group_num      INTEGER NOT NULL,
+                slot_label     TEXT NOT NULL,
+                player_name    TEXT NOT NULL,
+                cart_pos       INTEGER NOT NULL CHECK(cart_pos BETWEEN 1 AND 4),
+                tee_choice     TEXT,
+                handicap_index REAL,
+                created_at     TEXT DEFAULT (datetime('now')),
+                UNIQUE(event_id, holes, group_num, cart_pos)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_event_pairings_event ON event_pairings(event_id)"
+        )
+
+        # Pairing history — one row per unique player pair per event (built from saved pairings)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pairing_history (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_a    TEXT NOT NULL,
+                player_b    TEXT NOT NULL,
+                event_id    INTEGER NOT NULL REFERENCES events(id),
+                event_date  TEXT NOT NULL,
+                created_at  TEXT DEFAULT (datetime('now')),
+                UNIQUE(player_a, player_b, event_id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pairing_history_ab ON pairing_history(player_a, player_b)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pairing_history_date ON pairing_history(event_date)"
+        )
+
         logger.info("Database initialized at %s", db_path or DB_PATH)
 
 
@@ -20951,3 +20994,563 @@ def batch_approve_expenses(items: list[dict],
         except Exception as e:
             errors.append({"id": item_id, "error": str(e)})
     return {"approved": approved, "skipped": skipped, "errors": errors}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pairings
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _pairing_time_slots(event: dict, holes: str) -> list[str]:
+    """Compute ordered slot labels for a given holes type (9 or 18).
+
+    For tee-time events returns formatted clock strings ("8:00 AM", …).
+    For shotgun events returns hole identifiers ("1A", "1B", "2A", …).
+    """
+    combo = (event.get("format") or "").strip() == "9/18 Combo"
+    if combo and holes == "18":
+        start_type = event.get("start_type_18") or "Tee Times"
+        start_time = event.get("start_time_18")
+        count = event.get("tee_time_count_18") or 0
+    else:
+        start_type = event.get("start_type") or "Tee Times"
+        start_time = event.get("start_time")
+        count = event.get("tee_time_count") or 0
+
+    interval = event.get("tee_time_interval") or 10
+    count = int(count)
+    interval = int(interval)
+
+    if count == 0:
+        return []
+
+    if start_type == "Shotgun":
+        return [f"{(i // 2) + 1}{'A' if i % 2 == 0 else 'B'}" for i in range(count)]
+
+    if not start_time:
+        return [f"Group {i + 1}" for i in range(count)]
+
+    try:
+        base = datetime.strptime(start_time, "%H:%M")
+    except ValueError:
+        return [f"Group {i + 1}" for i in range(count)]
+
+    slots = []
+    for i in range(count):
+        t = base + timedelta(minutes=i * interval)
+        label = t.strftime("%I:%M %p").lstrip("0") or "12:00 AM"
+        slots.append(label)
+    return slots
+
+
+def get_event_pairings(event_id: int, db_path=None) -> dict:
+    """Return saved pairings for an event keyed by holes ('9' / '18').
+
+    Each value is a list of groups:
+        [{"group_num": int, "slot_label": str, "players": [...]}, ...]
+    Players: {"name", "cart_pos", "tee_choice", "handicap_index"}
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT holes, group_num, slot_label, player_name,
+                   cart_pos, tee_choice, handicap_index
+            FROM event_pairings
+            WHERE event_id = ?
+            ORDER BY holes, group_num, cart_pos
+            """,
+            (event_id,),
+        ).fetchall()
+
+    result: dict = {}
+    for r in rows:
+        h = r["holes"]
+        if h not in result:
+            result[h] = []
+        grp_list = result[h]
+        # Find or create the group entry
+        grp = next((g for g in grp_list if g["group_num"] == r["group_num"]), None)
+        if grp is None:
+            grp = {"group_num": r["group_num"], "slot_label": r["slot_label"], "players": []}
+            grp_list.append(grp)
+        grp["players"].append({
+            "name": r["player_name"],
+            "cart_pos": r["cart_pos"],
+            "tee_choice": r["tee_choice"],
+            "handicap_index": r["handicap_index"],
+        })
+    return result
+
+
+def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> None:
+    """Persist pairings for an event and rebuild pairing_history rows.
+
+    groups_by_holes: {"9": [...], "18": [...]}
+    Each group: {"group_num", "slot_label", "players": [{"name", "cart_pos",
+                  "tee_choice", "handicap_index"}]}
+    """
+    with _connect(db_path) as conn:
+        # Load event date for history
+        ev_row = conn.execute(
+            "SELECT event_date FROM events WHERE id = ?", (event_id,)
+        ).fetchone()
+        event_date = ev_row["event_date"] if ev_row else datetime.now().strftime("%Y-%m-%d")
+
+        # Replace existing pairings for this event
+        conn.execute("DELETE FROM event_pairings WHERE event_id = ?", (event_id,))
+        conn.execute("DELETE FROM pairing_history WHERE event_id = ?", (event_id,))
+
+        for holes, groups in groups_by_holes.items():
+            for grp in groups:
+                group_num = grp["group_num"]
+                slot_label = grp["slot_label"]
+                for p in grp["players"]:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO event_pairings
+                            (event_id, holes, group_num, slot_label, player_name,
+                             cart_pos, tee_choice, handicap_index)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            event_id, holes, group_num, slot_label,
+                            p["name"], p["cart_pos"],
+                            p.get("tee_choice"), p.get("handicap_index"),
+                        ),
+                    )
+
+                # Record every pair in history
+                player_names = [p["name"] for p in grp["players"]]
+                for i in range(len(player_names)):
+                    for j in range(i + 1, len(player_names)):
+                        a = min(player_names[i], player_names[j])
+                        b = max(player_names[i], player_names[j])
+                        conn.execute(
+                            """
+                            INSERT OR IGNORE INTO pairing_history
+                                (player_a, player_b, event_id, event_date)
+                            VALUES (?, ?, ?, ?)
+                            """,
+                            (a, b, event_id, event_date),
+                        )
+
+        conn.commit()
+
+
+def delete_event_pairings(event_id: int, db_path=None) -> None:
+    """Remove saved pairings (and their history) for an event."""
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM event_pairings WHERE event_id = ?", (event_id,))
+        conn.execute("DELETE FROM pairing_history WHERE event_id = ?", (event_id,))
+        conn.commit()
+
+
+def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
+    """Return a dict mapping (player_a, player_b) → count for the given calendar year.
+
+    player_a < player_b alphabetically (canonical key order).
+    If year is None uses the current year.
+    """
+    if year is None:
+        year = datetime.now().year
+    year_start = f"{year}-01-01"
+    year_end = f"{year}-12-31"
+
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT player_a, player_b, COUNT(*) as cnt
+            FROM pairing_history
+            WHERE event_date BETWEEN ? AND ?
+            GROUP BY player_a, player_b
+            """,
+            (year_start, year_end),
+        ).fetchall()
+
+    return {(r["player_a"], r["player_b"]): r["cnt"] for r in rows}
+
+
+def _pair_count(pair_counts: dict, a: str, b: str) -> int:
+    """Look up play count for two players (key is alphabetically ordered)."""
+    key = (min(a, b), max(a, b))
+    return pair_counts.get(key, 0)
+
+
+def _group_score(players: list[str], pair_counts: dict) -> int:
+    """Total pairings count for all combinations within a group."""
+    total = 0
+    for i in range(len(players)):
+        for j in range(i + 1, len(players)):
+            total += _pair_count(pair_counts, players[i], players[j])
+    return total
+
+
+def _find_partner_name(request_text: str, all_names: list[str], requester: str) -> str | None:
+    """Fuzzy-match a partner_request string against available player names."""
+    if not request_text:
+        return None
+    req = request_text.lower().strip()
+    for name in all_names:
+        if name.lower() == requester.lower():
+            continue
+        if req in name.lower() or name.lower() in req:
+            return name
+    return None
+
+
+def generate_event_pairings(
+    event_id: int,
+    mode: str = "random",
+    protect_partner_requests: bool = True,
+    seeds: list | None = None,
+    db_path=None,
+) -> dict:
+    """Generate pairings for an event and return (but do NOT save) the result.
+
+    mode: 'random' | 'abcd'
+    protect_partner_requests: honor partner_request field (random mode only)
+    seeds: list of pre-assigned player locks:
+        [{"holes": "9"|"18", "slot_index": int (0-based), "players": [{"name", "cart_pos"}]}]
+
+    Returns:
+        {
+            "9":  [{"group_num", "slot_label", "players": [...]}],
+            "18": [...],
+            "slots_9":  [str, ...],
+            "slots_18": [str, ...],
+        }
+    """
+    import random as _random
+
+    seeds = seeds or []
+    with _connect(db_path) as conn:
+        # ── Load event ────────────────────────────────────────────────
+        ev = conn.execute(
+            "SELECT * FROM events WHERE id = ?", (event_id,)
+        ).fetchone()
+        if not ev:
+            raise ValueError(f"Event {event_id} not found")
+        ev = dict(ev)
+
+        fmt = (ev.get("format") or "").strip()
+        is_combo = fmt == "9/18 Combo"
+
+        # ── Active players for this event ─────────────────────────────
+        INACTIVE = ("credited", "refunded", "transferred", "wd")
+        ph = ",".join("?" * len(INACTIVE))
+        items = conn.execute(
+            f"""
+            SELECT i.customer, i.holes, i.tee_choice, i.partner_request
+            FROM items i
+            WHERE i.event_id = ?
+              AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
+              AND i.parent_item_id IS NULL
+            ORDER BY i.customer COLLATE NOCASE
+            """,
+            (event_id, *INACTIVE),
+        ).fetchall()
+        items = [dict(r) for r in items]
+
+        # ── Handicap index map ────────────────────────────────────────
+        hcp_rows = conn.execute(
+            """
+            SELECT l.customer_name, p.handicap_index
+            FROM (
+                SELECT player_name,
+                       AVG(differential) as handicap_index
+                FROM (
+                    SELECT player_name, differential,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY player_name
+                               ORDER BY round_date DESC, id DESC
+                           ) as rn
+                    FROM handicap_rounds
+                    WHERE differential IS NOT NULL
+                      AND round_date >= date('now', '-12 months')
+                )
+                WHERE rn <= 20
+                GROUP BY player_name
+            ) p
+            JOIN handicap_player_links l ON l.player_name = p.player_name
+            WHERE l.customer_name IS NOT NULL
+            """
+        ).fetchall()
+        hcp_map = {r["customer_name"].lower(): r["handicap_index"] for r in hcp_rows}
+
+    # ── Normalise holes per player ────────────────────────────────────
+    def player_holes(item):
+        h = (item.get("holes") or "").strip()
+        if h in ("9", "18"):
+            return h
+        return "18" if fmt == "18 Holes" else "9"
+
+    # ── Separate players by holes ─────────────────────────────────────
+    nines = [i for i in items if player_holes(i) == "9"]
+    eighteens = [i for i in items if player_holes(i) == "18"]
+    if not is_combo:
+        if fmt == "18 Holes":
+            eighteens, nines = items, []
+        else:
+            nines, eighteens = items, []
+
+    # ── Pairing history for current year ─────────────────────────────
+    pair_counts = get_pairing_history_counts(db_path=db_path)
+
+    # ── Generate slots ────────────────────────────────────────────────
+    slots_9 = _pairing_time_slots(ev, "9")
+    slots_18 = _pairing_time_slots(ev, "18")
+
+    # ── Seed map: holes → {slot_index: {cart_pos: name}} ─────────────
+    seed_map: dict[str, dict[int, dict[int, str]]] = {"9": {}, "18": {}}
+    seeded_players: dict[str, set] = {"9": set(), "18": set()}
+    for s in seeds:
+        h = s.get("holes", "9")
+        si = s.get("slot_index", 0)
+        if si not in seed_map[h]:
+            seed_map[h][si] = {}
+        for sp in s.get("players", []):
+            seed_map[h][si][sp["cart_pos"]] = sp["name"]
+            seeded_players[h].add(sp["name"])
+
+    result: dict = {}
+
+    for holes, player_items, slots in [("9", nines, slots_9), ("18", eighteens, slots_18)]:
+        if not player_items and not seed_map[holes]:
+            continue
+
+        all_names = [p["customer"] for p in player_items if p.get("customer")]
+        # Build quick lookup dicts
+        tee_map = {p["customer"]: p.get("tee_choice") for p in player_items if p.get("customer")}
+        partner_map = {p["customer"]: p.get("partner_request") for p in player_items if p.get("customer")}
+
+        # Players available for free assignment (not seeded)
+        free_players = [n for n in all_names if n not in seeded_players[holes]]
+
+        # ── Determine groups to fill ──────────────────────────────────
+        n_free = len(free_players)
+        # Seeded slots may be partially or fully locked
+        n_slots = len(slots) if slots else max(
+            1,
+            -(-len(all_names) // 4)  # ceil(n/4)
+        )
+
+        # Count how many positions are pre-filled per seed slot
+        seed_space_used = {si: len(v) for si, v in seed_map[holes].items()}
+        # Positions still open in seeded slots
+        seed_space_open = {si: 4 - len(v) for si, v in seed_map[holes].items() if len(v) < 4}
+
+        if mode == "abcd":
+            groups_players = _abcd_groups(free_players, hcp_map)
+        else:
+            groups_players = _random_groups(
+                free_players, partner_map, pair_counts, protect_partner_requests
+            )
+
+        # ── Build final group list with slot labels ───────────────────
+        is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
+
+        # Start with seeded groups (already filled positions)
+        seeded_groups: dict[int, list] = {}
+        for si, pos_map in seed_map[holes].items():
+            seeded_groups[si] = [
+                {"name": pos_map[cp], "cart_pos": cp,
+                 "tee_choice": tee_map.get(pos_map[cp]),
+                 "handicap_index": hcp_map.get((pos_map[cp] or "").lower())}
+                for cp in sorted(pos_map)
+            ]
+
+        # Assign free groups to remaining slots
+        all_groups: list[dict] = []
+        group_num = 1
+        free_group_idx = 0
+
+        for si in range(n_slots):
+            if si in seeded_groups:
+                existing = seeded_groups[si]
+                # Fill remaining spots from free groups
+                if free_group_idx < len(groups_players):
+                    needed = 4 - len(existing)
+                    fill_players = groups_players[free_group_idx][:needed]
+                    if len(fill_players) == needed:
+                        free_group_idx += 1
+                    else:
+                        free_group_idx += 1
+                    next_cart = max((p["cart_pos"] for p in existing), default=0) + 1
+                    for fname in fill_players:
+                        existing.append({
+                            "name": fname,
+                            "cart_pos": next_cart,
+                            "tee_choice": tee_map.get(fname),
+                            "handicap_index": hcp_map.get((fname or "").lower()),
+                        })
+                        next_cart += 1
+                all_groups.append({
+                    "slot_label": slots[si] if si < len(slots) else f"Group {si+1}",
+                    "players": existing,
+                })
+            else:
+                if free_group_idx < len(groups_players):
+                    gp = groups_players[free_group_idx]
+                    free_group_idx += 1
+                    players_out = []
+                    for cp, name in enumerate(gp, start=1):
+                        players_out.append({
+                            "name": name,
+                            "cart_pos": cp,
+                            "tee_choice": tee_map.get(name),
+                            "handicap_index": hcp_map.get((name or "").lower()),
+                        })
+                    all_groups.append({
+                        "slot_label": slots[si] if si < len(slots) else f"Group {si+1}",
+                        "players": players_out,
+                    })
+                else:
+                    # Empty slot (more slots than groups)
+                    all_groups.append({
+                        "slot_label": slots[si] if si < len(slots) else f"Group {si+1}",
+                        "players": [],
+                    })
+
+        # Handle overflow: free groups beyond available slots
+        while free_group_idx < len(groups_players):
+            gp = groups_players[free_group_idx]
+            free_group_idx += 1
+            players_out = []
+            for cp, name in enumerate(gp, start=1):
+                players_out.append({
+                    "name": name,
+                    "cart_pos": cp,
+                    "tee_choice": tee_map.get(name),
+                    "handicap_index": hcp_map.get((name or "").lower()),
+                })
+            label = slots[len(all_groups)] if len(all_groups) < len(slots) else f"Group {len(all_groups)+1}"
+            all_groups.append({"slot_label": label, "players": players_out})
+
+        # Remove empty groups
+        all_groups = [g for g in all_groups if g["players"]]
+
+        # For shotgun: push threesomes to last slots
+        if is_shotgun and slots:
+            foursomes = [g for g in all_groups if len(g["players"]) >= 4]
+            smalls = [g for g in all_groups if len(g["players"]) < 4]
+            ordered = foursomes + smalls
+            for i, g in enumerate(ordered):
+                g["slot_label"] = slots[i] if i < len(slots) else f"Group {i+1}"
+        else:
+            ordered = all_groups
+
+        # Assign final group_num
+        for i, g in enumerate(ordered):
+            g["group_num"] = i + 1
+
+        result[holes] = ordered
+
+    result["slots_9"] = slots_9
+    result["slots_18"] = slots_18
+    return result
+
+
+def _random_groups(
+    players: list[str],
+    partner_map: dict,
+    pair_counts: dict,
+    protect_partner_requests: bool,
+) -> list[list[str]]:
+    """Form groups using weighted random (history-aware) assignment."""
+    import random as _random
+
+    used: set = set()
+    units: list[list[str]] = []
+
+    # Build partner pairs first
+    if protect_partner_requests:
+        for requester, req_text in partner_map.items():
+            if requester not in players or requester in used:
+                continue
+            partner = _find_partner_name(req_text, players, requester)
+            if partner and partner not in used:
+                units.append([requester, partner])
+                used.add(requester)
+                used.add(partner)
+
+    # Remaining singles — shuffle for randomness
+    singles = [p for p in players if p not in used]
+    _random.shuffle(singles)
+    for s in singles:
+        units.append([s])
+
+    # Greedy group formation
+    groups: list[list[str]] = []
+    remaining = units.copy()
+
+    while remaining:
+        first = remaining.pop(0)
+        group = list(first)
+
+        while len(group) < 4 and remaining:
+            needed = 4 - len(group)
+
+            # Prefer units that fit; among those, pick lowest pair-count score
+            fittable = [u for u in remaining if len(u) <= needed]
+            if not fittable:
+                fittable = remaining  # take whatever is left
+
+            best_idx = 0
+            best_score = float("inf")
+            for idx, unit in enumerate(fittable):
+                score = sum(
+                    _pair_count(pair_counts, g, u)
+                    for g in group
+                    for u in unit
+                )
+                if score < best_score:
+                    best_score = score
+                    best_idx = idx
+
+            chosen = fittable[best_idx]
+            remaining.remove(chosen)
+            group.extend(chosen)
+
+        groups.append(group)
+
+    return groups
+
+
+def _abcd_groups(players: list[str], hcp_map: dict) -> list[list[str]]:
+    """Form ABCD groups: one A/B/C/D tier player per group, sorted by handicap."""
+    if not players:
+        return []
+
+    # Sort by handicap index ascending (lower = better = A)
+    with_hcp = sorted(
+        [(p, hcp_map.get(p.lower())) for p in players if hcp_map.get(p.lower()) is not None],
+        key=lambda x: x[1],
+    )
+    without_hcp = [(p, None) for p in players if hcp_map.get(p.lower()) is None]
+    sorted_players = [p for p, _ in with_hcp] + [p for p, _ in without_hcp]
+
+    n = len(sorted_players)
+    if n == 0:
+        return []
+
+    threesomes = (4 - n % 4) % 4
+    foursomes = (n - 3 * threesomes) // 4
+    num_groups = foursomes + threesomes
+
+    if num_groups == 0:
+        return []
+
+    tier_a = sorted_players[:num_groups]
+    tier_b = sorted_players[num_groups: 2 * num_groups]
+    tier_c = sorted_players[2 * num_groups: 3 * num_groups]
+    tier_d = sorted_players[3 * num_groups: 4 * num_groups]
+
+    groups = []
+    for i in range(num_groups):
+        grp = []
+        if i < len(tier_a): grp.append(tier_a[i])
+        if i < len(tier_b): grp.append(tier_b[i])
+        if i < len(tier_c): grp.append(tier_c[i])
+        if i < len(tier_d): grp.append(tier_d[i])
+        groups.append(grp)
+
+    return groups

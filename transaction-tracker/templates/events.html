@@ -114,6 +114,90 @@
         .game-stat-badge strong {
             font-weight: 700;
         }
+        /* ── Pairings panel ─────────────────────────────────── */
+        .pairings-panel { padding: 0.5rem 0; }
+        .pairings-controls {
+            display: flex; align-items: center; gap: 0.5rem;
+            flex-wrap: wrap; padding: 0.25rem 0 0.6rem;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 0.6rem;
+        }
+        .pairings-control-group { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+        .pairings-mode-btn {
+            padding: 0.28rem 0.7rem; font-size: 0.78rem; font-weight: 600;
+            border: none; background: transparent; cursor: pointer; color: var(--text-muted);
+        }
+        .pairings-mode-btn.active { background: var(--primary); color: #fff; }
+        .pairings-mode-btn:hover:not(.active) { background: var(--bg-hover); }
+        .pairings-toggle-label { color: var(--text); }
+        .pairings-seed-toggle {
+            padding: 0.28rem 0.6rem; font-size: 0.78rem; border: 1px solid var(--border);
+            border-radius: 6px; cursor: pointer; background: transparent; color: var(--text-muted);
+        }
+        .pairings-seed-toggle:hover { border-color: var(--primary); color: var(--primary); }
+        .pairings-action-btn {
+            padding: 0.28rem 0.75rem; font-size: 0.8rem; font-weight: 600;
+            border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+            background: var(--bg); color: var(--text); transition: 0.15s;
+        }
+        .pairings-action-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .pairings-action-btn.generate-btn { border-color: var(--primary); color: var(--primary); }
+        .pairings-action-btn.generate-btn:hover { background: var(--primary); color: #fff; }
+        .pairings-seeds-panel {
+            background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 8px; padding: 0.75rem; margin-bottom: 0.6rem;
+        }
+        .pairings-seed-row {
+            display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;
+            flex-wrap: wrap;
+        }
+        .seed-players { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+        .seed-player-select { border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); }
+        .pairings-seed-remove { border: none; background: none; cursor: pointer; padding: 0.1rem 0.3rem; }
+        .pairings-swap-bar {
+            display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0;
+            margin-bottom: 0.5rem; flex-wrap: wrap;
+        }
+        .pairings-swap-btn {
+            padding: 0.22rem 0.65rem; font-size: 0.76rem; font-weight: 600;
+            border: 1px solid var(--border); border-radius: 20px; cursor: pointer;
+            background: transparent; color: var(--text-muted); transition: 0.15s;
+        }
+        .pairings-swap-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .pairings-swap-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .pairings-groups-grid {
+            display: grid; gap: 0.75rem;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            margin-top: 0.25rem;
+        }
+        .pairing-group-card {
+            border: 1px solid var(--border); border-radius: 8px;
+            overflow: hidden; background: var(--bg);
+            transition: box-shadow 0.15s, border-color 0.15s;
+        }
+        .pairing-group-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .pairing-group-card.pairings-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
+        .pairing-group-header {
+            background: var(--bg-secondary); font-size: 0.75rem; font-weight: 700;
+            padding: 0.3rem 0.6rem; letter-spacing: 0.04em; color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+        }
+        .pairing-player-row {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.3rem 0.6rem; font-size: 0.82rem; cursor: default;
+            transition: background 0.12s;
+        }
+        .pairing-player-row:hover { background: var(--bg-hover); }
+        .pairing-player-row.pairings-selected { background: rgba(99,102,241,0.12); }
+        .pairing-cart-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .pairing-player-name { flex: 1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pairing-hcp { font-size: 0.75rem; color: var(--text-muted); min-width: 2.5rem; text-align: right; }
+        .pairing-tee { font-size: 0.72rem; color: var(--text-muted); min-width: 2.2rem; text-align: right; }
+        .pairing-cart-divider {
+            height: 1px; background: var(--border); margin: 0 0.6rem;
+        }
         /* Orphan banner */
         .orphan-banner {
             background: #fef3c7;
@@ -1525,6 +1609,7 @@
     let rsvpCreditMap = {};  // keyed by event_name → { customerName: creditInfo }
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
+    let pairingsData = {};          // keyed by event id → {groups_9, groups_18, slots_9, slots_18, isDirty, mode, protectPartners, seeds, swapMode, selection, loaded}
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
     let payoutsOpenForEvent = {};  // keyed by event id → true if payouts panel is open
     let tgfPayoutData = { customers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
@@ -3609,6 +3694,220 @@
         return { linked, combinedPot, thisEventTgfMVP };
     }
 
+    // ── Pairings ──────────────────────────────────────────────────────────────
+
+    function getPairingsState(evId) {
+        if (!pairingsData[evId]) {
+            pairingsData[evId] = {
+                groups_9: [], groups_18: [],
+                slots_9: [], slots_18: [],
+                isDirty: false, loaded: false,
+                mode: 'random', protectPartners: true,
+                seeds: [],
+                swapMode: null, selection: null,
+                showSeeds: false,
+            };
+        }
+        return pairingsData[evId];
+    }
+
+    function renderPairingsPanel(ev, registrants) {
+        const state = getPairingsState(ev.id);
+        const fmt = (ev.format || '').trim();
+        const isCombo = fmt === '9/18 Combo';
+        const is18Only = fmt === '18 Holes';
+        const INACTIVE = ['credited', 'refunded', 'transferred', 'wd'];
+        const active = registrants.filter(r => !r.parent_item_id && !INACTIVE.includes(r.transaction_status));
+        const count9 = active.filter(r => String(r.holes) === '9').length;
+        const count18 = active.filter(r => String(r.holes) === '18').length;
+
+        let html = '<div class="pairings-panel">';
+
+        // ── Controls bar ──────────────────────────────────────────────────────
+        html += '<div class="pairings-controls">';
+
+        // Mode toggle
+        html += '<div class="pairings-control-group">';
+        html += `<button class="pairings-mode-btn${state.mode === 'random' ? ' active' : ''}" data-ev-id="${ev.id}" data-pairings-mode="random">Random</button>`;
+        html += `<button class="pairings-mode-btn${state.mode === 'abcd' ? ' active' : ''}" data-ev-id="${ev.id}" data-pairings-mode="abcd">ABCD</button>`;
+        html += '</div>';
+
+        // Partner requests toggle (random mode only)
+        if (state.mode === 'random') {
+            html += `<label class="pairings-toggle-label" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;">
+                <input type="checkbox" data-ev-id="${ev.id}" data-pairings-partners="${ev.id}" ${state.protectPartners ? 'checked' : ''} style="cursor:pointer;">
+                Partner Requests
+            </label>`;
+        }
+
+        // Seed/lock toggle
+        html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" title="Pre-assign players to specific slots before generating">${state.showSeeds ? '&#x25B2; Locks' : '&#x25BC; Locks'}</button>`;
+
+        // Spacer
+        html += '<div style="flex:1;"></div>';
+
+        // Action buttons
+        html += `<button class="pairings-action-btn generate-btn" data-ev-id="${ev.id}" data-pairings-action="generate">&#x21BB; Generate</button>`;
+        if (state.groups_9.length || state.groups_18.length) {
+            html += `<button class="pairings-action-btn clear-btn" data-ev-id="${ev.id}" data-pairings-action="clear" style="color:var(--red);">&#x2715; Clear</button>`;
+            if (state.isDirty) {
+                html += `<button class="pairings-action-btn save-btn" data-ev-id="${ev.id}" data-pairings-action="save" style="background:var(--green);color:#fff;">&#x2713; Save</button>`;
+            } else {
+                html += `<span style="font-size:0.78rem;color:var(--text-muted);padding:0.25rem 0.5rem;">Saved</span>`;
+            }
+        }
+        html += '</div>'; // .pairings-controls
+
+        // ── Seed/Lock panel ───────────────────────────────────────────────────
+        if (state.showSeeds) {
+            html += '<div class="pairings-seeds-panel">';
+            html += '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Pre-assign players to specific slots. Generator fills remaining spots around locks.</div>';
+
+            const allSlots9 = state.slots_9.length ? state.slots_9 : (ev.tee_time_count ? Array.from({length: ev.tee_time_count}, (_, i) => `Group ${i+1}`) : []);
+            const allSlots18 = state.slots_18.length ? state.slots_18 : (ev.tee_time_count_18 ? Array.from({length: ev.tee_time_count_18}, (_, i) => `Group ${i+1}`) : []);
+            const seedSlots = isCombo ? [...allSlots9.map(s => ({l: s, h: '9'})), ...allSlots18.map(s => ({l: s, h: '18'}))] :
+                              is18Only ? allSlots18.map(s => ({l: s, h: '18'})) :
+                              allSlots9.map(s => ({l: s, h: '9'}));
+
+            const playerNames = active.map(r => r.customer).filter(Boolean).sort();
+
+            // Existing seeds
+            state.seeds.forEach((seed, si) => {
+                const slotLabel = seed.slot_index < seedSlots.length ? seedSlots[seed.slot_index].l : `Slot ${seed.slot_index + 1}`;
+                const holesLabel = seed.holes === '18' ? '18-hole' : '9-hole';
+                html += `<div class="pairings-seed-row" data-seed-idx="${si}">`;
+                html += `<span style="font-size:0.8rem;font-weight:600;">${slotLabel} <span style="color:var(--text-muted);font-weight:400;">(${holesLabel})</span></span>`;
+                html += '<div class="seed-players">';
+                for (let cp = 1; cp <= 4; cp++) {
+                    const locked = seed.players.find(p => p.cart_pos === cp);
+                    html += `<select class="seed-player-select" data-ev-id="${ev.id}" data-seed-idx="${si}" data-cart-pos="${cp}" style="font-size:0.78rem;padding:0.2rem;">
+                        <option value="">Pos ${cp}</option>
+                        ${playerNames.map(n => `<option value="${n}" ${locked && locked.name === n ? 'selected' : ''}>${n}</option>`).join('')}
+                    </select>`;
+                }
+                html += '</div>';
+                html += `<button class="pairings-seed-remove" data-ev-id="${ev.id}" data-seed-remove="${si}" style="color:var(--red);font-size:0.8rem;">&#x2715;</button>`;
+                html += '</div>';
+            });
+
+            // Add lock button + slot selector
+            if (seedSlots.length > 0) {
+                html += '<div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.4rem;">';
+                html += `<select id="new-seed-slot-${ev.id}" style="font-size:0.8rem;padding:0.2rem;">`;
+                seedSlots.forEach((s, i) => {
+                    html += `<option value="${i}">${s.l}${isCombo ? ` (${s.h}-hole)` : ''}</option>`;
+                });
+                html += '</select>';
+                html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-pairings-action="add-seed" style="font-size:0.8rem;padding:0.2rem 0.6rem;">+ Add Lock</button>`;
+                html += '</div>';
+            }
+            html += '</div>'; // .pairings-seeds-panel
+        }
+
+        // ── Swap mode selector ────────────────────────────────────────────────
+        if (state.groups_9.length || state.groups_18.length) {
+            html += '<div class="pairings-swap-bar">';
+            html += '<span style="font-size:0.78rem;color:var(--text-muted);font-weight:600;">SWAP:</span>';
+            const swapModes = [['player', 'Player'], ['cartpair', 'Cart Pair'], ['group', 'Group']];
+            swapModes.forEach(([val, label]) => {
+                html += `<button class="pairings-swap-btn${state.swapMode === val ? ' active' : ''}" data-ev-id="${ev.id}" data-swap-mode="${val}">${label}</button>`;
+            });
+            if (state.swapMode) {
+                html += `<span style="font-size:0.78rem;color:var(--accent);margin-left:0.5rem;">${state.selection ? 'Click a second item to swap' : 'Click an item to select'}</span>`;
+            }
+            html += '</div>';
+        }
+
+        // ── Groups ────────────────────────────────────────────────────────────
+        if (!state.loaded) {
+            html += '<div style="padding:1.5rem;text-align:center;color:var(--text-muted);">Loading&hellip;</div>';
+        } else if (!state.groups_9.length && !state.groups_18.length) {
+            html += '<div style="padding:1.5rem;text-align:center;color:var(--text-muted);">No pairings yet. Hit <strong>Generate</strong> to create groups.</div>';
+        } else {
+            if (isCombo || !is18Only) {
+                html += renderPairingGroups(ev, state, '9', state.groups_9);
+            }
+            if (isCombo || is18Only) {
+                html += renderPairingGroups(ev, state, '18', state.groups_18);
+            }
+        }
+
+        html += '</div>'; // .pairings-panel
+        return html;
+    }
+
+    function renderPairingGroups(ev, state, holes, groups) {
+        if (!groups || !groups.length) return '';
+        const fmt = (ev.format || '').trim();
+        const isCombo = fmt === '9/18 Combo';
+        const isStartType = holes === '9' ? ev.start_type : ev.start_type_18;
+        const isShotgun = isStartType === 'Shotgun';
+        const foursomes = groups.filter(g => g.players.length >= 4).length;
+        const threesomes = groups.filter(g => g.players.length < 4 && g.players.length > 0).length;
+
+        let html = '';
+        if (isCombo) {
+            html += `<div style="font-weight:700;font-size:0.78rem;letter-spacing:0.06em;color:var(--text-muted);padding:0.6rem 0 0.3rem;">${holes}-HOLE PAIRINGS &mdash; ${groups.length} groups (${foursomes} foursomes${threesomes ? `, ${threesomes} threesomes` : ''})</div>`;
+        }
+
+        html += '<div class="pairings-groups-grid">';
+        groups.forEach(grp => {
+            const isSelected = state.swapMode === 'group' && state.selection &&
+                state.selection.holes === holes && state.selection.group_num === grp.group_num;
+            html += `<div class="pairing-group-card${isSelected ? ' pairings-selected' : ''}" data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}">`;
+            html += `<div class="pairing-group-header">${escapeHtml(grp.slot_label)}${isShotgun ? ' <span style="color:var(--text-muted);font-size:0.75em;">(Hole)</span>' : ''}</div>`;
+
+            grp.players.forEach((player, idx) => {
+                const isCart1 = player.cart_pos <= 2;
+                const cartDot = isCart1 ? 'var(--accent)' : 'var(--green)';
+                const isSelectedPlayer = state.swapMode === 'player' && state.selection &&
+                    state.selection.holes === holes && state.selection.group_num === grp.group_num &&
+                    state.selection.cart_pos === player.cart_pos;
+                const isSelectedPair = state.swapMode === 'cartpair' && state.selection &&
+                    state.selection.holes === holes && state.selection.group_num === grp.group_num &&
+                    (player.cart_pos <= 2) === (state.selection.cart_pos <= 2);
+
+                const hcp = player.handicap_index != null ? Number(player.handicap_index).toFixed(1) : '—';
+
+                // Cart divider between positions 2 and 3
+                if (idx === 2 && grp.players.length > 2) {
+                    html += '<div class="pairing-cart-divider"></div>';
+                }
+
+                html += `<div class="pairing-player-row${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
+                    data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
+                html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
+                html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+                html += `<span class="pairing-hcp">${hcp}</span>`;
+                html += `<span class="pairing-tee">${escapeHtml(player.tee_choice || '—')}</span>`;
+                html += '</div>';
+            });
+
+            html += '</div>'; // .pairing-group-card
+        });
+        html += '</div>'; // .pairings-groups-grid
+        return html;
+    }
+
+    async function loadPairings(evId) {
+        try {
+            const res = await fetch(`/api/events/${evId}/pairings`);
+            const data = await res.json();
+            const state = getPairingsState(evId);
+            state.slots_9 = data.slots_9 || [];
+            state.slots_18 = data.slots_18 || [];
+            state.groups_9 = (data.pairings && data.pairings['9']) ? data.pairings['9'] : [];
+            state.groups_18 = (data.pairings && data.pairings['18']) ? data.pairings['18'] : [];
+            state.isDirty = false;
+            state.loaded = true;
+        } catch (e) {
+            const state = getPairingsState(evId);
+            state.loaded = true;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -3972,7 +4271,7 @@
 
         // ---- PAIRINGS VIEW ----
         if (pairingsView) {
-            html += '<div style="padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:0.95rem;"><strong>Feature Coming Soon!</strong></div>';
+            html += renderPairingsPanel(ev, registrants);
             return html;
         }
 
@@ -4578,7 +4877,7 @@
 
         // PLAYERS / PAIRINGS / GAMES view toggle
         container.querySelectorAll("[data-toggle-games]").forEach(badge => {
-            badge.addEventListener("click", (e) => {
+            badge.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const val = badge.dataset.toggleGames;
                 gamesOpenForEvent[ev.id] = val === "1";
@@ -4586,8 +4885,18 @@
                 financialOpenForEvent[ev.id] = val === "3";
                 payoutsOpenForEvent[ev.id] = val === "4";
                 rerenderDetail(container, ev);
+                // Load saved pairings on first open
+                if (val === "2" && !getPairingsState(ev.id).loaded) {
+                    await loadPairings(ev.id);
+                    rerenderDetail(container, ev);
+                }
             });
         });
+
+        // ── Pairings handlers ─────────────────────────────────────────────────
+        if (pairingsOpenForEvent[ev.id]) {
+            attachPairingsHandlers(container, ev);
+        }
 
         // Game filter badges (PLAYERS view sub-filters)
         container.querySelectorAll(".game-stat-badge[data-filter]").forEach(badge => {
@@ -5124,6 +5433,269 @@
         });
 
     }
+
+    // ── Pairings interaction handlers ─────────────────────────────────────────
+    function attachPairingsHandlers(container, ev) {
+        const state = getPairingsState(ev.id);
+
+        // Mode toggle
+        container.querySelectorAll('[data-pairings-mode]').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                state.mode = btn.dataset.pairingsMode;
+                state.swapMode = null; state.selection = null;
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Partner requests toggle
+        const partnerChk = container.querySelector(`[data-pairings-partners="${ev.id}"]`);
+        if (partnerChk) {
+            partnerChk.addEventListener('change', e => {
+                state.protectPartners = partnerChk.checked;
+            });
+        }
+
+        // Seed/lock toggle
+        container.querySelectorAll('.pairings-seed-toggle').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                state.showSeeds = !state.showSeeds;
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Generate / Clear / Save / Add-seed
+        container.querySelectorAll('[data-pairings-action]').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const action = btn.dataset.pairingsAction;
+
+                if (action === 'generate') {
+                    btn.textContent = 'Generating…';
+                    btn.disabled = true;
+                    try {
+                        const res = await fetch(`/api/events/${ev.id}/pairings/generate`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                mode: state.mode,
+                                protect_partner_requests: state.protectPartners,
+                                seeds: state.seeds,
+                            }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) { alert(data.error || 'Generation failed'); return; }
+                        state.groups_9 = data['9'] || [];
+                        state.groups_18 = data['18'] || [];
+                        state.slots_9 = data.slots_9 || [];
+                        state.slots_18 = data.slots_18 || [];
+                        state.isDirty = true;
+                        state.swapMode = null; state.selection = null;
+                        state.loaded = true;
+                    } catch (err) {
+                        alert('Failed to generate pairings.');
+                    }
+                    rerenderDetail(container, ev);
+                    return;
+                }
+
+                if (action === 'clear') {
+                    if (!confirm('Clear all pairings for this event?')) return;
+                    try {
+                        await fetch(`/api/events/${ev.id}/pairings`, {method: 'DELETE'});
+                    } catch(e) { /* ignore */ }
+                    state.groups_9 = []; state.groups_18 = [];
+                    state.isDirty = false; state.swapMode = null; state.selection = null;
+                    rerenderDetail(container, ev);
+                    return;
+                }
+
+                if (action === 'save') {
+                    btn.textContent = 'Saving…'; btn.disabled = true;
+                    try {
+                        const res = await fetch(`/api/events/${ev.id}/pairings/save`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                groups_by_holes: {
+                                    '9': state.groups_9,
+                                    '18': state.groups_18,
+                                },
+                            }),
+                        });
+                        if (!res.ok) { const d = await res.json(); alert(d.error || 'Save failed'); return; }
+                        state.isDirty = false;
+                    } catch(err) {
+                        alert('Failed to save pairings.');
+                    }
+                    rerenderDetail(container, ev);
+                    return;
+                }
+
+                if (action === 'add-seed') {
+                    const selEl = container.querySelector(`#new-seed-slot-${ev.id}`);
+                    const slotIdx = selEl ? parseInt(selEl.value) : 0;
+                    const fmt = (ev.format || '').trim();
+                    const isCombo = fmt === '9/18 Combo';
+                    const is18Only = fmt === '18 Holes';
+                    // Determine holes from slot index relative to slots array
+                    const slots9 = state.slots_9;
+                    const holes = isCombo
+                        ? (slotIdx < slots9.length ? '9' : '18')
+                        : (is18Only ? '18' : '9');
+                    const adjIdx = isCombo && slotIdx >= slots9.length ? slotIdx - slots9.length : slotIdx;
+                    // Don't add duplicate seed for same slot+holes
+                    if (!state.seeds.find(s => s.slot_index === adjIdx && s.holes === holes)) {
+                        state.seeds.push({holes, slot_index: adjIdx, players: []});
+                    }
+                    rerenderDetail(container, ev);
+                    return;
+                }
+            });
+        });
+
+        // Seed remove
+        container.querySelectorAll('[data-seed-remove]').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.seedRemove);
+                state.seeds.splice(idx, 1);
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Seed player select
+        container.querySelectorAll('.seed-player-select').forEach(sel => {
+            sel.addEventListener('change', e => {
+                const si = parseInt(sel.dataset.seedIdx);
+                const cp = parseInt(sel.dataset.cartPos);
+                const name = sel.value;
+                const seed = state.seeds[si];
+                if (!seed) return;
+                seed.players = seed.players.filter(p => p.cart_pos !== cp);
+                if (name) seed.players.push({name, cart_pos: cp});
+            });
+        });
+
+        // Swap mode buttons
+        container.querySelectorAll('[data-swap-mode]').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const mode = btn.dataset.swapMode;
+                if (state.swapMode === mode) {
+                    state.swapMode = null; state.selection = null;
+                } else {
+                    state.swapMode = mode; state.selection = null;
+                }
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Group card click (group-swap)
+        container.querySelectorAll('.pairing-group-card').forEach(card => {
+            card.addEventListener('click', e => {
+                if (state.swapMode !== 'group') return;
+                e.stopPropagation();
+                const holes = card.dataset.holes;
+                const groupNum = parseInt(card.dataset.groupNum);
+                if (!state.selection) {
+                    state.selection = {holes, group_num: groupNum};
+                    rerenderDetail(container, ev);
+                } else {
+                    _swapGroups(state, state.selection.holes, state.selection.group_num, holes, groupNum);
+                    state.isDirty = true; state.selection = null;
+                    rerenderDetail(container, ev);
+                }
+            });
+        });
+
+        // Player row click (player-swap or cartpair-swap)
+        container.querySelectorAll('.pairing-player-row').forEach(row => {
+            row.addEventListener('click', e => {
+                if (!state.swapMode || state.swapMode === 'group') return;
+                e.stopPropagation();
+                const holes = row.dataset.holes;
+                const groupNum = parseInt(row.dataset.groupNum);
+                const cartPos = parseInt(row.dataset.cartPos);
+                if (!state.selection) {
+                    state.selection = {holes, group_num: groupNum, cart_pos: cartPos};
+                    rerenderDetail(container, ev);
+                } else {
+                    if (state.swapMode === 'player') {
+                        _swapPlayers(state, state.selection, {holes, group_num: groupNum, cart_pos: cartPos});
+                    } else if (state.swapMode === 'cartpair') {
+                        _swapCartPairs(state, state.selection, {holes, group_num: groupNum, cart_pos: cartPos});
+                    }
+                    state.isDirty = true; state.selection = null;
+                    rerenderDetail(container, ev);
+                }
+            });
+        });
+    }
+
+    function _findGroup(state, holes, groupNum) {
+        const list = holes === '18' ? state.groups_18 : state.groups_9;
+        return list.find(g => g.group_num === groupNum);
+    }
+
+    function _findPlayer(grp, cartPos) {
+        return grp.players.find(p => p.cart_pos === cartPos);
+    }
+
+    function _swapPlayers(state, a, b) {
+        const grpA = _findGroup(state, a.holes, a.group_num);
+        const grpB = _findGroup(state, b.holes, b.group_num);
+        if (!grpA || !grpB) return;
+        const pA = _findPlayer(grpA, a.cart_pos);
+        const pB = _findPlayer(grpB, b.cart_pos);
+        if (!pA || !pB) return;
+        // Swap names + metadata, keep cart positions in place
+        [pA.name, pB.name] = [pB.name, pA.name];
+        [pA.tee_choice, pB.tee_choice] = [pB.tee_choice, pA.tee_choice];
+        [pA.handicap_index, pB.handicap_index] = [pB.handicap_index, pA.handicap_index];
+    }
+
+    function _swapCartPairs(state, a, b) {
+        // a.cart_pos and b.cart_pos determine which cart (1-2 or 3-4)
+        const grpA = _findGroup(state, a.holes, a.group_num);
+        const grpB = _findGroup(state, b.holes, b.group_num);
+        if (!grpA || !grpB) return;
+        const isCart1A = a.cart_pos <= 2;
+        const isCart1B = b.cart_pos <= 2;
+        if (isCart1A === isCart1B && a.holes === b.holes && a.group_num === b.group_num) return; // same cart, no-op
+        const pairsA = grpA.players.filter(p => isCart1A ? p.cart_pos <= 2 : p.cart_pos > 2);
+        const pairsB = grpB.players.filter(p => isCart1B ? p.cart_pos <= 2 : p.cart_pos > 2);
+        // Swap player data between pairs (name, tee, hcp)
+        const minLen = Math.min(pairsA.length, pairsB.length);
+        for (let i = 0; i < minLen; i++) {
+            [pairsA[i].name, pairsB[i].name] = [pairsB[i].name, pairsA[i].name];
+            [pairsA[i].tee_choice, pairsB[i].tee_choice] = [pairsB[i].tee_choice, pairsA[i].tee_choice];
+            [pairsA[i].handicap_index, pairsB[i].handicap_index] = [pairsB[i].handicap_index, pairsA[i].handicap_index];
+        }
+        // If sizes differ, move the extra player
+        if (pairsA.length > pairsB.length) {
+            const extra = pairsA[minLen];
+            extra.cart_pos = pairsB.length > 0 ? (isCart1B ? 2 : 4) : (isCart1B ? 1 : 3);
+        } else if (pairsB.length > pairsA.length) {
+            const extra = pairsB[minLen];
+            extra.cart_pos = pairsA.length > 0 ? (isCart1A ? 2 : 4) : (isCart1A ? 1 : 3);
+        }
+    }
+
+    function _swapGroups(state, holesA, gnA, holesB, gnB) {
+        const listA = holesA === '18' ? state.groups_18 : state.groups_9;
+        const listB = holesB === '18' ? state.groups_18 : state.groups_9;
+        const idxA = listA.findIndex(g => g.group_num === gnA);
+        const idxB = listB.findIndex(g => g.group_num === gnB);
+        if (idxA === -1 || idxB === -1) return;
+        // Swap player arrays; keep slot_labels and group_nums in place
+        const playersA = listA[idxA].players;
+        listA[idxA].players = listB[idxB].players;
+        listB[idxB].players = playersA;
+    }
+
+    // ── End Pairings handlers ─────────────────────────────────────────────────
 
     // ---- Compose Message Modal Logic ----
     let composeEventName = "";
