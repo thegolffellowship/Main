@@ -21050,6 +21050,50 @@ def _pairing_time_slots(event: dict, holes: str) -> list[str]:
     return slots
 
 
+def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
+    """Create pairing tables if they don't exist (handles live DB migration)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS event_pairings (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id       INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            holes          TEXT NOT NULL CHECK(holes IN ('9', '18')),
+            group_num      INTEGER NOT NULL,
+            slot_label     TEXT NOT NULL,
+            player_name    TEXT NOT NULL,
+            cart_pos       INTEGER NOT NULL CHECK(cart_pos BETWEEN 1 AND 4),
+            tee_choice     TEXT,
+            handicap_index REAL,
+            created_at     TEXT DEFAULT (datetime('now')),
+            UNIQUE(event_id, holes, group_num, cart_pos)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_event_pairings_event ON event_pairings(event_id)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pairing_history (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_a    TEXT NOT NULL,
+            player_b    TEXT NOT NULL,
+            event_id    INTEGER NOT NULL REFERENCES events(id),
+            event_date  TEXT NOT NULL,
+            created_at  TEXT DEFAULT (datetime('now')),
+            UNIQUE(player_a, player_b, event_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pairing_history_ab ON pairing_history(player_a, player_b)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pairing_history_date ON pairing_history(event_date)"
+    )
+    conn.commit()
+
+
 def get_event_pairings(event_id: int, db_path=None) -> dict:
     """Return saved pairings for an event keyed by holes ('9' / '18').
 
@@ -21058,6 +21102,7 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
     Players: {"name", "cart_pos", "tee_choice", "handicap_index"}
     """
     with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
         rows = conn.execute(
             """
             SELECT holes, group_num, slot_label, player_name,
@@ -21097,6 +21142,7 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
                   "tee_choice", "handicap_index"}]}
     """
     with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
         # Load event date for history
         ev_row = conn.execute(
             "SELECT event_date FROM events WHERE id = ?", (event_id,)
@@ -21147,6 +21193,7 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
 def delete_event_pairings(event_id: int, db_path=None) -> None:
     """Remove saved pairings (and their history) for an event."""
     with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
         conn.execute("DELETE FROM event_pairings WHERE event_id = ?", (event_id,))
         conn.execute("DELETE FROM pairing_history WHERE event_id = ?", (event_id,))
         conn.commit()
@@ -21164,6 +21211,7 @@ def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
     year_end = f"{year}-12-31"
 
     with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
         rows = conn.execute(
             """
             SELECT player_a, player_b, COUNT(*) as cnt
