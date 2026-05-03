@@ -5603,6 +5603,12 @@
                     state.selection = {holes, group_num: groupNum};
                     rerenderDetail(container, ev);
                 } else {
+                    if (state.selection.holes !== holes) {
+                        alert('Cannot swap groups between 9-hole and 18-hole players.');
+                        state.selection = null;
+                        rerenderDetail(container, ev);
+                        return;
+                    }
                     _swapGroups(state, state.selection.holes, state.selection.group_num, holes, groupNum);
                     state.isDirty = true; state.selection = null;
                     rerenderDetail(container, ev);
@@ -5622,6 +5628,12 @@
                     state.selection = {holes, group_num: groupNum, cart_pos: cartPos};
                     rerenderDetail(container, ev);
                 } else {
+                    if (state.selection.holes !== holes) {
+                        alert('Cannot swap 9-hole and 18-hole players.');
+                        state.selection = null;
+                        rerenderDetail(container, ev);
+                        return;
+                    }
                     if (state.swapMode === 'player') {
                         _swapPlayers(state, state.selection, {holes, group_num: groupNum, cart_pos: cartPos});
                     } else if (state.swapMode === 'cartpair') {
