@@ -3904,6 +3904,7 @@ def api_create_event():
         course_cost_breakdown=data.get("course_cost_breakdown"),
         course_cost_breakdown_9=data.get("course_cost_breakdown_9"),
         course_cost_breakdown_18=data.get("course_cost_breakdown_18"),
+        per_game_addon=data.get("per_game_addon"),
     )
     if event:
         return jsonify({"status": "ok", "event": event}), 201

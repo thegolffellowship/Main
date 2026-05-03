@@ -1863,6 +1863,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("status_reason", "TEXT"),
             ("rescheduled_to_event_id", "INTEGER"),
             ("status_changed_at", "TEXT"),
+            ("per_game_addon", "REAL"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
@@ -5524,7 +5525,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
                 "side_game_fee_9", "side_game_fee_18",
                 "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18",
-                "course_surcharge",
+                "course_surcharge", "per_game_addon",
                 "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
                 "rescheduled_to_event_id"}
     safe = {k: v for k, v in fields.items() if k in allowed}
@@ -7708,6 +7709,7 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
                  course_cost_breakdown: str = None,
                  course_cost_breakdown_9: str = None,
                  course_cost_breakdown_18: str = None,
+                 per_game_addon: float = None,
                  db_path: str | Path | None = None) -> dict | None:
     """Manually create a new event. Returns the event dict or None if duplicate (case-insensitive)."""
     with _connect(db_path) as conn:
@@ -7719,8 +7721,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
             return None
         try:
             cursor = conn.execute(
-                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
-                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18),
+                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, per_game_addon, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
+                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, per_game_addon),
             )
             conn.commit()
             new_id = cursor.lastrowid
@@ -8395,6 +8397,7 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
 
 _PER_GAME_ADDON = 16.0  # $ per game (NET or GROSS) — 9 Holes and 9/18 Combo
 _PER_GAME_ADDON_18 = 30.0  # $ per game for standalone 18 Hole events
+_PER_GAME_ADDON_27 = 27.0  # default $ per game for 27 Hole events (overridable per-event via events.per_game_addon)
 
 
 def get_player_credits(
@@ -8478,8 +8481,10 @@ def _calc_event_pricing_breakdown(
     holes_str = str(holes or "").strip()
     status_upper = (user_status or "").upper()
     games_upper = (side_games or "").upper()
-    fmt = (event.get("format") or "").lower()
+    fmt_raw = event.get("format") or ""
+    fmt = fmt_raw.lower()
     is_combo = "combo" in fmt or "9/18" in fmt
+    is_27 = fmt_raw.strip() == "27 Holes"
 
     # Pick course cost / markup / side-game-fee based on holes
     if is_combo and holes_str == "18":
@@ -8503,18 +8508,38 @@ def _calc_event_pricing_breakdown(
     sg = float(sg or 0)
     tf = float(event.get("transaction_fee_pct") or 3.5)
 
-    # Player-type markup adjustment
+    # Player-type markup adjustment.
+    # 27 Holes: guest +$25, no 1st Timer tier (1st Timer falls back to guest pricing).
+    if is_27:
+        guest_extra = 25.0
+    elif holes_str == "18" and not is_combo:
+        guest_extra = 15.0
+    else:
+        guest_extra = 10.0
+
     if "GUEST" in status_upper:
-        extra = 15.0 if (holes_str == "18" and not is_combo) else 10.0
-        mu = mu_member + extra
+        mu = mu_member + guest_extra
     elif "1ST" in status_upper or "FIRST" in status_upper:
-        extra = 15.0 if (holes_str == "18" and not is_combo) else 10.0
-        mu = mu_member + extra - 25.0
+        # 27 Holes does not offer 1st Timer pricing — charge as guest
+        mu = mu_member + guest_extra if is_27 else (mu_member + guest_extra - 25.0)
     else:
         mu = mu_member
 
-    # Game addon — standalone 18 Hole events are $30/game, everything else is $16
-    per_game = _PER_GAME_ADDON_18 if (holes_str == "18" and not is_combo) else _PER_GAME_ADDON
+    # Game addon. 27 Holes uses the per-event override (events.per_game_addon),
+    # falling back to $27. 18 Holes standalone = $30, everything else = $16.
+    if is_27:
+        per_game_override = event.get("per_game_addon")
+        if per_game_override is not None and per_game_override != "":
+            try:
+                per_game = float(per_game_override)
+            except (TypeError, ValueError):
+                per_game = _PER_GAME_ADDON_27
+        else:
+            per_game = _PER_GAME_ADDON_27
+    elif holes_str == "18" and not is_combo:
+        per_game = _PER_GAME_ADDON_18
+    else:
+        per_game = _PER_GAME_ADDON
     if games_upper in ("BOTH",):
         game_addon = per_game * 2
     elif games_upper in ("NET", "GROSS"):
@@ -9150,7 +9175,7 @@ def apply_credit_to_rsvp(
         # HOLES column on 18-hole registrations.
         _evt_fmt = (event.get("format") or "")
         _is_combo = "combo" in _evt_fmt.lower() or "9/18" in _evt_fmt
-        if _evt_fmt == "18 Holes":
+        if _evt_fmt == "18 Holes" or _evt_fmt == "27 Holes":
             u_holes = "18"
         elif _evt_fmt == "9 Holes":
             u_holes = "9"
@@ -14758,7 +14783,7 @@ def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
     hole buckets that actually have players.
     """
     is_combo = "combo" in (event.get("format") or "").lower()
-    default_holes = "18" if event.get("format") == "18 Holes" else "9"
+    default_holes = "18" if event.get("format") in ("18 Holes", "27 Holes") else "9"
 
     parent_items = [i for i in all_items if not i.get("parent_item_id")]
     active_parents = [i for i in parent_items
@@ -21344,13 +21369,13 @@ def generate_event_pairings(
         h = (item.get("holes") or "").strip()
         if h in ("9", "18"):
             return h
-        return "18" if fmt == "18 Holes" else "9"
+        return "18" if fmt in ("18 Holes", "27 Holes") else "9"
 
     # ── Separate players by holes ─────────────────────────────────────
     nines = [i for i in items if player_holes(i) == "9"]
     eighteens = [i for i in items if player_holes(i) == "18"]
     if not is_combo:
-        if fmt == "18 Holes":
+        if fmt in ("18 Holes", "27 Holes"):
             eighteens, nines = items, []
         else:
             nines, eighteens = items, []
