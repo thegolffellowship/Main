@@ -3859,7 +3859,7 @@
 
             grp.players.forEach((player, idx) => {
                 const isCart1 = player.cart_pos <= 2;
-                const cartDot = isCart1 ? 'var(--accent)' : 'var(--green)';
+                const cartDot = isCart1 ? '#3b82f6' : '#22c55e';
                 const isSelectedPlayer = state.swapMode === 'player' && state.selection &&
                     state.selection.holes === holes && state.selection.group_num === grp.group_num &&
                     state.selection.cart_pos === player.cart_pos;
