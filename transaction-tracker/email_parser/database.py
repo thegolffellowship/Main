@@ -21291,18 +21291,25 @@ def generate_event_pairings(
         is_combo = fmt == "9/18 Combo"
 
         # ── Active players for this event ─────────────────────────────
+        # Join via item_name + aliases (event_id backfill is incomplete on live DB)
         INACTIVE = ("credited", "refunded", "transferred", "wd")
         ph = ",".join("?" * len(INACTIVE))
         items = conn.execute(
             f"""
-            SELECT i.customer, i.holes, i.tee_choice, i.partner_request
+            SELECT DISTINCT i.customer, i.holes, i.tee_choice, i.partner_request
             FROM items i
-            WHERE i.event_id = ?
+            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+            JOIN events e ON e.id = ?
+            WHERE (
+                i.item_name = e.item_name COLLATE NOCASE
+                OR i.item_name = ea.alias_name COLLATE NOCASE
+                OR i.event_id = ?
+            )
               AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
               AND i.parent_item_id IS NULL
             ORDER BY i.customer COLLATE NOCASE
             """,
-            (event_id, *INACTIVE),
+            (event_id, event_id, *INACTIVE),
         ).fetchall()
         items = [dict(r) for r in items]
 
