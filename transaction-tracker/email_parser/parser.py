@@ -142,7 +142,6 @@ FIELD-SPECIFIC GUIDANCE:
   "BOTH", or "NONE". If the text says "No Additional Games" that is "NONE". \
   If the text says "EVENT Only" that is "NONE". \
   If the text contains "BOTH NET & GROSS" that is "BOTH".
-- "handicap": The numeric handicap value only (for event registrations).
 - "has_handicap": For MEMBERSHIP items only — "YES" or "NO" from the \
   "Do you have a Current Handicap?" field. For events, set to null.
 - "returning_or_new": For MEMBERSHIP items — "New" or "Returning" from \
@@ -242,7 +241,6 @@ Return this exact JSON structure:
       "quantity": "<integer — number of units purchased, default 1>",
       "chapter": "<city/chapter — Austin, San Antonio, Dallas, etc.>",
       "course": "<golf course name if mentioned>",
-      "handicap": "<numeric handicap value if mentioned>",
       "has_handicap": "<YES or NO — membership only, null for events>",
       "side_games": "<NET, GROSS, BOTH, or NONE — see rules above>",
       "tee_choice": "<<50, 50-64, 65+, or Forward>",
@@ -880,7 +878,9 @@ def parse_email(email_data: dict) -> list[dict]:
             "quantity": item.get("quantity") or 1,
             "chapter": _normalize_chapter(item.get("chapter")),
             "course": _normalize_course_name(item.get("course")),
-            "handicap": item.get("handicap"),
+            # handicap intentionally NOT extracted from orders — canonical
+            # source is handicap_rounds (computed) and handicap_player_links.
+            "handicap": None,
             "has_handicap": item.get("has_handicap"),
             "side_games": item.get("side_games"),
             "tee_choice": _normalize_tee_choice(item.get("tee_choice")),
