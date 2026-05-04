@@ -2487,9 +2487,17 @@ def init_db(db_path: str | Path | None = None) -> None:
         # Customer memberships table + backfill from parsed `membership` items.
         # Idempotent — UNIQUE(customer_id, started_at) prevents dupes.
         try:
-            from .memberships import ensure_membership_tables, backfill_memberships_from_items
+            from .memberships import (
+                ensure_membership_tables,
+                backfill_memberships_from_items,
+                sync_player_status_with_terms,
+            )
             ensure_membership_tables(conn)
             backfill_memberships_from_items(conn)
+            # Reconcile current_player_status against the term data: lapsed
+            # terms → expired_member, renewed terms → active_member. Runs
+            # AFTER backfill so newly-seeded terms are considered.
+            sync_player_status_with_terms(conn)
         except Exception as e:
             logger.warning("customer_memberships migration/backfill failed: %s", e)
 

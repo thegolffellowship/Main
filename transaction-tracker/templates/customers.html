@@ -478,11 +478,24 @@
     // Derive customer status from roles + current_player_status + transaction history.
     // Roles and player_status are the authoritative inputs (set on the customer record);
     // items are the fallback for customers we haven't yet tagged on the Info tab.
-    function deriveStatus(items, roles, currentPlayerStatus) {
+    /** True if the customer's latest membership term has expired. */
+    function isMembershipLapsed(membershipTerm) {
+        if (!membershipTerm || !membershipTerm.expires_at) return false;
+        const today = new Date().toISOString().slice(0, 10);
+        return String(membershipTerm.expires_at).slice(0, 10) < today;
+    }
+
+    function deriveStatus(items, roles, currentPlayerStatus, membershipTerm) {
         roles = Array.isArray(roles) ? roles : [];
         const itemCount = Array.isArray(items) ? items.length : 0;
         const ELEVATED = ['owner', 'admin', 'manager', 'golfer'];
         if (roles.some(r => ELEVATED.includes(r))) return "MEMBER";
+
+        // A lapsed membership term beats the "they bought a membership" rule:
+        // someone whose term has actually ended should read FORMER, not
+        // MEMBER, regardless of historical purchases.  Renewing flips this
+        // back automatically (via the new term's expires_at).
+        if (isMembershipLapsed(membershipTerm)) return "FORMER";
 
         // A TGF Membership purchase auto-promotes to MEMBER regardless of
         // stored player_status (catches cases where the status hasn't been
@@ -693,6 +706,9 @@
         // Derive status and chapter for each customer
         const customers = Object.values(map);
         customers.forEach(c => {
+            // Initial pass — roles, current_player_status, membershipTerm all
+            // get overlaid asynchronously in init() and trigger a recompute
+            // (around line 3635) once they land.
             c.status = deriveStatus(c.items);
             c.chapter = deriveChapter(c.items);
             delete c._emailDate;  // clean up helper property
@@ -1358,10 +1374,19 @@
             inactive: 'FORMER',
             expired_member: 'FORMER',
         };
+        // A lapsed membership term overrides the stored status to FORMER —
+        // the daily scheduler eventually flips current_player_status itself,
+        // but this guarantees an immediate, consistent view regardless of
+        // when the cron last ran.
+        const lapsed = isMembershipLapsed(customer.membershipTerm);
         const cps = customer.current_player_status;
+        const displayStatus = lapsed ? 'FORMER' : (cps ? (statusLabels[cps] || cps) : null);
+        const statusNote = lapsed && cps !== 'expired_member' && cps !== 'inactive'
+            ? ` <span style="color:var(--text-muted); font-size:0.72rem; font-style:italic;">(membership term lapsed ${customer.membershipTerm.expires_at})</span>`
+            : '';
         html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
             <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Member Status</div>
-            <div style="font-size:0.82rem;">${cps ? escapeHtml(statusLabels[cps] || cps) : '<span style="color:var(--text-muted);">—</span>'}</div>
+            <div style="font-size:0.82rem;">${displayStatus ? escapeHtml(displayStatus) + statusNote : '<span style="color:var(--text-muted);">—</span>'}</div>
         </div>`;
 
         // Address section (read-only)
@@ -1639,6 +1664,10 @@
                     <option value="lapsed">T+14 lapsed: final notice + opt-in/out buttons</option>
                     <option value="confirmation">Confirmation: thanks for renewing</option>
                 </select>
+                <label class="notice-roster-toggle-wrap" style="display:inline-flex;align-items:center;gap:0.3rem;font-size:0.78rem;cursor:pointer;color:var(--text-muted);" title="Append Golf Genius Keep-on-rosters / Remove-from-rosters buttons to the body — useful for lapsed members who might prefer to gracefully step away rather than renew.">
+                    <input type="checkbox" class="notice-roster-toggle" style="accent-color:#16a34a;">
+                    Include opt-in/out buttons
+                </label>
                 <span class="notice-status" style="margin-left:auto;font-size:0.78rem;color:var(--text-muted);"></span>
             </div>
             <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.4rem;">
@@ -1666,16 +1695,29 @@
         const iframe = overlay.querySelector('.notice-preview');
         const sendBtn = overlay.querySelector('.notice-send');
         const status = overlay.querySelector('.notice-status');
+        const rosterToggle = overlay.querySelector('.notice-roster-toggle');
+        const rosterToggleWrap = overlay.querySelector('.notice-roster-toggle-wrap');
         // Track the auto-generated subject for the current window so Reset works
         // and we know whether the admin has edited it.
         let lastAutoSubject = '';
 
         async function loadPreview() {
             const window = sel.value;
+            // The lapsed final notice always includes the opt-in/out buttons by
+            // design — disable + visually grey out the toggle so admins don't
+            // get confused.  The other windows let the admin choose.
+            const isLapsed = window === 'lapsed';
+            const isConfirmation = window === 'confirmation';
+            rosterToggle.disabled = isLapsed || isConfirmation;
+            rosterToggleWrap.style.opacity = (isLapsed || isConfirmation) ? '0.5' : '1';
+            if (isLapsed) rosterToggle.checked = true;        // shown for clarity
+            if (isConfirmation) rosterToggle.checked = false; // doesn't make sense
+            const withRoster = rosterToggle.checked && !isConfirmation;
             status.textContent = 'Loading…';
             sendBtn.disabled = true;
             try {
-                const res = await fetch(`/api/memberships/${termId}/preview-notice?window=${encodeURIComponent(window)}`);
+                const params = new URLSearchParams({window, with_roster_buttons: withRoster ? '1' : '0'});
+                const res = await fetch(`/api/memberships/${termId}/preview-notice?${params}`);
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
                     throw new Error(err.error || `Server returned ${res.status}`);
@@ -1705,18 +1747,23 @@
         }
 
         sel.addEventListener('change', loadPreview);
+        rosterToggle.addEventListener('change', loadPreview);
         subjReset.addEventListener('click', () => { subjInput.value = lastAutoSubject; });
         overlay.querySelector('.notice-cancel').addEventListener('click', () => overlay.remove());
         sendBtn.addEventListener('click', async () => {
             const window = sel.value;
             const subject = (subjInput.value || '').trim();
             if (!subject) { alert('Subject is required'); return; }
-            if (!confirm(`Send the "${sel.options[sel.selectedIndex].text}" email now?\n\nSubject: ${subject}`)) return;
+            const withRoster = rosterToggle.checked && window !== 'confirmation';
+            if (!confirm(`Send the "${sel.options[sel.selectedIndex].text}" email now?\n\nSubject: ${subject}${withRoster && window !== 'lapsed' ? '\n(with opt-in/out buttons)' : ''}`)) return;
             sendBtn.disabled = true;
             sendBtn.textContent = 'Sending…';
             try {
                 const body = { window };
                 if (subject !== lastAutoSubject) body.subject = subject;
+                // Lapsed always includes the buttons by design — only pass the
+                // flag for the other windows where the toggle changes behavior.
+                if (withRoster && window !== 'lapsed') body.with_roster_buttons = true;
                 const res = await fetch(`/api/memberships/${termId}/send-notice`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3618,8 +3665,10 @@
                             if (info.chapter) c.chapter = info.chapter;
                         }
                     }
-                    // Recompute status now that roles + player_status are known
-                    c.status = deriveStatus(c.items, c.roles, c.current_player_status);
+                    // Recompute status now that roles + player_status are known.
+                    // c.membershipTerm is overlaid earlier in init() — if it's
+                    // lapsed, deriveStatus returns FORMER regardless of items/roles.
+                    c.status = deriveStatus(c.items, c.roles, c.current_player_status, c.membershipTerm);
                 });
             } catch (e) { /* roles data optional */ }
 

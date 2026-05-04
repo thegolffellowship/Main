@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.11.4";
+window.TGF_VERSION = "2.11.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.11.5",
+    date: "2026-05-04",
+    title: "Membership: lapsed → FORMER (auto), opt-in/out toggle on Send Notice Now",
+    changes: [
+      "Member Status now flips to FORMER automatically when a customer's latest membership term is lapsed. Frontend deriveStatus() consults c.membershipTerm and returns FORMER over the 'they bought a membership = MEMBER' rule. Backend has a new sync_player_status_with_terms helper that runs at boot and inside the daily scheduler — flips active_member/member_plus → expired_member when latest term has expires_at < today, and back to active_member when a renewal lands. Idempotent.",
+      "The Member Status field on the Info tab also overrides to FORMER for lapsed terms, with a small italic '(membership term lapsed YYYY-MM-DD)' note when the stored player_status hasn't caught up yet (e.g. between deploys).",
+      "Send Notice Now modal now has an 'Include opt-in/out buttons' checkbox — appends the Golf Genius keep-on-rosters / remove-from-rosters block (with HMAC-signed one-click links + admin notification) to T-30 / T-7 / T-0 emails. Useful for lapsed members who might prefer to gracefully step away rather than renew. The lapsed final notice always includes the buttons by design (toggle disabled). Confirmation email never includes them (toggle disabled).",
+      "Roster buttons block extracted into _roster_buttons_block() helper so all five email windows can share one definition.",
+    ],
+  },
   {
     version: "2.11.4",
     date: "2026-05-04",

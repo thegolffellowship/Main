@@ -3030,12 +3030,14 @@ def api_preview_membership_notice(term_id):
     """Render a notice email for a specific term without sending it.
 
     Query: ?window=30d|7d|dayof|lapsed|confirmation
+           ?with_roster_buttons=1 (optional — include Golf Genius opt-in/out buttons)
     Returns: {to, subject, html, term, customer, can_send, reason}
     """
     window = (request.args.get("window") or "").strip()
+    with_roster = request.args.get("with_roster_buttons") in ("1", "true", "yes")
     from email_parser.memberships import preview_notice
     try:
-        preview = preview_notice(term_id, window)
+        preview = preview_notice(term_id, window, with_roster_buttons=with_roster)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify(preview)
@@ -3047,15 +3049,18 @@ def api_send_membership_notice(term_id):
     """Send a specific notice for a term right now and stamp the matching column.
 
     Body: {window: "30d" | "7d" | "dayof" | "lapsed" | "confirmation",
-           subject?: "optional admin-edited subject"}
+           subject?: "optional admin-edited subject",
+           with_roster_buttons?: bool — include Golf Genius opt-in/out buttons}
     """
     data = request.get_json(force=True) or {}
     window = (data.get("window") or "").strip()
     subject_override = (data.get("subject") or "").strip() or None
+    with_roster = bool(data.get("with_roster_buttons"))
     from email_parser.memberships import send_notice_now
     result = send_notice_now(
         term_id, window, _membership_send_email,
         subject_override=subject_override,
+        with_roster_buttons=with_roster,
     )
     if not result.get("ok"):
         return jsonify(result), 400

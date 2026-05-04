@@ -232,6 +232,74 @@ def get_memberships_for_customer(customer_id: int, db_path=None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def sync_player_status_with_terms(conn: sqlite3.Connection) -> dict:
+    """Reconcile `customers.current_player_status` against `customer_memberships`.
+
+    Idempotent — runs at boot and inside the daily scheduler.
+
+    Two passes (mirror image of each other):
+
+    1. **Downgrade** active_member / member_plus to expired_member when their
+       latest term has expires_at < today.  A lapsed membership shouldn't
+       still read as "MEMBER" on the Customers list.
+    2. **Upgrade** expired_member / inactive / first_timer / active_guest to
+       active_member when their latest term is currently active
+       (expires_at >= today) — covers the renewal case (Phase 1A wouldn't
+       upgrade an expired_member on its own).
+
+    Customers without any term row are left untouched — `_migrate_autocorrect_player_status`
+    handles those (membership-item lookup, first-timer demote, etc.).
+
+    Returns counts: {downgraded, upgraded}.
+    """
+    ensure_membership_tables(conn)
+
+    # Latest term per customer joined back so we can branch on its expires_at.
+    latest_sql = """
+        SELECT m.customer_id, m.expires_at
+          FROM customer_memberships m
+          JOIN (
+              SELECT customer_id, MAX(started_at) AS latest
+                FROM customer_memberships
+               GROUP BY customer_id
+          ) lp ON lp.customer_id = m.customer_id AND lp.latest = m.started_at
+    """
+
+    downgraded = conn.execute(
+        f"""
+        UPDATE customers
+           SET current_player_status = 'expired_member',
+               updated_at = CURRENT_TIMESTAMP
+         WHERE customer_id IN (
+             SELECT customer_id FROM ({latest_sql})
+              WHERE expires_at < DATE('now')
+         )
+           AND current_player_status IN ('active_member', 'member_plus')
+        """
+    ).rowcount
+
+    upgraded = conn.execute(
+        f"""
+        UPDATE customers
+           SET current_player_status = 'active_member',
+               updated_at = CURRENT_TIMESTAMP
+         WHERE customer_id IN (
+             SELECT customer_id FROM ({latest_sql})
+              WHERE expires_at >= DATE('now')
+         )
+           AND current_player_status IN ('expired_member', 'inactive', 'first_timer', 'active_guest')
+        """
+    ).rowcount
+
+    if downgraded or upgraded:
+        conn.commit()
+        logger.info(
+            "sync_player_status_with_terms: %d downgraded to expired_member, %d upgraded to active_member",
+            downgraded, upgraded,
+        )
+    return {"downgraded": downgraded, "upgraded": upgraded}
+
+
 def get_current_term_map(db_path=None) -> dict:
     """Return {customer_id: {started_at, expires_at, source, ...}} for all customers.
 
@@ -476,6 +544,28 @@ def _renew_button(label: str = "Renew Membership — $75") -> str:
 <p style="font-size:0.82rem; color:#6b7280; margin-top:-0.5rem;">Or paste this link into your browser: <a href="{url}" style="color:#2563eb;">{url}</a></p>"""
 
 
+def _roster_buttons_block(term: dict) -> str:
+    """Render the Golf Genius opt-in/out buttons + plain-text fallback.
+
+    Used by the lapsed final-notice template (always) and optionally by
+    the other windows when the admin checks "Include opt-in/out buttons"
+    in the Send Notice Now modal — useful when sending an early reminder
+    to a lapsed member who might want to gracefully step away rather than
+    renew.
+    """
+    keep_url, remove_url = _roster_action_urls(term)
+    return f"""<p><strong>About Golf Genius:</strong> unless we hear from you, we'll be removing you from the rosters that deliver our weekly event invitations. One click is enough — let us know which you'd prefer:</p>
+<p style="margin:1.25rem 0;">
+  <a href="{keep_url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600; margin-right:0.5rem;">✅ Keep me on the invite list</a>
+  <a href="{remove_url}" style="display:inline-block; background:#dc2626; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600;">❌ Remove me from the rosters</a>
+</p>
+<p style="font-size:0.82rem; color:#6b7280;">If the buttons don't work in your email client:<br>
+  Keep on rosters: <a href="{keep_url}" style="color:#2563eb;">{keep_url}</a><br>
+  Remove from rosters: <a href="{remove_url}" style="color:#2563eb;">{remove_url}</a>
+</p>
+<p>Either button notifies our admin team at <a href="mailto:{ADMIN_NOTIFY_EMAIL}" style="color:#2563eb;">{ADMIN_NOTIFY_EMAIL}</a>. If we don't hear back at all in the next {NO_RESPONSE_DIGEST_DAYS} days, we'll go ahead and remove you from the rosters — no hard feelings, you're always welcome back.</p>"""
+
+
 def _time_phrase(days_left: int) -> str:
     """Human-readable phrase for `days_left` between today and expires_at.
 
@@ -494,12 +584,21 @@ def _time_phrase(days_left: int) -> str:
     return f"{abs(days_left)} days ago"
 
 
-def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, str]:
+def render_notice_email(
+    window: str,
+    term: dict,
+    customer: dict,
+    with_roster_buttons: bool = False,
+) -> tuple[str, str]:
     """Return (subject, html_body) for a given notice window.
 
     `window` ∈ {"30d", "7d", "dayof", "lapsed"}.
     `term` has at minimum: expires_at.
     `customer` has at minimum: first_name.
+    `with_roster_buttons` — when True (and window != "lapsed"), append the
+    Golf Genius opt-in/out buttons block to the body. Useful for sending an
+    early reminder to a lapsed member who might want to gracefully bow out.
+    The lapsed window always includes the buttons regardless of this flag.
 
     Subject AND body language are computed from the **actual** days remaining
     (today vs `expires_at`), not the window label, so a manually-fired
@@ -539,6 +638,10 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
     else:
         state_phrase = f"lapsed on <strong>{expires_pretty}</strong> ({days_lapsed} days ago)"
 
+    # Optional Golf Genius opt-in/out block — appended to the body for
+    # non-lapsed windows when the admin opts in via Send Notice Now.
+    extra_block = _roster_buttons_block(term) if with_roster_buttons else ""
+
     if window == "30d":
         if days_left > 0:
             opening = f"A heads-up that your membership in The Golf Fellowship {state_phrase}."
@@ -553,6 +656,7 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
 <p>{opening} Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap:</p>
 {_renew_button()}
 <p>{closing}</p>
+{extra_block}
 <p>Thanks for being part of The Golf Fellowship.</p>
 <p>— The Golf Fellowship</p>"""
         return soft_subject, _email_shell(body)
@@ -568,6 +672,7 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
 <p>{opening} Renewal is only <strong>$75 for the next 12 months</strong>:</p>
 {_renew_button()}
 <p>Once your renewal comes through, these reminders stop on their own.</p>
+{extra_block}
 <p>— The Golf Fellowship</p>"""
         return soft_subject, _email_shell(body)
 
@@ -582,25 +687,18 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
 <p>{opening} Renewal is only <strong>$75 for the next 12 months</strong>:</p>
 {_renew_button()}
 <p>Already renewed in the last 24 hours? Please ignore — your purchase will close out these notifications as soon as it parses.</p>
+{extra_block}
 <p>— The Golf Fellowship</p>"""
         return soft_subject, _email_shell(body)
 
     if window == "lapsed":
-        keep_url, remove_url = _roster_action_urls(term)
+        # The lapsed final notice ALWAYS includes the opt-in/out buttons —
+        # the with_roster_buttons flag is irrelevant here.
         subject = "Final notice — your TGF membership has lapsed"
         body = f"""<p>Hi {first_name},</p>
 <p>Your membership in The Golf Fellowship expired on <strong>{expires_pretty}</strong> ({days_lapsed} days ago) and we haven't seen a renewal come through yet. Renewal is still only <strong>$75 for the next 12 months</strong>:</p>
 {_renew_button()}
-<p><strong>About Golf Genius:</strong> unless we hear from you, we'll be removing you from the rosters that deliver our weekly event invitations. One click is enough — let us know which you'd prefer:</p>
-<p style="margin:1.25rem 0;">
-  <a href="{keep_url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600; margin-right:0.5rem;">✅ Keep me on the invite list</a>
-  <a href="{remove_url}" style="display:inline-block; background:#dc2626; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600;">❌ Remove me from the rosters</a>
-</p>
-<p style="font-size:0.82rem; color:#6b7280;">If the buttons don't work in your email client:<br>
-  Keep on rosters: <a href="{keep_url}" style="color:#2563eb;">{keep_url}</a><br>
-  Remove from rosters: <a href="{remove_url}" style="color:#2563eb;">{remove_url}</a>
-</p>
-<p>Either button notifies our admin team at <a href="mailto:{ADMIN_NOTIFY_EMAIL}" style="color:#2563eb;">{ADMIN_NOTIFY_EMAIL}</a>. If we don't hear back at all in the next {NO_RESPONSE_DIGEST_DAYS} days, we'll go ahead and remove you from the rosters — no hard feelings, you're always welcome back.</p>
+{_roster_buttons_block(term)}
 <p>Thanks,<br>The Golf Fellowship</p>"""
         return subject, _email_shell(body)
 
@@ -610,8 +708,17 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
 VALID_NOTICE_WINDOWS = {"30d", "7d", "dayof", "lapsed", "confirmation"}
 
 
-def preview_notice(term_id: int, window: str, db_path=None) -> dict:
+def preview_notice(
+    term_id: int,
+    window: str,
+    db_path=None,
+    with_roster_buttons: bool = False,
+) -> dict:
     """Render the notice email for an existing term WITHOUT sending it.
+
+    `with_roster_buttons` (optional) — append the Golf Genius opt-in/out
+    buttons block to the body. Ignored when window == "lapsed" (already
+    has them by design).
 
     Returns {to, subject, html, term, customer, can_send, reason}.  `can_send`
     is False when the recipient has no primary email on file (admin can still
@@ -654,7 +761,10 @@ def preview_notice(term_id: int, window: str, db_path=None) -> dict:
                     order_id = row["order_id"]
         subject, html = render_confirmation_email(term, customer, order_id)
     else:
-        subject, html = render_notice_email(window, term, customer)
+        subject, html = render_notice_email(
+            window, term, customer,
+            with_roster_buttons=with_roster_buttons,
+        )
     return {
         "to": cust["email"] or "",
         "subject": subject,
@@ -685,6 +795,7 @@ def send_notice_now(
     send_email: Callable,
     db_path=None,
     subject_override: Optional[str] = None,
+    with_roster_buttons: bool = False,
 ) -> dict:
     """Render + immediately send a notice for an existing term.
 
@@ -694,12 +805,14 @@ def send_notice_now(
     `subject_override` (optional) replaces the rendered subject — used by
     the Send Notice Now modal so admins can hand-edit the subject before
     sending without leaving the preview page.
+    `with_roster_buttons` (optional) — include Golf Genius opt-in/out
+    buttons in the body. Ignored when window == "lapsed".
 
     Returns {ok, sent_to, subject, stamped_column} or {ok: False, error}.
     """
     if window not in VALID_NOTICE_WINDOWS:
         return {"ok": False, "error": f"Unknown window: {window}"}
-    preview = preview_notice(term_id, window, db_path=db_path)
+    preview = preview_notice(term_id, window, db_path=db_path, with_roster_buttons=with_roster_buttons)
     if not preview["can_send"]:
         return {"ok": False, "error": preview["reason"]}
     subject = (subject_override or "").strip() or preview["subject"]
@@ -934,11 +1047,21 @@ def daily_membership_job(send_email: Callable) -> dict:
     counts = {
         "30d": 0, "7d": 0, "dayof": 0, "lapsed": 0,
         "confirmations": 0, "digest_sent": 0, "skipped_renewed": 0,
+        "status_downgraded": 0, "status_upgraded": 0,
     }
     today = date.today()
 
     with _connect() as conn:
         ensure_membership_tables(conn)
+        # Reconcile current_player_status against term state every run so
+        # FORMER badges flip the morning a term lapses, not at the next
+        # deploy.  Idempotent.
+        try:
+            sync = sync_player_status_with_terms(conn)
+            counts["status_downgraded"] = sync.get("downgraded", 0)
+            counts["status_upgraded"] = sync.get("upgraded", 0)
+        except Exception:
+            logger.exception("daily_membership_job: status sync failed")
 
         # 0. Renewal confirmations — for terms whose prior term had any
         # reminder sent and we haven't confirmed yet.
