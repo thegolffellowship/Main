@@ -84,6 +84,7 @@ def fetch_transaction_emails(
     client_secret: str,
     email_address: str,
     since_date: datetime | None = None,
+    until_date: datetime | None = None,
 ) -> list[dict]:
     """
     Connect to Microsoft Graph API and return a list of raw email dicts
@@ -104,12 +105,16 @@ def fetch_transaction_emails(
 
     # Format date for OData filter
     since_str = since_date.strftime("%Y-%m-%dT00:00:00Z")
+    odata_filter = f"receivedDateTime ge {since_str}"
+    if until_date is not None:
+        until_str = until_date.strftime("%Y-%m-%dT00:00:00Z")
+        odata_filter += f" and receivedDateTime lt {until_str}"
 
     results = []
     # Graph API endpoint for reading a user's messages
     base_url = f"{GRAPH_BASE}/users/{email_address}/messages"
     params = {
-        "$filter": f"receivedDateTime ge {since_str}",
+        "$filter": odata_filter,
         "$select": "id,subject,from,receivedDateTime,body,bodyPreview",
         "$top": "100",
         "$orderby": "receivedDateTime desc",

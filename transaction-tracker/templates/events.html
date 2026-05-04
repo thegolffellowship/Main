@@ -114,6 +114,90 @@
         .game-stat-badge strong {
             font-weight: 700;
         }
+        /* ── Pairings panel ─────────────────────────────────── */
+        .pairings-panel { padding: 0.5rem 0; }
+        .pairings-controls {
+            display: flex; align-items: center; gap: 0.5rem;
+            flex-wrap: wrap; padding: 0.25rem 0 0.6rem;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 0.6rem;
+        }
+        .pairings-control-group { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+        .pairings-mode-btn {
+            padding: 0.28rem 0.7rem; font-size: 0.78rem; font-weight: 600;
+            border: none; background: transparent; cursor: pointer; color: var(--text-muted);
+        }
+        .pairings-mode-btn.active { background: var(--primary); color: #fff; }
+        .pairings-mode-btn:hover:not(.active) { background: var(--bg-hover); }
+        .pairings-toggle-label { color: var(--text); }
+        .pairings-seed-toggle {
+            padding: 0.28rem 0.6rem; font-size: 0.78rem; border: 1px solid var(--border);
+            border-radius: 6px; cursor: pointer; background: transparent; color: var(--text-muted);
+        }
+        .pairings-seed-toggle:hover { border-color: var(--primary); color: var(--primary); }
+        .pairings-action-btn {
+            padding: 0.28rem 0.75rem; font-size: 0.8rem; font-weight: 600;
+            border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+            background: var(--bg); color: var(--text); transition: 0.15s;
+        }
+        .pairings-action-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .pairings-action-btn.generate-btn { border-color: var(--primary); color: var(--primary); }
+        .pairings-action-btn.generate-btn:hover { background: var(--primary); color: #fff; }
+        .pairings-seeds-panel {
+            background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 8px; padding: 0.75rem; margin-bottom: 0.6rem;
+        }
+        .pairings-seed-row {
+            display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;
+            flex-wrap: wrap;
+        }
+        .seed-players { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+        .seed-player-select { border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); }
+        .pairings-seed-remove { border: none; background: none; cursor: pointer; padding: 0.1rem 0.3rem; }
+        .pairings-swap-bar {
+            display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0;
+            margin-bottom: 0.5rem; flex-wrap: wrap;
+        }
+        .pairings-swap-btn {
+            padding: 0.22rem 0.65rem; font-size: 0.76rem; font-weight: 600;
+            border: 1px solid var(--border); border-radius: 20px; cursor: pointer;
+            background: transparent; color: var(--text-muted); transition: 0.15s;
+        }
+        .pairings-swap-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .pairings-swap-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .pairings-groups-grid {
+            display: grid; gap: 0.75rem;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            margin-top: 0.25rem;
+        }
+        .pairing-group-card {
+            border: 1px solid var(--border); border-radius: 8px;
+            overflow: hidden; background: var(--bg);
+            transition: box-shadow 0.15s, border-color 0.15s;
+        }
+        .pairing-group-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .pairing-group-card.pairings-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
+        .pairing-group-header {
+            background: var(--bg-secondary); font-size: 0.75rem; font-weight: 700;
+            padding: 0.3rem 0.6rem; letter-spacing: 0.04em; color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+        }
+        .pairing-player-row {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.3rem 0.6rem; font-size: 0.82rem; cursor: default;
+            transition: background 0.12s;
+        }
+        .pairing-player-row:hover { background: var(--bg-hover); }
+        .pairing-player-row.pairings-selected { background: rgba(99,102,241,0.12); }
+        .pairing-cart-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .pairing-player-name { flex: 1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pairing-hcp { font-size: 0.75rem; color: var(--text-muted); min-width: 2.5rem; text-align: right; }
+        .pairing-tee { font-size: 0.72rem; color: var(--text-muted); min-width: 2.2rem; text-align: right; }
+        .pairing-cart-divider {
+            height: 1px; background: var(--border); margin: 0 0.6rem;
+        }
         /* Orphan banner */
         .orphan-banner {
             background: #fef3c7;
@@ -474,6 +558,7 @@
                     <div class="segmented-control" id="edit-event-format-group">
                         <label class="seg-option"><input type="radio" name="edit-event-format" value="9 Holes"> 9 Holes</label>
                         <label class="seg-option"><input type="radio" name="edit-event-format" value="18 Holes"> 18 Holes</label>
+                        <label class="seg-option"><input type="radio" name="edit-event-format" value="27 Holes"> 27 Holes</label>
                         <label class="seg-option"><input type="radio" name="edit-event-format" value="9/18 Combo"> 9/18 Combo</label>
                     </div>
                 </div>
@@ -578,13 +663,17 @@
                     <!-- Format indicator -->
                     <div id="edit-pricing-format-badge" style="margin-bottom:1rem; padding:0.4rem 0.75rem; background:#f0f4ff; border-radius:6px; font-size:0.82rem; font-weight:600; color:#3730a3; display:inline-block;"></div>
 
-                    <!-- Single format pricing (9 Holes or 18 Holes) -->
+                    <!-- Single format pricing (9 Holes, 18 Holes, or 27 Holes) -->
                     <div id="edit-pricing-single">
                         <div id="edit-single-calc"></div>
                         <div class="edit-grid" style="grid-template-columns: 1fr 1fr; margin-top:0.75rem;">
                             <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="edit-event-tgf_markup" class="modal-input" min="0" step="0.01" placeholder="e.g., 15.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Inc. Games ($)<input type="number" id="edit-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="edit-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
+                        </div>
+                        <!-- Per-Game Add ($) — only shown for 27 Holes events -->
+                        <div id="edit-per_game_addon-wrap" style="display:none; margin-top:0.5rem;">
+                            <label style="font-weight:600; font-size:0.82rem;">Per Game Add ($) <span style="font-weight:400; color:var(--text-muted); font-size:0.75rem;">— amount added per side game</span><input type="number" id="edit-event-per_game_addon" class="modal-input" min="0" step="0.01" placeholder="e.g., 27.00"></label>
                         </div>
                         <div id="edit-single-event-total" style="margin-top:0.5rem; padding:0.4rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; text-align:center; display:none;">
                             <span style="font-size:0.75rem; font-weight:600; color:var(--text-muted);">Member Event Cost</span>
@@ -672,6 +761,7 @@
                             <option value="GoDaddy">GoDaddy</option>
                             <option value="Venmo">Venmo</option>
                             <option value="Zelle">Zelle</option>
+                            <option value="PayPal">PayPal</option>
                         </select>
                     </label>
                 </div>
@@ -682,6 +772,7 @@
                             <option value="GoDaddy">GoDaddy</option>
                             <option value="Venmo">Venmo</option>
                             <option value="Zelle">Zelle</option>
+                            <option value="PayPal">PayPal</option>
                         </select>
                     </label>
                     <div style="margin-top:0.5rem; font-weight:600; font-size:0.85rem;">Select components to refund:</div>
@@ -723,6 +814,38 @@
             <div class="modal-actions" style="margin-top:0.75rem;">
                 <button type="button" id="wd-cancel" class="btn btn-secondary">Cancel</button>
                 <button type="button" id="wd-submit" class="btn btn-primary" style="background:#dc2626;">Approve WD</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pay Out WD Credit Modal -->
+    <div id="wd-payout-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2>Refund WD Credit</h2>
+                <button id="wd-payout-close" class="modal-close">&times;</button>
+            </div>
+            <div id="wd-payout-info" class="credit-info"></div>
+            <div class="credit-fields" style="margin-top:0.75rem; display:flex; flex-direction:column; gap:0.5rem;">
+                <label>Method
+                    <select id="wd-payout-method" class="modal-input">
+                        <option value="Venmo">Venmo</option>
+                        <option value="Zelle">Zelle</option>
+                        <option value="PayPal">PayPal</option>
+                        <option value="Check">Check</option>
+                        <option value="GoDaddy">GoDaddy</option>
+                    </select>
+                </label>
+                <label>Refund Date
+                    <input type="date" id="wd-payout-date" class="modal-input">
+                </label>
+                <label>Note (optional)
+                    <input type="text" id="wd-payout-note" class="modal-input" placeholder="e.g. paid via Venmo on 4/15">
+                </label>
+            </div>
+            <div class="modal-actions" style="margin-top:0.75rem;">
+                <button type="button" id="wd-payout-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="wd-payout-submit" class="btn btn-primary" style="background:#dc2626;">Record Refund</button>
             </div>
         </div>
     </div>
@@ -1136,6 +1259,7 @@
                     <div class="segmented-control" id="add-event-format-group">
                         <label class="seg-option"><input type="radio" name="add-event-format" value="9 Holes"> 9 Holes</label>
                         <label class="seg-option"><input type="radio" name="add-event-format" value="18 Holes"> 18 Holes</label>
+                        <label class="seg-option"><input type="radio" name="add-event-format" value="27 Holes"> 27 Holes</label>
                         <label class="seg-option"><input type="radio" name="add-event-format" value="9/18 Combo"> 9/18 Combo</label>
                     </div>
                 </div>
@@ -1232,13 +1356,17 @@
                 <div id="add-tab-pricing" class="add-tab-content" style="display:none;">
                     <span id="add-pricing-format-badge" style="display:inline-block; padding:0.2rem 0.6rem; border-radius:4px; font-size:0.75rem; font-weight:600; background:#e0e7ff; color:#3730a3; margin-bottom:0.75rem;">No format selected</span>
 
-                    <!-- Single format pricing -->
+                    <!-- Single format pricing (9 Holes, 18 Holes, or 27 Holes) -->
                     <div id="add-pricing-single">
                         <div id="add-single-calc"></div>
                         <div class="edit-grid" style="grid-template-columns: 1fr 1fr; margin-top:0.75rem;">
                             <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="add-event-tgf_markup" class="modal-input" min="0" step="0.01" placeholder="e.g., 15.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Inc. Games ($)<input type="number" id="add-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="add-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
+                        </div>
+                        <!-- Per-Game Add ($) — only shown for 27 Holes events -->
+                        <div id="add-per_game_addon-wrap" style="display:none; margin-top:0.5rem;">
+                            <label style="font-weight:600; font-size:0.82rem;">Per Game Add ($) <span style="font-weight:400; color:var(--text-muted); font-size:0.75rem;">— amount added per side game</span><input type="number" id="add-event-per_game_addon" class="modal-input" min="0" step="0.01" placeholder="e.g., 27.00"></label>
                         </div>
                         <div id="add-single-event-total" style="margin-top:0.5rem; padding:0.4rem; background:#f9fafb; border:1px solid var(--border); border-radius:6px; text-align:center; display:none;">
                             <span style="font-size:0.75rem; font-weight:600; color:var(--text-muted);">Member Event Cost</span>
@@ -1525,6 +1653,7 @@
     let rsvpCreditMap = {};  // keyed by event_name → { customerName: creditInfo }
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
     let pairingsOpenForEvent = {};  // keyed by event id → true if pairings panel is open
+    let pairingsData = {};          // keyed by event id → {groups_9, groups_18, slots_9, slots_18, isDirty, mode, protectPartners, seeds, swapMode, selection, loaded}
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
     let payoutsOpenForEvent = {};  // keyed by event id → true if payouts panel is open
     let tgfPayoutData = { customers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
@@ -1718,7 +1847,16 @@
     async function fetchItems() {
         try {
             const res = await fetch("/api/items");
-            allItems = await res.json();
+            if (!res.ok) {
+                console.warn("fetchItems: non-OK response", res.status);
+                return;
+            }
+            const data = await res.json();
+            if (!Array.isArray(data)) {
+                console.warn("fetchItems: response not an array, keeping previous", data);
+                return;
+            }
+            allItems = data;
         } catch (err) {
             console.error("Failed to fetch items:", err);
         }
@@ -2534,6 +2672,7 @@
         if (format) {
             if (format === "9 Holes") return 9;
             if (format === "18 Holes") return 18;
+            if (format === "27 Holes") return 18;  // 27 Holes uses the 18-hole side games matrix
         }
         // Fallback: legacy naming convention e.g. "e18.EventName"
         const m = (eventName || "").match(/^[a-z](\d+)\./i);
@@ -2651,7 +2790,7 @@
 
         // Determine holes type and if combo
         const isCombo = (ev.format || "").includes("Combo");
-        const defaultHoles = ev.format === "18 Holes" ? "18" : "9";
+        const defaultHoles = (ev.format === "18 Holes" || ev.format === "27 Holes") ? "18" : "9";
 
         function getPlayerHoles(r) {
             const h = String(r.holes || "");
@@ -3609,6 +3748,221 @@
         return { linked, combinedPot, thisEventTgfMVP };
     }
 
+    // ── Pairings ──────────────────────────────────────────────────────────────
+
+    function getPairingsState(evId) {
+        if (!pairingsData[evId]) {
+            pairingsData[evId] = {
+                groups_9: [], groups_18: [],
+                slots_9: [], slots_18: [],
+                isDirty: false, loaded: false,
+                mode: 'random', protectPartners: true,
+                seeds: [],
+                swapMode: null, selection: null,
+                showSeeds: false,
+            };
+        }
+        return pairingsData[evId];
+    }
+
+    function renderPairingsPanel(ev, registrants) {
+        const state = getPairingsState(ev.id);
+        const fmt = (ev.format || '').trim();
+        const isCombo = fmt === '9/18 Combo';
+        // 27 Holes is a single-day, 18-hole-style pairing layout
+        const is18Only = fmt === '18 Holes' || fmt === '27 Holes';
+        const INACTIVE = ['credited', 'refunded', 'transferred', 'wd'];
+        const active = registrants.filter(r => !r.parent_item_id && !INACTIVE.includes(r.transaction_status));
+        const count9 = active.filter(r => String(r.holes) === '9').length;
+        const count18 = active.filter(r => String(r.holes) === '18').length;
+
+        let html = '<div class="pairings-panel">';
+
+        // ── Controls bar ──────────────────────────────────────────────────────
+        html += '<div class="pairings-controls">';
+
+        // Mode toggle
+        html += '<div class="pairings-control-group">';
+        html += `<button class="pairings-mode-btn${state.mode === 'random' ? ' active' : ''}" data-ev-id="${ev.id}" data-pairings-mode="random">Random</button>`;
+        html += `<button class="pairings-mode-btn${state.mode === 'abcd' ? ' active' : ''}" data-ev-id="${ev.id}" data-pairings-mode="abcd">ABCD</button>`;
+        html += '</div>';
+
+        // Partner requests toggle (random mode only)
+        if (state.mode === 'random') {
+            html += `<label class="pairings-toggle-label" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;">
+                <input type="checkbox" data-ev-id="${ev.id}" data-pairings-partners="${ev.id}" ${state.protectPartners ? 'checked' : ''} style="cursor:pointer;">
+                Partner Requests
+            </label>`;
+        }
+
+        // Seed/lock toggle
+        html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" title="Pre-assign players to specific slots before generating">${state.showSeeds ? '&#x25B2; Locks' : '&#x25BC; Locks'}</button>`;
+
+        // Spacer
+        html += '<div style="flex:1;"></div>';
+
+        // Action buttons
+        html += `<button class="pairings-action-btn generate-btn" data-ev-id="${ev.id}" data-pairings-action="generate">&#x21BB; Generate</button>`;
+        if (state.groups_9.length || state.groups_18.length) {
+            html += `<button class="pairings-action-btn clear-btn" data-ev-id="${ev.id}" data-pairings-action="clear" style="color:var(--red);">&#x2715; Clear</button>`;
+            if (state.isDirty) {
+                html += `<button class="pairings-action-btn save-btn" data-ev-id="${ev.id}" data-pairings-action="save" style="background:var(--green);color:#fff;">&#x2713; Save</button>`;
+            } else {
+                html += `<span style="font-size:0.78rem;color:var(--text-muted);padding:0.25rem 0.5rem;">Saved</span>`;
+            }
+        }
+        html += '</div>'; // .pairings-controls
+
+        // ── Seed/Lock panel ───────────────────────────────────────────────────
+        if (state.showSeeds) {
+            html += '<div class="pairings-seeds-panel">';
+            html += '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Pre-assign players to specific slots. Generator fills remaining spots around locks.</div>';
+
+            const allSlots9 = state.slots_9.length ? state.slots_9 : (ev.tee_time_count ? Array.from({length: ev.tee_time_count}, (_, i) => `Group ${i+1}`) : []);
+            const allSlots18 = state.slots_18.length ? state.slots_18 : (ev.tee_time_count_18 ? Array.from({length: ev.tee_time_count_18}, (_, i) => `Group ${i+1}`) : []);
+            const seedSlots = isCombo ? [...allSlots9.map(s => ({l: s, h: '9'})), ...allSlots18.map(s => ({l: s, h: '18'}))] :
+                              is18Only ? allSlots18.map(s => ({l: s, h: '18'})) :
+                              allSlots9.map(s => ({l: s, h: '9'}));
+
+            const playerNames = active.map(r => r.customer).filter(Boolean).sort();
+
+            // Existing seeds
+            state.seeds.forEach((seed, si) => {
+                const slotLabel = seed.slot_index < seedSlots.length ? seedSlots[seed.slot_index].l : `Slot ${seed.slot_index + 1}`;
+                const holesLabel = seed.holes === '18' ? '18-hole' : '9-hole';
+                html += `<div class="pairings-seed-row" data-seed-idx="${si}">`;
+                html += `<span style="font-size:0.8rem;font-weight:600;">${slotLabel} <span style="color:var(--text-muted);font-weight:400;">(${holesLabel})</span></span>`;
+                html += '<div class="seed-players">';
+                for (let cp = 1; cp <= 4; cp++) {
+                    const locked = seed.players.find(p => p.cart_pos === cp);
+                    html += `<select class="seed-player-select" data-ev-id="${ev.id}" data-seed-idx="${si}" data-cart-pos="${cp}" style="font-size:0.78rem;padding:0.2rem;">
+                        <option value="">Pos ${cp}</option>
+                        ${playerNames.map(n => `<option value="${n}" ${locked && locked.name === n ? 'selected' : ''}>${n}</option>`).join('')}
+                    </select>`;
+                }
+                html += '</div>';
+                html += `<button class="pairings-seed-remove" data-ev-id="${ev.id}" data-seed-remove="${si}" style="color:var(--red);font-size:0.8rem;">&#x2715;</button>`;
+                html += '</div>';
+            });
+
+            // Add lock button + slot selector
+            if (seedSlots.length > 0) {
+                html += '<div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.4rem;">';
+                html += `<select id="new-seed-slot-${ev.id}" style="font-size:0.8rem;padding:0.2rem;">`;
+                seedSlots.forEach((s, i) => {
+                    html += `<option value="${i}">${s.l}${isCombo ? ` (${s.h}-hole)` : ''}</option>`;
+                });
+                html += '</select>';
+                html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-pairings-action="add-seed" style="font-size:0.8rem;padding:0.2rem 0.6rem;">+ Add Lock</button>`;
+                html += '</div>';
+            }
+            html += '</div>'; // .pairings-seeds-panel
+        }
+
+        // ── Swap mode selector ────────────────────────────────────────────────
+        if (state.groups_9.length || state.groups_18.length) {
+            html += '<div class="pairings-swap-bar">';
+            html += '<span style="font-size:0.78rem;color:var(--text-muted);font-weight:600;">SWAP:</span>';
+            const swapModes = [['player', 'Player'], ['cartpair', 'Cart Pair'], ['group', 'Group']];
+            swapModes.forEach(([val, label]) => {
+                html += `<button class="pairings-swap-btn${state.swapMode === val ? ' active' : ''}" data-ev-id="${ev.id}" data-swap-mode="${val}">${label}</button>`;
+            });
+            if (state.swapMode) {
+                html += `<span style="font-size:0.78rem;color:var(--accent);margin-left:0.5rem;">${state.selection ? 'Click a second item to swap' : 'Click an item to select'}</span>`;
+            }
+            html += '</div>';
+        }
+
+        // ── Groups ────────────────────────────────────────────────────────────
+        if (!state.loaded) {
+            html += '<div style="padding:1.5rem;text-align:center;color:var(--text-muted);">Loading&hellip;</div>';
+        } else if (!state.groups_9.length && !state.groups_18.length) {
+            html += '<div style="padding:1.5rem;text-align:center;color:var(--text-muted);">No pairings yet. Hit <strong>Generate</strong> to create groups.</div>';
+        } else {
+            if (isCombo || !is18Only) {
+                html += renderPairingGroups(ev, state, '9', state.groups_9);
+            }
+            if (isCombo || is18Only) {
+                html += renderPairingGroups(ev, state, '18', state.groups_18);
+            }
+        }
+
+        html += '</div>'; // .pairings-panel
+        return html;
+    }
+
+    function renderPairingGroups(ev, state, holes, groups) {
+        if (!groups || !groups.length) return '';
+        const fmt = (ev.format || '').trim();
+        const isCombo = fmt === '9/18 Combo';
+        const isStartType = holes === '9' ? ev.start_type : ev.start_type_18;
+        const isShotgun = isStartType === 'Shotgun';
+        const foursomes = groups.filter(g => g.players.length >= 4).length;
+        const threesomes = groups.filter(g => g.players.length < 4 && g.players.length > 0).length;
+
+        let html = '';
+        if (isCombo) {
+            html += `<div style="font-weight:700;font-size:0.78rem;letter-spacing:0.06em;color:var(--text-muted);padding:0.6rem 0 0.3rem;">${holes}-HOLE PAIRINGS &mdash; ${groups.length} groups (${foursomes} foursomes${threesomes ? `, ${threesomes} threesomes` : ''})</div>`;
+        }
+
+        html += '<div class="pairings-groups-grid">';
+        groups.forEach(grp => {
+            const isSelected = state.swapMode === 'group' && state.selection &&
+                state.selection.holes === holes && state.selection.group_num === grp.group_num;
+            html += `<div class="pairing-group-card${isSelected ? ' pairings-selected' : ''}" data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}">`;
+            html += `<div class="pairing-group-header">${escapeHtml(grp.slot_label)}${isShotgun ? ' <span style="color:var(--text-muted);font-size:0.75em;">(Hole)</span>' : ''}</div>`;
+
+            grp.players.forEach((player, idx) => {
+                const isCart1 = player.cart_pos <= 2;
+                const cartDot = isCart1 ? '#3b82f6' : '#22c55e';
+                const isSelectedPlayer = state.swapMode === 'player' && state.selection &&
+                    state.selection.holes === holes && state.selection.group_num === grp.group_num &&
+                    state.selection.cart_pos === player.cart_pos;
+                const isSelectedPair = state.swapMode === 'cartpair' && state.selection &&
+                    state.selection.holes === holes && state.selection.group_num === grp.group_num &&
+                    (player.cart_pos <= 2) === (state.selection.cart_pos <= 2);
+
+                const hcp = player.handicap_index != null ? Number(player.handicap_index).toFixed(1) : '—';
+
+                // Cart divider between positions 2 and 3
+                if (idx === 2 && grp.players.length > 2) {
+                    html += '<div class="pairing-cart-divider"></div>';
+                }
+
+                html += `<div class="pairing-player-row${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
+                    data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
+                html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
+                html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+                html += `<span class="pairing-hcp">${hcp}</span>`;
+                html += `<span class="pairing-tee">${escapeHtml(player.tee_choice || '—')}</span>`;
+                html += '</div>';
+            });
+
+            html += '</div>'; // .pairing-group-card
+        });
+        html += '</div>'; // .pairings-groups-grid
+        return html;
+    }
+
+    async function loadPairings(evId) {
+        try {
+            const res = await fetch(`/api/events/${evId}/pairings`);
+            const data = await res.json();
+            const state = getPairingsState(evId);
+            state.slots_9 = data.slots_9 || [];
+            state.slots_18 = data.slots_18 || [];
+            state.groups_9 = (data.pairings && data.pairings['9']) ? data.pairings['9'] : [];
+            state.groups_18 = (data.pairings && data.pairings['18']) ? data.pairings['18'] : [];
+            state.isDirty = false;
+            state.loaded = true;
+        } catch (e) {
+            const state = getPairingsState(evId);
+            state.loaded = true;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -3972,7 +4326,7 @@
 
         // ---- PAIRINGS VIEW ----
         if (pairingsView) {
-            html += '<div style="padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:0.95rem;"><strong>Feature Coming Soon!</strong></div>';
+            html += renderPairingsPanel(ev, registrants);
             return html;
         }
 
@@ -4396,6 +4750,9 @@
                 if (!isCreditPoolRow(r)) {
                     html += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
                 }
+                if (st === 'wd' && r.credit_amount) {
+                    html += ` <button class="btn" data-wd-payout-id="${r.id}" data-wd-payout-amount="${escapeHtml(r.credit_amount)}" data-wd-payout-name="${escapeHtml(r.customer || '')}" data-wd-payout-event="${escapeHtml(r.item_name || '')}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1; background:#dc2626; color:#fff;">Refund</button>`;
+                }
                 html += `</div>`;
             });
             html += '</div></div>';
@@ -4578,7 +4935,7 @@
 
         // PLAYERS / PAIRINGS / GAMES view toggle
         container.querySelectorAll("[data-toggle-games]").forEach(badge => {
-            badge.addEventListener("click", (e) => {
+            badge.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const val = badge.dataset.toggleGames;
                 gamesOpenForEvent[ev.id] = val === "1";
@@ -4586,8 +4943,18 @@
                 financialOpenForEvent[ev.id] = val === "3";
                 payoutsOpenForEvent[ev.id] = val === "4";
                 rerenderDetail(container, ev);
+                // Load saved pairings on first open
+                if (val === "2" && !getPairingsState(ev.id).loaded) {
+                    await loadPairings(ev.id);
+                    rerenderDetail(container, ev);
+                }
             });
         });
+
+        // ── Pairings handlers ─────────────────────────────────────────────────
+        if (pairingsOpenForEvent[ev.id]) {
+            attachPairingsHandlers(container, ev);
+        }
 
         // Game filter badges (PLAYERS view sub-filters)
         container.querySelectorAll(".game-stat-badge[data-filter]").forEach(badge => {
@@ -4860,6 +5227,17 @@
                 reverseEvCredit(parseInt(btn.dataset.reverseId));
             });
         });
+        container.querySelectorAll("[data-wd-payout-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openWdPayoutModal(
+                    parseInt(btn.dataset.wdPayoutId),
+                    btn.dataset.wdPayoutName || "",
+                    btn.dataset.wdPayoutEvent || "",
+                    btn.dataset.wdPayoutAmount || "",
+                );
+            });
+        });
         container.querySelectorAll("[data-wd-id]").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -5124,6 +5502,281 @@
         });
 
     }
+
+    // ── Pairings interaction handlers ─────────────────────────────────────────
+    function attachPairingsHandlers(container, ev) {
+        const state = getPairingsState(ev.id);
+
+        // Mode toggle
+        container.querySelectorAll('[data-pairings-mode]').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                state.mode = btn.dataset.pairingsMode;
+                state.swapMode = null; state.selection = null;
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Partner requests toggle
+        const partnerChk = container.querySelector(`[data-pairings-partners="${ev.id}"]`);
+        if (partnerChk) {
+            partnerChk.addEventListener('change', e => {
+                state.protectPartners = partnerChk.checked;
+            });
+        }
+
+        // Seed/lock toggle
+        container.querySelectorAll('.pairings-seed-toggle').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                state.showSeeds = !state.showSeeds;
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Generate / Clear / Save / Add-seed
+        container.querySelectorAll('[data-pairings-action]').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const action = btn.dataset.pairingsAction;
+
+                if (action === 'generate') {
+                    btn.textContent = 'Generating…';
+                    btn.disabled = true;
+                    try {
+                        const res = await fetch(`/api/events/${ev.id}/pairings/generate`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                mode: state.mode,
+                                protect_partner_requests: state.protectPartners,
+                                seeds: state.seeds,
+                            }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) { alert(data.error || 'Generation failed'); return; }
+                        state.groups_9 = data['9'] || [];
+                        state.groups_18 = data['18'] || [];
+                        state.slots_9 = data.slots_9 || [];
+                        state.slots_18 = data.slots_18 || [];
+                        state.isDirty = true;
+                        state.swapMode = null; state.selection = null;
+                        state.loaded = true;
+                    } catch (err) {
+                        alert('Failed to generate pairings.');
+                    }
+                    rerenderDetail(container, ev);
+                    return;
+                }
+
+                if (action === 'clear') {
+                    if (!confirm('Clear all pairings for this event?')) return;
+                    try {
+                        await fetch(`/api/events/${ev.id}/pairings`, {method: 'DELETE'});
+                    } catch(e) { /* ignore */ }
+                    state.groups_9 = []; state.groups_18 = [];
+                    state.isDirty = false; state.swapMode = null; state.selection = null;
+                    rerenderDetail(container, ev);
+                    return;
+                }
+
+                if (action === 'save') {
+                    btn.textContent = 'Saving…'; btn.disabled = true;
+                    try {
+                        const res = await fetch(`/api/events/${ev.id}/pairings/save`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                groups_by_holes: {
+                                    '9': state.groups_9,
+                                    '18': state.groups_18,
+                                },
+                            }),
+                        });
+                        if (!res.ok) { const d = await res.json(); alert(d.error || 'Save failed'); return; }
+                        state.isDirty = false;
+                    } catch(err) {
+                        alert('Failed to save pairings.');
+                    }
+                    rerenderDetail(container, ev);
+                    return;
+                }
+
+                if (action === 'add-seed') {
+                    const selEl = container.querySelector(`#new-seed-slot-${ev.id}`);
+                    const slotIdx = selEl ? parseInt(selEl.value) : 0;
+                    const fmt = (ev.format || '').trim();
+                    const isCombo = fmt === '9/18 Combo';
+                    const is18Only = fmt === '18 Holes' || fmt === '27 Holes';
+                    // Determine holes from slot index relative to slots array
+                    const slots9 = state.slots_9;
+                    const holes = isCombo
+                        ? (slotIdx < slots9.length ? '9' : '18')
+                        : (is18Only ? '18' : '9');
+                    const adjIdx = isCombo && slotIdx >= slots9.length ? slotIdx - slots9.length : slotIdx;
+                    // Don't add duplicate seed for same slot+holes
+                    if (!state.seeds.find(s => s.slot_index === adjIdx && s.holes === holes)) {
+                        state.seeds.push({holes, slot_index: adjIdx, players: []});
+                    }
+                    rerenderDetail(container, ev);
+                    return;
+                }
+            });
+        });
+
+        // Seed remove
+        container.querySelectorAll('[data-seed-remove]').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.seedRemove);
+                state.seeds.splice(idx, 1);
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Seed player select
+        container.querySelectorAll('.seed-player-select').forEach(sel => {
+            sel.addEventListener('change', e => {
+                const si = parseInt(sel.dataset.seedIdx);
+                const cp = parseInt(sel.dataset.cartPos);
+                const name = sel.value;
+                const seed = state.seeds[si];
+                if (!seed) return;
+                seed.players = seed.players.filter(p => p.cart_pos !== cp);
+                if (name) seed.players.push({name, cart_pos: cp});
+            });
+        });
+
+        // Swap mode buttons
+        container.querySelectorAll('[data-swap-mode]').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const mode = btn.dataset.swapMode;
+                if (state.swapMode === mode) {
+                    state.swapMode = null; state.selection = null;
+                } else {
+                    state.swapMode = mode; state.selection = null;
+                }
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Group card click (group-swap)
+        container.querySelectorAll('.pairing-group-card').forEach(card => {
+            card.addEventListener('click', e => {
+                if (state.swapMode !== 'group') return;
+                e.stopPropagation();
+                const holes = card.dataset.holes;
+                const groupNum = parseInt(card.dataset.groupNum);
+                if (!state.selection) {
+                    state.selection = {holes, group_num: groupNum};
+                    rerenderDetail(container, ev);
+                } else {
+                    if (state.selection.holes !== holes) {
+                        alert('Cannot swap groups between 9-hole and 18-hole players.');
+                        state.selection = null;
+                        rerenderDetail(container, ev);
+                        return;
+                    }
+                    _swapGroups(state, state.selection.holes, state.selection.group_num, holes, groupNum);
+                    state.isDirty = true; state.selection = null;
+                    rerenderDetail(container, ev);
+                }
+            });
+        });
+
+        // Player row click (player-swap or cartpair-swap)
+        container.querySelectorAll('.pairing-player-row').forEach(row => {
+            row.addEventListener('click', e => {
+                if (!state.swapMode || state.swapMode === 'group') return;
+                e.stopPropagation();
+                const holes = row.dataset.holes;
+                const groupNum = parseInt(row.dataset.groupNum);
+                const cartPos = parseInt(row.dataset.cartPos);
+                if (!state.selection) {
+                    state.selection = {holes, group_num: groupNum, cart_pos: cartPos};
+                    rerenderDetail(container, ev);
+                } else {
+                    if (state.selection.holes !== holes) {
+                        alert('Cannot swap 9-hole and 18-hole players.');
+                        state.selection = null;
+                        rerenderDetail(container, ev);
+                        return;
+                    }
+                    if (state.swapMode === 'player') {
+                        _swapPlayers(state, state.selection, {holes, group_num: groupNum, cart_pos: cartPos});
+                    } else if (state.swapMode === 'cartpair') {
+                        _swapCartPairs(state, state.selection, {holes, group_num: groupNum, cart_pos: cartPos});
+                    }
+                    state.isDirty = true; state.selection = null;
+                    rerenderDetail(container, ev);
+                }
+            });
+        });
+    }
+
+    function _findGroup(state, holes, groupNum) {
+        const list = holes === '18' ? state.groups_18 : state.groups_9;
+        return list.find(g => g.group_num === groupNum);
+    }
+
+    function _findPlayer(grp, cartPos) {
+        return grp.players.find(p => p.cart_pos === cartPos);
+    }
+
+    function _swapPlayers(state, a, b) {
+        const grpA = _findGroup(state, a.holes, a.group_num);
+        const grpB = _findGroup(state, b.holes, b.group_num);
+        if (!grpA || !grpB) return;
+        const pA = _findPlayer(grpA, a.cart_pos);
+        const pB = _findPlayer(grpB, b.cart_pos);
+        if (!pA || !pB) return;
+        // Swap names + metadata, keep cart positions in place
+        [pA.name, pB.name] = [pB.name, pA.name];
+        [pA.tee_choice, pB.tee_choice] = [pB.tee_choice, pA.tee_choice];
+        [pA.handicap_index, pB.handicap_index] = [pB.handicap_index, pA.handicap_index];
+    }
+
+    function _swapCartPairs(state, a, b) {
+        // a.cart_pos and b.cart_pos determine which cart (1-2 or 3-4)
+        const grpA = _findGroup(state, a.holes, a.group_num);
+        const grpB = _findGroup(state, b.holes, b.group_num);
+        if (!grpA || !grpB) return;
+        const isCart1A = a.cart_pos <= 2;
+        const isCart1B = b.cart_pos <= 2;
+        if (isCart1A === isCart1B && a.holes === b.holes && a.group_num === b.group_num) return; // same cart, no-op
+        const pairsA = grpA.players.filter(p => isCart1A ? p.cart_pos <= 2 : p.cart_pos > 2);
+        const pairsB = grpB.players.filter(p => isCart1B ? p.cart_pos <= 2 : p.cart_pos > 2);
+        // Swap player data between pairs (name, tee, hcp)
+        const minLen = Math.min(pairsA.length, pairsB.length);
+        for (let i = 0; i < minLen; i++) {
+            [pairsA[i].name, pairsB[i].name] = [pairsB[i].name, pairsA[i].name];
+            [pairsA[i].tee_choice, pairsB[i].tee_choice] = [pairsB[i].tee_choice, pairsA[i].tee_choice];
+            [pairsA[i].handicap_index, pairsB[i].handicap_index] = [pairsB[i].handicap_index, pairsA[i].handicap_index];
+        }
+        // If sizes differ, move the extra player
+        if (pairsA.length > pairsB.length) {
+            const extra = pairsA[minLen];
+            extra.cart_pos = pairsB.length > 0 ? (isCart1B ? 2 : 4) : (isCart1B ? 1 : 3);
+        } else if (pairsB.length > pairsA.length) {
+            const extra = pairsB[minLen];
+            extra.cart_pos = pairsA.length > 0 ? (isCart1A ? 2 : 4) : (isCart1A ? 1 : 3);
+        }
+    }
+
+    function _swapGroups(state, holesA, gnA, holesB, gnB) {
+        const listA = holesA === '18' ? state.groups_18 : state.groups_9;
+        const listB = holesB === '18' ? state.groups_18 : state.groups_9;
+        const idxA = listA.findIndex(g => g.group_num === gnA);
+        const idxB = listB.findIndex(g => g.group_num === gnB);
+        if (idxA === -1 || idxB === -1) return;
+        // Swap player arrays; keep slot_labels and group_nums in place
+        const playersA = listA[idxA].players;
+        listA[idxA].players = listB[idxB].players;
+        listB[idxB].players = playersA;
+    }
+
+    // ── End Pairings handlers ─────────────────────────────────────────────────
 
     // ---- Compose Message Modal Logic ----
     let composeEventName = "";
@@ -5946,6 +6599,7 @@
     const PRICING_DEFAULTS = {
         "9 Holes":    { tgf_markup: 8,  side_game_fee: 7 },
         "18 Holes":   { tgf_markup: 15, side_game_fee: 14 },
+        "27 Holes":   { tgf_markup: 22, side_game_fee: 14, per_game_addon: 27 },
         "9/18 Combo": {
             tgf_markup_9: 8,   side_game_fee_9: 7,
             tgf_markup_18: 15, side_game_fee_18: 7  // combo 18-hole side game = same as 9
@@ -5965,14 +6619,18 @@
         return { roundedCC, eventCharge, actualCharge, roundingDiff, effectiveMarkup, txFee, playerTotal };
     }
 
-    // Guest surcharge: +$10 for 9 Holes and 9/18 Combo, +$15 for standalone 18 Holes
-    // 1st Timer: Guest markup - $25 (can go negative as a discount)
+    // Guest surcharge: +$10 for 9 Holes and 9/18 Combo, +$15 for standalone 18 Holes,
+    // +$25 for 27 Holes. 1st Timer: Guest markup - $25 (can go negative as a discount).
+    // 27 Holes does not offer a 1st Timer tier (firstTimer === null).
     function getPlayerMarkups(memberMarkup, format) {
-        const guestExtra = (format === "18 Holes") ? 15 : 10;
+        let guestExtra;
+        if (format === "27 Holes") guestExtra = 25;
+        else if (format === "18 Holes") guestExtra = 15;
+        else guestExtra = 10;
         return {
             member: memberMarkup,
             guest: memberMarkup + guestExtra,
-            firstTimer: memberMarkup + guestExtra - 25
+            firstTimer: format === "27 Holes" ? null : (memberMarkup + guestExtra - 25)
         };
     }
 
@@ -6002,7 +6660,12 @@
 
     // Per-game add-on cost (added for With One Game / With Both Games tiers)
     // Standalone 18 Hole events: $30/game. 9 Holes and 9/18 Combo: $16/game.
-    function getPerGameAddon(format) {
+    // 27 Holes: customizable per event (default $27); pass override as 2nd arg.
+    function getPerGameAddon(format, override) {
+        if (override != null && override !== "" && !isNaN(Number(override))) {
+            return Number(override);
+        }
+        if (format === "27 Holes") return 27;
         return (format === "18 Holes") ? 30 : 16;
     }
 
@@ -6010,12 +6673,18 @@
         const markups = getPlayerMarkups(memberMarkup, format);
         const memberOnly = !!(opts && opts.memberOnly);
         const compact = !!(opts && opts.compact);
-        const addon = getPerGameAddon(format);
+        const addonOverride = (opts && opts.perGameAddon != null) ? opts.perGameAddon : null;
+        const addon = getPerGameAddon(format, addonOverride);
+        // 27 Holes has no 1st Timer tier
+        const includeFirstTimer = markups.firstTimer != null;
         const players = [
             { key: 'member',     label: 'Member',    mu: markups.member },
-            { key: 'guest',      label: 'Guest',     mu: markups.guest },
-            { key: 'firstTimer', label: '1st Timer',  mu: markups.firstTimer }
+            { key: 'guest',      label: 'Guest',     mu: markups.guest }
         ];
+        if (includeFirstTimer) {
+            players.push({ key: 'firstTimer', label: '1st Timer', mu: markups.firstTimer });
+        }
+        const colCount = players.length;
         // Event Only includes Inc. Games (sg) in base
         // Game tiers add PER_GAME_ADDON on top
         const tiers = [
@@ -6028,7 +6697,7 @@
         let html = '';
         tiers.forEach(tier => {
             html += `<div style="font-weight:700; font-size:${compact ? '0.65rem' : '0.72rem'}; margin-top:0.3rem; margin-bottom:0.1rem;">${tier.label}</div>`;
-            html += `<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.2rem;">`;
+            html += `<div style="display:grid; grid-template-columns:repeat(${colCount}, 1fr); gap:0.2rem;">`;
             players.forEach(p => {
                 const isNA = (memberOnly && p.key !== 'member')
                     || (tier.guestNA && p.key === 'guest')
@@ -6065,6 +6734,8 @@
         const mu = parseFloat(document.getElementById(prefix + "-event-tgf_markup")?.value) || 0;
         const sg = parseFloat(document.getElementById(prefix + "-event-side_game_fee")?.value) || 0;
         const tf = parseFloat(document.getElementById(prefix + "-event-transaction_fee_pct")?.value) || 0;
+        const addonRaw = document.getElementById(prefix + "-event-per_game_addon")?.value;
+        const perGameAddon = (addonRaw != null && addonRaw !== "") ? parseFloat(addonRaw) : null;
         const previewEl = document.getElementById(prefix + "-pricing-preview");
         const summaryEl = document.getElementById(prefix + "-pricing-summary");
         if (!previewEl || !summaryEl) return;
@@ -6074,7 +6745,7 @@
 
         const subtotal = cc + mu + sg;
         if (subtotal > 0) {
-            summaryEl.innerHTML = renderPlayerPricingGrid(cc, mu, sg, tf, format);
+            summaryEl.innerHTML = renderPlayerPricingGrid(cc, mu, sg, tf, format, { perGameAddon });
             previewEl.style.display = "block";
         } else {
             previewEl.style.display = "none";
@@ -6135,9 +6806,9 @@
         _updateComboPricingPreviewInner("add");
     }
 
-    // Live preview on pricing input change — single format (TGF markup, side game, tx fee)
+    // Live preview on pricing input change — single format (TGF markup, side game, tx fee, per-game addon)
     ["edit", "add"].forEach(prefix => {
-        ["tgf_markup", "side_game_fee", "transaction_fee_pct"].forEach(field => {
+        ["tgf_markup", "side_game_fee", "transaction_fee_pct", "per_game_addon"].forEach(field => {
             const el = document.getElementById(prefix + "-event-" + field);
             if (el) el.addEventListener("input", () => updatePricingPreview(prefix));
         });
@@ -6160,6 +6831,12 @@
         });
     });
 
+    // Show/hide the customizable Per-Game Add field — only for 27 Holes
+    function togglePerGameAddonField(prefix, format) {
+        const wrap = document.getElementById(prefix + "-per_game_addon-wrap");
+        if (wrap) wrap.style.display = (format === "27 Holes") ? "" : "none";
+    }
+
     // ---- Update Pricing Tab When Format Changes ----
     function updatePricingTabForFormat(format) {
         const badge = document.getElementById("edit-pricing-format-badge");
@@ -6170,6 +6847,7 @@
         const isCombo = format === "9/18 Combo";
         singleEl.style.display = isCombo ? "none" : "";
         comboEl.style.display = isCombo ? "" : "none";
+        togglePerGameAddonField("edit", format);
 
         // Auto-populate defaults if fields are empty
         const defaults = PRICING_DEFAULTS[format];
@@ -6192,9 +6870,13 @@
             const muEl = document.getElementById("edit-event-tgf_markup");
             const sgEl = document.getElementById("edit-event-side_game_fee");
             const tfEl = document.getElementById("edit-event-transaction_fee_pct");
+            const addonEl = document.getElementById("edit-event-per_game_addon");
             if (muEl && !muEl.value) muEl.value = defaults.tgf_markup;
             if (sgEl && !sgEl.value) sgEl.value = defaults.side_game_fee;
             if (tfEl && !tfEl.value) tfEl.value = 3.5;
+            if (addonEl && !addonEl.value && defaults.per_game_addon != null) {
+                addonEl.value = defaults.per_game_addon;
+            }
         }
     }
 
@@ -6208,6 +6890,7 @@
         const isCombo = format === "9/18 Combo";
         if (singleEl) singleEl.style.display = isCombo ? "none" : "";
         if (comboEl) comboEl.style.display = isCombo ? "" : "none";
+        togglePerGameAddonField("add", format);
 
         // Render calculators if not yet rendered
         if (isCombo) {
@@ -6241,9 +6924,13 @@
             const muEl = document.getElementById("add-event-tgf_markup");
             const sgEl = document.getElementById("add-event-side_game_fee");
             const tfEl = document.getElementById("add-event-transaction_fee_pct");
+            const addonEl = document.getElementById("add-event-per_game_addon");
             if (muEl && !muEl.value) muEl.value = defaults.tgf_markup;
             if (sgEl && !sgEl.value) sgEl.value = defaults.side_game_fee;
             if (tfEl && !tfEl.value) tfEl.value = 3.5;
+            if (addonEl && !addonEl.value && defaults.per_game_addon != null) {
+                addonEl.value = defaults.per_game_addon;
+            }
         }
     }
 
@@ -6442,6 +7129,55 @@
         wdEventName = null;
     }
 
+    // ---- Pay Out WD Credit ----
+    let wdPayoutItemId = null;
+
+    function openWdPayoutModal(itemId, playerName, eventName, amount) {
+        wdPayoutItemId = itemId;
+        document.getElementById("wd-payout-info").innerHTML =
+            `<div><strong>${escapeHtml(playerName || "Player")}</strong> &middot; ${escapeHtml(eventName || "")}</div>` +
+            `<div style="margin-top:0.25rem; color:#991b1b; font-weight:600;">Outstanding credit: ${escapeHtml(amount || "")}</div>`;
+        document.getElementById("wd-payout-method").value = "Venmo";
+        const today = new Date().toISOString().slice(0, 10);
+        document.getElementById("wd-payout-date").value = today;
+        document.getElementById("wd-payout-note").value = "";
+        const btn = document.getElementById("wd-payout-submit");
+        btn.disabled = false;
+        btn.textContent = "Record Refund";
+        document.getElementById("wd-payout-overlay").style.display = "flex";
+    }
+
+    function closeWdPayoutModal() {
+        document.getElementById("wd-payout-overlay").style.display = "none";
+        wdPayoutItemId = null;
+    }
+
+    async function submitWdPayout() {
+        if (!wdPayoutItemId) return;
+        const method = document.getElementById("wd-payout-method").value;
+        const date = document.getElementById("wd-payout-date").value;
+        const note = document.getElementById("wd-payout-note").value.trim();
+        const btn = document.getElementById("wd-payout-submit");
+        btn.disabled = true;
+        btn.textContent = "Recording...";
+        try {
+            const res = await fetch(`/api/items/${wdPayoutItemId}/payout-wd-credit`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ method, date, note }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Payout failed");
+            closeWdPayoutModal();
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) {
+            alert(err.message);
+            btn.disabled = false;
+            btn.textContent = "Record Refund";
+        }
+    }
+
     async function submitWd() {
         if (!wdItemId) return;
         const note = document.getElementById("wd-note").value.trim();
@@ -6526,12 +7262,16 @@
 
         // Reset pricing fields
         ["add-event-tgf_markup", "add-event-side_game_fee", "add-event-transaction_fee_pct",
+         "add-event-per_game_addon",
          "add-event-tgf_markup_9", "add-event-side_game_fee_9",
          "add-event-tgf_markup_18", "add-event-side_game_fee_18",
          "add-event-transaction_fee_pct_combo"].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = "";
         });
+        // Hide the Per-Game Add field by default (only shown for 27 Holes)
+        const addAddonWrap = document.getElementById("add-per_game_addon-wrap");
+        if (addAddonWrap) addAddonWrap.style.display = "none";
 
         // Render default calculators
         renderCostCalculator("add-single-calc", "add-single", null);
@@ -6632,9 +7372,14 @@
                 const addMU = document.getElementById("add-event-tgf_markup").value;
                 const addSG = document.getElementById("add-event-side_game_fee").value;
                 const addTF = document.getElementById("add-event-transaction_fee_pct").value;
+                const addAddon = document.getElementById("add-event-per_game_addon").value;
                 if (addMU) payload.tgf_markup = parseFloat(addMU);
                 if (addSG) payload.side_game_fee = parseFloat(addSG);
                 if (addTF) payload.transaction_fee_pct = parseFloat(addTF);
+                // per_game_addon only persists for 27 Holes
+                if (addAddon && formatEl && formatEl.value === "27 Holes") {
+                    payload.per_game_addon = parseFloat(addAddon);
+                }
                 // Effective markup
                 const p = calcPricingLine(cc, parseFloat(addMU)||0, parseFloat(addSG)||0, 0);
                 payload.tgf_markup_final = Math.round(p.effectiveMarkup * 100) / 100 || null;
@@ -7145,6 +7890,7 @@
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
         document.getElementById("edit-event-side_game_fee").value = ev.side_game_fee != null ? ev.side_game_fee : "";
         document.getElementById("edit-event-transaction_fee_pct").value = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : 3.5;
+        document.getElementById("edit-event-per_game_addon").value = ev.per_game_addon != null ? ev.per_game_addon : "";
         // Pricing fields — combo format
         document.getElementById("edit-event-tgf_markup_9").value = ev.tgf_markup_9 != null ? ev.tgf_markup_9 : "";
         document.getElementById("edit-event-side_game_fee_9").value = ev.side_game_fee_9 != null ? ev.side_game_fee_9 : "";
@@ -7323,11 +8069,17 @@
             // Breakdown JSON
             const bd = JSON.stringify(getBreakdownFromCalc("edit-single"));
             if (bd !== (ev.course_cost_breakdown || null)) changes.course_cost_breakdown = bd;
-            // TGF markup, side game fee, transaction fee
-            ["tgf_markup", "side_game_fee", "transaction_fee_pct"].forEach(field => {
+            // TGF markup, side game fee, transaction fee, per-game addon (27 Holes only)
+            ["tgf_markup", "side_game_fee", "transaction_fee_pct", "per_game_addon"].forEach(field => {
                 const input = document.getElementById("edit-event-" + field);
                 if (!input) return;
-                const newVal = input.value ? parseFloat(input.value) : null;
+                // per_game_addon only persists for 27 Holes; clear it for other formats
+                let newVal;
+                if (field === "per_game_addon" && formatVal !== "27 Holes") {
+                    newVal = null;
+                } else {
+                    newVal = input.value ? parseFloat(input.value) : null;
+                }
                 const oldVal = ev[field] != null ? ev[field] : null;
                 if (newVal !== oldVal) changes[field] = newVal;
             });
@@ -7790,6 +8542,13 @@
         return Math.floor(mins / 15) * 15;
     }
 
+    // Round duration in minutes for a single-format event
+    // 27 Holes is treated as a single-day event using the 18-hole timing rules
+    function singleFormatDurationMins(format) {
+        if (format === "18 Holes" || format === "27 Holes") return 300;
+        return 150;
+    }
+
     function trafficLight(finishMins, twilightMins) {
         const margin = twilightMins - finishMins;
         if (margin >= 45) return { icon: "\u{1F7E2}", cls: "green", text: "" };
@@ -7920,7 +8679,7 @@
         } else {
             const startTimeEl = document.getElementById(`${prefix}-event-start_time`);
             if (startTimeEl && !startTimeEl.dataset.userOverride && inputs.teeDirection === "Last Tee") {
-                const recMins = inputs.format === "18 Holes" ? last18 : last9;
+                const recMins = singleFormatDurationMins(inputs.format) === 300 ? last18 : last9;
                 startTimeEl.value = minutesToTime24(recMins);
             }
         }
@@ -7965,13 +8724,13 @@
         } else {
             // Single format: shotgun estimate
             if (inputs.startType === "Shotgun" && cur9) {
-                const dur = inputs.format === "18 Holes" ? 300 : 150;
+                const dur = singleFormatDurationMins(inputs.format);
                 const f = timeToMinutes(cur9) + dur;
                 html += `<div class="shotgun-estimate">All groups estimated finish: <strong>${minutesToTime12(f)}</strong> ${statusIcon(f, twilightMins)}</div>`;
             }
             // Single format: tee sheet
             if (inputs.startType === "Tee Times" && inputs.teeInterval > 0 && cur9 && inputs.teeCount > 0) {
-                const dur = inputs.format === "18 Holes" ? 300 : 150;
+                const dur = singleFormatDurationMins(inputs.format);
                 html += buildTeeSheet(null, timeToMinutes(cur9), inputs.teeCount, inputs.teeInterval, dur, twilightMins, sunData, inputs.teeDirection);
             }
         }
@@ -8360,6 +9119,14 @@
         document.getElementById("wd-close").addEventListener("click", closeWdModal);
         document.getElementById("wd-overlay").addEventListener("click", (e) => {
             if (e.target === e.currentTarget) closeWdModal();
+        });
+
+        // WD payout modal
+        document.getElementById("wd-payout-submit").addEventListener("click", submitWdPayout);
+        document.getElementById("wd-payout-cancel").addEventListener("click", closeWdPayoutModal);
+        document.getElementById("wd-payout-close").addEventListener("click", closeWdPayoutModal);
+        document.getElementById("wd-payout-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeWdPayoutModal();
         });
 
         // Search
@@ -8851,7 +9618,7 @@
             // holes — a 9-hole credit applied at an 18-hole event would
             // otherwise produce a 9-hole subtotal here).
             let initHoles;
-            if (evFmt === '18 Holes') initHoles = '18';
+            if (evFmt === '18 Holes' || evFmt === '27 Holes') initHoles = '18';
             else if (evFmt === '9 Holes') initHoles = '9';
             else initHoles = (prev.holes || '9').toString();
             const initGames = (prev.side_games || 'NONE').toUpperCase();
@@ -9023,13 +9790,61 @@
                         const vH = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
                         const vNote = encodeURIComponent(`${resolvedCustomer} Excess credit refund`);
                         const vUrl = vH ? `https://venmo.com/${vH}?txn=pay&amount=${eAmt}&note=${vNote}` : '';
-                        const vLbl = vH
-                            ? `Venmo back ($${eAmt}) — <a href="${vUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link</a>`
-                            : `Venmo back ($${eAmt} — no handle on file)`;
+                        const venmoLine = vH
+                            ? `Venmo back ($${eAmt}) — <a href="${vUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link for @${escapeHtml(vH)}</a>`
+                            : `Venmo back ($${eAmt}) — <span style="color:#9a3412;">no handle on file</span> ` +
+                              `<button type="button" id="credit-venmo-add-btn" style="margin-left:0.4rem; font-size:0.72rem; padding:0.1rem 0.45rem; border:1px solid #cbd5e1; background:#f1f5f9; border-radius:4px; cursor:pointer;">+ Add @handle</button>` +
+                              `<span id="credit-venmo-handle-row" style="display:none; margin-top:0.3rem; gap:0.3rem; align-items:center;">` +
+                              `<span style="font-size:0.78rem; color:#475569;">@</span>` +
+                              `<input type="text" id="credit-venmo-handle-input" placeholder="venmo-username" style="font-size:0.78rem; padding:0.15rem 0.4rem; border:1px solid #cbd5e1; border-radius:4px; width:9rem;">` +
+                              `<button type="button" id="credit-venmo-handle-save" style="font-size:0.72rem; padding:0.1rem 0.45rem; border:1px solid #16a34a; background:#16a34a; color:#fff; border-radius:4px; cursor:pointer;">Save</button>` +
+                              `<span id="credit-venmo-handle-msg" style="font-size:0.72rem; color:#dc2626;"></span>` +
+                              `</span>`;
                         excessEl.innerHTML = `<div style="font-weight:600;font-size:0.82rem;color:#065f46;margin-bottom:0.4rem;">Excess Credit: $${eAmt}</div>
                             <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;"><input type="radio" name="excess-action" value="keep" checked style="margin-right:0.3rem;">Keep as credit in player's account</label>
-                            <label style="display:block;font-size:0.82rem;"><input type="radio" name="excess-action" value="venmo" style="margin-right:0.3rem;">${vLbl}</label>`;
+                            <label style="display:block;font-size:0.82rem;"><input type="radio" name="excess-action" value="venmo" style="margin-right:0.3rem;">${venmoLine}</label>`;
                         excessEl.style.display = '';
+                        // Wire the inline Venmo handle entry (only present when no handle).
+                        const addBtn = document.getElementById('credit-venmo-add-btn');
+                        if (addBtn) {
+                            addBtn.addEventListener('click', () => {
+                                addBtn.style.display = 'none';
+                                const row = document.getElementById('credit-venmo-handle-row');
+                                if (row) { row.style.display = 'inline-flex'; }
+                                const input = document.getElementById('credit-venmo-handle-input');
+                                if (input) input.focus();
+                            });
+                        }
+                        const saveBtn = document.getElementById('credit-venmo-handle-save');
+                        if (saveBtn) {
+                            saveBtn.addEventListener('click', async () => {
+                                const input = document.getElementById('credit-venmo-handle-input');
+                                const msg = document.getElementById('credit-venmo-handle-msg');
+                                const handle = (input?.value || '').trim().replace(/^@/, '');
+                                if (!handle) { if (msg) msg.textContent = 'Enter a handle'; return; }
+                                saveBtn.disabled = true;
+                                saveBtn.textContent = 'Saving…';
+                                if (msg) msg.textContent = '';
+                                try {
+                                    const resp = await fetch('/api/customers/update', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            customer_name: resolvedCustomer,
+                                            fields: { venmo_username: handle },
+                                        }),
+                                    });
+                                    const data = await resp.json();
+                                    if (!resp.ok) throw new Error(data.error || 'Save failed');
+                                    info.venmo_username = handle;
+                                    _updateCrdCalc(); // re-render the section with the link
+                                } catch (err) {
+                                    if (msg) msg.textContent = err.message;
+                                    saveBtn.disabled = false;
+                                    saveBtn.textContent = 'Save';
+                                }
+                            });
+                        }
                     } else {
                         excessEl.style.display = 'none';
                     }

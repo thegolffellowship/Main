@@ -1,5 +1,63 @@
-window.TGF_VERSION = "2.10.15";
+window.TGF_VERSION = "2.10.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.21",
+    date: "2026-05-04",
+    title: "Parser: route MEMBERSHIP orders to Sonnet, keep Haiku for everything else",
+    changes: [
+      "The v2.10.19 prompt update with an explicit MEMBERSHIP+EVENT worked example was not sufficient — Haiku still returned single mashed-up rows on Wafford R301078428 even after Re-extract. Five suspect rows surfaced via /api/audit/membership-mashup-scan: two recent Wafford/Fehlis mashups plus older Fehlis/Colby/Buratowski rows.",
+      "New routing in email_parser/parser.py:_call_ai(): if the email body matches /TGF\\s+MEMBERSHIP|SKU:\\s*MEM-[A-Z]-[A-Z]/i, the call goes to claude-sonnet-4-5 (override via env var CLAUDE_MODEL_PREMIUM); everything else stays on the existing Haiku default. CLAUDE_MODEL env still wins as a global override. Each parse logs the model and whether membership routing fired.",
+      "Cost impact: minimal — membership purchases are rare relative to event registrations, and only those orders pay Sonnet rates.",
+    ],
+  },
+  {
+    version: "2.10.20",
+    date: "2026-05-04",
+    title: "Admin scanner for membership-mashup victims",
+    changes: [
+      "New read-only GET /api/audit/membership-mashup-scan admin endpoint. Returns every active TGF MEMBERSHIP row in the items table that has non-null event-side fields (holes / side_games != NONE / tee_choice). Those rows are likely victims of the same parser mash-up bug that hit Jeremy Wafford R301078428 (membership name with event's price/games/holes). For each suspect: id, order_id, email_uid, customer, item_price, holes, side_games, tee_choice, order_date, transaction_status, created_at — enough to decide whether to delete + re-import.",
+      "Workflow: hit the endpoint, review the list, then for each row delete the bad row and click 'Re-import This Order' on the corresponding Audit Log card to let the v2.10.19 tightened prompt re-extract both items correctly.",
+    ],
+  },
+  {
+    version: "2.10.19",
+    date: "2026-05-04",
+    title: "Parser prompt: handle MEMBERSHIP + EVENT combo orders correctly",
+    changes: [
+      "Tightened the AI extraction prompt with an explicit MEMBERSHIP + EVENT rule. When an order contains both a TGF MEMBERSHIP and an event in the same email (e.g. Jeremy Wafford R301078428: TGF MEMBERSHIP + s9.8 SILVERHORN), the parser was returning a single mashed-up row — TGF MEMBERSHIP item_name with the event's $96 price, holes=9, side_games=BOTH, tee_choice=<50 — and dropping the second item entirely.",
+      "The new prompt rule includes a concrete worked example that anchors each item to its own SKU and price line, and explicitly forbids assigning event-side fields (holes / side_games / tee_choice / user_status) to a membership row, or membership-side fields (has_handicap / returning_or_new / date_of_birth / MEM SKU) to an event row.",
+    ],
+  },
+  {
+    version: "2.10.18",
+    date: "2026-05-04",
+    title: "Audit page: Re-import This Order; remove now-redundant Delete Phantom Duplicates button",
+    changes: [
+      "New 'Re-import This Order' button on the Audit Log card (admin-only, shown when status != ok and email_uid is non-manual). Calls a new POST /api/audit/reimport-order endpoint that re-fetches the email by uid via Microsoft Graph, runs the AI parser, and INSERTs the resulting rows via save_items(). Use case: an order's items were deleted (e.g. to clean up a parser mis-extraction) — the existing 'Re-extract This Order' button can't help because it only UPDATEs existing rows. The cross-uid dedup gate in save_items() prevents any duplicates if rows already exist.",
+      "Removed the 'Delete Phantom Duplicates' button from the Transactions header now that the cleanup is complete and the v2.10.17 dedup gate prevents recurrence. The backend endpoint POST /api/audit/delete-phantom-duplicates remains as a quiet safety net but is no longer surfaced in the UI.",
+    ],
+  },
+  {
+    version: "2.10.17",
+    date: "2026-05-04",
+    title: "Fix phantom-duplicate items: order_id+item_index dedup gate + admin delete backfill",
+    changes: [
+      "Root cause of the 5/3 incident: Microsoft Graph re-keyed ~65 already-parsed 'New Order' emails under brand-new message ids in a single 3-minute burst (likely a folder rebuild, mass reply/forward, or PWA resync). The existing dedup gate keyed only on email_uid + item_index, so the same logical orders sailed through under their new uids and got inserted as identical sibling rows under the buyer's name — making the Transactions tab show '2 items — $192' for what was actually a single $96 purchase.",
+      "Prevention (save_items in email_parser/database.py): added a cross-email-uid dedup check. Before each INSERT, if a row with the same (order_id, item_index) already exists under a different email_uid for a real (non-manual) order, the new row is skipped and logged. The original UNIQUE(email_uid, item_index) constraint is preserved.",
+      "Cleanup (POST /api/audit/delete-phantom-duplicates, admin-only): finds groups of items sharing (order_id, customer, item_name, item_price) with COUNT > 1, keeps the lowest-id row (the original), and DELETEs each later duplicate. Skips any row that has downstream references (acct_allocations.item_id, acct_transactions.item_id, items.transferred_from_id / transferred_to_id / parent_item_id) so accounting state is never corrupted. Idempotent. Supports ?dry_run=1 for preview and ?since=YYYY-MM-DD to scope the window (default 2026-04-26).",
+      "New 'Delete Phantom Duplicates' admin-only button on the Transactions page next to 'Expand Qty Purchases'.",
+    ],
+  },
+  {
+    version: "2.10.16",
+    date: "2026-05-03",
+    title: "27 Holes event format with custom pricing rules",
+    changes: [
+      "New 27 Holes event format added to the Edit/Add Event modal alongside 9 Holes, 18 Holes, and 9/18 Combo. Treated as a single-day event using the 18-hole tee-time / shotgun rules (single start time, 5-hour planning duration).",
+      "27 Holes pricing has its own rules: Guest = Member + $25 (vs +$10 for 9/Combo and +$15 for standalone 18 Hole), and there is no 1st Timer tier (the pricing grid hides the 1st Timer column).",
+      "New per-event 'Per Game Add ($)' field appears in the Pricing tab when 27 Holes is selected. Defaults to $27 and persists to the new events.per_game_addon column. The server-side breakdown calculator honors this override for NET/GROSS/BOTH game add-ons on 27-Hole events.",
+    ],
+  },
   {
     version: "2.10.15",
     date: "2026-04-27",

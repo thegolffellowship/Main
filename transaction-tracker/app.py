@@ -39,6 +39,7 @@ from email_parser.database import (
     transfer_item,
     reverse_credit,
     wd_item,
+    payout_credit,
     create_event,
     seed_events,
     add_player_to_event,
@@ -258,6 +259,13 @@ from email_parser.database import (
     get_chat_master_context,
     build_coo_full_context,
     delete_chat_session,
+    # Pairings
+    get_event_pairings,
+    save_event_pairings,
+    delete_event_pairings,
+    generate_event_pairings,
+    get_pairing_history_counts,
+    _pairing_time_slots,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -1589,8 +1597,10 @@ def api_audit_emails():
     returning them side-by-side so the user can verify extraction accuracy.
 
     Query params:
-        limit  — max emails to return (default 50)
-        days   — how far back to look (default 90)
+        limit       — max emails to return (default 25)
+        days        — how far back to look (default 7); ignored if start_date is set
+        start_date  — optional YYYY-MM-DD; overrides `days` lower bound
+        end_date    — optional YYYY-MM-DD (exclusive upper bound)
     """
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
@@ -1602,6 +1612,24 @@ def api_audit_emails():
 
     limit = request.args.get("limit", 25, type=int)
     days = request.args.get("days", 7, type=int)
+    start_date_str = request.args.get("start_date", "").strip()
+    end_date_str = request.args.get("end_date", "").strip()
+
+    since_dt: datetime
+    until_dt: datetime | None = None
+    if start_date_str:
+        try:
+            since_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "start_date must be YYYY-MM-DD"}), 400
+        if end_date_str:
+            try:
+                # end_date is inclusive in the UI, exclusive in the OData filter
+                until_dt = datetime.strptime(end_date_str, "%Y-%m-%d") + timedelta(days=1)
+            except ValueError:
+                return jsonify({"error": "end_date must be YYYY-MM-DD"}), 400
+    else:
+        since_dt = datetime.now() - timedelta(days=days)
 
     try:
         emails = fetch_transaction_emails(
@@ -1609,19 +1637,30 @@ def api_audit_emails():
             client_id=client_id,
             client_secret=client_secret,
             email_address=address,
-            since_date=datetime.now() - timedelta(days=days),
+            since_date=since_dt,
+            until_date=until_dt,
         )
     except Exception as e:
         logger.exception("Audit: failed to fetch emails")
         return jsonify({"error": f"Failed to fetch emails: {e}"}), 500
 
-    # Build a lookup of DB items keyed by email_uid
+    # Build lookups of DB items keyed by email_uid AND order_id.
+    # The order_id index covers the case where Microsoft Graph re-keys an
+    # already-imported email under a brand-new message id — save_items()
+    # dedups by (order_id, item_index) but the row keeps the OLD uid, so a
+    # uid-only lookup falsely reports the email as "Not Parsed".
     all_items = get_all_items()
     db_by_uid: dict[str, list[dict]] = {}
+    db_by_order: dict[str, list[dict]] = {}
     for item in all_items:
         uid = item.get("email_uid", "")
         if uid:
             db_by_uid.setdefault(uid, []).append(item)
+        oid = (item.get("order_id") or "").strip()
+        if oid:
+            db_by_order.setdefault(oid, []).append(item)
+
+    _order_id_re = re.compile(r"#(R\d+)")
 
     comparisons = []
     for email in emails[:limit]:
@@ -1634,6 +1673,12 @@ def api_audit_emails():
         body_preview = body_text[:2000] if body_text else "(empty)"
 
         db_rows = db_by_uid.get(uid, [])
+        if not db_rows:
+            # Fallback: pull order_id from subject (e.g. "New Order #R805080852")
+            # and look up by order_id to catch cross-uid re-keys.
+            m = _order_id_re.search(email.get("subject", "") or "")
+            if m:
+                db_rows = db_by_order.get(m.group(1), [])
 
         # Determine audit status
         if not db_rows:
@@ -2196,6 +2241,67 @@ def api_reextract_order():
         return jsonify({"error": str(exc)}), 500
 
 
+@app.route("/api/audit/reimport-order", methods=["POST"])
+@require_role("admin")
+def api_reimport_order():
+    """Re-fetch and re-parse an email by uid, INSERTing the resulting items.
+
+    Use case: an order's items were deleted (e.g. to clean up a parser
+    mis-extraction) and need to be re-imported from scratch. The standard
+    re-extract endpoint only UPDATEs existing rows, so when the items have
+    been removed it has nothing to operate on. This endpoint bypasses that:
+    fetch the email, run the parser, and call save_items().
+
+    The save_items() pipeline already has the cross-email-uid dedup gate
+    plus the UNIQUE(email_uid, item_index) constraint, so no duplicates are
+    created — if rows already exist for this order they will be skipped.
+
+    Body: {"email_uid": "..."}
+    """
+    data = request.get_json(force=True) or {}
+    email_uid = (data.get("email_uid") or "").strip()
+    if not email_uid:
+        return jsonify({"error": "email_uid is required"}), 400
+    if email_uid.startswith("manual-"):
+        return jsonify({"error": "Manual entries cannot be re-imported"}), 400
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    email_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, email_address]):
+        return jsonify({"error": "Azure AD credentials not configured"}), 400
+
+    try:
+        email_data = fetch_email_by_id(
+            tenant_id, client_id, client_secret, email_address, email_uid
+        )
+        if not email_data:
+            return jsonify({"error": f"Could not fetch email {email_uid} from Graph API"}), 404
+
+        parsed_rows = parse_email(email_data)
+        if not parsed_rows:
+            return jsonify({
+                "status": "ok",
+                "email_uid": email_uid,
+                "parsed_count": 0,
+                "inserted": 0,
+                "message": "Parser returned 0 items — email body may be malformed.",
+            })
+
+        inserted = save_items(parsed_rows)
+        return jsonify({
+            "status": "ok",
+            "email_uid": email_uid,
+            "parsed_count": len(parsed_rows),
+            "inserted": inserted,
+            "skipped": len(parsed_rows) - inserted,
+        })
+    except Exception as exc:
+        logger.exception("reimport-order failed for email_uid=%s", email_uid)
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/api/audit/retry-failed", methods=["POST"])
 @require_role("admin")
 def api_retry_failed():
@@ -2221,6 +2327,310 @@ def api_retry_failed():
         "cleared": cleared,
         "message": f"Cleared {cleared} failed entries and re-processed inbox",
     })
+
+
+@app.route("/api/audit/delete-phantom-duplicates", methods=["POST"])
+@require_role("admin")
+def api_delete_phantom_duplicates():
+    """Delete phantom duplicate item rows.
+
+    For each group of items sharing (order_id, customer, item_name, item_price)
+    with COUNT > 1, keep the lowest-id row (the original parse — earliest
+    created_at) and DELETE every later row. Skips any row that has downstream
+    references that deletion would orphan:
+
+    - acct_allocations.item_id pointing at the row
+    - acct_transactions.item_id pointing at the row
+    - items.transferred_from_id / items.transferred_to_id pointing at the row
+    - items.parent_item_id pointing at the row (child +PAY rows)
+
+    Idempotent: after one run no groups have COUNT > 1, so re-running is a
+    no-op.
+
+    Query params:
+      since=YYYY-MM-DD   restrict to orders with order_date >= this date
+                         (default: 2026-04-26 to scope this to the May-3
+                         backfill incident; pass since=1900-01-01 for ALL)
+      dry_run=1          report what would be deleted without deleting
+    """
+    since = (request.args.get("since") or "2026-04-26").strip()
+    dry_run = request.args.get("dry_run") in ("1", "true", "yes")
+    conn = get_connection()
+    try:
+        groups = conn.execute(
+            """
+            SELECT order_id, customer, item_name, item_price,
+                   GROUP_CONCAT(id ORDER BY id) as ids
+            FROM items
+            WHERE COALESCE(transaction_status, 'active') = 'active'
+              AND order_id IS NOT NULL AND order_id != ''
+              AND customer IS NOT NULL AND customer != ''
+              AND item_name IS NOT NULL AND item_name != ''
+              AND order_date >= ?
+            GROUP BY order_id, LOWER(customer), LOWER(item_name), item_price
+            HAVING COUNT(*) > 1
+            """,
+            (since,),
+        ).fetchall()
+
+        deleted = 0
+        skipped = 0
+        skip_reasons: list[str] = []
+        deleted_ids: list[int] = []
+
+        for g in groups:
+            ids = [int(x) for x in (g["ids"] or "").split(",") if x]
+            if len(ids) < 2:
+                continue
+            # ids is sorted ASC by GROUP_CONCAT (... ORDER BY id);
+            # the first is the original — keep it.
+            for dup_id in ids[1:]:
+                # Acct allocations
+                alloc_count = 0
+                try:
+                    alloc_count = conn.execute(
+                        "SELECT COUNT(*) as cnt FROM acct_allocations WHERE item_id = ?",
+                        (dup_id,),
+                    ).fetchone()["cnt"]
+                except Exception:
+                    pass
+                if alloc_count > 0:
+                    skipped += 1
+                    skip_reasons.append(f"#{dup_id}: {alloc_count} acct_allocations")
+                    continue
+
+                # Acct transactions
+                txn_count = 0
+                try:
+                    txn_count = conn.execute(
+                        "SELECT COUNT(*) as cnt FROM acct_transactions WHERE item_id = ?",
+                        (dup_id,),
+                    ).fetchone()["cnt"]
+                except Exception:
+                    pass
+                if txn_count > 0:
+                    skipped += 1
+                    skip_reasons.append(f"#{dup_id}: {txn_count} acct_transactions")
+                    continue
+
+                # Other items referencing this id (transfer chain or +PAY children)
+                ref_count = conn.execute(
+                    """SELECT COUNT(*) as cnt FROM items
+                       WHERE transferred_from_id = ?
+                          OR transferred_to_id = ?
+                          OR parent_item_id = ?""",
+                    (dup_id, dup_id, dup_id),
+                ).fetchone()["cnt"]
+                if ref_count > 0:
+                    skipped += 1
+                    skip_reasons.append(f"#{dup_id}: {ref_count} item back-refs")
+                    continue
+
+                if dry_run:
+                    deleted += 1
+                    deleted_ids.append(dup_id)
+                    continue
+
+                try:
+                    conn.execute("DELETE FROM items WHERE id = ?", (dup_id,))
+                    deleted += 1
+                    deleted_ids.append(dup_id)
+                except Exception as e:
+                    logger.warning("delete-phantom-duplicates: failed on id=%s: %s", dup_id, e)
+                    skipped += 1
+                    skip_reasons.append(f"#{dup_id}: delete error: {e}")
+
+        if not dry_run:
+            conn.commit()
+
+        return jsonify({
+            "status": "ok",
+            "since": since,
+            "dry_run": dry_run,
+            "groups_processed": len(groups),
+            "deleted": deleted,
+            "deleted_ids": deleted_ids[:200],
+            "skipped": skipped,
+            "skip_reasons": skip_reasons[:50],
+        })
+    finally:
+        conn.close()
+
+
+@app.route("/api/audit/membership-mashup-scan", methods=["GET"])
+@require_role("admin")
+def api_membership_mashup_scan():
+    """Scan for TGF MEMBERSHIP rows that look like victims of the
+    membership+event mash-up parser bug.
+
+    Background: Haiku (the parser model) sometimes returns a single row
+    for an order that actually contained both a TGF MEMBERSHIP and an
+    event line item — using the membership's name with the event's
+    price / holes / side_games / tee_choice. The membership row should
+    have NULL for those event-side fields. Any membership row with
+    non-null holes, side_games, or tee_choice is suspect.
+
+    Read-only. Returns one entry per suspect row with the fields needed
+    to decide whether to delete + re-import that order.
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT i.id, i.order_id, i.email_uid, i.customer, i.item_name,
+                   i.item_price, i.holes, i.side_games, i.tee_choice,
+                   i.user_status, i.order_date, i.total_amount,
+                   i.transaction_fees, i.transaction_status, i.created_at
+            FROM items i
+            WHERE i.item_name = 'TGF MEMBERSHIP'
+              AND COALESCE(i.transaction_status, 'active') = 'active'
+              AND (
+                   (i.holes IS NOT NULL AND i.holes != '')
+                OR (i.side_games IS NOT NULL AND i.side_games != ''
+                    AND UPPER(i.side_games) != 'NONE')
+                OR (i.tee_choice IS NOT NULL AND i.tee_choice != '')
+              )
+            ORDER BY i.order_date DESC, i.id DESC
+            """
+        ).fetchall()
+
+        suspects = [dict(r) for r in rows]
+        return jsonify({
+            "status": "ok",
+            "count": len(suspects),
+            "rows": suspects,
+        })
+    finally:
+        conn.close()
+
+
+@app.route("/api/audit/duplicate-items-diagnostic", methods=["GET"])
+@require_role("admin")
+def api_duplicate_items_diagnostic():
+    """Read-only diagnostic for duplicate item rows.
+
+    Groups items by (order_id, customer, item_name, item_price) — order_id
+    instead of email_uid so we catch both same-email-uid duplicates AND
+    same-order-different-email-uid duplicates. Returns per-row metadata to
+    classify the root cause:
+
+    - Same email_uid, different item_index, same created_at → AI returned
+      multiple items in one parse (hallucination at extraction time).
+    - Same email_uid, different item_index, different created_at → some
+      later script appended rows under the same email_uid (e.g. re-extract).
+    - Different email_uid, same order_id → same order ingested via two
+      different emails or two parser runs with different uids.
+    - Manual entries → manual-entry duplicates.
+
+    Query params:
+      since=YYYY-MM-DD   filter to orders with order_date >= this date
+                         (default: 2026-04-26 to focus on the May-3 backfill
+                         incident; pass since=1900-01-01 to see ALL dupes)
+
+    Skips rows where order_id is NULL (manual + RSVP-only rows often lack one).
+    Read-only — does not mutate any rows.
+    """
+    since = (request.args.get("since") or "2026-04-26").strip()
+    conn = get_connection()
+    try:
+        groups = conn.execute(
+            """
+            SELECT order_id, customer, item_name, item_price,
+                   COUNT(*) as cnt,
+                   GROUP_CONCAT(id ORDER BY id) as ids
+            FROM items
+            WHERE COALESCE(transaction_status, 'active') = 'active'
+              AND customer IS NOT NULL AND customer != ''
+              AND item_name IS NOT NULL AND item_name != ''
+              AND order_id IS NOT NULL AND order_id != ''
+              AND order_date >= ?
+            GROUP BY order_id, LOWER(customer), LOWER(item_name), item_price
+            HAVING COUNT(*) > 1
+            ORDER BY MIN(id) DESC
+            """,
+            (since,),
+        ).fetchall()
+
+        from datetime import datetime
+        result_groups = []
+        same_uid_diff_idx_same_created = 0
+        same_uid_diff_idx_diff_created = 0
+        different_uid = 0
+        manual_uid = 0
+        max_created_gap_seconds = 0.0
+
+        for g in groups:
+            ids = [int(x) for x in (g["ids"] or "").split(",") if x]
+            rows = conn.execute(
+                f"""
+                SELECT id, email_uid, item_index, order_id, order_date,
+                       created_at, transaction_status, customer_id, merchant
+                FROM items
+                WHERE id IN ({",".join("?" * len(ids))})
+                ORDER BY id
+                """,
+                tuple(ids),
+            ).fetchall()
+            row_dicts = [dict(r) for r in rows]
+
+            uids = {r["email_uid"] for r in row_dicts}
+            indexes = sorted({r["item_index"] for r in row_dicts})
+            is_manual = any((r["email_uid"] or "").startswith("manual-") for r in row_dicts)
+
+            created_times = []
+            for r in row_dicts:
+                try:
+                    created_times.append(datetime.fromisoformat((r["created_at"] or "").replace("Z", "+00:00")))
+                except Exception:
+                    pass
+            gap_seconds = 0.0
+            if len(created_times) >= 2:
+                gap_seconds = (max(created_times) - min(created_times)).total_seconds()
+                if gap_seconds > max_created_gap_seconds:
+                    max_created_gap_seconds = gap_seconds
+
+            if is_manual:
+                pattern = "manual"
+                manual_uid += 1
+            elif len(uids) > 1:
+                pattern = "different_uid_same_order"
+                different_uid += 1
+            elif gap_seconds < 60:
+                pattern = "same_uid_diff_idx_same_created"
+                same_uid_diff_idx_same_created += 1
+            else:
+                pattern = "same_uid_diff_idx_diff_created"
+                same_uid_diff_idx_diff_created += 1
+
+            result_groups.append({
+                "customer": g["customer"],
+                "item_name": g["item_name"],
+                "item_price": g["item_price"],
+                "order_id": g["order_id"],
+                "count": g["cnt"],
+                "pattern": pattern,
+                "distinct_email_uids": len(uids),
+                "item_indexes": indexes,
+                "created_at_gap_seconds": round(gap_seconds, 2),
+                "rows": row_dicts,
+            })
+
+        return jsonify({
+            "status": "ok",
+            "since": since,
+            "total_duplicate_groups": len(result_groups),
+            "total_extra_rows": sum(g["count"] - 1 for g in result_groups),
+            "patterns": {
+                "same_uid_diff_idx_same_created": same_uid_diff_idx_same_created,
+                "same_uid_diff_idx_diff_created": same_uid_diff_idx_diff_created,
+                "different_uid_same_order": different_uid,
+                "manual": manual_uid,
+            },
+            "max_created_at_gap_seconds": round(max_created_gap_seconds, 2),
+            "groups": result_groups,
+        })
+    finally:
+        conn.close()
 
 
 @app.route("/api/audit/expand-quantities", methods=["POST"])
@@ -2931,6 +3341,90 @@ def api_delete_event_alias_from_event(event_id):
     return jsonify({"status": "ok", "deleted": deleted})
 
 
+@app.route("/api/events/<int:event_id>/pairings", methods=["GET"])
+@require_role("view-only")
+def api_get_pairings(event_id):
+    """Return saved pairings for an event plus the computed tee-time slots."""
+    try:
+        from email_parser.database import _connect
+        with _connect() as conn:
+            ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return jsonify({"error": "Event not found"}), 404
+        ev = dict(ev)
+        pairings = get_event_pairings(event_id)
+        slots_9 = _pairing_time_slots(ev, "9")
+        slots_18 = _pairing_time_slots(ev, "18")
+        return jsonify({
+            "pairings": pairings,
+            "slots_9": slots_9,
+            "slots_18": slots_18,
+            "event": {
+                "format": ev.get("format"),
+                "start_type": ev.get("start_type"),
+                "start_type_18": ev.get("start_type_18"),
+                "tee_time_count": ev.get("tee_time_count"),
+                "tee_time_count_18": ev.get("tee_time_count_18"),
+            },
+        })
+    except Exception as e:
+        logger.exception("Failed to get pairings for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings/generate", methods=["POST"])
+@require_role("manager")
+def api_generate_pairings(event_id):
+    """Run the pairing generator and return proposed groups (not saved)."""
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode", "random")
+    protect = bool(data.get("protect_partner_requests", True))
+    seeds = data.get("seeds", [])
+    if mode not in ("random", "abcd"):
+        return jsonify({"error": "mode must be 'random' or 'abcd'"}), 400
+    try:
+        result = generate_event_pairings(
+            event_id,
+            mode=mode,
+            protect_partner_requests=protect,
+            seeds=seeds,
+        )
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.exception("Pairing generation failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings/save", methods=["POST"])
+@require_role("manager")
+def api_save_pairings(event_id):
+    """Save pairings for an event (replaces any previous save)."""
+    data = request.get_json(silent=True) or {}
+    groups_by_holes = data.get("groups_by_holes")
+    if not groups_by_holes or not isinstance(groups_by_holes, dict):
+        return jsonify({"error": "groups_by_holes required"}), 400
+    try:
+        save_event_pairings(event_id, groups_by_holes)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.exception("Failed to save pairings for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings", methods=["DELETE"])
+@require_role("manager")
+def api_delete_pairings(event_id):
+    """Clear saved pairings (and their history) for an event."""
+    try:
+        delete_event_pairings(event_id)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.exception("Failed to delete pairings for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/sync", methods=["POST"])
 @require_role("manager")
 def api_sync_events():
@@ -3250,8 +3744,8 @@ def api_apply_credit_to_rsvp(item_id):
 
     if not credited_item_ids:
         return jsonify({"error": "credited_item_ids required"}), 400
-    if excess_action not in ("keep", "note"):
-        return jsonify({"error": "excess_action must be 'keep' or 'note'"}), 400
+    if excess_action not in ("keep", "note", "venmo"):
+        return jsonify({"error": "excess_action must be 'keep', 'note', or 'venmo'"}), 400
 
     result = apply_credit_to_rsvp(
         rsvp_item_id=item_id,
@@ -3813,6 +4307,7 @@ def api_create_event():
         course_cost_breakdown=data.get("course_cost_breakdown"),
         course_cost_breakdown_9=data.get("course_cost_breakdown_9"),
         course_cost_breakdown_18=data.get("course_cost_breakdown_18"),
+        per_game_addon=data.get("per_game_addon"),
     )
     if event:
         return jsonify({"status": "ok", "event": event}), 201
@@ -4067,11 +4562,37 @@ def api_refund_item(item_id):
     """Mark an item as refunded via GoDaddy or Venmo."""
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
-    if method and method not in ("GoDaddy", "Venmo", "Zelle"):
-        return jsonify({"error": "Invalid refund method. Must be GoDaddy, Venmo, or Zelle."}), 400
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal"):
+        return jsonify({"error": "Invalid refund method. Must be GoDaddy, Venmo, Zelle, or PayPal."}), 400
     if refund_item(item_id, method=method, note=data.get("note", "")):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
+
+
+@app.route("/api/items/<int:item_id>/payout-credit", methods=["POST"])
+@app.route("/api/items/<int:item_id>/payout-wd-credit", methods=["POST"])  # legacy alias
+@require_role("admin")
+def api_payout_credit(item_id):
+    """Record a cash payout of a player credit (WD or standalone credited row).
+
+    Body: {"method": "Venmo|Zelle|Check|GoDaddy|PayPal", "date": "YYYY-MM-DD", "note": "..."}
+    """
+    data = request.get_json(silent=True) or {}
+    method = (data.get("method") or "").strip()
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check", "PayPal"):
+        return jsonify({"error": "Invalid method. Must be GoDaddy, Venmo, Zelle, Check, or PayPal."}), 400
+    refund_date = (data.get("date") or "").strip()
+    if refund_date:
+        try:
+            datetime.strptime(refund_date, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "date must be YYYY-MM-DD"}), 400
+    result = payout_credit(
+        item_id, method=method, note=data.get("note", ""), refund_date=refund_date,
+    )
+    if not result.get("ok"):
+        return jsonify({"error": result.get("error", "Payout failed")}), 400
+    return jsonify({"status": "ok", "amount": result.get("amount"), "date": result.get("date")})
 
 
 @app.route("/api/items/<int:item_id>/partial-refund", methods=["POST"])
@@ -4083,7 +4604,7 @@ def api_partial_refund_item(item_id):
     """
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
-    if method and method not in ("GoDaddy", "Venmo", "Zelle"):
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal"):
         return jsonify({"error": "Invalid refund method."}), 400
     refunded_components = data.get("components", {})  # e.g. {"gross_games": 30}
     new_side_games = data.get("new_side_games")  # e.g. "NET" (after removing GROSS)
@@ -4151,7 +4672,8 @@ def api_partial_refund_item(item_id):
         try:
             from email_parser.database import _write_acct_entry
             refund_source = method.lower().replace(" ", "_") if method else "manual"
-            refund_account = "Venmo" if "venmo" in (method or "").lower() else "TGF Checking"
+            _m = (method or "").lower()
+            refund_account = "Venmo" if "venmo" in _m else ("PayPal" if "paypal" in _m else "TGF Checking")
             _write_acct_entry(
                 conn,
                 item_id=new_child_id,
@@ -7864,6 +8386,22 @@ def api_recon_auto_match():
     d = request.json or {}
     account_id = d.get("account_id")
     return jsonify(run_deposit_auto_match(account_id))
+
+
+@app.route("/api/admin/run-recon-drift-fix", methods=["POST"])
+@require_role("admin")
+def api_admin_run_recon_drift_fix():
+    """One-shot remediation for April-2026 reconciliation drift.
+
+    Runs the same logic as scripts/fix_recon_drift_2026_04.py and
+    returns a JSON report. Idempotent — safe to call repeatedly.
+    """
+    from email_parser.recon_drift_fix import apply_recon_drift_fix
+    try:
+        return jsonify(apply_recon_drift_fix())
+    except Exception as e:  # noqa: BLE001
+        logger.exception("recon-drift-fix failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/reconciliation/match", methods=["POST"])

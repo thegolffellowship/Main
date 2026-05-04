@@ -432,6 +432,13 @@
         <!-- Audit controls -->
         <div class="audit-controls" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem;">
             <label style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
+                Range
+                <select id="audit-range-mode" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
+                    <option value="days" selected>Days back</option>
+                    <option value="custom">Custom dates</option>
+                </select>
+            </label>
+            <label id="audit-days-wrap" style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
                 Days back
                 <select id="audit-days" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
                     <option value="7" selected>7</option>
@@ -442,6 +449,14 @@
                     <option value="180">180</option>
                     <option value="365">365</option>
                 </select>
+            </label>
+            <label id="audit-start-wrap" style="display:none; font-size:0.82rem; font-weight:600; align-items:center; gap:0.35rem;">
+                From
+                <input type="date" id="audit-start-date" style="padding:0.25rem 0.4rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
+            </label>
+            <label id="audit-end-wrap" style="display:none; font-size:0.82rem; font-weight:600; align-items:center; gap:0.35rem;">
+                To
+                <input type="date" id="audit-end-date" style="padding:0.25rem 0.4rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
             </label>
             <label style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
                 Max emails
@@ -634,6 +649,9 @@
                 ${comp.parsed_items.length && comp.parsed_items[0].order_id
                     ? `<button class="btn btn-secondary btn-reextract-order" data-order-id="${escapeHtml(comp.parsed_items[0].order_id)}" style="margin-top:0.5rem; font-size:0.78rem; padding:0.3rem 0.8rem;">Re-extract This Order</button>`
                     : ""}
+                ${comp.email_uid && !String(comp.email_uid).startsWith("manual-") && comp.status !== "ok"
+                    ? `<button class="btn btn-secondary btn-reimport-order" data-email-uid="${escapeHtml(comp.email_uid)}" style="margin-top:0.5rem; margin-left:0.5rem; font-size:0.78rem; padding:0.3rem 0.8rem;">Re-import This Order</button>`
+                    : ""}
             </div>
         </div>`;
     }
@@ -698,6 +716,38 @@
                 }
             });
         });
+
+        // Per-order re-import buttons (re-fetch email + parse + INSERT items)
+        listEl.querySelectorAll(".btn-reimport-order").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const emailUid = btn.dataset.emailUid;
+                if (!confirm("Re-import this order? The email will be re-fetched from the inbox, re-parsed, and any missing items will be inserted. Existing rows are preserved (the dedup gate skips anything already present).")) return;
+                btn.disabled = true;
+                btn.textContent = "Re-importing...";
+                try {
+                    const res = await fetch("/api/audit/reimport-order", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email_uid: emailUid }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                        alert(data.error || "Re-import failed.");
+                    } else if (data.parsed_count === 0) {
+                        alert(data.message || "Parser returned 0 items.");
+                    } else {
+                        alert(`Re-imported: ${data.inserted} new row(s) inserted` + (data.skipped ? `, ${data.skipped} skipped (already existed)` : "") + `. Refreshing audit…`);
+                        runAudit();
+                    }
+                } catch (err) {
+                    alert("Re-import failed: " + err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = "Re-import This Order";
+                }
+            });
+        });
     }
 
     async function runAudit() {
@@ -712,9 +762,24 @@
         contentEl.style.display = "none";
 
         try {
-            const auditDays = document.getElementById("audit-days").value;
             const auditLimit = document.getElementById("audit-limit").value;
-            const res = await fetch(`/api/audit/emails?limit=${auditLimit}&days=${auditDays}`);
+            const rangeMode = document.getElementById("audit-range-mode").value;
+            const qs = new URLSearchParams({ limit: auditLimit });
+            if (rangeMode === "custom") {
+                const start = document.getElementById("audit-start-date").value;
+                const end = document.getElementById("audit-end-date").value;
+                if (!start) {
+                    loadingEl.textContent = "Pick a 'From' date for the custom range.";
+                    btn.disabled = false;
+                    btn.textContent = "Run Audit";
+                    return;
+                }
+                qs.set("start_date", start);
+                if (end) qs.set("end_date", end);
+            } else {
+                qs.set("days", document.getElementById("audit-days").value);
+            }
+            const res = await fetch(`/api/audit/emails?${qs.toString()}`);
             if (!res.ok) {
                 const err = await res.json();
                 throw new Error(err.error || "Request failed");
@@ -750,6 +815,18 @@
 
         document.getElementById("btn-run-audit").addEventListener("click", runAudit);
         document.getElementById("btn-apply-audit-filters").addEventListener("click", runAudit);
+
+        // Show/hide days vs custom-range fields
+        const rangeModeEl = document.getElementById("audit-range-mode");
+        function updateRangeMode() {
+            const custom = rangeModeEl.value === "custom";
+            document.getElementById("audit-days-wrap").style.display = custom ? "none" : "flex";
+            document.getElementById("audit-start-wrap").style.display = custom ? "flex" : "none";
+            document.getElementById("audit-end-wrap").style.display = custom ? "flex" : "none";
+        }
+        rangeModeEl.addEventListener("change", updateRangeMode);
+        updateRangeMode();
+
         // Auto-apply when either dropdown changes (only after the first run,
         // so the initial "Click Run Audit" prompt is preserved).
         ["audit-days", "audit-limit"].forEach(id => {

@@ -1863,6 +1863,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("status_reason", "TEXT"),
             ("rescheduled_to_event_id", "INTEGER"),
             ("status_changed_at", "TEXT"),
+            ("per_game_addon", "REAL"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
@@ -3210,6 +3211,29 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.IntegrityError:
                 pass
 
+        # One-time migration: import_venmo_statement historically wrote
+        # bank_accounts.id into bank_deposits.account_id, while every other
+        # import path stores acct_accounts.id. Rewrite the legacy rows so all
+        # bank_deposits.account_id values reference acct_accounts.
+        try:
+            ba_venmo = conn.execute(
+                "SELECT id FROM bank_accounts "
+                "WHERE LOWER(name) LIKE '%venmo%' OR account_type = 'venmo' "
+                "ORDER BY id LIMIT 1"
+            ).fetchone()
+            aa_venmo = conn.execute(
+                "SELECT id FROM acct_accounts "
+                "WHERE is_active = 1 AND (LOWER(name) LIKE 'venmo%' OR account_type = 'venmo') "
+                "ORDER BY (account_type = 'venmo') DESC, id LIMIT 1"
+            ).fetchone()
+            if ba_venmo and aa_venmo and ba_venmo["id"] != aa_venmo["id"]:
+                conn.execute(
+                    "UPDATE bank_deposits SET account_id = ? WHERE account_id = ?",
+                    (aa_venmo["id"], ba_venmo["id"]),
+                )
+        except sqlite3.OperationalError:
+            pass
+
         # Seed chart of accounts on first run
         existing_coa = conn.execute("SELECT COUNT(*) as cnt FROM chart_of_accounts").fetchone()
         if existing_coa["cnt"] == 0:
@@ -3570,6 +3594,49 @@ def init_db(db_path: str | Path | None = None) -> None:
         if _mf:
             logger.info("Backfilled merchant_fee on %d GoDaddy transactions", _mf)
             conn.commit()
+
+        # ── Pairings ─────────────────────────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS event_pairings (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id       INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                holes          TEXT NOT NULL CHECK(holes IN ('9', '18')),
+                group_num      INTEGER NOT NULL,
+                slot_label     TEXT NOT NULL,
+                player_name    TEXT NOT NULL,
+                cart_pos       INTEGER NOT NULL CHECK(cart_pos BETWEEN 1 AND 4),
+                tee_choice     TEXT,
+                handicap_index REAL,
+                created_at     TEXT DEFAULT (datetime('now')),
+                UNIQUE(event_id, holes, group_num, cart_pos)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_event_pairings_event ON event_pairings(event_id)"
+        )
+
+        # Pairing history — one row per unique player pair per event (built from saved pairings)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pairing_history (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_a    TEXT NOT NULL,
+                player_b    TEXT NOT NULL,
+                event_id    INTEGER NOT NULL REFERENCES events(id),
+                event_date  TEXT NOT NULL,
+                created_at  TEXT DEFAULT (datetime('now')),
+                UNIQUE(player_a, player_b, event_id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pairing_history_ab ON pairing_history(player_a, player_b)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pairing_history_date ON pairing_history(event_date)"
+        )
 
         logger.info("Database initialized at %s", db_path or DB_PATH)
 
@@ -4677,6 +4744,34 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
         skipped = 0
         _touched_gd_orders = set()  # Track GoDaddy orders for order-level accounting
         for row in rows:
+            # ── Cross-email-uid dedup gate ──
+            # Microsoft Graph occasionally re-keys the same logical email under
+            # a brand-new message id (e.g. after a folder rebuild, mass reply
+            # to "New Order …" emails, or PWA resync). The existing UNIQUE
+            # constraint on (email_uid, item_index) does not catch that — both
+            # rows have legitimate uids. Guard at the order_id level instead:
+            # if a row with the same (order_id, item_index) already exists
+            # under a different email_uid for a real GoDaddy purchase, this is
+            # the same order coming in under a new uid, so skip it.
+            _oid = (row.get("order_id") or "").strip()
+            _idx = row.get("item_index") if row.get("item_index") is not None else 0
+            _uid = (row.get("email_uid") or "").strip()
+            if _oid and _uid and not _uid.startswith("manual-"):
+                _existing = conn.execute(
+                    "SELECT id, email_uid FROM items "
+                    "WHERE order_id = ? AND item_index = ? AND email_uid != ? "
+                    "LIMIT 1",
+                    (_oid, _idx, _uid),
+                ).fetchone()
+                if _existing:
+                    logger.info(
+                        "save_items: skipping cross-uid duplicate — order_id=%s "
+                        "item_index=%s (existing item id=%d uid=%s vs new uid=%s)",
+                        _oid, _idx, _existing["id"], _existing["email_uid"], _uid,
+                    )
+                    skipped += 1
+                    continue
+
             # Auto-resolve customer_id if not already set
             if not row.get("customer_id"):
                 row["customer_id"] = _resolve_or_create_customer(
@@ -5458,7 +5553,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "course_cost_9", "course_cost_18", "tgf_markup_9", "tgf_markup_18",
                 "side_game_fee_9", "side_game_fee_18",
                 "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18",
-                "course_surcharge",
+                "course_surcharge", "per_game_addon",
                 "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
                 "rescheduled_to_event_id"}
     safe = {k: v for k, v in fields.items() if k in allowed}
@@ -7209,7 +7304,8 @@ def refund_item(item_id: int, method: str = "", note: str = "",
                     refund_source = "manual"
                     if method:
                         refund_source = method.lower().replace(" ", "_")
-                    refund_account = "Venmo" if "venmo" in (method or "").lower() else "TGF Checking"
+                    _m = (method or "").lower()
+                    refund_account = "Venmo" if "venmo" in _m else ("PayPal" if "paypal" in _m else "TGF Checking")
                     _write_acct_entry(
                         conn,
                         item_id=item_id,
@@ -7230,6 +7326,100 @@ def refund_item(item_id: int, method: str = "", note: str = "",
 
         conn.commit()
         return cursor.rowcount > 0
+
+
+def payout_credit(
+    item_id: int,
+    method: str = "",
+    note: str = "",
+    refund_date: str = "",
+    db_path: str | Path | None = None,
+) -> dict:
+    """Record a cash payout of an outstanding player credit.
+
+    Handles two row shapes:
+
+      * WD rows (transaction_status='wd') — the credit lives in
+        ``credit_amount``. After payout, that field is cleared but the
+        row stays WD; ``credit_note`` is stamped with the refund summary.
+      * Standalone credit rows (transaction_status='credited') — the
+        credit lives in ``item_price`` (e.g. excess credits, overpayment
+        credits, or full registration credits). After payout, status is
+        flipped to 'refunded' so the customer's credit balance no longer
+        counts it; ``credit_note`` is stamped with the refund summary.
+
+    In both cases a flat ``acct_transactions`` expense entry is written
+    so bank reconciliation can match the actual Venmo/Zelle/Check.
+
+    Returns {"ok": True, "amount": float, "date": str} on success, or
+    {"ok": False, "error": str} on validation/lookup failure.
+    """
+    import datetime as _dt
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not row:
+            return {"ok": False, "error": "Item not found"}
+        item = dict(row)
+        status = (item.get("transaction_status") or "").lower()
+        if status == "wd":
+            amount = _parse_dollar(item.get("credit_amount"))
+            if amount <= 0:
+                return {"ok": False, "error": "WD row has no outstanding credit to pay out"}
+        elif status == "credited":
+            amount = _parse_dollar(item.get("item_price"))
+            if amount <= 0:
+                return {"ok": False, "error": "Credit row has no balance to pay out"}
+        else:
+            return {"ok": False, "error": "Item is not in WD or credited status"}
+
+        date_str = (refund_date or "").strip() or _dt.datetime.now().strftime("%Y-%m-%d")
+
+        try:
+            refund_source = method.lower().replace(" ", "_") if method else "manual"
+            _m = (method or "").lower()
+            refund_account = "Venmo" if "venmo" in _m else ("PayPal" if "paypal" in _m else "TGF Checking")
+            label = "WD credit refund" if status == "wd" else "Credit payout"
+            _write_acct_entry(
+                conn,
+                item_id=item_id,
+                event_name=item.get("item_name", ""),
+                customer=item.get("customer", ""),
+                order_id=item.get("order_id", ""),
+                entry_type="expense",
+                category="refund",
+                source=refund_source,
+                amount=amount,
+                description=(
+                    f"{label} ({method or 'manual'}): "
+                    f"{item.get('customer', '')} — {item.get('item_name', '')}"
+                ),
+                account=refund_account,
+                source_ref=f"credit-payout-{item_id}",
+                date=date_str,
+            )
+        except Exception:
+            logger.warning("Failed to write acct entry for credit payout %s", item_id, exc_info=True)
+            return {"ok": False, "error": "Could not write accounting entry"}
+
+        stamp = f"Refunded ${amount:.2f} via {method or 'manual'} on {date_str}"
+        if note:
+            stamp += f" — {note}"
+        if status == "wd":
+            conn.execute(
+                "UPDATE items SET credit_amount = NULL, credit_note = ? WHERE id = ?",
+                (stamp, item_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE items SET transaction_status = 'refunded', credit_note = ? WHERE id = ?",
+                (stamp, item_id),
+            )
+        conn.commit()
+        return {"ok": True, "amount": amount, "date": date_str}
+
+
+# Back-compat alias for the original WD-only entry point.
+payout_wd_credit = payout_credit
 
 
 def wd_item(
@@ -7642,6 +7832,7 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
                  course_cost_breakdown: str = None,
                  course_cost_breakdown_9: str = None,
                  course_cost_breakdown_18: str = None,
+                 per_game_addon: float = None,
                  db_path: str | Path | None = None) -> dict | None:
     """Manually create a new event. Returns the event dict or None if duplicate (case-insensitive)."""
     with _connect(db_path) as conn:
@@ -7653,8 +7844,8 @@ def create_event(item_name: str, event_date: str = None, course: str = None,
             return None
         try:
             cursor = conn.execute(
-                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
-                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18),
+                "INSERT INTO events (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, per_game_addon, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'event')",
+                (item_name, event_date, course, chapter, format, start_type, start_time, tee_time_count, tee_time_interval, start_time_18, start_type_18, tee_time_count_18, tee_direction, tee_direction_18, course_cost, tgf_markup, side_game_fee, transaction_fee_pct, course_cost_9, course_cost_18, tgf_markup_9, tgf_markup_18, side_game_fee_9, side_game_fee_18, tgf_markup_final, tgf_markup_final_9, tgf_markup_final_18, course_surcharge, course_cost_breakdown, course_cost_breakdown_9, course_cost_breakdown_18, per_game_addon),
             )
             conn.commit()
             new_id = cursor.lastrowid
@@ -8329,6 +8520,7 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
 
 _PER_GAME_ADDON = 16.0  # $ per game (NET or GROSS) — 9 Holes and 9/18 Combo
 _PER_GAME_ADDON_18 = 30.0  # $ per game for standalone 18 Hole events
+_PER_GAME_ADDON_27 = 27.0  # default $ per game for 27 Hole events (overridable per-event via events.per_game_addon)
 
 
 def get_player_credits(
@@ -8412,8 +8604,10 @@ def _calc_event_pricing_breakdown(
     holes_str = str(holes or "").strip()
     status_upper = (user_status or "").upper()
     games_upper = (side_games or "").upper()
-    fmt = (event.get("format") or "").lower()
+    fmt_raw = event.get("format") or ""
+    fmt = fmt_raw.lower()
     is_combo = "combo" in fmt or "9/18" in fmt
+    is_27 = fmt_raw.strip() == "27 Holes"
 
     # Pick course cost / markup / side-game-fee based on holes
     if is_combo and holes_str == "18":
@@ -8437,18 +8631,38 @@ def _calc_event_pricing_breakdown(
     sg = float(sg or 0)
     tf = float(event.get("transaction_fee_pct") or 3.5)
 
-    # Player-type markup adjustment
+    # Player-type markup adjustment.
+    # 27 Holes: guest +$25, no 1st Timer tier (1st Timer falls back to guest pricing).
+    if is_27:
+        guest_extra = 25.0
+    elif holes_str == "18" and not is_combo:
+        guest_extra = 15.0
+    else:
+        guest_extra = 10.0
+
     if "GUEST" in status_upper:
-        extra = 15.0 if (holes_str == "18" and not is_combo) else 10.0
-        mu = mu_member + extra
+        mu = mu_member + guest_extra
     elif "1ST" in status_upper or "FIRST" in status_upper:
-        extra = 15.0 if (holes_str == "18" and not is_combo) else 10.0
-        mu = mu_member + extra - 25.0
+        # 27 Holes does not offer 1st Timer pricing — charge as guest
+        mu = mu_member + guest_extra if is_27 else (mu_member + guest_extra - 25.0)
     else:
         mu = mu_member
 
-    # Game addon — standalone 18 Hole events are $30/game, everything else is $16
-    per_game = _PER_GAME_ADDON_18 if (holes_str == "18" and not is_combo) else _PER_GAME_ADDON
+    # Game addon. 27 Holes uses the per-event override (events.per_game_addon),
+    # falling back to $27. 18 Holes standalone = $30, everything else = $16.
+    if is_27:
+        per_game_override = event.get("per_game_addon")
+        if per_game_override is not None and per_game_override != "":
+            try:
+                per_game = float(per_game_override)
+            except (TypeError, ValueError):
+                per_game = _PER_GAME_ADDON_27
+        else:
+            per_game = _PER_GAME_ADDON_27
+    elif holes_str == "18" and not is_combo:
+        per_game = _PER_GAME_ADDON_18
+    else:
+        per_game = _PER_GAME_ADDON
     if games_upper in ("BOTH",):
         game_addon = per_game * 2
     elif games_upper in ("NET", "GROSS"):
@@ -9084,7 +9298,7 @@ def apply_credit_to_rsvp(
         # HOLES column on 18-hole registrations.
         _evt_fmt = (event.get("format") or "")
         _is_combo = "combo" in _evt_fmt.lower() or "9/18" in _evt_fmt
-        if _evt_fmt == "18 Holes":
+        if _evt_fmt == "18 Holes" or _evt_fmt == "27 Holes":
             u_holes = "18"
         elif _evt_fmt == "9 Holes":
             u_holes = "9"
@@ -9206,8 +9420,10 @@ def apply_credit_to_rsvp(
         except Exception:
             logger.warning("Failed to write transfer_in for rsvp item %s", rsvp_item_id, exc_info=True)
 
-        # If excess and keep: create a new credited item for the remainder
-        if excess > 0 and excess_action == "keep":
+        # If excess and keep/venmo: create a new credited item for the remainder.
+        # 'venmo' is treated like 'keep' here — the excess credit row is the audit
+        # trail; the Venmo refund itself is a manual followup recorded separately.
+        if excess > 0 and excess_action in ("keep", "venmo"):
             uid = f"credit-excess-{rsvp_item_id}-{int(_time.time() * 1000)}"
             conn.execute(
                 """INSERT INTO items
@@ -14692,7 +14908,7 @@ def _calc_aggregate_course_cost(event: dict, all_items: list[dict],
     hole buckets that actually have players.
     """
     is_combo = "combo" in (event.get("format") or "").lower()
-    default_holes = "18" if event.get("format") == "18 Holes" else "9"
+    default_holes = "18" if event.get("format") in ("18 Holes", "27 Holes") else "9"
 
     parent_items = [i for i in all_items if not i.get("parent_item_id")]
     active_parents = [i for i in parent_items
@@ -15051,10 +15267,18 @@ def backfill_financial_entries(db_path: str | Path | None = None) -> dict:
 
 def _resolve_db(conn, db_path):
     """Internal: yield a (conn, owns_conn) pair so resolvers can either share
-    a caller's connection or open their own."""
+    a caller's connection or open their own.
+
+    When opening our own, use get_connection() directly rather than the
+    managed_connection contextmanager — calling .__enter__() on the latter
+    without holding a reference to the wrapper causes Python's GC to close
+    the underlying connection immediately (the generator's finally runs
+    when the wrapper is reclaimed). Callers must call conn.close() in their
+    finally when owns is True.
+    """
     if conn is not None:
         return conn, False
-    return _connect(db_path).__enter__(), True
+    return get_connection(db_path), True
 
 
 def _resolve_lookup_customer_id(conn, item_or_id, name_hint: str = "") -> int | None:
@@ -15077,6 +15301,17 @@ def _resolve_lookup_customer_id(conn, item_or_id, name_hint: str = "") -> int | 
            LIMIT 1""",
         (name, name),
     ).fetchone()
+    if row:
+        return int(row["customer_id"])
+    # Alias-name fallback — covers "Stu Kirksey" → Stuart Kirksey, etc.
+    row = conn.execute(
+        """SELECT c.customer_id FROM customer_aliases ca
+           JOIN customers c
+             ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+           WHERE ca.alias_type = 'name' AND LOWER(ca.alias_value) = LOWER(?)
+           LIMIT 1""",
+        (name,),
+    ).fetchone()
     return int(row["customer_id"]) if row else None
 
 
@@ -15097,7 +15332,7 @@ def resolve_player_email(item, conn=None, db_path=None) -> str:
         return ""
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
@@ -15118,7 +15353,7 @@ def resolve_player_phone(item, conn=None, db_path=None) -> str:
         return ""
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
@@ -15145,7 +15380,7 @@ def resolve_player_name(item, conn=None, db_path=None) -> dict:
         return {"first_name": "", "last_name": ""}
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
@@ -15166,7 +15401,7 @@ def resolve_player_chapter(item, conn=None, db_path=None) -> str:
         return ""
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
@@ -15209,7 +15444,7 @@ def resolve_player_status(item, conn=None, db_path=None) -> str:
         return ""
     finally:
         if owns:
-            try: conn.__exit__(None, None, None)
+            try: conn.close()
             except Exception: pass
 
 
@@ -18367,20 +18602,24 @@ def import_venmo_statement(csv_text: str, account_label: str,
     categorized: dict[str, int] = {}
 
     with _connect(db_path) as conn:
-        # Look up Venmo account_id from bank_accounts
+        # Look up Venmo account_id from acct_accounts so the value stored in
+        # bank_deposits.account_id matches every other import path (Chase /
+        # generic CSV imports also store an acct_accounts.id).
         acct_row = conn.execute(
-            "SELECT id FROM bank_accounts WHERE account_type = 'venmo' LIMIT 1"
+            "SELECT id FROM acct_accounts "
+            "WHERE is_active = 1 AND LOWER(name) LIKE 'venmo%' AND account_type = 'venmo' "
+            "LIMIT 1"
         ).fetchone()
         if not acct_row:
-            # Fallback: try by name
             acct_row = conn.execute(
-                "SELECT id FROM bank_accounts WHERE LOWER(name) LIKE '%venmo%' LIMIT 1"
+                "SELECT id FROM acct_accounts "
+                "WHERE is_active = 1 AND account_type = 'venmo' LIMIT 1"
             ).fetchone()
         account_id = acct_row["id"] if acct_row else None
         if account_id is None:
             return {"imported": 0, "skipped": 0, "format": fmt,
                     "categorized": {}, "rows_preview": [],
-                    "error": "No Venmo account found in bank_accounts"}
+                    "error": "No Venmo account found in acct_accounts"}
 
         for row in data_rows:
             if not row:
@@ -18652,11 +18891,108 @@ def _import_pdf_deposits(file_bytes, batch_id, account_id, db_path):
             "format": "PDF (AI-parsed)", "rows_preview": preview}
 
 
+_GODADDY_BATCH_DATE_RE = re.compile(r"\b(\d{2})/(\d{2})\b")
+
+
+def _parse_godaddy_batch_date(description: str, deposit_date: str) -> str:
+    """Extract MM/DD from a GoDaddy deposit description and resolve to ISO date.
+
+    GoDaddy descriptions look like "GoDaddy Payments Dep 04/26 80229e16-e5e6-4".
+    The MM/DD is the batch close date, which is typically deposit_date - 1 day.
+    Falls back to deposit_date - 1 day if the description has no MM/DD token.
+    Handles year rollover (a 12/31 batch deposited on 01/02 of the next year).
+    """
+    try:
+        dep_dt = datetime.strptime(deposit_date, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return deposit_date
+    fallback = (dep_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+    if not description:
+        return fallback
+    match = _GODADDY_BATCH_DATE_RE.search(description)
+    if not match:
+        return fallback
+    try:
+        month, day = int(match.group(1)), int(match.group(2))
+        candidate = datetime(dep_dt.year, month, day)
+        if candidate > dep_dt:
+            candidate = datetime(dep_dt.year - 1, month, day)
+        return candidate.strftime("%Y-%m-%d")
+    except ValueError:
+        return fallback
+
+
+def _subset_sum_match(values: list[float], target: float,
+                      tolerance: float = 0.50) -> list[int] | None:
+    """Find indices of a subset of `values` whose sum ≈ `target`.
+
+    Exact recursive search with suffix-sum pruning for n ≤ 25; greedy
+    descending fit for larger pools. Returns indices into the input list,
+    or None if no subset is within `tolerance` of `target`. Works in
+    integer cents internally to avoid float drift.
+    """
+    n = len(values)
+    if n == 0:
+        return None
+    for i, v in enumerate(values):
+        if abs(v - target) < tolerance:
+            return [i]
+    positive_total = sum(v for v in values if v > 0)
+    if positive_total < target - tolerance:
+        return None
+
+    if n <= 25:
+        cents = [round(v * 100) for v in values]
+        target_c = round(target * 100)
+        tol_c = round(tolerance * 100)
+        order = sorted(range(n), key=lambda i: -cents[i])
+        sc = [cents[i] for i in order]
+        suffix = [0] * (n + 1)
+        for i in range(n - 1, -1, -1):
+            suffix[i] = suffix[i + 1] + max(sc[i], 0)
+        found: list[int] = []
+
+        def dfs(idx: int, remaining: int, picked: list[int]) -> bool:
+            if abs(remaining) <= tol_c:
+                found.extend(picked)
+                return True
+            if idx >= n:
+                return False
+            if suffix[idx] < remaining - tol_c:
+                return False
+            if sc[idx] <= remaining + tol_c:
+                picked.append(idx)
+                if dfs(idx + 1, remaining - sc[idx], picked):
+                    return True
+                picked.pop()
+            return dfs(idx + 1, remaining, picked)
+
+        if dfs(0, target_c, []):
+            return [order[i] for i in found]
+        return None
+
+    indexed = sorted(range(n), key=lambda i: -values[i])
+    picked: list[int] = []
+    running = 0.0
+    for idx in indexed:
+        v = values[idx]
+        if v <= 0:
+            continue
+        if running + v <= target + tolerance:
+            picked.append(idx)
+            running += v
+            if abs(running - target) < tolerance:
+                return picked
+    return picked if abs(running - target) < tolerance else None
+
+
 def run_deposit_auto_match(account_id: int | None = None,
                            db_path: str | Path | None = None) -> dict:
     """Auto-match bank_deposits to acct_transactions.
 
-    GoDaddy batches: match by date ± 2 days, sum comparison.
+    GoDaddy batches: parse MM/DD from description, subset-sum match in a
+    2-day window around the batch date, sequentially claim orders so
+    consecutive batches don't double-count.
     Venmo: match by amount + customer name in description.
     Other: match by amount + date ± 1 day, flag for manual.
 
@@ -18681,69 +19017,117 @@ def run_deposit_auto_match(account_id: int | None = None,
         ).fetchall()
         deposits = [dict(d) for d in deposits]
 
+        # Track acct_transaction IDs claimed by earlier GoDaddy deposits in this
+        # run. Sequential claiming prevents the same order from satisfying two
+        # consecutive batch deposits.
+        claimed_txn_ids: set[int] = set()
+
         for dep in deposits:
             dep_id = dep["id"]
             dep_date = dep["deposit_date"]
             dep_amt = dep["amount"]
             dep_desc = (dep["description"] or "").upper()
             dep_source = dep.get("source", "")
-            acct_type = dep.get("account_type", "")
+            acct_type = dep.get("account_type", "") or ""
+            # Defensive fallback: if the account join returned no row (legacy
+            # row referencing a stale id, or an as-yet-unmigrated import path),
+            # use the deposit's source field to drive branch selection so the
+            # Venmo / GoDaddy logic still fires.
+            if not acct_type and dep_source:
+                acct_type = dep_source
 
             matched_txn_ids = []
             confidence = 0.0
             detail = ""
 
             if dep_source == "godaddy" or "GODADDY" in dep_desc:
-                # GoDaddy batch: find order-level transactions using net_deposit
-                candidates = conn.execute(
-                    """SELECT id, amount, net_deposit, merchant_fee, date, customer, event_name, order_id
-                       FROM acct_transactions
-                       WHERE category = 'godaddy_order'
-                       AND COALESCE(status, 'active') = 'active'
-                       AND ABS(julianday(date) - julianday(?)) <= 5
-                       AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
-                       ORDER BY date""",
-                    (dep_date,),
-                ).fetchall()
-                candidates = [dict(c) for c in candidates]
+                # Parse the MM/DD batch date out of the description
+                # ("GoDaddy Payments Dep 04/26 ..."). Falls back to
+                # deposit_date - 1 day if absent.
+                batch_date = _parse_godaddy_batch_date(
+                    dep.get("description") or "", dep_date,
+                )
+                try:
+                    bd_obj = datetime.strptime(batch_date, "%Y-%m-%d")
+                except ValueError:
+                    bd_obj = None
 
-                if not candidates:
-                    # Fallback: old per-item format (category='registration')
-                    candidates = conn.execute(
-                        """SELECT id, amount, date, customer, event_name, order_id
-                           FROM acct_transactions
-                           WHERE entry_type = 'income' AND source = 'godaddy'
-                           AND category = 'registration'
-                           AND COALESCE(status, 'active') = 'active'
-                           AND ABS(julianday(date) - julianday(?)) <= 5
-                           AND id NOT IN (SELECT acct_transaction_id FROM reconciliation_matches)
-                           ORDER BY date""",
-                        (dep_date,),
-                    ).fetchall()
-                    candidates = [dict(c) for c in candidates]
+                matched_indices: list[int] | None = None
+                candidates: list[dict] = []
+                used_widened = False
 
-                if candidates:
-                    # Use net_deposit (what actually hits the bank) when available
-                    total_net = sum(c.get("net_deposit") or c["amount"] for c in candidates)
-                    gap = abs(total_net - dep_amt)
+                if bd_obj is not None:
+                    # Two passes: a tight 2-day window keyed on the batch
+                    # date, then a 4-day fallback for delayed deposits.
+                    windows = [
+                        ((-1, 0), False),
+                        ((-2, 1), True),
+                    ]
+                    for (off_lo, off_hi), is_wide in windows:
+                        win_start = (bd_obj + timedelta(days=off_lo)).strftime("%Y-%m-%d")
+                        win_end = (bd_obj + timedelta(days=off_hi)).strftime("%Y-%m-%d")
+                        excluded = list(claimed_txn_ids)
+                        excl_clause = ""
+                        if excluded:
+                            excl_clause = (
+                                f" AND id NOT IN ({','.join('?' * len(excluded))})"
+                            )
+                        rows = conn.execute(
+                            f"""SELECT id, amount, net_deposit, merchant_fee,
+                                       date, customer, event_name, order_id
+                                FROM acct_transactions
+                                WHERE category = 'godaddy_order'
+                                  AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
+                                  AND date BETWEEN ? AND ?
+                                  AND id NOT IN (
+                                      SELECT acct_transaction_id
+                                      FROM reconciliation_matches
+                                  )
+                                  {excl_clause}
+                                ORDER BY date""",
+                            [win_start, win_end, *excluded],
+                        ).fetchall()
+                        candidates = [dict(r) for r in rows]
+                        if not candidates:
+                            continue
+                        values = [
+                            (c.get("net_deposit") or c["amount"]) for c in candidates
+                        ]
+                        matched_indices = _subset_sum_match(
+                            values, dep_amt, tolerance=0.50,
+                        )
+                        if matched_indices:
+                            used_widened = is_wide
+                            break
 
-                    if gap < 1.00:
-                        matched_txn_ids = [c["id"] for c in candidates]
-                        confidence = 0.95
-                        detail = f"Batch match: {len(candidates)} orders, gap ${gap:.2f}"
-                    elif gap < 5.00:
-                        matched_txn_ids = [c["id"] for c in candidates]
-                        confidence = 0.70
-                        detail = f"Partial batch: {len(candidates)} orders, gap ${gap:.2f}"
+                if matched_indices:
+                    matched_txn_ids = [candidates[i]["id"] for i in matched_indices]
+                    sub_sum = sum(
+                        (candidates[i].get("net_deposit") or candidates[i]["amount"])
+                        for i in matched_indices
+                    )
+                    gap = abs(sub_sum - dep_amt)
+                    if used_widened:
+                        confidence = 0.75
+                        detail = (
+                            f"Wide subset match: {len(matched_txn_ids)} orders, "
+                            f"gap ${gap:.2f}, batch {batch_date}"
+                        )
                     else:
-                        # Try individual order matching by net_deposit
-                        for c in candidates:
-                            c_net = c.get("net_deposit") or c["amount"]
-                            if abs(c_net - dep_amt) < 1.00:
-                                matched_txn_ids = [c["id"]]
-                                confidence = 0.90
-                                detail = f"Single order: {c['customer']} ${c_net:.2f}"
-                                break
+                        confidence = 0.92
+                        detail = (
+                            f"Batch subset match: {len(matched_txn_ids)} orders, "
+                            f"gap ${gap:.2f}, batch {batch_date}"
+                        )
+                    # Claim these IDs so subsequent GoDaddy deposits in this
+                    # run won't re-pull them as candidates.
+                    claimed_txn_ids.update(matched_txn_ids)
+                else:
+                    logger.info(
+                        "GoDaddy auto-match: no subset found dep_id=%s "
+                        "amt=%.2f batch=%s",
+                        dep_id, dep_amt, batch_date,
+                    )
 
             elif acct_type == "venmo" or dep_source == "venmo":
                 # Venmo: match by exact amount + customer name
@@ -18918,6 +19302,16 @@ def create_entry_from_deposit(deposit_id: int, txn_type: str = "expense",
             row = conn.execute(
                 "SELECT id FROM acct_entities WHERE LOWER(short_name) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1",
                 (entity_name, entity_name),
+            ).fetchone()
+            if row:
+                entity_id = row["id"]
+
+        # acct_splits.entity_id is NOT NULL. If the caller did not pass an
+        # entity_name, or the name didn't resolve, fall back to the first
+        # active entity so the split insert doesn't crash.
+        if entity_id is None:
+            row = conn.execute(
+                "SELECT id FROM acct_entities WHERE is_active = 1 ORDER BY id LIMIT 1"
             ).fetchone()
             if row:
                 entity_id = row["id"]
@@ -19156,7 +19550,7 @@ def get_bank_deposits(account_id: int | None = None, status: str | None = None,
                        GROUP_CONCAT(rm.acct_transaction_id) as matched_txn_ids,
                        GROUP_CONCAT(rm.match_confidence) as match_confidences
                 FROM bank_deposits d
-                JOIN bank_accounts ba ON ba.id = d.account_id
+                LEFT JOIN acct_accounts ba ON ba.id = d.account_id
                 LEFT JOIN reconciliation_matches rm ON rm.bank_deposit_id = d.id
                 {where}
                 GROUP BY d.id
@@ -20622,9 +21016,11 @@ def promote_expense_to_ledger(expense_id: int, category_name: str | None,
 
         cur = conn.execute(
             """INSERT INTO acct_transactions
-               (date, description, total_amount, type, account_id, source, source_ref, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (txn_date, merchant, amount, txn_type, account_id, source, source_ref, final_notes),
+               (date, description, total_amount, amount, type, entry_type,
+                account_id, source, source_ref, notes, event_name)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (txn_date, merchant, amount, amount, txn_type, txn_type,
+             account_id, source, source_ref, final_notes, lookup_event),
         )
         txn_id = cur.lastrowid
 
@@ -20767,3 +21163,618 @@ def batch_approve_expenses(items: list[dict],
         except Exception as e:
             errors.append({"id": item_id, "error": str(e)})
     return {"approved": approved, "skipped": skipped, "errors": errors}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pairings
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _pairing_time_slots(event: dict, holes: str) -> list[str]:
+    """Compute ordered slot labels for a given holes type (9 or 18).
+
+    For tee-time events returns formatted clock strings ("8:00 AM", …).
+    For shotgun events returns hole identifiers ("1A", "1B", "2A", …).
+    """
+    combo = (event.get("format") or "").strip() == "9/18 Combo"
+    if combo and holes == "18":
+        start_type = event.get("start_type_18") or "Tee Times"
+        start_time = event.get("start_time_18")
+        count = event.get("tee_time_count_18") or 0
+    else:
+        start_type = event.get("start_type") or "Tee Times"
+        start_time = event.get("start_time")
+        count = event.get("tee_time_count") or 0
+
+    interval = event.get("tee_time_interval") or 10
+    count = int(count)
+    interval = int(interval)
+
+    if count == 0:
+        return []
+
+    if start_type == "Shotgun":
+        return [f"{(i // 2) + 1}{'A' if i % 2 == 0 else 'B'}" for i in range(count)]
+
+    if not start_time:
+        return [f"Group {i + 1}" for i in range(count)]
+
+    try:
+        base = datetime.strptime(start_time, "%H:%M")
+    except ValueError:
+        return [f"Group {i + 1}" for i in range(count)]
+
+    slots = []
+    for i in range(count):
+        t = base + timedelta(minutes=i * interval)
+        label = t.strftime("%I:%M %p").lstrip("0") or "12:00 AM"
+        slots.append(label)
+    return slots
+
+
+def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
+    """Create pairing tables if they don't exist (handles live DB migration)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS event_pairings (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id       INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            holes          TEXT NOT NULL CHECK(holes IN ('9', '18')),
+            group_num      INTEGER NOT NULL,
+            slot_label     TEXT NOT NULL,
+            player_name    TEXT NOT NULL,
+            cart_pos       INTEGER NOT NULL CHECK(cart_pos BETWEEN 1 AND 4),
+            tee_choice     TEXT,
+            handicap_index REAL,
+            created_at     TEXT DEFAULT (datetime('now')),
+            UNIQUE(event_id, holes, group_num, cart_pos)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_event_pairings_event ON event_pairings(event_id)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pairing_history (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_a    TEXT NOT NULL,
+            player_b    TEXT NOT NULL,
+            event_id    INTEGER NOT NULL REFERENCES events(id),
+            event_date  TEXT NOT NULL,
+            created_at  TEXT DEFAULT (datetime('now')),
+            UNIQUE(player_a, player_b, event_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pairing_history_ab ON pairing_history(player_a, player_b)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pairing_history_date ON pairing_history(event_date)"
+    )
+    conn.commit()
+
+
+def get_event_pairings(event_id: int, db_path=None) -> dict:
+    """Return saved pairings for an event keyed by holes ('9' / '18').
+
+    Each value is a list of groups:
+        [{"group_num": int, "slot_label": str, "players": [...]}, ...]
+    Players: {"name", "cart_pos", "tee_choice", "handicap_index"}
+    """
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        rows = conn.execute(
+            """
+            SELECT holes, group_num, slot_label, player_name,
+                   cart_pos, tee_choice, handicap_index
+            FROM event_pairings
+            WHERE event_id = ?
+            ORDER BY holes, group_num, cart_pos
+            """,
+            (event_id,),
+        ).fetchall()
+
+    result: dict = {}
+    for r in rows:
+        h = r["holes"]
+        if h not in result:
+            result[h] = []
+        grp_list = result[h]
+        # Find or create the group entry
+        grp = next((g for g in grp_list if g["group_num"] == r["group_num"]), None)
+        if grp is None:
+            grp = {"group_num": r["group_num"], "slot_label": r["slot_label"], "players": []}
+            grp_list.append(grp)
+        grp["players"].append({
+            "name": r["player_name"],
+            "cart_pos": r["cart_pos"],
+            "tee_choice": r["tee_choice"],
+            "handicap_index": r["handicap_index"],
+        })
+    return result
+
+
+def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> None:
+    """Persist pairings for an event and rebuild pairing_history rows.
+
+    groups_by_holes: {"9": [...], "18": [...]}
+    Each group: {"group_num", "slot_label", "players": [{"name", "cart_pos",
+                  "tee_choice", "handicap_index"}]}
+    """
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        # Load event date for history
+        ev_row = conn.execute(
+            "SELECT event_date FROM events WHERE id = ?", (event_id,)
+        ).fetchone()
+        event_date = ev_row["event_date"] if ev_row else datetime.now().strftime("%Y-%m-%d")
+
+        # Replace existing pairings for this event
+        conn.execute("DELETE FROM event_pairings WHERE event_id = ?", (event_id,))
+        conn.execute("DELETE FROM pairing_history WHERE event_id = ?", (event_id,))
+
+        for holes, groups in groups_by_holes.items():
+            for grp in groups:
+                group_num = grp["group_num"]
+                slot_label = grp["slot_label"]
+                for p in grp["players"]:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO event_pairings
+                            (event_id, holes, group_num, slot_label, player_name,
+                             cart_pos, tee_choice, handicap_index)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            event_id, holes, group_num, slot_label,
+                            p["name"], p["cart_pos"],
+                            p.get("tee_choice"), p.get("handicap_index"),
+                        ),
+                    )
+
+                # Record every pair in history
+                player_names = [p["name"] for p in grp["players"]]
+                for i in range(len(player_names)):
+                    for j in range(i + 1, len(player_names)):
+                        a = min(player_names[i], player_names[j])
+                        b = max(player_names[i], player_names[j])
+                        conn.execute(
+                            """
+                            INSERT OR IGNORE INTO pairing_history
+                                (player_a, player_b, event_id, event_date)
+                            VALUES (?, ?, ?, ?)
+                            """,
+                            (a, b, event_id, event_date),
+                        )
+
+        conn.commit()
+
+
+def delete_event_pairings(event_id: int, db_path=None) -> None:
+    """Remove saved pairings (and their history) for an event."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        conn.execute("DELETE FROM event_pairings WHERE event_id = ?", (event_id,))
+        conn.execute("DELETE FROM pairing_history WHERE event_id = ?", (event_id,))
+        conn.commit()
+
+
+def get_pairing_history_counts(year: int | None = None, db_path=None) -> dict:
+    """Return a dict mapping (player_a, player_b) → count for the given calendar year.
+
+    player_a < player_b alphabetically (canonical key order).
+    If year is None uses the current year.
+    """
+    if year is None:
+        year = datetime.now().year
+    year_start = f"{year}-01-01"
+    year_end = f"{year}-12-31"
+
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        rows = conn.execute(
+            """
+            SELECT player_a, player_b, COUNT(*) as cnt
+            FROM pairing_history
+            WHERE event_date BETWEEN ? AND ?
+            GROUP BY player_a, player_b
+            """,
+            (year_start, year_end),
+        ).fetchall()
+
+    return {(r["player_a"], r["player_b"]): r["cnt"] for r in rows}
+
+
+def _pair_count(pair_counts: dict, a: str, b: str) -> int:
+    """Look up play count for two players (key is alphabetically ordered)."""
+    key = (min(a, b), max(a, b))
+    return pair_counts.get(key, 0)
+
+
+def _group_score(players: list[str], pair_counts: dict) -> int:
+    """Total pairings count for all combinations within a group."""
+    total = 0
+    for i in range(len(players)):
+        for j in range(i + 1, len(players)):
+            total += _pair_count(pair_counts, players[i], players[j])
+    return total
+
+
+def _find_partner_name(request_text: str, all_names: list[str], requester: str) -> str | None:
+    """Fuzzy-match a partner_request string against available player names."""
+    if not request_text:
+        return None
+    req = request_text.lower().strip()
+    for name in all_names:
+        if name.lower() == requester.lower():
+            continue
+        if req in name.lower() or name.lower() in req:
+            return name
+    return None
+
+
+def generate_event_pairings(
+    event_id: int,
+    mode: str = "random",
+    protect_partner_requests: bool = True,
+    seeds: list | None = None,
+    db_path=None,
+) -> dict:
+    """Generate pairings for an event and return (but do NOT save) the result.
+
+    mode: 'random' | 'abcd'
+    protect_partner_requests: honor partner_request field (random mode only)
+    seeds: list of pre-assigned player locks:
+        [{"holes": "9"|"18", "slot_index": int (0-based), "players": [{"name", "cart_pos"}]}]
+
+    Returns:
+        {
+            "9":  [{"group_num", "slot_label", "players": [...]}],
+            "18": [...],
+            "slots_9":  [str, ...],
+            "slots_18": [str, ...],
+        }
+    """
+    import random as _random
+
+    seeds = seeds or []
+    with _connect(db_path) as conn:
+        # ── Load event ────────────────────────────────────────────────
+        ev = conn.execute(
+            "SELECT * FROM events WHERE id = ?", (event_id,)
+        ).fetchone()
+        if not ev:
+            raise ValueError(f"Event {event_id} not found")
+        ev = dict(ev)
+
+        fmt = (ev.get("format") or "").strip()
+        is_combo = fmt == "9/18 Combo"
+
+        # ── Active players for this event ─────────────────────────────
+        # Start from events → aliases → items (mirrors get_all_events join order)
+        INACTIVE = ("credited", "refunded", "transferred", "wd")
+        ph = ",".join("?" * len(INACTIVE))
+        items = conn.execute(
+            f"""
+            SELECT DISTINCT i.customer, i.holes, i.tee_choice, i.partner_request
+            FROM events e
+            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+            JOIN items i ON (
+                i.item_name = e.item_name COLLATE NOCASE
+                OR i.item_name = ea.alias_name COLLATE NOCASE
+                OR i.event_id = e.id
+            )
+            WHERE e.id = ?
+              AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
+              AND i.parent_item_id IS NULL
+            ORDER BY i.customer COLLATE NOCASE
+            """,
+            (event_id, *INACTIVE),
+        ).fetchall()
+        items = [dict(r) for r in items]
+
+        # ── Handicap index map ────────────────────────────────────────
+        hcp_rows = conn.execute(
+            """
+            SELECT l.customer_name, p.handicap_index
+            FROM (
+                SELECT player_name,
+                       AVG(differential) as handicap_index
+                FROM (
+                    SELECT player_name, differential,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY player_name
+                               ORDER BY round_date DESC, id DESC
+                           ) as rn
+                    FROM handicap_rounds
+                    WHERE differential IS NOT NULL
+                      AND round_date >= date('now', '-12 months')
+                )
+                WHERE rn <= 20
+                GROUP BY player_name
+            ) p
+            JOIN handicap_player_links l ON l.player_name = p.player_name
+            WHERE l.customer_name IS NOT NULL
+            """
+        ).fetchall()
+        hcp_map = {r["customer_name"].lower(): r["handicap_index"] for r in hcp_rows}
+
+    # ── Normalise holes per player ────────────────────────────────────
+    def player_holes(item):
+        h = (item.get("holes") or "").strip()
+        if h in ("9", "18"):
+            return h
+        return "18" if fmt in ("18 Holes", "27 Holes") else "9"
+
+    # ── Separate players by holes ─────────────────────────────────────
+    nines = [i for i in items if player_holes(i) == "9"]
+    eighteens = [i for i in items if player_holes(i) == "18"]
+    if not is_combo:
+        if fmt in ("18 Holes", "27 Holes"):
+            eighteens, nines = items, []
+        else:
+            nines, eighteens = items, []
+
+    # ── Pairing history for current year ─────────────────────────────
+    pair_counts = get_pairing_history_counts(db_path=db_path)
+
+    # ── Generate slots ────────────────────────────────────────────────
+    slots_9 = _pairing_time_slots(ev, "9")
+    slots_18 = _pairing_time_slots(ev, "18")
+
+    # ── Seed map: holes → {slot_index: {cart_pos: name}} ─────────────
+    seed_map: dict[str, dict[int, dict[int, str]]] = {"9": {}, "18": {}}
+    seeded_players: dict[str, set] = {"9": set(), "18": set()}
+    for s in seeds:
+        h = s.get("holes", "9")
+        si = s.get("slot_index", 0)
+        if si not in seed_map[h]:
+            seed_map[h][si] = {}
+        for sp in s.get("players", []):
+            seed_map[h][si][sp["cart_pos"]] = sp["name"]
+            seeded_players[h].add(sp["name"])
+
+    result: dict = {}
+
+    for holes, player_items, slots in [("9", nines, slots_9), ("18", eighteens, slots_18)]:
+        if not player_items and not seed_map[holes]:
+            continue
+
+        all_names = [p["customer"] for p in player_items if p.get("customer")]
+        # Build quick lookup dicts
+        tee_map = {p["customer"]: p.get("tee_choice") for p in player_items if p.get("customer")}
+        partner_map = {p["customer"]: p.get("partner_request") for p in player_items if p.get("customer")}
+
+        # Players available for free assignment (not seeded)
+        free_players = [n for n in all_names if n not in seeded_players[holes]]
+
+        # ── Determine groups to fill ──────────────────────────────────
+        n_free = len(free_players)
+        # Seeded slots may be partially or fully locked
+        n_slots = len(slots) if slots else max(
+            1,
+            -(-len(all_names) // 4)  # ceil(n/4)
+        )
+
+        # Count how many positions are pre-filled per seed slot
+        seed_space_used = {si: len(v) for si, v in seed_map[holes].items()}
+        # Positions still open in seeded slots
+        seed_space_open = {si: 4 - len(v) for si, v in seed_map[holes].items() if len(v) < 4}
+
+        if mode == "abcd":
+            groups_players = _abcd_groups(free_players, hcp_map)
+        else:
+            groups_players = _random_groups(
+                free_players, partner_map, pair_counts, protect_partner_requests
+            )
+
+        # ── Build final group list with slot labels ───────────────────
+        is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
+
+        # Start with seeded groups (already filled positions)
+        seeded_groups: dict[int, list] = {}
+        for si, pos_map in seed_map[holes].items():
+            seeded_groups[si] = [
+                {"name": pos_map[cp], "cart_pos": cp,
+                 "tee_choice": tee_map.get(pos_map[cp]),
+                 "handicap_index": hcp_map.get((pos_map[cp] or "").lower())}
+                for cp in sorted(pos_map)
+            ]
+
+        # Assign free groups to remaining slots
+        all_groups: list[dict] = []
+        group_num = 1
+        free_group_idx = 0
+
+        for si in range(n_slots):
+            if si in seeded_groups:
+                existing = seeded_groups[si]
+                # Fill remaining spots from free groups
+                if free_group_idx < len(groups_players):
+                    needed = 4 - len(existing)
+                    fill_players = groups_players[free_group_idx][:needed]
+                    if len(fill_players) == needed:
+                        free_group_idx += 1
+                    else:
+                        free_group_idx += 1
+                    next_cart = max((p["cart_pos"] for p in existing), default=0) + 1
+                    for fname in fill_players:
+                        existing.append({
+                            "name": fname,
+                            "cart_pos": next_cart,
+                            "tee_choice": tee_map.get(fname),
+                            "handicap_index": hcp_map.get((fname or "").lower()),
+                        })
+                        next_cart += 1
+                all_groups.append({
+                    "slot_label": slots[si] if si < len(slots) else f"Group {si+1}",
+                    "players": existing,
+                })
+            else:
+                if free_group_idx < len(groups_players):
+                    gp = groups_players[free_group_idx]
+                    free_group_idx += 1
+                    players_out = []
+                    for cp, name in enumerate(gp, start=1):
+                        players_out.append({
+                            "name": name,
+                            "cart_pos": cp,
+                            "tee_choice": tee_map.get(name),
+                            "handicap_index": hcp_map.get((name or "").lower()),
+                        })
+                    all_groups.append({
+                        "slot_label": slots[si] if si < len(slots) else f"Group {si+1}",
+                        "players": players_out,
+                    })
+                else:
+                    # Empty slot (more slots than groups)
+                    all_groups.append({
+                        "slot_label": slots[si] if si < len(slots) else f"Group {si+1}",
+                        "players": [],
+                    })
+
+        # Handle overflow: free groups beyond available slots
+        while free_group_idx < len(groups_players):
+            gp = groups_players[free_group_idx]
+            free_group_idx += 1
+            players_out = []
+            for cp, name in enumerate(gp, start=1):
+                players_out.append({
+                    "name": name,
+                    "cart_pos": cp,
+                    "tee_choice": tee_map.get(name),
+                    "handicap_index": hcp_map.get((name or "").lower()),
+                })
+            label = slots[len(all_groups)] if len(all_groups) < len(slots) else f"Group {len(all_groups)+1}"
+            all_groups.append({"slot_label": label, "players": players_out})
+
+        # Remove empty groups
+        all_groups = [g for g in all_groups if g["players"]]
+
+        # For shotgun: push threesomes to last slots
+        if is_shotgun and slots:
+            foursomes = [g for g in all_groups if len(g["players"]) >= 4]
+            smalls = [g for g in all_groups if len(g["players"]) < 4]
+            ordered = foursomes + smalls
+            for i, g in enumerate(ordered):
+                g["slot_label"] = slots[i] if i < len(slots) else f"Group {i+1}"
+        else:
+            ordered = all_groups
+
+        # Assign final group_num
+        for i, g in enumerate(ordered):
+            g["group_num"] = i + 1
+
+        result[holes] = ordered
+
+    result["slots_9"] = slots_9
+    result["slots_18"] = slots_18
+    return result
+
+
+def _random_groups(
+    players: list[str],
+    partner_map: dict,
+    pair_counts: dict,
+    protect_partner_requests: bool,
+) -> list[list[str]]:
+    """Form groups using weighted random (history-aware) assignment."""
+    import random as _random
+
+    used: set = set()
+    units: list[list[str]] = []
+
+    # Build partner pairs first
+    if protect_partner_requests:
+        for requester, req_text in partner_map.items():
+            if requester not in players or requester in used:
+                continue
+            partner = _find_partner_name(req_text, players, requester)
+            if partner and partner not in used:
+                units.append([requester, partner])
+                used.add(requester)
+                used.add(partner)
+
+    # Remaining singles — shuffle for randomness
+    singles = [p for p in players if p not in used]
+    _random.shuffle(singles)
+    for s in singles:
+        units.append([s])
+
+    # Greedy group formation
+    groups: list[list[str]] = []
+    remaining = units.copy()
+
+    while remaining:
+        first = remaining.pop(0)
+        group = list(first)
+
+        while len(group) < 4 and remaining:
+            needed = 4 - len(group)
+
+            # Prefer units that fit; among those, pick lowest pair-count score
+            fittable = [u for u in remaining if len(u) <= needed]
+            if not fittable:
+                fittable = remaining  # take whatever is left
+
+            best_idx = 0
+            best_score = float("inf")
+            for idx, unit in enumerate(fittable):
+                score = sum(
+                    _pair_count(pair_counts, g, u)
+                    for g in group
+                    for u in unit
+                )
+                if score < best_score:
+                    best_score = score
+                    best_idx = idx
+
+            chosen = fittable[best_idx]
+            remaining.remove(chosen)
+            group.extend(chosen)
+
+        groups.append(group)
+
+    return groups
+
+
+def _abcd_groups(players: list[str], hcp_map: dict) -> list[list[str]]:
+    """Form ABCD groups: one A/B/C/D tier player per group, sorted by handicap."""
+    if not players:
+        return []
+
+    # Sort by handicap index ascending (lower = better = A)
+    with_hcp = sorted(
+        [(p, hcp_map.get(p.lower())) for p in players if hcp_map.get(p.lower()) is not None],
+        key=lambda x: x[1],
+    )
+    without_hcp = [(p, None) for p in players if hcp_map.get(p.lower()) is None]
+    sorted_players = [p for p, _ in with_hcp] + [p for p, _ in without_hcp]
+
+    n = len(sorted_players)
+    if n == 0:
+        return []
+
+    threesomes = (4 - n % 4) % 4
+    foursomes = (n - 3 * threesomes) // 4
+    num_groups = foursomes + threesomes
+
+    if num_groups == 0:
+        return []
+
+    tier_a = sorted_players[:num_groups]
+    tier_b = sorted_players[num_groups: 2 * num_groups]
+    tier_c = sorted_players[2 * num_groups: 3 * num_groups]
+    tier_d = sorted_players[3 * num_groups: 4 * num_groups]
+
+    groups = []
+    for i in range(num_groups):
+        grp = []
+        if i < len(tier_a): grp.append(tier_a[i])
+        if i < len(tier_b): grp.append(tier_b[i])
+        if i < len(tier_c): grp.append(tier_c[i])
+        if i < len(tier_d): grp.append(tier_d[i])
+        groups.append(grp)
+
+    return groups

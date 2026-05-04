@@ -84,6 +84,11 @@
                 <option value="last_year">Last Year</option>
                 <option value="all">All Years</option>
             </select>
+            <select id="filter-credit" class="filter-select" title="Filter by credit balance">
+                <option value="">All Credits</option>
+                <option value="has">With Credit</option>
+                <option value="none">No Credit</option>
+            </select>
             <select id="sort-select" class="sort-select">
                 <option value="name-asc">Name (A-Z)</option>
                 <option value="name-desc">Name (Z-A)</option>
@@ -180,6 +185,38 @@
             <div class="modal-actions">
                 <button type="button" id="cust-credit-cancel" class="btn btn-secondary">Cancel</button>
                 <button type="button" id="cust-credit-submit" class="btn btn-primary">Apply Credit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refund Credit modal (records a credit payout via Venmo/Zelle/Check) -->
+    <div id="cust-payout-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2>Refund Credit</h2>
+                <button id="cust-payout-close" class="modal-close">&times;</button>
+            </div>
+            <div id="cust-payout-info" class="credit-info"></div>
+            <div class="credit-fields" style="margin-top:0.75rem; display:flex; flex-direction:column; gap:0.5rem;">
+                <label>Method
+                    <select id="cust-payout-method" class="modal-input">
+                        <option value="Venmo">Venmo</option>
+                        <option value="Zelle">Zelle</option>
+                        <option value="PayPal">PayPal</option>
+                        <option value="Check">Check</option>
+                        <option value="GoDaddy">GoDaddy</option>
+                    </select>
+                </label>
+                <label>Refund Date
+                    <input type="date" id="cust-payout-date" class="modal-input">
+                </label>
+                <label>Note (optional)
+                    <input type="text" id="cust-payout-note" class="modal-input" placeholder="e.g. paid via Venmo on 5/4">
+                </label>
+            </div>
+            <div class="modal-actions" style="margin-top:0.75rem;">
+                <button type="button" id="cust-payout-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="cust-payout-submit" class="btn btn-primary" style="background:#dc2626;">Record Refund</button>
             </div>
         </div>
     </div>
@@ -655,6 +692,7 @@
         const chapterFilter = document.getElementById("filter-chapter").value;
         const archivedFilter = document.getElementById("filter-archived").value;
         const activityFilter = document.getElementById("filter-activity").value;
+        const creditFilter = document.getElementById("filter-credit").value;
         let filtered = allCustomers;
 
         // Archive filter (default: show active only)
@@ -690,6 +728,11 @@
         }
         if (chapterFilter) {
             filtered = filtered.filter(c => c.chapter === chapterFilter);
+        }
+        if (creditFilter === "has") {
+            filtered = filtered.filter(c => (c.creditTotal || 0) > 0);
+        } else if (creditFilter === "none") {
+            filtered = filtered.filter(c => !((c.creditTotal || 0) > 0));
         }
 
         // Sort
@@ -738,7 +781,8 @@
         const chapterFilter = document.getElementById("filter-chapter").value;
         const archivedFilter = document.getElementById("filter-archived").value;
         const activityFilter = document.getElementById("filter-activity").value;
-        const hasFilters = query || statusFilter || chapterFilter
+        const creditFilter = document.getElementById("filter-credit").value;
+        const hasFilters = query || statusFilter || chapterFilter || creditFilter
             || archivedFilter !== "active" || activityFilter !== "this_year";
         document.getElementById("btn-clear-filters").classList.toggle("visible", !!hasFilters);
     }
@@ -749,6 +793,7 @@
         document.getElementById("filter-chapter").value = "";
         document.getElementById("filter-archived").value = "active";
         document.getElementById("filter-activity").value = "this_year";
+        document.getElementById("filter-credit").value = "";
         currentSortField = "name";
         currentSortDir = "asc";
         document.getElementById("sort-select").value = "name-asc";
@@ -868,7 +913,9 @@
             if (txStatus === "active" && !item.transferred_from_id) {
                 actionBtn = `<button class="btn btn-credit" data-cust-credit-id="${item.id}">Credit</button>`;
             } else if (txStatus === "credited") {
-                actionBtn = `<button class="btn btn-apply-cust-credit" data-cust-apply-id="${item.id}" data-customer="${escapeHtml(item.customer || '')}" data-source-event="${escapeHtml(item.item_name || '')}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Apply</button> <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
+                actionBtn = `<button class="btn btn-apply-cust-credit" data-cust-apply-id="${item.id}" data-customer="${escapeHtml(item.customer || '')}" data-source-event="${escapeHtml(item.item_name || '')}" style="background:#16a34a;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Apply</button> <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button> <button class="btn" data-cust-payout-id="${item.id}" data-cust-payout-name="${escapeHtml(item.customer || '')}" data-cust-payout-event="${escapeHtml(item.item_name || '')}" data-cust-payout-amount="${escapeHtml(stripPriceSuffix(item.item_price) || '')}" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Refund</button>`;
+            } else if (txStatus === "wd" && item.credit_amount) {
+                actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button> <button class="btn" data-cust-payout-id="${item.id}" data-cust-payout-name="${escapeHtml(item.customer || '')}" data-cust-payout-event="${escapeHtml(item.item_name || '')}" data-cust-payout-amount="${escapeHtml(item.credit_amount || '')}" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Refund</button>`;
             } else if (txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
@@ -968,6 +1015,17 @@
                     btn.addEventListener("click", (e) => {
                         e.stopPropagation();
                         openCustApplyCreditModal(parseInt(btn.dataset.custApplyId), btn.dataset.customer, btn.dataset.sourceEvent);
+                    });
+                });
+                expandedCard.querySelectorAll("[data-cust-payout-id]").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        openCustPayoutModal(
+                            parseInt(btn.dataset.custPayoutId),
+                            btn.dataset.custPayoutName || "",
+                            btn.dataset.custPayoutEvent || "",
+                            btn.dataset.custPayoutAmount || "",
+                        );
                     });
                 });
 
@@ -1494,6 +1552,9 @@
                 if (!uid.startsWith("credit-excess-") && !uid.startsWith("overpayment-credit-")) {
                     actionBtn += ` <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                 }
+                actionBtn += ` <button class="btn" data-cust-payout-id="${item.id}" data-cust-payout-name="${escapeHtml(item.customer || '')}" data-cust-payout-event="${escapeHtml(item.item_name || '')}" data-cust-payout-amount="${escapeHtml(stripPriceSuffix(item.item_price) || '')}" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Refund</button>`;
+            } else if (txStatus === "wd" && item.credit_amount) {
+                actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button> <button class="btn" data-cust-payout-id="${item.id}" data-cust-payout-name="${escapeHtml(item.customer || '')}" data-cust-payout-event="${escapeHtml(item.item_name || '')}" data-cust-payout-amount="${escapeHtml(item.credit_amount || '')}" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Refund</button>`;
             } else if (txStatus === "transferred" || txStatus === "wd") {
                 actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
             }
@@ -1672,6 +1733,17 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openCustApplyCreditModal(parseInt(btn.dataset.custApplyId), btn.dataset.customer, btn.dataset.sourceEvent);
+            });
+        });
+        container.querySelectorAll("[data-cust-payout-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openCustPayoutModal(
+                    parseInt(btn.dataset.custPayoutId),
+                    btn.dataset.custPayoutName || "",
+                    btn.dataset.custPayoutEvent || "",
+                    btn.dataset.custPayoutAmount || "",
+                );
             });
         });
         // Merge customer button
@@ -1997,6 +2069,9 @@
                     if (!uid.startsWith("credit-excess-") && !uid.startsWith("overpayment-credit-")) {
                         actionBtn += ` <button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                     }
+                    actionBtn += ` <button class="btn" data-cust-payout-id="${item.id}" data-cust-payout-name="${escapeHtml(item.customer || '')}" data-cust-payout-event="${escapeHtml(item.item_name || '')}" data-cust-payout-amount="${escapeHtml(stripPriceSuffix(item.item_price) || '')}" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Refund</button>`;
+                } else if (txStatus === "wd" && item.credit_amount) {
+                    actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button> <button class="btn" data-cust-payout-id="${item.id}" data-cust-payout-name="${escapeHtml(item.customer || '')}" data-cust-payout-event="${escapeHtml(item.item_name || '')}" data-cust-payout-amount="${escapeHtml(item.credit_amount || '')}" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.2rem 0.45rem;">Refund</button>`;
                 } else if (txStatus === "transferred" || txStatus === "wd") {
                     actionBtn = `<button class="btn btn-reverse" data-cust-reverse-id="${item.id}">Reverse</button>`;
                 }
@@ -2166,6 +2241,54 @@
             custCachedEvents = null;
             await init();
         } catch (err) { alert(err.message); }
+    }
+
+    // ---- Refund Credit (records cash payout against a credited or WD-credit row) ----
+    let custPayoutItemId = null;
+
+    function openCustPayoutModal(itemId, playerName, eventName, amount) {
+        custPayoutItemId = itemId;
+        document.getElementById("cust-payout-info").innerHTML =
+            `<div><strong>${escapeHtml(playerName || "Player")}</strong> &middot; ${escapeHtml(eventName || "")}</div>` +
+            `<div style="margin-top:0.25rem; color:#991b1b; font-weight:600;">Outstanding credit: ${escapeHtml(amount || "")}</div>`;
+        document.getElementById("cust-payout-method").value = "Venmo";
+        document.getElementById("cust-payout-date").value = new Date().toISOString().slice(0, 10);
+        document.getElementById("cust-payout-note").value = "";
+        const btn = document.getElementById("cust-payout-submit");
+        btn.disabled = false;
+        btn.textContent = "Record Refund";
+        document.getElementById("cust-payout-overlay").style.display = "flex";
+    }
+
+    function closeCustPayoutModal() {
+        document.getElementById("cust-payout-overlay").style.display = "none";
+        custPayoutItemId = null;
+    }
+
+    async function submitCustPayout() {
+        if (!custPayoutItemId) return;
+        const method = document.getElementById("cust-payout-method").value;
+        const date = document.getElementById("cust-payout-date").value;
+        const note = document.getElementById("cust-payout-note").value.trim();
+        const btn = document.getElementById("cust-payout-submit");
+        btn.disabled = true;
+        btn.textContent = "Recording...";
+        try {
+            const res = await fetch(`/api/items/${custPayoutItemId}/payout-credit`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ method, date, note }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Refund failed");
+            closeCustPayoutModal();
+            custCachedEvents = null;
+            await init();
+        } catch (err) {
+            alert(err.message);
+            btn.disabled = false;
+            btn.textContent = "Record Refund";
+        }
     }
 
     // ---- Apply Credit to Event (from Customers page) ----
@@ -3165,6 +3288,14 @@
             });
         });
 
+        // Refund Credit modal
+        document.getElementById("cust-payout-submit").addEventListener("click", submitCustPayout);
+        document.getElementById("cust-payout-cancel").addEventListener("click", closeCustPayoutModal);
+        document.getElementById("cust-payout-close").addEventListener("click", closeCustPayoutModal);
+        document.getElementById("cust-payout-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeCustPayoutModal();
+        });
+
         // Customer Merge modal
         document.getElementById("cust-merge-submit").addEventListener("click", submitCustMerge);
         document.getElementById("cust-merge-cancel").addEventListener("click", closeCustMergeModal);
@@ -3197,6 +3328,7 @@
         document.getElementById("filter-chapter").addEventListener("change", renderCustomers);
         document.getElementById("filter-archived").addEventListener("change", renderCustomers);
         document.getElementById("filter-activity").addEventListener("change", renderCustomers);
+        document.getElementById("filter-credit").addEventListener("change", renderCustomers);
         document.getElementById("sort-select").addEventListener("change", () => {
             const val = document.getElementById("sort-select").value;
             if (val) {
