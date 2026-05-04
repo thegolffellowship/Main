@@ -124,6 +124,7 @@
                         <th data-col="email">Email</th>
                         <th data-col="phone">Phone</th>
                         <th data-sort="handicap" data-col="handicap">HCP <span class="sort-arrow">&#9650;&#9660;</span></th>
+                        <th data-sort="renewal" data-col="renewal" title="Membership term expiration">Renewal <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="latest" data-col="latest">Last Activity <span class="sort-arrow">&#9650;&#9660;</span></th>
                     </tr>
                 </thead>
@@ -567,6 +568,37 @@
     }
 
     /** Build a "LastName, FirstName..." key for consistent name sorting. */
+    /** Render the Renewal column cell from c.membershipTerm (overlaid by init()).
+     * Returns a status badge or em-dash. */
+    function renderRenewalCell(c) {
+        const term = c.membershipTerm;
+        if (!term || !term.expires_at) {
+            return '<span style="color:var(--text-muted);">—</span>';
+        }
+        const today = new Date().toISOString().slice(0, 10);
+        const exp = String(term.expires_at).slice(0, 10);
+        let label, fg, bg;
+        if (exp >= today) {
+            const daysLeft = Math.round((new Date(exp) - new Date(today)) / 86400000);
+            if (daysLeft <= 30) {
+                label = `${exp} · ${daysLeft}d`; fg = '#854d0e'; bg = '#fef3c7';
+            } else {
+                label = exp; fg = '#166534'; bg = '#dcfce7';
+            }
+        } else {
+            const daysLapsed = Math.round((new Date(today) - new Date(exp)) / 86400000);
+            label = `${exp} · -${daysLapsed}d`; fg = '#991b1b'; bg = '#fee2e2';
+        }
+        return `<span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:0.72rem;font-weight:600;color:${fg};background:${bg};white-space:nowrap;">${label}</span>`;
+    }
+
+    /** Sort key for the Renewal column — descending by expires_at; nulls last. */
+    function renewalSortKey(c) {
+        return c.membershipTerm && c.membershipTerm.expires_at
+            ? String(c.membershipTerm.expires_at)
+            : '￿';  // sentinel that sorts after any real date
+    }
+
     function lastNameSortKey(name) {
         const s = String(name).trim();
         const parts = s.split(/\s+/);
@@ -751,6 +783,10 @@
                 const ha = a.handicapIndex !== null ? a.handicapIndex : 999;
                 const hb = b.handicapIndex !== null ? b.handicapIndex : 999;
                 return asc ? ha - hb : hb - ha;
+            }
+            if (currentSortField === "renewal") {
+                const ka = renewalSortKey(a), kb = renewalSortKey(b);
+                return asc ? ka.localeCompare(kb) : kb.localeCompare(ka);
             }
             if (currentSortField === "latest") return b.latestDate.localeCompare(a.latestDate);
             return 0;
@@ -1167,10 +1203,11 @@
                 <td style="font-size:0.78rem; color:var(--text-muted);">${c.email ? `<a href="mailto:${encodeURIComponent(c.email)}" class="cell-link" onclick="event.stopPropagation()">${escapeHtml(c.email)}</a>` : '\u2014'}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.phone || "\u2014")}</td>
                 <td style="font-size:0.78rem; font-weight:600; color:${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '#16a34a' : '#2563eb') : 'var(--text-muted)'};">${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1)) + '<span style="font-size:0.85em;color:#94a3b8;font-weight:500;margin-left:2px;">N</span><span style="font-size:0.9em;color:#64748b;font-weight:500;"> / ' + (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex * 2).toFixed(1) : (c.handicapIndex * 2).toFixed(1)) + '</span>' : '\u2014'}</td>
+                <td style="font-size:0.78rem;">${renderRenewalCell(c)}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
             </tr>
             <tr class="cust-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${escapeHtml(c.name)}">
-                <td colspan="9">
+                <td colspan="10">
                     <div class="cust-detail-content" data-detail-name="${escapeHtml(c.name)}">
                         ${isExpanded ? renderCustDetailContent(c) : ''}
                     </div>
@@ -1503,7 +1540,8 @@
                 }
                 list.innerHTML = terms.map(t => {
                     const adminCtrls = currentRole === 'admin'
-                        ? `<button type="button" class="cust-edit-membership-btn" data-term-id="${t.id}" data-customer-id="${cid}" data-started="${t.started_at || ''}" data-expires="${t.expires_at || ''}" data-notes="${escapeHtml(t.notes || '')}" style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:0.7rem;padding:0.05rem 0.3rem;">Edit</button>` +
+                        ? `<button type="button" class="cust-send-notice-btn" data-term-id="${t.id}" data-customer-id="${cid}" style="background:none;border:1px solid #cbd5e1;color:#0f172a;cursor:pointer;font-size:0.68rem;padding:0.05rem 0.4rem;border-radius:4px;margin-right:0.2rem;" title="Send a notice email immediately">Send notice</button>` +
+                          `<button type="button" class="cust-edit-membership-btn" data-term-id="${t.id}" data-customer-id="${cid}" data-started="${t.started_at || ''}" data-expires="${t.expires_at || ''}" data-notes="${escapeHtml(t.notes || '')}" style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:0.7rem;padding:0.05rem 0.3rem;">Edit</button>` +
                           `<button type="button" class="cust-delete-membership-btn" data-term-id="${t.id}" data-customer-id="${cid}" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.7rem;padding:0.05rem 0.3rem;">✕</button>`
                         : '';
                     return `<div style="display:flex;align-items:center;gap:0.4rem;padding:0.25rem 0;border-bottom:1px dashed var(--border);font-size:0.78rem;flex-wrap:wrap;">
@@ -1584,13 +1622,127 @@
         });
     }
 
-    // Wire Add / Edit / Delete handlers for the membership card.  Idempotent —
-    // sets a flag on the container so re-calls don't double-bind.
+    // Open the "Send notice" preview/send modal for a given membership term.
+    // Pulls a preview for the chosen window from /api/memberships/<id>/preview-notice
+    // so the admin sees the actual email body before sending.
+    async function _openSendNoticeModal(termId) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+        overlay.innerHTML = `<div style="background:#fff;border-radius:8px;padding:1.25rem;max-width:720px;width:100%;max-height:90vh;display:flex;flex-direction:column;font-size:0.85rem;">
+            <div style="font-weight:700;font-size:0.95rem;margin-bottom:0.6rem;">Send membership notice now</div>
+            <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
+                <label style="font-size:0.78rem;font-weight:600;color:var(--text-muted);">Notice:</label>
+                <select class="modal-input notice-window-select" style="padding:0.3rem;font-size:0.85rem;width:auto;">
+                    <option value="30d">T-30: expires in 30 days</option>
+                    <option value="7d">T-7: expires in 7 days</option>
+                    <option value="dayof">T-0: expires today</option>
+                    <option value="lapsed">T+14 lapsed: final notice + opt-in/out buttons</option>
+                    <option value="confirmation">Confirmation: thanks for renewing</option>
+                </select>
+                <span class="notice-status" style="margin-left:auto;font-size:0.78rem;color:var(--text-muted);"></span>
+            </div>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.4rem;">
+                <strong>To:</strong> <span class="notice-to">…</span> &nbsp;·&nbsp;
+                <strong>Subject:</strong> <span class="notice-subject">…</span>
+            </div>
+            <div style="flex:1;overflow:auto;border:1px solid var(--border);border-radius:6px;background:#fafafa;min-height:280px;">
+                <iframe class="notice-preview" sandbox="" style="width:100%;height:60vh;border:none;background:#fff;"></iframe>
+            </div>
+            <div style="display:flex;gap:0.4rem;justify-content:flex-end;margin-top:0.8rem;">
+                <button type="button" class="btn btn-secondary notice-cancel" style="font-size:0.85rem;padding:0.4rem 0.9rem;">Cancel</button>
+                <button type="button" class="btn btn-primary notice-send" style="font-size:0.85rem;padding:0.4rem 0.9rem;">Send now</button>
+            </div>
+        </div>`;
+        document.body.appendChild(overlay);
+
+        const sel = overlay.querySelector('.notice-window-select');
+        const toEl = overlay.querySelector('.notice-to');
+        const subjEl = overlay.querySelector('.notice-subject');
+        const iframe = overlay.querySelector('.notice-preview');
+        const sendBtn = overlay.querySelector('.notice-send');
+        const status = overlay.querySelector('.notice-status');
+
+        async function loadPreview() {
+            const window = sel.value;
+            status.textContent = 'Loading…';
+            sendBtn.disabled = true;
+            try {
+                const res = await fetch(`/api/memberships/${termId}/preview-notice?window=${encodeURIComponent(window)}`);
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || `Server returned ${res.status}`);
+                }
+                const data = await res.json();
+                toEl.textContent = data.to || '(no email on file)';
+                subjEl.textContent = data.subject;
+                iframe.srcdoc = data.html;
+                if (data.can_send) {
+                    sendBtn.disabled = false;
+                    status.textContent = '';
+                    status.style.color = 'var(--text-muted)';
+                } else {
+                    sendBtn.disabled = true;
+                    status.textContent = data.reason || 'Cannot send';
+                    status.style.color = '#b91c1c';
+                }
+            } catch (err) {
+                toEl.textContent = '—';
+                subjEl.textContent = '—';
+                iframe.srcdoc = `<p style="font-family:sans-serif;color:#b91c1c;padding:1rem;">Preview failed: ${escapeHtml(err.message)}</p>`;
+                status.textContent = err.message;
+                status.style.color = '#b91c1c';
+                sendBtn.disabled = true;
+            }
+        }
+
+        sel.addEventListener('change', loadPreview);
+        overlay.querySelector('.notice-cancel').addEventListener('click', () => overlay.remove());
+        sendBtn.addEventListener('click', async () => {
+            const window = sel.value;
+            if (!confirm(`Send the "${sel.options[sel.selectedIndex].text}" email now?`)) return;
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending…';
+            try {
+                const res = await fetch(`/api/memberships/${termId}/send-notice`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ window }),
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) {
+                    throw new Error(data.error || 'Send failed');
+                }
+                sendBtn.textContent = 'Sent';
+                sendBtn.style.background = '#16a34a';
+                setTimeout(() => {
+                    overlay.remove();
+                    // Reload terms in any visible Membership card
+                    document.querySelectorAll('.cust-memberships-section').forEach(sec => {
+                        loadCustomerMemberships(sec.closest('.cust-tab-content') || sec.parentElement);
+                    });
+                }, 700);
+            } catch (err) {
+                alert('Send failed: ' + err.message);
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Send now';
+            }
+        });
+        loadPreview();
+    }
+
+    // Wire Add / Edit / Delete / Send-Notice handlers for the membership card.
+    // Idempotent — sets a flag on the container so re-calls don't double-bind.
     function wireMembershipUI(container) {
         if (!container || container._membershipWired) return;
         container._membershipWired = true;
 
         container.addEventListener("click", async (e) => {
+            const sendBtn = e.target.closest(".cust-send-notice-btn");
+            if (sendBtn) {
+                e.stopPropagation();
+                _openSendNoticeModal(sendBtn.dataset.termId);
+                return;
+            }
             const addBtn = e.target.closest(".cust-add-membership-btn");
             if (addBtn) {
                 e.stopPropagation();
@@ -3403,6 +3555,18 @@
                     if (canon.customer_id && !c.customer_id) c.customer_id = canon.customer_id;
                 });
             } catch (e) { /* canonical data optional — items-derived values used as fallback */ }
+
+            // Fetch current membership term (one-row-per-customer map) for the
+            // Renewal column on the list view + the term-aware sort key.
+            try {
+                const memRes = await fetch("/api/memberships/current");
+                const memMap = await memRes.json();
+                allCustomers.forEach(c => {
+                    if (c.customer_id && memMap[c.customer_id]) {
+                        c.membershipTerm = memMap[c.customer_id];
+                    }
+                });
+            } catch (e) { /* membership data optional — column shows em-dash */ }
 
             // Fetch Venmo handles and merge into customer objects
             try {

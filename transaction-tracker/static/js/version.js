@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.11.0";
+window.TGF_VERSION = "2.11.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.11.1",
+    date: "2026-05-04",
+    title: "Membership: Renewal column on customers list + Send Notice Now + admin CC",
+    changes: [
+      "New Renewal column on the top-level Customers list shows each customer's current-term expires_at as a colored badge (green=active, amber=≤30d left, red=lapsed). Sortable by date. Backed by GET /api/memberships/current which returns the latest term per customer in one fetch.",
+      "New 'Send notice' button on every membership term row (admin only). Opens a preview modal with a notice-window dropdown (T-30, T-7, T-0, T+14 lapsed, Confirmation), live preview iframe of the actual rendered email, recipient line, and Send button. Stamps the matching *_sent_at column on success so the daily scheduler doesn't re-fire.",
+      "Admin notifications (roster opt-in/out, no-response digest) now CC admin@thegolffellowship.com by default. Override via MEMBERSHIP_ADMIN_CC env var (set to '' to disable, or comma-separated for multiple). Auto-dedup so a recipient already on the TO line isn't added again.",
+      "send_mail_graph extended with optional cc_address kwarg → real ccRecipients in the Graph payload (not a second TO).",
+      "New endpoints: GET /api/memberships/<id>/preview-notice?window=… and POST /api/memberships/<id>/send-notice (admin only).",
+    ],
+  },
   {
     version: "2.11.0",
     date: "2026-05-04",

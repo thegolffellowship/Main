@@ -357,10 +357,13 @@ def send_mail_graph(
     to_address: str,
     subject: str,
     html_body: str,
+    cc_address: str | None = None,
 ) -> bool:
     """Send an email via Microsoft Graph API (requires Mail.Send permission).
 
     ``to_address`` may be a single email or a comma-separated list of emails.
+    ``cc_address`` (optional) likewise — added as `ccRecipients` so it shows
+    up as a real CC in the recipient's email client, not as another TO.
     """
     token = _get_graph_token(tenant_id, client_id, client_secret)
     if not token:
@@ -375,15 +378,23 @@ def send_mail_graph(
         "Content-Type": "application/json",
     }
 
-    payload = {
-        "message": {
-            "subject": subject,
-            "body": {
-                "contentType": "HTML",
-                "content": html_body,
-            },
-            "toRecipients": to_recipients,
+    message = {
+        "subject": subject,
+        "body": {
+            "contentType": "HTML",
+            "content": html_body,
         },
+        "toRecipients": to_recipients,
+    }
+    if cc_address:
+        cc_addresses = [a.strip() for a in cc_address.split(",") if a.strip()]
+        if cc_addresses:
+            message["ccRecipients"] = [
+                {"emailAddress": {"address": addr}} for addr in cc_addresses
+            ]
+
+    payload = {
+        "message": message,
         "saveToSentItems": "false",
     }
 
@@ -392,7 +403,10 @@ def send_mail_graph(
     try:
         resp = _request_with_retry("post", url, headers=headers, json=payload, timeout=30)
         resp.raise_for_status()
-        logger.info("Email sent via Graph API to %s", to_address)
+        if cc_address:
+            logger.info("Email sent via Graph API to %s (cc %s)", to_address, cc_address)
+        else:
+            logger.info("Email sent via Graph API to %s", to_address)
         return True
     except requests.exceptions.HTTPError as e:
         logger.exception("Graph API send mail error: %s", e.response.text if e.response else e)

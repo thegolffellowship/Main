@@ -1244,6 +1244,11 @@ def send_auto_payment_reminders():
 def _membership_send_email(to_address: str, subject: str, html_body: str) -> bool:
     """Thin wrapper that membership notices use to fire emails through Graph.
 
+    Auto-CCs `MEMBERSHIP_ADMIN_CC` (env var, comma-separated) when the message
+    is going to `admin@thegolffellowship.com` — so the owner gets a copy of
+    every roster opt-in/out notification and the no-response digest without
+    needing to be on the TO line.
+
     Returns False (without raising) if email credentials aren't configured —
     the caller treats that as "skipped" and won't stamp the notice column,
     so the next scheduler run will retry.
@@ -1255,10 +1260,31 @@ def _membership_send_email(to_address: str, subject: str, html_body: str) -> boo
     if not all([tenant_id, client_id, client_secret, from_address]):
         logger.warning("Membership send: email credentials missing, skipping send to %s", to_address)
         return False
+    # Default: always CC admin@thegolffellowship.com on internal admin
+    # notifications (roster opt-in/out, no-response digest, etc.) so the
+    # owner has a copy regardless of where the TO is routed.  Override via
+    # MEMBERSHIP_ADMIN_CC env var (set to "" to disable).
+    cc_address = None
+    is_internal_admin = "admin@thegolffellowship.com" in (to_address or "").lower()
+    if is_internal_admin:
+        cc_raw = os.getenv("MEMBERSHIP_ADMIN_CC")
+        if cc_raw is None:
+            cc_raw = "admin@thegolffellowship.com"
+        cc_raw = cc_raw.strip()
+        # Strip out any address that's already on the TO line (avoid the
+        # "TO and CC are the same" no-op while preserving multi-recipient
+        # CCs that include extra addresses beyond the TO).
+        to_set = {a.strip().lower() for a in (to_address or "").split(",") if a.strip()}
+        cc_filtered = ",".join(
+            a.strip() for a in cc_raw.split(",")
+            if a.strip() and a.strip().lower() not in to_set
+        )
+        cc_address = cc_filtered or None
     try:
         return send_mail_graph(
             tenant_id, client_id, client_secret, from_address,
             to_address, subject, html_body,
+            cc_address=cc_address,
         )
     except Exception:
         logger.exception("Membership send: graph failure for %s", to_address)
@@ -2929,6 +2955,18 @@ def api_get_memberships(customer_id):
     return jsonify(get_memberships_for_customer(customer_id))
 
 
+@app.route("/api/memberships/current")
+@require_role("view-only")
+def api_current_memberships():
+    """Return {customer_id: {expires_at, started_at, ...}} for the latest term per customer.
+
+    Used by the Customers list page to render the Renewal column in one fetch
+    instead of N round-trips.
+    """
+    from email_parser.memberships import get_current_term_map
+    return jsonify(get_current_term_map())
+
+
 @app.route("/api/customers/<int:customer_id>/memberships", methods=["POST"])
 @require_role("admin")
 def api_add_membership(customer_id):
@@ -2974,6 +3012,39 @@ def api_run_membership_reminders():
     if counts is None:
         return jsonify({"error": "run failed — check server logs"}), 500
     return jsonify({"status": "ok", "counts": counts})
+
+
+@app.route("/api/memberships/<int:term_id>/preview-notice")
+@require_role("admin")
+def api_preview_membership_notice(term_id):
+    """Render a notice email for a specific term without sending it.
+
+    Query: ?window=30d|7d|dayof|lapsed|confirmation
+    Returns: {to, subject, html, term, customer, can_send, reason}
+    """
+    window = (request.args.get("window") or "").strip()
+    from email_parser.memberships import preview_notice
+    try:
+        preview = preview_notice(term_id, window)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(preview)
+
+
+@app.route("/api/memberships/<int:term_id>/send-notice", methods=["POST"])
+@require_role("admin")
+def api_send_membership_notice(term_id):
+    """Send a specific notice for a term right now and stamp the matching column.
+
+    Body: {window: "30d" | "7d" | "dayof" | "lapsed" | "confirmation"}
+    """
+    data = request.get_json(force=True) or {}
+    window = (data.get("window") or "").strip()
+    from email_parser.memberships import send_notice_now
+    result = send_notice_now(term_id, window, _membership_send_email)
+    if not result.get("ok"):
+        return jsonify(result), 400
+    return jsonify(result)
 
 
 @app.route("/m/roster/<token>")

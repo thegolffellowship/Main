@@ -399,12 +399,63 @@ Wired from both render paths (inline expand + detail panel) via
 latter is idempotent via a `_membershipWired` flag). The Add modal pre-fills
 `expires_at` from the chosen `started_at` based on the policy.
 
+## Customers list — Renewal column
+
+The Customers list page renders a **Renewal** column between HCP and Last
+Activity, showing each customer's current term's `expires_at` as a colored
+badge:
+
+- Green (`#dcfce7` bg) — active, more than 30 days left
+- Amber (`#fef3c7` bg) — active, 30 days or less remaining (with `Nd` left)
+- Red (`#fee2e2` bg) — lapsed (with `-Nd` since expiry)
+- Em-dash — no membership term on file
+
+`init()` fetches `GET /api/memberships/current` (one row per customer,
+latest term) and overlays `c.membershipTerm` onto each customer object.
+The column is sortable: `renewalSortKey(c)` puts customers without terms
+last via a sentinel character.
+
+## Send notice now (admin) — preview modal
+
+Each term row on the Membership Terms card shows a **Send notice** button
+for admins. Clicking opens a modal with:
+- Window selector: T-30 / T-7 / T-0 / T+14 lapsed / Confirmation
+- Live preview iframe of the rendered email body (sandboxed)
+- Recipient address and subject line
+- Send button (disabled if no primary email on file)
+
+`POST /api/memberships/<term_id>/send-notice` with `{window}` fires the
+email through Microsoft Graph and stamps the matching `*_sent_at` column
+so the daily scheduler doesn't re-fire the same window.
+
+`GET /api/memberships/<term_id>/preview-notice?window=<w>` returns
+`{to, subject, html, term, customer, can_send, reason}` — the modal calls
+this on every dropdown change so admins see exactly what will go out.
+
+## Admin notification CC
+
+`_membership_send_email(to, subject, html)` (the wrapper in `app.py` that
+all admin notifications fire through) auto-CCs `admin@thegolffellowship.com`
+by default whenever the TO is going to that same address. Configurable via
+the `MEMBERSHIP_ADMIN_CC` env var (set to `""` to disable, comma-separated
+for multiple recipients).
+
+The wrapper de-duplicates: any address already on the TO line is stripped
+from the CC list, so you never get the redundant "TO and CC are the same"
+header.
+
+`send_mail_graph(..., cc_address=None)` (in `email_parser/fetcher.py`) adds
+real `ccRecipients` to the Graph payload — not a second TO.
+
 ## API endpoints
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | GET | `/api/customers/<id>/memberships` | view-only | List terms for a customer |
 | POST | `/api/customers/<id>/memberships` | admin | Add a manual term `{started_at, expires_at?, notes?}` |
+| GET | `/api/memberships/current` | view-only | `{customer_id: {expires_at, …}}` for the latest term per customer (Renewal column) |
+| GET | `/api/memberships/<term_id>/preview-notice` | admin | Render a notice email without sending; query `?window=30d|7d|dayof|lapsed|confirmation` |
+| POST | `/api/memberships/<term_id>/send-notice` | admin | Send a notice now and stamp the matching column |
 | PATCH | `/api/memberships/<term_id>` | admin | Update `started_at` / `expires_at` / `notes` |
 | DELETE | `/api/memberships/<term_id>` | admin | Delete a term |
 | POST | `/api/admin/run-membership-reminders` | admin | Manually trigger the daily job |

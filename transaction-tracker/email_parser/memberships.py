@@ -218,6 +218,47 @@ def get_memberships_for_customer(customer_id: int, db_path=None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_current_term_map(db_path=None) -> dict:
+    """Return {customer_id: {started_at, expires_at, source, ...}} for all customers.
+
+    Uses the latest term per customer (highest `started_at`). The Customers
+    list page overlays this onto each row to render the Renewal column.
+    """
+    with _connect(db_path) as conn:
+        ensure_membership_tables(conn)
+        rows = conn.execute(
+            """
+            SELECT m.customer_id, m.id, m.started_at, m.expires_at, m.source,
+                   m.notice_30d_sent_at, m.notice_7d_sent_at,
+                   m.notice_dayof_sent_at, m.notice_lapsed_sent_at,
+                   m.confirmation_sent_at, m.roster_choice
+              FROM customer_memberships m
+              JOIN (
+                  SELECT customer_id, MAX(started_at) AS latest
+                    FROM customer_memberships
+                   GROUP BY customer_id
+              ) latest_per
+                ON latest_per.customer_id = m.customer_id
+               AND latest_per.latest = m.started_at
+            """
+        ).fetchall()
+    result = {}
+    for r in rows:
+        result[r["customer_id"]] = {
+            "id": r["id"],
+            "started_at": r["started_at"],
+            "expires_at": r["expires_at"],
+            "source": r["source"],
+            "notice_30d_sent_at": r["notice_30d_sent_at"],
+            "notice_7d_sent_at": r["notice_7d_sent_at"],
+            "notice_dayof_sent_at": r["notice_dayof_sent_at"],
+            "notice_lapsed_sent_at": r["notice_lapsed_sent_at"],
+            "confirmation_sent_at": r["confirmation_sent_at"],
+            "roster_choice": r["roster_choice"],
+        }
+    return result
+
+
 def get_current_term(conn: sqlite3.Connection, customer_id: int) -> Optional[dict]:
     """Return the current (latest) term for this customer, or None."""
     ensure_membership_tables(conn)
@@ -485,6 +526,110 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
         return subject, _email_shell(body)
 
     raise ValueError(f"Unknown notice window: {window}")
+
+
+VALID_NOTICE_WINDOWS = {"30d", "7d", "dayof", "lapsed", "confirmation"}
+
+
+def preview_notice(term_id: int, window: str, db_path=None) -> dict:
+    """Render the notice email for an existing term WITHOUT sending it.
+
+    Returns {to, subject, html, term, customer, can_send, reason}.  `can_send`
+    is False when the recipient has no primary email on file (admin can still
+    see what would have gone out, but the Send button is disabled).
+    """
+    if window not in VALID_NOTICE_WINDOWS:
+        raise ValueError(f"Unknown notice window: {window}")
+    with _connect(db_path) as conn:
+        ensure_membership_tables(conn)
+        term = conn.execute(
+            "SELECT * FROM customer_memberships WHERE id = ?", (term_id,)
+        ).fetchone()
+        if not term:
+            raise ValueError(f"Term {term_id} not found")
+        term = dict(term)
+        cust = conn.execute(
+            """
+            SELECT c.first_name, c.last_name,
+                   COALESCE(NULLIF(TRIM(c.first_name||' '||c.last_name),''), '(unknown)') AS full_name,
+                   ce.email
+              FROM customers c
+              LEFT JOIN customer_emails ce
+                     ON ce.customer_id = c.customer_id AND ce.is_primary = 1
+             WHERE c.customer_id = ?
+            """,
+            (term["customer_id"],),
+        ).fetchone()
+    if not cust:
+        raise ValueError(f"Customer {term['customer_id']} not found")
+    customer = {"first_name": cust["first_name"], "last_name": cust["last_name"]}
+    if window == "confirmation":
+        # Pull the originating order_id if the term came from a parsed item.
+        order_id = None
+        if term.get("source_item_id"):
+            with _connect(db_path) as conn:
+                row = conn.execute(
+                    "SELECT order_id FROM items WHERE id = ?", (term["source_item_id"],)
+                ).fetchone()
+                if row:
+                    order_id = row["order_id"]
+        subject, html = render_confirmation_email(term, customer, order_id)
+    else:
+        subject, html = render_notice_email(window, term, customer)
+    return {
+        "to": cust["email"] or "",
+        "subject": subject,
+        "html": html,
+        "term": term,
+        "customer": {
+            "first_name": cust["first_name"],
+            "last_name": cust["last_name"],
+            "full_name": cust["full_name"],
+        },
+        "can_send": bool(cust["email"]),
+        "reason": "" if cust["email"] else "No primary email on file for this customer.",
+    }
+
+
+_WINDOW_TO_COLUMN = {
+    "30d":          "notice_30d_sent_at",
+    "7d":           "notice_7d_sent_at",
+    "dayof":        "notice_dayof_sent_at",
+    "lapsed":       "notice_lapsed_sent_at",
+    "confirmation": "confirmation_sent_at",
+}
+
+
+def send_notice_now(term_id: int, window: str, send_email: Callable, db_path=None) -> dict:
+    """Render + immediately send a notice for an existing term.
+
+    Stamps the corresponding `*_sent_at` column on success so the daily
+    scheduler doesn't re-fire the same window.
+
+    Returns {ok, sent_to, subject, stamped_column} or {ok: False, error}.
+    """
+    if window not in VALID_NOTICE_WINDOWS:
+        return {"ok": False, "error": f"Unknown window: {window}"}
+    preview = preview_notice(term_id, window, db_path=db_path)
+    if not preview["can_send"]:
+        return {"ok": False, "error": preview["reason"]}
+    sent = send_email(preview["to"], preview["subject"], preview["html"])
+    if not sent:
+        return {"ok": False, "error": "Email send failed (check server logs)"}
+    col = _WINDOW_TO_COLUMN[window]
+    with _connect(db_path) as conn:
+        ensure_membership_tables(conn)
+        conn.execute(
+            f"UPDATE customer_memberships SET {col} = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+            (term_id,),
+        )
+        conn.commit()
+    return {
+        "ok": True,
+        "sent_to": preview["to"],
+        "subject": preview["subject"],
+        "stamped_column": col,
+    }
 
 
 def render_confirmation_email(term: dict, customer: dict, order_id: Optional[str] = None) -> tuple[str, str]:
