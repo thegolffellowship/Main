@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.11.2";
+window.TGF_VERSION = "2.11.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.11.3",
+    date: "2026-05-04",
+    title: "Membership notices: BCC admin on member-facing emails",
+    changes: [
+      "Member-facing membership emails (T-30/T-7/T-0/lapsed/confirmation, including manual Send Notice Now sends) are now BCC'd to admin@thegolffellowship.com automatically. Member's email client doesn't display the BCC line, so the recipient sees a clean email; the owner gets a paper trail of every notice that goes out.",
+      "Configurable via MEMBERSHIP_MEMBER_BCC env var (defaults to admin@thegolffellowship.com, comma-separated for multiple, set to \"\" to disable). De-duplicates against the TO line so a member email can't accidentally end up BCC'ing itself.",
+      "Admin-facing emails (roster opt-in/out, no-response digest) keep the existing CC behavior via MEMBERSHIP_ADMIN_CC. The two paths are now mutually exclusive — admin-facing uses CC, member-facing uses BCC.",
+      "send_mail_graph extended with optional bcc_address kwarg → real bccRecipients in the Graph payload (Microsoft Graph respects BCC privacy: it's not echoed back in headers).",
+    ],
+  },
   {
     version: "2.11.2",
     date: "2026-05-04",

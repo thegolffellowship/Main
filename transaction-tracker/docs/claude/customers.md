@@ -444,20 +444,30 @@ so the daily scheduler doesn't re-fire the same window.
 `{to, subject, html, term, customer, can_send, reason}` — the modal calls
 this on every dropdown change so admins see exactly what will go out.
 
-## Admin notification CC
+## Admin copy on every membership email
 
 `_membership_send_email(to, subject, html)` (the wrapper in `app.py` that
-all admin notifications fire through) auto-CCs `admin@thegolffellowship.com`
-by default whenever the TO is going to that same address. Configurable via
-the `MEMBERSHIP_ADMIN_CC` env var (set to `""` to disable, comma-separated
-for multiple recipients).
+all membership notices fire through) automatically copies admin on every
+send via two env-var-driven rules:
 
-The wrapper de-duplicates: any address already on the TO line is stripped
-from the CC list, so you never get the redundant "TO and CC are the same"
-header.
+| Direction | Env var | Default | Header |
+|---|---|---|---|
+| Admin-facing (TO is admin@thegolffellowship.com — roster opt-in/out, no-response digest) | `MEMBERSHIP_ADMIN_CC` | `admin@thegolffellowship.com` | **CC** |
+| Member-facing (TO is anything else — daily reminders, Send Notice Now) | `MEMBERSHIP_MEMBER_BCC` | `admin@thegolffellowship.com` | **BCC** |
 
-`send_mail_graph(..., cc_address=None)` (in `email_parser/fetcher.py`) adds
-real `ccRecipients` to the Graph payload — not a second TO.
+Both env vars accept comma-separated lists. Set either to `""` to disable
+that copy entirely. Both lists are de-duplicated against the TO line, so an
+address already on TO is never re-added — meaning if TO=admin@ and CC
+default is also admin@, the CC is dropped and the admin gets one copy
+(not two).
+
+BCC is used for member-facing notices specifically so the member's email
+client doesn't display admin@ on their headers — the admin gets a quiet
+paper trail without changing how the email reads to the recipient.
+
+`send_mail_graph(..., cc_address=None, bcc_address=None)` (in
+`email_parser/fetcher.py`) adds real `ccRecipients` / `bccRecipients` to
+the Graph payload — not extra TOs.
 
 ## API endpoints
 

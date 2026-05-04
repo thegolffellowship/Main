@@ -358,12 +358,14 @@ def send_mail_graph(
     subject: str,
     html_body: str,
     cc_address: str | None = None,
+    bcc_address: str | None = None,
 ) -> bool:
     """Send an email via Microsoft Graph API (requires Mail.Send permission).
 
     ``to_address`` may be a single email or a comma-separated list of emails.
-    ``cc_address`` (optional) likewise — added as `ccRecipients` so it shows
-    up as a real CC in the recipient's email client, not as another TO.
+    ``cc_address`` / ``bcc_address`` (optional) likewise — added as
+    `ccRecipients` / `bccRecipients` so they show up correctly in the
+    recipient's email client (or stay hidden, in the BCC case).
     """
     token = _get_graph_token(tenant_id, client_id, client_secret)
     if not token:
@@ -392,6 +394,12 @@ def send_mail_graph(
             message["ccRecipients"] = [
                 {"emailAddress": {"address": addr}} for addr in cc_addresses
             ]
+    if bcc_address:
+        bcc_addresses = [a.strip() for a in bcc_address.split(",") if a.strip()]
+        if bcc_addresses:
+            message["bccRecipients"] = [
+                {"emailAddress": {"address": addr}} for addr in bcc_addresses
+            ]
 
     payload = {
         "message": message,
@@ -403,8 +411,11 @@ def send_mail_graph(
     try:
         resp = _request_with_retry("post", url, headers=headers, json=payload, timeout=30)
         resp.raise_for_status()
-        if cc_address:
-            logger.info("Email sent via Graph API to %s (cc %s)", to_address, cc_address)
+        log_extras = []
+        if cc_address: log_extras.append(f"cc {cc_address}")
+        if bcc_address: log_extras.append(f"bcc {bcc_address}")
+        if log_extras:
+            logger.info("Email sent via Graph API to %s (%s)", to_address, ", ".join(log_extras))
         else:
             logger.info("Email sent via Graph API to %s", to_address)
         return True
