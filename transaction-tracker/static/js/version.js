@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.10.15";
+window.TGF_VERSION = "2.10.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.16",
+    date: "2026-05-03",
+    title: "27 Holes event format with custom pricing rules",
+    changes: [
+      "New 27 Holes event format added to the Edit/Add Event modal alongside 9 Holes, 18 Holes, and 9/18 Combo. Treated as a single-day event using the 18-hole tee-time / shotgun rules (single start time, 5-hour planning duration).",
+      "27 Holes pricing has its own rules: Guest = Member + $25 (vs +$10 for 9/Combo and +$15 for standalone 18 Hole), and there is no 1st Timer tier (the pricing grid hides the 1st Timer column).",
+      "New per-event 'Per Game Add ($)' field appears in the Pricing tab when 27 Holes is selected. Defaults to $27 and persists to the new events.per_game_addon column. The server-side breakdown calculator honors this override for NET/GROSS/BOTH game add-ons on 27-Hole events.",
+    ],
+  },
   {
     version: "2.10.15",
     date: "2026-04-27",
