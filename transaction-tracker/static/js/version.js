@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.11.1";
+window.TGF_VERSION = "2.11.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.11.2",
+    date: "2026-05-04",
+    title: "Membership notices: dynamic subject + editable subject + configurable URL",
+    changes: [
+      "Subject lines are now computed from the actual days remaining between today and expires_at, not hardcoded to the window label. Sending the T-30 notice on a term that expires in 14 days now reads 'Your TGF membership expires in 14 days' (was: 'in 30 days'). Falls through to 'expires today' / 'expires tomorrow' / 'lapsed N days ago' for edge cases.",
+      "The Send Notice Now modal now exposes the subject as an editable text input (with a Reset button to revert to the auto-generated subject). Edits are passed through as `subject` in the POST body and round-trip into Microsoft Graph as the actual subject.",
+      "Renewal link is now configurable via the MEMBERSHIP_RENEWAL_URL env var (read at render time, no code deploy needed if the storefront URL ever moves). Falls back to https://thegolffellowship.com/shop/ols/products/tgf-membership.",
+    ],
+  },
   {
     version: "2.11.1",
     date: "2026-05-04",

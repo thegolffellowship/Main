@@ -1642,9 +1642,13 @@
                 <span class="notice-status" style="margin-left:auto;font-size:0.78rem;color:var(--text-muted);"></span>
             </div>
             <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.4rem;">
-                <strong>To:</strong> <span class="notice-to">…</span> &nbsp;·&nbsp;
-                <strong>Subject:</strong> <span class="notice-subject">…</span>
+                <strong>To:</strong> <span class="notice-to">…</span>
             </div>
+            <label style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.4rem;">
+                <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);min-width:3.5rem;">Subject:</span>
+                <input type="text" class="notice-subject modal-input" placeholder="Loading…" style="flex:1;padding:0.3rem 0.5rem;font-size:0.85rem;font-weight:500;">
+                <button type="button" class="notice-subject-reset" title="Reset to auto-generated subject" style="background:none;border:1px solid var(--border);color:var(--text-muted);cursor:pointer;font-size:0.7rem;padding:0.2rem 0.5rem;border-radius:4px;">Reset</button>
+            </label>
             <div style="flex:1;overflow:auto;border:1px solid var(--border);border-radius:6px;background:#fafafa;min-height:280px;">
                 <iframe class="notice-preview" sandbox="" style="width:100%;height:60vh;border:none;background:#fff;"></iframe>
             </div>
@@ -1657,10 +1661,14 @@
 
         const sel = overlay.querySelector('.notice-window-select');
         const toEl = overlay.querySelector('.notice-to');
-        const subjEl = overlay.querySelector('.notice-subject');
+        const subjInput = overlay.querySelector('.notice-subject');
+        const subjReset = overlay.querySelector('.notice-subject-reset');
         const iframe = overlay.querySelector('.notice-preview');
         const sendBtn = overlay.querySelector('.notice-send');
         const status = overlay.querySelector('.notice-status');
+        // Track the auto-generated subject for the current window so Reset works
+        // and we know whether the admin has edited it.
+        let lastAutoSubject = '';
 
         async function loadPreview() {
             const window = sel.value;
@@ -1674,7 +1682,8 @@
                 }
                 const data = await res.json();
                 toEl.textContent = data.to || '(no email on file)';
-                subjEl.textContent = data.subject;
+                lastAutoSubject = data.subject || '';
+                subjInput.value = lastAutoSubject;
                 iframe.srcdoc = data.html;
                 if (data.can_send) {
                     sendBtn.disabled = false;
@@ -1687,7 +1696,7 @@
                 }
             } catch (err) {
                 toEl.textContent = '—';
-                subjEl.textContent = '—';
+                subjInput.value = '';
                 iframe.srcdoc = `<p style="font-family:sans-serif;color:#b91c1c;padding:1rem;">Preview failed: ${escapeHtml(err.message)}</p>`;
                 status.textContent = err.message;
                 status.style.color = '#b91c1c';
@@ -1696,17 +1705,22 @@
         }
 
         sel.addEventListener('change', loadPreview);
+        subjReset.addEventListener('click', () => { subjInput.value = lastAutoSubject; });
         overlay.querySelector('.notice-cancel').addEventListener('click', () => overlay.remove());
         sendBtn.addEventListener('click', async () => {
             const window = sel.value;
-            if (!confirm(`Send the "${sel.options[sel.selectedIndex].text}" email now?`)) return;
+            const subject = (subjInput.value || '').trim();
+            if (!subject) { alert('Subject is required'); return; }
+            if (!confirm(`Send the "${sel.options[sel.selectedIndex].text}" email now?\n\nSubject: ${subject}`)) return;
             sendBtn.disabled = true;
             sendBtn.textContent = 'Sending…';
             try {
+                const body = { window };
+                if (subject !== lastAutoSubject) body.subject = subject;
                 const res = await fetch(`/api/memberships/${termId}/send-notice`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ window }),
+                    body: JSON.stringify(body),
                 });
                 const data = await res.json();
                 if (!res.ok || !data.ok) {

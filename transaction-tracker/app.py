@@ -3036,12 +3036,17 @@ def api_preview_membership_notice(term_id):
 def api_send_membership_notice(term_id):
     """Send a specific notice for a term right now and stamp the matching column.
 
-    Body: {window: "30d" | "7d" | "dayof" | "lapsed" | "confirmation"}
+    Body: {window: "30d" | "7d" | "dayof" | "lapsed" | "confirmation",
+           subject?: "optional admin-edited subject"}
     """
     data = request.get_json(force=True) or {}
     window = (data.get("window") or "").strip()
+    subject_override = (data.get("subject") or "").strip() or None
     from email_parser.memberships import send_notice_now
-    result = send_notice_now(term_id, window, _membership_send_email)
+    result = send_notice_now(
+        term_id, window, _membership_send_email,
+        subject_override=subject_override,
+    )
     if not result.get("ok"):
         return jsonify(result), 400
     return jsonify(result)

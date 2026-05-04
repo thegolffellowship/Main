@@ -40,8 +40,22 @@ logger = logging.getLogger(__name__)
 # -- Constants --------------------------------------------------------------
 
 MEMBERSHIP_PRICE = 75
-RENEWAL_URL = "https://thegolffellowship.com/shop/ols/products/tgf-membership"
+# Override at runtime via MEMBERSHIP_RENEWAL_URL env var if the storefront URL
+# ever moves. The default below matches the current TGF storefront product page.
+RENEWAL_URL_DEFAULT = "https://thegolffellowship.com/shop/ols/products/tgf-membership"
 ADMIN_NOTIFY_EMAIL = "admin@thegolffellowship.com"
+
+
+def _renewal_url() -> str:
+    """Read RENEWAL_URL from env at call time so the default can be overridden
+    without a code deploy.  Falls back to the constant above."""
+    return (os.getenv("MEMBERSHIP_RENEWAL_URL") or "").strip() or RENEWAL_URL_DEFAULT
+
+
+# Backwards-compat shim: a few callers reference RENEWAL_URL as a module-level
+# constant.  Resolved at import time, but the live value comes from
+# `_renewal_url()` inside email rendering.
+RENEWAL_URL = RENEWAL_URL_DEFAULT
 
 # The policy switch year: terms started in 2025+ run 365 days from purchase.
 # Anything earlier is calendar-year (expires Dec 31 of the start year).
@@ -445,19 +459,39 @@ def record_renewal_for_item(
 
 def _email_shell(body_html: str) -> str:
     """Minimal HTML wrapper — keeps emails readable across clients."""
+    url = _renewal_url()
     return f"""<!doctype html>
 <html><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#111827; max-width:600px; margin:0 auto; padding:1.5rem;">
 {body_html}
 <hr style="border:none; border-top:1px solid #e5e7eb; margin:1.5rem 0;">
-<p style="font-size:0.78rem; color:#6b7280;">The Golf Fellowship · <a href="{RENEWAL_URL}" style="color:#2563eb;">thegolffellowship.com</a></p>
+<p style="font-size:0.78rem; color:#6b7280;">The Golf Fellowship · <a href="{url}" style="color:#2563eb;">thegolffellowship.com</a></p>
 </body></html>"""
 
 
 def _renew_button(label: str = "Renew Membership — $75") -> str:
+    url = _renewal_url()
     return f"""<p style="margin:1.25rem 0;">
-  <a href="{RENEWAL_URL}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.4rem; border-radius:6px; text-decoration:none; font-weight:600;">{label}</a>
+  <a href="{url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.4rem; border-radius:6px; text-decoration:none; font-weight:600;">{label}</a>
 </p>
-<p style="font-size:0.82rem; color:#6b7280; margin-top:-0.5rem;">Or paste this link into your browser: <a href="{RENEWAL_URL}" style="color:#2563eb;">{RENEWAL_URL}</a></p>"""
+<p style="font-size:0.82rem; color:#6b7280; margin-top:-0.5rem;">Or paste this link into your browser: <a href="{url}" style="color:#2563eb;">{url}</a></p>"""
+
+
+def _time_phrase(days_left: int) -> str:
+    """Human-readable phrase for `days_left` between today and expires_at.
+
+    Used to keep subject lines accurate when an admin fires Send Notice Now
+    on a term that's not exactly 30 / 7 / 0 days from today (e.g. a manually
+    backfilled term entered mid-cycle).
+    """
+    if days_left > 1:
+        return f"in {days_left} days"
+    if days_left == 1:
+        return "tomorrow"
+    if days_left == 0:
+        return "today"
+    if days_left == -1:
+        return "yesterday"
+    return f"{abs(days_left)} days ago"
 
 
 def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, str]:
@@ -466,6 +500,12 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
     `window` ∈ {"30d", "7d", "dayof", "lapsed"}.
     `term` has at minimum: expires_at.
     `customer` has at minimum: first_name.
+
+    Subjects + body language are computed from the **actual** days remaining
+    (today vs `expires_at`), not the window label, so a manually-fired
+    Send Notice Now on a mid-cycle term reads correctly.  E.g. if Bryce's
+    term expires in 14 days and the admin picks the "T-30" window, the
+    subject says "expires in 14 days", not "in 30 days".
     """
     first_name = customer.get("first_name") or "there"
     expires_at = term["expires_at"]
@@ -477,11 +517,18 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
     days_left = (exp_d - today).days
     days_lapsed = max(0, -days_left)
     expires_pretty = exp_d.strftime("%B %-d, %Y")
+    phrase = _time_phrase(days_left)  # "in 14 days" / "tomorrow" / "today" / "2 days ago"
 
     if window == "30d":
-        subject = "Your TGF membership expires in 30 days"
+        # Pre-expiry "heads up" — subject reflects the actual days remaining.
+        if days_left > 0:
+            subject = f"Your TGF membership expires {phrase}"
+        elif days_left == 0:
+            subject = "Your TGF membership expires today"
+        else:
+            subject = f"Your TGF membership lapsed {days_lapsed} days ago"
         body = f"""<p>Hi {first_name},</p>
-<p>A heads-up that your membership in The Golf Fellowship expires on <strong>{expires_pretty}</strong>. Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap:</p>
+<p>A heads-up that your membership in The Golf Fellowship expires on <strong>{expires_pretty}</strong>{f" ({phrase})" if days_left > 0 else ""}. Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap:</p>
 {_renew_button()}
 <p>Renewals run for 365 days from the date of purchase. If you've already renewed, no action needed — these reminders shut off automatically once the purchase lands in our system.</p>
 <p>Thanks for being part of The Golf Fellowship.</p>
@@ -489,9 +536,15 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
         return subject, _email_shell(body)
 
     if window == "7d":
-        subject = "Your TGF membership expires in 7 days"
+        # Tighter reminder — same dynamic subject treatment.
+        if days_left > 0:
+            subject = f"Your TGF membership expires {phrase}"
+        elif days_left == 0:
+            subject = "Your TGF membership expires today"
+        else:
+            subject = f"Your TGF membership lapsed {days_lapsed} days ago"
         body = f"""<p>Hi {first_name},</p>
-<p>Quick reminder — your membership in The Golf Fellowship expires <strong>{expires_pretty}</strong> ({days_left} days from today). Renewal is only <strong>$75 for the next 12 months</strong>:</p>
+<p>Quick reminder — your membership in The Golf Fellowship expires <strong>{expires_pretty}</strong>{f" ({phrase})" if days_left != 0 else " (today)"}. Renewal is only <strong>$75 for the next 12 months</strong>:</p>
 {_renew_button()}
 <p>Once your renewal comes through, these reminders stop on their own.</p>
 <p>— The Golf Fellowship</p>"""
@@ -600,11 +653,21 @@ _WINDOW_TO_COLUMN = {
 }
 
 
-def send_notice_now(term_id: int, window: str, send_email: Callable, db_path=None) -> dict:
+def send_notice_now(
+    term_id: int,
+    window: str,
+    send_email: Callable,
+    db_path=None,
+    subject_override: Optional[str] = None,
+) -> dict:
     """Render + immediately send a notice for an existing term.
 
     Stamps the corresponding `*_sent_at` column on success so the daily
     scheduler doesn't re-fire the same window.
+
+    `subject_override` (optional) replaces the rendered subject — used by
+    the Send Notice Now modal so admins can hand-edit the subject before
+    sending without leaving the preview page.
 
     Returns {ok, sent_to, subject, stamped_column} or {ok: False, error}.
     """
@@ -613,7 +676,8 @@ def send_notice_now(term_id: int, window: str, send_email: Callable, db_path=Non
     preview = preview_notice(term_id, window, db_path=db_path)
     if not preview["can_send"]:
         return {"ok": False, "error": preview["reason"]}
-    sent = send_email(preview["to"], preview["subject"], preview["html"])
+    subject = (subject_override or "").strip() or preview["subject"]
+    sent = send_email(preview["to"], subject, preview["html"])
     if not sent:
         return {"ok": False, "error": "Email send failed (check server logs)"}
     col = _WINDOW_TO_COLUMN[window]
@@ -627,7 +691,7 @@ def send_notice_now(term_id: int, window: str, send_email: Callable, db_path=Non
     return {
         "ok": True,
         "sent_to": preview["to"],
-        "subject": preview["subject"],
+        "subject": subject,
         "stamped_column": col,
     }
 

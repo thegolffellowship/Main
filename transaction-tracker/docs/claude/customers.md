@@ -337,17 +337,29 @@ counts dict for inspection.
 ## Email templates (all $75 / 365-day)
 
 All five emails sit in `render_notice_email(window, term, customer)` and
-`render_confirmation_email(term, customer, order_id)`:
+`render_confirmation_email(term, customer, order_id)`. Subject lines for the
+pre-expiry windows (`30d`, `7d`) are computed from **actual** days remaining
+between today and `expires_at` via `_time_phrase(days_left)` — not hardcoded
+to the window label. So firing the T-30 notice on a term that's actually 14
+days from expiry produces "expires in 14 days", not "in 30 days". Falls
+through to "expires today" / "expires tomorrow" / "lapsed N days ago" for
+edge cases.
 
-- **30d** — "Your TGF membership expires in 30 days"
-- **7d** — "Your TGF membership expires in 7 days"
+- **30d / 7d** — dynamic "Your TGF membership expires {in N days|today|tomorrow|N days ago}"
 - **dayof** — "Your TGF membership expires today"
 - **lapsed** — "Final notice — your TGF membership has lapsed" (only window
   with the Golf Genius opt-in/out buttons + plain-text fallback)
 - **confirmation** — "Thanks for renewing your TGF membership"
 
-`MEMBERSHIP_PRICE = 75` and `RENEWAL_URL = https://thegolffellowship.com/shop/ols/products/tgf-membership`
-are constants at the top of `memberships.py`.
+`MEMBERSHIP_PRICE = 75` is a constant. The renewal URL defaults to
+`https://thegolffellowship.com/shop/ols/products/tgf-membership` but is
+read from `MEMBERSHIP_RENEWAL_URL` env var at render time (`_renewal_url()`
+helper) so the storefront link can be updated without a code deploy.
+
+The Send Notice Now modal exposes the rendered subject as an **editable**
+input with a Reset button. The send endpoint accepts an optional `subject`
+field that overrides the rendered subject — useful when the auto-generated
+subject doesn't quite read right for an unusual case.
 
 ## Roster opt-in / opt-out (lapsed-notice buttons)
 
