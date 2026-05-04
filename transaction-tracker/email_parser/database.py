@@ -2484,6 +2484,15 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("chapter canonicalization failed: %s", e)
 
+        # Customer memberships table + backfill from parsed `membership` items.
+        # Idempotent — UNIQUE(customer_id, started_at) prevents dupes.
+        try:
+            from .memberships import ensure_membership_tables, backfill_memberships_from_items
+            ensure_membership_tables(conn)
+            backfill_memberships_from_items(conn)
+        except Exception as e:
+            logger.warning("customer_memberships migration/backfill failed: %s", e)
+
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
         # and updates that would set these columns to NULL or empty string.
@@ -4911,6 +4920,19 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                                 _touched_gd_orders.add(oid)
                     except Exception:
                         logger.warning("Failed to track GoDaddy order for item %s",
+                                       row.get("email_uid"), exc_info=True)
+
+                    # ── Open a customer_memberships term for membership items ──
+                    # The daily scheduler job sends the confirmation email; we
+                    # just record the term so reminders for the previous term
+                    # stop firing.
+                    try:
+                        item_name_val = (row.get("item_name") or "").lower()
+                        if "membership" in item_name_val:
+                            from .memberships import record_renewal_for_item
+                            record_renewal_for_item(conn, new_item_id, send_email=None)
+                    except Exception:
+                        logger.warning("Failed to record membership term for item %s",
                                        row.get("email_uid"), exc_info=True)
             except sqlite3.IntegrityError:
                 skipped += 1

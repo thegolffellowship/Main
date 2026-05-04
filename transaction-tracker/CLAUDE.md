@@ -6,7 +6,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/bank-reconciliation.md` (bank match queue, cash flow)
 - `docs/claude/expense-workflow.md` (CC/bank alert ingestion, vendor categorization)
 - `docs/claude/events.md` (events/RSVPs/pricing/cancellation/TGF payouts)
-- `docs/claude/customers.md` (customer identity)
+- `docs/claude/customers.md` (customer identity, **membership renewal system**)
 - `docs/claude/handicaps.md` (handicap rules)
 - `docs/claude/coo.md` (COO dashboard + AI chat)
 
@@ -166,6 +166,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `app.py` — routes, scheduler, webhook (~6200 lines)
 - `email_parser/parser.py` — AI extraction prompt and logic
 - `email_parser/database.py` — schema, CRUD, audit queries, customer matching, COO context, bank reconciliation (~12000+ lines)
+- `email_parser/memberships.py` — `customer_memberships` schema/backfill, renewal detection, reminder email templates, daily scheduler job, signed roster opt-in/out tokens
 - `email_parser/fetcher.py` — Microsoft Graph email fetching
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
