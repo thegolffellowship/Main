@@ -1,6 +1,6 @@
 # Database Schema
 
-## Database Tables (38+)
+## Database Tables (40+)
 
 `items`, `processed_emails`, `events`, `event_aliases`, `chapters`, `courses`, `course_aliases`,
 `rsvps`, `rsvp_overrides`,
@@ -12,7 +12,8 @@
 `period_closings`, `bank_accounts`, `bank_deposits`, `reconciliation_matches`,
 `expense_transactions`, `acct_keyword_rules`,
 `coo_agents`, `coo_chat_sessions`, `coo_chat_messages`, `coo_manual_values`,
-`agent_action_log`, `tgf_events`, `tgf_payouts`, `contractor_payouts`
+`agent_action_log`, `tgf_events`, `tgf_payouts`, `contractor_payouts`,
+`event_pairings`, `pairing_history`
 
 Key tables not documented elsewhere in CLAUDE sub-docs:
 - `chapters` — chapter dimension table. Five canonical entries: San Antonio, Austin, DFW, Houston, Hill Country (Hill Country added via `_migrate_canonicalize_chapters` after the original seed block early-returns once initialized). Maps to Platform `org_units`. FK from `items.chapter_id` and `events.chapter_id`. **Note:** `customers.chapter` is still a `VARCHAR(50)` text column — it does **not** have a `chapter_id` FK. Chapter selection on the Customers Info tab is constrained to canonical names via the UI, and `update_customer_info` writes the chapter string to both `items.chapter` (per-row) and `customers.chapter` (master). Adding `customers.chapter_id INTEGER REFERENCES chapters(chapter_id)` and phasing out the text column is deferred — see "Deferred / Known Concessions" below.
@@ -36,6 +37,8 @@ Key tables not documented elsewhere in CLAUDE sub-docs:
 - `contractor_payouts` — revenue-share payouts to chapter managers; `manager_customer_id` FK to `customers`, `chapter_id` FK to `chapters`, `event_id` FK to `events` (backfilled from `event_name`)
 - `expense_transactions` — staging table for CC/bank alert emails; rows are created by the AI bookkeeper and require human approval. Approved rows are promoted to `acct_transactions` via `_sync_expense_ledger_entry` (sets `entry_type='expense'`). Linked back via `acct_transaction_id` FK.
 - `acct_keyword_rules` — auto-categorization rules (`match_type='contains'`, `COLLATE NOCASE`). Created when an expense is approved with a category; used to pre-categorize future alerts from the same merchant before the AI bookkeeper runs.
+- `event_pairings` — saved pairings per event: `event_id`, `holes`, `group_num`, `slot_label` (e.g. `1A`, `1B`, `2A`), `cart_pos` (1–4 within the foursome), `customer_id` / `item_id`. Created lazily on first pairing operation by `_ensure_pairing_tables()` so existing live deployments self-migrate.
+- `pairing_history` — round-robin tracking: who played with whom, per event. Calendar-year window feeds the random-mode generator's history-aware weighting. Also created lazily by `_ensure_pairing_tables()`.
 
 ## Customer Identity — Tables with `customer_id`
 
@@ -53,6 +56,13 @@ column:
 - `season_contests.customer_id` — FK backfilled at startup
 - `handicap_rounds.customer_id` — FK backfilled at startup
 - `godaddy_order_splits.customer_id` — FK backfilled at startup
+- `parse_warnings.customer_id` — FK (Phase 2); backfilled by `_backfill_customer_id_on_parse_warnings` (by customer name) so the COO action-items banner can deep-link from a parse warning to the linked player
+- `message_log.customer_id` — FK (Phase 2); backfilled by `_backfill_customer_id_on_message_log` (by recipient email + name) so a customer's full email history doesn't depend on fragile name/email string matching
+- `rsvp_email_overrides.customer_id` — FK (Phase 2); backfilled by `_backfill_customer_id_on_rsvp_email_overrides` (by `player_email`) so overrides don't drift when a player changes their email
+- `action_items.customer_id` — FK (Phase 2); backfilled by `_backfill_customer_id_on_action_items` (by `from_email` + `from_name`)
+- `feedback.customer_id` — FK (Phase 2); column added but no backfill helper today (no submitter identity field exists yet); future submissions populate it directly
+
+All Phase 2 ALTERs are wrapped in `try/except sqlite3.OperationalError` so re-running is a no-op on already-migrated DBs.
 
 ## Event ID FK System
 
@@ -86,6 +96,58 @@ rows that don't already match the canonical state.
 | `_migrate_normalize_customer_name_case` | Converts customer first/last names that are entirely uppercase (e.g., `HORTON`) to proper case (`Horton`). Handles `Mc`/`Mac` prefixes, apostrophes (`O'Brien`), hyphens (`Smith-Jones`), and Roman-numeral suffixes (`II`, `III`, `IV`). After updating the customers master record, it propagates the new first/last/customer values to **every** matching `items` row (both the `customer` denormalized full name and the per-row `first_name` / `last_name` fields). A second pass re-syncs items rows whose `first_name`/`last_name` are still uppercase but whose linked customers row is already proper-cased. |
 | `_migrate_autocorrect_player_status` | Reconciles `customers.current_player_status` against item history. Pass 1 — anyone with a `membership` item but flagged `first_timer` / `active_guest` / NULL → upgraded to `active_member`. Pass 2 — anyone still flagged `first_timer` who has more than one item → demoted to `active_guest`. Roles in `customer_roles` are intentionally not modified. |
 | `_migrate_canonicalize_chapters` | Inserts `Hill Country` into `chapters` if missing (the original seed block early-returns once initialized, so a code-level addition wouldn't otherwise reach a live DB). Then remaps legacy chapter strings across `items.chapter`, `events.chapter`, and `customers.chapter`: `Cedar Park` → `Austin`, `Pflugerville` → `Austin`, `August` → `NULL`, `Yes_For_Both` → `NULL`. |
+| `_migrate_rename_member_role_to_golfer` | Recreates `customer_roles` with a CHECK that lists `golfer` instead of `member`, copying existing rows with `role_type='member'` mapped to `'golfer'`. Detects whether the migration has already run by inspecting the stored `CREATE TABLE` SQL — idempotent. Wired ahead of `_migrate_seed_customer_roles` in the startup sequence. Player_status values (`MEMBER`, `MEMBER+`, etc.) and `membership` item names are unchanged. |
+| `_migrate_relabel_credit_pool_items` | Backfills descriptive `item_name` on credit-pool rows: `Excess credit — <event>` (from `apply_credit_to_rsvp`) and `Overpayment credit — <event>` (from `_post_overpayment_credit`). Idempotent — skips rows whose `item_name` already starts with the new prefix. |
+| `_migrate_move_noncanonical_side_games_to_notes` | Items where `side_games` is non-empty and not in `(NET, GROSS, BOTH, NONE)` have the text appended to `notes` (with `' — '` separator if notes already had content), then `side_games` is cleared. Skips rows whose exact text is already in `notes`. Idempotent. |
+| `capture_email_aliases_from_items` | Promotes every `items.customer_email` value differing from the linked customer's primary email into `customer_aliases` (alias_type='email'). Skips matches-primary, case-only variants, and already-aliased typos. |
+| `_heal_items_identity_fields` (Phase 1B) | Flattens `items.customer_email` / `customer_phone` / `chapter` / `first_name` / `last_name` to match the linked `customers` / `customer_emails` record. Captures stale emails as aliases first; overwrites other fields silently. |
+| `repair_orphan_pay_children` | Heals `+PAY` children whose parent is missing, `rsvp_only`, or `transferred`: re-points `parent_item_id` at an active sibling parent for the same customer + event when one exists, otherwise converts the child to a standalone `credited` item with a descriptive `credit_note`. |
+| `backfill_missing_godaddy_orders` | Targeted, idempotent helper that finds every GoDaddy order whose items exist but lack an active `godaddy-order-{id}` `acct_transactions` row, then calls `_write_godaddy_order_entry` for each. Wired into the startup block unconditionally (replaces the old `if-empty` gate that meant any order whose post-save write failed stayed un-promoted forever). |
+
+## `events` table — recent column additions
+
+| Column | Type | Notes |
+|---|---|---|
+| `per_game_addon` | REAL | Per-event game add-on price for NET / GROSS / BOTH tiers. Defaults to $27 on the new "27 Holes" format. Plumbed through `create_event()`, `_validate_update_fields` allow-list, and `POST /api/events`. The server-side `_calc_event_pricing_breakdown` reads this when present; the client-side modal also picks it up. Existing 9-hole / 18-hole / Combo formats fall back to the old $16 / $30 constants. |
+| `format` | TEXT | Now accepts `9 Holes`, `18 Holes`, `9/18 Combo`, **or `27 Holes`**. 27 Holes is treated as a single-day event using the same start-time / tee-sheet / 5-hour-duration rules as 18 Holes; pairings, default holes, and the side-games matrix all map 27 Holes to the 18-hole code path. **Combo detection bug fix:** `is_combo` was comparing `format.lower() == "combo"`, but the actual string is `"9/18 Combo"` — the equality check never matched. Use `"combo" in format.lower()` (or pre-canonicalize) in any new code. |
+
+## `items` cross-uid dedup gate
+
+`save_items()` rejects a row whose `(order_id, item_index)` already exists under a
+different `email_uid` for a real (non-manual) order — Microsoft Graph occasionally
+re-keys an already-imported email under a brand-new message id (folder rebuild, mass
+reply, PWA resync). The existing `UNIQUE(email_uid, item_index)` constraint stays in
+place. Without this gate the same orders re-parsed and inserted as identical sibling
+rows under the buyer's name (the May 3 phantom-duplicates incident).
+
+`/api/audit/emails` similarly falls back to an `order_id` lookup when the `email_uid`
+lookup misses (re-keyed emails would otherwise falsely report as "Not Parsed").
+
+`POST /api/audit/delete-phantom-duplicates` (admin-only) is kept as a quiet safety net
+but is no longer surfaced in the UI; it finds groups of items sharing
+`(order_id, customer, item_name, item_price)` with `COUNT > 1`, keeps the lowest-id
+(original) row, deletes each later duplicate. Skips any row with downstream refs
+(`acct_allocations.item_id`, `acct_transactions.item_id`, `items.transferred_from_id`
+/ `transferred_to_id` / `parent_item_id`). Supports `?dry_run=1` and
+`?since=YYYY-MM-DD` (default `2026-04-26`).
+
+## `acct_transactions.type` CHECK constraint
+
+`acct_transactions.type` has a `CHECK (type IN ('income', 'expense', 'transfer'))`
+constraint. `_sync_expense_ledger_entry` and `_promote_expense_to_ledger` map
+`expense_transactions.transaction_type` → ledger `type` via:
+
+```
+{received → income, payout → expense, expense → expense, transfer → transfer}
+```
+
+Without the mapping, raw values like `"received"` or `"payout"` hit the constraint and
+the ledger sync silently fails (the calling try/except logs and continues). The mapping
+also matters for `entry_type`: `received` rows now write `entry_type='income'`
+(previously hardcoded `'expense'`), which is what `get_event_reconciliation_status` and
+the negative-deposit auto-match branch both require. A one-time idempotent backfill in
+`init_db` flips already-promoted Venmo received rows from `entry_type='expense'` to
+`'income'`.
 
 ## Deferred / Known Concessions
 

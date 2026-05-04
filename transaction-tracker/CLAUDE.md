@@ -77,10 +77,16 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 ## Architecture
 
 - **Flask app** in `transaction-tracker/app.py` (~6200 lines, 200+ routes)
-- **Email parsing** via Claude Sonnet in `email_parser/parser.py`
-- **Email fetching** via Microsoft Graph API in `email_parser/fetcher.py` — only processes emails with "New Order" subject lines; all processed email UIDs tracked in `processed_emails` table to prevent re-parsing
+- **Email parsing** via Claude in `email_parser/parser.py`. Default model is Haiku
+  (`CLAUDE_MODEL` env var); orders whose body matches
+  `/TGF\s+MEMBERSHIP|SKU:\s*MEM-[A-Z]-[A-Z]/i` route to `claude-sonnet-4-5`
+  (`CLAUDE_MODEL_PREMIUM` env var to override). Membership + EVENT combo orders
+  consistently mash up on Haiku — the Sonnet route is the fix. `_call_ai()` logs the
+  model selected and whether membership routing fired so the choice is visible in
+  Railway logs.
+- **Email fetching** via Microsoft Graph API in `email_parser/fetcher.py` — only processes emails with "New Order" subject lines; all processed email UIDs tracked in `processed_emails` table to prevent re-parsing. **Cross-uid dedup gate** in `save_items()` rejects rows whose `(order_id, item_index)` already exists under a different `email_uid` for a real (non-manual) order — Graph occasionally re-keys an already-imported email under a brand-new message id (folder rebuild, mass reply, PWA resync).
 - **SQLite DB** at `transaction-tracker/transactions.db` (local is empty; live data on Railway)
-- **Database layer** in `email_parser/database.py` (~12000+ lines) — schema, CRUD, allocations, COO context
+- **Database layer** in `email_parser/database.py` (~12000+ lines) — schema, CRUD, allocations, COO context, pairings generator
 - **Scheduler** checks inbox every 5 minutes via APScheduler (default;
   override with `CHECK_INTERVAL_MINUTES` env var). Both the transaction
   inbox and the RSVP inbox use a 7-day lookback window when fetching
@@ -92,8 +98,41 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - **TGF Payouts** — tournament payout tracking with screenshot import via Claude Vision
 - **Golf Genius sync** via direct HTTP requests in `golf_genius_sync.py` (rewritten from Playwright)
 - **MCP Server** in `mcp_server.py` — 31 tools for Claude direct DB access
+- **Pairings generator** with seed/lock, cart pairs, and round-robin history.
+  Tables (`event_pairings`, `pairing_history`) are created lazily by
+  `_ensure_pairing_tables()` on first pairing operation so existing live deployments
+  self-migrate.
 - **Auth** — PIN-based with roles: `admin`, `manager`, `view-only`; `@require_role()` decorator
 - **`initAuth()`** must be called on every page for nav link visibility (DATABASE link, etc.)
+
+## Audit Log
+
+- `/audit` — admin/QA page for inspecting Microsoft Graph emails vs. parsed `items` rows.
+- `GET /api/audit/emails` accepts `days_back` / `max_emails` (defaults lowered to 7 / 25
+  for a faster Run Audit), and now also accepts `start_date` / `end_date` for a custom
+  window — needed to reach orders older than the longest preset (e.g. a Feb 21 order from
+  a May 4 session).
+- The `email_uid` lookup falls back to an `order_id` lookup when the uid lookup misses
+  (re-keyed Graph emails would otherwise falsely report as "Not Parsed"). The `order_id`
+  is parsed from the subject (`#R805080852`).
+- `Apply` button next to the filter selects re-runs the audit (the existing Run Audit
+  button is in the page header and isn't visually associated with the filter row); auto-
+  applies on dropdown change once results are already on screen.
+- **Re-extract This Order** — `POST /api/audit/reextract-order` UPDATEs existing rows
+  using the original email + AI parser. Force-updates `item_price`, `side_games`, and
+  `holes` (`FORCE_UPDATE_FIELDS`).
+- **Re-import This Order** — `POST /api/audit/reimport-order` INSERTs rows for orders
+  whose items were deleted (e.g. after cleaning up a parser mis-extraction). The cross-uid
+  dedup gate prevents duplicates if rows already exist. Renders next to Re-extract on the
+  Audit Log card when `comp.email_uid` is present, not `manual-*`, AND `comp.status != "ok"`.
+- **Membership-mashup scanner** — `GET /api/audit/membership-mashup-scan` lists every
+  active TGF MEMBERSHIP row that has non-null event-side fields (`holes`, `side_games`
+  != NONE, `tee_choice`). Those are likely victims of the Haiku parser mash-up.
+- **Duplicate-items diagnostic** — `GET /api/audit/duplicate-items-diagnostic` (default
+  `since=2026-04-26`) groups by `(order_id, customer, item_name, item_price)` to surface
+  cross-email-uid duplicates. The companion `POST /api/audit/delete-phantom-duplicates`
+  is kept as a quiet safety net; UI button removed since the cross-uid dedup gate
+  prevents recurrence.
 
 ## Transactions Page — Key Behaviors
 
@@ -192,3 +231,40 @@ When merging branches that have diverged (especially long-running feature branch
 - **Rebase vs merge** — Prefer `git merge` for long-lived branches with many commits. Rebase rewrites history and can silently drop changes.
 - **Force-push** — Never `git push --force` to a shared branch. If a push is rejected, investigate why before overriding.
 - **Large template files** — Files like `events.html` (3000+ lines) are conflict-prone. When resolving, check every function/block boundary carefully.
+
+## Identity drift watch (IMPORTANT for any code that reads `items.*`)
+
+`items.customer_email` / `customer_phone` / `first_name` / `last_name` / `chapter` /
+`user_status` are historical snapshots captured per-order. **Never read them directly**
+for customer-facing operations (sending email, building previews, derived UI badges)
+without going through one of:
+
+- `resolve_player_email`, `resolve_player_phone`, `resolve_player_name`,
+  `resolve_player_chapter`, `resolve_player_status` — five canonical resolvers in
+  `database.py` that look up the canonical value via `items.customer_id` and fall back
+  to `items.*` only when nothing canonical exists. Always open the resolver's connection
+  with `get_connection()` and close it with `conn.close()` (never use
+  `_connect(db_path).__enter__()` without holding the contextmanager reference — see
+  `docs/claude/customers.md`).
+- `_resolve_player_email(item, conn=None)` — top-level helper in `app.py` used by every
+  customer-facing send path (`_send_rsvp_credit_alerts`, `_build_balance_due_email`,
+  `/api/items/<id>/send-payment-reminder`, the bulk-send composer). Skips rows that
+  resolve to no email at send time, so manually-added RSVPs whose email lives only in
+  `customer_emails` are no longer excluded.
+
+`save_items()` raises `EMAIL_DRIFT` / `PHONE_DRIFT` / `CHAPTER_DRIFT` parse warnings
+when a new GoDaddy order's value differs from the canonical record (canonical wins; the
+manager sees the discrepancy in the COO action-items banner).
+
+Three idempotent boot migrations enforce the same shape:
+`capture_email_aliases_from_items` (promotes typos to aliases),
+`_heal_items_identity_fields` (Phase 1B; flattens stale items.* values to canonical), and
+`_migrate_normalize_customer_name_case` (proper-cases names, propagates to items rows).
+
+## items.handicap is NOT fed by orders
+
+The LLM email parser no longer extracts `handicap` from order emails — `items.handicap`
+stays empty on every new row. The canonical source is `handicap_rounds` joined via
+`handicap_player_links`. Stale `items.handicap` values on old order rows look
+authoritative but don't update when the player's real handicap changes. See
+`docs/claude/handicaps.md`.

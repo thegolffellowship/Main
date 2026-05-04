@@ -142,14 +142,107 @@ PROJECTED PROFIT = Net Income - Total Expenses
 ## Credit/transfer/refund actions
 - Credit transfer items now show Credit, WD, and Refund buttons (same as regular items)
 - Partial refund supports custom dollar amount input (for credit overpayments like $29)
-- Refund methods: GoDaddy, Venmo, Zelle
+- **Refund methods: GoDaddy, Venmo, Zelle, Check, PayPal.** PayPal-method refunds route
+  the `acct_transactions` entry to a `PayPal` account (parallel to how Venmo refunds
+  route to `Venmo`); all other methods route to `TGF Checking`. Supported by
+  `api_refund_item`, `api_payout_credit`, and `api_partial_refund_item` plus the
+  `payout_credit`, `refund_item`, and partial-refund flows in `database.py`.
 - Transfer items carry the original price (e.g., "$102.00 (credit)") not "$0.00 (credit)"
+- **Transfer cascade.** `transfer_item` sums the parent's `item_price` with every active
+  `+PAY` child and creates ONE new credit-transfer item at the target with the combined
+  amount. Children flip to `transferred` alongside the parent and their
+  `transferred_to_id` points at the same target. The new row's `credit_note` spells out
+  e.g. `"$75.00 parent + $8.37 +PAY"`.
+
+## Payout Credit (WD-credit + standalone credited refunds)
+
+`payout_credit(conn, item_id, method, date, note)` records a real-world refund against a
+WD-credit balance or a standalone `credited` row:
+- For `transaction_status='credited'`: amount = `item_price`, row flips to `refunded`.
+- For `transaction_status='wd'`: amount = `credit_amount`, the field is cleared, status
+  stays `wd`.
+- Writes an `acct_transactions` expense entry (`category='refund'`, `source=method`,
+  `account=Venmo|PayPal|TGF Checking`).
+- `credit_note` stamped `Refunded $X.XX via <method> on YYYY-MM-DD`.
+- `payout_wd_credit` retained as a Python alias for back-compat.
+
+API: `POST /api/items/<id>/payout-credit` (canonical) and
+`/api/items/<id>/payout-wd-credit` (legacy alias). Both admin-only.
 
 ## Course fee rounding fix
 - **Per-player allocations** store individual post-tax amounts (individually correct)
 - **Aggregate calculations** (Financial tab) use corrected formula:
   `base_rate × player_count × (1 + tax_rate)` — totals first, tax second
 - Example: $54 × 32 × 1.0825 = $1,870.56 (correct) vs $58.46 × 32 = $1,870.72 (old drift)
+
+## Course fee — 9/18 split rendering
+
+`_calc_aggregate_course_cost` returns `{total, by_holes[]}` where each `by_holes` entry has
+`holes`, player count, per-player cost, and bucket total. The fallback path (no event
+config, summing from `acct_allocations`) also buckets by hole. The API exposes this as
+`expenses.course_fees_by_holes`, and the Financial panel renders indented sub-rows under
+Course Fees whenever more than one bucket exists — same pattern as Prize Fund's HIO /
+Net / Gross sub-rows.
+
+Two combo bugs the rendering depended on:
+1. `is_combo` detection. The actual format string is `"9/18 Combo"` — the equality
+   check `format.lower() == "combo"` never matched, so combo events read from the
+   single-format columns (`course_cost`, `course_cost_breakdown`) instead of the
+   per-hole columns (`_9` / `_18`) and yielded $0. Fixed in both `_calc_event_allocation`
+   and `_calc_aggregate_course_cost`.
+2. Empty-event fallback. When an event has neither `course_cost` nor
+   `course_cost_breakdown` set, `_calc_aggregate_course_cost` used to return `0` even
+   when each player's `acct_allocations` row already had a `course_payable` (and
+   `course_surcharge`) value budgeted at registration time. Now falls back to summing
+   those per-allocation values so projected expenses match what was allocated.
+
+## Books-posted vs Bank-reconciled (Financial tab)
+
+The Financial tab's verification panel shows two independent checks with explicit
+prefixes so they don't read as contradictions:
+
+- **Books:** entries posted to ledger (i.e. `acct_transactions` rows exist for the
+  event — what `data.accounting_verified` actually measures). Previously rendered as
+  the green "Accounting (verified)" badge, which sounded like a bank confirmation.
+- **Bank:** `0 of 53 matched to deposits ($0.00 confirmed, 0%)` — the actual
+  bank-deposit match status. Red at 0%, amber at partial, green at 100%, with the
+  no-entries-yet case handled explicitly.
+
+## Venmo "received" rows — income, not expense
+
+`expense_transactions` is the staging table for every CC/bank/Venmo email alert
+regardless of direction. Inbound Venmo balance-due payments are tagged
+`transaction_type='received'` to mark them as income. Two consequences:
+
+1. **Ledger sync.** `_sync_expense_ledger_entry` now sets `entry_type='income'` for
+   `received` rows (was hardcoded `'expense'`). A one-time idempotent backfill in
+   `init_db` flips already-promoted Venmo received rows. The pre-fix bug didn't
+   visibly inflate event expense totals because the event financial summary only sums
+   `entry_type='expense'` rows whose category is `'refund'` or `'processing_fee'` —
+   and these promoted Venmo rows have NULL category — so they were neutral phantoms.
+   But other consumers (e.g. `get_event_reconciliation_status`, which counts
+   `entry_type='income'` rows for an event) were missing them.
+2. **Actual Expenses panel filter.** The Financial tab Actual Expenses panel filters
+   `received` rows out before rendering so only true outflows
+   (`transaction_type` = expense / payout / transfer) appear in the table. Before,
+   inbound balance-due Venmo payments showed up as outflows.
+
+## Venmo balance-due dedup
+
+Each Venmo IN balance-due payment used to produce TWO `acct_transactions` rows: one
+from `_sync_expense_ledger_entry` (`source_ref=exp-promoted-{id}`, raw merchant
+description) and one from `auto_match_venmo_inbound_to_balance_due`
+(`source_ref=venmo-bd-{id}`, category=`addon`, `item_id` linked). Both
+`entry_type='income'` for the same payment, so income was double-counted.
+
+Fix:
+- `auto_match_venmo_inbound_to_balance_due` soft-deletes the `exp-promoted` row
+  (looked up via `expense.acct_transaction_id`) before writing the `venmo-bd` row,
+  then re-points `expense_transactions.acct_transaction_id` at the new row.
+- `_backfill_approved_expenses_to_ledger` skips Venmo received rows that already have
+  `matched_item_id` — `auto_match` owns the ledger entry for those.
+- One-time idempotent backfill in `init_db` reverses every `exp-promoted` row whose
+  expense has both `matched_item_id` AND a matching active `venmo-bd` row.
 
 ## `acct_allocations` table — per-player cost breakdown
 Each row represents one player's cost allocation for one event:

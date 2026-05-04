@@ -12,7 +12,7 @@
 ## Event detail view sections (top to bottom)
 1. **Toggle bar** — PLAYERS | PAIRINGS | GAMES + 9|18 holes filter + NET | GROSS | NONE
 2. **Registrations table** — only active/rsvp players (compact rows)
-3. **Inactive section** — credited/refunded/transferred/WD players in a gray box with Reverse buttons. Names link to `/customers?name=...` (clickable).
+3. **Inactive section** — credited/refunded/transferred/WD players in a gray box with Reverse buttons. Names link to `/customers?name=...` (clickable). WD rows with a `credit_amount` and standalone `credited` rows expose an additional **Refund** button (see `Payout Credit / Refund` below).
 4. **Not Playing section** — GG RSVP players marked as not playing (red box). Names render as full "Last, First" (resolved via `rsvps.customer_id` FK → `customers` master record), link to `/customers?name=...`, and surnames render UPPERCASE for elevated-role players. No email rendered on the row.
 5. **Message History** — collapsible section
 
@@ -30,6 +30,33 @@ The `user_status` field is cleaned at display time via `_cleanStatus()`:
 - Mobile collapsed view: amber badge showing "9h" or "18h" (first of three badges: Holes, Games, Tees)
 - 9|18 toggle filter in Events: filters registrants by hole count
 - Can be backfilled via `/api/audit/re-extract-fields`
+
+## Event formats — `events.format`
+The Edit/Add Event modal exposes four radios: `9 Holes`, `18 Holes`, `9/18 Combo`, and `27 Holes`.
+- **27 Holes** is treated as a single-day event using the same start-time / tee-sheet /
+  5-hour-duration rules as 18 Holes. Pairings, default holes, and the side-games matrix all
+  map 27 Holes to the 18-hole code path (single block, not combo).
+- **Pricing differences for 27 Holes:**
+  - Guest = Member + $25 (vs +$10 for 9/Combo, +$15 for 18 standalone)
+  - No 1st Timer tier — pricing grid hides the 1st Timer column
+  - New per-event **Per Game Add ($)** input (defaults to $27), persisted on
+    `events.per_game_addon REAL` and used by the server-side
+    `_calc_event_pricing_breakdown` for NET / GROSS / BOTH game add-ons.
+- `per_game_addon` is plumbed through `create_event()`, `_validate_update_fields`
+  allow-list, and the `POST /api/events` route.
+
+## HCP column — hole-aware rendering
+Registration rows (desktop + mobile) apply a hole-aware HCP rule:
+- An event with any 9-hole players (9-only or 9/18 mixed) renders only the 9-hole net handicap with the `N` subscript.
+- An event with only 18-hole players renders only the 18-hole index.
+
+## Per-row Actions dropdown (desktop)
+The Actions cell on each registration row collapses every per-row button into a single
+`⚙ ▾` menu (`.ev-actions-toggle` / `.ev-actions-menu`). Each previously-inline button
+(Apply Credit, Send Venmo / Remind, Undo, Credit, WD, Reverse, Refund, Delete) becomes
+an `.ev-menu-item`; Delete uses `.ev-menu-item-danger`. Class names and `data-*` attrs
+are preserved so existing event delegation keeps working unchanged. Mobile registration
+cards remain inline buttons.
 
 ## Game stats computation (`computeGameStats`)
 - Excludes credited/refunded/transferred players from counts
@@ -82,6 +109,8 @@ the following are available to **manager** (and admin):
 | Apply Credit (GG RSVP) | `POST /api/rsvps/gg/<id>/apply-credit` | manager |
 | Delete manual player | `DELETE /api/events/delete-manual-player/<id>` | manager |
 | Send Venmo / Remind | `GET/POST /api/items/<id>/balance-due-email/{preview,send}` | manager |
+| Refund (WD-credit + standalone credited) | `POST /api/items/<id>/payout-credit` (legacy alias `payout-wd-credit`) | admin |
+| Match Venmo (header button) | `POST /api/accounting/auto-match-venmo-balance-due` | admin |
 
 **Event-level** Edit / Merge / Delete (entire event) remain admin-only.
 The client-side `btn-undo-credit-apply` handler also gates on
@@ -96,13 +125,18 @@ else is effectively "any authenticated").
 
 | Element | Rendering |
 |---|---|
-| Transfer indicator | Compact circular **T** badge (`status-tag-circle status-tag-from-transfer`) — replaced the old word "Transfer" pill |
+| Transfer indicator | Compact circular **T** badge (`status-tag-circle status-tag-from-transfer`) on **deep navy** (`#1e40af` bg, `#1e3a8a` border, white text) — harmonizes with the light-blue (`#dbeafe`) credit-transfer row tint |
+| Paid-balance indicator | Compact circular **$** badge (`status-tag-circle status-tag-paid`) — replaces the older green "Paid" pill on settled credit-transfer rows; tooltip "Balance paid via Venmo on YYYY-MM-DD" |
+| Coupon indicator | Compact circular **C** badge (`.coupon-badge`, purple) on items with `coupon_code` or `coupon_amount` set; tooltip shows full coupon code + discount |
 | RSVP reminder pill | "Remind" (was "RSVP - Remind") |
 | Balance-due pill on credit-transfer rows | `-$X.XX` (was `$X.XX DUE`) |
 | Undo Credit button | "Undo" (was "Undo Credit") |
 | Delete button | Compact red **×** icon (`.btn-delete-manual` / `.btn-danger` tightened to icon style); `title="Delete"` for hover hint |
 | Sort arrows | Hidden via `.sort-arrow { display: none }`; column headers stay clickable |
 | Check Now button | Header on Events page mirrors the Transactions page button — POSTs `/api/check-now`, polls `/api/check-status`, refreshes events on completion |
+| Stripped price suffix | `stripPriceSuffix(s)` removes the noise `' (credit transfer)'` from `item_price` at every render site (cells, modals, mobile cards). Other suffixes like `(credit)` and `(comp)` are preserved. Storage is unchanged: `items.item_price` keeps the literal text. |
+| Child +PAY truncation | Child +PAY rows truncate the GAMES cell to `max-width: 8rem` with `overflow: ellipsis` + `title=` so long `+PAY Difference between …` labels can't stretch the parent's GAMES column. |
+| Adjacent circles | `.status-tag-circle + .status-tag-circle { margin-left: 0 }` so two circular badges in a row (e.g. T+$ on a paid credit-transfer row) group visually instead of being separated by the default `0.35rem` margin. |
 
 ## Player ACTIONS — Row tinting palette
 
@@ -115,7 +149,7 @@ following based on status, in this precedence:
 | Comp / Manager | `#dcfce7` (mint green) | `email_uid` starts with `manual-comp` |
 | GUEST | `#fbcfe8` (pink) | cleaned `user_status === "GUEST"` |
 | 1ST TIMER | `#fdba74` (peach) | cleaned `user_status === "1ST TIMER"` |
-| Manual / Credit transfer | `#dbeafe` (light blue) | `email_uid` starts with `manual-` (catches both manual entries and credit-transfer items) |
+| Manual / Credit transfer | `#dbeafe` (light blue) | `email_uid` starts with `manual-` **or** `transferred_from_id IS NOT NULL` (catches credit-transfer rows whose RSVP came in via the regular email parser, not a synthesized `manual-gg-rsvp-…` uid). The Delete action and "Manual" badge stay gated on the strict `email_uid` check so a credit-transfer row can't be accidentally deleted (which would orphan the source's `transferred_to_id` pointer). |
 | WD | `#fef2f2` (light red) + 0.55 opacity + line-through | `transaction_status === "wd"` |
 | Credited / Transferred / Refunded | white + 0.6 opacity (dimmed) | corresponding `transaction_status` |
 | Active member (default) | white | otherwise |
@@ -236,8 +270,28 @@ to a future event can have their credit applied directly from the RSVP row.
 **Undo Credit Application:**
 - `reverse_credit_application(conn, item_id)` — restores transferred source credits
   to `credited`, removes any excess credit item, reverses accounting entries, reverts
-  target item to `rsvp_only` (or deletes if it was a promoted GG RSVP item).
+  target item to `rsvp_only` (or deletes if it was a promoted GG RSVP item). Also handles
+  every `+PAY` child of the reverted parent (not just rows tagged with
+  `[xfer-consumed:<id>]`): each child is detached, children with non-zero `item_price`
+  flip to `transaction_status='credited'` (so the player's payment stays on their account
+  as a standalone credit), and any `expense_transactions.matched_item_id` pointing at the
+  child is cleared so a future Match Venmo run can re-attach.
+- Startup helper `repair_orphan_pay_children()` heals pre-existing orphans for parents in
+  `transferred` / `rsvp_only` / missing state — re-points `parent_item_id` at an active
+  sibling parent for the same customer + event when one exists, otherwise converts the
+  child to a standalone `credited` item with a descriptive `credit_note`. Idempotent.
 - `POST /api/items/<id>/reverse-credit-application` (admin only)
+
+**Apply Credit nets prior unallocated Venmo +PAY items:**
+- `apply_credit_to_rsvp()` scans for orphan manual-payment items by the same customer
+  (`parent_item_id IS NULL`, `merchant LIKE 'Manual Entry%' COLLATE NOCASE`, last 14 days),
+  reparents them onto the new credit-transfer item with a `[xfer-consumed:<id>]` notes tag,
+  and nets their total against `amount_owed`. If fully covered, the parent flips to
+  `paid_at:<today>`; any surplus is posted as a `transaction_status='credited'`
+  "Overpayment credit" item that surfaces in the customer's available credit pool.
+- One-time backfill: `reconcile_orphan_venmo_payments()` + `POST /api/admin/reconcile-orphan-venmo`
+  sweeps existing credit-transfer rows with `balance_due:*` and applies the same logic
+  retroactively. Idempotent; supports `?dry_run=1`.
 
 ## Apply Credit to Event from Customers Page
 
@@ -251,6 +305,123 @@ price, balance-due or excess handling), and applies the credit.
 
 Uses idempotent uid `manual-credit-{credit_item_id}` to prevent double-apply.
 All three rendering paths on the Customers page (inline expand, detail panel, mobile card) updated.
+
+## Apply Credit modal — holes default + multi-credit + Venmo handle inline entry
+
+- **Holes default from event format.** For non-combo events, `apply_credit_to_rsvp` and the
+  client-side modal force `holes` to match the event format (e.g. always `18` for an
+  18 Holes event), regardless of the credited *source* item's holes. Combo events keep the
+  cascade `override > credited > "9"`. Applied in three places: `apply_credit_to_rsvp`
+  (database.py), `api_rsvp_credit_info_by_item` + `api_gg_rsvp_credit_info` (app.py), and
+  the modal renderer (events.html). Prevents the bug where applying a 9-hole credit to an
+  18-hole event yielded `subtotal $109 / owed $32.41` server-side while the modal showed
+  `$123 / $46.41`.
+- **Multi-credit selection.** The credits table now has a checkbox column (defaults all
+  checked). "Total Credit (selected)" recalculates as boxes toggle, and the submit handler
+  sends only the checked credit IDs. Last remaining checkbox can't be unticked.
+- **Inline Venmo handle entry.** When "Venmo back" is selected and no handle is on file,
+  the modal shows a `+ Add @handle` affordance that expands to an inline input + Save
+  button. Save persists via `/api/customers/update`, then the modal re-renders the excess
+  section with the prefilled Venmo deep link. `excess_action="venmo"` is now accepted by
+  `apply_credit_to_rsvp` (was 400) — the actual Venmo transfer is a manual followup, but
+  the excess credit row is created in both `keep` and `venmo` modes so the audit trail is
+  preserved either way.
+
+# Payout Credit / Refund (WD + standalone credited rows)
+
+When a player WDs late (only part of their payment is creditable) or carries a standalone
+`credited` row (excess credit, overpayment credit, full registration credit), the admin
+can record a real-world Venmo / Zelle / Check / GoDaddy / PayPal refund and clear the
+balance.
+
+**Refund button placement:**
+- Event detail (events.html) — Refund button next to Reverse on every WD row that carries
+  a `credit_amount`.
+- Customers page (customers.html) — Refund button on every `credited` or WD-credit row
+  across all three render paths (card view, table view, detail tab).
+
+**Modal fields:** method (Venmo / Zelle / Check / GoDaddy / **PayPal**), back-datable
+refund date, optional note.
+
+**Backend behavior** — `payout_credit(conn, item_id, method, date, note)` in database.py:
+- For `transaction_status='credited'`: amount comes from `item_price`, row flips to
+  `refunded`.
+- For `transaction_status='wd'`: amount comes from `credit_amount`, the field is cleared,
+  status stays `wd`.
+- In both cases an `acct_transactions` expense entry is written (`category='refund'`,
+  `source=method`). Method `Venmo` routes the entry to the `Venmo` account; `PayPal`
+  routes to the `PayPal` account; everything else routes to `TGF Checking`. The
+  `credit_note` is stamped `Refunded $X.XX via <method> on YYYY-MM-DD`.
+- `payout_wd_credit` retained as a Python alias for back-compat.
+
+**API endpoints (admin only):**
+- `POST /api/items/<id>/payout-credit` — canonical route
+- `POST /api/items/<id>/payout-wd-credit` — legacy alias (kept so the existing events-page
+  WD pill keeps working without changes)
+
+This closes the loop on the apply-credit-with-Venmo-back flow: admin sends the Venmo
+manually using the prefilled link, then clicks Refund on the resulting excess-credit
+row to record the disbursement and clear the customer's credit balance.
+
+# Transfer cascade — +PAY children follow the parent
+
+`transfer_item` now sums the parent's `item_price` with every active `+PAY` child and
+creates ONE new credit-transfer item at the target with the combined amount. Children are
+flipped to `transferred` alongside the parent and their `transferred_to_id` points at the
+same target. The resulting target `item_price` reads e.g. `$83.37 (credit)` instead of
+`$75.00 (credit)` with an orphan `$8.37` child sitting on the source event. `credit_note`
+on the new row spells out `$75.00 parent + $8.37 +PAY` so the breakdown is visible.
+
+**Modal gating:** when the Credit/Transfer/Refund dialog is opened on a `+PAY` child
+(`parent_item_id IS NOT NULL`), Transfer and Partial Refund are hidden — both options are
+nonsensical on a top-up payment (Transfer would strand the parent registration, Partial
+Refund would split a single small line). Credit and Refund remain.
+
+# Pairings Generator (events.html PAIRINGS tab)
+
+Full pairings system with seed/lock, cart pairs, and round-robin history.
+
+**Tables:**
+- `event_pairings` — saved group assignments per event: `holes`, `group_num`,
+  `slot_label` (e.g. `1A`, `1B`, `2A`), `cart_pos` (1–4 within the foursome).
+- `pairing_history` — tracks who played with whom per event for round-robin weighting
+  (calendar-year window).
+
+Both tables are created lazily on first pairing operation by `_ensure_pairing_tables()`,
+called at the top of every pairing function (get, save, delete, history counts, generate).
+This eliminates `'no such table'` errors on existing deployments.
+
+**Generator algorithm (Python, `email_parser/database.py`):**
+- **Random mode** — history-aware weighted pairing (calendar-year round-robin); honors
+  one-way partner requests with same-cart enforcement (positions 1&2 or 3&4).
+- **ABCD mode** — splits the field evenly into handicap tiers, one player per tier per group.
+- **9 / 18 / 27 hole separation enforced**; players never mix across formats (27 Holes
+  shares the 18-hole code path).
+- **Threesomes** placed at the furthest holes for shotgun events (1A, 1B, 2A… order).
+- **Seed/lock:** pre-assign individual players, cart pairs, or full foursomes to specific
+  slots before generating.
+- **Tee time slots** computed from `events.start_time` + group count + tee interval.
+
+**Generator robustness — query event players by `item_name`, not `event_id`:**
+The `event_id` FK on items is incompletely backfilled on the live DB, so the generator
+matches items by `item_name` (+ `event_aliases`) with `event_id` as a fallback — same
+pattern used by `get_all_events` throughout the rest of the app. Query joins start from
+`events → event_aliases → items` (SQLite requires `ON` clauses only reference tables
+already joined).
+
+**API routes (admin):**
+- `GET  /api/events/<id>/pairings` — load saved pairings + slot metadata
+- `POST /api/events/<id>/pairings/generate` — run generator (not saved)
+- `POST /api/events/<id>/pairings/save` — persist + rebuild `pairing_history`
+- `DELETE /api/events/<id>/pairings` — clear saved pairings
+
+**UI swap modes:**
+- Swap individual **Player**, **Cart Pair** (positions 1&2 or 3&4), or **full Group**.
+- All three modes block cross-holes swaps — you can't swap a 9-hole player/pair/group
+  with an 18-hole one. Shows an alert and resets selection.
+- Cart dots use solid hex colors (`#3b82f6` blue for Cart A, `#22c55e` green for Cart B)
+  instead of CSS vars, so they stay visible on light backgrounds.
+- Saved-state indicator + dirty tracking before save.
 
 # Event Pricing Architecture
 

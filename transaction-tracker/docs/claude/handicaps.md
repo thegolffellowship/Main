@@ -69,6 +69,36 @@ Two visual separator rows appear in the expanded rounds table:
 - `/api/handicaps/players` auto-runs `relink_all_unlinked_players()` on each request
 - Customers page also matches by `player_name` as fallback (not just `customer_name`)
 
+## Handicap email — canonical email priority
+
+`build_handicap_card_data` looks up the customer_id via the most recent items row that
+has one, then reads `customer_emails.is_primary` first. The earlier implementation
+preferred the most-recent `items.customer_email` and only fell back to
+`customer_emails.is_primary` if items had nothing — so any historical typo on an items
+row (e.g. Fred Wicker's `fredwickee@att.net` from one old order) would override the
+canonical `fredwicker@att.net` primary the user maintains on the Customer Info page.
+
+`build_handicap_card_data` is also refactored to use the
+`resolve_player_email / phone / name / chapter / status` canonical resolvers (see
+`docs/claude/customers.md → Canonical Identity Resolvers`). The bespoke email/chapter/name
+lookup that was the source of the typo'd-email bug is gone. Items.* fallbacks remain only
+for the few records where no primary email is set yet.
+
+## items.handicap is no longer parsed from orders
+
+The LLM email parser used to pull a `handicap` value from each order email and write it
+to `items.handicap`. That column is no longer fed by orders:
+- The `handicap` field is stripped from the LLM prompt schema in `email_parser/parser.py`.
+- `_save_items` sets the persisted value to `None` so `items.handicap` stays empty on new
+  rows.
+- `has_handicap` (a separate membership-only YES/NO flag) is unaffected.
+
+Handicap data effectively never came through GoDaddy orders in practice — the canonical
+source is `handicap_rounds` (per-round differentials, re-aggregated by the WHS calculator)
+joined via `handicap_player_links`. Stale `items.handicap` values on old order rows
+looked authoritative but didn't update when the player's real handicap changed, so any
+code path that read them silently drifted.
+
 ## Key files
 - `email_parser/database.py` — `_HANDICAP_DIFF_LOOKUP` (server-side table), `_match_customer_name()` (linking logic)
 - `templates/handicaps.html` — `DIFF_LOOKUP` (client-side JS table, must match)

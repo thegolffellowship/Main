@@ -18,10 +18,72 @@ When a new transaction arrives, the system resolves the customer in this order:
 4. **Alias name via `customer_aliases`** — alias_type='name' JOIN customers
 5. **Fallback: `items.customer_email`** — checks existing items for pre-migration customers
 
+`_resolve_lookup_customer_id` (the variant used by some send paths) **also** consults
+`customer_aliases` (alias_type='name') when the direct first+last name match misses, so
+an `item.customer` of "Stu Kirksey" can resolve to the canonical "Stuart Kirksey" record.
+
 ## Customer Resolution (`_resolve_or_create_customer`)
 - Calls `_lookup_customer_id` first
 - If no match, creates a new `customers` row + `customer_emails` row
 - On email IntegrityError (duplicate), returns the existing owner's customer_id instead of creating an orphan
+
+## Canonical Identity Resolvers (`resolve_player_*`)
+
+`items.customer_email` / `customer_phone` / `first_name` / `last_name` / `chapter` /
+`user_status` are historical snapshots captured per-order — they can carry typos or stale
+values that the manager has corrected on the Customer Info page. Reading `items.*`
+directly resurrects bugs (e.g. handicap card preview using a typo'd email from one old
+order). Five resolver helpers in `database.py` look up the canonical value via
+`items.customer_id` (or by name match) and fall back to `items.*` only when nothing
+canonical exists:
+
+- `resolve_player_email(item, conn=None)` — `customer_emails.is_primary`
+- `resolve_player_phone(item, conn=None)` — `customers.phone`
+- `resolve_player_name(item, conn=None)` — `customers.first_name + last_name`
+- `resolve_player_chapter(item, conn=None)` — `customers.chapter`
+- `resolve_player_status(item, conn=None)` — `customers.current_player_status` + roles
+
+Every customer-facing send path goes through `_resolve_player_email` (which delegates to
+`resolve_player_email`): `_send_rsvp_credit_alerts`, `_build_balance_due_email`, the
+`/api/items/<id>/send-payment-reminder` route, and the bulk-send composer's
+`resolve_email()`. Drop the `'and i.get("customer_email")'` filters on player-collection
+lists and skip rows that resolve to no email at send time, so manually-added RSVPs whose
+email lives only in `customer_emails` are no longer excluded from reminders.
+
+**Connection lifetime gotcha** — `_resolve_db` opens its own connection via
+`get_connection()` and closes it directly with `conn.close()` in the resolver `finally`
+blocks. The earlier implementation used `_connect(db_path).__enter__()` without holding
+a reference to the contextmanager, which CPython's reference counting reclaimed
+immediately and closed the underlying sqlite generator's connection in its `finally`
+block — every `owns=True` resolver call then hit "Cannot operate on a closed database"
+on its first `.execute()` and bubbled out of `api_send_messages` as a 500. Always open
+the connection directly in resolver helpers.
+
+## Identity Self-Healing at Boot
+
+Three idempotent migrations run in `init_db()` so the `items` snapshot stays consistent
+with the canonical `customers` / `customer_emails` records:
+
+| Migration | What it does |
+|---|---|
+| `capture_email_aliases_from_items` | Promotes every `items.customer_email` value differing from the linked customer's primary email into `customer_aliases` (alias_type='email'). Idempotent — case-only variants and already-aliased typos are skipped. The Customer Info card's Aliases section then shows each captured variant under the 📧 icon. |
+| `_heal_items_identity_fields` (Phase 1B) | Flattens `items.customer_email` / `customer_phone` / `chapter` / `first_name` / `last_name` to match the linked `customers` / `customer_emails` record. For email differences, captures the existing `items.customer_email` value as a `customer_alias` (alias_type='email') before overwriting. Other fields overwrite silently — there's no alias slot for phone/name/chapter, and the canonical record is by definition correct. Belt-and-suspenders behind the resolver helpers. |
+| `_migrate_relabel_credit_pool_items` | Backfills descriptive `item_name` on credit-pool rows: "Excess credit — `<event>`" or "Overpayment credit — `<event>`". Idempotent (skips rows whose `item_name` already starts with the new prefix). |
+
+## Drift detection on new orders (Phase 3)
+
+When a new GoDaddy order arrives, `save_items()` compares the order's
+`customer_email` / `customer_phone` / `chapter` against the canonical record on the linked
+customer (`customer_emails.is_primary`, `customers.phone`, `customers.chapter`). For each
+field that differs:
+
+- **Canonical wins.** The items row is persisted with the manager-maintained value, never
+  the order's drift.
+- **A `parse_warning` is raised** (`EMAIL_DRIFT` / `PHONE_DRIFT` / `CHAPTER_DRIFT`) so the
+  manager sees the discrepancy in the COO action-items banner and can decide whether to
+  update the customer record, capture the variant as an alias, or dismiss it as a typo.
+- `parse_warnings.customer_id` (Phase 2 FK) is populated so the warning links straight
+  back to the affected customer.
 
 ## Customer Merge (`merge_customers`)
 - Reassigns `items.customer` string (all transactions)
@@ -64,7 +126,19 @@ on any customer profile (all three rendering paths: inline expand, detail panel,
 - `member_plus` — new status (migration-adds to CHECK constraint); displayed as "MEMBER+"
 - `expired_member` kept in DB for backward compat; displayed as "FORMER"
 
-**Roles checkboxes:** `member`, `manager`, `admin`, `vendor`, `course_contact`, `sponsor`
+**Roles checkboxes:** `golfer`, `manager`, `admin`, `vendor`, `course_contact`, `sponsor`
+
+> **Renamed:** the old `member` role string was renamed to `golfer` (lowercase, in
+> `customer_roles.role_type`) because it collided conceptually with the `MEMBER`
+> player_status display label, making code and conversation ambiguous. Migration
+> `_migrate_rename_member_role_to_golfer` recreates the `customer_roles` table with the
+> new CHECK and maps existing `member` rows to `golfer`. Idempotent (detects whether the
+> migration already ran by inspecting the stored CREATE TABLE SQL). All `player_status`
+> values (`MEMBER`, `MEMBER+`, `1ST TIMER`, `GUEST`, `FORMER`, `active_member`,
+> `expired_member`, `MANAGER`) and `membership` item names are unchanged.
+> Frontend constants updated: `ELEVATED` and `ALL_ROLES` arrays in customers.html, the
+> four `hasRole(...)` guards in events.html's user_status validator, and the
+> `valid_roles` set in `/api/replace-customer-roles`.
 
 **Save flow:**
 1. `PATCH /api/customers/<id>` — updates `current_player_status` via `update_customer_info()`
@@ -165,6 +239,14 @@ Roster Import / Customer Entry / RSVP Import / RSVP Email Link
 
 Roster Import items also do not appear in the customer-detail Transactions tab.
 
+## Customers Page List — Credit-Balance Filter
+
+A second dropdown (**All Credits / With Credit / No Credit**) sits next to the existing
+filters so admins can quickly isolate players carrying a credit balance — the same
+balance surfaced by the orange "$X.XX CREDIT" badge next to the customer name. Cents are
+shown via `toLocaleString({min: 2, max: 2})` so a $0.19 overpayment credit reads as
+"$0.19 Credit" instead of "$0 Credit". `totalSpent` formatting stays whole-dollar.
+
 ## Customers Page — Row Tinting by Status
 
 Each customer row (desktop table + mobile card) gets a status-based class:
@@ -233,6 +315,48 @@ Each rendering path has 5 tabs: **Transactions**, **Scores**, **Winnings**, **Po
 - `get_customer_winnings()` uses multi-step name matching:
   exact → case-insensitive → alias → name reversal
 - Returns `{golfer_name, total_winnings, payouts: [{event_name, date, category, amount}]}`
+
+## Customer detail Transactions tab — display columns
+
+The Customer detail Transactions tab renders the same `displaySideGames` / `displayItemNotes`
+helpers as the Transactions page:
+
+- `displaySideGames(item)` only renders `NET / GROSS / BOTH / NONE`. Anything else
+  collapses to an em-dash so free-form text doesn't pollute the Side Games column.
+- `displayItemNotes(item)` joins `item.notes` (with internal markers like
+  `[venmo-bd-exp:N]` and `[xfer-consumed:N]` stripped) with any non-canonical
+  `side_games` text, separated by ` — `. Notes truncate to `14rem` with overflow
+  ellipsis + `title=` tooltip for the full text.
+
+Other columns in this tab:
+- **Account** — derived from merchant: `The Golf Fellowship` → GoDaddy,
+  `Manual Entry (Venmo)` → Venmo, `Manual Entry` → Manual,
+  `Paid Separately ...` → Credit Transfer, RSVP/Roster/Customer Entry variants → labeled.
+- **Total / Fees** — `total_amount` with `transaction_fees` in muted grey.
+- **Multi-item order hint** — when an `order_id` is shared across rows, the Item cell
+  shows a small italic `<N>-item order <id>` subtitle. Single-item orders show
+  `order_id` in light grey.
+- **From-transfer indicator** — same circular navy `T` badge used on Events
+  (replaces the older "From Transfer" pill).
+- **Coupon C-badge** — purple `.coupon-badge` on items with `coupon_code` or
+  `coupon_amount` set.
+
+**Reverse hidden on credit-pool rows.** New JS helper `isCreditPoolRow(row)` detects
+credit-pool rows by `email_uid` prefix (`credit-excess-` / `overpayment-credit-`) and
+hides Reverse on them across every render site (desktop INACTIVE chip, mobile chip,
+desktop Players-tab actions dropdown, mobile player-row, customer detail Transactions
+tab). Reverse on these rows previously flipped `transaction_status` from `credited` to
+`active` and cleared `credit_note`, leaving a phantom active registration on the event.
+To unwind a credit-pool row, reverse the parent credit-transfer instead —
+`reverse_credit_application` already deletes excess + overpayment children.
+
+## Storage migration: non-canonical side_games → notes
+
+Pairs with the display helper above. `_migrate_move_noncanonical_side_games_to_notes`
+runs at startup once: any `items` row where `side_games` is non-empty and not in
+`{NET, GROSS, BOTH, NONE}` has the text appended to `notes` (with `' — '` separator if
+notes already had content, skipping if the exact text is already in notes), then
+`side_games` is cleared. Idempotent.
 
 ## Canonical customer data API
 - `GET /api/customers` — returns all customers from canonical tables
