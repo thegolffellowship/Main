@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.10.18";
+window.TGF_VERSION = "2.10.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.19",
+    date: "2026-05-04",
+    title: "Parser prompt: handle MEMBERSHIP + EVENT combo orders correctly",
+    changes: [
+      "Tightened the AI extraction prompt with an explicit MEMBERSHIP + EVENT rule. When an order contains both a TGF MEMBERSHIP and an event in the same email (e.g. Jeremy Wafford R301078428: TGF MEMBERSHIP + s9.8 SILVERHORN), the parser was returning a single mashed-up row — TGF MEMBERSHIP item_name with the event's $96 price, holes=9, side_games=BOTH, tee_choice=<50 — and dropping the second item entirely.",
+      "The new prompt rule includes a concrete worked example that anchors each item to its own SKU and price line, and explicitly forbids assigning event-side fields (holes / side_games / tee_choice / user_status) to a membership row, or membership-side fields (has_handicap / returning_or_new / date_of_birth / MEM SKU) to an event row.",
+    ],
+  },
   {
     version: "2.10.18",
     date: "2026-05-04",

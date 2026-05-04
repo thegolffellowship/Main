@@ -79,6 +79,45 @@ IMPORTANT RULES:
   included (e.g. "SEASON CONTESTS" at $0.00 is a real item). Never merge \
   or skip a $0 item — each named line item in the Order Summary gets its \
   own entry in the "items" array.
+- CRITICAL — MEMBERSHIP + EVENT in the same order: a single order may \
+  contain BOTH a TGF MEMBERSHIP item AND an event item (e.g. "s9.8 \
+  SILVERHORN", "a9.8 AVERY RANCH", "2026 HILL COUNTRY MATCHES"). When \
+  this happens, return TWO separate items — never merge them. Each item \
+  has its own SKU line and its own price line in the Order Summary. The \
+  membership's price line ($50 / $75 / etc., usually right after \
+  "SKU: MEM-...") is the membership's item_price. The event's price line \
+  (right after the event's "SKU: 26-..." or similar) is the event's \
+  item_price. Do NOT take the event's price/holes/side_games/tee_choice \
+  and assign them to the membership row — those fields are NULL for a \
+  membership. Membership-specific fields (has_handicap, returning_or_new, \
+  date_of_birth, MEM-R-S SKU) belong only on the membership row; event- \
+  specific fields (holes, side_games, tee_choice, user_status, post_game) \
+  belong only on the event row.
+
+  Concrete example. Order Summary contains:
+      TGF MEMBERSHIP
+      CITY: SAN ANTONIO
+      RETURNING or NEW?: RETURNING
+      Do you have a Current Handicap?: YES
+      Date of Birth?: 12/20/1988
+      SKU: MEM-R-S
+      $75.00
+      s9.8 SILVERHORN
+      MEMBER STATUS: MEMBER
+      9 or 18 HOLES?: 9 HOLES - 5:30p Shotgun = $64
+      GOLF or COMPETE?: EVENT + BOTH NET & GROSS Games | Add $32
+      TEE CHOICE: <50 | 6300-6800y
+      SKU: 26-s9-8-M-9-B
+      $96.00
+      Subtotal: $171.00 ... Order Total: $176.99
+
+  Correct extraction → TWO items:
+      {item_name: "TGF MEMBERSHIP", item_price: "$75.00", chapter: "San Antonio",
+       has_handicap: "YES", returning_or_new: "Returning", date_of_birth: "1988-12-20",
+       holes: null, side_games: null, tee_choice: null}
+      {item_name: "s9.8 SILVERHORN", item_price: "$96.00", user_status: "MEMBER",
+       holes: "9", side_games: "BOTH", tee_choice: "<50",
+       has_handicap: null, returning_or_new: null, date_of_birth: null}
 - If a field is not present in the email, use null for that field.
 - Dollar amounts should include the "$" sign (e.g. "$158.00").
 - Dates should be in YYYY-MM-DD format.
