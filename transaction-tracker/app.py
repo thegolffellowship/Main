@@ -39,7 +39,7 @@ from email_parser.database import (
     transfer_item,
     reverse_credit,
     wd_item,
-    payout_wd_credit,
+    payout_credit,
     create_event,
     seed_events,
     add_player_to_event,
@@ -4569,10 +4569,11 @@ def api_refund_item(item_id):
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
 
 
-@app.route("/api/items/<int:item_id>/payout-wd-credit", methods=["POST"])
+@app.route("/api/items/<int:item_id>/payout-credit", methods=["POST"])
+@app.route("/api/items/<int:item_id>/payout-wd-credit", methods=["POST"])  # legacy alias
 @require_role("admin")
-def api_payout_wd_credit(item_id):
-    """Record a cash payout of a WD row's outstanding credit_amount.
+def api_payout_credit(item_id):
+    """Record a cash payout of a player credit (WD or standalone credited row).
 
     Body: {"method": "Venmo|Zelle|Check|GoDaddy", "date": "YYYY-MM-DD", "note": "..."}
     """
@@ -4586,7 +4587,7 @@ def api_payout_wd_credit(item_id):
             datetime.strptime(refund_date, "%Y-%m-%d")
         except ValueError:
             return jsonify({"error": "date must be YYYY-MM-DD"}), 400
-    result = payout_wd_credit(
+    result = payout_credit(
         item_id, method=method, note=data.get("note", ""), refund_date=refund_date,
     )
     if not result.get("ok"):

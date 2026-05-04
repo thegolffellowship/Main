@@ -7327,23 +7327,31 @@ def refund_item(item_id: int, method: str = "", note: str = "",
         return cursor.rowcount > 0
 
 
-def payout_wd_credit(
+def payout_credit(
     item_id: int,
     method: str = "",
     note: str = "",
     refund_date: str = "",
     db_path: str | Path | None = None,
 ) -> dict:
-    """Record a cash payout of a WD-row's outstanding credit_amount.
+    """Record a cash payout of an outstanding player credit.
 
-    Used when an admin has already refunded a withdrawn player's partial
-    credit out-of-band (e.g. via Venmo) and needs the system to mirror it:
-    writes a flat accounting entry, then clears credit_amount on the WD row
-    and stamps credit_note. The WD row stays WD — only the credit balance
-    is paid out.
+    Handles two row shapes:
 
-    Returns {"ok": True, "amount": float} on success, or {"ok": False,
-    "error": str} on validation/lookup failure.
+      * WD rows (transaction_status='wd') — the credit lives in
+        ``credit_amount``. After payout, that field is cleared but the
+        row stays WD; ``credit_note`` is stamped with the refund summary.
+      * Standalone credit rows (transaction_status='credited') — the
+        credit lives in ``item_price`` (e.g. excess credits, overpayment
+        credits, or full registration credits). After payout, status is
+        flipped to 'refunded' so the customer's credit balance no longer
+        counts it; ``credit_note`` is stamped with the refund summary.
+
+    In both cases a flat ``acct_transactions`` expense entry is written
+    so bank reconciliation can match the actual Venmo/Zelle/Check.
+
+    Returns {"ok": True, "amount": float, "date": str} on success, or
+    {"ok": False, "error": str} on validation/lookup failure.
     """
     import datetime as _dt
     with _connect(db_path) as conn:
@@ -7351,17 +7359,24 @@ def payout_wd_credit(
         if not row:
             return {"ok": False, "error": "Item not found"}
         item = dict(row)
-        if (item.get("transaction_status") or "") != "wd":
-            return {"ok": False, "error": "Item is not in WD status"}
-        amount = _parse_dollar(item.get("credit_amount"))
-        if amount <= 0:
-            return {"ok": False, "error": "WD row has no outstanding credit to pay out"}
+        status = (item.get("transaction_status") or "").lower()
+        if status == "wd":
+            amount = _parse_dollar(item.get("credit_amount"))
+            if amount <= 0:
+                return {"ok": False, "error": "WD row has no outstanding credit to pay out"}
+        elif status == "credited":
+            amount = _parse_dollar(item.get("item_price"))
+            if amount <= 0:
+                return {"ok": False, "error": "Credit row has no balance to pay out"}
+        else:
+            return {"ok": False, "error": "Item is not in WD or credited status"}
 
         date_str = (refund_date or "").strip() or _dt.datetime.now().strftime("%Y-%m-%d")
 
         try:
             refund_source = method.lower().replace(" ", "_") if method else "manual"
             refund_account = "Venmo" if "venmo" in (method or "").lower() else "TGF Checking"
+            label = "WD credit refund" if status == "wd" else "Credit payout"
             _write_acct_entry(
                 conn,
                 item_id=item_id,
@@ -7373,26 +7388,36 @@ def payout_wd_credit(
                 source=refund_source,
                 amount=amount,
                 description=(
-                    f"WD credit refund ({method or 'manual'}): "
+                    f"{label} ({method or 'manual'}): "
                     f"{item.get('customer', '')} — {item.get('item_name', '')}"
                 ),
                 account=refund_account,
-                source_ref=f"wd-credit-payout-{item_id}",
+                source_ref=f"credit-payout-{item_id}",
                 date=date_str,
             )
         except Exception:
-            logger.warning("Failed to write acct entry for WD payout %s", item_id, exc_info=True)
+            logger.warning("Failed to write acct entry for credit payout %s", item_id, exc_info=True)
             return {"ok": False, "error": "Could not write accounting entry"}
 
         stamp = f"Refunded ${amount:.2f} via {method or 'manual'} on {date_str}"
         if note:
             stamp += f" — {note}"
-        conn.execute(
-            "UPDATE items SET credit_amount = NULL, credit_note = ? WHERE id = ?",
-            (stamp, item_id),
-        )
+        if status == "wd":
+            conn.execute(
+                "UPDATE items SET credit_amount = NULL, credit_note = ? WHERE id = ?",
+                (stamp, item_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE items SET transaction_status = 'refunded', credit_note = ? WHERE id = ?",
+                (stamp, item_id),
+            )
         conn.commit()
         return {"ok": True, "amount": amount, "date": date_str}
+
+
+# Back-compat alias for the original WD-only entry point.
+payout_wd_credit = payout_credit
 
 
 def wd_item(
