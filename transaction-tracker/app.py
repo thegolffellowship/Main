@@ -2203,6 +2203,67 @@ def api_reextract_order():
         return jsonify({"error": str(exc)}), 500
 
 
+@app.route("/api/audit/reimport-order", methods=["POST"])
+@require_role("admin")
+def api_reimport_order():
+    """Re-fetch and re-parse an email by uid, INSERTing the resulting items.
+
+    Use case: an order's items were deleted (e.g. to clean up a parser
+    mis-extraction) and need to be re-imported from scratch. The standard
+    re-extract endpoint only UPDATEs existing rows, so when the items have
+    been removed it has nothing to operate on. This endpoint bypasses that:
+    fetch the email, run the parser, and call save_items().
+
+    The save_items() pipeline already has the cross-email-uid dedup gate
+    plus the UNIQUE(email_uid, item_index) constraint, so no duplicates are
+    created — if rows already exist for this order they will be skipped.
+
+    Body: {"email_uid": "..."}
+    """
+    data = request.get_json(force=True) or {}
+    email_uid = (data.get("email_uid") or "").strip()
+    if not email_uid:
+        return jsonify({"error": "email_uid is required"}), 400
+    if email_uid.startswith("manual-"):
+        return jsonify({"error": "Manual entries cannot be re-imported"}), 400
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    email_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, email_address]):
+        return jsonify({"error": "Azure AD credentials not configured"}), 400
+
+    try:
+        email_data = fetch_email_by_id(
+            tenant_id, client_id, client_secret, email_address, email_uid
+        )
+        if not email_data:
+            return jsonify({"error": f"Could not fetch email {email_uid} from Graph API"}), 404
+
+        parsed_rows = parse_email(email_data)
+        if not parsed_rows:
+            return jsonify({
+                "status": "ok",
+                "email_uid": email_uid,
+                "parsed_count": 0,
+                "inserted": 0,
+                "message": "Parser returned 0 items — email body may be malformed.",
+            })
+
+        inserted = save_items(parsed_rows)
+        return jsonify({
+            "status": "ok",
+            "email_uid": email_uid,
+            "parsed_count": len(parsed_rows),
+            "inserted": inserted,
+            "skipped": len(parsed_rows) - inserted,
+        })
+    except Exception as exc:
+        logger.exception("reimport-order failed for email_uid=%s", email_uid)
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/api/audit/retry-failed", methods=["POST"])
 @require_role("admin")
 def api_retry_failed():

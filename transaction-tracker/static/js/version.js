@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.10.17";
+window.TGF_VERSION = "2.10.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.18",
+    date: "2026-05-04",
+    title: "Audit page: Re-import This Order; remove now-redundant Delete Phantom Duplicates button",
+    changes: [
+      "New 'Re-import This Order' button on the Audit Log card (admin-only, shown when status != ok and email_uid is non-manual). Calls a new POST /api/audit/reimport-order endpoint that re-fetches the email by uid via Microsoft Graph, runs the AI parser, and INSERTs the resulting rows via save_items(). Use case: an order's items were deleted (e.g. to clean up a parser mis-extraction) — the existing 'Re-extract This Order' button can't help because it only UPDATEs existing rows. The cross-uid dedup gate in save_items() prevents any duplicates if rows already exist.",
+      "Removed the 'Delete Phantom Duplicates' button from the Transactions header now that the cleanup is complete and the v2.10.17 dedup gate prevents recurrence. The backend endpoint POST /api/audit/delete-phantom-duplicates remains as a quiet safety net but is no longer surfaced in the UI.",
+    ],
+  },
   {
     version: "2.10.17",
     date: "2026-05-04",
