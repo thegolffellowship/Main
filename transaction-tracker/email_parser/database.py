@@ -4785,6 +4785,78 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                     order_id=row.get("order_id"),
                     item_name=row.get("item_name"),
                 )
+
+            # ── Identity-drift guard ──
+            # If the order's customer_email/phone/chapter differs from what the
+            # manager has on the Customer Info page, the canonical record wins.
+            # The order's value is overwritten to canonical AND a parse_warning
+            # is raised so the manager can review the drift in the COO action-
+            # items banner. Prevents the "fredwickee@att.net" class of bug
+            # where a single typo'd order keeps polluting downstream reads.
+            _drift_cid = row.get("customer_id")
+            if _drift_cid:
+                _drift_canonical = conn.execute(
+                    """SELECT
+                          (SELECT email FROM customer_emails
+                           WHERE customer_id = c.customer_id AND is_primary = 1
+                           LIMIT 1) AS canonical_email,
+                          c.phone   AS canonical_phone,
+                          c.chapter AS canonical_chapter
+                       FROM customers c
+                       WHERE c.customer_id = ?
+                       LIMIT 1""",
+                    (_drift_cid,),
+                ).fetchone()
+                if _drift_canonical:
+                    _checks = (
+                        ("customer_email", "EMAIL_DRIFT",
+                         _drift_canonical["canonical_email"], True),
+                        ("customer_phone", "PHONE_DRIFT",
+                         _drift_canonical["canonical_phone"], False),
+                        ("chapter", "CHAPTER_DRIFT",
+                         _drift_canonical["canonical_chapter"], False),
+                    )
+                    for _field, _code, _canonical, _normalize_lower in _checks:
+                        if not _canonical:
+                            continue
+                        _order_val = (row.get(_field) or "").strip()
+                        _can_val = (_canonical or "").strip()
+                        if not _order_val:
+                            continue
+                        _a = _order_val.lower() if _normalize_lower else _order_val
+                        _b = _can_val.lower() if _normalize_lower else _can_val
+                        if _a == _b:
+                            continue
+                        # Drift detected → warn + overwrite to canonical
+                        try:
+                            conn.execute(
+                                """INSERT OR IGNORE INTO parse_warnings
+                                   (email_uid, order_id, customer, customer_id,
+                                    item_name, warning_code, message)
+                                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                                (
+                                    row.get("email_uid"),
+                                    row.get("order_id"),
+                                    row.get("customer"),
+                                    _drift_cid,
+                                    row.get("item_name"),
+                                    _code,
+                                    f"Order {_field} '{_order_val}' differs from "
+                                    f"canonical '{_can_val}' on Customer Info — "
+                                    f"order value ignored, canonical kept. "
+                                    f"Review and decide whether to update the "
+                                    f"customer record or capture as alias.",
+                                ),
+                            )
+                        except Exception:
+                            logger.warning(
+                                "save_items: failed to log %s for item %s",
+                                _code, row.get("email_uid"), exc_info=True,
+                            )
+                        # Overwrite the row's value with canonical so what
+                        # gets persisted matches the customer record.
+                        row[_field] = _canonical
+
             values = tuple(row.get(col) for col in ITEM_COLUMNS)
             try:
                 cursor = conn.execute(sql, values)
