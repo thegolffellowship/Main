@@ -105,6 +105,8 @@ function updateRoleUI() {
     // Show admin-only buttons
     const expandQtyBtn = document.getElementById("btn-expand-qty");
     if (expandQtyBtn) expandQtyBtn.style.display = (currentRole === "admin") ? "" : "none";
+    const deletePhantomsBtn = document.getElementById("btn-delete-phantoms");
+    if (deletePhantomsBtn) deletePhantomsBtn.style.display = (currentRole === "admin") ? "" : "none";
 }
 
 function updateNavForRole() {

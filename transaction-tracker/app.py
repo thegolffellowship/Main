@@ -2230,6 +2230,134 @@ def api_retry_failed():
     })
 
 
+@app.route("/api/audit/delete-phantom-duplicates", methods=["POST"])
+@require_role("admin")
+def api_delete_phantom_duplicates():
+    """Delete phantom duplicate item rows.
+
+    For each group of items sharing (order_id, customer, item_name, item_price)
+    with COUNT > 1, keep the lowest-id row (the original parse — earliest
+    created_at) and DELETE every later row. Skips any row that has downstream
+    references that deletion would orphan:
+
+    - acct_allocations.item_id pointing at the row
+    - acct_transactions.item_id pointing at the row
+    - items.transferred_from_id / items.transferred_to_id pointing at the row
+    - items.parent_item_id pointing at the row (child +PAY rows)
+
+    Idempotent: after one run no groups have COUNT > 1, so re-running is a
+    no-op.
+
+    Query params:
+      since=YYYY-MM-DD   restrict to orders with order_date >= this date
+                         (default: 2026-04-26 to scope this to the May-3
+                         backfill incident; pass since=1900-01-01 for ALL)
+      dry_run=1          report what would be deleted without deleting
+    """
+    since = (request.args.get("since") or "2026-04-26").strip()
+    dry_run = request.args.get("dry_run") in ("1", "true", "yes")
+    conn = get_connection()
+    try:
+        groups = conn.execute(
+            """
+            SELECT order_id, customer, item_name, item_price,
+                   GROUP_CONCAT(id ORDER BY id) as ids
+            FROM items
+            WHERE COALESCE(transaction_status, 'active') = 'active'
+              AND order_id IS NOT NULL AND order_id != ''
+              AND customer IS NOT NULL AND customer != ''
+              AND item_name IS NOT NULL AND item_name != ''
+              AND order_date >= ?
+            GROUP BY order_id, LOWER(customer), LOWER(item_name), item_price
+            HAVING COUNT(*) > 1
+            """,
+            (since,),
+        ).fetchall()
+
+        deleted = 0
+        skipped = 0
+        skip_reasons: list[str] = []
+        deleted_ids: list[int] = []
+
+        for g in groups:
+            ids = [int(x) for x in (g["ids"] or "").split(",") if x]
+            if len(ids) < 2:
+                continue
+            # ids is sorted ASC by GROUP_CONCAT (... ORDER BY id);
+            # the first is the original — keep it.
+            for dup_id in ids[1:]:
+                # Acct allocations
+                alloc_count = 0
+                try:
+                    alloc_count = conn.execute(
+                        "SELECT COUNT(*) as cnt FROM acct_allocations WHERE item_id = ?",
+                        (dup_id,),
+                    ).fetchone()["cnt"]
+                except Exception:
+                    pass
+                if alloc_count > 0:
+                    skipped += 1
+                    skip_reasons.append(f"#{dup_id}: {alloc_count} acct_allocations")
+                    continue
+
+                # Acct transactions
+                txn_count = 0
+                try:
+                    txn_count = conn.execute(
+                        "SELECT COUNT(*) as cnt FROM acct_transactions WHERE item_id = ?",
+                        (dup_id,),
+                    ).fetchone()["cnt"]
+                except Exception:
+                    pass
+                if txn_count > 0:
+                    skipped += 1
+                    skip_reasons.append(f"#{dup_id}: {txn_count} acct_transactions")
+                    continue
+
+                # Other items referencing this id (transfer chain or +PAY children)
+                ref_count = conn.execute(
+                    """SELECT COUNT(*) as cnt FROM items
+                       WHERE transferred_from_id = ?
+                          OR transferred_to_id = ?
+                          OR parent_item_id = ?""",
+                    (dup_id, dup_id, dup_id),
+                ).fetchone()["cnt"]
+                if ref_count > 0:
+                    skipped += 1
+                    skip_reasons.append(f"#{dup_id}: {ref_count} item back-refs")
+                    continue
+
+                if dry_run:
+                    deleted += 1
+                    deleted_ids.append(dup_id)
+                    continue
+
+                try:
+                    conn.execute("DELETE FROM items WHERE id = ?", (dup_id,))
+                    deleted += 1
+                    deleted_ids.append(dup_id)
+                except Exception as e:
+                    logger.warning("delete-phantom-duplicates: failed on id=%s: %s", dup_id, e)
+                    skipped += 1
+                    skip_reasons.append(f"#{dup_id}: delete error: {e}")
+
+        if not dry_run:
+            conn.commit()
+
+        return jsonify({
+            "status": "ok",
+            "since": since,
+            "dry_run": dry_run,
+            "groups_processed": len(groups),
+            "deleted": deleted,
+            "deleted_ids": deleted_ids[:200],
+            "skipped": skipped,
+            "skip_reasons": skip_reasons[:50],
+        })
+    finally:
+        conn.close()
+
+
 @app.route("/api/audit/duplicate-items-diagnostic", methods=["GET"])
 @require_role("admin")
 def api_duplicate_items_diagnostic():
