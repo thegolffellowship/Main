@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.11.5";
+window.TGF_VERSION = "2.11.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.11.6",
+    date: "2026-05-04",
+    title: "Roster opt-in/out copy: warmer, less transactional tone",
+    changes: [
+      "About Golf Genius header reframed from \"unless we hear from you, we'll be removing you\" to \"we don't want to crowd your inbox with our weekly event invitations if they're no longer useful — totally fine either way.\" The opt-out feels like a courtesy, not a threat.",
+      "Remove button relabeled from \"❌ Remove me from the rosters\" to \"No need to keep me posted\" and recolored from red (#dc2626) to neutral grey (#6b7280) so the choice doesn't read as a destructive action.",
+      "Closing paragraph softened: \"Either button just sends a quick note ... so we know what to do. If we don't hear from you in the next 7 days, we'll quietly take you off the rosters so we're not buggin' you — and you're always welcome back any time.\" Replaces the older \"go ahead and remove you ... no hard feelings\" phrasing.",
+      "Plain-text fallback link labels updated to match the new button copy.",
+    ],
+  },
   {
     version: "2.11.5",
     date: "2026-05-04",

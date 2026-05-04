@@ -552,18 +552,22 @@ def _roster_buttons_block(term: dict) -> str:
     in the Send Notice Now modal — useful when sending an early reminder
     to a lapsed member who might want to gracefully step away rather than
     renew.
+
+    Tone is intentionally soft: "we don't want to crowd your inbox" /
+    "totally fine either way" / "you're always welcome back any time".
+    The opt-out should feel like a courtesy, not a threat.
     """
     keep_url, remove_url = _roster_action_urls(term)
-    return f"""<p><strong>About Golf Genius:</strong> unless we hear from you, we'll be removing you from the rosters that deliver our weekly event invitations. One click is enough — let us know which you'd prefer:</p>
+    return f"""<p><strong>About Golf Genius:</strong> we don't want to crowd your inbox with our weekly event invitations if they're no longer useful — totally fine either way. If it's easy, let us know what works best for you:</p>
 <p style="margin:1.25rem 0;">
   <a href="{keep_url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600; margin-right:0.5rem;">✅ Keep me on the invite list</a>
-  <a href="{remove_url}" style="display:inline-block; background:#dc2626; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600;">❌ Remove me from the rosters</a>
+  <a href="{remove_url}" style="display:inline-block; background:#6b7280; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600;">No need to keep me posted</a>
 </p>
 <p style="font-size:0.82rem; color:#6b7280;">If the buttons don't work in your email client:<br>
-  Keep on rosters: <a href="{keep_url}" style="color:#2563eb;">{keep_url}</a><br>
-  Remove from rosters: <a href="{remove_url}" style="color:#2563eb;">{remove_url}</a>
+  Keep me on the invite list: <a href="{keep_url}" style="color:#2563eb;">{keep_url}</a><br>
+  No need to keep me posted: <a href="{remove_url}" style="color:#2563eb;">{remove_url}</a>
 </p>
-<p>Either button notifies our admin team at <a href="mailto:{ADMIN_NOTIFY_EMAIL}" style="color:#2563eb;">{ADMIN_NOTIFY_EMAIL}</a>. If we don't hear back at all in the next {NO_RESPONSE_DIGEST_DAYS} days, we'll go ahead and remove you from the rosters — no hard feelings, you're always welcome back.</p>"""
+<p>Either button just sends a quick note to <a href="mailto:{ADMIN_NOTIFY_EMAIL}" style="color:#2563eb;">{ADMIN_NOTIFY_EMAIL}</a> so we know what to do. If we don't hear from you in the next {NO_RESPONSE_DIGEST_DAYS} days, we'll quietly take you off the rosters so we're not buggin' you — and you're always welcome back any time.</p>"""
 
 
 def _time_phrase(days_left: int) -> str:
