@@ -7304,7 +7304,8 @@ def refund_item(item_id: int, method: str = "", note: str = "",
                     refund_source = "manual"
                     if method:
                         refund_source = method.lower().replace(" ", "_")
-                    refund_account = "Venmo" if "venmo" in (method or "").lower() else "TGF Checking"
+                    _m = (method or "").lower()
+                    refund_account = "Venmo" if "venmo" in _m else ("PayPal" if "paypal" in _m else "TGF Checking")
                     _write_acct_entry(
                         conn,
                         item_id=item_id,
@@ -7375,7 +7376,8 @@ def payout_credit(
 
         try:
             refund_source = method.lower().replace(" ", "_") if method else "manual"
-            refund_account = "Venmo" if "venmo" in (method or "").lower() else "TGF Checking"
+            _m = (method or "").lower()
+            refund_account = "Venmo" if "venmo" in _m else ("PayPal" if "paypal" in _m else "TGF Checking")
             label = "WD credit refund" if status == "wd" else "Credit payout"
             _write_acct_entry(
                 conn,

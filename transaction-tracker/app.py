@@ -4562,8 +4562,8 @@ def api_refund_item(item_id):
     """Mark an item as refunded via GoDaddy or Venmo."""
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
-    if method and method not in ("GoDaddy", "Venmo", "Zelle"):
-        return jsonify({"error": "Invalid refund method. Must be GoDaddy, Venmo, or Zelle."}), 400
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal"):
+        return jsonify({"error": "Invalid refund method. Must be GoDaddy, Venmo, Zelle, or PayPal."}), 400
     if refund_item(item_id, method=method, note=data.get("note", "")):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
@@ -4575,12 +4575,12 @@ def api_refund_item(item_id):
 def api_payout_credit(item_id):
     """Record a cash payout of a player credit (WD or standalone credited row).
 
-    Body: {"method": "Venmo|Zelle|Check|GoDaddy", "date": "YYYY-MM-DD", "note": "..."}
+    Body: {"method": "Venmo|Zelle|Check|GoDaddy|PayPal", "date": "YYYY-MM-DD", "note": "..."}
     """
     data = request.get_json(silent=True) or {}
     method = (data.get("method") or "").strip()
-    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check"):
-        return jsonify({"error": "Invalid method. Must be GoDaddy, Venmo, Zelle, or Check."}), 400
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check", "PayPal"):
+        return jsonify({"error": "Invalid method. Must be GoDaddy, Venmo, Zelle, Check, or PayPal."}), 400
     refund_date = (data.get("date") or "").strip()
     if refund_date:
         try:
@@ -4604,7 +4604,7 @@ def api_partial_refund_item(item_id):
     """
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
-    if method and method not in ("GoDaddy", "Venmo", "Zelle"):
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal"):
         return jsonify({"error": "Invalid refund method."}), 400
     refunded_components = data.get("components", {})  # e.g. {"gross_games": 30}
     new_side_games = data.get("new_side_games")  # e.g. "NET" (after removing GROSS)
@@ -4672,7 +4672,8 @@ def api_partial_refund_item(item_id):
         try:
             from email_parser.database import _write_acct_entry
             refund_source = method.lower().replace(" ", "_") if method else "manual"
-            refund_account = "Venmo" if "venmo" in (method or "").lower() else "TGF Checking"
+            _m = (method or "").lower()
+            refund_account = "Venmo" if "venmo" in _m else ("PayPal" if "paypal" in _m else "TGF Checking")
             _write_acct_entry(
                 conn,
                 item_id=new_child_id,
