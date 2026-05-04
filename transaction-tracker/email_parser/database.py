@@ -4744,6 +4744,34 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
         skipped = 0
         _touched_gd_orders = set()  # Track GoDaddy orders for order-level accounting
         for row in rows:
+            # ── Cross-email-uid dedup gate ──
+            # Microsoft Graph occasionally re-keys the same logical email under
+            # a brand-new message id (e.g. after a folder rebuild, mass reply
+            # to "New Order …" emails, or PWA resync). The existing UNIQUE
+            # constraint on (email_uid, item_index) does not catch that — both
+            # rows have legitimate uids. Guard at the order_id level instead:
+            # if a row with the same (order_id, item_index) already exists
+            # under a different email_uid for a real GoDaddy purchase, this is
+            # the same order coming in under a new uid, so skip it.
+            _oid = (row.get("order_id") or "").strip()
+            _idx = row.get("item_index") if row.get("item_index") is not None else 0
+            _uid = (row.get("email_uid") or "").strip()
+            if _oid and _uid and not _uid.startswith("manual-"):
+                _existing = conn.execute(
+                    "SELECT id, email_uid FROM items "
+                    "WHERE order_id = ? AND item_index = ? AND email_uid != ? "
+                    "LIMIT 1",
+                    (_oid, _idx, _uid),
+                ).fetchone()
+                if _existing:
+                    logger.info(
+                        "save_items: skipping cross-uid duplicate — order_id=%s "
+                        "item_index=%s (existing item id=%d uid=%s vs new uid=%s)",
+                        _oid, _idx, _existing["id"], _existing["email_uid"], _uid,
+                    )
+                    skipped += 1
+                    continue
+
             # Auto-resolve customer_id if not already set
             if not row.get("customer_id"):
                 row["customer_id"] = _resolve_or_create_customer(

@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.10.16";
+window.TGF_VERSION = "2.10.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.17",
+    date: "2026-05-04",
+    title: "Fix phantom-duplicate items: order_id+item_index dedup gate + admin delete backfill",
+    changes: [
+      "Root cause of the 5/3 incident: Microsoft Graph re-keyed ~65 already-parsed 'New Order' emails under brand-new message ids in a single 3-minute burst (likely a folder rebuild, mass reply/forward, or PWA resync). The existing dedup gate keyed only on email_uid + item_index, so the same logical orders sailed through under their new uids and got inserted as identical sibling rows under the buyer's name — making the Transactions tab show '2 items — $192' for what was actually a single $96 purchase.",
+      "Prevention (save_items in email_parser/database.py): added a cross-email-uid dedup check. Before each INSERT, if a row with the same (order_id, item_index) already exists under a different email_uid for a real (non-manual) order, the new row is skipped and logged. The original UNIQUE(email_uid, item_index) constraint is preserved.",
+      "Cleanup (POST /api/audit/delete-phantom-duplicates, admin-only): finds groups of items sharing (order_id, customer, item_name, item_price) with COUNT > 1, keeps the lowest-id row (the original), and DELETEs each later duplicate. Skips any row that has downstream references (acct_allocations.item_id, acct_transactions.item_id, items.transferred_from_id / transferred_to_id / parent_item_id) so accounting state is never corrupted. Idempotent. Supports ?dry_run=1 for preview and ?since=YYYY-MM-DD to scope the window (default 2026-04-26).",
+      "New 'Delete Phantom Duplicates' admin-only button on the Transactions page next to 'Expand Qty Purchases'.",
+    ],
+  },
   {
     version: "2.10.16",
     date: "2026-05-03",
