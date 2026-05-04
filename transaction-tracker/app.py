@@ -1596,8 +1596,10 @@ def api_audit_emails():
     returning them side-by-side so the user can verify extraction accuracy.
 
     Query params:
-        limit  — max emails to return (default 50)
-        days   — how far back to look (default 90)
+        limit       — max emails to return (default 25)
+        days        — how far back to look (default 7); ignored if start_date is set
+        start_date  — optional YYYY-MM-DD; overrides `days` lower bound
+        end_date    — optional YYYY-MM-DD (exclusive upper bound)
     """
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
@@ -1609,6 +1611,24 @@ def api_audit_emails():
 
     limit = request.args.get("limit", 25, type=int)
     days = request.args.get("days", 7, type=int)
+    start_date_str = request.args.get("start_date", "").strip()
+    end_date_str = request.args.get("end_date", "").strip()
+
+    since_dt: datetime
+    until_dt: datetime | None = None
+    if start_date_str:
+        try:
+            since_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "start_date must be YYYY-MM-DD"}), 400
+        if end_date_str:
+            try:
+                # end_date is inclusive in the UI, exclusive in the OData filter
+                until_dt = datetime.strptime(end_date_str, "%Y-%m-%d") + timedelta(days=1)
+            except ValueError:
+                return jsonify({"error": "end_date must be YYYY-MM-DD"}), 400
+    else:
+        since_dt = datetime.now() - timedelta(days=days)
 
     try:
         emails = fetch_transaction_emails(
@@ -1616,7 +1636,8 @@ def api_audit_emails():
             client_id=client_id,
             client_secret=client_secret,
             email_address=address,
-            since_date=datetime.now() - timedelta(days=days),
+            since_date=since_dt,
+            until_date=until_dt,
         )
     except Exception as e:
         logger.exception("Audit: failed to fetch emails")

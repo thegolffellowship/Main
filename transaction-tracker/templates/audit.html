@@ -432,6 +432,13 @@
         <!-- Audit controls -->
         <div class="audit-controls" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem;">
             <label style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
+                Range
+                <select id="audit-range-mode" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
+                    <option value="days" selected>Days back</option>
+                    <option value="custom">Custom dates</option>
+                </select>
+            </label>
+            <label id="audit-days-wrap" style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
                 Days back
                 <select id="audit-days" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
                     <option value="7" selected>7</option>
@@ -442,6 +449,14 @@
                     <option value="180">180</option>
                     <option value="365">365</option>
                 </select>
+            </label>
+            <label id="audit-start-wrap" style="display:none; font-size:0.82rem; font-weight:600; align-items:center; gap:0.35rem;">
+                From
+                <input type="date" id="audit-start-date" style="padding:0.25rem 0.4rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
+            </label>
+            <label id="audit-end-wrap" style="display:none; font-size:0.82rem; font-weight:600; align-items:center; gap:0.35rem;">
+                To
+                <input type="date" id="audit-end-date" style="padding:0.25rem 0.4rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.82rem;">
             </label>
             <label style="font-size:0.82rem; font-weight:600; display:flex; align-items:center; gap:0.35rem;">
                 Max emails
@@ -747,9 +762,24 @@
         contentEl.style.display = "none";
 
         try {
-            const auditDays = document.getElementById("audit-days").value;
             const auditLimit = document.getElementById("audit-limit").value;
-            const res = await fetch(`/api/audit/emails?limit=${auditLimit}&days=${auditDays}`);
+            const rangeMode = document.getElementById("audit-range-mode").value;
+            const qs = new URLSearchParams({ limit: auditLimit });
+            if (rangeMode === "custom") {
+                const start = document.getElementById("audit-start-date").value;
+                const end = document.getElementById("audit-end-date").value;
+                if (!start) {
+                    loadingEl.textContent = "Pick a 'From' date for the custom range.";
+                    btn.disabled = false;
+                    btn.textContent = "Run Audit";
+                    return;
+                }
+                qs.set("start_date", start);
+                if (end) qs.set("end_date", end);
+            } else {
+                qs.set("days", document.getElementById("audit-days").value);
+            }
+            const res = await fetch(`/api/audit/emails?${qs.toString()}`);
             if (!res.ok) {
                 const err = await res.json();
                 throw new Error(err.error || "Request failed");
@@ -785,6 +815,18 @@
 
         document.getElementById("btn-run-audit").addEventListener("click", runAudit);
         document.getElementById("btn-apply-audit-filters").addEventListener("click", runAudit);
+
+        // Show/hide days vs custom-range fields
+        const rangeModeEl = document.getElementById("audit-range-mode");
+        function updateRangeMode() {
+            const custom = rangeModeEl.value === "custom";
+            document.getElementById("audit-days-wrap").style.display = custom ? "none" : "flex";
+            document.getElementById("audit-start-wrap").style.display = custom ? "flex" : "none";
+            document.getElementById("audit-end-wrap").style.display = custom ? "flex" : "none";
+        }
+        rangeModeEl.addEventListener("change", updateRangeMode);
+        updateRangeMode();
+
         // Auto-apply when either dropdown changes (only after the first run,
         // so the initial "Click Run Audit" prompt is preserved).
         ["audit-days", "audit-limit"].forEach(id => {
