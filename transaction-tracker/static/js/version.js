@@ -1,5 +1,23 @@
-window.TGF_VERSION = "2.10.18";
+window.TGF_VERSION = "2.10.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.20",
+    date: "2026-05-04",
+    title: "Admin scanner for membership-mashup victims",
+    changes: [
+      "New read-only GET /api/audit/membership-mashup-scan admin endpoint. Returns every active TGF MEMBERSHIP row in the items table that has non-null event-side fields (holes / side_games != NONE / tee_choice). Those rows are likely victims of the same parser mash-up bug that hit Jeremy Wafford R301078428 (membership name with event's price/games/holes). For each suspect: id, order_id, email_uid, customer, item_price, holes, side_games, tee_choice, order_date, transaction_status, created_at — enough to decide whether to delete + re-import.",
+      "Workflow: hit the endpoint, review the list, then for each row delete the bad row and click 'Re-import This Order' on the corresponding Audit Log card to let the v2.10.19 tightened prompt re-extract both items correctly.",
+    ],
+  },
+  {
+    version: "2.10.19",
+    date: "2026-05-04",
+    title: "Parser prompt: handle MEMBERSHIP + EVENT combo orders correctly",
+    changes: [
+      "Tightened the AI extraction prompt with an explicit MEMBERSHIP + EVENT rule. When an order contains both a TGF MEMBERSHIP and an event in the same email (e.g. Jeremy Wafford R301078428: TGF MEMBERSHIP + s9.8 SILVERHORN), the parser was returning a single mashed-up row — TGF MEMBERSHIP item_name with the event's $96 price, holes=9, side_games=BOTH, tee_choice=<50 — and dropping the second item entirely.",
+      "The new prompt rule includes a concrete worked example that anchors each item to its own SKU and price line, and explicitly forbids assigning event-side fields (holes / side_games / tee_choice / user_status) to a membership row, or membership-side fields (has_handicap / returning_or_new / date_of_birth / MEM SKU) to an event row.",
+    ],
+  },
   {
     version: "2.10.18",
     date: "2026-05-04",

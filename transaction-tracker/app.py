@@ -2419,6 +2419,53 @@ def api_delete_phantom_duplicates():
         conn.close()
 
 
+@app.route("/api/audit/membership-mashup-scan", methods=["GET"])
+@require_role("admin")
+def api_membership_mashup_scan():
+    """Scan for TGF MEMBERSHIP rows that look like victims of the
+    membership+event mash-up parser bug.
+
+    Background: Haiku (the parser model) sometimes returns a single row
+    for an order that actually contained both a TGF MEMBERSHIP and an
+    event line item — using the membership's name with the event's
+    price / holes / side_games / tee_choice. The membership row should
+    have NULL for those event-side fields. Any membership row with
+    non-null holes, side_games, or tee_choice is suspect.
+
+    Read-only. Returns one entry per suspect row with the fields needed
+    to decide whether to delete + re-import that order.
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT i.id, i.order_id, i.email_uid, i.customer, i.item_name,
+                   i.item_price, i.holes, i.side_games, i.tee_choice,
+                   i.user_status, i.order_date, i.total_amount,
+                   i.transaction_fees, i.transaction_status, i.created_at
+            FROM items i
+            WHERE i.item_name = 'TGF MEMBERSHIP'
+              AND COALESCE(i.transaction_status, 'active') = 'active'
+              AND (
+                   (i.holes IS NOT NULL AND i.holes != '')
+                OR (i.side_games IS NOT NULL AND i.side_games != ''
+                    AND UPPER(i.side_games) != 'NONE')
+                OR (i.tee_choice IS NOT NULL AND i.tee_choice != '')
+              )
+            ORDER BY i.order_date DESC, i.id DESC
+            """
+        ).fetchall()
+
+        suspects = [dict(r) for r in rows]
+        return jsonify({
+            "status": "ok",
+            "count": len(suspects),
+            "rows": suspects,
+        })
+    finally:
+        conn.close()
+
+
 @app.route("/api/audit/duplicate-items-diagnostic", methods=["GET"])
 @require_role("admin")
 def api_duplicate_items_diagnostic():
