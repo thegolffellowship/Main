@@ -548,8 +548,33 @@ def _normalize_item_name(name: str | None) -> str | None:
 
 
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+_PREMIUM_MODEL = "claude-sonnet-4-5"  # used selectively for orders Haiku struggles with
 _ACTIVE_MODEL = os.getenv("CLAUDE_MODEL", _DEFAULT_MODEL)
 logger.info("Claude parser model: %s", _ACTIVE_MODEL)
+
+
+# Patterns that signal a TGF MEMBERSHIP item is present in the email body.
+# When matched, we route the call to the premium (Sonnet) model because
+# Haiku has been observed to mash MEMBERSHIP + EVENT items together
+# (e.g. Wafford R301078428: TGF MEMBERSHIP item_name with the event's
+# $96 price + holes=9 + side_games=BOTH + tee_choice=<50, with the
+# actual event registration dropped). Sonnet handles the multi-item
+# split reliably.
+_MEMBERSHIP_BODY_RE = re.compile(
+    r"(TGF\s+MEMBERSHIP|SKU:\s*MEM-[A-Z]-[A-Z])",
+    re.IGNORECASE,
+)
+
+
+def _select_model_for_body(email_text: str, override: str | None) -> str:
+    """Pick the parser model. Honours CLAUDE_MODEL env override; otherwise
+    routes membership orders to the premium model and everything else to
+    the default."""
+    if override:
+        return override
+    if _MEMBERSHIP_BODY_RE.search(email_text or ""):
+        return os.getenv("CLAUDE_MODEL_PREMIUM", _PREMIUM_MODEL)
+    return _DEFAULT_MODEL
 
 
 def _call_ai(email_text: str) -> dict | None:
@@ -559,7 +584,10 @@ def _call_ai(email_text: str) -> dict | None:
         logger.error("ANTHROPIC_API_KEY not set — cannot parse email with AI")
         return None
 
-    model = os.getenv("CLAUDE_MODEL", _DEFAULT_MODEL)
+    override = os.getenv("CLAUDE_MODEL")
+    model = _select_model_for_body(email_text, override)
+    logger.info("Claude parser call → model=%s (membership_routed=%s)",
+                model, model != _DEFAULT_MODEL and not override)
 
     client = anthropic.Anthropic(api_key=api_key)
 
