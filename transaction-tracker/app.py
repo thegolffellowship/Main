@@ -2248,9 +2248,15 @@ def api_duplicate_items_diagnostic():
       different emails or two parser runs with different uids.
     - Manual entries → manual-entry duplicates.
 
+    Query params:
+      since=YYYY-MM-DD   filter to orders with order_date >= this date
+                         (default: 2026-04-26 to focus on the May-3 backfill
+                         incident; pass since=1900-01-01 to see ALL dupes)
+
     Skips rows where order_id is NULL (manual + RSVP-only rows often lack one).
     Read-only — does not mutate any rows.
     """
+    since = (request.args.get("since") or "2026-04-26").strip()
     conn = get_connection()
     try:
         groups = conn.execute(
@@ -2263,10 +2269,12 @@ def api_duplicate_items_diagnostic():
               AND customer IS NOT NULL AND customer != ''
               AND item_name IS NOT NULL AND item_name != ''
               AND order_id IS NOT NULL AND order_id != ''
+              AND order_date >= ?
             GROUP BY order_id, LOWER(customer), LOWER(item_name), item_price
             HAVING COUNT(*) > 1
             ORDER BY MIN(id) DESC
-            """
+            """,
+            (since,),
         ).fetchall()
 
         from datetime import datetime
@@ -2335,6 +2343,7 @@ def api_duplicate_items_diagnostic():
 
         return jsonify({
             "status": "ok",
+            "since": since,
             "total_duplicate_groups": len(result_groups),
             "total_extra_rows": sum(g["count"] - 1 for g in result_groups),
             "patterns": {
