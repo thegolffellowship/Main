@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.10.20";
+window.TGF_VERSION = "2.10.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.10.21",
+    date: "2026-05-04",
+    title: "Parser: route MEMBERSHIP orders to Sonnet, keep Haiku for everything else",
+    changes: [
+      "The v2.10.19 prompt update with an explicit MEMBERSHIP+EVENT worked example was not sufficient — Haiku still returned single mashed-up rows on Wafford R301078428 even after Re-extract. Five suspect rows surfaced via /api/audit/membership-mashup-scan: two recent Wafford/Fehlis mashups plus older Fehlis/Colby/Buratowski rows.",
+      "New routing in email_parser/parser.py:_call_ai(): if the email body matches /TGF\\s+MEMBERSHIP|SKU:\\s*MEM-[A-Z]-[A-Z]/i, the call goes to claude-sonnet-4-5 (override via env var CLAUDE_MODEL_PREMIUM); everything else stays on the existing Haiku default. CLAUDE_MODEL env still wins as a global override. Each parse logs the model and whether membership routing fired.",
+      "Cost impact: minimal — membership purchases are rare relative to event registrations, and only those orders pay Sonnet rates.",
+    ],
+  },
   {
     version: "2.10.20",
     date: "2026-05-04",
