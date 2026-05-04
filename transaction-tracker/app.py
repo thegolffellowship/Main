@@ -39,6 +39,7 @@ from email_parser.database import (
     transfer_item,
     reverse_credit,
     wd_item,
+    payout_wd_credit,
     create_event,
     seed_events,
     add_player_to_event,
@@ -4566,6 +4567,31 @@ def api_refund_item(item_id):
     if refund_item(item_id, method=method, note=data.get("note", "")):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
+
+
+@app.route("/api/items/<int:item_id>/payout-wd-credit", methods=["POST"])
+@require_role("admin")
+def api_payout_wd_credit(item_id):
+    """Record a cash payout of a WD row's outstanding credit_amount.
+
+    Body: {"method": "Venmo|Zelle|Check|GoDaddy", "date": "YYYY-MM-DD", "note": "..."}
+    """
+    data = request.get_json(silent=True) or {}
+    method = (data.get("method") or "").strip()
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check"):
+        return jsonify({"error": "Invalid method. Must be GoDaddy, Venmo, Zelle, or Check."}), 400
+    refund_date = (data.get("date") or "").strip()
+    if refund_date:
+        try:
+            datetime.strptime(refund_date, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "date must be YYYY-MM-DD"}), 400
+    result = payout_wd_credit(
+        item_id, method=method, note=data.get("note", ""), refund_date=refund_date,
+    )
+    if not result.get("ok"):
+        return jsonify({"error": result.get("error", "Payout failed")}), 400
+    return jsonify({"status": "ok", "amount": result.get("amount"), "date": result.get("date")})
 
 
 @app.route("/api/items/<int:item_id>/partial-refund", methods=["POST"])

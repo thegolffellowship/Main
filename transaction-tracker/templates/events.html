@@ -816,6 +816,37 @@
         </div>
     </div>
 
+    <!-- Pay Out WD Credit Modal -->
+    <div id="wd-payout-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal credit-modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2>Refund WD Credit</h2>
+                <button id="wd-payout-close" class="modal-close">&times;</button>
+            </div>
+            <div id="wd-payout-info" class="credit-info"></div>
+            <div class="credit-fields" style="margin-top:0.75rem; display:flex; flex-direction:column; gap:0.5rem;">
+                <label>Method
+                    <select id="wd-payout-method" class="modal-input">
+                        <option value="Venmo">Venmo</option>
+                        <option value="Zelle">Zelle</option>
+                        <option value="Check">Check</option>
+                        <option value="GoDaddy">GoDaddy</option>
+                    </select>
+                </label>
+                <label>Refund Date
+                    <input type="date" id="wd-payout-date" class="modal-input">
+                </label>
+                <label>Note (optional)
+                    <input type="text" id="wd-payout-note" class="modal-input" placeholder="e.g. paid via Venmo on 4/15">
+                </label>
+            </div>
+            <div class="modal-actions" style="margin-top:0.75rem;">
+                <button type="button" id="wd-payout-cancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="wd-payout-submit" class="btn btn-primary" style="background:#dc2626;">Record Refund</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Apply Credit Modal -->
     <div id="apply-credit-overlay" class="modal-overlay" style="display:none;">
         <div class="modal credit-modal" style="max-width:520px;">
@@ -4707,6 +4738,9 @@
                 if (!isCreditPoolRow(r)) {
                     html += ` <button class="btn btn-reverse" data-reverse-id="${r.id}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1;">Reverse</button>`;
                 }
+                if (st === 'wd' && r.credit_amount) {
+                    html += ` <button class="btn" data-wd-payout-id="${r.id}" data-wd-payout-amount="${escapeHtml(r.credit_amount)}" data-wd-payout-name="${escapeHtml(r.customer || '')}" data-wd-payout-event="${escapeHtml(r.item_name || '')}" style="font-size:0.6rem;padding:0.1rem 0.35rem;line-height:1; background:#dc2626; color:#fff;">Refund</button>`;
+                }
                 html += `</div>`;
             });
             html += '</div></div>';
@@ -5179,6 +5213,17 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 reverseEvCredit(parseInt(btn.dataset.reverseId));
+            });
+        });
+        container.querySelectorAll("[data-wd-payout-id]").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openWdPayoutModal(
+                    parseInt(btn.dataset.wdPayoutId),
+                    btn.dataset.wdPayoutName || "",
+                    btn.dataset.wdPayoutEvent || "",
+                    btn.dataset.wdPayoutAmount || "",
+                );
             });
         });
         container.querySelectorAll("[data-wd-id]").forEach(btn => {
@@ -7070,6 +7115,55 @@
         document.getElementById("wd-overlay").style.display = "none";
         wdItemId = null;
         wdEventName = null;
+    }
+
+    // ---- Pay Out WD Credit ----
+    let wdPayoutItemId = null;
+
+    function openWdPayoutModal(itemId, playerName, eventName, amount) {
+        wdPayoutItemId = itemId;
+        document.getElementById("wd-payout-info").innerHTML =
+            `<div><strong>${escapeHtml(playerName || "Player")}</strong> &middot; ${escapeHtml(eventName || "")}</div>` +
+            `<div style="margin-top:0.25rem; color:#991b1b; font-weight:600;">Outstanding credit: ${escapeHtml(amount || "")}</div>`;
+        document.getElementById("wd-payout-method").value = "Venmo";
+        const today = new Date().toISOString().slice(0, 10);
+        document.getElementById("wd-payout-date").value = today;
+        document.getElementById("wd-payout-note").value = "";
+        const btn = document.getElementById("wd-payout-submit");
+        btn.disabled = false;
+        btn.textContent = "Record Refund";
+        document.getElementById("wd-payout-overlay").style.display = "flex";
+    }
+
+    function closeWdPayoutModal() {
+        document.getElementById("wd-payout-overlay").style.display = "none";
+        wdPayoutItemId = null;
+    }
+
+    async function submitWdPayout() {
+        if (!wdPayoutItemId) return;
+        const method = document.getElementById("wd-payout-method").value;
+        const date = document.getElementById("wd-payout-date").value;
+        const note = document.getElementById("wd-payout-note").value.trim();
+        const btn = document.getElementById("wd-payout-submit");
+        btn.disabled = true;
+        btn.textContent = "Recording...";
+        try {
+            const res = await fetch(`/api/items/${wdPayoutItemId}/payout-wd-credit`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ method, date, note }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Payout failed");
+            closeWdPayoutModal();
+            await fetchItems();
+            await fetchEvents();
+        } catch (err) {
+            alert(err.message);
+            btn.disabled = false;
+            btn.textContent = "Record Refund";
+        }
     }
 
     async function submitWd() {
@@ -9013,6 +9107,14 @@
         document.getElementById("wd-close").addEventListener("click", closeWdModal);
         document.getElementById("wd-overlay").addEventListener("click", (e) => {
             if (e.target === e.currentTarget) closeWdModal();
+        });
+
+        // WD payout modal
+        document.getElementById("wd-payout-submit").addEventListener("click", submitWdPayout);
+        document.getElementById("wd-payout-cancel").addEventListener("click", closeWdPayoutModal);
+        document.getElementById("wd-payout-close").addEventListener("click", closeWdPayoutModal);
+        document.getElementById("wd-payout-overlay").addEventListener("click", (e) => {
+            if (e.target === e.currentTarget) closeWdPayoutModal();
         });
 
         // Search
