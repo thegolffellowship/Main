@@ -1135,40 +1135,6 @@ async function sendReport() {
     }
 }
 
-async function deletePhantomDuplicates() {
-    const btn = document.getElementById("btn-delete-phantoms");
-    if (!btn) return;
-    if (!confirm(
-        "This will DELETE phantom duplicate items where the same order_id appears under multiple email_uids.\n\n" +
-        "The lowest-id (original) row in each group is kept; the rest are deleted.\n" +
-        "Rows with accounting references (acct_allocations / acct_transactions / transfer chain / +PAY children) are SKIPPED for safety.\n\n" +
-        "Continue?"
-    )) return;
-    btn.disabled = true;
-    btn.textContent = "Deleting...";
-
-    try {
-        const res = await fetch("/api/audit/delete-phantom-duplicates", { method: "POST" });
-        const data = await res.json();
-        if (data.error) {
-            alert("Error: " + data.error);
-        } else if (!data.deleted && !data.skipped) {
-            alert("No phantom duplicates found.");
-        } else {
-            const reasons = (data.skip_reasons || []).slice(0, 20).join("\n");
-            const skipNote = data.skipped ? `\n\nSkipped ${data.skipped} (had accounting refs):\n${reasons}` : "";
-            alert(`Done!\nDeleted ${data.deleted} phantom rows across ${data.groups_processed} duplicate groups.${skipNote}`);
-            loadData();
-        }
-    } catch (err) {
-        console.error("Delete phantom duplicates failed:", err);
-        alert("Failed to delete phantom duplicates.");
-    } finally {
-        btn.disabled = false;
-        btn.textContent = "Delete Phantom Duplicates";
-    }
-}
-
 async function expandQuantities() {
     const btn = document.getElementById("btn-expand-qty");
     if (!confirm("This will split any x2/x3 purchases into separate player entries. Continue?")) return;
@@ -1580,8 +1546,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("btn-clear-filters").addEventListener("click", clearAllFilters);
     document.getElementById("btn-send-report").addEventListener("click", sendReport);
     document.getElementById("btn-expand-qty").addEventListener("click", expandQuantities);
-    const btnPhantoms = document.getElementById("btn-delete-phantoms");
-    if (btnPhantoms) btnPhantoms.addEventListener("click", deletePhantomDuplicates);
 
     // Edit modal
     document.getElementById("edit-form").addEventListener("submit", handleEditSubmit);

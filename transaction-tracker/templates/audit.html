@@ -634,6 +634,9 @@
                 ${comp.parsed_items.length && comp.parsed_items[0].order_id
                     ? `<button class="btn btn-secondary btn-reextract-order" data-order-id="${escapeHtml(comp.parsed_items[0].order_id)}" style="margin-top:0.5rem; font-size:0.78rem; padding:0.3rem 0.8rem;">Re-extract This Order</button>`
                     : ""}
+                ${comp.email_uid && !String(comp.email_uid).startsWith("manual-") && comp.status !== "ok"
+                    ? `<button class="btn btn-secondary btn-reimport-order" data-email-uid="${escapeHtml(comp.email_uid)}" style="margin-top:0.5rem; margin-left:0.5rem; font-size:0.78rem; padding:0.3rem 0.8rem;">Re-import This Order</button>`
+                    : ""}
             </div>
         </div>`;
     }
@@ -695,6 +698,38 @@
                 } finally {
                     btn.disabled = false;
                     btn.textContent = "Re-extract This Order";
+                }
+            });
+        });
+
+        // Per-order re-import buttons (re-fetch email + parse + INSERT items)
+        listEl.querySelectorAll(".btn-reimport-order").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const emailUid = btn.dataset.emailUid;
+                if (!confirm("Re-import this order? The email will be re-fetched from the inbox, re-parsed, and any missing items will be inserted. Existing rows are preserved (the dedup gate skips anything already present).")) return;
+                btn.disabled = true;
+                btn.textContent = "Re-importing...";
+                try {
+                    const res = await fetch("/api/audit/reimport-order", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email_uid: emailUid }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                        alert(data.error || "Re-import failed.");
+                    } else if (data.parsed_count === 0) {
+                        alert(data.message || "Parser returned 0 items.");
+                    } else {
+                        alert(`Re-imported: ${data.inserted} new row(s) inserted` + (data.skipped ? `, ${data.skipped} skipped (already existed)` : "") + `. Refreshing audit…`);
+                        runAudit();
+                    }
+                } catch (err) {
+                    alert("Re-import failed: " + err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = "Re-import This Order";
                 }
             });
         });
