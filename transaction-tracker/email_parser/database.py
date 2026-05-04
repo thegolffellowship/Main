@@ -9393,8 +9393,10 @@ def apply_credit_to_rsvp(
         except Exception:
             logger.warning("Failed to write transfer_in for rsvp item %s", rsvp_item_id, exc_info=True)
 
-        # If excess and keep: create a new credited item for the remainder
-        if excess > 0 and excess_action == "keep":
+        # If excess and keep/venmo: create a new credited item for the remainder.
+        # 'venmo' is treated like 'keep' here — the excess credit row is the audit
+        # trail; the Venmo refund itself is a manual followup recorded separately.
+        if excess > 0 and excess_action in ("keep", "venmo"):
             uid = f"credit-excess-{rsvp_item_id}-{int(_time.time() * 1000)}"
             conn.execute(
                 """INSERT INTO items

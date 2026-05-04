@@ -1844,7 +1844,16 @@
     async function fetchItems() {
         try {
             const res = await fetch("/api/items");
-            allItems = await res.json();
+            if (!res.ok) {
+                console.warn("fetchItems: non-OK response", res.status);
+                return;
+            }
+            const data = await res.json();
+            if (!Array.isArray(data)) {
+                console.warn("fetchItems: response not an array, keeping previous", data);
+                return;
+            }
+            allItems = data;
         } catch (err) {
             console.error("Failed to fetch items:", err);
         }
@@ -9778,13 +9787,61 @@
                         const vH = info.venmo_username ? info.venmo_username.replace(/^@/, '') : '';
                         const vNote = encodeURIComponent(`${resolvedCustomer} Excess credit refund`);
                         const vUrl = vH ? `https://venmo.com/${vH}?txn=pay&amount=${eAmt}&note=${vNote}` : '';
-                        const vLbl = vH
-                            ? `Venmo back ($${eAmt}) — <a href="${vUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link</a>`
-                            : `Venmo back ($${eAmt} — no handle on file)`;
+                        const venmoLine = vH
+                            ? `Venmo back ($${eAmt}) — <a href="${vUrl}" target="_blank" rel="noopener" style="color:#3D95CE;">open Venmo link for @${escapeHtml(vH)}</a>`
+                            : `Venmo back ($${eAmt}) — <span style="color:#9a3412;">no handle on file</span> ` +
+                              `<button type="button" id="credit-venmo-add-btn" style="margin-left:0.4rem; font-size:0.72rem; padding:0.1rem 0.45rem; border:1px solid #cbd5e1; background:#f1f5f9; border-radius:4px; cursor:pointer;">+ Add @handle</button>` +
+                              `<span id="credit-venmo-handle-row" style="display:none; margin-top:0.3rem; gap:0.3rem; align-items:center;">` +
+                              `<span style="font-size:0.78rem; color:#475569;">@</span>` +
+                              `<input type="text" id="credit-venmo-handle-input" placeholder="venmo-username" style="font-size:0.78rem; padding:0.15rem 0.4rem; border:1px solid #cbd5e1; border-radius:4px; width:9rem;">` +
+                              `<button type="button" id="credit-venmo-handle-save" style="font-size:0.72rem; padding:0.1rem 0.45rem; border:1px solid #16a34a; background:#16a34a; color:#fff; border-radius:4px; cursor:pointer;">Save</button>` +
+                              `<span id="credit-venmo-handle-msg" style="font-size:0.72rem; color:#dc2626;"></span>` +
+                              `</span>`;
                         excessEl.innerHTML = `<div style="font-weight:600;font-size:0.82rem;color:#065f46;margin-bottom:0.4rem;">Excess Credit: $${eAmt}</div>
                             <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;"><input type="radio" name="excess-action" value="keep" checked style="margin-right:0.3rem;">Keep as credit in player's account</label>
-                            <label style="display:block;font-size:0.82rem;"><input type="radio" name="excess-action" value="venmo" style="margin-right:0.3rem;">${vLbl}</label>`;
+                            <label style="display:block;font-size:0.82rem;"><input type="radio" name="excess-action" value="venmo" style="margin-right:0.3rem;">${venmoLine}</label>`;
                         excessEl.style.display = '';
+                        // Wire the inline Venmo handle entry (only present when no handle).
+                        const addBtn = document.getElementById('credit-venmo-add-btn');
+                        if (addBtn) {
+                            addBtn.addEventListener('click', () => {
+                                addBtn.style.display = 'none';
+                                const row = document.getElementById('credit-venmo-handle-row');
+                                if (row) { row.style.display = 'inline-flex'; }
+                                const input = document.getElementById('credit-venmo-handle-input');
+                                if (input) input.focus();
+                            });
+                        }
+                        const saveBtn = document.getElementById('credit-venmo-handle-save');
+                        if (saveBtn) {
+                            saveBtn.addEventListener('click', async () => {
+                                const input = document.getElementById('credit-venmo-handle-input');
+                                const msg = document.getElementById('credit-venmo-handle-msg');
+                                const handle = (input?.value || '').trim().replace(/^@/, '');
+                                if (!handle) { if (msg) msg.textContent = 'Enter a handle'; return; }
+                                saveBtn.disabled = true;
+                                saveBtn.textContent = 'Saving…';
+                                if (msg) msg.textContent = '';
+                                try {
+                                    const resp = await fetch('/api/customers/update', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            customer_name: resolvedCustomer,
+                                            fields: { venmo_username: handle },
+                                        }),
+                                    });
+                                    const data = await resp.json();
+                                    if (!resp.ok) throw new Error(data.error || 'Save failed');
+                                    info.venmo_username = handle;
+                                    _updateCrdCalc(); // re-render the section with the link
+                                } catch (err) {
+                                    if (msg) msg.textContent = err.message;
+                                    saveBtn.disabled = false;
+                                    saveBtn.textContent = 'Save';
+                                }
+                            });
+                        }
                     } else {
                         excessEl.style.display = 'none';
                     }

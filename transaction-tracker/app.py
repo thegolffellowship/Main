@@ -3744,8 +3744,8 @@ def api_apply_credit_to_rsvp(item_id):
 
     if not credited_item_ids:
         return jsonify({"error": "credited_item_ids required"}), 400
-    if excess_action not in ("keep", "note"):
-        return jsonify({"error": "excess_action must be 'keep' or 'note'"}), 400
+    if excess_action not in ("keep", "note", "venmo"):
+        return jsonify({"error": "excess_action must be 'keep', 'note', or 'venmo'"}), 400
 
     result = apply_credit_to_rsvp(
         rsvp_item_id=item_id,
