@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.10.21";
+window.TGF_VERSION = "2.11.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.11.0",
+    date: "2026-05-04",
+    title: "Membership renewal reminders + Golf Genius roster opt-in/out",
+    changes: [
+      "New customer_memberships table tracks one row per term (year). Backfilled at boot from every parsed items row with item_name LIKE '%membership%'. Term length: 365 days from purchase for terms started 2025+; calendar-year for older.",
+      "Daily 09:00 US/Central scheduler job sends four notice emails per term: T-30, T-7, day-of, and T+14 lapsed. All include the $75 / 12-month renewal CTA pointed at https://thegolffellowship.com/shop/ols/products/tgf-membership.",
+      "When a renewal lands in the parser, the prior term's reminders auto-shut-off (idempotent gate via 'later term exists' check) and a 'Thanks for renewing' confirmation fires from the same daily job.",
+      "The lapsed final notice includes two HMAC-signed one-click buttons (Keep on rosters / Remove from rosters) — clicking notifies admin@thegolffellowship.com and stamps the customer's roster_choice. Plain-text fallback links rendered for stricter email clients.",
+      "If neither button is clicked within 7 days, the daily job emails admin@thegolffellowship.com a single digest of non-responders so they can be removed from Golf Genius. One-shot per term via roster_admin_notified_at.",
+      "New Membership Terms card on every customer's Info tab shows term history with status badges, source, notice/confirmation timestamps, and roster choice. Admins can + Add term (back-date legacy renewals), Edit, or ✕ Delete.",
+      "API: GET/POST /api/customers/<id>/memberships, PATCH/DELETE /api/memberships/<id>, POST /api/admin/run-membership-reminders, GET /m/roster/<token>.",
+    ],
+  },
   {
     version: "2.10.21",
     date: "2026-05-04",

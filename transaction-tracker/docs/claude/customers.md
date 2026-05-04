@@ -266,6 +266,150 @@ the Activity-Year filter). Counts `c.status === "MEMBER" || c.status === "MEMBER
 A per-chapter breakdown renders beneath the count, sorted by chapter size desc
 then alphabetically.
 
+# Membership renewal system
+
+A separate `customer_memberships` table tracks one row per term (year). The
+latest row per customer is the "current" term; older rows are history.
+Implementation lives in `email_parser/memberships.py` (kept out of the giant
+`database.py` to keep it self-contained).
+
+## Term length policy
+
+- Terms started **2025-01-01 or later** run **365 days from the date of purchase**
+  (TGF's current policy).
+- Older terms run to **December 31 of the start year** (legacy calendar-year
+  policy). `compute_expires_at(started_at)` applies the cutoff (`POLICY_365_FROM_YEAR = 2025`).
+- The Add-Term modal pre-fills `expires_at` based on the chosen `started_at` but
+  admins can override it manually for edge cases.
+
+## Backfill
+
+`backfill_memberships_from_items(conn)` runs at boot from `init_db`. Idempotent —
+inserts one term row per parsed `items` row where
+`LOWER(item_name) LIKE '%membership%'`, deduped by `UNIQUE(customer_id, started_at)`.
+Items without a `customer_id` are skipped (they'll be picked up on a future boot
+once identity-resolution catches them).
+
+## Renewal detection
+
+`save_items()` calls `record_renewal_for_item(conn, item_id, send_email=None)`
+for every newly-inserted membership row. That opens a fresh term row for the
+customer (idempotent) and tags it `source='renewal'`. The actual
+"thanks for renewing" email is fired by the daily scheduler job, not from
+inside the parser path — this keeps `save_items` synchronous and means the
+confirmation reaches the member within ~24 hours of the order parsing.
+
+## Notice schedule
+
+`daily_membership_job(send_email)` runs at **09:00 US/Central** (configurable
+via `DAILY_REPORT_TZ`). Hits four windows per term, idempotently:
+
+| Window | Days from `expires_at` | Column stamped |
+|---|---|---|
+| 30 days before | -30 | `notice_30d_sent_at` |
+| 7 days before | -7 | `notice_7d_sent_at` |
+| Day of expiry | 0 | `notice_dayof_sent_at` |
+| Lapsed (final notice) | +14 | `notice_lapsed_sent_at` |
+
+For each row with the matching `expires_at` and that column NULL, the job:
+
+1. Checks for a **later term** for the same customer (renewal already came in).
+   If one exists, the column is stamped without sending — reminders auto-shut-off.
+   `counts["skipped_renewed"]` increments.
+2. Looks up the canonical email via `customer_emails.is_primary`. Skips silently
+   if no email is on file.
+3. Renders the per-window email via `render_notice_email(window, term, customer)`
+   and fires it through Microsoft Graph (`_membership_send_email` wrapper in
+   `app.py`).
+4. Stamps the column with `datetime('now')` only on a successful send so a
+   transient Graph failure retries on the next run.
+
+The same job also:
+- Sends pending **renewal confirmations** — terms whose prior term had any
+  notice column set and whose `confirmation_sent_at` is NULL.
+- Sends the **no-response admin digest** to `admin@thegolffellowship.com` when
+  `notice_lapsed_sent_at` was 7+ days ago and `roster_choice IS NULL`. Stamps
+  `roster_admin_notified_at` so each term's digest is one-shot.
+
+Manual trigger: `POST /api/admin/run-membership-reminders` (admin) returns the
+counts dict for inspection.
+
+## Email templates (all $75 / 365-day)
+
+All five emails sit in `render_notice_email(window, term, customer)` and
+`render_confirmation_email(term, customer, order_id)`:
+
+- **30d** — "Your TGF membership expires in 30 days"
+- **7d** — "Your TGF membership expires in 7 days"
+- **dayof** — "Your TGF membership expires today"
+- **lapsed** — "Final notice — your TGF membership has lapsed" (only window
+  with the Golf Genius opt-in/out buttons + plain-text fallback)
+- **confirmation** — "Thanks for renewing your TGF membership"
+
+`MEMBERSHIP_PRICE = 75` and `RENEWAL_URL = https://thegolffellowship.com/shop/ols/products/tgf-membership`
+are constants at the top of `memberships.py`.
+
+## Roster opt-in / opt-out (lapsed-notice buttons)
+
+The lapsed-notice email contains two HMAC-signed one-click links:
+
+- **Keep on rosters** → `/m/roster/<token>` with `action=keep`
+- **Remove from rosters** → `/m/roster/<token>` with `action=remove`
+
+Token format: `base64url(json{c, t, a, e}).hmac_sha256_first32` where
+`c=customer_id`, `t=term_id`, `a=keep|remove`, `e=unix_expiry`.
+`SECRET_KEY` is the HMAC secret. TTL is **30 days** (`ROSTER_TOKEN_TTL_DAYS`).
+
+`apply_roster_choice(token, send_email)`:
+- Verifies the token (signature + expiry).
+- Idempotent — a second click for the same action just re-renders the page
+  without re-notifying admin.
+- Updates `roster_choice`, `roster_choice_at`.
+- Notifies `admin@thegolffellowship.com` with the member's name + email +
+  link back to the customer page (one-shot per click).
+
+The route renders a small standalone HTML page (`_public_page`) with a green
+or red confirmation banner — no auth required, no app shell.
+
+## No-response digest
+
+If neither button is clicked within `NO_RESPONSE_DIGEST_DAYS = 7` days of the
+lapsed notice (and no later term has been recorded), the daily job sends a
+single digest email to `admin@thegolffellowship.com` listing every such member.
+`roster_admin_notified_at` is stamped per-row so the digest is one-shot per
+term. A late renewal still cancels follow-up actions because the daily job
+re-checks `EXISTS (later term)` before including a row.
+
+## Customer Info tab UI
+
+A new **Membership Terms** card on the Info tab shows every term newest-first:
+
+- `started_at → expires_at` with a status badge (Active / Active · N days left
+  in the 30-day warning window / Lapsed N days ago).
+- Roster choice if recorded (✅ stays / ❌ removed / "awaiting reply" if the
+  lapsed notice was sent).
+- Source badge (parsed / renewal / manual / backfill).
+- Notices summary (30d · 7d · 0d · lapsed · confirmed) — empty if none sent.
+- Free-form notes if present.
+- **Admins** see `+ Add term`, Edit, and ✕ Delete buttons; everyone else
+  sees read-only.
+
+Wired from both render paths (inline expand + detail panel) via
+`loadCustomerMemberships(container)` + `wireMembershipUI(container)` (the
+latter is idempotent via a `_membershipWired` flag). The Add modal pre-fills
+`expires_at` from the chosen `started_at` based on the policy.
+
+## API endpoints
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/api/customers/<id>/memberships` | view-only | List terms for a customer |
+| POST | `/api/customers/<id>/memberships` | admin | Add a manual term `{started_at, expires_at?, notes?}` |
+| PATCH | `/api/memberships/<term_id>` | admin | Update `started_at` / `expires_at` / `notes` |
+| DELETE | `/api/memberships/<term_id>` | admin | Delete a term |
+| POST | `/api/admin/run-membership-reminders` | admin | Manually trigger the daily job |
+| GET | `/m/roster/<token>` | public | One-click roster keep/remove from email |
+
 # Customers Page — Key Behaviors
 
 ## Name display format

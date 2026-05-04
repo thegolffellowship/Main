@@ -1093,6 +1093,20 @@ def start_scheduler():
     logger.info("Auto payment reminders scheduled every other day at 06:00 %s",
                 reminder_tz)
 
+    # Membership renewal reminders — daily at 9:00 AM US/Central. Sends per-window
+    # notices (T-30 / T-7 / T-0 / T+14 lapsed), thank-you confirmations on detected
+    # renewals, and the no-response admin digest.
+    scheduler.add_job(
+        run_membership_reminders,
+        "cron",
+        hour=9,
+        minute=0,
+        timezone=reminder_tz,
+        id="membership_reminders",
+        replace_existing=True,
+    )
+    logger.info("Membership renewal reminders scheduled daily at 09:00 %s", reminder_tz)
+
     # Golf Genius handicap sync — daily at configurable hour (default 2 AM Central)
     gg_sync_hour = int(os.getenv("GOLF_GENIUS_SYNC_HOUR", "2"))
     gg_sync_tz = os.getenv("DAILY_REPORT_TZ", "US/Central")
@@ -1221,6 +1235,46 @@ def send_auto_payment_reminders():
                 total_failed += 1
 
     logger.info("Auto payment reminders: %d sent, %d failed", total_sent, total_failed)
+
+
+# ---------------------------------------------------------------------------
+# Membership renewal reminders
+# ---------------------------------------------------------------------------
+
+def _membership_send_email(to_address: str, subject: str, html_body: str) -> bool:
+    """Thin wrapper that membership notices use to fire emails through Graph.
+
+    Returns False (without raising) if email credentials aren't configured —
+    the caller treats that as "skipped" and won't stamp the notice column,
+    so the next scheduler run will retry.
+    """
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        logger.warning("Membership send: email credentials missing, skipping send to %s", to_address)
+        return False
+    try:
+        return send_mail_graph(
+            tenant_id, client_id, client_secret, from_address,
+            to_address, subject, html_body,
+        )
+    except Exception:
+        logger.exception("Membership send: graph failure for %s", to_address)
+        return False
+
+
+def run_membership_reminders():
+    """Wrapper for the scheduler — runs the daily membership job."""
+    try:
+        from email_parser.memberships import daily_membership_job
+        counts = daily_membership_job(_membership_send_email)
+        logger.info("Membership reminders run complete: %s", counts)
+        return counts
+    except Exception:
+        logger.exception("Membership reminders run failed")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -2861,6 +2915,125 @@ def api_customer_venmo_handles():
     """Return all customers with Venmo handles set."""
     from email_parser.database import get_customer_venmo_handles
     return jsonify(get_customer_venmo_handles())
+
+
+# ---------------------------------------------------------------------------
+# Membership renewal endpoints
+# ---------------------------------------------------------------------------
+
+@app.route("/api/customers/<int:customer_id>/memberships")
+@require_role("view-only")
+def api_get_memberships(customer_id):
+    """Return the membership term history for a customer (newest first)."""
+    from email_parser.memberships import get_memberships_for_customer
+    return jsonify(get_memberships_for_customer(customer_id))
+
+
+@app.route("/api/customers/<int:customer_id>/memberships", methods=["POST"])
+@require_role("admin")
+def api_add_membership(customer_id):
+    """Add a manual membership term (e.g. backfill a legacy renewal)."""
+    from email_parser.memberships import add_manual_term
+    data = request.get_json(force=True) or {}
+    started_at = (data.get("started_at") or "").strip()
+    expires_at = (data.get("expires_at") or "").strip() or None
+    notes = data.get("notes")
+    if not started_at:
+        return jsonify({"error": "started_at is required (YYYY-MM-DD)"}), 400
+    try:
+        result = add_manual_term(customer_id, started_at, expires_at, notes)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"status": "ok", "term": result})
+
+
+@app.route("/api/memberships/<int:term_id>", methods=["PATCH"])
+@require_role("admin")
+def api_update_membership(term_id):
+    """Update started_at / expires_at / notes on a membership term."""
+    from email_parser.memberships import update_term
+    data = request.get_json(force=True) or {}
+    updated = update_term(term_id, data)
+    return jsonify({"status": "ok", "updated": updated})
+
+
+@app.route("/api/memberships/<int:term_id>", methods=["DELETE"])
+@require_role("admin")
+def api_delete_membership(term_id):
+    """Delete a membership term (admin cleanup of mistaken manual entries)."""
+    from email_parser.memberships import delete_term
+    deleted = delete_term(term_id)
+    return jsonify({"status": "ok", "deleted": deleted})
+
+
+@app.route("/api/admin/run-membership-reminders", methods=["POST"])
+@require_role("admin")
+def api_run_membership_reminders():
+    """Manually trigger the daily membership reminders job. Returns counts."""
+    counts = run_membership_reminders()
+    if counts is None:
+        return jsonify({"error": "run failed — check server logs"}), 500
+    return jsonify({"status": "ok", "counts": counts})
+
+
+@app.route("/m/roster/<token>")
+def public_roster_choice(token):
+    """One-click roster keep/remove from the lapsed-notice email.
+
+    No login required — the token is HMAC-signed and expires after 30 days.
+    Renders a simple HTML confirmation page and notifies admin via email.
+    """
+    from email_parser.memberships import apply_roster_choice
+    result = apply_roster_choice(token, send_email=_membership_send_email)
+    if not result.get("ok"):
+        body = f"""<h2 style="color:#b91c1c;">{result.get('error', 'Invalid link')}</h2>
+<p>If you'd like to update your roster preference manually, please reply to your most recent membership email or write to <a href="mailto:admin@thegolffellowship.com">admin@thegolffellowship.com</a>.</p>"""
+        return _public_page("Membership link invalid", body), 400
+
+    action = result["action"]
+    if action == "keep":
+        headline = "Got it — we'll keep you on the rosters."
+        sub = ("You'll continue to receive Golf Genius weekly event invitations. "
+               "If you'd still like to renew your membership, the link is below.")
+        bg = "#16a34a"
+    else:
+        headline = "Got it — we'll remove you from the rosters."
+        sub = ("You'll stop receiving Golf Genius weekly event invitations within "
+               "the next few days. You're always welcome back — renewing your "
+               "membership at the link below puts you straight back on the list.")
+        bg = "#dc2626"
+
+    body = f"""<div style="background:{bg}; color:#fff; padding:1rem 1.25rem; border-radius:8px;">
+  <h2 style="margin:0 0 0.5rem; font-size:1.25rem;">{headline}</h2>
+  <p style="margin:0; opacity:0.92;">{sub}</p>
+</div>
+<p style="margin-top:1.5rem;">A confirmation has been sent to our admin team.</p>
+<p style="margin-top:1.5rem;">
+  <a href="https://thegolffellowship.com/shop/ols/products/tgf-membership"
+     style="display:inline-block; background:#2563eb; color:#fff; padding:0.7rem 1.4rem; border-radius:6px; text-decoration:none; font-weight:600;">
+    Renew Membership — $75
+  </a>
+</p>"""
+    return _public_page("Roster preference saved", body)
+
+
+def _public_page(title: str, body_html: str) -> str:
+    """Tiny standalone HTML shell for the public roster-choice confirmation page."""
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>{title} · The Golf Fellowship</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         color:#111827; background:#f9fafb; margin:0; padding:2rem 1rem; }}
+  .card {{ max-width:560px; margin:0 auto; background:#fff; padding:1.75rem;
+          border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.06); }}
+  h1 {{ font-size:1.05rem; color:#6b7280; margin:0 0 1.25rem; font-weight:600;
+        text-transform:uppercase; letter-spacing:0.05em; }}
+</style>
+</head><body><div class="card">
+<h1>The Golf Fellowship</h1>
+{body_html}
+</div></body></html>"""
 
 
 @app.route("/api/customers/sync-roles", methods=["POST"])

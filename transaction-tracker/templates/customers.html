@@ -887,6 +887,15 @@
             <div class="mc-field-grid">
                 ${infoHtml}
             </div>
+            ${customer.customer_id ? `<div class="cust-memberships-section" style="margin-top:0.6rem; padding-top:0.4rem; border-top:1px solid var(--border);">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.25rem;">
+                    <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">Membership Terms</div>
+                    <button type="button" class="btn cust-add-membership-btn" data-customer-id="${customer.customer_id}" style="font-size:0.68rem; padding:0.1rem 0.45rem; display:none;">+ Add term</button>
+                </div>
+                <div class="cust-memberships-list" data-customer-id="${customer.customer_id}" style="font-size:0.75rem; min-height:1.2em;">
+                    <span style="color:var(--text-muted);">Loading...</span>
+                </div>
+            </div>` : ''}
             <div class="mc-actions" style="margin-top:0.5rem;">
                 <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.78rem; padding:0.35rem 0.8rem;">Save</button>
             </div>
@@ -1066,7 +1075,14 @@
                         }
                         const mPoints = expandedCard.querySelector(".cust-tab-points");
                         if (mPoints) mPoints.style.display = target === "points" ? "" : "none";
-                        expandedCard.querySelector(".cust-tab-info").style.display = target === "info" ? "" : "none";
+                        const infoTab = expandedCard.querySelector(".cust-tab-info");
+                        infoTab.style.display = target === "info" ? "" : "none";
+                        // Lazy-load membership terms on first Info-tab view.
+                        if (target === "info" && !infoTab._membershipsLoaded) {
+                            infoTab._membershipsLoaded = true;
+                            loadCustomerMemberships(expandedCard);
+                            wireMembershipUI(expandedCard);
+                        }
                     });
                 });
 
@@ -1326,6 +1342,19 @@
             </div>
         </div>`;
 
+        // Membership terms section (read-only by default; admin gets Add/Edit)
+        if (customer.customer_id) {
+            html += `<div class="cust-memberships-section" style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border);">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.3rem;">
+                    <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em;">Membership Terms</div>
+                    <button type="button" class="btn cust-add-membership-btn" data-customer-id="${customer.customer_id}" style="font-size:0.7rem; padding:0.15rem 0.5rem; display:none;">+ Add term</button>
+                </div>
+                <div class="cust-memberships-list" data-customer-id="${customer.customer_id}" style="font-size:0.82rem; min-height:1.2em;">
+                    <span style="color:var(--text-muted);">Loading...</span>
+                </div>
+            </div>`;
+        }
+
         html += `<div style="margin-top:0.6rem;">
             <button type="button" class="btn btn-edit cust-edit-toggle" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Edit</button>
         </div></div>`;
@@ -1407,6 +1436,219 @@
         </div></div>`;
 
         return html;
+    }
+
+    // ---- Membership terms (customer Info tab) ----------------------------
+
+    function _membershipStatusBadge(term) {
+        // Returns inline-styled <span> based on expires_at vs today.
+        const today = new Date().toISOString().slice(0, 10);
+        const exp = (term.expires_at || "").slice(0, 10);
+        if (!exp) return '';
+        let label, fg, bg;
+        if (exp >= today) {
+            const daysLeft = Math.round((new Date(exp) - new Date(today)) / 86400000);
+            if (daysLeft <= 30) {
+                label = `Active · ${daysLeft}d left`; fg = '#854d0e'; bg = '#fef3c7';
+            } else {
+                label = 'Active'; fg = '#166534'; bg = '#dcfce7';
+            }
+        } else {
+            const daysLapsed = Math.round((new Date(today) - new Date(exp)) / 86400000);
+            label = `Lapsed ${daysLapsed}d ago`; fg = '#991b1b'; bg = '#fee2e2';
+        }
+        return `<span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:0.7rem;font-weight:600;color:${fg};background:${bg};">${label}</span>`;
+    }
+
+    function _formatNoticesSummary(term) {
+        const sent = [];
+        if (term.notice_30d_sent_at) sent.push("30d");
+        if (term.notice_7d_sent_at) sent.push("7d");
+        if (term.notice_dayof_sent_at) sent.push("0d");
+        if (term.notice_lapsed_sent_at) sent.push("lapsed");
+        if (term.confirmation_sent_at) sent.push("confirmed");
+        if (!sent.length) return '<span style="color:var(--text-muted);">No notices sent</span>';
+        return `<span style="color:var(--text-muted); font-size:0.72rem;">Notices: ${sent.join(" · ")}</span>`;
+    }
+
+    function _formatRosterChoice(term) {
+        if (term.roster_choice === 'keep') {
+            return '<span style="display:inline-block;padding:1px 6px;border-radius:99px;font-size:0.68rem;font-weight:600;color:#166534;background:#dcfce7;">✅ stays on roster</span>';
+        }
+        if (term.roster_choice === 'remove') {
+            return '<span style="display:inline-block;padding:1px 6px;border-radius:99px;font-size:0.68rem;font-weight:600;color:#991b1b;background:#fee2e2;">❌ removed from roster</span>';
+        }
+        if (term.notice_lapsed_sent_at) {
+            return '<span style="color:#a16207; font-size:0.7rem;">awaiting roster reply</span>';
+        }
+        return '';
+    }
+
+    async function loadCustomerMemberships(container) {
+        const lists = container.querySelectorAll(".cust-memberships-list");
+        for (const list of lists) {
+            const cid = list.dataset.customerId;
+            if (!cid) continue;
+            // Show the Add button only for admins
+            const addBtn = container.querySelector(`.cust-add-membership-btn[data-customer-id="${cid}"]`);
+            if (addBtn && currentRole === 'admin') addBtn.style.display = '';
+
+            try {
+                const res = await fetch(`/api/customers/${cid}/memberships`);
+                const terms = await res.json();
+                if (!Array.isArray(terms) || terms.length === 0) {
+                    list.innerHTML = '<span style="color:var(--text-muted);">No membership terms on file. ' +
+                        (currentRole === 'admin' ? 'Use “+ Add term” to record a legacy renewal.' : '') + '</span>';
+                    continue;
+                }
+                list.innerHTML = terms.map(t => {
+                    const adminCtrls = currentRole === 'admin'
+                        ? `<button type="button" class="cust-edit-membership-btn" data-term-id="${t.id}" data-customer-id="${cid}" data-started="${t.started_at || ''}" data-expires="${t.expires_at || ''}" data-notes="${escapeHtml(t.notes || '')}" style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:0.7rem;padding:0.05rem 0.3rem;">Edit</button>` +
+                          `<button type="button" class="cust-delete-membership-btn" data-term-id="${t.id}" data-customer-id="${cid}" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.7rem;padding:0.05rem 0.3rem;">✕</button>`
+                        : '';
+                    return `<div style="display:flex;align-items:center;gap:0.4rem;padding:0.25rem 0;border-bottom:1px dashed var(--border);font-size:0.78rem;flex-wrap:wrap;">
+                        <span><strong>${escapeHtml(t.started_at || '')}</strong> → ${escapeHtml(t.expires_at || '')}</span>
+                        ${_membershipStatusBadge(t)}
+                        ${_formatRosterChoice(t)}
+                        <span style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.03em;">${escapeHtml(t.source || '')}</span>
+                        ${_formatNoticesSummary(t)}
+                        ${t.notes ? `<span style="font-size:0.7rem;color:var(--text-muted);font-style:italic;">${escapeHtml(t.notes)}</span>` : ''}
+                        <span style="margin-left:auto;">${adminCtrls}</span>
+                    </div>`;
+                }).join('');
+            } catch (err) {
+                list.innerHTML = '<span style="color:#dc2626;">Failed to load membership terms</span>';
+            }
+        }
+    }
+
+    function _promptMembershipTerm(defaults) {
+        // Returns a promise that resolves with {started_at, expires_at, notes} or null.
+        return new Promise(resolve => {
+            const startedDefault = defaults.started_at || new Date().toISOString().slice(0, 10);
+            // Default expires = started + 365 days for >=2025; Dec 31 of start year otherwise.
+            function defaultExpires(s) {
+                const d = new Date(s);
+                if (isNaN(d)) return '';
+                if (d.getUTCFullYear() >= 2025) {
+                    const e = new Date(d); e.setUTCDate(e.getUTCDate() + 365);
+                    return e.toISOString().slice(0, 10);
+                }
+                return `${d.getUTCFullYear()}-12-31`;
+            }
+            const expiresDefault = defaults.expires_at || defaultExpires(startedDefault);
+            const notesDefault = defaults.notes || '';
+
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+            overlay.innerHTML = `<div style="background:#fff;border-radius:8px;padding:1.25rem;max-width:380px;width:100%;font-size:0.85rem;">
+                <div style="font-weight:700;font-size:0.95rem;margin-bottom:0.6rem;">${defaults._mode === 'edit' ? 'Edit' : 'Add'} membership term</div>
+                <label style="display:block;margin-bottom:0.5rem;">
+                    <span style="display:block;font-size:0.7rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;">Started</span>
+                    <input type="date" class="modal-input mship-started" value="${startedDefault}" style="width:100%;padding:0.3rem;font-size:0.85rem;">
+                </label>
+                <label style="display:block;margin-bottom:0.5rem;">
+                    <span style="display:block;font-size:0.7rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;">Expires</span>
+                    <input type="date" class="modal-input mship-expires" value="${expiresDefault}" style="width:100%;padding:0.3rem;font-size:0.85rem;">
+                    <span style="display:block;font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Auto-set to +365 days for 2025+ terms; calendar-year for older.</span>
+                </label>
+                <label style="display:block;margin-bottom:0.75rem;">
+                    <span style="display:block;font-size:0.7rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;">Notes (optional)</span>
+                    <input type="text" class="modal-input mship-notes" value="${escapeHtml(notesDefault)}" placeholder="e.g. Paid via Zelle" style="width:100%;padding:0.3rem;font-size:0.85rem;">
+                </label>
+                <div style="display:flex;gap:0.4rem;justify-content:flex-end;">
+                    <button type="button" class="btn btn-secondary mship-cancel" style="font-size:0.78rem;padding:0.3rem 0.7rem;">Cancel</button>
+                    <button type="button" class="btn btn-primary mship-save" style="font-size:0.78rem;padding:0.3rem 0.7rem;">Save</button>
+                </div>
+            </div>`;
+            document.body.appendChild(overlay);
+            const startedInp = overlay.querySelector('.mship-started');
+            const expiresInp = overlay.querySelector('.mship-expires');
+            const notesInp = overlay.querySelector('.mship-notes');
+            // When started_at changes, auto-recompute expires.
+            startedInp.addEventListener('change', () => {
+                expiresInp.value = defaultExpires(startedInp.value);
+            });
+            overlay.querySelector('.mship-cancel').addEventListener('click', () => {
+                overlay.remove(); resolve(null);
+            });
+            overlay.querySelector('.mship-save').addEventListener('click', () => {
+                const result = {
+                    started_at: startedInp.value,
+                    expires_at: expiresInp.value,
+                    notes: notesInp.value.trim() || null,
+                };
+                if (!result.started_at) { alert('Started date is required'); return; }
+                overlay.remove(); resolve(result);
+            });
+        });
+    }
+
+    // Wire Add / Edit / Delete handlers for the membership card.  Idempotent —
+    // sets a flag on the container so re-calls don't double-bind.
+    function wireMembershipUI(container) {
+        if (!container || container._membershipWired) return;
+        container._membershipWired = true;
+
+        container.addEventListener("click", async (e) => {
+            const addBtn = e.target.closest(".cust-add-membership-btn");
+            if (addBtn) {
+                e.stopPropagation();
+                const cid = addBtn.dataset.customerId;
+                const result = await _promptMembershipTerm({_mode: 'add'});
+                if (!result) return;
+                try {
+                    const resp = await fetch(`/api/customers/${cid}/memberships`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(result),
+                    });
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        throw new Error(data.error || "Failed");
+                    }
+                    loadCustomerMemberships(container);
+                } catch (err) {
+                    alert("Failed to add membership term: " + err.message);
+                }
+                return;
+            }
+            const editBtn = e.target.closest(".cust-edit-membership-btn");
+            if (editBtn) {
+                e.stopPropagation();
+                const result = await _promptMembershipTerm({
+                    _mode: 'edit',
+                    started_at: editBtn.dataset.started,
+                    expires_at: editBtn.dataset.expires,
+                    notes: editBtn.dataset.notes,
+                });
+                if (!result) return;
+                try {
+                    const resp = await fetch(`/api/memberships/${editBtn.dataset.termId}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(result),
+                    });
+                    if (!resp.ok) throw new Error("Failed to save");
+                    loadCustomerMemberships(container);
+                } catch (err) {
+                    alert("Failed to update membership term: " + err.message);
+                }
+                return;
+            }
+            const delBtn = e.target.closest(".cust-delete-membership-btn");
+            if (delBtn) {
+                e.stopPropagation();
+                if (!confirm("Delete this membership term? Notice history will be lost.")) return;
+                try {
+                    const resp = await fetch(`/api/memberships/${delBtn.dataset.termId}`, { method: "DELETE" });
+                    if (!resp.ok) throw new Error("Failed to delete");
+                    loadCustomerMemberships(container);
+                } catch (err) {
+                    alert("Failed to delete membership term: " + err.message);
+                }
+            }
+        });
     }
 
     // Load and render aliases for a customer in the info panel
@@ -1924,6 +2166,8 @@
 
         // Load aliases when info tab is shown
         loadCustomerAliases(container);
+        loadCustomerMemberships(container);
+        wireMembershipUI(container);
 
         // Add alias button
         container.querySelectorAll(".cust-add-alias-btn").forEach(btn => {
