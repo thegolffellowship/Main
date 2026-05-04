@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.11.3";
+window.TGF_VERSION = "2.11.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.11.4",
+    date: "2026-05-04",
+    title: "Membership notices: body language now state-aware (active / today / lapsed)",
+    changes: [
+      "Body copy in T-30 / T-7 / T-0 templates now adapts to the term's actual state, not just the window label. Previously: firing T-30 on a member whose term lapsed 69 days ago produced 'A heads-up that your membership ... expires on Feb 24, 2026' — future-tense framing on a past date. Now produces 'A heads-up that your membership ... lapsed on Feb 24, 2026 (69 days ago) and we haven't seen a renewal yet.'",
+      "Three states branch: active (future-tense, 'expires on X (in N days)'), today ('expires today'), lapsed (past-tense, 'lapsed on X (N days ago) and we haven't seen a renewal yet'). The window label still controls tone — heads-up vs. quick reminder vs. day-of phrasing — but no longer forces incorrect facts about state.",
+      "T-30 closing paragraph also adapts: 'no action needed' (active) vs. 'last chance' (today) vs. 'a few clicks gets you back to active' (lapsed). T-7 and T-0 closing paragraphs are short enough to share across states.",
+      "Lapsed final-notice template (with Golf Genius opt-in/out buttons) is unchanged — it was already lapsed-only.",
+    ],
+  },
   {
     version: "2.11.3",
     date: "2026-05-04",

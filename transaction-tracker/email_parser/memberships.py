@@ -501,11 +501,13 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
     `term` has at minimum: expires_at.
     `customer` has at minimum: first_name.
 
-    Subjects + body language are computed from the **actual** days remaining
+    Subject AND body language are computed from the **actual** days remaining
     (today vs `expires_at`), not the window label, so a manually-fired
-    Send Notice Now on a mid-cycle term reads correctly.  E.g. if Bryce's
-    term expires in 14 days and the admin picks the "T-30" window, the
-    subject says "expires in 14 days", not "in 30 days".
+    Send Notice Now on a mid-cycle term reads correctly. E.g. firing the
+    "T-30" window on a term that's already lapsed 69 days uses past-tense
+    body copy ("lapsed on Feb 24, 2026 — 69 days ago") instead of the
+    nonsensical "expires on Feb 24, 2026". The window still controls tone
+    (heads-up vs reminder vs final notice), not factual claims about state.
     """
     first_name = customer.get("first_name") or "there"
     expires_at = term["expires_at"]
@@ -519,45 +521,69 @@ def render_notice_email(window: str, term: dict, customer: dict) -> tuple[str, s
     expires_pretty = exp_d.strftime("%B %-d, %Y")
     phrase = _time_phrase(days_left)  # "in 14 days" / "tomorrow" / "today" / "2 days ago"
 
+    # Subject is identical across the three pre-expiry windows — they only
+    # differ in body tone, not in the factual claim about state.
+    if days_left > 0:
+        soft_subject = f"Your TGF membership expires {phrase}"
+    elif days_left == 0:
+        soft_subject = "Your TGF membership expires today"
+    else:
+        soft_subject = f"Your TGF membership lapsed {days_lapsed} days ago"
+
+    # State-aware fact phrase used as the subject of the opening line.
+    # "expires on … (in 14 days)" / "expires today" / "lapsed on … (69 days ago)"
+    if days_left > 0:
+        state_phrase = f"expires on <strong>{expires_pretty}</strong> ({phrase})"
+    elif days_left == 0:
+        state_phrase = "expires <strong>today</strong>"
+    else:
+        state_phrase = f"lapsed on <strong>{expires_pretty}</strong> ({days_lapsed} days ago)"
+
     if window == "30d":
-        # Pre-expiry "heads up" — subject reflects the actual days remaining.
         if days_left > 0:
-            subject = f"Your TGF membership expires {phrase}"
+            opening = f"A heads-up that your membership in The Golf Fellowship {state_phrase}."
+            closing = "Renewals run for 365 days from the date of purchase. If you've already renewed, no action needed — these reminders shut off automatically once the purchase lands in our system."
         elif days_left == 0:
-            subject = "Your TGF membership expires today"
+            opening = f"A heads-up that your membership in The Golf Fellowship {state_phrase} — last chance to renew before it lapses."
+            closing = "Already renewed in the last 24 hours? Please ignore — your purchase will close out these notifications as soon as it parses."
         else:
-            subject = f"Your TGF membership lapsed {days_lapsed} days ago"
+            opening = f"A heads-up that your membership in The Golf Fellowship {state_phrase} and we haven't seen a renewal yet."
+            closing = "If you've recently renewed, these reminders shut off automatically once the purchase lands in our system. Otherwise, the link above gets you back to active in a few clicks."
         body = f"""<p>Hi {first_name},</p>
-<p>A heads-up that your membership in The Golf Fellowship expires on <strong>{expires_pretty}</strong>{f" ({phrase})" if days_left > 0 else ""}. Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap:</p>
+<p>{opening} Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap:</p>
 {_renew_button()}
-<p>Renewals run for 365 days from the date of purchase. If you've already renewed, no action needed — these reminders shut off automatically once the purchase lands in our system.</p>
+<p>{closing}</p>
 <p>Thanks for being part of The Golf Fellowship.</p>
 <p>— The Golf Fellowship</p>"""
-        return subject, _email_shell(body)
+        return soft_subject, _email_shell(body)
 
     if window == "7d":
-        # Tighter reminder — same dynamic subject treatment.
         if days_left > 0:
-            subject = f"Your TGF membership expires {phrase}"
+            opening = f"Quick reminder — your membership in The Golf Fellowship {state_phrase}."
         elif days_left == 0:
-            subject = "Your TGF membership expires today"
+            opening = f"Quick reminder — your membership in The Golf Fellowship {state_phrase}."
         else:
-            subject = f"Your TGF membership lapsed {days_lapsed} days ago"
+            opening = f"Quick note — your membership in The Golf Fellowship {state_phrase} and we haven't seen a renewal yet."
         body = f"""<p>Hi {first_name},</p>
-<p>Quick reminder — your membership in The Golf Fellowship expires <strong>{expires_pretty}</strong>{f" ({phrase})" if days_left != 0 else " (today)"}. Renewal is only <strong>$75 for the next 12 months</strong>:</p>
+<p>{opening} Renewal is only <strong>$75 for the next 12 months</strong>:</p>
 {_renew_button()}
 <p>Once your renewal comes through, these reminders stop on their own.</p>
 <p>— The Golf Fellowship</p>"""
-        return subject, _email_shell(body)
+        return soft_subject, _email_shell(body)
 
     if window == "dayof":
-        subject = "Your TGF membership expires today"
+        if days_left > 0:
+            opening = f"Your membership in The Golf Fellowship {state_phrase} — renewing now keeps things uninterrupted."
+        elif days_left == 0:
+            opening = "Today is the last day of your current term with The Golf Fellowship."
+        else:
+            opening = f"Your membership in The Golf Fellowship {state_phrase} — renewing now picks back up where you left off."
         body = f"""<p>Hi {first_name},</p>
-<p>Today is the last day of your current term with The Golf Fellowship. Renewal is only <strong>$75 for the next 12 months</strong>:</p>
+<p>{opening} Renewal is only <strong>$75 for the next 12 months</strong>:</p>
 {_renew_button()}
 <p>Already renewed in the last 24 hours? Please ignore — your purchase will close out these notifications as soon as it parses.</p>
 <p>— The Golf Fellowship</p>"""
-        return subject, _email_shell(body)
+        return soft_subject, _email_shell(body)
 
     if window == "lapsed":
         keep_url, remove_url = _roster_action_urls(term)
