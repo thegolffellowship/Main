@@ -1643,13 +1643,23 @@ def api_audit_emails():
         logger.exception("Audit: failed to fetch emails")
         return jsonify({"error": f"Failed to fetch emails: {e}"}), 500
 
-    # Build a lookup of DB items keyed by email_uid
+    # Build lookups of DB items keyed by email_uid AND order_id.
+    # The order_id index covers the case where Microsoft Graph re-keys an
+    # already-imported email under a brand-new message id — save_items()
+    # dedups by (order_id, item_index) but the row keeps the OLD uid, so a
+    # uid-only lookup falsely reports the email as "Not Parsed".
     all_items = get_all_items()
     db_by_uid: dict[str, list[dict]] = {}
+    db_by_order: dict[str, list[dict]] = {}
     for item in all_items:
         uid = item.get("email_uid", "")
         if uid:
             db_by_uid.setdefault(uid, []).append(item)
+        oid = (item.get("order_id") or "").strip()
+        if oid:
+            db_by_order.setdefault(oid, []).append(item)
+
+    _order_id_re = re.compile(r"#(R\d+)")
 
     comparisons = []
     for email in emails[:limit]:
@@ -1662,6 +1672,12 @@ def api_audit_emails():
         body_preview = body_text[:2000] if body_text else "(empty)"
 
         db_rows = db_by_uid.get(uid, [])
+        if not db_rows:
+            # Fallback: pull order_id from subject (e.g. "New Order #R805080852")
+            # and look up by order_id to catch cross-uid re-keys.
+            m = _order_id_re.search(email.get("subject", "") or "")
+            if m:
+                db_rows = db_by_order.get(m.group(1), [])
 
         # Determine audit status
         if not db_rows:

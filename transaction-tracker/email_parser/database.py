@@ -15204,6 +15204,17 @@ def _resolve_lookup_customer_id(conn, item_or_id, name_hint: str = "") -> int | 
            LIMIT 1""",
         (name, name),
     ).fetchone()
+    if row:
+        return int(row["customer_id"])
+    # Alias-name fallback — covers "Stu Kirksey" → Stuart Kirksey, etc.
+    row = conn.execute(
+        """SELECT c.customer_id FROM customer_aliases ca
+           JOIN customers c
+             ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+           WHERE ca.alias_type = 'name' AND LOWER(ca.alias_value) = LOWER(?)
+           LIMIT 1""",
+        (name,),
+    ).fetchone()
     return int(row["customer_id"]) if row else None
 
 
