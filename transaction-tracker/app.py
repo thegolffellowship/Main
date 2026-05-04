@@ -2230,6 +2230,125 @@ def api_retry_failed():
     })
 
 
+@app.route("/api/audit/duplicate-items-diagnostic", methods=["GET"])
+@require_role("admin")
+def api_duplicate_items_diagnostic():
+    """Read-only diagnostic for duplicate item rows.
+
+    Groups items by (email_uid, customer, item_name, item_price) — the same
+    signature used to spot phantom duplicates on the Transactions tab — and
+    returns per-row metadata that lets us figure out the root cause:
+
+    - Same email_uid, different item_index, same created_at → AI returned
+      multiple items in one parse (hallucination at extraction time).
+    - Same email_uid, different item_index, different created_at → some
+      later script appended rows under the same email_uid.
+    - Different email_uid → same email got ingested through two paths
+      (e.g. parser + a separate sync), or a migration cloned rows.
+    - All manual-* email_uids → manual-entry duplicates.
+
+    Plus aggregate counts so you can tell at a glance which pattern dominates.
+    Read-only — does not mutate any rows.
+    """
+    conn = get_connection()
+    try:
+        groups = conn.execute(
+            """
+            SELECT email_uid, customer, item_name, item_price,
+                   COUNT(*) as cnt,
+                   GROUP_CONCAT(id ORDER BY id) as ids
+            FROM items
+            WHERE COALESCE(transaction_status, 'active') = 'active'
+              AND customer IS NOT NULL AND customer != ''
+              AND item_name IS NOT NULL AND item_name != ''
+            GROUP BY email_uid, LOWER(customer), LOWER(item_name), item_price
+            HAVING COUNT(*) > 1
+            ORDER BY MIN(id) DESC
+            """
+        ).fetchall()
+
+        result_groups = []
+        same_uid_diff_idx_same_created = 0
+        same_uid_diff_idx_diff_created = 0
+        different_uid = 0
+        manual_uid = 0
+        max_created_gap_seconds = 0.0
+
+        for g in groups:
+            ids = [int(x) for x in (g["ids"] or "").split(",") if x]
+            rows = conn.execute(
+                f"""
+                SELECT id, email_uid, item_index, order_id, order_date,
+                       created_at, transaction_status, customer_id, merchant
+                FROM items
+                WHERE id IN ({",".join("?" * len(ids))})
+                ORDER BY id
+                """,
+                tuple(ids),
+            ).fetchall()
+            row_dicts = [dict(r) for r in rows]
+
+            uids = {r["email_uid"] for r in row_dicts}
+            indexes = sorted({r["item_index"] for r in row_dicts})
+            created_set = {r["created_at"] for r in row_dicts}
+            is_manual = any((r["email_uid"] or "").startswith("manual-") for r in row_dicts)
+
+            # Compute the largest gap between created_at timestamps in this group
+            from datetime import datetime
+            created_times = []
+            for r in row_dicts:
+                try:
+                    created_times.append(datetime.fromisoformat((r["created_at"] or "").replace("Z", "+00:00")))
+                except Exception:
+                    pass
+            gap_seconds = 0.0
+            if len(created_times) >= 2:
+                gap_seconds = (max(created_times) - min(created_times)).total_seconds()
+                if gap_seconds > max_created_gap_seconds:
+                    max_created_gap_seconds = gap_seconds
+
+            # Classify the group
+            if is_manual:
+                pattern = "manual"
+                manual_uid += 1
+            elif len(uids) == 1 and len(indexes) == len(row_dicts):
+                if gap_seconds < 60:
+                    pattern = "same_uid_diff_idx_same_created"
+                    same_uid_diff_idx_same_created += 1
+                else:
+                    pattern = "same_uid_diff_idx_diff_created"
+                    same_uid_diff_idx_diff_created += 1
+            else:
+                pattern = "different_uid"
+                different_uid += 1
+
+            result_groups.append({
+                "customer": g["customer"],
+                "item_name": g["item_name"],
+                "item_price": g["item_price"],
+                "count": g["cnt"],
+                "pattern": pattern,
+                "created_at_gap_seconds": round(gap_seconds, 2),
+                "rows": row_dicts,
+            })
+
+        return jsonify({
+            "status": "ok",
+            "total_duplicate_groups": len(result_groups),
+            "total_extra_rows": sum(g["count"] - 1 for g in result_groups),
+            "patterns": {
+                "same_uid_diff_idx_same_created": same_uid_diff_idx_same_created,
+                "same_uid_diff_idx_diff_created": same_uid_diff_idx_diff_created,
+                "different_uid": different_uid,
+                "manual": manual_uid,
+            },
+            "max_created_at_gap_seconds": round(max_created_gap_seconds, 2),
+            "groups": result_groups,
+        })
+    finally:
+        conn.close()
+
+
 @app.route("/api/audit/expand-quantities", methods=["POST"])
 @require_role("admin")
 def api_expand_quantities():
