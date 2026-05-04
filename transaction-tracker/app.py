@@ -2235,38 +2235,49 @@ def api_retry_failed():
 def api_duplicate_items_diagnostic():
     """Read-only diagnostic for duplicate item rows.
 
-    Groups items by (email_uid, customer, item_name, item_price) — the same
-    signature used to spot phantom duplicates on the Transactions tab — and
-    returns per-row metadata that lets us figure out the root cause:
+    Groups items by (order_id, customer, item_name, item_price) — order_id
+    instead of email_uid so we catch both same-email-uid duplicates AND
+    same-order-different-email-uid duplicates. Returns per-row metadata to
+    classify the root cause:
 
     - Same email_uid, different item_index, same created_at → AI returned
       multiple items in one parse (hallucination at extraction time).
     - Same email_uid, different item_index, different created_at → some
-      later script appended rows under the same email_uid.
-    - Different email_uid → same email got ingested through two paths
-      (e.g. parser + a separate sync), or a migration cloned rows.
-    - All manual-* email_uids → manual-entry duplicates.
+      later script appended rows under the same email_uid (e.g. re-extract).
+    - Different email_uid, same order_id → same order ingested via two
+      different emails or two parser runs with different uids.
+    - Manual entries → manual-entry duplicates.
 
-    Plus aggregate counts so you can tell at a glance which pattern dominates.
+    Query params:
+      since=YYYY-MM-DD   filter to orders with order_date >= this date
+                         (default: 2026-04-26 to focus on the May-3 backfill
+                         incident; pass since=1900-01-01 to see ALL dupes)
+
+    Skips rows where order_id is NULL (manual + RSVP-only rows often lack one).
     Read-only — does not mutate any rows.
     """
+    since = (request.args.get("since") or "2026-04-26").strip()
     conn = get_connection()
     try:
         groups = conn.execute(
             """
-            SELECT email_uid, customer, item_name, item_price,
+            SELECT order_id, customer, item_name, item_price,
                    COUNT(*) as cnt,
                    GROUP_CONCAT(id ORDER BY id) as ids
             FROM items
             WHERE COALESCE(transaction_status, 'active') = 'active'
               AND customer IS NOT NULL AND customer != ''
               AND item_name IS NOT NULL AND item_name != ''
-            GROUP BY email_uid, LOWER(customer), LOWER(item_name), item_price
+              AND order_id IS NOT NULL AND order_id != ''
+              AND order_date >= ?
+            GROUP BY order_id, LOWER(customer), LOWER(item_name), item_price
             HAVING COUNT(*) > 1
             ORDER BY MIN(id) DESC
-            """
+            """,
+            (since,),
         ).fetchall()
 
+        from datetime import datetime
         result_groups = []
         same_uid_diff_idx_same_created = 0
         same_uid_diff_idx_diff_created = 0
@@ -2290,11 +2301,8 @@ def api_duplicate_items_diagnostic():
 
             uids = {r["email_uid"] for r in row_dicts}
             indexes = sorted({r["item_index"] for r in row_dicts})
-            created_set = {r["created_at"] for r in row_dicts}
             is_manual = any((r["email_uid"] or "").startswith("manual-") for r in row_dicts)
 
-            # Compute the largest gap between created_at timestamps in this group
-            from datetime import datetime
             created_times = []
             for r in row_dicts:
                 try:
@@ -2307,39 +2315,41 @@ def api_duplicate_items_diagnostic():
                 if gap_seconds > max_created_gap_seconds:
                     max_created_gap_seconds = gap_seconds
 
-            # Classify the group
             if is_manual:
                 pattern = "manual"
                 manual_uid += 1
-            elif len(uids) == 1 and len(indexes) == len(row_dicts):
-                if gap_seconds < 60:
-                    pattern = "same_uid_diff_idx_same_created"
-                    same_uid_diff_idx_same_created += 1
-                else:
-                    pattern = "same_uid_diff_idx_diff_created"
-                    same_uid_diff_idx_diff_created += 1
-            else:
-                pattern = "different_uid"
+            elif len(uids) > 1:
+                pattern = "different_uid_same_order"
                 different_uid += 1
+            elif gap_seconds < 60:
+                pattern = "same_uid_diff_idx_same_created"
+                same_uid_diff_idx_same_created += 1
+            else:
+                pattern = "same_uid_diff_idx_diff_created"
+                same_uid_diff_idx_diff_created += 1
 
             result_groups.append({
                 "customer": g["customer"],
                 "item_name": g["item_name"],
                 "item_price": g["item_price"],
+                "order_id": g["order_id"],
                 "count": g["cnt"],
                 "pattern": pattern,
+                "distinct_email_uids": len(uids),
+                "item_indexes": indexes,
                 "created_at_gap_seconds": round(gap_seconds, 2),
                 "rows": row_dicts,
             })
 
         return jsonify({
             "status": "ok",
+            "since": since,
             "total_duplicate_groups": len(result_groups),
             "total_extra_rows": sum(g["count"] - 1 for g in result_groups),
             "patterns": {
                 "same_uid_diff_idx_same_created": same_uid_diff_idx_same_created,
                 "same_uid_diff_idx_diff_created": same_uid_diff_idx_diff_created,
-                "different_uid": different_uid,
+                "different_uid_same_order": different_uid,
                 "manual": manual_uid,
             },
             "max_created_at_gap_seconds": round(max_created_gap_seconds, 2),
