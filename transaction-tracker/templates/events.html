@@ -165,6 +165,8 @@
         }
         .pairings-swap-btn:hover { border-color: var(--accent); color: var(--accent); }
         .pairings-swap-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .pairings-move-target { outline: 2px dashed #f59e0b; outline-offset: 2px; cursor: copy; }
+        .pairings-move-target:hover { background: #fffbeb !important; }
         .pairings-groups-grid {
             display: grid; gap: 0.75rem;
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -3861,12 +3863,18 @@
         if (state.groups_9.length || state.groups_18.length) {
             html += '<div class="pairings-swap-bar">';
             html += '<span style="font-size:0.78rem;color:var(--text-muted);font-weight:600;">SWAP:</span>';
-            const swapModes = [['player', 'Player'], ['cartpair', 'Cart Pair'], ['group', 'Group']];
+            const swapModes = [['player', 'Player'], ['cartpair', 'Cart Pair'], ['group', 'Group'], ['move', 'Move']];
             swapModes.forEach(([val, label]) => {
                 html += `<button class="pairings-swap-btn${state.swapMode === val ? ' active' : ''}" data-ev-id="${ev.id}" data-swap-mode="${val}">${label}</button>`;
             });
             if (state.swapMode) {
-                html += `<span style="font-size:0.78rem;color:var(--accent);margin-left:0.5rem;">${state.selection ? 'Click a second item to swap' : 'Click an item to select'}</span>`;
+                let hint = '';
+                if (state.swapMode === 'move') {
+                    hint = state.selection ? `Click a group to place <strong>${escapeHtml(state.selection.name || '')}</strong>` : 'Click a player to pick up';
+                } else {
+                    hint = state.selection ? 'Click a second item to swap' : 'Click an item to select';
+                }
+                html += `<span style="font-size:0.78rem;color:var(--accent);margin-left:0.5rem;">${hint}</span>`;
             }
             html += '</div>';
         }
@@ -3883,6 +3891,7 @@
             if (isCombo || is18Only) {
                 html += renderPairingGroups(ev, state, '18', state.groups_18);
             }
+            html += renderUnassignedPlayers(ev, state);
         }
 
         html += '</div>'; // .pairings-panel
@@ -3904,16 +3913,20 @@
         }
 
         html += '<div class="pairings-groups-grid">';
+        const isMoveTarget = state.swapMode === 'move' && state.selection;
         groups.forEach(grp => {
             const isSelected = state.swapMode === 'group' && state.selection &&
                 state.selection.holes === holes && state.selection.group_num === grp.group_num;
-            html += `<div class="pairing-group-card${isSelected ? ' pairings-selected' : ''}" data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}">`;
+            const isDropTarget = isMoveTarget && grp.players.length < 4 &&
+                !(state.selection.holes === holes && state.selection.group_num === grp.group_num);
+            html += `<div class="pairing-group-card${isSelected ? ' pairings-selected' : ''}${isDropTarget ? ' pairings-move-target' : ''}" data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}">`;
             html += `<div class="pairing-group-header">${escapeHtml(grp.slot_label)}${isShotgun ? ' <span style="color:var(--text-muted);font-size:0.75em;">(Hole)</span>' : ''}</div>`;
 
             grp.players.forEach((player, idx) => {
                 const isCart1 = player.cart_pos <= 2;
                 const cartDot = isCart1 ? '#3b82f6' : '#22c55e';
-                const isSelectedPlayer = state.swapMode === 'player' && state.selection &&
+                const isSelectedPlayer = (state.swapMode === 'player' || state.swapMode === 'move') && state.selection &&
+                    !state.selection.unassigned &&
                     state.selection.holes === holes && state.selection.group_num === grp.group_num &&
                     state.selection.cart_pos === player.cart_pos;
                 const isSelectedPair = state.swapMode === 'cartpair' && state.selection &&
@@ -3951,6 +3964,7 @@
             state.slots_18 = data.slots_18 || [];
             state.groups_9 = (data.pairings && data.pairings['9']) ? data.pairings['9'] : [];
             state.groups_18 = (data.pairings && data.pairings['18']) ? data.pairings['18'] : [];
+            state.event_players = data.event_players || [];
             state.isDirty = false;
             state.loaded = true;
         } catch (e) {
@@ -5656,13 +5670,21 @@
             });
         });
 
-        // Group card click (group-swap)
+        // Group card click (group-swap or move drop target)
         container.querySelectorAll('.pairing-group-card').forEach(card => {
             card.addEventListener('click', e => {
-                if (state.swapMode !== 'group') return;
-                e.stopPropagation();
                 const holes = card.dataset.holes;
                 const groupNum = parseInt(card.dataset.groupNum);
+                if (state.swapMode === 'move') {
+                    if (!state.selection) return; // nothing selected; player row click will handle selection
+                    e.stopPropagation();
+                    _movePlayer(state, state.selection, holes, groupNum);
+                    state.isDirty = true; state.selection = null;
+                    rerenderDetail(container, ev);
+                    return;
+                }
+                if (state.swapMode !== 'group') return;
+                e.stopPropagation();
                 if (!state.selection) {
                     state.selection = {holes, group_num: groupNum};
                     rerenderDetail(container, ev);
@@ -5680,7 +5702,7 @@
             });
         });
 
-        // Player row click (player-swap or cartpair-swap)
+        // Player row click (player-swap, cartpair-swap, or move)
         container.querySelectorAll('.pairing-player-row').forEach(row => {
             row.addEventListener('click', e => {
                 if (!state.swapMode || state.swapMode === 'group') return;
@@ -5688,6 +5710,23 @@
                 const holes = row.dataset.holes;
                 const groupNum = parseInt(row.dataset.groupNum);
                 const cartPos = parseInt(row.dataset.cartPos);
+                // Unassigned rows have no holes/groupNum; handled by separate listener
+                if (!holes || isNaN(groupNum)) return;
+                if (state.swapMode === 'move') {
+                    if (!state.selection) {
+                        // Pick up this player
+                        const grp = _findGroup(state, holes, groupNum);
+                        const pl = grp && grp.players.find(p => p.cart_pos === cartPos);
+                        state.selection = {holes, group_num: groupNum, cart_pos: cartPos, unassigned: false, name: pl ? pl.name : ''};
+                        rerenderDetail(container, ev);
+                    } else {
+                        // Drop into the group this player belongs to
+                        _movePlayer(state, state.selection, holes, groupNum);
+                        state.isDirty = true; state.selection = null;
+                        rerenderDetail(container, ev);
+                    }
+                    return;
+                }
                 if (!state.selection) {
                     state.selection = {holes, group_num: groupNum, cart_pos: cartPos};
                     rerenderDetail(container, ev);
@@ -5708,6 +5747,29 @@
                 }
             });
         });
+
+        // Unassigned player row click (move mode only)
+        container.querySelectorAll('[data-unassigned-name]').forEach(row => {
+            row.addEventListener('click', e => {
+                e.stopPropagation();
+                if (state.swapMode !== 'move') {
+                    state.swapMode = 'move'; // auto-activate move mode
+                }
+                const name = row.dataset.unassignedName;
+                if (!state.selection) {
+                    state.selection = {unassigned: true, name};
+                    rerenderDetail(container, ev);
+                } else if (state.selection.unassigned && state.selection.name === name) {
+                    state.selection = null; // deselect
+                    rerenderDetail(container, ev);
+                }
+                // If something else is selected, just re-select this one
+                else {
+                    state.selection = {unassigned: true, name};
+                    rerenderDetail(container, ev);
+                }
+            });
+        });
     }
 
     function _findGroup(state, holes, groupNum) {
@@ -5717,6 +5779,67 @@
 
     function _findPlayer(grp, cartPos) {
         return grp.players.find(p => p.cart_pos === cartPos);
+    }
+
+    function getUnassigned(state) {
+        if (!state.event_players || !state.event_players.length) return [];
+        const pairedNames = new Set();
+        [...(state.groups_9 || []), ...(state.groups_18 || [])].forEach(g => {
+            (g.players || []).forEach(p => pairedNames.add((p.name || '').toLowerCase()));
+        });
+        return state.event_players.filter(p => !pairedNames.has((p.name || '').toLowerCase()));
+    }
+
+    function renderUnassignedPlayers(ev, state) {
+        if (!state.loaded) return '';
+        const unassigned = getUnassigned(state);
+        if (!unassigned.length) return '';
+        let html = `<div style="margin-top:1rem;">`;
+        html += `<div style="font-weight:700;font-size:0.78rem;letter-spacing:0.06em;color:#d97706;padding:0.4rem 0 0.3rem;">&#9888; UNASSIGNED (${unassigned.length}) &mdash; Click player then a group to place</div>`;
+        html += '<div style="display:flex;flex-wrap:wrap;gap:0.4rem;">';
+        unassigned.forEach(player => {
+            const isSelected = state.swapMode === 'move' && state.selection &&
+                state.selection.unassigned && state.selection.name === player.name;
+            const hcp = player.handicap_index != null ? Number(player.handicap_index).toFixed(1) : '—';
+            html += `<div class="pairing-player-row${isSelected ? ' pairings-selected' : ''}"
+                style="background:${isSelected ? '' : '#fffbeb'};border:1px solid #fcd34d;border-radius:6px;cursor:pointer;min-width:180px;"
+                data-ev-id="${ev.id}" data-unassigned-name="${escapeHtml(player.name)}">`;
+            html += `<span class="pairing-cart-dot" style="background:#f59e0b;"></span>`;
+            html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+            html += `<span class="pairing-hcp">${hcp}</span>`;
+            html += `<span class="pairing-tee">${escapeHtml(player.tee_choice || '—')}</span>`;
+            html += '</div>';
+        });
+        html += '</div></div>';
+        return html;
+    }
+
+    function _movePlayer(state, src, destHoles, destGroupNum) {
+        const destGroup = _findGroup(state, destHoles, destGroupNum);
+        if (!destGroup) return;
+        if (destGroup.players.length >= 4) {
+            alert('That group is already a foursome.');
+            return;
+        }
+        let player;
+        if (src.unassigned) {
+            const unassigned = getUnassigned(state);
+            player = unassigned.find(p => p.name === src.name);
+            if (!player) return;
+            // Unassigned players don't live in a real group; just add to dest.
+            // We reconstruct a minimal player object.
+            player = { name: player.name, tee_choice: player.tee_choice || null, handicap_index: player.handicap_index ?? null };
+        } else {
+            const srcGroup = _findGroup(state, src.holes, src.group_num);
+            if (!srcGroup) return;
+            const idx = srcGroup.players.findIndex(p => p.cart_pos === src.cart_pos);
+            if (idx === -1) return;
+            [player] = srcGroup.players.splice(idx, 1);
+            // Renumber source
+            srcGroup.players.forEach((p, i) => { p.cart_pos = i + 1; });
+        }
+        player.cart_pos = destGroup.players.length + 1;
+        destGroup.players.push(player);
     }
 
     function _swapPlayers(state, a, b) {

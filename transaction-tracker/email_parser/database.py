@@ -763,6 +763,33 @@ def _repair_chalfant_attribution(conn: sqlite3.Connection) -> None:
     ).rowcount
 
     total_fixed = fixed_a + fixed_b + fixed_c + fixed_d + fixed_e + fixed_f
+
+    # Fix saved pairings: rename 18-hole 'Justin McCrary' → 'Tanner Chalfant'
+    # in events where Chalfant has an 18-hole registration but McCrary does not.
+    fixed_pairings = conn.execute("""
+        UPDATE event_pairings
+        SET player_name = 'Tanner Chalfant'
+        WHERE player_name = 'Justin McCrary'
+          AND holes = '18'
+          AND event_id IN (
+              SELECT DISTINCT e.id FROM events e
+              JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE OR i.event_id = e.id)
+              WHERE i.customer_id = ?
+                AND i.holes = '18'
+                AND COALESCE(i.transaction_status,'active') = 'active'
+          )
+          AND event_id NOT IN (
+              SELECT DISTINCT e.id FROM events e
+              JOIN items i ON (i.item_name = e.item_name COLLATE NOCASE OR i.event_id = e.id)
+              WHERE i.customer_id = ?
+                AND i.holes = '18'
+                AND COALESCE(i.transaction_status,'active') = 'active'
+          )
+    """, (_CHALFANT_CID, _MCCRARY_CID)).rowcount
+    if fixed_pairings:
+        logger.info("Chalfant repair: renamed %d saved pairing row(s) from McCrary to Chalfant",
+                    fixed_pairings)
+
     if total_fixed:
         logger.info(
             "Chalfant repair: re-attributed %d item(s) to customer %d "
