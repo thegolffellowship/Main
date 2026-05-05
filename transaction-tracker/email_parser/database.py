@@ -613,6 +613,52 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
              AND venmo_username = 'tchalfant'""",
     )
 
+    # Fix bad email association: tchalfant@sconservices.com was moved into customer 46
+    # (Justin McCrary) when the duplicate customer 317 (which incorrectly had tchalfant
+    # data) was merged into 46. This caused heal_items_from_customers to overwrite all
+    # of Tanner Chalfant's items with McCrary's name/email.
+    _CHALFANT_EMAIL = 'tchalfant@sconservices.com'
+    _CHALFANT_CID = 325
+    _MCCRARY_CID = 46
+
+    removed_email = conn.execute(
+        "DELETE FROM customer_emails WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
+        (_MCCRARY_CID, _CHALFANT_EMAIL),
+    ).rowcount
+    if removed_email:
+        logger.info("Removed %s from McCrary (customer 46) — bad merge artifact", _CHALFANT_EMAIL)
+
+    # Ensure Chalfant's email is on his own customer record
+    conn.execute(
+        """INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, label)
+           SELECT ?, ?, 1, 'repaired'
+           WHERE EXISTS (SELECT 1 FROM customers WHERE customer_id = ?)""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL, _CHALFANT_CID),
+    )
+
+    # Fix items corrupted by the bad association:
+    # (a) Known corrupted order R945426004 — email may already have been overwritten
+    fixed_a = conn.execute(
+        """UPDATE items
+           SET customer = 'Tanner Chalfant',
+               customer_id = ?,
+               customer_email = ?,
+               customer_phone = CASE WHEN customer_phone = '(210) 882-2755' THEN '(432) 661-9022' ELSE customer_phone END
+           WHERE order_id = 'R945426004'""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL),
+    ).rowcount
+    # (b) Any items still carrying Chalfant's email but wrongly under McCrary
+    fixed_b = conn.execute(
+        """UPDATE items
+           SET customer = 'Tanner Chalfant',
+               customer_id = ?
+           WHERE customer_id = ? AND LOWER(customer_email) = LOWER(?)""",
+        (_CHALFANT_CID, _MCCRARY_CID, _CHALFANT_EMAIL),
+    ).rowcount
+    if fixed_a or fixed_b:
+        logger.info("Re-attributed %d Tanner Chalfant item(s) from McCrary back to customer %d",
+                    fixed_a + fixed_b, _CHALFANT_CID)
+
     conn.commit()
     logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
 
