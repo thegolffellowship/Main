@@ -692,10 +692,11 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
              AND LOWER(customer_email) = LOWER(?)""",
         (_CHALFANT_EMAIL, _CHALFANT_CID, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_EMAIL),
     ).rowcount
-    # (d) Bridge via action_items.email_uid: when the original email was parsed, an
-    #     action item was created with from_name='Tanner Chalfant'. The email_uid on
-    #     that action item matches email_uid on the items row, letting us find the item
-    #     even after its customer/email fields were overwritten by normalization/heal.
+    # (d) Bridge via parse_warnings: EMAIL_DRIFT/PHONE_DRIFT warnings store the
+    #     customer name FROM the original order (before canonical override), which
+    #     is 'Tanner Chalfant'. The order_id and email_uid on those warnings match
+    #     the items rows, finding ALL corrupted orders even when customer/email on
+    #     items have been fully overwritten by the canonical McCrary values.
     fixed_d = conn.execute(
         """UPDATE items
            SET customer = 'Tanner Chalfant',
@@ -703,11 +704,20 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
                customer_email = ?,
                customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
            WHERE customer_id = ?
-             AND email_uid IS NOT NULL
-             AND email_uid IN (
-                 SELECT DISTINCT email_uid FROM action_items
-                 WHERE LOWER(from_name) = 'tanner chalfant'
-                   AND email_uid IS NOT NULL
+             AND (
+                 (order_id IS NOT NULL AND order_id IN (
+                     SELECT DISTINCT order_id FROM parse_warnings
+                     WHERE LOWER(customer) = 'tanner chalfant'
+                       AND warning_code IN ('EMAIL_DRIFT', 'PHONE_DRIFT')
+                       AND order_id IS NOT NULL
+                 ))
+                 OR
+                 (email_uid IS NOT NULL AND email_uid IN (
+                     SELECT DISTINCT email_uid FROM parse_warnings
+                     WHERE LOWER(customer) = 'tanner chalfant'
+                       AND warning_code IN ('EMAIL_DRIFT', 'PHONE_DRIFT')
+                       AND email_uid IS NOT NULL
+                 ))
              )""",
         (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_CID),
     ).rowcount
@@ -719,7 +729,15 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
             "(cases: a=%d b=%d c=%d d=%d)",
             total_fixed, _CHALFANT_CID, fixed_a, fixed_b, fixed_c, fixed_d,
         )
-        # Dismiss the mismatch action items now that the items are correctly attributed
+        # Resolve the drift warnings now that the items are correctly attributed
+        conn.execute(
+            """UPDATE parse_warnings
+               SET status = 'resolved'
+               WHERE LOWER(customer) = 'tanner chalfant'
+                 AND warning_code IN ('EMAIL_DRIFT', 'PHONE_DRIFT')
+                 AND status = 'open'""",
+        )
+        # Dismiss any COO action items for Tanner Chalfant mismatches
         conn.execute(
             """UPDATE action_items
                SET status = 'dismissed',
