@@ -334,22 +334,52 @@ The same job also:
 Manual trigger: `POST /api/admin/run-membership-reminders` (admin) returns the
 counts dict for inspection.
 
-## Email templates (all $75 / 365-day)
+## Email templates — v1.0 standards (May 2026)
 
-All five emails sit in `render_notice_email(window, term, customer)` and
-`render_confirmation_email(term, customer, order_id)`. Subject lines for the
-pre-expiry windows (`30d`, `7d`) are computed from **actual** days remaining
-between today and `expires_at` via `_time_phrase(days_left)` — not hardcoded
-to the window label. So firing the T-30 notice on a term that's actually 14
-days from expiry produces "expires in 14 days", not "in 30 days". Falls
-through to "expires today" / "expires tomorrow" / "lapsed N days ago" for
-edge cases.
+All four notice templates plus the renewal confirmation sit in
+`render_notice_email(window, term, customer, with_roster_buttons=None)` and
+`render_confirmation_email(term, customer, order_id)`.
 
-- **30d / 7d** — dynamic "Your TGF membership expires {in N days|today|tomorrow|N days ago}"
+**Subjects (locked to spec):**
+
+- **30d** — "Your TGF membership expires in 30 days"
+- **7d** — "Your TGF membership expires in 7 days"
 - **dayof** — "Your TGF membership expires today"
-- **lapsed** — "Final notice — your TGF membership has lapsed" (only window
-  with the Golf Genius opt-in/out buttons + plain-text fallback)
+- **lapsed** — "One last note from TGF"
 - **confirmation** — "Thanks for renewing your TGF membership"
+
+**Body openings (each has a unique warmth line):**
+
+- **30d** — "The Golf Fellowship is built on people like you — and we'd love to keep you in it."
+- **7d** — "The Golf Fellowship wouldn't be what it is without members like you — just didn't want this to slip by unnoticed."
+- **dayof** — "Today's the last day of your Golf Fellowship membership — and we'd really love to keep you in the crew."
+- **lapsed** — "The Fellowship is better because you were part of it — hoping we can keep it that way."
+
+**Closings (two locked variants depending on `with_roster_buttons`):**
+
+- With buttons: `_roster_buttons_block(term)` ends with "Either way, no hard feelings — just hit the button that works for you and we'll handle the rest. You're always welcome back whenever the time is right."
+- Without buttons: `_THANKS_LINE` = "Thanks for being part of The Golf Fellowship."
+
+Sign-off is consistent across both: `— The Golf Fellowship`.
+
+**Golf Genius opt-in/out section (locked, identical everywhere it appears):**
+
+> Still want the weekly invites? We send event invitations through Golf Genius every week. If that's still working for you, great. If not, just let us know and we'll take care of it:
+>
+> [✓ Keep me on the invite list] [No need to keep me posted]
+
+The Remove button is neutral grey (`#6b7280`), not red — the opt-out reads
+as a courtesy, not a destructive action.
+
+**`with_roster_buttons` defaulting:**
+
+- `None` (the default when no kwarg is passed) applies a per-window default:
+  lapsed → `True`, all others → `False`. This matches the daily-scheduler
+  behavior (lapsed always carries the section).
+- Explicit `True` / `False` overrides — used by the Send Notice Now modal's
+  toggle. The lapsed window now respects the toggle (the spec includes both
+  variants); the modal defaults the toggle to checked when the lapsed window
+  is selected and remembers the admin's override during the session.
 
 `MEMBERSHIP_PRICE = 75` is a constant. The renewal URL defaults to
 `https://thegolffellowship.com/shop/ols/products/tgf-membership` but is
@@ -358,8 +388,8 @@ helper) so the storefront link can be updated without a code deploy.
 
 The Send Notice Now modal exposes the rendered subject as an **editable**
 input with a Reset button. The send endpoint accepts an optional `subject`
-field that overrides the rendered subject — useful when the auto-generated
-subject doesn't quite read right for an unusual case.
+field that overrides the rendered subject — useful when an off-cycle send
+needs different wording (e.g. firing T-30 on a term that's already lapsed).
 
 ## Roster opt-in / opt-out (lapsed-notice buttons)
 

@@ -545,29 +545,37 @@ def _renew_button(label: str = "Renew Membership — $75") -> str:
 
 
 def _roster_buttons_block(term: dict) -> str:
-    """Render the Golf Genius opt-in/out buttons + plain-text fallback.
+    """Render the Golf Genius opt-in/out section + "Either way" closing.
 
-    Used by the lapsed final-notice template (always) and optionally by
-    the other windows when the admin checks "Include opt-in/out buttons"
-    in the Send Notice Now modal — useful when sending an early reminder
-    to a lapsed member who might want to gracefully step away rather than
-    renew.
+    Used by the lapsed final-notice template (always, by default) and
+    optionally by the other windows when the admin checks "Include opt-in/out
+    buttons" in the Send Notice Now modal — useful when sending an early
+    reminder to a lapsed member who might want to gracefully step away
+    rather than renew.
 
-    Tone is intentionally soft: "we don't want to crowd your inbox" /
-    "totally fine either way" / "you're always welcome back any time".
-    The opt-out should feel like a courtesy, not a threat.
+    Copy locked per the v1.0 email standards (TGF MEMBERSHIP RENEWAL EMAILS,
+    May 2026): same block across every email that includes it.
+
+    Note: this block does NOT include the "— The Golf Fellowship" sign-off;
+    the caller appends that.  The "Either way" line plus this whole opt-in/out
+    section IS the closing for emails that include it (no separate "Thanks
+    for being part of TGF" line).
     """
     keep_url, remove_url = _roster_action_urls(term)
-    return f"""<p><strong>About Golf Genius:</strong> we don't want to crowd your inbox with our weekly event invitations if they're no longer useful — totally fine either way. If it's easy, let us know what works best for you:</p>
+    return f"""<p><strong>Still want the weekly invites?</strong> We send event invitations through Golf Genius every week. If that's still working for you, great. If not, just let us know and we'll take care of it:</p>
 <p style="margin:1.25rem 0;">
-  <a href="{keep_url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600; margin-right:0.5rem;">✅ Keep me on the invite list</a>
+  <a href="{keep_url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600; margin-right:0.5rem;">✓ Keep me on the invite list</a>
   <a href="{remove_url}" style="display:inline-block; background:#6b7280; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600;">No need to keep me posted</a>
 </p>
 <p style="font-size:0.82rem; color:#6b7280;">If the buttons don't work in your email client:<br>
   Keep me on the invite list: <a href="{keep_url}" style="color:#2563eb;">{keep_url}</a><br>
   No need to keep me posted: <a href="{remove_url}" style="color:#2563eb;">{remove_url}</a>
 </p>
-<p>Either button just sends a quick note to <a href="mailto:{ADMIN_NOTIFY_EMAIL}" style="color:#2563eb;">{ADMIN_NOTIFY_EMAIL}</a> so we know what to do. If we don't hear from you in the next {NO_RESPONSE_DIGEST_DAYS} days, we'll quietly take you off the rosters so we're not buggin' you — and you're always welcome back any time.</p>"""
+<p>Either way, no hard feelings — just hit the button that works for you and we'll handle the rest. You're always welcome back whenever the time is right.</p>"""
+
+
+# Locked-spec closing line for emails that don't include the opt-in/out buttons.
+_THANKS_LINE = "<p>Thanks for being part of The Golf Fellowship.</p>"
 
 
 def _time_phrase(days_left: int) -> str:
@@ -592,118 +600,76 @@ def render_notice_email(
     window: str,
     term: dict,
     customer: dict,
-    with_roster_buttons: bool = False,
+    with_roster_buttons: Optional[bool] = None,
 ) -> tuple[str, str]:
     """Return (subject, html_body) for a given notice window.
 
     `window` ∈ {"30d", "7d", "dayof", "lapsed"}.
     `term` has at minimum: expires_at.
     `customer` has at minimum: first_name.
-    `with_roster_buttons` — when True (and window != "lapsed"), append the
-    Golf Genius opt-in/out buttons block to the body. Useful for sending an
-    early reminder to a lapsed member who might want to gracefully bow out.
-    The lapsed window always includes the buttons regardless of this flag.
+    `with_roster_buttons` — when True, the email includes the Golf Genius
+    opt-in/out section + "Either way, no hard feelings…" closing.  When False,
+    it ends with the simple "Thanks for being part of The Golf Fellowship."
+    line.  When None (default), the lapsed window includes buttons (preserves
+    the existing daily-scheduler behavior) and the others do not.
 
-    Subject AND body language are computed from the **actual** days remaining
-    (today vs `expires_at`), not the window label, so a manually-fired
-    Send Notice Now on a mid-cycle term reads correctly. E.g. firing the
-    "T-30" window on a term that's already lapsed 69 days uses past-tense
-    body copy ("lapsed on Feb 24, 2026 — 69 days ago") instead of the
-    nonsensical "expires on Feb 24, 2026". The window still controls tone
-    (heads-up vs reminder vs final notice), not factual claims about state.
+    Body copy is **locked to the v1.0 email standards** (May 2026 spec):
+    each window has a unique warmth line and fixed body, regardless of
+    actual days_left.  The Send Notice Now modal lets admins edit the
+    subject inline if a non-canonical case needs different wording (e.g.
+    firing T-30 on a term that's already 69 days lapsed).
     """
     first_name = customer.get("first_name") or "there"
-    expires_at = term["expires_at"]
-    today = date.today()
-    try:
-        exp_d = datetime.strptime(expires_at[:10], "%Y-%m-%d").date()
-    except ValueError:
-        exp_d = today
-    days_left = (exp_d - today).days
-    days_lapsed = max(0, -days_left)
-    expires_pretty = exp_d.strftime("%B %-d, %Y")
-    phrase = _time_phrase(days_left)  # "in 14 days" / "tomorrow" / "today" / "2 days ago"
 
-    # Subject is identical across the three pre-expiry windows — they only
-    # differ in body tone, not in the factual claim about state.
-    if days_left > 0:
-        soft_subject = f"Your TGF membership expires {phrase}"
-    elif days_left == 0:
-        soft_subject = "Your TGF membership expires today"
-    else:
-        soft_subject = f"Your TGF membership lapsed {days_lapsed} days ago"
+    # Default lapsed → with buttons, others → without buttons.  This matches
+    # the prior daily-scheduler behavior where the lapsed final notice always
+    # carried the opt-in/out section.
+    if with_roster_buttons is None:
+        with_roster_buttons = (window == "lapsed")
 
-    # State-aware fact phrase used as the subject of the opening line.
-    # "expires on … (in 14 days)" / "expires today" / "lapsed on … (69 days ago)"
-    if days_left > 0:
-        state_phrase = f"expires on <strong>{expires_pretty}</strong> ({phrase})"
-    elif days_left == 0:
-        state_phrase = "expires <strong>today</strong>"
-    else:
-        state_phrase = f"lapsed on <strong>{expires_pretty}</strong> ({days_lapsed} days ago)"
-
-    # Optional Golf Genius opt-in/out block — appended to the body for
-    # non-lapsed windows when the admin opts in via Send Notice Now.
-    extra_block = _roster_buttons_block(term) if with_roster_buttons else ""
+    closing_block = _roster_buttons_block(term) if with_roster_buttons else _THANKS_LINE
 
     if window == "30d":
-        if days_left > 0:
-            opening = f"A heads-up that your membership in The Golf Fellowship {state_phrase}."
-            closing = "Renewals run for 365 days from the date of purchase. If you've already renewed, no action needed — these reminders shut off automatically once the purchase lands in our system."
-        elif days_left == 0:
-            opening = f"A heads-up that your membership in The Golf Fellowship {state_phrase} — last chance to renew before it lapses."
-            closing = "Already renewed in the last 24 hours? Please ignore — your purchase will close out these notifications as soon as it parses."
-        else:
-            opening = f"A heads-up that your membership in The Golf Fellowship {state_phrase} and we haven't seen a renewal yet."
-            closing = "If you've recently renewed, these reminders shut off automatically once the purchase lands in our system. Otherwise, the link above gets you back to active in a few clicks."
+        subject = "Your TGF membership expires in 30 days"
         body = f"""<p>Hi {first_name},</p>
-<p>{opening} Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap:</p>
+<p>The Golf Fellowship is built on people like you — and we'd love to keep you in it.</p>
+<p>Just a heads-up that your membership expires in 30 days. Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap.</p>
 {_renew_button()}
-<p>{closing}</p>
-{extra_block}
-<p>Thanks for being part of The Golf Fellowship.</p>
+<p>Just renewed? Ignore this — our system will catch up and these will stop automatically.</p>
+{closing_block}
 <p>— The Golf Fellowship</p>"""
-        return soft_subject, _email_shell(body)
+        return subject, _email_shell(body)
 
     if window == "7d":
-        if days_left > 0:
-            opening = f"Quick reminder — your membership in The Golf Fellowship {state_phrase}."
-        elif days_left == 0:
-            opening = f"Quick reminder — your membership in The Golf Fellowship {state_phrase}."
-        else:
-            opening = f"Quick note — your membership in The Golf Fellowship {state_phrase} and we haven't seen a renewal yet."
+        subject = "Your TGF membership expires in 7 days"
         body = f"""<p>Hi {first_name},</p>
-<p>{opening} Renewal is only <strong>$75 for the next 12 months</strong>:</p>
+<p>The Golf Fellowship wouldn't be what it is without members like you — just didn't want this to slip by unnoticed.</p>
+<p>Your membership expires in 7 days and we haven't seen a renewal yet. Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap.</p>
 {_renew_button()}
-<p>Once your renewal comes through, these reminders stop on their own.</p>
-{extra_block}
+<p>Just renewed? Ignore this — our system will catch up and these will stop automatically.</p>
+{closing_block}
 <p>— The Golf Fellowship</p>"""
-        return soft_subject, _email_shell(body)
+        return subject, _email_shell(body)
 
     if window == "dayof":
-        if days_left > 0:
-            opening = f"Your membership in The Golf Fellowship {state_phrase} — renewing now keeps things uninterrupted."
-        elif days_left == 0:
-            opening = "Today is the last day of your current term with The Golf Fellowship."
-        else:
-            opening = f"Your membership in The Golf Fellowship {state_phrase} — renewing now picks back up where you left off."
+        subject = "Your TGF membership expires today"
         body = f"""<p>Hi {first_name},</p>
-<p>{opening} Renewal is only <strong>$75 for the next 12 months</strong>:</p>
+<p>Today's the last day of your Golf Fellowship membership — and we'd really love to keep you in the crew.</p>
+<p>Renewing today picks back up where you left off — no gap in your history or pricing. Renewal is only <strong>$75 for the next 12 months.</strong></p>
 {_renew_button()}
-<p>Already renewed in the last 24 hours? Please ignore — your purchase will close out these notifications as soon as it parses.</p>
-{extra_block}
+<p>Already renewed? No action needed — these stop automatically once today's payment processes.</p>
+{closing_block}
 <p>— The Golf Fellowship</p>"""
-        return soft_subject, _email_shell(body)
+        return subject, _email_shell(body)
 
     if window == "lapsed":
-        # The lapsed final notice ALWAYS includes the opt-in/out buttons —
-        # the with_roster_buttons flag is irrelevant here.
-        subject = "Final notice — your TGF membership has lapsed"
+        subject = "One last note from TGF"
         body = f"""<p>Hi {first_name},</p>
-<p>Your membership in The Golf Fellowship expired on <strong>{expires_pretty}</strong> ({days_lapsed} days ago) and we haven't seen a renewal come through yet. Renewal is still only <strong>$75 for the next 12 months</strong>:</p>
+<p>The Fellowship is better because you were part of it — hoping we can keep it that way.</p>
+<p>It's not too late — renewal is still only <strong>$75 for the next 12 months</strong> and everything picks back up right where you left off.</p>
 {_renew_button()}
-{_roster_buttons_block(term)}
-<p>Thanks,<br>The Golf Fellowship</p>"""
+{closing_block}
+<p>— The Golf Fellowship</p>"""
         return subject, _email_shell(body)
 
     raise ValueError(f"Unknown notice window: {window}")
@@ -716,13 +682,14 @@ def preview_notice(
     term_id: int,
     window: str,
     db_path=None,
-    with_roster_buttons: bool = False,
+    with_roster_buttons: Optional[bool] = None,
 ) -> dict:
     """Render the notice email for an existing term WITHOUT sending it.
 
-    `with_roster_buttons` (optional) — append the Golf Genius opt-in/out
-    buttons block to the body. Ignored when window == "lapsed" (already
-    has them by design).
+    `with_roster_buttons` (optional) — when True the email includes the
+    Golf Genius opt-in/out section; when False it doesn't; when None the
+    lapsed window defaults to True and the others to False (matches the
+    daily-scheduler behavior).
 
     Returns {to, subject, html, term, customer, can_send, reason}.  `can_send`
     is False when the recipient has no primary email on file (admin can still
@@ -799,7 +766,7 @@ def send_notice_now(
     send_email: Callable,
     db_path=None,
     subject_override: Optional[str] = None,
-    with_roster_buttons: bool = False,
+    with_roster_buttons: Optional[bool] = None,
 ) -> dict:
     """Render + immediately send a notice for an existing term.
 
@@ -809,8 +776,8 @@ def send_notice_now(
     `subject_override` (optional) replaces the rendered subject — used by
     the Send Notice Now modal so admins can hand-edit the subject before
     sending without leaving the preview page.
-    `with_roster_buttons` (optional) — include Golf Genius opt-in/out
-    buttons in the body. Ignored when window == "lapsed".
+    `with_roster_buttons` (optional) — None applies the per-window default
+    (lapsed → True, others → False); explicit True/False overrides.
 
     Returns {ok, sent_to, subject, stamped_column} or {ok: False, error}.
     """

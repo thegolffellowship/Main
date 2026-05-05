@@ -1703,15 +1703,21 @@
 
         async function loadPreview() {
             const window = sel.value;
-            // The lapsed final notice always includes the opt-in/out buttons by
-            // design — disable + visually grey out the toggle so admins don't
-            // get confused.  The other windows let the admin choose.
-            const isLapsed = window === 'lapsed';
+            // Confirmation never includes opt-in/out buttons (doesn't apply).
+            // Lapsed defaults to checked but the admin can uncheck — the v1.0
+            // email standards spec covers both with and without variants.
+            // Other windows default unchecked.
             const isConfirmation = window === 'confirmation';
-            rosterToggle.disabled = isLapsed || isConfirmation;
-            rosterToggleWrap.style.opacity = (isLapsed || isConfirmation) ? '0.5' : '1';
-            if (isLapsed) rosterToggle.checked = true;        // shown for clarity
-            if (isConfirmation) rosterToggle.checked = false; // doesn't make sense
+            const isLapsed = window === 'lapsed';
+            rosterToggle.disabled = isConfirmation;
+            rosterToggleWrap.style.opacity = isConfirmation ? '0.5' : '1';
+            if (isConfirmation) {
+                rosterToggle.checked = false;
+            } else if (isLapsed && !rosterToggle._lapsedTouched) {
+                // Reset to checked when arriving at lapsed unless the admin
+                // explicitly toggled it during this session.
+                rosterToggle.checked = true;
+            }
             const withRoster = rosterToggle.checked && !isConfirmation;
             status.textContent = 'Loading…';
             sendBtn.disabled = true;
@@ -1747,7 +1753,12 @@
         }
 
         sel.addEventListener('change', loadPreview);
-        rosterToggle.addEventListener('change', loadPreview);
+        rosterToggle.addEventListener('change', () => {
+            // Mark the toggle as user-touched for the lapsed window so we don't
+            // re-default to checked when they switch away and back.
+            if (sel.value === 'lapsed') rosterToggle._lapsedTouched = true;
+            loadPreview();
+        });
         subjReset.addEventListener('click', () => { subjInput.value = lastAutoSubject; });
         overlay.querySelector('.notice-cancel').addEventListener('click', () => overlay.remove());
         sendBtn.addEventListener('click', async () => {
@@ -1755,15 +1766,17 @@
             const subject = (subjInput.value || '').trim();
             if (!subject) { alert('Subject is required'); return; }
             const withRoster = rosterToggle.checked && window !== 'confirmation';
-            if (!confirm(`Send the "${sel.options[sel.selectedIndex].text}" email now?\n\nSubject: ${subject}${withRoster && window !== 'lapsed' ? '\n(with opt-in/out buttons)' : ''}`)) return;
+            const buttonsNote = window === 'confirmation' ? '' :
+                (withRoster ? '\n(with opt-in/out buttons)' : '\n(without opt-in/out buttons)');
+            if (!confirm(`Send the "${sel.options[sel.selectedIndex].text}" email now?\n\nSubject: ${subject}${buttonsNote}`)) return;
             sendBtn.disabled = true;
             sendBtn.textContent = 'Sending…';
             try {
                 const body = { window };
                 if (subject !== lastAutoSubject) body.subject = subject;
-                // Lapsed always includes the buttons by design — only pass the
-                // flag for the other windows where the toggle changes behavior.
-                if (withRoster && window !== 'lapsed') body.with_roster_buttons = true;
+                // Send the explicit toggle state for non-confirmation windows.
+                // Confirmation can't include buttons by design.
+                if (window !== 'confirmation') body.with_roster_buttons = withRoster;
                 const res = await fetch(`/api/memberships/${termId}/send-notice`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

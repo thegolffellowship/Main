@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.11.6";
+window.TGF_VERSION = "2.12.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.12.0",
+    date: "2026-05-04",
+    title: "Membership emails: locked v1.0 copy standards (May 2026)",
+    changes: [
+      "All four pre-lapse + lapsed templates rewritten to the v1.0 email standards spec. Each opens with a unique warmth line: T-30 'built on people like you', T-7 'wouldn't be what it is without members like you', T-0 'love to keep you in the crew', T+14 lapsed 'better because you were part of it'. Tone is appreciative, not transactional.",
+      "Subject lines are now locked to the spec (T-30: 'Your TGF membership expires in 30 days' / T-7: '... 7 days' / T-0: '... today' / lapsed: 'One last note from TGF'). The Send Notice Now modal still allows inline subject editing for non-canonical cases.",
+      "Body language reverts to spec-canonical wording (drops the prior 14-day-state-aware variants). Editable subject in the modal is the escape hatch for off-cycle sends.",
+      "Golf Genius opt-in/out section locked: 'Still want the weekly invites? We send event invitations through Golf Genius every week...' Closing for opted-in emails is the 'Either way, no hard feelings' line. Closing for opt-out-free emails is 'Thanks for being part of The Golf Fellowship.'",
+      "Lapsed final notice now respects the with_roster_buttons toggle (was always-on). Daily scheduler still defaults lapsed to with-buttons; admin Send Notice Now defaults lapsed checked but allows uncheck for the spec's without-buttons variant.",
+      "Confirmation (renewal thank-you) email unchanged — not in the v1.0 spec.",
+    ],
+  },
   {
     version: "2.11.6",
     date: "2026-05-04",
