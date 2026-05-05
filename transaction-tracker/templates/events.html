@@ -4444,6 +4444,23 @@
         const evCount9 = registrants.filter(rr => rr.holes === "9").length;
         const evCount18 = registrants.filter(rr => rr.holes === "18").length;
         const showHcp18Only = evCount9 === 0 && evCount18 > 0;
+        // Detect active rows with duplicate customer+event registrations for badge display.
+        const _activeRegistrations = registrants.filter(rr =>
+            (rr.transaction_status || "active") === "active" &&
+            !String(rr.id).startsWith("gg-rsvp") &&
+            !(rr.email_uid || "").startsWith("manual-")
+        );
+        const _dupItemIds = new Set();
+        const _seen = {};
+        _activeRegistrations.forEach(rr => {
+            const key = (rr.customer_id || (rr.customer || "").toLowerCase());
+            if (_seen[key]) {
+                _dupItemIds.add(rr.id);
+                _dupItemIds.add(_seen[key]);
+            } else {
+                _seen[key] = rr.id;
+            }
+        });
         filtered.forEach(r => {
             const txStatus = r.transaction_status || "active";
             const isRsvpOnly = txStatus === "rsvp_only";
@@ -4567,6 +4584,9 @@
                         }
                     }
                     tag += couponTag(r);
+                    if (_dupItemIds.has(r.id)) {
+                        tag += ` <span class="status-tag" style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:4px;font-weight:700;" title="Duplicate active registration for this event">⚠ Dup</span>`;
+                    }
                     const infoIcon = hasExtraInfo ? '<span class="player-info-icon" title="Has notes / partner / fellowship info">i</span>' : '';
                     html += `<td style="${style}"><a class="cell-link" href="/customers?name=${encodeURIComponent(r.customer || "")}">${escapeHtml(displayName(r.customer, r.user_status))}</a>${tag}${infoIcon}</td>`;
                 } else if (c.key === "item_price") {
@@ -4615,6 +4635,7 @@
                         } else {
                             items.push(`<button class="ev-menu-item btn-credit" data-credit-id="${r.id}">Credit</button>`);
                             items.push(`<button class="ev-menu-item btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}">WD</button>`);
+                            items.push(`<button class="ev-menu-item btn-assign-guest-action" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Assign this spot to a guest player">Assign Guest</button>`);
                             if (isManualEmailUidRow) items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
                         }
                     } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
@@ -5311,6 +5332,33 @@
                 const guestName = prompt(
                     `This GUEST registration is under "${buyerName}".\n\n` +
                     `Enter the actual guest player's name:`
+                );
+                if (!guestName || !guestName.trim()) return;
+                try {
+                    const res = await fetch(`/api/items/${itemId}/assign-guest`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ guest_name: guestName.trim() }),
+                    });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        alert(data.error || "Failed to assign guest name.");
+                        return;
+                    }
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Failed to assign guest name."); }
+            });
+        });
+
+        container.querySelectorAll(".btn-assign-guest-action").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(btn.dataset.itemId);
+                const buyerName = btn.dataset.buyerName || "";
+                const guestName = prompt(
+                    `Assign a guest name to this registration (currently under "${buyerName}").\n\n` +
+                    `Enter the guest player's full name:`
                 );
                 if (!guestName || !guestName.trim()) return;
                 try {

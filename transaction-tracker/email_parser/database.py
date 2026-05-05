@@ -4952,10 +4952,14 @@ def _backfill_event_id_on_string_tables(conn: sqlite3.Connection) -> None:
             logger.info("Backfilled event_id for %d %s rows", updated, tbl)
 
 
-def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
+def save_items(rows: list[dict], db_path: str | Path | None = None,
+               _alerts_out: list | None = None) -> int:
     """
     Insert item rows into the database, skipping duplicates
     (by email_uid + item_index).  Returns the number of newly inserted rows.
+
+    If _alerts_out is a list, duplicate/guest-purchase alerts are appended to it
+    so the caller can send immediate notifications.
     """
     with managed_connection(db_path) as conn:
         placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
@@ -5121,6 +5125,87 @@ def save_items(rows: list[dict], db_path: str | Path | None = None) -> int:
                                             rsvp_match["id"], cust_name, event_name_val, new_item_id)
                     except Exception:
                         logger.warning("RSVP replacement check failed for item %s",
+                                       row.get("email_uid"), exc_info=True)
+
+                    # ── Duplicate / guest-purchase detection ──
+                    try:
+                        if _alerts_out is not None and merchant_val == "The Golf Fellowship":
+                            _dc_cid = row.get("customer_id")
+                            _dc_name = row.get("customer") or ""
+                            _dc_event = row.get("item_name") or ""
+                            _dc_order = row.get("order_id") or ""
+                            if (_dc_cid or _dc_name) and _dc_event and not row.get("transferred_from_id"):
+                                _prior = None
+                                if _dc_cid:
+                                    _prior = conn.execute(
+                                        """SELECT id, order_id FROM items
+                                           WHERE customer_id = ? AND item_name = ? COLLATE NOCASE
+                                             AND COALESCE(transaction_status,'active') = 'active'
+                                             AND id != ?
+                                             AND COALESCE(email_uid,'') NOT LIKE 'manual-%'
+                                           LIMIT 1""",
+                                        (_dc_cid, _dc_event, new_item_id),
+                                    ).fetchone()
+                                if not _prior and _dc_name:
+                                    _prior = conn.execute(
+                                        """SELECT id, order_id FROM items
+                                           WHERE customer = ? COLLATE NOCASE AND item_name = ? COLLATE NOCASE
+                                             AND COALESCE(transaction_status,'active') = 'active'
+                                             AND id != ?
+                                             AND COALESCE(email_uid,'') NOT LIKE 'manual-%'
+                                           LIMIT 1""",
+                                        (_dc_name, _dc_event, new_item_id),
+                                    ).fetchone()
+                                if _prior:
+                                    _pr_val = (row.get("partner_request") or "").strip().lower()
+                                    _buyer_lower = _dc_name.strip().lower()
+                                    _is_guest = bool(_pr_val and _pr_val == _buyer_lower)
+                                    _atype = "guest_purchase" if _is_guest else "duplicate_reg"
+                                    if _is_guest:
+                                        _asummary = (
+                                            f"{_dc_name} registered for {_dc_event} twice in order "
+                                            f"{_dc_order}. The second spot appears to be for a guest "
+                                            f"— assign the guest player's name."
+                                        )
+                                    else:
+                                        _asummary = (
+                                            f"{_dc_name} has two active registrations for {_dc_event}: "
+                                            f"item #{dict(_prior)['id']} (order {dict(_prior)['order_id']}) "
+                                            f"and item #{new_item_id} (order {_dc_order}). "
+                                            f"Consider crediting the duplicate."
+                                        )
+                                    _ai_exists = conn.execute(
+                                        """SELECT id FROM action_items
+                                           WHERE category = 'duplicate_registration'
+                                             AND status = 'open'
+                                             AND subject LIKE ?""",
+                                        (f"%{_dc_name}%{_dc_event}%",),
+                                    ).fetchone()
+                                    if not _ai_exists:
+                                        conn.execute(
+                                            """INSERT INTO action_items
+                                               (email_uid, subject, from_name, from_email, summary,
+                                                urgency, category, email_date, confidence)
+                                               VALUES (?, ?, 'Registration Monitor', 'system@tgf',
+                                                       ?, 'high', 'duplicate_registration', date('now'), 90)""",
+                                            (
+                                                row.get("email_uid"),
+                                                f"Duplicate registration: {_dc_name} — {_dc_event}",
+                                                _asummary,
+                                            ),
+                                        )
+                                    _alerts_out.append({
+                                        "type": _atype,
+                                        "customer": _dc_name,
+                                        "event_name": _dc_event,
+                                        "order_id": _dc_order,
+                                        "new_item_id": new_item_id,
+                                        "prior_item_id": dict(_prior)["id"],
+                                        "prior_order_id": dict(_prior)["order_id"],
+                                        "summary": _asummary,
+                                    })
+                    except Exception:
+                        logger.warning("Duplicate detection failed for item %s",
                                        row.get("email_uid"), exc_info=True)
 
                     # ── Track GoDaddy orders for order-level accounting ──

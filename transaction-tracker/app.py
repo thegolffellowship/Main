@@ -435,10 +435,13 @@ def check_inbox():
             total_parsed += 1
             _inbox_check_status["emails_parsed"] = total_parsed
             if rows:
-                count = save_items(rows)
+                _dup_alerts: list = []
+                count = save_items(rows, _alerts_out=_dup_alerts)
                 total_saved += count
                 _inbox_check_status["items_saved"] = total_saved
                 logger.info("Email %d/%d: saved %d items", i, len(new_emails), count)
+                for _alert in _dup_alerts:
+                    _send_dup_reg_alert(_alert)
                 # Persist any parse warnings (e.g. item_name is just a course name)
                 try:
                     save_parse_warnings(rows)
@@ -780,6 +783,72 @@ def check_rsvp_inbox():
 
     # Check for credited players who just RSVPd and send admin alert emails
     _send_rsvp_credit_alerts()
+
+
+def _send_dup_reg_alert(alert: dict) -> None:
+    """Send an immediate email alert for a duplicate or guest-purchase registration."""
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    coo_to = os.getenv("COO_EMAIL_TO") or from_address
+    if not all([tenant_id, client_id, client_secret, from_address, coo_to]):
+        logger.warning("Email not configured — skipping dup-reg alert")
+        return
+    try:
+        atype = alert["type"]
+        customer = alert["customer"]
+        event_name = alert["event_name"]
+        order_id = alert.get("order_id", "")
+        new_id = alert.get("new_item_id", "")
+        prior_id = alert.get("prior_item_id", "")
+        prior_order = alert.get("prior_order_id", "")
+
+        if atype == "guest_purchase":
+            subject = f"⚠ Guest purchase needs name — {customer} / {event_name}"
+            headline = "Guest Purchase Detected"
+            color = "#f59e0b"
+            details = (
+                f"<strong>{customer}</strong> purchased two spots for <strong>{event_name}</strong> "
+                f"in order <strong>{order_id}</strong>. The second spot appears to be for a guest "
+                f"but no guest name was provided."
+            )
+            action_label = "Assign Guest Name"
+        else:
+            subject = f"⚠ Duplicate registration — {customer} / {event_name}"
+            headline = "Duplicate Registration Detected"
+            color = "#ef4444"
+            details = (
+                f"<strong>{customer}</strong> now has two active registrations for "
+                f"<strong>{event_name}</strong>: "
+                f"item #{prior_id} (order {prior_order}) and item #{new_id} (order {order_id})."
+            )
+            action_label = "Review &amp; Credit Duplicate"
+
+        base_url = "https://tgf-tracker.up.railway.app"
+        events_url = f"{base_url}/events"
+        html_body = f"""<!DOCTYPE html>
+<html><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+<div style="border-left:4px solid {color};padding:12px 16px;background:#fafafa;margin-bottom:16px;">
+  <h2 style="margin:0 0 8px;color:{color};">{headline}</h2>
+  <p style="margin:0;">{details}</p>
+</div>
+<p><strong>Action required:</strong> {action_label}</p>
+<p><a href="{events_url}" style="background:{color};color:#fff;padding:8px 16px;
+   border-radius:4px;text-decoration:none;display:inline-block;">View Events Tab &rarr;</a></p>
+<p style="color:#6b7280;font-size:0.85em;">{alert.get('summary','')}</p>
+</body></html>"""
+        ok = send_mail_graph(
+            tenant_id=tenant_id, client_id=client_id,
+            client_secret=client_secret, from_address=from_address,
+            to_address=coo_to, subject=subject, html_body=html_body,
+        )
+        if ok:
+            logger.info("Dup-reg alert sent: %s / %s (%s)", customer, event_name, atype)
+        else:
+            logger.warning("Dup-reg alert send failed: %s / %s", customer, event_name)
+    except Exception:
+        logger.exception("_send_dup_reg_alert failed")
 
 
 def _send_rsvp_credit_alerts():
@@ -1644,7 +1713,10 @@ def api_connector_ingest():
         items = data["items"]
         if not isinstance(items, list) or not items:
             return jsonify({"error": "'items' must be a non-empty array."}), 400
-        count = save_items(items)
+        _dup_alerts_c: list = []
+        count = save_items(items, _alerts_out=_dup_alerts_c)
+        for _al in _dup_alerts_c:
+            _send_dup_reg_alert(_al)
         return jsonify({"status": "ok", "inserted": count, "received": len(items)})
 
     # Format 2: raw email for AI parsing
@@ -1659,7 +1731,10 @@ def api_connector_ingest():
 
         rows = parse_emails([raw])
         if rows:
-            count = save_items(rows)
+            _dup_alerts_r: list = []
+            count = save_items(rows, _alerts_out=_dup_alerts_r)
+            for _al in _dup_alerts_r:
+                _send_dup_reg_alert(_al)
             return jsonify({"status": "ok", "inserted": count, "parsed_items": len(rows)})
         return jsonify({"status": "ok", "inserted": 0, "message": "No items could be parsed from the email."}), 200
 
@@ -2379,7 +2454,10 @@ def api_reimport_order():
                 "message": "Parser returned 0 items — email body may be malformed.",
             })
 
-        inserted = save_items(parsed_rows)
+        _dup_alerts_ri: list = []
+        inserted = save_items(parsed_rows, _alerts_out=_dup_alerts_ri)
+        for _al in _dup_alerts_ri:
+            _send_dup_reg_alert(_al)
         return jsonify({
             "status": "ok",
             "email_uid": email_uid,
