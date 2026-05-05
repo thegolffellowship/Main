@@ -746,10 +746,20 @@ def _repair_chalfant_attribution(conn: sqlite3.Connection) -> None:
     #     McCrary's (e.g. name lookup fell back to the buyer's cid), fix it here.
     #     Don't overwrite customer_email — it was intentionally cleared (guest slot);
     #     heal_items_from_customers will populate Chalfant's canonical email afterward.
+    # (f) Guest items: McCrary bought for Chalfant — find via partner_request on McCrary's
+    #     companion rows; companion guest items have notes='Purchased by Justin McCrary'
+    #     but customer may not be 'Tanner Chalfant', so we bridge via order_id.
     fixed_f = conn.execute(
-        """UPDATE items SET customer_id = ?
-           WHERE customer = 'Tanner Chalfant' AND customer_id = ?""",
-        (_CHALFANT_CID, _MCCRARY_CID),
+        """UPDATE items
+           SET customer = 'Tanner Chalfant', customer_id = ?, customer_email = ?
+           WHERE customer_id = ?
+             AND order_id IN (
+                 SELECT DISTINCT order_id FROM items
+                 WHERE customer_id = ?
+                   AND LOWER(COALESCE(partner_request, '')) LIKE '%chalfant%'
+             )
+             AND LOWER(COALESCE(notes, '')) LIKE '%purchased by justin mccrary%'""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_CID, _MCCRARY_CID),
     ).rowcount
 
     total_fixed = fixed_a + fixed_b + fixed_c + fixed_d + fixed_e + fixed_f
