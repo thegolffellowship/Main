@@ -618,8 +618,11 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
     # data) was merged into 46. This caused heal_items_from_customers to overwrite all
     # of Tanner Chalfant's items with McCrary's name/email.
     _CHALFANT_EMAIL = 'tchalfant@sconservices.com'
+    _CHALFANT_PHONE = '(432) 661-9022'
     _CHALFANT_CID = 325
     _MCCRARY_CID = 46
+    _MCCRARY_EMAIL = 'justinmccrary@elliottelectric.com'
+    _MCCRARY_PHONE = '(210) 882-2755'
 
     removed_email = conn.execute(
         "DELETE FROM customer_emails WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
@@ -628,47 +631,102 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
     if removed_email:
         logger.info("Removed %s from McCrary (customer 46) — bad merge artifact", _CHALFANT_EMAIL)
 
-    # Ensure Chalfant's email is on his own customer record
+    # Ensure Chalfant's email is on his own customer record.
+    # INSERT OR IGNORE with is_primary=0 first (avoids unique-index violation if another
+    # primary already exists), then explicitly promote it to primary after clearing others.
     conn.execute(
         """INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, label)
-           SELECT ?, ?, 1, 'repaired'
+           SELECT ?, ?, 0, 'repaired'
            WHERE EXISTS (SELECT 1 FROM customers WHERE customer_id = ?)""",
         (_CHALFANT_CID, _CHALFANT_EMAIL, _CHALFANT_CID),
     )
+    # Clear any other primary for Chalfant so the unique partial index allows the next UPDATE
+    conn.execute(
+        """UPDATE customer_emails SET is_primary = 0
+           WHERE customer_id = ? AND LOWER(email) != LOWER(?) AND is_primary = 1""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL),
+    )
+    conn.execute(
+        """UPDATE customer_emails SET is_primary = 1
+           WHERE customer_id = ? AND LOWER(email) = LOWER(?)""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL),
+    )
+
+    # Ensure Chalfant's customers.phone is his real number, not McCrary's contaminated value.
+    # heal_items_from_customers reads customers.phone → items after this repair runs, so this
+    # must be correct before heal overwrites items.customer_phone at startup.
+    conn.execute(
+        """UPDATE customers SET phone = ?
+           WHERE customer_id = ?
+             AND (phone IS NULL OR TRIM(phone) = '' OR phone = ?)""",
+        (_CHALFANT_PHONE, _CHALFANT_CID, _MCCRARY_PHONE),
+    )
 
     # Fix items corrupted by the bad association:
-    # (a) Known corrupted order R945426004
+    # (a) Known corrupted order — try several order_id formats used by GoDaddy
     fixed_a = conn.execute(
         """UPDATE items
            SET customer = 'Tanner Chalfant',
                customer_id = ?,
                customer_email = ?,
-               customer_phone = CASE WHEN customer_phone = '(210) 882-2755' THEN '(432) 661-9022' ELSE customer_phone END
-           WHERE order_id = 'R945426004'""",
-        (_CHALFANT_CID, _CHALFANT_EMAIL),
+               customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
+           WHERE order_id IN ('R945426004', '#R945426004', 'R-945426004', '945426004')""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE),
     ).rowcount
     # (b) Items with Chalfant's email wrongly under McCrary's customer_id
     fixed_b = conn.execute(
         """UPDATE items
            SET customer = 'Tanner Chalfant',
-               customer_id = ?
+               customer_id = ?,
+               customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
            WHERE customer_id = ? AND LOWER(customer_email) = LOWER(?)""",
-        (_CHALFANT_CID, _MCCRARY_CID, _CHALFANT_EMAIL),
+        (_CHALFANT_CID, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_CID, _CHALFANT_EMAIL),
     ).rowcount
     # (c) Items still named 'Tanner Chalfant' but carrying McCrary's email (partial heal)
-    #     — fix their email back to Chalfant's so the name-normalization guard works
     fixed_c = conn.execute(
         """UPDATE items
            SET customer_email = ?,
                customer_id = ?,
-               customer_phone = CASE WHEN customer_phone = '(210) 882-2755' THEN '(432) 661-9022' ELSE customer_phone END
+               customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
            WHERE customer = 'Tanner Chalfant'
-             AND LOWER(customer_email) = 'justinmccrary@elliottelectric.com'""",
-        (_CHALFANT_EMAIL, _CHALFANT_CID),
+             AND LOWER(customer_email) = LOWER(?)""",
+        (_CHALFANT_EMAIL, _CHALFANT_CID, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_EMAIL),
     ).rowcount
-    if fixed_a or fixed_b or fixed_c:
-        logger.info("Re-attributed %d Tanner Chalfant item(s) from McCrary back to customer %d",
-                    fixed_a + fixed_b + fixed_c, _CHALFANT_CID)
+    # (d) Bridge via action_items.email_uid: when the original email was parsed, an
+    #     action item was created with from_name='Tanner Chalfant'. The email_uid on
+    #     that action item matches email_uid on the items row, letting us find the item
+    #     even after its customer/email fields were overwritten by normalization/heal.
+    fixed_d = conn.execute(
+        """UPDATE items
+           SET customer = 'Tanner Chalfant',
+               customer_id = ?,
+               customer_email = ?,
+               customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
+           WHERE customer_id = ?
+             AND email_uid IS NOT NULL
+             AND email_uid IN (
+                 SELECT DISTINCT email_uid FROM action_items
+                 WHERE LOWER(from_name) = 'tanner chalfant'
+                   AND email_uid IS NOT NULL
+             )""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_CID),
+    ).rowcount
+
+    total_fixed = fixed_a + fixed_b + fixed_c + fixed_d
+    if total_fixed:
+        logger.info(
+            "Re-attributed %d Tanner Chalfant item(s) back to customer %d "
+            "(cases: a=%d b=%d c=%d d=%d)",
+            total_fixed, _CHALFANT_CID, fixed_a, fixed_b, fixed_c, fixed_d,
+        )
+        # Dismiss the mismatch action items now that the items are correctly attributed
+        conn.execute(
+            """UPDATE action_items
+               SET status = 'dismissed',
+                   resolution_notes = 'Auto-fixed: re-attributed to Tanner Chalfant (cid 325)'
+               WHERE LOWER(from_name) = 'tanner chalfant'
+                 AND status IN ('open', 'in_progress')""",
+        )
 
     conn.commit()
     logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
