@@ -2594,6 +2594,59 @@ def api_membership_mashup_scan():
         conn.close()
 
 
+@app.route("/api/audit/credited-duplicate-scan", methods=["GET"])
+@require_role("admin")
+def api_credited_duplicate_scan():
+    """Find orders where the same item appears as both active AND credited/refunded.
+
+    These are likely cases where a credit was issued on one copy but a phantom
+    duplicate active copy was left behind (like the Chalfant Canyon Springs case).
+    The active copy should be deleted.
+
+    Returns list of problem groups with item ids so the admin can delete via UI.
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT
+                order_id,
+                LOWER(item_name) AS item_key,
+                item_name,
+                item_price,
+                customer,
+                GROUP_CONCAT(id || ':' || COALESCE(transaction_status,'active') ORDER BY id) AS id_statuses,
+                SUM(CASE WHEN COALESCE(transaction_status,'active') = 'active' THEN 1 ELSE 0 END) AS active_cnt,
+                SUM(CASE WHEN transaction_status IN ('credited','refunded') THEN 1 ELSE 0 END) AS credited_cnt,
+                GROUP_CONCAT(CASE WHEN COALESCE(transaction_status,'active') = 'active' THEN id END) AS active_ids,
+                GROUP_CONCAT(CASE WHEN transaction_status IN ('credited','refunded') THEN id END) AS credited_ids
+            FROM items
+            WHERE order_id IS NOT NULL AND order_id NOT LIKE 'manual-%'
+              AND item_name IS NOT NULL AND item_name != ''
+            GROUP BY order_id, LOWER(item_name), item_price
+            HAVING active_cnt > 0 AND credited_cnt > 0
+            ORDER BY order_id
+        """).fetchall()
+
+        results = []
+        for r in rows:
+            active_ids = [int(x) for x in (r["active_ids"] or "").split(",") if x]
+            credited_ids = [int(x) for x in (r["credited_ids"] or "").split(",") if x]
+            results.append({
+                "order_id": r["order_id"],
+                "item_name": r["item_name"],
+                "item_price": r["item_price"],
+                "customer": r["customer"],
+                "id_statuses": r["id_statuses"],
+                "active_ids": active_ids,
+                "credited_ids": credited_ids,
+                "note": "Delete the active_ids — they are phantom duplicates of the credited copy.",
+            })
+
+        return jsonify({"count": len(results), "problems": results})
+    finally:
+        conn.close()
+
+
 @app.route("/api/audit/duplicate-items-diagnostic", methods=["GET"])
 @require_role("admin")
 def api_duplicate_items_diagnostic():
