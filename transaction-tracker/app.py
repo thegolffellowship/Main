@@ -3684,20 +3684,24 @@ def api_get_pairings(event_id):
         # Current active player list — used by UI to detect unassigned players
         INACTIVE = ("credited", "refunded", "transferred", "wd")
         ph = ",".join("?" * len(INACTIVE))
-        player_rows = conn.execute(f"""
-            SELECT DISTINCT i.customer AS name, i.holes, i.tee_choice
-            FROM events e
-            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
-            JOIN items i ON (
-                i.item_name = e.item_name COLLATE NOCASE
-                OR i.item_name = ea.alias_name COLLATE NOCASE
-                OR i.event_id = e.id
-            )
-            WHERE e.id = ?
-              AND COALESCE(i.transaction_status,'active') NOT IN ({ph})
-              AND i.parent_item_id IS NULL
-            ORDER BY i.customer COLLATE NOCASE
-        """, (event_id, *INACTIVE)).fetchall()
+        _pconn = get_connection()
+        try:
+            player_rows = _pconn.execute(f"""
+                SELECT DISTINCT i.customer AS name, i.holes, i.tee_choice
+                FROM events e
+                LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+                JOIN items i ON (
+                    i.item_name = e.item_name COLLATE NOCASE
+                    OR i.item_name = ea.alias_name COLLATE NOCASE
+                    OR i.event_id = e.id
+                )
+                WHERE e.id = ?
+                  AND COALESCE(i.transaction_status,'active') NOT IN ({ph})
+                  AND i.parent_item_id IS NULL
+                ORDER BY i.customer COLLATE NOCASE
+            """, (event_id, *INACTIVE)).fetchall()
+        finally:
+            _pconn.close()
         event_players = [dict(r) for r in player_rows]
         return jsonify({
             "pairings": pairings,
