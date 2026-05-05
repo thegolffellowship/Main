@@ -3064,6 +3064,7 @@ def api_update_customer():
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
+               "address", "address2", "city", "state", "zip",
                "archived", "venmo_username", "current_player_status"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
