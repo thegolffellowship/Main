@@ -488,14 +488,22 @@
     function deriveStatus(items, roles, currentPlayerStatus, membershipTerm) {
         roles = Array.isArray(roles) ? roles : [];
         const itemCount = Array.isArray(items) ? items.length : 0;
-        const ELEVATED = ['owner', 'admin', 'manager', 'golfer'];
-        if (roles.some(r => ELEVATED.includes(r))) return "MEMBER";
 
-        // A lapsed membership term beats the "they bought a membership" rule:
-        // someone whose term has actually ended should read FORMER, not
-        // MEMBER, regardless of historical purchases.  Renewing flips this
-        // back automatically (via the new term's expires_at).
+        // TGF leadership — always reads MEMBER regardless of membership term
+        // state.  These are organizational roles, not paid-membership status.
+        const PERMANENT = ['owner', 'admin', 'manager'];
+        if (roles.some(r => PERMANENT.includes(r))) return "MEMBER";
+
+        // A lapsed membership term beats the role and items checks below:
+        // someone whose term has actually ended reads FORMER, even if they
+        // still carry the 'golfer' role or have a historical membership
+        // purchase on file.  Renewing flips this back automatically (via
+        // the new term's expires_at).
         if (isMembershipLapsed(membershipTerm)) return "FORMER";
+
+        // 'golfer' role on its own — without a lapsed term — indicates an
+        // active member.
+        if (roles.includes('golfer')) return "MEMBER";
 
         // A TGF Membership purchase auto-promotes to MEMBER regardless of
         // stored player_status (catches cases where the status hasn't been

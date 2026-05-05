@@ -596,6 +596,27 @@ def _time_phrase(days_left: int) -> str:
     return f"{abs(days_left)} days ago"
 
 
+def _state_action_phrase(days_left: int) -> str:
+    """Returns the time-reference clause used in T-30 / T-7 subject + body
+    opening: 'expires in 14 days' / 'expires tomorrow' / 'expires today' /
+    'lapsed yesterday' / 'lapsed 28 days ago'.
+
+    Lets the v1.0 spec copy stay canonical for on-cycle daily-scheduler runs
+    (days_left == 30 → 'expires in 30 days') while reading correctly when
+    an admin manually fires Send Notice Now on an off-cycle term (e.g.
+    T-30 on a member who's actually 28 days lapsed).
+    """
+    if days_left > 1:
+        return f"expires in {days_left} days"
+    if days_left == 1:
+        return "expires tomorrow"
+    if days_left == 0:
+        return "expires today"
+    if days_left == -1:
+        return "lapsed yesterday"
+    return f"lapsed {abs(days_left)} days ago"
+
+
 def render_notice_email(
     window: str,
     term: dict,
@@ -613,13 +634,25 @@ def render_notice_email(
     line.  When None (default), the lapsed window includes buttons (preserves
     the existing daily-scheduler behavior) and the others do not.
 
-    Body copy is **locked to the v1.0 email standards** (May 2026 spec):
-    each window has a unique warmth line and fixed body, regardless of
-    actual days_left.  The Send Notice Now modal lets admins edit the
-    subject inline if a non-canonical case needs different wording (e.g.
-    firing T-30 on a term that's already 69 days lapsed).
+    T-30 and T-7 subject + body opening + renewal-impact phrase adapt to the
+    term's actual state so manual Send Notice Now sends on off-cycle terms
+    read correctly (e.g. firing T-30 on a member 28 days lapsed says
+    "lapsed 28 days ago", not "expires in 30 days"). Warmth line and
+    structure stay canonical per the v1.0 spec.
+
+    T-0 ("Today's the last day…") and lapsed ("It's not too late…") templates
+    have state-specific warmth lines and stay canonical — admins should pick
+    T-30 or T-7 for off-cycle informational sends.
     """
     first_name = customer.get("first_name") or "there"
+
+    # Compute days_left — drives the state-aware phrasing below.
+    today = date.today()
+    try:
+        exp_d = datetime.strptime(term["expires_at"][:10], "%Y-%m-%d").date()
+    except (ValueError, KeyError, TypeError):
+        exp_d = today
+    days_left = (exp_d - today).days
 
     # Default lapsed → with buttons, others → without buttons.  This matches
     # the prior daily-scheduler behavior where the lapsed final notice always
@@ -629,11 +662,19 @@ def render_notice_email(
 
     closing_block = _roster_buttons_block(term) if with_roster_buttons else _THANKS_LINE
 
+    # Renewal-impact phrase: emphasizes "without a gap" when active, "back in
+    # place" when already lapsed.  Used by T-30 / T-7.
+    if days_left >= 0:
+        renewal_impact = "keeps your weekly event invitations and member pricing in place without a gap"
+    else:
+        renewal_impact = "puts your weekly event invitations and member pricing back in place"
+
     if window == "30d":
-        subject = "Your TGF membership expires in 30 days"
+        action = _state_action_phrase(days_left)
+        subject = f"Your TGF membership {action}"
         body = f"""<p>Hi {first_name},</p>
 <p>The Golf Fellowship is built on people like you — and we'd love to keep you in it.</p>
-<p>Just a heads-up that your membership expires in 30 days. Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap.</p>
+<p>Just a heads-up that your membership {action}. Renewal is only <strong>$75 for the next 12 months</strong> and {renewal_impact}.</p>
 {_renew_button()}
 <p>Just renewed? Ignore this — our system will catch up and these will stop automatically.</p>
 {closing_block}
@@ -641,10 +682,11 @@ def render_notice_email(
         return subject, _email_shell(body)
 
     if window == "7d":
-        subject = "Your TGF membership expires in 7 days"
+        action = _state_action_phrase(days_left)
+        subject = f"Your TGF membership {action}"
         body = f"""<p>Hi {first_name},</p>
 <p>The Golf Fellowship wouldn't be what it is without members like you — just didn't want this to slip by unnoticed.</p>
-<p>Your membership expires in 7 days and we haven't seen a renewal yet. Renewal is only <strong>$75 for the next 12 months</strong> and keeps your weekly event invitations and member pricing in place without a gap.</p>
+<p>Your membership {action} and we haven't seen a renewal yet. Renewal is only <strong>$75 for the next 12 months</strong> and {renewal_impact}.</p>
 {_renew_button()}
 <p>Just renewed? Ignore this — our system will catch up and these will stop automatically.</p>
 {closing_block}

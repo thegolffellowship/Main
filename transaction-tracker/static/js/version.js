@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.12.0";
+window.TGF_VERSION = "2.12.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.12.1",
+    date: "2026-05-04",
+    title: "Membership: state-aware T-30/T-7 + status badge fix for lapsed golfers",
+    changes: [
+      "T-30 and T-7 templates' subject + body opening + renewal-impact phrase adapt to the term's actual state — sending T-30 to a member 28 days lapsed now reads 'Your TGF membership lapsed 28 days ago' / 'Just a heads-up that your membership lapsed 28 days ago' / 'puts your weekly event invitations and member pricing back in place', instead of the canonical 'expires in 30 days / without a gap' wording. Canonical days_left=30 / days_left=7 cases still render the spec wording verbatim.",
+      "Edge cases: 'expires tomorrow' / 'expires today' / 'lapsed yesterday' branches handled. T-0 and lapsed templates stay canonical (warmth lines are state-specific — admins should pick T-30/T-7 for off-cycle informational sends).",
+      "Status badge fix: deriveStatus() previously short-circuited to MEMBER on any 'elevated' role including 'golfer', which meant lapsed members who carry the golfer role (i.e. most members) still read MEMBER on the customers list even when the Info-tab Member Status correctly read FORMER. Split the role check: PERMANENT roles (owner / admin / manager — TGF leadership) always read MEMBER and override lapsed state; the 'golfer' role only reads MEMBER when the latest term is NOT lapsed. Demonte now reads FORMER on the badge as expected.",
+    ],
+  },
   {
     version: "2.12.0",
     date: "2026-05-04",
