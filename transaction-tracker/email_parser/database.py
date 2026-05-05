@@ -810,6 +810,141 @@ def _repair_chalfant_attribution(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
+    """Re-attribute William Massey's orders corrupted by a bad customer merge.
+
+    Massey's email (wncmassey@outlook.com) ended up on a duplicate Colby Johnson
+    record which was merged into canonical Johnson, pulling Massey's orders in
+    under Johnson's customer_id.
+
+    Known Massey orders now showing under Johnson:
+      R545206118 — TGF Membership + a9.3 Avery Ranch (Massey's own order)
+      R112804515 — a9.5 Star Ranch (Massey's own order)
+      R278736131 — Austin Kickoff companion item (Johnson bought 2 spots; one is Massey's)
+
+    Fully idempotent — all UPDATEs are no-ops once customer_id is already Massey's.
+    """
+    _MASSEY_EMAIL = 'wncmassey@outlook.com'
+    _MASSEY_NAME = 'William Massey'
+    _MASSEY_PHONE = '(678) 314-8527'
+    _MASSEY_ZIP = '78729'
+    _MASSEY_DOB = '1990-12-11'
+    _JOHNSON_EMAIL = 'colbygjohnson8@gmail.com'
+
+    # Find canonical Johnson customer_id
+    johnson_row = conn.execute(
+        """SELECT c.id FROM customers c
+           JOIN customer_emails ce ON ce.customer_id = c.id
+           WHERE LOWER(ce.email) = LOWER(?)
+           LIMIT 1""",
+        (_JOHNSON_EMAIL,),
+    ).fetchone()
+    if not johnson_row:
+        # Fallback: check customers.customer_email directly
+        johnson_row = conn.execute(
+            "SELECT id FROM customers WHERE LOWER(customer_email) = LOWER(?) LIMIT 1",
+            (_JOHNSON_EMAIL,),
+        ).fetchone()
+    if not johnson_row:
+        logger.warning("Massey repair: could not find Colby Johnson customer record — skipping")
+        return
+    johnson_cid = johnson_row["id"]
+
+    # 1. Remove Massey's email from Johnson's customer_emails (bad merge artifact)
+    removed = conn.execute(
+        "DELETE FROM customer_emails WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
+        (johnson_cid, _MASSEY_EMAIL),
+    ).rowcount
+    if removed:
+        logger.info("Massey repair: removed %s from Johnson customer_emails", _MASSEY_EMAIL)
+
+    # 2. Find or create Massey's own customer record
+    massey_row = conn.execute(
+        """SELECT c.id FROM customers c
+           JOIN customer_emails ce ON ce.customer_id = c.id
+           WHERE LOWER(ce.email) = LOWER(?)
+           LIMIT 1""",
+        (_MASSEY_EMAIL,),
+    ).fetchone()
+    if not massey_row:
+        massey_row = conn.execute(
+            "SELECT id FROM customers WHERE LOWER(customer_email) = LOWER(?) LIMIT 1",
+            (_MASSEY_EMAIL,),
+        ).fetchone()
+    if massey_row:
+        massey_cid = massey_row["id"]
+    else:
+        conn.execute(
+            """INSERT INTO customers
+                   (customer, customer_email, phone, zip, dob, chapter, status)
+               VALUES (?, ?, ?, ?, ?, 'Austin', 'member')""",
+            (_MASSEY_NAME, _MASSEY_EMAIL, _MASSEY_PHONE, _MASSEY_ZIP, _MASSEY_DOB),
+        )
+        massey_cid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        logger.info("Massey repair: created customer record cid=%d", massey_cid)
+
+    # 3. Ensure Massey's email is on his own record as primary
+    conn.execute(
+        """INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, source)
+           VALUES (?, ?, 0, 'repaired')""",
+        (massey_cid, _MASSEY_EMAIL),
+    )
+    conn.execute(
+        """UPDATE customer_emails SET is_primary = 1
+           WHERE customer_id = ? AND LOWER(email) = LOWER(?)""",
+        (massey_cid, _MASSEY_EMAIL),
+    )
+
+    # 4. Re-attribute items: Massey's email currently under Johnson's customer_id
+    r4 = conn.execute(
+        """UPDATE items
+           SET customer = ?, customer_id = ?, customer_email = ?
+           WHERE customer_id = ? AND LOWER(customer_email) = LOWER(?)""",
+        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, johnson_cid, _MASSEY_EMAIL),
+    ).rowcount
+
+    # 5. Re-attribute items named William/Will Massey still under Johnson's customer_id
+    r5 = conn.execute(
+        """UPDATE items
+           SET customer = ?, customer_id = ?, customer_email = ?
+           WHERE customer_id = ? AND LOWER(customer) IN ('william massey', 'will massey')""",
+        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, johnson_cid),
+    ).rowcount
+
+    # 6. Companion item from R278736131: Johnson bought 2 spots, one for Massey.
+    #    The companion item has partner_request referencing Massey but may still carry
+    #    Johnson's customer_id after the bad merge.
+    r6 = conn.execute(
+        """UPDATE items
+           SET customer = ?, customer_id = ?, customer_email = ?
+           WHERE order_id = 'R278736131'
+             AND customer_id = ?
+             AND (LOWER(COALESCE(partner_request, '')) LIKE '%massey%'
+                  OR LOWER(COALESCE(notes, '')) LIKE '%massey%')""",
+        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, johnson_cid),
+    ).rowcount
+
+    total = r4 + r5 + r6
+    if total:
+        logger.info(
+            "Massey repair: re-attributed %d item(s) to cid=%d "
+            "(by-email=%d, by-name=%d, companion=%d)",
+            total, massey_cid, r4, r5, r6,
+        )
+
+    # 7. Fix open action_items referencing Massey under Johnson's name
+    conn.execute(
+        """UPDATE action_items
+           SET customer = ?, customer_id = ?
+           WHERE customer_id = ?
+             AND LOWER(from_name) IN ('william massey', 'will massey')
+             AND status IN ('open', 'in_progress')""",
+        (_MASSEY_NAME, massey_cid, johnson_cid),
+    )
+
+    conn.commit()
+
+
 def _migrate_create_dedup_aliases(conn: sqlite3.Connection) -> None:
     """Create customer_aliases entries for the dedup-migration name mappings.
 
@@ -2601,6 +2736,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_chalfant_attribution(conn)
         except Exception as e:
             logger.warning("Chalfant attribution repair failed: %s", e)
+
+        # Always-run repair: re-attribute William Massey items corrupted by bad merge
+        try:
+            _repair_massey_attribution(conn)
+        except Exception as e:
+            logger.warning("Massey attribution repair failed: %s", e)
 
         # Rename 'member' role → 'golfer' (no-op if already migrated).
         # Must run before the seed so the seed sees the new CHECK constraint.
