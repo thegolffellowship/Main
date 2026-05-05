@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from .database import (
     get_connection,
+    get_db_health_metrics,
     get_open_feedback,
     get_recent_feedback,
     get_recent_rsvps,
@@ -277,11 +278,86 @@ def _build_feedback_section(recent: list[dict], open_tickets: list[dict]) -> str
 </div>"""
 
 
+def _build_health_section(metrics: dict) -> str:
+    """Build the DB health check section of the digest."""
+    deltas = metrics.get("deltas", {})
+    prev_date = metrics.get("previous_date")
+
+    def delta_html(key: str) -> str:
+        d = deltas.get(key)
+        if d is None:
+            return ""
+        if d > 0:
+            return f' <span style="color:#dc2626; font-size:11px;">&#9650;{d}</span>'
+        if d < 0:
+            return f' <span style="color:#16a34a; font-size:11px;">&#9660;{abs(d)}</span>'
+        return ' <span style="color:#aaa; font-size:11px;">&#8212;</span>'
+
+    problems = []
+    if metrics.get("credited_duplicates", 0) > 0:
+        problems.append(f"{metrics['credited_duplicates']} credited duplicate(s) — active copy should be deleted")
+    if metrics.get("membership_mashups", 0) > 0:
+        problems.append(f"{metrics['membership_mashups']} membership row(s) with event fields set (parser mashup)")
+    if metrics.get("null_customer_items", 0) > 0:
+        problems.append(f"{metrics['null_customer_items']} item(s) missing customer ID")
+    if metrics.get("open_parse_warnings", 0) > 0:
+        problems.append(f"{metrics['open_parse_warnings']} open parse warning(s)")
+
+    status_color = "#16a34a" if not problems else "#dc2626"
+    status_bg = "#f0fdf4" if not problems else "#fef2f2"
+    status_label = "&#10003; All Clear" if not problems else "&#9888; Issues Found"
+
+    problems_html = ""
+    if problems:
+        li = "".join(
+            f'<li style="margin:4px 0; font-size:13px; color:#dc2626;">{p}</li>'
+            for p in problems
+        )
+        problems_html = f'<ul style="margin:8px 0 0 0; padding-left:18px;">{li}</ul>'
+
+    prev_note = (
+        f'<p style="font-size:11px; color:#aaa; margin:8px 0 0 0;">Deltas vs {prev_date}</p>'
+        if prev_date else ""
+    )
+
+    rows_html = "".join(f"""\
+<tr>
+  <td style="{STYLES['td']}">{label}</td>
+  <td style="{STYLES['td']}; text-align:right; font-weight:600;">{metrics.get(key, '—')}{delta_html(key)}</td>
+</tr>""" for label, key in [
+        ("Total Items", "total_items"),
+        ("Active Items", "active_items"),
+        ("Open Parse Warnings", "open_parse_warnings"),
+        ("Open Action Items", "open_action_items"),
+        ("Credited Duplicates", "credited_duplicates"),
+        ("Membership Mashups", "membership_mashups"),
+        ("Items Missing Customer ID", "null_customer_items"),
+    ])
+
+    return f"""
+<div style="{STYLES['section']}">
+  <h3 style="{STYLES['h3']}">DB Health Check</h3>
+  <div style="background:{status_bg}; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+    <span style="font-weight:700; color:{status_color}; font-size:15px;">{status_label}</span>
+    {problems_html}
+  </div>
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
+  <thead><tr style="background:#f9fafb;">
+    <th style="{STYLES['th']}">Metric</th>
+    <th style="{STYLES['th']}; text-align:right;">Value</th>
+  </tr></thead>
+  <tbody>{rows_html}</tbody>
+  </table>
+  {prev_note}
+</div>"""
+
+
 # ---------------------------------------------------------------------------
 # Main report builder & sender
 # ---------------------------------------------------------------------------
 
-def build_digest_html(items, rsvps, upcoming_events, recent_feedback, open_feedback) -> str:
+def build_digest_html(items, rsvps, upcoming_events, recent_feedback, open_feedback,
+                      health_metrics: dict | None = None) -> str:
     """Build the full daily digest HTML email."""
     now = datetime.now().strftime("%B %d, %Y")
 
@@ -290,6 +366,7 @@ def build_digest_html(items, rsvps, upcoming_events, recent_feedback, open_feedb
         _build_rsvps_section(rsvps),
         _build_upcoming_events_section(upcoming_events),
         _build_feedback_section(recent_feedback, open_feedback),
+        _build_health_section(health_metrics) if health_metrics is not None else "",
     ]
 
     body = "\n".join(sections)
@@ -358,8 +435,13 @@ def send_daily_report():
     upcoming = get_upcoming_events()
     recent_fb = get_recent_feedback(hours=24)
     open_fb = get_open_feedback()
+    try:
+        health = get_db_health_metrics()
+    except Exception as e:
+        logger.warning("DB health check failed — skipping section: %s", e)
+        health = None
 
-    html_body = build_digest_html(items, rsvps, upcoming, recent_fb, open_fb)
+    html_body = build_digest_html(items, rsvps, upcoming, recent_fb, open_fb, health)
 
     # Build a summary subject line
     parts = []
@@ -369,6 +451,15 @@ def send_daily_report():
         parts.append(f"{len(rsvps)} RSVP(s)")
     if recent_fb:
         parts.append(f"{len(recent_fb)} ticket(s)")
+    if health:
+        problem_count = (
+            (health.get("credited_duplicates") or 0)
+            + (health.get("membership_mashups") or 0)
+            + (health.get("null_customer_items") or 0)
+            + (health.get("open_parse_warnings") or 0)
+        )
+        if problem_count:
+            parts.append(f"⚠ {problem_count} DB issue(s)")
     summary = ", ".join(parts) if parts else "No new activity"
 
     subject = f"TGF Daily Digest — {datetime.now().strftime('%b %d, %Y')} — {summary}"

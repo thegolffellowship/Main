@@ -10912,6 +10912,126 @@ def get_upcoming_events(db_path: str | Path | None = None) -> list[dict]:
         return results
 
 
+def get_db_health_metrics(db_path: str | Path | None = None) -> dict:
+    """Run daily health diagnostic queries and persist a snapshot for delta tracking.
+
+    Checks:
+    - total_items / active_items (with day-over-day deltas)
+    - open parse_warnings and action_items
+    - credited duplicate pairs (active + credited copy of same item in same order)
+    - membership mashups (membership rows with event-side fields set)
+    - items missing customer_id (real orders only)
+    """
+    with _connect(db_path) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS db_health_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_date TEXT NOT NULL UNIQUE,
+                total_items INTEGER,
+                active_items INTEGER,
+                open_parse_warnings INTEGER,
+                open_action_items INTEGER,
+                credited_duplicates INTEGER,
+                membership_mashups INTEGER,
+                null_customer_items INTEGER,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        total_items = conn.execute("SELECT COUNT(*) FROM items").fetchone()[0]
+
+        active_items = conn.execute(
+            "SELECT COUNT(*) FROM items WHERE COALESCE(transaction_status,'active') = 'active'"
+        ).fetchone()[0]
+
+        open_parse_warnings = conn.execute(
+            "SELECT COUNT(*) FROM parse_warnings WHERE status='open'"
+        ).fetchone()[0]
+
+        open_action_items = conn.execute(
+            "SELECT COUNT(*) FROM action_items WHERE status IN ('open','in_progress')"
+        ).fetchone()[0]
+
+        credited_duplicates = conn.execute("""
+            SELECT COUNT(*) FROM (
+                SELECT order_id, LOWER(item_name), item_price
+                FROM items
+                WHERE order_id IS NOT NULL AND order_id NOT LIKE 'manual-%'
+                  AND item_name IS NOT NULL AND item_name != ''
+                GROUP BY order_id, LOWER(item_name), item_price
+                HAVING SUM(CASE WHEN COALESCE(transaction_status,'active') = 'active' THEN 1 ELSE 0 END) > 0
+                   AND SUM(CASE WHEN transaction_status IN ('credited','refunded') THEN 1 ELSE 0 END) > 0
+            )
+        """).fetchone()[0]
+
+        membership_mashups = conn.execute("""
+            SELECT COUNT(*) FROM items
+            WHERE LOWER(COALESCE(item_name,'')) LIKE '%tgf membership%'
+              AND COALESCE(transaction_status,'active') = 'active'
+              AND (holes IS NOT NULL
+                   OR (side_games IS NOT NULL AND side_games != 'NONE')
+                   OR tee_choice IS NOT NULL)
+        """).fetchone()[0]
+
+        null_customer_items = conn.execute("""
+            SELECT COUNT(*) FROM items
+            WHERE customer_id IS NULL
+              AND COALESCE(transaction_status,'active') = 'active'
+              AND COALESCE(order_id,'') NOT LIKE 'manual-%'
+              AND COALESCE(transaction_status,'active') != 'rsvp_only'
+        """).fetchone()[0]
+
+        # Load previous snapshot for deltas
+        prev = conn.execute("""
+            SELECT * FROM db_health_snapshots
+            WHERE snapshot_date < ?
+            ORDER BY snapshot_date DESC LIMIT 1
+        """, (today,)).fetchone()
+        prev = dict(prev) if prev else {}
+
+        metrics: dict = {
+            "snapshot_date": today,
+            "total_items": total_items,
+            "active_items": active_items,
+            "open_parse_warnings": open_parse_warnings,
+            "open_action_items": open_action_items,
+            "credited_duplicates": credited_duplicates,
+            "membership_mashups": membership_mashups,
+            "null_customer_items": null_customer_items,
+            "previous_date": prev.get("snapshot_date"),
+        }
+
+        delta_keys = ("total_items", "active_items", "open_parse_warnings",
+                      "open_action_items", "credited_duplicates",
+                      "membership_mashups", "null_customer_items")
+        metrics["deltas"] = {
+            k: metrics[k] - prev[k]
+            for k in delta_keys
+            if k in prev and prev[k] is not None
+        }
+
+        # Upsert today's snapshot
+        conn.execute("""
+            INSERT INTO db_health_snapshots
+                (snapshot_date, total_items, active_items, open_parse_warnings,
+                 open_action_items, credited_duplicates, membership_mashups, null_customer_items)
+            VALUES (?,?,?,?,?,?,?,?)
+            ON CONFLICT(snapshot_date) DO UPDATE SET
+                total_items=excluded.total_items,
+                active_items=excluded.active_items,
+                open_parse_warnings=excluded.open_parse_warnings,
+                open_action_items=excluded.open_action_items,
+                credited_duplicates=excluded.credited_duplicates,
+                membership_mashups=excluded.membership_mashups,
+                null_customer_items=excluded.null_customer_items
+        """, (today, total_items, active_items, open_parse_warnings,
+               open_action_items, credited_duplicates, membership_mashups, null_customer_items))
+
+        return metrics
+
+
 # ---------------------------------------------------------------------------
 # Messaging — templates & send log
 # ---------------------------------------------------------------------------
