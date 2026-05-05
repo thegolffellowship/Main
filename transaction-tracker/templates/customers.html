@@ -344,6 +344,7 @@
     let allItems = [];
     let allChapters = [];   // populated from /api/chapters; canonical names + IDs
     let selectedCustomer = null;
+    let expandedNames = new Set();  // multi-expand: customer names with inline detail open (list + mobile views)
     let activeDetailTab = "transactions";  // track active tab across re-renders
     let currentView = "list";
     let currentSortField = "name";
@@ -647,6 +648,23 @@
         if (parts.length <= 1) return s; // all parts were suffixes, return original
         const last = parts.pop();
         return last + ", " + parts.join(" ") + (suffixParts.length ? " " + suffixParts.join(" ") : "");
+    }
+
+    // Patch the local customer/items in-place after a successful info save, so we can
+    // re-render from local state without re-fetching everything (which would collapse rows).
+    function patchCustomerLocal(customerName, fields) {
+        const cust = allCustomers.find(c => c.name === customerName);
+        if (!cust) return;
+        const topLevelMap = {
+            customer_email: "email",
+            customer_phone: "phone",
+        };
+        Object.entries(fields).forEach(([key, val]) => {
+            const topKey = topLevelMap[key] || key;
+            if (topKey in cust) cust[topKey] = val;
+            // Backend updates every items row for this customer, so mirror that locally.
+            cust.items.forEach(item => { item[key] = val; });
+        });
     }
 
     // Build customer aggregate data from items
@@ -1023,7 +1041,7 @@
         }
 
         container.innerHTML = filtered.map(c => {
-            const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
+            const isExpanded = expandedNames.has(c.name);
             const meta = [];
             if (c.chapter) meta.push(escapeHtml(c.chapter));
             meta.push(c.items.length + " purchase" + (c.items.length !== 1 ? "s" : ""));
@@ -1058,16 +1076,20 @@
                 const name = top.dataset.name;
                 const cust = allCustomers.find(c => c.name === name);
                 if (!cust) return;
-                const wasExpanded = selectedCustomer && selectedCustomer.name === name;
-                selectedCustomer = wasExpanded ? null : cust;
+                if (expandedNames.has(name)) {
+                    expandedNames.delete(name);
+                } else {
+                    expandedNames.add(name);
+                }
                 renderCustomersMobile(filtered);
             });
         });
 
-        // Attach credit/reverse handlers for expanded customer
-        if (selectedCustomer) {
-            const expandedCard = container.querySelector(`.mobile-card[data-cust-name="${escapeHtml(selectedCustomer.name)}"]`);
-            if (expandedCard) {
+        // Attach credit/reverse handlers for every expanded mobile card
+        expandedNames.forEach(name => {
+            const expandedCard = container.querySelector(`.mobile-card[data-cust-name="${escapeHtml(name)}"]`);
+            const cust = allCustomers.find(c => c.name === name);
+            if (expandedCard && cust) {
                 expandedCard.querySelectorAll("[data-cust-credit-id]").forEach(btn => {
                     btn.addEventListener("click", (e) => {
                         e.stopPropagation();
@@ -1180,7 +1202,13 @@
                             }
                             saveBtn.textContent = "Saved!";
                             saveBtn.style.background = "#16a34a";
-                            setTimeout(() => init(), 800);
+                            patchCustomerLocal(customerName, fields);
+                            setTimeout(() => {
+                                saveBtn.textContent = "Save";
+                                saveBtn.style.background = "";
+                                saveBtn.disabled = false;
+                                renderCustomers();
+                            }, 800);
                         } catch (err) {
                             alert("Failed to save: " + err.message);
                             saveBtn.disabled = false;
@@ -1189,7 +1217,7 @@
                     });
                 }
             }
-        }
+        });
     }
 
     function renderCustomers() {
@@ -1216,7 +1244,7 @@
 
         let html = "";
         filtered.forEach(c => {
-            const isExpanded = selectedCustomer && selectedCustomer.name === c.name;
+            const isExpanded = expandedNames.has(c.name);
             html += `
             <tr data-name="${escapeHtml(c.name)}" class="cust-row-clickable ${statusRowClass(c.status)} ${isExpanded ? 'expanded' : ''}">
                 <td><strong>${escapeHtml(displayName(c.name))}</strong>${c.creditTotal > 0 ? ` <span class="status-tag status-tag-credited">$${c.creditTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} Credit</span>` : ''}</td>
@@ -1250,13 +1278,13 @@
             });
         });
 
-        // Re-attach detail handlers for expanded row
-        if (selectedCustomer) {
-            const container = tbody.querySelector(`.cust-detail-content[data-detail-name="${escapeHtml(selectedCustomer.name)}"]`);
+        // Re-attach detail handlers for every expanded row
+        expandedNames.forEach(name => {
+            const container = tbody.querySelector(`.cust-detail-content[data-detail-name="${escapeHtml(name)}"]`);
             if (container && container.innerHTML.trim()) {
                 attachCustDetailHandlers(container);
             }
-        }
+        });
 
         applyCustColumnVisibility();
     }
@@ -2389,7 +2417,23 @@
                     }
                     saveBtn.textContent = "Saved!";
                     saveBtn.style.background = "#16a34a";
-                    setTimeout(() => init(), 800);
+                    patchCustomerLocal(customerName, fields);
+                    setTimeout(() => {
+                        saveBtn.textContent = "Save";
+                        saveBtn.style.background = "";
+                        saveBtn.disabled = false;
+                        // Re-render only this customer's expanded panel; other expanded
+                        // rows and edit panels are left untouched (no full list re-render).
+                        const cust = allCustomers.find(c => c.name === customerName);
+                        const detailRow = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(customerName)}"]`);
+                        if (detailRow && cust) {
+                            const innerContainer = detailRow.querySelector(".cust-detail-content");
+                            if (innerContainer) {
+                                innerContainer.innerHTML = renderCustDetailContent(cust);
+                                attachCustDetailHandlers(innerContainer);
+                            }
+                        }
+                    }, 800);
                 } catch (err) {
                     alert("Failed to save: " + err.message);
                     saveBtn.disabled = false;
@@ -2452,25 +2496,22 @@
     }
 
     function toggleCustomerDetail(customer) {
-        const wasExpanded = selectedCustomer && selectedCustomer.name === customer.name;
-
-        // Collapse current
-        if (selectedCustomer) {
-            const prevRow = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(selectedCustomer.name)}"]`);
-            const prevDetail = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(selectedCustomer.name)}"]`);
-            if (prevRow) prevRow.classList.remove("expanded");
-            if (prevDetail) prevDetail.classList.remove("visible");
-            selectedCustomer = null;
-            activeDetailTab = "transactions";  // reset tab when collapsing
-        }
-
-        // If clicking same row, just collapse
-        if (wasExpanded) return;
-
-        // Expand clicked
-        selectedCustomer = customer;
+        // Multi-expand: toggle just this row, leave other expanded rows alone.
         const row = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(customer.name)}"]`);
         const detailRow = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(customer.name)}"]`);
+
+        if (expandedNames.has(customer.name)) {
+            expandedNames.delete(customer.name);
+            if (row) row.classList.remove("expanded");
+            if (detailRow) {
+                detailRow.classList.remove("visible");
+                const container = detailRow.querySelector(".cust-detail-content");
+                if (container) container.innerHTML = "";
+            }
+            return;
+        }
+
+        expandedNames.add(customer.name);
         if (row) row.classList.add("expanded");
         if (detailRow) {
             detailRow.classList.add("visible");
@@ -3705,6 +3746,9 @@
                     }
                 }
             }
+            // Drop any expanded names that no longer exist after a refresh.
+            const liveNames = new Set(allCustomers.map(c => c.name));
+            expandedNames.forEach(n => { if (!liveNames.has(n)) expandedNames.delete(n); });
 
             // renderCustomers handles both list (inline expansion) and cards views
             renderCustomers();
@@ -3724,6 +3768,7 @@
                     if (match) {
                         // Set selected so both desktop and mobile render expanded
                         selectedCustomer = match;
+                        expandedNames.add(match.name);
                         renderCustomers();
                         // Scroll to the customer card/row after render
                         requestAnimationFrame(() => {
