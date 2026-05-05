@@ -613,6 +613,52 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
              AND venmo_username = 'tchalfant'""",
     )
 
+    # Fix bad email association: tchalfant@sconservices.com was moved into customer 46
+    # (Justin McCrary) when the duplicate customer 317 (which incorrectly had tchalfant
+    # data) was merged into 46. This caused heal_items_from_customers to overwrite all
+    # of Tanner Chalfant's items with McCrary's name/email.
+    _CHALFANT_EMAIL = 'tchalfant@sconservices.com'
+    _CHALFANT_CID = 325
+    _MCCRARY_CID = 46
+
+    removed_email = conn.execute(
+        "DELETE FROM customer_emails WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
+        (_MCCRARY_CID, _CHALFANT_EMAIL),
+    ).rowcount
+    if removed_email:
+        logger.info("Removed %s from McCrary (customer 46) — bad merge artifact", _CHALFANT_EMAIL)
+
+    # Ensure Chalfant's email is on his own customer record
+    conn.execute(
+        """INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, label)
+           SELECT ?, ?, 1, 'repaired'
+           WHERE EXISTS (SELECT 1 FROM customers WHERE customer_id = ?)""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL, _CHALFANT_CID),
+    )
+
+    # Fix items corrupted by the bad association:
+    # (a) Known corrupted order R945426004 — email may already have been overwritten
+    fixed_a = conn.execute(
+        """UPDATE items
+           SET customer = 'Tanner Chalfant',
+               customer_id = ?,
+               customer_email = ?,
+               customer_phone = CASE WHEN customer_phone = '(210) 882-2755' THEN '(432) 661-9022' ELSE customer_phone END
+           WHERE order_id = 'R945426004'""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL),
+    ).rowcount
+    # (b) Any items still carrying Chalfant's email but wrongly under McCrary
+    fixed_b = conn.execute(
+        """UPDATE items
+           SET customer = 'Tanner Chalfant',
+               customer_id = ?
+           WHERE customer_id = ? AND LOWER(customer_email) = LOWER(?)""",
+        (_CHALFANT_CID, _MCCRARY_CID, _CHALFANT_EMAIL),
+    ).rowcount
+    if fixed_a or fixed_b:
+        logger.info("Re-attributed %d Tanner Chalfant item(s) from McCrary back to customer %d",
+                    fixed_a + fixed_b, _CHALFANT_CID)
+
     conn.commit()
     logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
 
@@ -21775,6 +21821,25 @@ def generate_event_pairings(
     return result
 
 
+def _make_group_sizes(n: int) -> list[int]:
+    """Return group sizes summing to n with max 4 per group and no onesomes."""
+    if n <= 0:
+        return []
+    if n <= 4:
+        return [n]
+    q, r = divmod(n, 4)
+    if r == 0:
+        return [4] * q
+    elif r == 1:
+        if q == 1:  # n == 5
+            return [2, 3]
+        return [4] * (q - 2) + [3, 3, 3]  # e.g. 9→[3,3,3], 13→[4,3,3,3]
+    elif r == 2:
+        return [4] * (q - 1) + [3, 3]     # e.g. 6→[3,3], 10→[4,3,3]
+    else:  # r == 3
+        return [4] * q + [3]              # e.g. 7→[4,3], 11→[4,4,3]
+
+
 def _random_groups(
     players: list[str],
     partner_map: dict,
@@ -21804,22 +21869,18 @@ def _random_groups(
     for s in singles:
         units.append([s])
 
-    # Greedy group formation
+    # Determine target group sizes to avoid onesomes
+    target_sizes = _make_group_sizes(len(players))
     groups: list[list[str]] = []
-    remaining = units.copy()
+    remaining = list(units)
 
-    while remaining:
-        first = remaining.pop(0)
-        group = list(first)
-
-        while len(group) < 4 and remaining:
-            needed = 4 - len(group)
-
-            # Prefer units that fit; among those, pick lowest pair-count score
+    for target in target_sizes:
+        group: list[str] = []
+        while len(group) < target and remaining:
+            needed = target - len(group)
             fittable = [u for u in remaining if len(u) <= needed]
             if not fittable:
-                fittable = remaining  # take whatever is left
-
+                fittable = remaining
             best_idx = 0
             best_score = float("inf")
             for idx, unit in enumerate(fittable):
@@ -21831,12 +21892,18 @@ def _random_groups(
                 if score < best_score:
                     best_score = score
                     best_idx = idx
-
             chosen = fittable[best_idx]
             remaining.remove(chosen)
             group.extend(chosen)
+        if group:
+            groups.append(group)
 
-        groups.append(group)
+    # Absorb any leftover units (e.g. oversized partner pair) into the last group
+    for leftover in remaining:
+        if groups:
+            groups[-1].extend(leftover)
+        else:
+            groups.append(leftover)
 
     return groups
 
@@ -21858,25 +21925,16 @@ def _abcd_groups(players: list[str], hcp_map: dict) -> list[list[str]]:
     if n == 0:
         return []
 
-    threesomes = (4 - n % 4) % 4
-    foursomes = (n - 3 * threesomes) // 4
-    num_groups = foursomes + threesomes
+    group_sizes = _make_group_sizes(n)
+    num_groups = len(group_sizes)
 
     if num_groups == 0:
         return []
 
-    tier_a = sorted_players[:num_groups]
-    tier_b = sorted_players[num_groups: 2 * num_groups]
-    tier_c = sorted_players[2 * num_groups: 3 * num_groups]
-    tier_d = sorted_players[3 * num_groups: 4 * num_groups]
-
-    groups = []
-    for i in range(num_groups):
-        grp = []
-        if i < len(tier_a): grp.append(tier_a[i])
-        if i < len(tier_b): grp.append(tier_b[i])
-        if i < len(tier_c): grp.append(tier_c[i])
-        if i < len(tier_d): grp.append(tier_d[i])
-        groups.append(grp)
+    # Distribute round-robin: player i goes to group (i % num_groups)
+    # Result: each group gets one player from each tier (A/B/C/D), last tier may be short
+    groups: list[list[str]] = [[] for _ in range(num_groups)]
+    for i, player in enumerate(sorted_players):
+        groups[i % num_groups].append(player)
 
     return groups

@@ -2180,7 +2180,6 @@
                 const email = (r.player_email || "").toLowerCase();
                 if (email && mEmailOvr[email] === "not_playing") return false;
                 if (email && mRegEmails.has(email)) return false;
-                if (email && mInactiveEmails.has(email)) return false;
                 const resolved = (r.resolved_name || "").toLowerCase();
                 const first = (r.player_name || "").toLowerCase();
                 if (resolved && mRegNames.has(resolved)) return false;
@@ -2557,7 +2556,6 @@
             const email = (r.player_email || "").toLowerCase();
             if (email && emailOvr[email] === "not_playing") return false;
             if (email && regEmails.has(email)) return false;
-            if (email && inactiveEmailsTP.has(email)) return false;
             const resolved = (r.resolved_name || "").toLowerCase();
             const first = (r.player_name || "").toLowerCase();
             if (resolved && regNames.has(resolved)) return false;
@@ -4195,9 +4193,6 @@
         const inactiveRegs = registrants.filter(r => INACTIVE_FOR_DEDUP.includes(r.transaction_status));
         const regEmails = new Set(activeRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
         const regNames = new Set(activeRegs.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
-        // Also track inactive registrant emails — credited/transferred players should not
-        // reappear as synthetic GG RSVP rows (they're already in the Inactive section)
-        const inactiveEmails = new Set(inactiveRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
         const activeItemIds = new Set(activeRegs.map(r => r.id));
         // Build a map of item_id → email for verifying RSVP matches
         const itemEmailMap = {};
@@ -4217,8 +4212,8 @@
             const email = (r.player_email || "").toLowerCase();
             if (email && dEmailOvr[email] === "not_playing") return false;
             if (email && regEmails.has(email)) return false;
-            // Don't create synthetic rows for players already in the Inactive section
-            if (email && inactiveEmails.has(email)) return false;
+            // Note: don't exclude players with inactive items — a PLAYING RSVP after a
+            // refund/credit means they still want to play and should appear in the roster
             const resolved = (r.resolved_name || "").toLowerCase();
             const first = (r.player_name || "").toLowerCase();
             if (resolved && regNames.has(resolved)) return false;
