@@ -613,10 +613,22 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
              AND venmo_username = 'tchalfant'""",
     )
 
-    # Fix bad email association: tchalfant@sconservices.com was moved into customer 46
-    # (Justin McCrary) when the duplicate customer 317 (which incorrectly had tchalfant
-    # data) was merged into 46. This caused heal_items_from_customers to overwrite all
-    # of Tanner Chalfant's items with McCrary's name/email.
+    conn.commit()
+    logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
+
+
+def _repair_chalfant_attribution(conn: sqlite3.Connection) -> None:
+    """Re-attribute Tanner Chalfant's orders that were corrupted by a bad customer merge.
+
+    Customer 317 (a duplicate Justin McCrary record) had Chalfant's email/Venmo.
+    When merged into customer 46 (canonical McCrary), those values contaminated
+    McCrary's customer_emails. The identity-drift guard in save_items() then
+    assigned all new Chalfant orders to customer_id=46 (McCrary) and overwrote
+    their email/phone with McCrary's canonical values.
+
+    This function is called directly from init_db() every boot and is fully
+    idempotent — all UPDATEs are no-ops once items.customer_id is already 325.
+    """
     _CHALFANT_EMAIL = 'tchalfant@sconservices.com'
     _CHALFANT_PHONE = '(432) 661-9022'
     _CHALFANT_CID = 325
@@ -624,37 +636,35 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
     _MCCRARY_EMAIL = 'justinmccrary@elliottelectric.com'
     _MCCRARY_PHONE = '(210) 882-2755'
 
+    # 1. Remove Chalfant's email from McCrary's customer_emails (bad merge artifact)
     removed_email = conn.execute(
         "DELETE FROM customer_emails WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
         (_MCCRARY_CID, _CHALFANT_EMAIL),
     ).rowcount
     if removed_email:
-        logger.info("Removed %s from McCrary (customer 46) — bad merge artifact", _CHALFANT_EMAIL)
+        logger.info("Chalfant repair: removed %s from McCrary customer_emails", _CHALFANT_EMAIL)
 
-    # Ensure Chalfant's email is on his own customer record.
-    # INSERT OR IGNORE with is_primary=0 first (avoids unique-index violation if another
-    # primary already exists), then explicitly promote it to primary after clearing others.
+    # 2. Ensure Chalfant's email is on his own record as the primary.
+    #    INSERT with is_primary=0 first to avoid the unique partial-index violation
+    #    when another primary already exists, then explicitly promote it.
     conn.execute(
         """INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, label)
            SELECT ?, ?, 0, 'repaired'
            WHERE EXISTS (SELECT 1 FROM customers WHERE customer_id = ?)""",
         (_CHALFANT_CID, _CHALFANT_EMAIL, _CHALFANT_CID),
     )
-    # Clear any other primary for Chalfant so the unique partial index allows the next UPDATE
     conn.execute(
         """UPDATE customer_emails SET is_primary = 0
            WHERE customer_id = ? AND LOWER(email) != LOWER(?) AND is_primary = 1""",
         (_CHALFANT_CID, _CHALFANT_EMAIL),
     )
     conn.execute(
-        """UPDATE customer_emails SET is_primary = 1
-           WHERE customer_id = ? AND LOWER(email) = LOWER(?)""",
+        "UPDATE customer_emails SET is_primary = 1 WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
         (_CHALFANT_CID, _CHALFANT_EMAIL),
     )
 
-    # Ensure Chalfant's customers.phone is his real number, not McCrary's contaminated value.
-    # heal_items_from_customers reads customers.phone → items after this repair runs, so this
-    # must be correct before heal overwrites items.customer_phone at startup.
+    # 3. Fix Chalfant's phone on the customers record so heal_items_from_customers
+    #    applies the correct value after we set customer_id=325 on items below.
     conn.execute(
         """UPDATE customers SET phone = ?
            WHERE customer_id = ?
@@ -662,46 +672,42 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
         (_CHALFANT_PHONE, _CHALFANT_CID, _MCCRARY_PHONE),
     )
 
-    # Fix items corrupted by the bad association:
-    # (a) Known corrupted order R222413986 (confirmed from Audit Log raw email body)
+    # 4. Fix corrupted items rows.  Four overlapping cases ensure full coverage
+    #    regardless of which fields were overwritten by the drift guard or heal.
+
+    # (a) Known order R222413986 (confirmed from Audit Log raw email body)
     fixed_a = conn.execute(
         """UPDATE items
-           SET customer = 'Tanner Chalfant',
-               customer_id = ?,
-               customer_email = ?,
+           SET customer = 'Tanner Chalfant', customer_id = ?, customer_email = ?,
                customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
            WHERE order_id IN ('R222413986', '#R222413986', 'R-222413986', '222413986')""",
         (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE),
     ).rowcount
-    # (b) Items with Chalfant's email wrongly under McCrary's customer_id
+
+    # (b) Items with Chalfant's email still under McCrary's customer_id
     fixed_b = conn.execute(
         """UPDATE items
-           SET customer = 'Tanner Chalfant',
-               customer_id = ?,
+           SET customer = 'Tanner Chalfant', customer_id = ?,
                customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
            WHERE customer_id = ? AND LOWER(customer_email) = LOWER(?)""",
         (_CHALFANT_CID, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_CID, _CHALFANT_EMAIL),
     ).rowcount
-    # (c) Items still named 'Tanner Chalfant' but carrying McCrary's email (partial heal)
+
+    # (c) Items named 'Tanner Chalfant' but carrying McCrary's email
     fixed_c = conn.execute(
         """UPDATE items
-           SET customer_email = ?,
-               customer_id = ?,
+           SET customer_email = ?, customer_id = ?,
                customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
-           WHERE customer = 'Tanner Chalfant'
-             AND LOWER(customer_email) = LOWER(?)""",
+           WHERE customer = 'Tanner Chalfant' AND LOWER(customer_email) = LOWER(?)""",
         (_CHALFANT_EMAIL, _CHALFANT_CID, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_EMAIL),
     ).rowcount
-    # (d) Bridge via parse_warnings: EMAIL_DRIFT/PHONE_DRIFT warnings store the
-    #     customer name FROM the original order (before canonical override), which
-    #     is 'Tanner Chalfant'. The order_id and email_uid on those warnings match
-    #     the items rows, finding ALL corrupted orders even when customer/email on
-    #     items have been fully overwritten by the canonical McCrary values.
+
+    # (d) Bridge via parse_warnings: EMAIL_DRIFT/PHONE_DRIFT rows store the pre-override
+    #     customer name ('Tanner Chalfant') and order_id/email_uid that link back to items
+    #     even after items.customer/email were fully overwritten to McCrary's canonical values.
     fixed_d = conn.execute(
         """UPDATE items
-           SET customer = 'Tanner Chalfant',
-               customer_id = ?,
-               customer_email = ?,
+           SET customer = 'Tanner Chalfant', customer_id = ?, customer_email = ?,
                customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
            WHERE customer_id = ?
              AND (
@@ -725,29 +731,22 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
     total_fixed = fixed_a + fixed_b + fixed_c + fixed_d
     if total_fixed:
         logger.info(
-            "Re-attributed %d Tanner Chalfant item(s) back to customer %d "
-            "(cases: a=%d b=%d c=%d d=%d)",
+            "Chalfant repair: re-attributed %d item(s) to customer %d "
+            "(a=%d b=%d c=%d d=%d)",
             total_fixed, _CHALFANT_CID, fixed_a, fixed_b, fixed_c, fixed_d,
         )
-        # Resolve the drift warnings now that the items are correctly attributed
         conn.execute(
-            """UPDATE parse_warnings
-               SET status = 'resolved'
+            """UPDATE parse_warnings SET status = 'resolved'
                WHERE LOWER(customer) = 'tanner chalfant'
-                 AND warning_code IN ('EMAIL_DRIFT', 'PHONE_DRIFT')
-                 AND status = 'open'""",
+                 AND warning_code IN ('EMAIL_DRIFT', 'PHONE_DRIFT') AND status = 'open'""",
         )
-        # Dismiss any COO action items for Tanner Chalfant mismatches
         conn.execute(
             """UPDATE action_items
                SET status = 'dismissed',
                    resolution_notes = 'Auto-fixed: re-attributed to Tanner Chalfant (cid 325)'
-               WHERE LOWER(from_name) = 'tanner chalfant'
-                 AND status IN ('open', 'in_progress')""",
+               WHERE LOWER(from_name) = 'tanner chalfant' AND status IN ('open', 'in_progress')""",
         )
-
     conn.commit()
-    logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
 
 
 def _migrate_create_dedup_aliases(conn: sqlite3.Connection) -> None:
@@ -2535,6 +2534,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_dedupe_payout_customers(conn)
         except Exception as e:
             logger.warning("Payout customer dedup migration failed: %s", e)
+
+        # Always-run repair: re-attribute Tanner Chalfant items corrupted by bad merge
+        try:
+            _repair_chalfant_attribution(conn)
+        except Exception as e:
+            logger.warning("Chalfant attribution repair failed: %s", e)
 
         # Rename 'member' role → 'golfer' (no-op if already migrated).
         # Must run before the seed so the seed sees the new CHECK constraint.
