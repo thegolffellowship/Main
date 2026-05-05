@@ -1203,12 +1203,13 @@
                             saveBtn.textContent = "Saved!";
                             saveBtn.style.background = "#16a34a";
                             patchCustomerLocal(customerName, fields);
+                            // Don't auto-close the edit form. Just reset the Save button
+                            // so the user stays in edit mode until they explicitly leave.
                             setTimeout(() => {
                                 saveBtn.textContent = "Save";
                                 saveBtn.style.background = "";
                                 saveBtn.disabled = false;
-                                renderCustomers();
-                            }, 800);
+                            }, 1200);
                         } catch (err) {
                             alert("Failed to save: " + err.message);
                             saveBtn.disabled = false;
@@ -2418,22 +2419,13 @@
                     saveBtn.textContent = "Saved!";
                     saveBtn.style.background = "#16a34a";
                     patchCustomerLocal(customerName, fields);
+                    // Don't auto-close the edit form. Just reset the Save button
+                    // so the user stays in edit mode until they explicitly leave.
                     setTimeout(() => {
                         saveBtn.textContent = "Save";
                         saveBtn.style.background = "";
                         saveBtn.disabled = false;
-                        // Re-render only this customer's expanded panel; other expanded
-                        // rows and edit panels are left untouched (no full list re-render).
-                        const cust = allCustomers.find(c => c.name === customerName);
-                        const detailRow = document.querySelector(`.cust-detail-row[data-detail-for="${escapeHtml(customerName)}"]`);
-                        if (detailRow && cust) {
-                            const innerContainer = detailRow.querySelector(".cust-detail-content");
-                            if (innerContainer) {
-                                innerContainer.innerHTML = renderCustDetailContent(cust);
-                                attachCustDetailHandlers(innerContainer);
-                            }
-                        }
-                    }, 800);
+                    }, 1200);
                 } catch (err) {
                     alert("Failed to save: " + err.message);
                     saveBtn.disabled = false;
