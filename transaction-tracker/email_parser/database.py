@@ -728,12 +728,25 @@ def _repair_chalfant_attribution(conn: sqlite3.Connection) -> None:
         (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_CID),
     ).rowcount
 
-    total_fixed = fixed_a + fixed_b + fixed_c + fixed_d
+    # (e) Items under McCrary with Chalfant's Midland TX zip (79707).
+    #     city/state/zip are captured from the order email and NOT overwritten by
+    #     the identity-drift guard or heal_items_from_customers, so they survive
+    #     even when customer/email/phone have been fully replaced by canonical values.
+    #     zip 79707 is specific to Midland TX — McCrary has no legitimate orders there.
+    fixed_e = conn.execute(
+        """UPDATE items
+           SET customer = 'Tanner Chalfant', customer_id = ?, customer_email = ?,
+               customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
+           WHERE customer_id = ? AND COALESCE(TRIM(zip), '') = '79707'""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_CID),
+    ).rowcount
+
+    total_fixed = fixed_a + fixed_b + fixed_c + fixed_d + fixed_e
     if total_fixed:
         logger.info(
             "Chalfant repair: re-attributed %d item(s) to customer %d "
-            "(a=%d b=%d c=%d d=%d)",
-            total_fixed, _CHALFANT_CID, fixed_a, fixed_b, fixed_c, fixed_d,
+            "(a=%d b=%d c=%d d=%d e=%d)",
+            total_fixed, _CHALFANT_CID, fixed_a, fixed_b, fixed_c, fixed_d, fixed_e,
         )
         conn.execute(
             """UPDATE parse_warnings SET status = 'resolved'
