@@ -741,12 +741,23 @@ def _repair_chalfant_attribution(conn: sqlite3.Connection) -> None:
         (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE, _MCCRARY_CID),
     ).rowcount
 
-    total_fixed = fixed_a + fixed_b + fixed_c + fixed_d + fixed_e
+    # (f) Guest-swapped items: _do_guest_swap sets customer='Tanner Chalfant' but also
+    #     clears email/phone/zip, so cases b/c/e can't match. If customer_id is still
+    #     McCrary's (e.g. name lookup fell back to the buyer's cid), fix it here.
+    #     Don't overwrite customer_email — it was intentionally cleared (guest slot);
+    #     heal_items_from_customers will populate Chalfant's canonical email afterward.
+    fixed_f = conn.execute(
+        """UPDATE items SET customer_id = ?
+           WHERE customer = 'Tanner Chalfant' AND customer_id = ?""",
+        (_CHALFANT_CID, _MCCRARY_CID),
+    ).rowcount
+
+    total_fixed = fixed_a + fixed_b + fixed_c + fixed_d + fixed_e + fixed_f
     if total_fixed:
         logger.info(
             "Chalfant repair: re-attributed %d item(s) to customer %d "
-            "(a=%d b=%d c=%d d=%d e=%d)",
-            total_fixed, _CHALFANT_CID, fixed_a, fixed_b, fixed_c, fixed_d, fixed_e,
+            "(a=%d b=%d c=%d d=%d e=%d f=%d)",
+            total_fixed, _CHALFANT_CID, fixed_a, fixed_b, fixed_c, fixed_d, fixed_e, fixed_f,
         )
         conn.execute(
             """UPDATE parse_warnings SET status = 'resolved'
