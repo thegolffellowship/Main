@@ -663,14 +663,14 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
     )
 
     # Fix items corrupted by the bad association:
-    # (a) Known corrupted order — try several order_id formats used by GoDaddy
+    # (a) Known corrupted order R222413986 (confirmed from Audit Log raw email body)
     fixed_a = conn.execute(
         """UPDATE items
            SET customer = 'Tanner Chalfant',
                customer_id = ?,
                customer_email = ?,
                customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
-           WHERE order_id IN ('R945426004', '#R945426004', 'R-945426004', '945426004')""",
+           WHERE order_id IN ('R222413986', '#R222413986', 'R-222413986', '222413986')""",
         (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE),
     ).rowcount
     # (b) Items with Chalfant's email wrongly under McCrary's customer_id
