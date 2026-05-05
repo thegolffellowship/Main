@@ -637,7 +637,7 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
     )
 
     # Fix items corrupted by the bad association:
-    # (a) Known corrupted order R945426004 — email may already have been overwritten
+    # (a) Known corrupted order R945426004
     fixed_a = conn.execute(
         """UPDATE items
            SET customer = 'Tanner Chalfant',
@@ -647,7 +647,7 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
            WHERE order_id = 'R945426004'""",
         (_CHALFANT_CID, _CHALFANT_EMAIL),
     ).rowcount
-    # (b) Any items still carrying Chalfant's email but wrongly under McCrary
+    # (b) Items with Chalfant's email wrongly under McCrary's customer_id
     fixed_b = conn.execute(
         """UPDATE items
            SET customer = 'Tanner Chalfant',
@@ -655,9 +655,20 @@ def _migrate_dedupe_payout_customers(conn: sqlite3.Connection) -> None:
            WHERE customer_id = ? AND LOWER(customer_email) = LOWER(?)""",
         (_CHALFANT_CID, _MCCRARY_CID, _CHALFANT_EMAIL),
     ).rowcount
-    if fixed_a or fixed_b:
+    # (c) Items still named 'Tanner Chalfant' but carrying McCrary's email (partial heal)
+    #     — fix their email back to Chalfant's so the name-normalization guard works
+    fixed_c = conn.execute(
+        """UPDATE items
+           SET customer_email = ?,
+               customer_id = ?,
+               customer_phone = CASE WHEN customer_phone = '(210) 882-2755' THEN '(432) 661-9022' ELSE customer_phone END
+           WHERE customer = 'Tanner Chalfant'
+             AND LOWER(customer_email) = 'justinmccrary@elliottelectric.com'""",
+        (_CHALFANT_EMAIL, _CHALFANT_CID),
+    ).rowcount
+    if fixed_a or fixed_b or fixed_c:
         logger.info("Re-attributed %d Tanner Chalfant item(s) from McCrary back to customer %d",
-                    fixed_a + fixed_b, _CHALFANT_CID)
+                    fixed_a + fixed_b + fixed_c, _CHALFANT_CID)
 
     conn.commit()
     logger.info("Payout customer dedup complete — merged %d duplicate customers", merged)
@@ -4151,10 +4162,13 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
     # The Customers page groups by items.customer text, so "Will Peterson" and
     # "William Peterson" show as separate entries even with the same customer_id.
     # Find emails with multiple distinct customer name strings and normalize.
+    # GUARD: skip if items with this email have multiple distinct customer_ids —
+    # that means different people share the email due to a bad merge, not name variants.
     name_variants = conn.execute(
         """SELECT LOWER(TRIM(customer_email)) as email,
                   GROUP_CONCAT(DISTINCT customer) as names,
-                  COUNT(DISTINCT customer) as cnt
+                  COUNT(DISTINCT customer) as cnt,
+                  COUNT(DISTINCT customer_id) as cid_cnt
            FROM items
            WHERE customer_email IS NOT NULL AND customer_email != ''
              AND customer IS NOT NULL AND customer != ''
@@ -4164,6 +4178,9 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
 
     for row in name_variants:
         email = row["email"]
+        # Multiple distinct customer_ids sharing an email = different people, not variants
+        if row["cid_cnt"] > 1:
+            continue
         names = [n.strip() for n in row["names"].split(",") if n.strip()]
         if len(names) < 2:
             continue
@@ -4674,9 +4691,9 @@ def _backfill_event_id_on_items(conn: sqlite3.Connection) -> int:
 
     # Build alias→event name map
     alias_map: dict[str, str] = {}
-    for a in conn.execute("SELECT alias_name, canonical_name FROM event_aliases").fetchall():
-        if a["alias_name"] and a["canonical_name"]:
-            alias_map[a["alias_name"].strip().lower()] = a["canonical_name"].strip().lower()
+    for a in conn.execute("SELECT alias_name, canonical_event_name FROM event_aliases").fetchall():
+        if a["alias_name"] and a["canonical_event_name"]:
+            alias_map[a["alias_name"].strip().lower()] = a["canonical_event_name"].strip().lower()
 
     # Cache parent event_id to avoid re-querying for child rows
     parent_cache: dict[int, int | None] = {}
@@ -4730,9 +4747,9 @@ def _backfill_event_id_on_string_tables(conn: sqlite3.Connection) -> None:
             ev_map[e["item_name"].strip().lower()] = e["id"]
 
     alias_map: dict[str, str] = {}
-    for a in conn.execute("SELECT alias_name, canonical_name FROM event_aliases").fetchall():
-        if a["alias_name"] and a["canonical_name"]:
-            alias_map[a["alias_name"].strip().lower()] = a["canonical_name"].strip().lower()
+    for a in conn.execute("SELECT alias_name, canonical_event_name FROM event_aliases").fetchall():
+        if a["alias_name"] and a["canonical_event_name"]:
+            alias_map[a["alias_name"].strip().lower()] = a["canonical_event_name"].strip().lower()
 
     def _resolve(name: str | None) -> int | None:
         if not name:
@@ -17721,10 +17738,10 @@ def _get_month_close_status_inner(db_path: str | Path | None = None) -> dict:
         # 5. Events this month with no accounting entries
         events_no_entries = conn.execute(
             """SELECT COUNT(*) as cnt FROM events e
-               WHERE e.date LIKE ? AND e.name IS NOT NULL
+               WHERE e.event_date LIKE ? AND e.item_name IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM acct_transactions t
-                   WHERE t.event_name = e.name AND t.entry_type IS NOT NULL
+                   WHERE t.event_name = e.item_name AND t.entry_type IS NOT NULL
                )""",
             (f"{month_prefix}%",),
         ).fetchone()["cnt"]
