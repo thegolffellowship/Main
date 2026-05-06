@@ -886,7 +886,7 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
     r4 = conn.execute(
         """UPDATE items
            SET customer = ?, customer_id = ?, customer_email = ?
-           WHERE LOWER(customer_email) = LOWER(?) AND customer_id != ?""",
+           WHERE LOWER(customer_email) = LOWER(?) AND (customer_id != ? OR customer_id IS NULL)""",
         (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, _MASSEY_EMAIL, massey_cid),
     ).rowcount
 
@@ -894,7 +894,8 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
     r5 = conn.execute(
         """UPDATE items
            SET customer = ?, customer_id = ?, customer_email = ?
-           WHERE LOWER(customer) IN ('william massey', 'will massey') AND customer_id != ?""",
+           WHERE LOWER(customer) IN ('william massey', 'will massey')
+             AND (customer_id != ? OR customer_id IS NULL)""",
         (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, massey_cid),
     ).rowcount
 
@@ -903,21 +904,30 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
         """UPDATE items
            SET customer = ?, customer_id = ?, customer_email = ?
            WHERE order_id = 'R278736131'
-             AND customer_id != ?
+             AND (customer_id != ? OR customer_id IS NULL)
              AND (LOWER(COALESCE(partner_request, '')) LIKE '%massey%'
                   OR LOWER(COALESCE(notes, '')) LIKE '%massey%')""",
         (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, massey_cid),
     ).rowcount
 
-    total = r4 + r5 + r6
-    if total:
-        logger.info(
-            "Massey repair: re-attributed %d item(s) to cid=%d "
-            "(by-email=%d, by-name=%d, companion=%d)",
-            total, massey_cid, r4, r5, r6,
-        )
+    # 7. Explicit order-id fix for Will's own orders whose customer_email may have been
+    #    overwritten by the identity-heal to Johnson's canonical email.
+    r7 = conn.execute(
+        """UPDATE items
+           SET customer = ?, customer_id = ?, customer_email = ?
+           WHERE order_id IN ('R545206118', 'R112804515')
+             AND (customer_id != ? OR customer_id IS NULL)""",
+        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, massey_cid),
+    ).rowcount
 
-    # 7. Fix open action_items referencing Massey (action_items has no customer column)
+    total = r4 + r5 + r6 + r7
+    logger.info(
+        "Massey repair: re-attributed %d item(s) to cid=%d "
+        "(by-email=%d, by-name=%d, companion=%d, by-order=%d)",
+        total, massey_cid, r4, r5, r6, r7,
+    )
+
+    # 8. Fix open action_items referencing Massey (action_items has no customer column)
     conn.execute(
         """UPDATE action_items
            SET customer_id = ?
