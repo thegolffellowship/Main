@@ -881,20 +881,21 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
         (massey_cid, _MASSEY_EMAIL),
     )
 
-    # 4. Re-attribute items: Massey's email currently under Johnson's customer_id
+    # 4. Re-attribute ALL items with Massey's email, regardless of which customer_id
+    #    they're currently under (catches orders placed before the bad merge).
     r4 = conn.execute(
         """UPDATE items
            SET customer = ?, customer_id = ?, customer_email = ?
-           WHERE customer_id = ? AND LOWER(customer_email) = LOWER(?)""",
-        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, johnson_cid, _MASSEY_EMAIL),
+           WHERE LOWER(customer_email) = LOWER(?) AND customer_id != ?""",
+        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, _MASSEY_EMAIL, massey_cid),
     ).rowcount
 
-    # 5. Re-attribute items named William/Will Massey still under Johnson's customer_id
+    # 5. Re-attribute ALL items named William/Will Massey not already on his record.
     r5 = conn.execute(
         """UPDATE items
            SET customer = ?, customer_id = ?, customer_email = ?
-           WHERE customer_id = ? AND LOWER(customer) IN ('william massey', 'will massey')""",
-        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, johnson_cid),
+           WHERE LOWER(customer) IN ('william massey', 'will massey') AND customer_id != ?""",
+        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, massey_cid),
     ).rowcount
 
     # 6. Companion item from R278736131: Johnson bought 2 spots, one for Massey.
@@ -902,10 +903,10 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
         """UPDATE items
            SET customer = ?, customer_id = ?, customer_email = ?
            WHERE order_id = 'R278736131'
-             AND customer_id = ?
+             AND customer_id != ?
              AND (LOWER(COALESCE(partner_request, '')) LIKE '%massey%'
                   OR LOWER(COALESCE(notes, '')) LIKE '%massey%')""",
-        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, johnson_cid),
+        (_MASSEY_NAME, massey_cid, _MASSEY_EMAIL, massey_cid),
     ).rowcount
 
     total = r4 + r5 + r6
