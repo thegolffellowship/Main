@@ -917,14 +917,14 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
             total, massey_cid, r4, r5, r6,
         )
 
-    # 7. Fix open action_items referencing Massey under Johnson's customer_id
+    # 7. Fix open action_items referencing Massey (action_items has no customer column)
     conn.execute(
         """UPDATE action_items
-           SET customer = ?, customer_id = ?
-           WHERE customer_id = ?
-             AND LOWER(from_name) IN ('william massey', 'will massey')
+           SET customer_id = ?
+           WHERE LOWER(from_name) IN ('william massey', 'will massey')
+             AND (customer_id != ? OR customer_id IS NULL)
              AND status IN ('open', 'in_progress')""",
-        (_MASSEY_NAME, massey_cid, johnson_cid),
+        (massey_cid, massey_cid),
     )
 
     conn.commit()

@@ -173,7 +173,7 @@ Return ONLY the JSON object."""
     # Clean up
     result.setdefault("confidence", 50)
     result.setdefault("transaction_type", "expense")
-    if "amount" in result:
+    if result.get("amount") is not None:
         result["amount"] = abs(float(result["amount"]))
     return result
 
@@ -305,7 +305,7 @@ Return ONLY the JSON object."""
                 result["entity"] = meta["entity"]
             break
 
-    if "amount" in result:
+    if result.get("amount") is not None:
         result["amount"] = abs(float(result["amount"]))
     return result
 
