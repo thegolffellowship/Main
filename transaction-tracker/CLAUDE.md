@@ -9,6 +9,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/customers.md` (customer identity, **membership renewal system**)
 - `docs/claude/handicaps.md` (handicap rules)
 - `docs/claude/coo.md` (COO dashboard + AI chat)
+- `docs/claude/customer-merge-repair.md` (playbook for fixing absorbed customer profiles)
 
 ## Deployed URL
 
