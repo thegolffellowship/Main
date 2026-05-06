@@ -415,13 +415,27 @@ already joined).
 - `POST /api/events/<id>/pairings/save` — persist + rebuild `pairing_history`
 - `DELETE /api/events/<id>/pairings` — clear saved pairings
 
-**UI swap modes:**
-- Swap individual **Player**, **Cart Pair** (positions 1&2 or 3&4), or **full Group**.
-- All three modes block cross-holes swaps — you can't swap a 9-hole player/pair/group
-  with an 18-hole one. Shows an alert and resets selection.
+**UI swap/move modes** (buttons in the pairings control bar):
+- **Player** — click one player then another to swap positions.
+- **Cart Pair** — click one cart (positions 1&2 or 3&4) then another to swap pairs.
+- **Group** — click one foursome then another to swap entire groups.
+- **Move** — click a player to pick them up, then click a destination group to place
+  them there without swapping. The player is removed from their current position and
+  inserted into the destination group's next open slot. Works for both assigned players
+  and unassigned players (see below).
+- All modes block cross-holes moves — you can't move a 9-hole player into an 18-hole
+  group. Shows an alert and resets selection.
 - Cart dots use solid hex colors (`#3b82f6` blue for Cart A, `#22c55e` green for Cart B)
   instead of CSS vars, so they stay visible on light backgrounds.
 - Saved-state indicator + dirty tracking before save.
+
+**Unassigned players panel:**
+Displayed below the pairings groups when any registered players are not yet in a group.
+Shows an amber "⚠ UNASSIGNED (N) — Click player then a group to place" header. Uses
+`getUnassigned(state)` which computes the set difference between all registered players
+and those in current groups. In **Move** mode, clicking an unassigned player selects
+them; then clicking a group places them. Clicking the same unassigned player again
+deselects. The panel disappears automatically once all players are assigned.
 
 # Event Pricing Architecture
 

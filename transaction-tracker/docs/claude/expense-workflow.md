@@ -40,6 +40,26 @@ Future alerts from the same merchant (or containing that merchant name) are pre-
 Vendor (`customer_id`) auto-suggestion is NOT yet implemented — that requires a separate
 lookup of which `customer_id` most frequently maps to a given keyword rule.
 
+## Expense Parser — Email Classification and Null Safety
+
+`email_parser/expense_parser.py` uses Claude Haiku to classify and extract financial
+emails. Classification types: `godaddy_order`, `golf_genius_rsvp`, `chase_transaction_alert`,
+`venmo_payment`, `expense_receipt`, `action_required`, `unknown`.
+
+Each extraction function (`parse_chase_alert`, `parse_expense_receipt`) returns a dict.
+**Null field safety:** both functions guard against the LLM returning `null` for
+numeric fields before type conversion:
+
+```python
+if result.get("amount") is not None:
+    result["amount"] = abs(float(result["amount"]))
+```
+
+Without this guard, `abs(float(None))` raises `TypeError` and the email is silently
+skipped for that scheduler run (logged as ERROR but not retried). Missing amounts should
+be filled in manually during the review/approval step. The same pattern should be used
+for any new numeric fields added to extraction prompts.
+
 ## GoDaddy Merchant Fee Split
 GoDaddy transactions store up to 3 splits in `acct_splits`: registration, tx_fee, and
 negative merchant_fee. When the edit modal opens for a GoDaddy transaction:

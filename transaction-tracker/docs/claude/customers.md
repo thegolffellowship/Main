@@ -92,6 +92,23 @@ field that differs:
 - Creates name alias for old name
 - Deletes orphaned source `customers` row
 
+## Automatic Merge Repair (Boot-Time)
+
+When a customer's profile is accidentally absorbed into another customer's record
+during a bad merge, the system auto-detects and repairs it on the next boot via
+`_repair_*_attribution()` functions in `email_parser/database.py`. These are called
+from `init_db()` inside individual try/except blocks so one failing repair doesn't
+block the others.
+
+**Known repairs (both fully idempotent):**
+- `_repair_massey_attribution()` — William Massey absorbed into Colby Johnson
+- `_repair_chalfant_attribution()` — Tanner Chalfant absorbed into Bryan McCrary
+
+**How to add a new repair:** See `docs/claude/customer-merge-repair.md` for the full
+playbook — diagnosis steps, function skeleton, and 7 critical gotchas (wrong column
+names, SQLite NULL comparison behaviour, identity-heal overwriting `customer_email`
+before the repair runs, commit placement, etc.).
+
 ## Vendor Customers
 
 Vendors (suppliers, payment processors, etc.) are stored in the `customers` table with

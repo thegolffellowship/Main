@@ -102,7 +102,18 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - **Pairings generator** with seed/lock, cart pairs, and round-robin history.
   Tables (`event_pairings`, `pairing_history`) are created lazily by
   `_ensure_pairing_tables()` on first pairing operation so existing live deployments
-  self-migrate.
+  self-migrate. UI has four modes: Player swap, Cart Pair swap, Group swap, and
+  **Move** (place a player into a group without swapping). An **Unassigned Players**
+  panel appears below groups for any registered players not yet in a group.
+- **Boot-time self-healing** — `init_db()` runs idempotent repair functions on every
+  startup. Current repairs: `_repair_chalfant_attribution()` and
+  `_repair_massey_attribution()` re-attribute transactions absorbed by bad customer
+  merges. Each runs in its own try/except so one failure doesn't block others. See
+  `docs/claude/customer-merge-repair.md` for the repair pattern and gotchas.
+- **Daily digest** (`email_parser/report.py`) — includes a **DB Health Check** section
+  with 7 metrics (total items, active items, open parse warnings, open action items,
+  credited duplicates, membership mashups, items missing customer ID) plus delta arrows
+  (↑/↓) vs the previous day's snapshot.
 - **Auth** — PIN-based with roles: `admin`, `manager`, `view-only`; `@require_role()` decorator
 - **`initAuth()`** must be called on every page for nav link visibility (DATABASE link, etc.)
 
