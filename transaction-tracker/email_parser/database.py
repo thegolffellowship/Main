@@ -827,28 +827,19 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
     _MASSEY_EMAIL = 'wncmassey@outlook.com'
     _MASSEY_NAME = 'William Massey'
     _MASSEY_PHONE = '(678) 314-8527'
-    _MASSEY_ZIP = '78729'
-    _MASSEY_DOB = '1990-12-11'
     _JOHNSON_EMAIL = 'colbygjohnson8@gmail.com'
 
-    # Find canonical Johnson customer_id
+    # Find canonical Johnson customer_id via customer_emails table
     johnson_row = conn.execute(
-        """SELECT c.id FROM customers c
-           JOIN customer_emails ce ON ce.customer_id = c.id
-           WHERE LOWER(ce.email) = LOWER(?)
+        """SELECT customer_id FROM customer_emails
+           WHERE LOWER(email) = LOWER(?)
            LIMIT 1""",
         (_JOHNSON_EMAIL,),
     ).fetchone()
     if not johnson_row:
-        # Fallback: check customers.customer_email directly
-        johnson_row = conn.execute(
-            "SELECT id FROM customers WHERE LOWER(customer_email) = LOWER(?) LIMIT 1",
-            (_JOHNSON_EMAIL,),
-        ).fetchone()
-    if not johnson_row:
         logger.warning("Massey repair: could not find Colby Johnson customer record — skipping")
         return
-    johnson_cid = johnson_row["id"]
+    johnson_cid = johnson_row["customer_id"]
 
     # 1. Remove Massey's email from Johnson's customer_emails (bad merge artifact)
     removed = conn.execute(
@@ -860,27 +851,22 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
 
     # 2. Find or create Massey's own customer record
     massey_row = conn.execute(
-        """SELECT c.id FROM customers c
-           JOIN customer_emails ce ON ce.customer_id = c.id
-           WHERE LOWER(ce.email) = LOWER(?)
+        """SELECT customer_id FROM customer_emails
+           WHERE LOWER(email) = LOWER(?)
            LIMIT 1""",
         (_MASSEY_EMAIL,),
     ).fetchone()
-    if not massey_row:
-        massey_row = conn.execute(
-            "SELECT id FROM customers WHERE LOWER(customer_email) = LOWER(?) LIMIT 1",
-            (_MASSEY_EMAIL,),
-        ).fetchone()
     if massey_row:
-        massey_cid = massey_row["id"]
+        massey_cid = massey_row["customer_id"]
     else:
-        conn.execute(
+        cur = conn.execute(
             """INSERT INTO customers
-                   (customer, customer_email, phone, zip, dob, chapter, status)
-               VALUES (?, ?, ?, ?, ?, 'Austin', 'member')""",
-            (_MASSEY_NAME, _MASSEY_EMAIL, _MASSEY_PHONE, _MASSEY_ZIP, _MASSEY_DOB),
+                   (first_name, last_name, phone, chapter, account_status,
+                    acquisition_source)
+               VALUES (?, ?, ?, 'Austin', 'active', 'repair')""",
+            ('William', 'Massey', _MASSEY_PHONE),
         )
-        massey_cid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        massey_cid = cur.lastrowid
         logger.info("Massey repair: created customer record cid=%d", massey_cid)
 
     # 3. Ensure Massey's email is on his own record as primary
@@ -912,8 +898,6 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
     ).rowcount
 
     # 6. Companion item from R278736131: Johnson bought 2 spots, one for Massey.
-    #    The companion item has partner_request referencing Massey but may still carry
-    #    Johnson's customer_id after the bad merge.
     r6 = conn.execute(
         """UPDATE items
            SET customer = ?, customer_id = ?, customer_email = ?
@@ -932,7 +916,7 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
             total, massey_cid, r4, r5, r6,
         )
 
-    # 7. Fix open action_items referencing Massey under Johnson's name
+    # 7. Fix open action_items referencing Massey under Johnson's customer_id
     conn.execute(
         """UPDATE action_items
            SET customer = ?, customer_id = ?
