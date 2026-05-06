@@ -871,8 +871,8 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
 
     # 3. Ensure Massey's email is on his own record as primary
     conn.execute(
-        """INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, source)
-           VALUES (?, ?, 0, 'repaired')""",
+        """INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary)
+           VALUES (?, ?, 0)""",
         (massey_cid, _MASSEY_EMAIL),
     )
     conn.execute(
