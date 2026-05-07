@@ -2266,10 +2266,10 @@
                     if (mHolesF) {
                         filteredRegs = filteredRegs.filter(r => String(r.holes) === mHolesF);
                     }
-                    filteredRegs = sortRegistrants(filteredRegs);
+                    filteredRegs = sortRegistrants(filteredRegs, registrants);
                     if (!activeFilter || activeFilter === "NO GAMES") {
                         filteredRegs = filteredRegs.concat(mGgRows);
-                        filteredRegs = sortRegistrants(filteredRegs);
+                        filteredRegs = sortRegistrants(filteredRegs, registrants);
                     }
 
                     // Render inactive section for mobile
@@ -2494,22 +2494,44 @@
         try { localStorage.setItem("tgf_detail_visible_columns", JSON.stringify(detailVisibleColumns)); } catch (e) {}
     }
 
-    function sortRegistrants(registrants) {
+    function sortRegistrants(registrants, allRegs) {
         const sorted = [...registrants];
         const asc = detailSortDir === "asc";
         sorted.sort((a, b) => {
             let va = a[detailSortField] || "";
             let vb = b[detailSortField] || "";
             if (detailSortField === "item_price") {
-                va = parseFloat((va || "0").replace(/[$,]/g, "")) || 0;
-                vb = parseFloat((vb || "0").replace(/[$,]/g, "")) || 0;
+                va = parseFloat((String(va) || "0").replace(/[$,]/g, "")) || 0;
+                vb = parseFloat((String(vb) || "0").replace(/[$,]/g, "")) || 0;
                 return asc ? va - vb : vb - va;
             }
-            // Sort customer names by last name
             if (detailSortField === "customer") {
-                va = lastNameSortKey(va);
-                vb = lastNameSortKey(vb);
+                va = lastNameSortKey(String(va));
+                vb = lastNameSortKey(String(vb));
                 return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+            }
+            if (detailSortField === "handicap") {
+                const refs = allRegs || registrants;
+                const cnt9 = refs.filter(r => r.holes === "9" || r.holes === 9).length;
+                const cnt18 = refs.filter(r => r.holes === "18" || r.holes === 18).length;
+                const use18 = cnt9 === 0 && cnt18 > 0;
+                const getHcp = r => {
+                    const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    if (lh !== undefined) return use18 ? lh.index_18 : lh.index_9;
+                    return parseFloat(r.handicap) || null;
+                };
+                const na = getHcp(a), nb = getHcp(b);
+                if (na === null && nb === null) return 0;
+                if (na === null) return 1;
+                if (nb === null) return -1;
+                return asc ? na - nb : nb - na;
+            }
+            if (detailSortField === "side_games") {
+                const refs = allRegs || registrants;
+                const ORDER = { "BOTH": 0, "NET": 1, "GROSS": 2, "NO GAMES": 3 };
+                const oa = ORDER[getEffectiveGameType(a, refs)] ?? 4;
+                const ob = ORDER[getEffectiveGameType(b, refs)] ?? 4;
+                return asc ? oa - ob : ob - oa;
             }
             va = String(va).toLowerCase();
             vb = String(vb).toLowerCase();
@@ -4384,12 +4406,12 @@
         }
 
         // Sort the filtered registrants
-        filtered = sortRegistrants(filtered);
+        filtered = sortRegistrants(filtered, registrants);
 
         // Append GG RSVP players (show when no filter or NO GAMES filter)
         if (!activeFilter || activeFilter === "NO GAMES") {
             filtered = filtered.concat(ggRsvpRows);
-            filtered = sortRegistrants(filtered);
+            filtered = sortRegistrants(filtered, registrants);
         }
 
         // Detail controls row: column toggle + count + Add Player + Remind All
