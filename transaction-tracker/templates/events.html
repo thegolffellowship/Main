@@ -3674,21 +3674,29 @@
         let roles = [];
         let firstTimerEver = null;
         let firstTimerUsed = 0;
+        let profileStatus = null;
+        let hasProfile = false;
         if (item.customer_id) {
             const info = CUSTOMER_ROLES_MAP[String(item.customer_id)];
             if (info) {
+                hasProfile = true;
                 roles = info.roles || [];
                 firstTimerEver = info.first_timer_ever;
                 firstTimerUsed = info.first_timer_used || 0;
+                profileStatus = info.current_player_status || null;
             }
         }
         const hasRole = (r) => roles.includes(r);
         const isMember = hasRole("golfer") || hasRole("manager") || hasRole("admin") || hasRole("owner");
         const isManager = hasRole("manager") || hasRole("admin") || hasRole("owner");
+        const isFormer = profileStatus === "expired_member" || profileStatus === "inactive";
 
-        // Canonical profile checks (when we have profile data)
-        if (roles.length > 0) {
-            if (selected === "MEMBER" && !isMember) {
+        // Canonical profile checks (when we have a linked profile)
+        if (hasProfile) {
+            if (selected === "MEMBER" && isFormer) {
+                return {reason: "Registered as MEMBER but customer is a Former Member — membership renewal needed"};
+            }
+            if (selected === "MEMBER" && !isMember && !isFormer) {
                 return {reason: "Registered as MEMBER but customer profile has no member role"};
             }
             if (selected === "MANAGER" && !isManager) {
@@ -3717,7 +3725,7 @@
             playerItems = allItems.filter(i => (i.customer || "").toLowerCase() === name && i.id !== item.id);
         }
 
-        // Always include the current item's own history in the full set for context
+        // Include the current item in history for full context
         const historyItems = [item, ...playerItems];
         const derivedActual = _deriveStatusFromHistory(historyItems);
         if (!derivedActual) return null;
