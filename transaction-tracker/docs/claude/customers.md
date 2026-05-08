@@ -140,69 +140,120 @@ on any customer profile (all three rendering paths: inline expand, detail panel,
 
 **Member Status dropdown options:**
 `1ST TIMER` / `GUEST` / `MEMBER` / `MEMBER+` / `FORMER`
-- `member_plus` — new status (migration-adds to CHECK constraint); displayed as "MEMBER+"
-- `expired_member` kept in DB for backward compat; displayed as "FORMER"
 
 **Roles checkboxes:** `golfer`, `manager`, `admin`, `vendor`, `course_contact`, `sponsor`
 
-> **Renamed:** the old `member` role string was renamed to `golfer` (lowercase, in
-> `customer_roles.role_type`) because it collided conceptually with the `MEMBER`
-> player_status display label, making code and conversation ambiguous. Migration
-> `_migrate_rename_member_role_to_golfer` recreates the `customer_roles` table with the
-> new CHECK and maps existing `member` rows to `golfer`. Idempotent (detects whether the
-> migration already ran by inspecting the stored CREATE TABLE SQL). All `player_status`
-> values (`MEMBER`, `MEMBER+`, `1ST TIMER`, `GUEST`, `FORMER`, `active_member`,
-> `expired_member`, `MANAGER`) and `membership` item names are unchanged.
-> Frontend constants updated: `ELEVATED` and `ALL_ROLES` arrays in customers.html, the
-> four `hasRole(...)` guards in events.html's user_status validator, and the
-> `valid_roles` set in `/api/replace-customer-roles`.
+> **Roles and status are decoupled** (v2.13.0). Roles are participation/org tags
+> only — they do **not** drive the status badge. The `golfer` role no longer forces
+> a MEMBER badge. Status is its own thing, set explicitly via the dropdown or by
+> automated lapse/renewal detection in the membership scheduler.
+>
+> The old `member` role was renamed to `golfer` (in v2.x) for the same disambiguation
+> reason. `_migrate_rename_member_role_to_golfer` is idempotent (inspects stored
+> CREATE TABLE SQL).
 
-**Save flow:**
-1. `PATCH /api/customers/<id>` — updates `current_player_status` via `update_customer_info()`
-2. `POST /api/customers/sync-roles` — `{customer_id, roles[]}` replaces all roles atomically
+### Status Storage (`customer_statuses` history table)
+
+The canonical store of customer status is the `customer_statuses` history table —
+one row per status change, with the most recent row determining current status.
+
+```sql
+CREATE TABLE roles (
+  role_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+  role_name  VARCHAR(30) NOT NULL UNIQUE,  -- golfer, manager, admin, ...
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE statuses (
+  status_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+  status_name  VARCHAR(20) NOT NULL UNIQUE,  -- 1st_timer, guest, member, member_plus, former
+  display_name VARCHAR(20) NOT NULL,         -- '1ST TIMER', 'GUEST', 'MEMBER', 'MEMBER+', 'FORMER'
+  created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE customer_statuses (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(customer_id) ON DELETE CASCADE,
+  status_id   INTEGER NOT NULL REFERENCES statuses(status_id),
+  set_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  set_by      INTEGER REFERENCES customers(customer_id),
+  notes       TEXT
+);
+CREATE INDEX idx_customer_statuses_cid ON customer_statuses(customer_id, set_at DESC);
+```
+
+`_migrate_create_status_tables(conn)` (called from `init_db`) creates and seeds
+both reference tables and backfills `customer_statuses` from the existing
+`customers.current_player_status` column. `current_player_status` is **kept in
+sync** as a denormalized snapshot for legacy reads (don't break the column —
+many queries still use it), but the history table is authoritative.
+
+**Helpers:**
+- `get_current_status(customer_id, conn=None, db_path=None)` — returns the latest row.
+- `set_customer_status(customer_id, status_name, *, conn, db_path, set_by, notes, set_at)`
+  — inserts a new row AND syncs `current_player_status` in the same transaction.
+
+`_resolve_or_create_customer()` and `update_customer_info()` route through
+`set_customer_status()` for any status change.
+
+### FORMER status automation
+
+`email_parser/memberships.py` runs the daily renewal-detection job:
+- When a term lapses (`expires_at` past with no renewal), inserts a FORMER row.
+- When a TGF Membership payment is recorded, inserts a MEMBER row.
+- A renewal that arrives before the lapse date keeps the status as MEMBER —
+  no FORMER row is written.
+- Most-recent row wins, so a MEMBER row after a FORMER row cleanly restores
+  membership without any cleanup.
+
+`_write_status_history(conn, customer_ids, status_name, notes)` is the helper
+used by the scheduler; it skips inserting a duplicate row when the customer is
+already at that status.
+
+**Save flow (Info tab edits):**
+1. `POST /api/customers/<id>/status` — `{status_name, notes?}` inserts a `customer_statuses` row.
+2. `POST /api/customers/sync-roles` — `{customer_id, roles[]}` replaces all roles atomically (independent of status).
 
 **API:**
-- `GET  /api/customer-roles` — returns roles per customer + `_by_name` map (name→customer_id);
-  frontend uses `_by_name` as fallback when `items.customer_id` is null (pre-identity items).
-  Per-customer dict also includes `current_player_status`, `first_timer_ever`, and `chapter`
-  (read from the customers master record). The frontend overlays these onto each customer
-  object, so the Customers page reads chapter authoritatively from the customers table
-  rather than the items-derived `deriveChapter` fallback.
-- `POST /api/customers/sync-roles` — `{customer_id, roles}` replaces full role set
+- `GET  /api/customer-roles` — returns roles per customer + `_by_name` map, plus
+  `status_name` and `status_display_name` from the latest `customer_statuses` row
+  (joined with `statuses`), and `first_timer_ever` / `chapter` from the customers
+  master. The frontend overlays these onto each customer object so the Customers
+  page reads canonical status authoritatively.
+- `GET  /api/customers/<id>/status-history` — returns full history rows for
+  display in the Info tab.
+- `POST /api/customers/<id>/status` — append a new status row.
+- `POST /api/customers/sync-roles` — replaces full role set.
 
 ## Status Derivation (`deriveStatus`)
 
-`deriveStatus(items, roles, currentPlayerStatus)` (customers.html) returns one of
-`MEMBER` / `MEMBER+` / `1st TIMER` / `FORMER` / `GUEST`. Precedence (most authoritative
-first):
+`deriveStatus(items, roles, currentPlayerStatus, membershipTerm, statusName)`
+(customers.html) returns one of `MEMBER` / `MEMBER+` / `1st TIMER` / `FORMER` /
+`GUEST`. Precedence (most authoritative first):
 
-1. **Elevated role** — `owner` / `admin` / `manager` / `member` in `roles` → `MEMBER`.
-2. **Membership purchase** — any item whose `item_name` contains `membership` (case-insensitive)
-   → `MEMBER`. Hoisted above `current_player_status` so a customer who just bought a
-   membership reads as `MEMBER` even before the stored status is updated.
-3. **`current_player_status`**:
-   - `active_member` → `MEMBER`
+1. **Permanent leadership role** — `owner` / `admin` / `manager` in `roles` → `MEMBER`.
+   These three roles imply membership regardless of stored status.
+2. **Lapsed membership term** — `isMembershipLapsed(membershipTerm)` true → `FORMER`.
+3. **Canonical status** (from `customer_statuses` via `statusName`):
+   - `member` → `MEMBER`
    - `member_plus` → `MEMBER+`
-   - `first_timer` → `1st TIMER` **only if `items.length ≤ 1`**; otherwise demoted to `GUEST`
-     (a customer flagged first-timer who has played more than once is no longer a first-timer).
-   - `expired_member` / `inactive` → `FORMER`
-   - `active_guest` → `GUEST`
-4. **Items-based fallbacks** — membership in item name; `user_status === MEMBER`;
-   `returning_or_new` containing "new"/"1st"/"first" (also capped at `items.length ≤ 1`);
-   `NON-MEMBER` / `GUEST` user_status; default `GUEST`.
+   - `former` → `FORMER`
+   - `guest` → `GUEST`
+   - `1st_timer` → `1st TIMER`
+4. **Legacy fallbacks** (only if no `statusName` and no roles): membership-purchase
+   item heuristic, `user_status === MEMBER` from items, `1st`/`first` substring,
+   default `GUEST`.
 
-`c.status` is recomputed after the `/api/customer-roles` fetch resolves, so the badge
-reflects the final (roles + player_status) view rather than the items-only first pass.
+> **No more `golfer` short-circuit.** The role is purely organizational —
+> someone with `golfer` and a `1st_timer` status reads `1st TIMER`, not `MEMBER`.
 
-**Backend autocorrect** (`_migrate_autocorrect_player_status` in `email_parser/database.py`,
-runs at `init_db`): mirrors the frontend rules into the database itself.
-- Pass 1 — anyone with a `membership` item still flagged `first_timer` / `active_guest` /
-  NULL → upgraded to `active_member`.
-- Pass 2 — anyone still flagged `first_timer` with more than one item → demoted to
-  `active_guest`.
+`c.status` is recomputed after the `/api/customer-roles` fetch resolves, so the
+badge reflects the final (roles + status_name + lapse-state) view rather than
+the items-only first pass.
 
-`customer_roles` is intentionally not modified by the autocorrect; only the soft
-`current_player_status` flag is flipped.
+**Backend autocorrect** (`_migrate_autocorrect_player_status` in `email_parser/database.py`)
+still mirrors the legacy `current_player_status` rules at boot but is now a
+backwards-compat layer behind the canonical `customer_statuses` writes.
 
 ## Surname Uppercase for Elevated Roles (Events + Transactions only)
 

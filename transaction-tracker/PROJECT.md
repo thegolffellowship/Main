@@ -679,7 +679,7 @@ Operations Command Center with AI-powered strategic advisor.
 | chapter | TEXT | Primary chapter affiliation |
 | ghin_number | TEXT | GHIN handicap number |
 | company_name | TEXT | Vendor/company name (single field; display prefers this over first+last) |
-| current_player_status | TEXT | `active_member` / `expired_member` / `member_plus` / `active_guest` / `inactive` / `first_timer` |
+| current_player_status | TEXT | `active_member` / `expired_member` / `member_plus` / `active_guest` / `inactive` / `first_timer`. **Denormalized snapshot only** as of v2.13.0 — canonical store is `customer_statuses` history table, kept in sync via `set_customer_status()`. |
 | first_timer_ever | INTEGER | Whether this customer was ever a first timer |
 | acquisition_source | TEXT | How they found TGF |
 | account_status | TEXT | `active` / `inactive` / `banned` |
@@ -701,6 +701,44 @@ Canonical source of truth for customer email addresses. Supports multiple emails
 | created_at | TEXT | |
 
 **Constraints:** UNIQUE(customer_id, email), unique index on (customer_id, is_primary) WHERE is_primary=1
+
+### `roles` table (v2.13.0)
+
+Reference table for valid customer role names. Seeded at boot.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| role_id | INTEGER PK | Auto-increment |
+| role_name | VARCHAR(30) UNIQUE NOT NULL | `golfer`, `manager`, `admin`, `owner`, `course_contact`, `sponsor`, `vendor` |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
+
+### `statuses` table (v2.13.0)
+
+Reference table for valid customer status values. Seeded at boot.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| status_id | INTEGER PK | Auto-increment |
+| status_name | VARCHAR(20) UNIQUE NOT NULL | `1st_timer`, `guest`, `member`, `member_plus`, `former` |
+| display_name | VARCHAR(20) NOT NULL | `'1ST TIMER'`, `'GUEST'`, `'MEMBER'`, `'MEMBER+'`, `'FORMER'` |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
+
+### `customer_statuses` table (v2.13.0)
+
+Append-only history of customer status changes. **Most recent row by `set_at DESC` is the current status.** Canonical store as of v2.13.0; the legacy `customers.current_player_status` column is now a denormalized snapshot kept in sync.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER PK | Auto-increment |
+| customer_id | INTEGER NOT NULL | FK to `customers.customer_id` ON DELETE CASCADE |
+| status_id | INTEGER NOT NULL | FK to `statuses.status_id` |
+| set_at | TIMESTAMP NOT NULL | DEFAULT CURRENT_TIMESTAMP |
+| set_by | INTEGER | FK to `customers.customer_id` (who made the change; nullable) |
+| notes | TEXT | Free-text context (e.g. `"bootstrapped from first transaction"`, `"membership term lapsed"`) |
+
+**Index:** `idx_customer_statuses_cid` on `(customer_id, set_at DESC)` — used by every `get_current_status` lookup.
+
+**Helpers:** `get_current_status(customer_id)` returns latest row; `set_customer_status(customer_id, status_name, ...)` appends a new row AND updates `customers.current_player_status` snapshot in the same transaction. `email_parser/memberships.py` writes FORMER on lapse and MEMBER on renewal via `_write_status_history()`, which skips inserts when the customer is already at that status.
 
 ### `app_settings` table
 

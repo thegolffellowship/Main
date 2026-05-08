@@ -11,6 +11,24 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/coo.md` (COO dashboard + AI chat)
 - `docs/claude/customer-merge-repair.md` (playbook for fixing absorbed customer profiles)
 
+## Workflow rules (always)
+
+These run on every session — no need to remind me.
+
+1. **After every commit/push, bump `static/js/version.js`.**
+   - Increment patch version (e.g. `2.12.1` → `2.12.2`); minor bump (`2.12.x` → `2.13.0`) for user-visible features; major bump only for breaking changes.
+   - Add a new entry at the TOP of `TGF_CHANGELOG` with: version, today's date (YYYY-MM-DD), short title, and a `changes` array of 1-N bullet strings.
+   - Style match the existing entries: each bullet is a self-contained sentence/paragraph, written for someone re-reading later (what changed AND why).
+   - Update `TGF_VERSION` to match the new top entry.
+   - Include this in the same commit as the code change when feasible; otherwise commit it as a follow-up labelled `chore: bump version to X.Y.Z`.
+
+2. **After every commit/push, update affected documentation.**
+   - If the change touches behavior described in any `docs/claude/*.md` sub-doc, update that sub-doc.
+   - If the change adds/renames a key file, route, table, or column referenced in `CLAUDE.md`, update the matching section here.
+   - Don't write doc updates for trivial fixes (typo, formatting, log-string change). Use judgement: if a future reader could be misled by the existing docs, update them.
+
+3. **Don't ask permission before performing rules 1 and 2** — do them as part of finishing the work. Mention what you updated in the wrap-up summary.
+
 ## Deployed URL
 
 **Railway:** `https://tgf-tracker.up.railway.app`

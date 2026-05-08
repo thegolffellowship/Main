@@ -14,6 +14,8 @@
 2. **Registrations table** — only active/rsvp players (compact rows)
 3. **Inactive section** — credited/refunded/transferred/WD players in a gray box with Reverse buttons. Names link to `/customers?name=...` (clickable). WD rows with a `credit_amount` and standalone `credited` rows expose an additional **Refund** button (see `Payout Credit / Refund` below).
 4. **Not Playing section** — GG RSVP players marked as not playing (red box). Names render as full "Last, First" (resolved via `rsvps.customer_id` FK → `customers` master record), link to `/customers?name=...`, and surnames render UPPERCASE for elevated-role players. No email rendered on the row.
+   - **Suppression rule (v2.13.0):** if a player who RSVPd "not playing" later registers and has an active transaction for the event, their GG RSVP is filtered out of this section automatically. Daniel Stich-style: he RSVPd not-playing then paid; he no longer shows up under NOT PLAYING.
+   - **Dedup (v2.13.0):** `notPlayingRsvps` is deduplicated by email (primary key) then resolved/first name, so a doubled GG RSVP import (HOFFMAN, Rocky × 2 etc.) only renders once.
 5. **Message History** — collapsible section
 
 ## Columns in registrations table
@@ -111,6 +113,33 @@ the following are available to **manager** (and admin):
 | Send Venmo / Remind | `GET/POST /api/items/<id>/balance-due-email/{preview,send}` | manager |
 | Refund (WD-credit + standalone credited) | `POST /api/items/<id>/payout-credit` (legacy alias `payout-wd-credit`) | admin |
 | Match Venmo (header button) | `POST /api/accounting/auto-match-venmo-balance-due` | admin |
+
+### Match Venmo — resolution chain (v2.13.0)
+
+`auto_match_venmo_inbound_to_balance_due` in `email_parser/database.py` walks
+this chain to find the right `balance_due:` item for each unmatched Venmo IN
+expense. The matcher accepts both `transaction_type='received'` and
+`transaction_type='income'` — the LLM expense parser splits inbound payments
+inconsistently between those two labels, and excluding `'income'` was silently
+dropping ~half the inbound stream.
+
+Per-expense lookup, in order:
+1. **Exact name** — `items.customer = expense.merchant` (case-insensitive).
+2. **Name alias** — `customer_aliases.alias_value = expense.merchant` with `alias_type='name'`, then look up the canonical customer name. Fixes the common case where a Venmo display name differs from the registered name (e.g. "James Youngs Jr" → "Pat Youngs").
+3. **Venmo handle** — `expense.other_party_handle` (extracted from the Venmo notification email's `venmo.com/u/<handle>` URL by `extract_venmo_other_party_handle`) compared against `customers.venmo_username` after stripping `@` and lowercasing. On hit, looks up balance_due items by `customer_id`. If no items match by `customer_id` (the row has a NULL `customer_id`), falls back to a canonical-name lookup.
+
+Both the alias and handle paths require an exact match on the `balance_due:`
+amount within ±$1.00 to avoid false positives on similar amounts. Multiple
+matches → `ambiguous`, no matches → `no_candidate`.
+
+Diagnostic: `GET /api/admin/venmo-debug?payer=<name fragment>` returns the full
+state (expense_transactions, customer_aliases, customers.venmo_username,
+balance_due items) for a payer fragment so you can see exactly where the chain
+breaks.
+
+INFO-level logs are emitted for every unmatched expense (`venmo no-candidate:
+exp <id> payer='<name>' handle=<handle>`) and for handle-resolution outcomes
+in Railway logs.
 
 **Event-level** Edit / Merge / Delete (entire event) remain admin-only.
 The client-side `btn-undo-credit-apply` handler also gates on

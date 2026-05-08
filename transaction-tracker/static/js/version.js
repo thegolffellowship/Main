@@ -1,5 +1,22 @@
-window.TGF_VERSION = "2.12.1";
+window.TGF_VERSION = "2.13.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.13.0",
+    date: "2026-05-08",
+    title: "Roles decoupled from status; Venmo matcher fixes; NOT PLAYING dedup",
+    changes: [
+      "Customer status is now decoupled from roles. New `customer_statuses` history table is the canonical source — `golfer` role no longer forces a MEMBER badge. Joe Brandon (golfer + 1ST TIMER) now reads 1ST TIMER on the badge as expected. Status changes write a new history row via the new `POST /api/customers/<id>/status` endpoint; latest row determines current status. Reference tables `roles` and `statuses` seeded at boot. `customers.current_player_status` kept in sync as a denormalized snapshot for legacy reads.",
+      "FORMER status automation: `email_parser/memberships.py` daily scheduler now writes a FORMER row to `customer_statuses` when a term lapses, and a MEMBER row when a renewal is recorded. Most recent row wins, so a renewal cleanly restores membership.",
+      "Mismatch flags in events tab: registered as MEMBER + canonical status FORMER → `Former Member renewal needed`. Registered as MEMBER + canonical not-a-member → `Customer profile is not a member`. MEMBER + 1st Timer pricing on first event = no flag (legitimate). Flag only fires on second 1st Timer attempt.",
+      "Venmo balance-due matcher: now also accepts `transaction_type='income'` (not just `'received'`) — the LLM expense parser splits inbound payments inconsistently between those two labels, which was silently excluding ~half the inbound stream from auto-matching. Pat Youngs's $53.85 from 'James Youngs Jr' is the case that surfaced this.",
+      "Venmo matcher: third fallback added — when name + alias lookups miss, the matcher now compares `expense_transactions.other_party_handle` (Venmo @handle) against `customers.venmo_username`. Lets a payment from a Venmo display name that differs from the registered name match by handle alone. Backed up with a canonical-name fallback when the balance_due item has a NULL `customer_id`.",
+      "New diagnostic endpoint `GET /api/admin/venmo-debug?payer=<name>` returns expense_transactions, customer_aliases, customers.venmo_username matches, and balance_due items for a given payer fragment — used to pinpoint why a specific Venmo payment isn't matching.",
+      "NOT PLAYING section in event detail now (a) suppresses any GG RSVP whose player has since registered with an active transaction (Daniel Stich-style: he RSVPd not-playing, then registered and paid; his GG badge no longer appears in NOT PLAYING), and (b) deduplicates by email/name so a doubled GG RSVP import doesn't surface twice (HOFFMAN, Rocky × 2 etc).",
+      "events.html `statusMismatchReason()`: hoisted `statusName` to function top to fix a `ReferenceError: info is not defined` that was crashing `renderDetailContent` and emptying the entire player table when a row had no canonical profile (e.g. unmatched GG RSVPs like 'Matt'). Now degrades gracefully.",
+      "ALTER TABLE migrations added at boot for `customers.suffix` and `customers.middle_name` — fixed a 500 on `/api/customers` after the columns were added to the schema but the live Railway DB was missing them.",
+      "CLAUDE.md: added 'Workflow rules (always)' section documenting durable per-session expectations (bump `version.js` and update affected `docs/claude/*.md` after every push).",
+    ],
+  },
   {
     version: "2.12.1",
     date: "2026-05-04",

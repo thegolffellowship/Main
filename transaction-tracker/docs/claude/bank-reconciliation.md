@@ -147,8 +147,9 @@ Red warning rows where projected expenses exceed confirmed income.
 | `/api/reconciliation/event/<name>` | GET | manager | Event reconciliation status |
 | `/api/reconciliation/cashflow` | GET | admin | Weekly cash flow data |
 | `/api/admin/run-recon-drift-fix` | POST | admin | Apply 2026-04 recon-drift fixes (see below) |
-| `/api/accounting/auto-match-venmo-balance-due` | POST | admin | Re-runs the Venmo IN matcher on demand |
+| `/api/accounting/auto-match-venmo-balance-due` | POST | admin | Re-runs the Venmo IN matcher on demand. Walks a 3-step lookup chain (exact name → name alias → Venmo handle via `customers.venmo_username`) and accepts both `transaction_type='received'` and `transaction_type='income'` (v2.13.0 — see `events.md` "Match Venmo — resolution chain"). |
 | `/api/admin/reconcile-orphan-venmo` | POST | admin | Sweeps existing credit-transfer rows for orphan Venmo +PAY items (`?dry_run=1` supported) |
+| `/api/admin/venmo-debug` | GET | admin | Diagnostic: `?payer=<name>` returns expense_transactions, customer_aliases, customers.venmo_username matches, and balance_due items for the given payer fragment. Use to pinpoint why a specific Venmo payment isn't matching. |
 | `/api/audit/duplicate-items-diagnostic` | GET | admin | Group duplicate items by `(order_id, customer, item_name, item_price)` (default `since=2026-04-26`) |
 | `/api/audit/delete-phantom-duplicates` | POST | admin | One-shot dedup cleanup (no longer surfaced in UI) |
 | `/api/audit/membership-mashup-scan` | GET | admin | Find suspect TGF MEMBERSHIP rows that have non-null event-side fields |
