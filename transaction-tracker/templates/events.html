@@ -3675,6 +3675,7 @@
         let firstTimerEver = null;
         let firstTimerUsed = 0;
         let profileStatus = null;
+        let statusName = null;
         let hasProfile = false;
         if (item.customer_id) {
             const info = CUSTOMER_ROLES_MAP[String(item.customer_id)];
@@ -3684,10 +3685,10 @@
                 firstTimerEver = info.first_timer_ever;
                 firstTimerUsed = info.first_timer_used || 0;
                 profileStatus = info.current_player_status || null;
+                statusName = info.status_name || null;
             }
         }
         const hasRole = (r) => roles.includes(r);
-        const statusName = info ? (info.status_name || null) : null;
         // Org leadership is always treated as MEMBER regardless of stored status
         const isOrgLeader = hasRole("manager") || hasRole("admin") || hasRole("owner");
         const isMember = statusName === "member" || statusName === "member_plus" || isOrgLeader;
