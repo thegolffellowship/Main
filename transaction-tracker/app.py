@@ -8334,6 +8334,70 @@ def api_auto_match_venmo_balance_due():
     return jsonify(auto_match_venmo_inbound_to_balance_due())
 
 
+@app.route("/api/admin/venmo-debug")
+@require_role("admin")
+def api_admin_venmo_debug():
+    """Diagnostic: search expense_transactions by payer name + show match data.
+
+    Query: ?payer=<name fragment> (case-insensitive LIKE on merchant)
+    Returns: expense rows + the customer_aliases / customers.venmo_username lookups
+    that the matcher would attempt.
+    """
+    from email_parser.database import _connect
+    payer = (request.args.get("payer") or "").strip()
+    if not payer:
+        return jsonify({"error": "payer query param required"}), 400
+    with _connect() as conn:
+        expenses = [
+            dict(r) for r in conn.execute(
+                """SELECT id, source_type, transaction_type, merchant, amount,
+                          transaction_date, review_status, matched_item_id,
+                          other_party_handle, customer_id
+                   FROM expense_transactions
+                   WHERE merchant LIKE ? COLLATE NOCASE
+                   ORDER BY id DESC LIMIT 20""",
+                (f"%{payer}%",),
+            ).fetchall()
+        ]
+        aliases = [
+            dict(r) for r in conn.execute(
+                """SELECT customer_name, alias_type, alias_value
+                   FROM customer_aliases
+                   WHERE alias_value LIKE ? COLLATE NOCASE
+                   ORDER BY customer_name""",
+                (f"%{payer}%",),
+            ).fetchall()
+        ]
+        venmo_handles = [
+            dict(r) for r in conn.execute(
+                """SELECT customer_id, first_name, last_name, venmo_username
+                   FROM customers
+                   WHERE (LOWER(first_name || ' ' || COALESCE(last_name,'')) LIKE ?
+                       OR LOWER(COALESCE(venmo_username,'')) LIKE ?)
+                   LIMIT 20""",
+                (f"%{payer.lower()}%", f"%{payer.lower()}%"),
+            ).fetchall()
+        ]
+        balance_due_items = [
+            dict(r) for r in conn.execute(
+                """SELECT id, customer, customer_id, item_name, credit_note,
+                          item_price, transaction_status
+                   FROM items
+                   WHERE merchant = 'Paid Separately (Credit Transfer)'
+                     AND credit_note LIKE 'balance_due:%'
+                     AND (customer LIKE ? COLLATE NOCASE)
+                   LIMIT 20""",
+                (f"%{payer}%",),
+            ).fetchall()
+        ]
+    return jsonify({
+        "expense_transactions": expenses,
+        "customer_aliases": aliases,
+        "customers_with_matching_name_or_handle": venmo_handles,
+        "balance_due_items": balance_due_items,
+    })
+
+
 @app.route("/api/accounting/expense-transactions/<int:tid>", methods=["DELETE"])
 @require_role("admin")
 def api_delete_expense_transaction(tid):
