@@ -4310,7 +4310,6 @@
 
         // Count RSVP stats
         const playingRsvps = rsvps.filter(r => r.response === 'PLAYING');
-        const notPlayingRsvps = rsvps.filter(r => r.response === 'NOT PLAYING');
         const matchedItemIds = new Set(rsvps.filter(r => r.matched_item_id).map(r => r.matched_item_id));
         // Frontend dedup: exclude GG RSVPs whose email or name matches an existing registrant
         // Also exclude RSVPs that have been overridden to not_playing via email override
@@ -4320,6 +4319,23 @@
         const inactiveRegs = registrants.filter(r => INACTIVE_FOR_DEDUP.includes(r.transaction_status));
         const regEmails = new Set(activeRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
         const regNames = new Set(activeRegs.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        // NOT PLAYING: exclude anyone who has since registered (active transaction), and dedup by email/name
+        const notPlayingRsvps = (() => {
+            const seen = new Set();
+            return rsvps.filter(r => {
+                if (r.response !== 'NOT PLAYING') return false;
+                const email = (r.player_email || '').toLowerCase();
+                if (email && regEmails.has(email)) return false;
+                const resolved = (r.resolved_name || '').toLowerCase();
+                const first = (r.player_name || '').toLowerCase();
+                if (resolved && regNames.has(resolved)) return false;
+                if (!resolved && first && [...regNames].some(n => n.startsWith(first))) return false;
+                const key = email || resolved || first;
+                if (key && seen.has(key)) return false;
+                if (key) seen.add(key);
+                return true;
+            });
+        })();
         const activeItemIds = new Set(activeRegs.map(r => r.id));
         // Build a map of item_id → email for verifying RSVP matches
         const itemEmailMap = {};

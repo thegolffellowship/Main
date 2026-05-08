@@ -10360,13 +10360,22 @@ def auto_match_venmo_inbound_to_balance_due(
                     raw_handle = (exp["other_party_handle"] or "").lstrip("@").lower()
                     if raw_handle:
                         handle_row = conn.execute(
-                            """SELECT c.customer_id
+                            """SELECT c.customer_id,
+                                      TRIM(COALESCE(NULLIF(c.company_name,''),
+                                           NULLIF(TRIM(COALESCE(c.first_name,'') || ' '
+                                                  || COALESCE(c.last_name,'')), ''))) AS canonical_name
                                FROM customers c
                                WHERE REPLACE(LOWER(COALESCE(c.venmo_username,'')), '@', '') = ?
                                LIMIT 1""",
                             (raw_handle,),
                         ).fetchone()
                         if handle_row:
+                            logger.debug(
+                                "venmo match: handle %s → customer_id %s (%s)",
+                                raw_handle, handle_row["customer_id"], handle_row["canonical_name"],
+                            )
+                            # Try customer_id first (reliable); fall back to canonical name
+                            # in case the balance_due item has a NULL customer_id.
                             candidates = [
                                 dict(r) for r in conn.execute(
                                     """SELECT id, customer, item_name, credit_note, item_price
@@ -10378,6 +10387,17 @@ def auto_match_venmo_inbound_to_balance_due(
                                     (handle_row["customer_id"],),
                                 ).fetchall()
                             ]
+                            if not candidates and handle_row["canonical_name"]:
+                                candidates = [
+                                    dict(r) for r in conn.execute(
+                                        _BALANCE_DUE_SQL, (handle_row["canonical_name"],)
+                                    ).fetchall()
+                                ]
+                        else:
+                            logger.debug(
+                                "venmo match: handle %s not found in customers.venmo_username",
+                                raw_handle,
+                            )
                 # Filter by amount tolerance (±$1.00)
                 matched: list[dict] = []
                 for c in candidates:
