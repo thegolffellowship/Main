@@ -2814,6 +2814,13 @@ def init_db(db_path: str | Path | None = None) -> None:
         except sqlite3.OperationalError:
             pass
 
+        # Add suffix/middle_name columns for name parsing (added to schema but not migrated)
+        for col_def in ["suffix TEXT", "middle_name TEXT"]:
+            try:
+                conn.execute(f"ALTER TABLE customers ADD COLUMN {col_def}")
+            except sqlite3.OperationalError:
+                pass
+
         # One-time migration: eliminate tgf_golfers table, unify into customers.
         # - Adds customer_id column to tgf_payouts
         # - Backfills customer_id from golfer→customer mapping (creates missing customers)
