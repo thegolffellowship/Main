@@ -1549,7 +1549,8 @@ def api_assign_member(item_id):
         cust = conn.execute(
             """SELECT c.customer_id,
                       TRIM(COALESCE(NULLIF(c.company_name,''),
-                           NULLIF(TRIM(c.first_name || ' ' || c.last_name),''))) AS full_name,
+                           NULLIF(TRIM(c.first_name || ' ' || c.last_name
+                                  || COALESCE(' ' || NULLIF(TRIM(c.suffix),''), '')),''))) AS full_name,
                       c.current_player_status,
                       c.chapter,
                       c.phone,

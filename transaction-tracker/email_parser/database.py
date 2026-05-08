@@ -6688,7 +6688,8 @@ def get_all_customers(db_path=None) -> list[dict]:
                    c.first_name,
                    c.last_name,
                    TRIM(COALESCE(NULLIF(c.company_name,''),
-                        NULLIF(TRIM(c.first_name || ' ' || c.last_name), ''))) AS customer_name,
+                        NULLIF(TRIM(c.first_name || ' ' || c.last_name
+                               || COALESCE(' ' || NULLIF(TRIM(c.suffix),''), '')), ''))) AS customer_name,
                    c.phone,
                    c.venmo_username,
                    c.current_player_status,
