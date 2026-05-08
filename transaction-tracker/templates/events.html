@@ -3687,9 +3687,13 @@
             }
         }
         const hasRole = (r) => roles.includes(r);
-        const isMember = hasRole("golfer") || hasRole("manager") || hasRole("admin") || hasRole("owner");
-        const isManager = hasRole("manager") || hasRole("admin") || hasRole("owner");
-        const isFormer = profileStatus === "expired_member" || profileStatus === "inactive";
+        const statusName = info ? (info.status_name || null) : null;
+        // Org leadership is always treated as MEMBER regardless of stored status
+        const isOrgLeader = hasRole("manager") || hasRole("admin") || hasRole("owner");
+        const isMember = statusName === "member" || statusName === "member_plus" || isOrgLeader;
+        const isManager = isOrgLeader;
+        const isFormer = statusName === "former"
+            || profileStatus === "expired_member" || profileStatus === "inactive";
 
         // Canonical profile checks (when we have a linked profile)
         if (hasProfile) {
@@ -3697,7 +3701,7 @@
                 return {reason: "Registered as MEMBER but customer is a Former Member — membership renewal needed"};
             }
             if (selected === "MEMBER" && !isMember && !isFormer) {
-                return {reason: "Registered as MEMBER but customer profile has no member role"};
+                return {reason: "Registered as MEMBER but customer profile is not a member"};
             }
             if (selected === "MANAGER" && !isManager) {
                 return {reason: "Registered as MANAGER but customer profile has no manager role"};
@@ -3705,10 +3709,12 @@
             if (selected === "GUEST" && isMember) {
                 return {reason: "Registered as GUEST but customer IS a member"};
             }
-            if (selected === "1ST TIMER" && hasRole("golfer") && firstTimerUsed > 1) {
+            // 1ST TIMER: a member using 1st-timer pricing more than once is a mismatch
+            if (selected === "1ST TIMER" && isMember && firstTimerUsed > 1) {
                 return {reason: "Member has already used their 1st Timer registration"};
             }
-            if (selected === "1ST TIMER" && firstTimerEver === true && !hasRole("golfer")) {
+            // 1ST TIMER: a non-member who has played before can't use 1st-timer pricing again
+            if (selected === "1ST TIMER" && !isMember && firstTimerEver === true && firstTimerUsed > 1) {
                 return {reason: "Has played before — 1st Timer rate no longer applies"};
             }
             return null;

@@ -1680,6 +1680,111 @@ def _migrate_autocorrect_player_status(conn: sqlite3.Connection) -> int:
     return upgraded + demoted
 
 
+# Maps customers.current_player_status → statuses.status_name
+_PS_TO_STATUS_NAME: dict[str, str] = {
+    "active_member":  "member",
+    "member_plus":    "member_plus",
+    "expired_member": "former",
+    "inactive":       "former",
+    "active_guest":   "guest",
+    "first_timer":    "1st_timer",
+}
+
+# Maps statuses.status_name → customers.current_player_status (for backwards compat write)
+_STATUS_NAME_TO_PS: dict[str, str] = {
+    "member":      "active_member",
+    "member_plus": "member_plus",
+    "former":      "inactive",
+    "guest":       "active_guest",
+    "1st_timer":   "first_timer",
+}
+
+
+def _migrate_create_status_tables(conn: sqlite3.Connection) -> int:
+    """Create roles, statuses, and customer_statuses reference/junction tables.
+
+    Idempotent. Creates tables, seeds reference rows, and backfills
+    customer_statuses from customers.current_player_status on first run.
+    Returns count of customer_statuses rows inserted.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS roles (
+            role_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            role_name  VARCHAR(30) NOT NULL UNIQUE,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS statuses (
+            status_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            status_name  VARCHAR(20) NOT NULL UNIQUE,
+            display_name VARCHAR(20) NOT NULL,
+            created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS customer_statuses (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL
+                        REFERENCES customers(customer_id) ON DELETE CASCADE,
+            status_id   INTEGER NOT NULL REFERENCES statuses(status_id),
+            set_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            set_by      INTEGER REFERENCES customers(customer_id),
+            notes       TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_customer_statuses_cid
+        ON customer_statuses(customer_id, set_at DESC)
+    """)
+
+    # Seed roles reference rows
+    for rn in ["golfer", "manager", "admin", "owner", "course_contact", "sponsor", "vendor"]:
+        conn.execute("INSERT OR IGNORE INTO roles (role_name) VALUES (?)", (rn,))
+
+    # Seed statuses reference rows
+    for sname, dname in [
+        ("1st_timer",   "1ST TIMER"),
+        ("guest",       "GUEST"),
+        ("member",      "MEMBER"),
+        ("member_plus", "MEMBER+"),
+        ("former",      "FORMER"),
+    ]:
+        conn.execute(
+            "INSERT OR IGNORE INTO statuses (status_name, display_name) VALUES (?, ?)",
+            (sname, dname),
+        )
+
+    # Backfill customer_statuses from current_player_status for customers
+    # that don't yet have any customer_statuses row.
+    rows = conn.execute(
+        """SELECT customer_id, current_player_status, updated_at
+           FROM customers
+           WHERE current_player_status IS NOT NULL
+             AND customer_id NOT IN (SELECT DISTINCT customer_id FROM customer_statuses)"""
+    ).fetchall()
+
+    inserted = 0
+    for r in rows:
+        sname = _PS_TO_STATUS_NAME.get(r["current_player_status"])
+        if not sname:
+            continue
+        sid = conn.execute(
+            "SELECT status_id FROM statuses WHERE status_name = ?", (sname,)
+        ).fetchone()
+        if not sid:
+            continue
+        conn.execute(
+            """INSERT INTO customer_statuses (customer_id, status_id, set_at, notes)
+               VALUES (?, ?, ?, 'migrated from current_player_status')""",
+            (r["customer_id"], sid["status_id"], r["updated_at"] or "CURRENT_TIMESTAMP"),
+        )
+        inserted += 1
+
+    logger.info("_migrate_create_status_tables: inserted %d customer_statuses rows", inserted)
+    return inserted
+
+
 def _migrate_canonicalize_chapters(conn: sqlite3.Connection) -> int:
     """Ensure the canonical chapters list includes Hill Country, then remap
     legacy items.chapter / events.chapter / customers.chapter values to the
@@ -2835,6 +2940,14 @@ def init_db(db_path: str | Path | None = None) -> None:
             sync_player_status_with_terms(conn)
         except Exception as e:
             logger.warning("customer_memberships migration/backfill failed: %s", e)
+
+        # Normalised roles/statuses reference tables + customer_statuses history table.
+        # Runs AFTER sync_player_status_with_terms so current_player_status is fully
+        # reconciled before being backfilled into customer_statuses.
+        try:
+            _migrate_create_status_tables(conn)
+        except Exception as e:
+            logger.warning("status tables migration failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
@@ -4211,6 +4324,20 @@ def _resolve_or_create_customer(
         )
         new_cid = cursor.lastrowid
         logger.info("Auto-created customer %s %s (customer_id=%d)", first, last, new_cid)
+
+        # Bootstrap status history from the transaction's user_status
+        if player_status:
+            status_name = _PS_TO_STATUS_NAME.get(player_status)
+            if status_name:
+                try:
+                    set_customer_status(
+                        new_cid, status_name,
+                        conn=conn,
+                        notes="bootstrapped from first transaction",
+                        set_at=None,
+                    )
+                except Exception:
+                    pass  # non-fatal; migration backfill will cover it
 
         # Link email if provided
         if customer_email and customer_email.strip():
@@ -6642,18 +6769,98 @@ def update_customer_info(customer_name: str, fields: dict,
             )
             rowcount = max(rowcount, 1)
 
-        # Update current_player_status on the customers table (customer-level field)
-        if current_player_status is not None:
-            val = current_player_status or None
-            conn.execute(
-                """UPDATE customers SET current_player_status = ?, updated_at = CURRENT_TIMESTAMP
-                   WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)""",
-                (val, customer_name),
-            )
+        # Update status via customer_statuses table (canonical) + keep legacy column in sync
+        if current_player_status is not None and cid:
+            status_name = _PS_TO_STATUS_NAME.get(current_player_status or "")
+            if status_name:
+                set_customer_status(cid, status_name, conn=conn, notes="manual edit")
+            elif not current_player_status:
+                # Clearing status — write to legacy column only
+                conn.execute(
+                    "UPDATE customers SET current_player_status = NULL, updated_at = CURRENT_TIMESTAMP WHERE customer_id = ?",
+                    (cid,),
+                )
             rowcount = max(rowcount, 1)
 
         conn.commit()
         return rowcount
+
+
+def get_current_status(customer_id: int, conn=None, db_path=None) -> dict | None:
+    """Return the most recent customer_statuses row for customer_id, or None.
+
+    Returns a dict with keys: id, customer_id, status_id, status_name,
+    display_name, set_at, notes.
+    """
+    def _query(c):
+        return c.execute(
+            """SELECT cs.id, cs.customer_id, cs.status_id,
+                      s.status_name, s.display_name, cs.set_at, cs.notes
+               FROM customer_statuses cs
+               JOIN statuses s ON s.status_id = cs.status_id
+               WHERE cs.customer_id = ?
+               ORDER BY cs.set_at DESC
+               LIMIT 1""",
+            (customer_id,),
+        ).fetchone()
+
+    if conn is not None:
+        row = _query(conn)
+    else:
+        with _connect(db_path) as c:
+            row = _query(c)
+    return dict(row) if row else None
+
+
+def set_customer_status(
+    customer_id: int,
+    status_name: str,
+    *,
+    conn=None,
+    db_path=None,
+    set_by: int | None = None,
+    notes: str | None = None,
+    set_at: str | None = None,
+) -> int:
+    """Insert a new row into customer_statuses and keep current_player_status in sync.
+
+    Returns the new row id.
+    """
+    def _insert(c):
+        sid = c.execute(
+            "SELECT status_id FROM statuses WHERE status_name = ?", (status_name,)
+        ).fetchone()
+        if not sid:
+            raise ValueError(f"Unknown status_name: {status_name!r}")
+        ts = set_at or "CURRENT_TIMESTAMP"
+        if ts == "CURRENT_TIMESTAMP":
+            cursor = c.execute(
+                """INSERT INTO customer_statuses (customer_id, status_id, set_by, notes)
+                   VALUES (?, ?, ?, ?)""",
+                (customer_id, sid["status_id"], set_by, notes),
+            )
+        else:
+            cursor = c.execute(
+                """INSERT INTO customer_statuses (customer_id, status_id, set_at, set_by, notes)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (customer_id, sid["status_id"], ts, set_by, notes),
+            )
+        new_id = cursor.lastrowid
+        # Keep the legacy column in sync for backwards compatibility
+        ps = _STATUS_NAME_TO_PS.get(status_name)
+        if ps:
+            c.execute(
+                "UPDATE customers SET current_player_status = ?, updated_at = CURRENT_TIMESTAMP WHERE customer_id = ?",
+                (ps, customer_id),
+            )
+        return new_id
+
+    if conn is not None:
+        return _insert(conn)
+    with _connect(db_path) as c:
+        result = _insert(c)
+        c.commit()
+        return result
 
 
 def get_customer_venmo_handles(db_path=None) -> list[dict]:
@@ -6693,6 +6900,9 @@ def get_all_customers(db_path=None) -> list[dict]:
                    c.phone,
                    c.venmo_username,
                    c.current_player_status,
+                   COALESCE(s.status_name, NULL)      AS status_name,
+                   COALESCE(s.display_name, NULL)     AS status_display_name,
+                   cs_latest.set_at                   AS status_set_at,
                    c.chapter,
                    c.ghin_number,
                    c.account_status,
@@ -6702,6 +6912,13 @@ def get_all_customers(db_path=None) -> list[dict]:
                FROM customers c
                LEFT JOIN customer_emails ce
                       ON ce.customer_id = c.customer_id AND ce.is_primary = 1
+               LEFT JOIN customer_statuses cs_latest
+                      ON cs_latest.id = (
+                          SELECT id FROM customer_statuses
+                          WHERE customer_id = c.customer_id
+                          ORDER BY set_at DESC LIMIT 1
+                      )
+               LEFT JOIN statuses s ON s.status_id = cs_latest.status_id
                ORDER BY c.last_name COLLATE NOCASE, c.first_name COLLATE NOCASE"""
         ).fetchall()
         return [dict(r) for r in rows]
