@@ -9800,7 +9800,8 @@ def apply_credit_to_rsvp(
             return {"ok": False, "error": "RSVP item not found"}
         rsvp_item = dict(rsvp_item)
 
-        # Load the credited items to sum
+        # Load the credited items to sum (supports both 'credited' rows and
+        # WD rows that carry an outstanding credit in their credit_amount column)
         credited_items = []
         total_credit = 0.0
         for cid in credited_item_ids:
@@ -9808,9 +9809,16 @@ def apply_credit_to_rsvp(
             if not row:
                 continue
             d = dict(row)
-            if d.get("transaction_status") != "credited":
+            status = d.get("transaction_status")
+            if status == "credited":
+                amt = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
+                d["_is_wd_credit"] = False
+            elif status == "wd" and d.get("credit_amount"):
+                amt = _parse_dollar(d.get("credit_amount"))
+                d["_is_wd_credit"] = True
+            else:
                 continue
-            amt = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
+            d["_credit_amt"] = amt
             total_credit += amt
             credited_items.append(d)
 
@@ -9902,19 +9910,32 @@ def apply_credit_to_rsvp(
              credited_items[0]["id"], balance_note, rsvp_item_id),
         )
 
-        # Mark all credited items as transferred
+        # Mark all credited items as consumed
         now_str = _dt.datetime.utcnow().isoformat()
         for ci in credited_items:
-            conn.execute(
-                """UPDATE items
-                   SET transaction_status = 'transferred',
-                       credit_note = ?,
-                       transferred_to_id = ?
-                   WHERE id = ?""",
-                (f"Applied to {rsvp_item['item_name']} on {now_str[:10]}",
-                 rsvp_item_id, ci["id"]),
-            )
-            # Accounting: transfer_out on source
+            if ci.get("_is_wd_credit"):
+                # WD rows keep their status; just clear the credit_amount
+                conn.execute(
+                    """UPDATE items
+                       SET credit_amount = NULL,
+                           transferred_to_id = ?,
+                           credit_note = ?
+                       WHERE id = ?""",
+                    (rsvp_item_id,
+                     f"WD credit applied to {rsvp_item['item_name']} on {now_str[:10]}",
+                     ci["id"]),
+                )
+            else:
+                conn.execute(
+                    """UPDATE items
+                       SET transaction_status = 'transferred',
+                           credit_note = ?,
+                           transferred_to_id = ?
+                       WHERE id = ?""",
+                    (f"Applied to {rsvp_item['item_name']} on {now_str[:10]}",
+                     rsvp_item_id, ci["id"]),
+                )
+            # Accounting: transfer_out on source (use the computed credit amount)
             try:
                 _write_acct_entry(
                     conn,
@@ -9925,7 +9946,7 @@ def apply_credit_to_rsvp(
                     entry_type="contra",
                     category="transfer_out",
                     source="manual",
-                    amount=_parse_dollar(ci.get("item_price")),
+                    amount=ci["_credit_amt"],
                     description=f"Credit transfer out → {rsvp_item['item_name']}",
                     account="TGF Checking",
                     source_ref=f"xfer-flat-{ci['id']}-out",
