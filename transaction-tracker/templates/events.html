@@ -3645,34 +3645,100 @@
         }
     }
 
-    // Returns null if no mismatch, or an object {expected, actual, reason}
-    // explaining how items.user_status disagrees with customer_roles.
-    function statusMismatchReason(item) {
-        if (!item || !item.customer_id) return null;
-        const info = CUSTOMER_ROLES_MAP[String(item.customer_id)];
-        if (!info) return null;
-        const roles = info.roles || [];
-        const firstTimerEver = info.first_timer_ever;
-        const firstTimerUsed = info.first_timer_used || 0;
-        const selected = (_cleanStatus(item.user_status) || "").toUpperCase();
-        const hasRole = (r) => roles.includes(r);
+    // Derive a plain status label from transaction history alone (no profile needed).
+    // Mirrors the logic in customers.html deriveStatus() but without roles/membership term.
+    function _deriveStatusFromHistory(playerItems) {
+        if (!Array.isArray(playerItems) || playerItems.length === 0) return null;
+        const statuses = playerItems.map(i => (i.user_status || "").toUpperCase()).filter(Boolean);
+        if (statuses.includes("MEMBER")) return "MEMBER";
+        const hasMembership = playerItems.some(i => (i.item_name || "").toLowerCase().includes("membership"));
+        if (hasMembership) return "MEMBER";
+        if (statuses.includes("MANAGER")) return "MANAGER";
+        if (statuses.includes("GUEST")) return "GUEST";
+        const returning = playerItems.map(i => (i.returning_or_new || "").toLowerCase()).filter(Boolean);
+        const isFirstTimer = returning.some(v => v.includes("new") || v.includes("1st") || v.includes("first"));
+        if (isFirstTimer && playerItems.length === 1) return "1ST TIMER";
+        if (isFirstTimer && playerItems.length > 1) return "GUEST";
+        return playerItems.length > 1 ? "GUEST" : null;
+    }
 
-        if (selected === "MEMBER" && !hasRole("golfer")) {
-            return {reason: "Selected MEMBER but customer record has no 'golfer' role"};
+    // Returns null if no mismatch, or {reason} explaining the discrepancy.
+    // Works even without a linked customer_id — derives actual status from
+    // all transactions sharing the same customer name/id in allItems.
+    function statusMismatchReason(item) {
+        if (!item) return null;
+        const selected = (_cleanStatus(item.user_status) || "").toUpperCase();
+        if (!selected || selected === "—") return null;
+
+        // Gather roles/flags from canonical profile if available
+        let roles = [];
+        let firstTimerEver = null;
+        let firstTimerUsed = 0;
+        let profileStatus = null;
+        let hasProfile = false;
+        if (item.customer_id) {
+            const info = CUSTOMER_ROLES_MAP[String(item.customer_id)];
+            if (info) {
+                hasProfile = true;
+                roles = info.roles || [];
+                firstTimerEver = info.first_timer_ever;
+                firstTimerUsed = info.first_timer_used || 0;
+                profileStatus = info.current_player_status || null;
+            }
         }
-        if (selected === "MANAGER" && !hasRole("manager")) {
-            return {reason: "Selected MANAGER but customer record has no 'manager' role"};
+        const hasRole = (r) => roles.includes(r);
+        const isMember = hasRole("golfer") || hasRole("manager") || hasRole("admin") || hasRole("owner");
+        const isManager = hasRole("manager") || hasRole("admin") || hasRole("owner");
+        const isFormer = profileStatus === "expired_member" || profileStatus === "inactive";
+
+        // Canonical profile checks (when we have a linked profile)
+        if (hasProfile) {
+            if (selected === "MEMBER" && isFormer) {
+                return {reason: "Registered as MEMBER but customer is a Former Member — membership renewal needed"};
+            }
+            if (selected === "MEMBER" && !isMember && !isFormer) {
+                return {reason: "Registered as MEMBER but customer profile has no member role"};
+            }
+            if (selected === "MANAGER" && !isManager) {
+                return {reason: "Registered as MANAGER but customer profile has no manager role"};
+            }
+            if (selected === "GUEST" && isMember) {
+                return {reason: "Registered as GUEST but customer IS a member"};
+            }
+            if (selected === "1ST TIMER" && hasRole("golfer") && firstTimerUsed > 1) {
+                return {reason: "Member has already used their 1st Timer registration"};
+            }
+            if (selected === "1ST TIMER" && firstTimerEver === true && !hasRole("golfer")) {
+                return {reason: "Has played before — 1st Timer rate no longer applies"};
+            }
+            return null;
         }
-        if (selected === "GUEST" && hasRole("golfer")) {
-            return {reason: "Selected GUEST but customer IS a member"};
+
+        // No canonical profile — derive actual status from transaction history
+        // Find all transactions for this player (by customer_id or matching name)
+        let playerItems;
+        if (item.customer_id) {
+            playerItems = allItems.filter(i => i.customer_id === item.customer_id && i.id !== item.id);
+        } else {
+            const name = (item.customer || "").toLowerCase();
+            if (!name) return null;
+            playerItems = allItems.filter(i => (i.customer || "").toLowerCase() === name && i.id !== item.id);
         }
-        // Members get exactly one 1ST TIMER opportunity
-        if (selected === "1ST TIMER" && hasRole("golfer") && firstTimerUsed > 1) {
-            return {reason: "Member has already used their 1st Timer registration"};
+
+        // Include the current item in history for full context
+        const historyItems = [item, ...playerItems];
+        const derivedActual = _deriveStatusFromHistory(historyItems);
+        if (!derivedActual) return null;
+
+        const derivedUp = derivedActual.toUpperCase();
+        if (selected === "MEMBER" && derivedUp !== "MEMBER") {
+            return {reason: `Registered as MEMBER but transaction history suggests ${derivedActual}`};
         }
-        // Non-members: warn if they've played before
-        if (selected === "1ST TIMER" && firstTimerEver === false && !hasRole("golfer")) {
-            return {reason: "Selected 1st TIMER but customer has played before"};
+        if (selected === "GUEST" && derivedUp === "MEMBER") {
+            return {reason: "Registered as GUEST but transaction history suggests MEMBER"};
+        }
+        if (selected === "1ST TIMER" && playerItems.length > 0) {
+            return {reason: "Registered as 1ST TIMER but player has prior transactions on record"};
         }
         return null;
     }
