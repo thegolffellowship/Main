@@ -7302,14 +7302,15 @@
 
     // ── Assign Member Modal ──────────────────────────────────────────────────
     let _memberCache = null;
+    let _memberCacheVersion = 2; // bump to bust stale cache
 
     async function _loadMemberCache() {
-        if (_memberCache) return _memberCache;
+        if (_memberCache && _memberCache._v === _memberCacheVersion) return _memberCache.data;
         try {
             const res = await fetch("/api/customers");
-            if (res.ok) _memberCache = await res.json();
-        } catch (e) { _memberCache = []; }
-        return _memberCache || [];
+            if (res.ok) _memberCache = { _v: _memberCacheVersion, data: await res.json() };
+        } catch (e) { _memberCache = { _v: _memberCacheVersion, data: [] }; }
+        return (_memberCache && _memberCache.data) || [];
     }
 
     function openAssignMemberModal(itemId, buyerName) {
@@ -7327,7 +7328,7 @@
         searchEl.focus();
 
         _loadMemberCache().then(members => {
-            renderMemberResults(members, "", itemId, buyerName, results);
+            renderMemberResults(members, searchEl.value, itemId, buyerName, results);
             searchEl.oninput = () => renderMemberResults(members, searchEl.value, itemId, buyerName, results);
         });
     }
