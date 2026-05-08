@@ -1523,6 +1523,65 @@ def api_assign_guest(item_id):
         conn.close()
 
 
+@app.route("/api/items/<int:item_id>/assign-member", methods=["POST"])
+@require_role("manager")
+def api_assign_member(item_id):
+    """Re-assign a registration to an existing member by customer_id.
+
+    Used when a buyer purchased a spot for someone else and the parser
+    couldn't identify the actual player (e.g. a family member who is a
+    known member). Links the item to the canonical customer record so
+    email, handicap, and credit lookups all work correctly.
+    """
+    data = request.get_json(silent=True) or {}
+    customer_id = data.get("customer_id")
+    if not customer_id:
+        return jsonify({"error": "customer_id is required."}), 400
+
+    conn = get_connection()
+    try:
+        item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return jsonify({"error": "Item not found."}), 404
+        item = dict(item)
+        buyer = item["customer"] or ""
+
+        cust = conn.execute(
+            """SELECT c.customer_id,
+                      TRIM(COALESCE(NULLIF(c.company_name,''),
+                           NULLIF(TRIM(c.first_name || ' ' || c.last_name),''))) AS full_name,
+                      c.current_player_status,
+                      c.chapter,
+                      c.phone,
+                      ce.email AS primary_email
+               FROM customers c
+               LEFT JOIN customer_emails ce ON ce.customer_id = c.customer_id AND ce.is_primary = 1
+               WHERE c.customer_id = ?""",
+            (customer_id,),
+        ).fetchone()
+        if not cust:
+            return jsonify({"error": "Customer not found."}), 404
+        cust = dict(cust)
+
+        from email_parser.parser import _normalize_customer_name
+        normalized = _normalize_customer_name(cust["full_name"] or "")
+
+        changes = {
+            "customer": normalized,
+            "customer_id": cust["customer_id"],
+            "customer_email": cust.get("primary_email") or None,
+            "customer_phone": cust.get("phone") or None,
+            "user_status": cust.get("current_player_status") or item.get("user_status"),
+            "chapter": cust.get("chapter") or item.get("chapter"),
+            "notes": f"Purchased by {buyer}" if buyer != normalized else item.get("notes"),
+        }
+        update_item(item_id, changes)
+
+        return jsonify({"status": "ok", "customer": normalized, "buyer": buyer})
+    finally:
+        conn.close()
+
+
 @app.route("/api/items/<int:item_id>", methods=["DELETE"])
 @require_role("admin")
 def api_delete_item(item_id):

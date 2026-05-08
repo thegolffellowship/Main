@@ -1225,6 +1225,24 @@
         </div>
     </div>
 
+    <!-- Assign Member Modal -->
+    <div id="assign-member-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-header">
+                <h2>Assign Member</h2>
+                <button id="assign-member-close" class="modal-close">&times;</button>
+            </div>
+            <p id="assign-member-context" style="margin:0 0 0.75rem; font-size:0.88rem; color:var(--text-muted);"></p>
+            <div style="position:relative; margin-bottom:0.5rem;">
+                <input id="assign-member-search" type="text" class="modal-input" placeholder="Type name to search…" autocomplete="off" style="width:100%; box-sizing:border-box;">
+            </div>
+            <div id="assign-member-results" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); background:#fff;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+                <button id="assign-member-cancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Event Modal -->
     <div id="add-event-overlay" class="modal-overlay" style="display:none;">
         <div class="modal add-event-modal" style="max-width:700px;">
@@ -4658,6 +4676,7 @@
                             items.push(`<button class="ev-menu-item btn-credit" data-credit-id="${r.id}">Credit</button>`);
                             items.push(`<button class="ev-menu-item btn-wd" data-wd-id="${r.id}" data-wd-event="${escapeHtml(ev.item_name)}">WD</button>`);
                             items.push(`<button class="ev-menu-item btn-assign-guest-action" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Assign this spot to a guest player">Assign Guest</button>`);
+                            items.push(`<button class="ev-menu-item btn-assign-member-action" data-item-id="${r.id}" data-buyer-name="${escapeHtml(r.customer || '')}" title="Reassign to an existing member">Assign Member</button>`);
                             if (isManualEmailUidRow) items.push(`<button class="ev-menu-item ev-menu-item-danger btn-delete-manual" data-delete-id="${r.id}" data-player-name="${escapeHtml(r.customer || "")}">Delete</button>`);
                         }
                     } else if (txStatus === "credited" || txStatus === "transferred" || txStatus === "refunded" || txStatus === "wd") {
@@ -5397,6 +5416,14 @@
                     await fetchItems();
                     await fetchEvents();
                 } catch (err) { alert("Failed to assign guest name."); }
+            });
+        });
+
+        // Assign Member
+        container.querySelectorAll(".btn-assign-member-action").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openAssignMemberModal(parseInt(btn.dataset.itemId), btn.dataset.buyerName || "");
             });
         });
 
@@ -7272,6 +7299,98 @@
         document.getElementById("wd-credit-total").textContent =
             `Credit Total: $${total.toFixed(2)}`;
     }
+
+    // ── Assign Member Modal ──────────────────────────────────────────────────
+    let _memberCache = null;
+
+    async function _loadMemberCache() {
+        if (_memberCache) return _memberCache;
+        try {
+            const res = await fetch("/api/customers");
+            if (res.ok) _memberCache = await res.json();
+        } catch (e) { _memberCache = []; }
+        return _memberCache || [];
+    }
+
+    function openAssignMemberModal(itemId, buyerName) {
+        const overlay = document.getElementById("assign-member-overlay");
+        const searchEl = document.getElementById("assign-member-search");
+        const results = document.getElementById("assign-member-results");
+        const ctx = document.getElementById("assign-member-context");
+
+        ctx.textContent = buyerName
+            ? `Currently registered under "${buyerName}". Select the actual member below.`
+            : "Select the member to assign to this registration.";
+        searchEl.value = "";
+        results.innerHTML = '<div style="padding:0.6rem 0.75rem; color:var(--text-muted); font-size:0.85rem;">Loading members…</div>';
+        overlay.style.display = "flex";
+        searchEl.focus();
+
+        _loadMemberCache().then(members => {
+            renderMemberResults(members, "", itemId, buyerName, results);
+            searchEl.oninput = () => renderMemberResults(members, searchEl.value, itemId, buyerName, results);
+        });
+    }
+
+    function renderMemberResults(members, query, itemId, buyerName, container) {
+        const q = query.trim().toLowerCase();
+        const filtered = q
+            ? members.filter(m => (m.customer_name || "").toLowerCase().includes(q))
+            : members;
+        if (!filtered.length) {
+            container.innerHTML = '<div style="padding:0.6rem 0.75rem; color:var(--text-muted); font-size:0.85rem;">No matches</div>';
+            return;
+        }
+        container.innerHTML = filtered.slice(0, 60).map(m => {
+            const status = (m.current_player_status || "").toUpperCase();
+            const chapter = m.chapter || "";
+            const statusColor = status === "MEMBER" ? "#065f46" : "#92400e";
+            const statusBg   = status === "MEMBER" ? "#d1fae5" : "#fef3c7";
+            return `<div class="assign-member-row" data-customer-id="${m.customer_id}"
+                        style="padding:0.5rem 0.75rem; cursor:pointer; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:0.5rem; font-size:0.85rem;">
+                      <span style="font-weight:600;">${escapeHtml(m.customer_name || "")}</span>
+                      <span style="display:flex; gap:0.35rem; align-items:center; flex-shrink:0;">
+                        ${chapter ? `<span style="color:var(--text-muted);font-size:0.78rem;">${escapeHtml(chapter)}</span>` : ""}
+                        <span style="background:${statusBg};color:${statusColor};border-radius:4px;padding:0.1rem 0.3rem;font-size:0.7rem;font-weight:600;">${escapeHtml(status || "—")}</span>
+                      </span>
+                    </div>`;
+        }).join("");
+
+        container.querySelectorAll(".assign-member-row").forEach(row => {
+            row.addEventListener("mouseenter", () => row.style.background = "#f0fdf4");
+            row.addEventListener("mouseleave", () => row.style.background = "");
+            row.addEventListener("click", async () => {
+                const customerId = parseInt(row.dataset.customerId);
+                document.getElementById("assign-member-overlay").style.display = "none";
+                try {
+                    const res = await fetch(`/api/items/${itemId}/assign-member`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ customer_id: customerId }),
+                    });
+                    if (!res.ok) {
+                        const d = await res.json().catch(() => ({}));
+                        alert(d.error || "Failed to assign member.");
+                        return;
+                    }
+                    await fetchItems();
+                    await fetchEvents();
+                } catch (err) { alert("Failed to assign member."); }
+            });
+        });
+    }
+
+    document.getElementById("assign-member-close").addEventListener("click", () => {
+        document.getElementById("assign-member-overlay").style.display = "none";
+    });
+    document.getElementById("assign-member-cancel").addEventListener("click", () => {
+        document.getElementById("assign-member-overlay").style.display = "none";
+    });
+    document.getElementById("assign-member-overlay").addEventListener("click", (e) => {
+        if (e.target === document.getElementById("assign-member-overlay"))
+            document.getElementById("assign-member-overlay").style.display = "none";
+    });
+    // ── End Assign Member Modal ──────────────────────────────────────────────
 
     function openWdModal(itemId, eventName) {
         const item = allItems.find(r => r.id === itemId);
