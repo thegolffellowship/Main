@@ -10353,6 +10353,11 @@ def auto_match_venmo_inbound_to_balance_due(
                                 _BALANCE_DUE_SQL, (alias_row["canonical"],)
                             ).fetchall()
                         ]
+                if not candidates:
+                    logger.info(
+                        "venmo no-candidate: exp %s payer='%s' handle=%r",
+                        exp.get("id"), payer_name, exp.get("other_party_handle"),
+                    )
                 if not candidates and exp.get("other_party_handle"):
                     # Try matching the Venmo handle against customers.venmo_username
                     # so profiles where the registered name differs from the account name
@@ -10370,7 +10375,7 @@ def auto_match_venmo_inbound_to_balance_due(
                             (raw_handle,),
                         ).fetchone()
                         if handle_row:
-                            logger.debug(
+                            logger.info(
                                 "venmo match: handle %s → customer_id %s (%s)",
                                 raw_handle, handle_row["customer_id"], handle_row["canonical_name"],
                             )
@@ -10394,9 +10399,9 @@ def auto_match_venmo_inbound_to_balance_due(
                                     ).fetchall()
                                 ]
                         else:
-                            logger.debug(
-                                "venmo match: handle %s not found in customers.venmo_username",
-                                raw_handle,
+                            logger.info(
+                                "venmo match: handle '%s' (exp %s payer '%s') not found in customers.venmo_username",
+                                raw_handle, exp.get("id"), payer_name,
                             )
                 # Filter by amount tolerance (±$1.00)
                 matched: list[dict] = []
