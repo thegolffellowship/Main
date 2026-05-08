@@ -10299,11 +10299,13 @@ def auto_match_venmo_inbound_to_balance_due(
     }
     with _connect(db_path) as conn:
         # Pull approved or pending Venmo IN expenses, optionally filtered to specific IDs
-        # pending Venmo INs are auto-approved when they match a balance-due item
-        params: list = ["venmo", "received"]
+        # pending Venmo INs are auto-approved when they match a balance-due item.
+        # Both 'received' and 'income' are inbound — the LLM parser splits them
+        # inconsistently, so we accept either.
+        params: list = ["venmo"]
         sql = (
             "SELECT * FROM expense_transactions "
-            "WHERE source_type = ? AND transaction_type = ? "
+            "WHERE source_type = ? AND transaction_type IN ('received', 'income') "
             "AND review_status IN ('approved', 'pending') "
             "AND COALESCE(matched_item_id, 0) = 0"
         )
