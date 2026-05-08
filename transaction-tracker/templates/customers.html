@@ -1203,6 +1203,9 @@
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ customer_name: customerName, roles }),
                                 });
+                                // Patch roles into local customer object so deriveStatus gets fresh data
+                                const _c = allCustomers.find(c => c.name === customerName);
+                                if (_c) _c.roles = roles;
                             }
                             saveBtn.textContent = "Saved!";
                             saveBtn.style.background = "#16a34a";
@@ -2412,6 +2415,9 @@
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ customer_name: customerName, roles }),
                         });
+                        // Patch roles into local customer object so deriveStatus gets fresh data
+                        const _c = allCustomers.find(c => c.name === customerName);
+                        if (_c) _c.roles = roles;
                     }
                     saveBtn.textContent = "Saved!";
                     saveBtn.style.background = "#16a34a";
