@@ -1394,36 +1394,26 @@
         } else {
             rolesHtml = '<span style="color:var(--text-muted); font-size:0.82rem;">No assigned roles</span>';
         }
-        if (firstTimerFlag) {
-            rolesHtml += `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;color:#a16207;background:#fefce8;margin-right:4px;text-transform:uppercase;letter-spacing:0.03em;">1st Timer (lifetime)</span>`;
-        }
         html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
             <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Roles</div>
             <div style="font-size:0.82rem; min-height:1.2em;">${rolesHtml}</div>
         </div>`;
 
-        // Member Status section (read-only)
-        const statusLabels = {
-            first_timer: '1ST TIMER',
-            active_guest: 'GUEST',
-            active_member: 'MEMBER',
-            member_plus: 'MEMBER+',
-            inactive: 'FORMER',
-            expired_member: 'FORMER',
-        };
-        // A lapsed membership term overrides the stored status to FORMER —
-        // the daily scheduler eventually flips current_player_status itself,
-        // but this guarantees an immediate, consistent view regardless of
-        // when the cron last ran.
+        // Member Status section — uses the same deriveStatus() logic as the list badge
+        // so the badge and this field are always in sync.
+        const derivedStatus = deriveStatus(customer.items, customer.roles, customer.current_player_status, customer.membershipTerm);
         const lapsed = isMembershipLapsed(customer.membershipTerm);
-        const cps = customer.current_player_status;
-        const displayStatus = lapsed ? 'FORMER' : (cps ? (statusLabels[cps] || cps) : null);
-        const statusNote = lapsed && cps !== 'expired_member' && cps !== 'inactive'
+        const statusNote = lapsed && !['FORMER','expired_member','inactive'].includes(customer.current_player_status)
             ? ` <span style="color:var(--text-muted); font-size:0.72rem; font-style:italic;">(membership term lapsed ${customer.membershipTerm.expires_at})</span>`
+            : '';
+        // Append historical 1st Timer note when the person was once a 1st Timer
+        // but is now active — makes it clear they can't use 1st Timer pricing again.
+        const firstTimerNote = firstTimerFlag && derivedStatus !== '1st TIMER'
+            ? ` <span style="color:var(--text-muted); font-size:0.72rem; font-style:italic;">(played as 1st Timer)</span>`
             : '';
         html += `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;">
             <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Member Status</div>
-            <div style="font-size:0.82rem;">${displayStatus ? escapeHtml(displayStatus) + statusNote : '<span style="color:var(--text-muted);">—</span>'}</div>
+            <div style="font-size:0.82rem;">${derivedStatus ? escapeHtml(derivedStatus) + statusNote + firstTimerNote : '<span style="color:var(--text-muted);">—</span>'}</div>
         </div>`;
 
         // Address section (read-only)
@@ -1489,11 +1479,11 @@
             <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Member Status</div>
             <select class="modal-input cust-edit-input" data-field="current_player_status" style="width:auto; padding:0.3rem; font-size:0.82rem;">
                 <option value="">— Not Set —</option>
-                <option value="first_timer" ${(customer.current_player_status === 'first_timer') ? 'selected' : ''}>1ST TIMER</option>
                 <option value="active_guest" ${(customer.current_player_status === 'active_guest') ? 'selected' : ''}>GUEST</option>
                 <option value="active_member" ${(customer.current_player_status === 'active_member') ? 'selected' : ''}>MEMBER</option>
                 <option value="member_plus" ${(customer.current_player_status === 'member_plus') ? 'selected' : ''}>MEMBER+</option>
                 <option value="inactive" ${(['inactive','expired_member'].includes(customer.current_player_status)) ? 'selected' : ''}>FORMER</option>
+                ${(customer.current_player_status === 'first_timer') ? '<option value="first_timer" selected>1ST TIMER (legacy)</option>' : ''}
             </select>
         </div>`;
 
