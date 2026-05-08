@@ -9071,7 +9071,9 @@ def get_player_credits(
                      FROM items i
                      LEFT JOIN events e ON e.item_name = i.item_name COLLATE NOCASE
                      WHERE {where}
-                       AND i.transaction_status = 'credited'
+                       AND (i.transaction_status = 'credited'
+                            OR (i.transaction_status = 'wd'
+                                AND COALESCE(i.credit_amount, '') != ''))
                      ORDER BY i.order_date DESC"""
 
     with _connect(db_path) as conn:
@@ -9105,7 +9107,11 @@ def get_player_credits(
     result = []
     for r in rows:
         d = dict(r)
-        d["credit_amount"] = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
+        if d.get("transaction_status") == "wd":
+            # WD rows store the outstanding credit directly in the credit_amount column
+            d["credit_amount"] = _parse_dollar(d.get("credit_amount") or "0")
+        else:
+            d["credit_amount"] = _parse_dollar(d.get("item_price")) + _parse_dollar(d.get("transaction_fees") or "0")
         result.append(d)
     return result
 
