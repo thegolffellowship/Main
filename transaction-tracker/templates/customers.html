@@ -665,6 +665,10 @@
             // Backend updates every items row for this customer, so mirror that locally.
             cust.items.forEach(item => { item[key] = val; });
         });
+        // Re-derive the displayed status badge when player status changes
+        if ("current_player_status" in fields) {
+            cust.status = deriveStatus(cust.items, cust.roles, cust.current_player_status, cust.membershipTerm);
+        }
     }
 
     // Build customer aggregate data from items
@@ -1203,13 +1207,16 @@
                             saveBtn.textContent = "Saved!";
                             saveBtn.style.background = "#16a34a";
                             patchCustomerLocal(customerName, fields);
-                            // Don't auto-close the edit form. Just reset the Save button
-                            // so the user stays in edit mode until they explicitly leave.
+                            const needsRerender = "current_player_status" in fields || roleCheckboxes.length > 0;
                             setTimeout(() => {
-                                saveBtn.textContent = "Save";
-                                saveBtn.style.background = "";
-                                saveBtn.disabled = false;
-                            }, 1200);
+                                if (needsRerender) {
+                                    renderCustomers();
+                                } else {
+                                    saveBtn.textContent = "Save";
+                                    saveBtn.style.background = "";
+                                    saveBtn.disabled = false;
+                                }
+                            }, 800);
                         } catch (err) {
                             alert("Failed to save: " + err.message);
                             saveBtn.disabled = false;
@@ -1479,11 +1486,11 @@
             <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Member Status</div>
             <select class="modal-input cust-edit-input" data-field="current_player_status" style="width:auto; padding:0.3rem; font-size:0.82rem;">
                 <option value="">— Not Set —</option>
+                <option value="first_timer" ${(customer.current_player_status === 'first_timer') ? 'selected' : ''}>1ST TIMER</option>
                 <option value="active_guest" ${(customer.current_player_status === 'active_guest') ? 'selected' : ''}>GUEST</option>
                 <option value="active_member" ${(customer.current_player_status === 'active_member') ? 'selected' : ''}>MEMBER</option>
                 <option value="member_plus" ${(customer.current_player_status === 'member_plus') ? 'selected' : ''}>MEMBER+</option>
                 <option value="inactive" ${(['inactive','expired_member'].includes(customer.current_player_status)) ? 'selected' : ''}>FORMER</option>
-                ${(customer.current_player_status === 'first_timer') ? '<option value="first_timer" selected>1ST TIMER (legacy)</option>' : ''}
             </select>
         </div>`;
 
@@ -2409,13 +2416,16 @@
                     saveBtn.textContent = "Saved!";
                     saveBtn.style.background = "#16a34a";
                     patchCustomerLocal(customerName, fields);
-                    // Don't auto-close the edit form. Just reset the Save button
-                    // so the user stays in edit mode until they explicitly leave.
+                    const needsRerender = "current_player_status" in fields || roleCheckboxes.length > 0;
                     setTimeout(() => {
-                        saveBtn.textContent = "Save";
-                        saveBtn.style.background = "";
-                        saveBtn.disabled = false;
-                    }, 1200);
+                        if (needsRerender) {
+                            renderCustomers();
+                        } else {
+                            saveBtn.textContent = "Save";
+                            saveBtn.style.background = "";
+                            saveBtn.disabled = false;
+                        }
+                    }, 800);
                 } catch (err) {
                     alert("Failed to save: " + err.message);
                     saveBtn.disabled = false;
