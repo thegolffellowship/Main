@@ -10353,6 +10353,31 @@ def auto_match_venmo_inbound_to_balance_due(
                                 _BALANCE_DUE_SQL, (alias_row["canonical"],)
                             ).fetchall()
                         ]
+                if not candidates and exp.get("other_party_handle"):
+                    # Try matching the Venmo handle against customers.venmo_username
+                    # so profiles where the registered name differs from the account name
+                    # (e.g. "Pat Youngs" registered as "James Youngs Jr" on Venmo) still match.
+                    raw_handle = (exp["other_party_handle"] or "").lstrip("@").lower()
+                    if raw_handle:
+                        handle_row = conn.execute(
+                            """SELECT c.customer_id
+                               FROM customers c
+                               WHERE REPLACE(LOWER(COALESCE(c.venmo_username,'')), '@', '') = ?
+                               LIMIT 1""",
+                            (raw_handle,),
+                        ).fetchone()
+                        if handle_row:
+                            candidates = [
+                                dict(r) for r in conn.execute(
+                                    """SELECT id, customer, item_name, credit_note, item_price
+                                       FROM items
+                                       WHERE merchant = 'Paid Separately (Credit Transfer)'
+                                         AND COALESCE(transaction_status, 'active') = 'active'
+                                         AND credit_note LIKE 'balance_due:%'
+                                         AND customer_id = ?""",
+                                    (handle_row["customer_id"],),
+                                ).fetchall()
+                            ]
                 # Filter by amount tolerance (±$1.00)
                 matched: list[dict] = []
                 for c in candidates:
