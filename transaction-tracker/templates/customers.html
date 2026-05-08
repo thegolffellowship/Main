@@ -486,55 +486,50 @@
         return String(membershipTerm.expires_at).slice(0, 10) < today;
     }
 
-    function deriveStatus(items, roles, currentPlayerStatus, membershipTerm) {
+    // Derive the display status badge for a customer.
+    // Priority order:
+    //   1. Org leadership roles (owner/admin/manager) → always MEMBER
+    //   2. Lapsed membership term → FORMER
+    //   3. status_name from customer_statuses (canonical, set by system/manager)
+    //   4. Bootstrap from transaction user_status history (new customers only)
+    // Roles (golfer, sponsor, etc.) have NO bearing on member status.
+    function deriveStatus(items, roles, currentPlayerStatus, membershipTerm, statusName) {
         roles = Array.isArray(roles) ? roles : [];
-        const itemCount = Array.isArray(items) ? items.length : 0;
+        items = Array.isArray(items) ? items : [];
 
-        // TGF leadership — always reads MEMBER regardless of membership term
-        // state.  These are organizational roles, not paid-membership status.
+        // Org leadership roles are always MEMBER regardless of stored status
         const PERMANENT = ['owner', 'admin', 'manager'];
         if (roles.some(r => PERMANENT.includes(r))) return "MEMBER";
 
-        // A lapsed membership term beats the role and items checks below:
-        // someone whose term has actually ended reads FORMER, even if they
-        // still carry the 'golfer' role or have a historical membership
-        // purchase on file.  Renewing flips this back automatically (via
-        // the new term's expires_at).
+        // Lapsed membership term → FORMER (objective fact, overrides stored status)
         if (isMembershipLapsed(membershipTerm)) return "FORMER";
 
-        // 'golfer' role on its own — without a lapsed term — indicates an
-        // active member.
-        if (roles.includes('golfer')) return "MEMBER";
-
-        // A TGF Membership purchase auto-promotes to MEMBER regardless of
-        // stored player_status (catches cases where the status hasn't been
-        // updated yet after the membership was bought).
-        const hasMembership = (items || []).some(item =>
-            (item.item_name || "").toLowerCase().includes("membership")
-        );
-        if (hasMembership) return "MEMBER";
-
-        if (currentPlayerStatus === 'active_member') return "MEMBER";
-        if (currentPlayerStatus === 'member_plus') return "MEMBER+";
-        if (currentPlayerStatus === 'first_timer') return itemCount > 1 ? "GUEST" : "1st TIMER";
-        if (currentPlayerStatus === 'expired_member' || currentPlayerStatus === 'inactive') return "FORMER";
-        if (currentPlayerStatus === 'active_guest') return "GUEST";
-
-        // Check user_status field across transactions
-        const memberStatuses = items.map(i => (i.user_status || "").toUpperCase()).filter(Boolean);
-        if (memberStatuses.includes("MEMBER")) return "MEMBER";
-
-        // Check returning_or_new
-        const returningNew = items.map(i => (i.returning_or_new || "").toLowerCase()).filter(Boolean);
-        if (returningNew.some(v => v.includes("new") || v.includes("1st") || v.includes("first"))) {
-            return itemCount > 1 ? "GUEST" : "1st TIMER";
+        // Canonical status from customer_statuses table
+        if (statusName) {
+            if (statusName === 'member')      return "MEMBER";
+            if (statusName === 'member_plus') return "MEMBER+";
+            if (statusName === 'former')      return "FORMER";
+            if (statusName === 'guest')       return "GUEST";
+            if (statusName === '1st_timer')   return "1st TIMER";
         }
 
-        // If they have NON-MEMBER status or guest indicators
-        if (memberStatuses.includes("NON-MEMBER") || memberStatuses.includes("GUEST")) return "GUEST";
+        // Legacy fallback: current_player_status column (pre-migration or no status row yet)
+        if (currentPlayerStatus === 'active_member')  return "MEMBER";
+        if (currentPlayerStatus === 'member_plus')    return "MEMBER+";
+        if (currentPlayerStatus === 'expired_member' || currentPlayerStatus === 'inactive') return "FORMER";
+        if (currentPlayerStatus === 'active_guest')   return "GUEST";
+        if (currentPlayerStatus === 'first_timer')    return items.length > 1 ? "GUEST" : "1st TIMER";
 
-        // Default: if only 1 purchase and no status info, likely a guest
-        if (items.length <= 1) return "GUEST";
+        // Bootstrap from transaction history for customers with no explicit status set
+        const memberStatuses = items.map(i => (i.user_status || "").toUpperCase()).filter(Boolean);
+        if (memberStatuses.includes("MEMBER")) return "MEMBER";
+        const hasMembership = items.some(i => (i.item_name || "").toLowerCase().includes("membership"));
+        if (hasMembership) return "MEMBER";
+        if (memberStatuses.includes("GUEST") || memberStatuses.includes("NON-MEMBER")) return "GUEST";
+        const returning = items.map(i => (i.returning_or_new || "").toLowerCase()).filter(Boolean);
+        if (returning.some(v => v.includes("new") || v.includes("1st") || v.includes("first"))) {
+            return items.length > 1 ? "GUEST" : "1st TIMER";
+        }
 
         return "GUEST";
     }
@@ -650,6 +645,16 @@
         return last + ", " + parts.join(" ") + (suffixParts.length ? " " + suffixParts.join(" ") : "");
     }
 
+    // Maps current_player_status → statuses.status_name
+    const _PS_TO_STATUS_NAME = {
+        active_member:  "member",
+        member_plus:    "member_plus",
+        expired_member: "former",
+        inactive:       "former",
+        active_guest:   "guest",
+        first_timer:    "1st_timer",
+    };
+
     // Patch the local customer/items in-place after a successful info save, so we can
     // re-render from local state without re-fetching everything (which would collapse rows).
     function patchCustomerLocal(customerName, fields) {
@@ -667,7 +672,8 @@
         });
         // Re-derive the displayed status badge when player status changes
         if ("current_player_status" in fields) {
-            cust.status = deriveStatus(cust.items, cust.roles, cust.current_player_status, cust.membershipTerm);
+            cust.status_name = _PS_TO_STATUS_NAME[fields.current_player_status] || null;
+            cust.status = deriveStatus(cust.items, cust.roles, cust.current_player_status, cust.membershipTerm, cust.status_name);
         }
     }
 
@@ -1411,7 +1417,7 @@
 
         // Member Status section — uses the same deriveStatus() logic as the list badge
         // so the badge and this field are always in sync.
-        const derivedStatus = deriveStatus(customer.items, customer.roles, customer.current_player_status, customer.membershipTerm);
+        const derivedStatus = deriveStatus(customer.items, customer.roles, customer.current_player_status, customer.membershipTerm, customer.status_name);
         const lapsed = isMembershipLapsed(customer.membershipTerm);
         const statusNote = lapsed && !['FORMER','expired_member','inactive'].includes(customer.current_player_status)
             ? ` <span style="color:var(--text-muted); font-size:0.72rem; font-style:italic;">(membership term lapsed ${customer.membershipTerm.expires_at})</span>`
@@ -3720,6 +3726,8 @@
                             c.roles = info.roles || [];
                             c.first_timer_ever = info.first_timer_ever;
                             c.current_player_status = info.current_player_status || null;
+                            c.status_name = info.status_name || null;
+                            c.status_display_name = info.status_display_name || null;
                             // Authoritative chapter from customers master record
                             // (overrides the items-derived fallback).
                             if (info.chapter) c.chapter = info.chapter;
@@ -3728,7 +3736,7 @@
                     // Recompute status now that roles + player_status are known.
                     // c.membershipTerm is overlaid earlier in init() — if it's
                     // lapsed, deriveStatus returns FORMER regardless of items/roles.
-                    c.status = deriveStatus(c.items, c.roles, c.current_player_status, c.membershipTerm);
+                    c.status = deriveStatus(c.items, c.roles, c.current_player_status, c.membershipTerm, c.status_name);
                 });
             } catch (e) { /* roles data optional */ }
 

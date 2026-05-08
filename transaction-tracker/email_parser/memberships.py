@@ -232,6 +232,38 @@ def get_memberships_for_customer(customer_id: int, db_path=None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _write_status_history(
+    conn,
+    customer_ids: list[int],
+    status_name: str,
+    notes: str,
+) -> None:
+    """Insert a customer_statuses row for each customer_id, skipping any whose
+    most recent row already has that status_name (avoids duplicate history).
+    """
+    sid_row = conn.execute(
+        "SELECT status_id FROM statuses WHERE status_name = ?", (status_name,)
+    ).fetchone()
+    if not sid_row:
+        return  # status tables not yet migrated — skip silently
+    sid = sid_row["status_id"]
+    for cid in customer_ids:
+        last = conn.execute(
+            """SELECT s.status_name FROM customer_statuses cs
+               JOIN statuses s ON s.status_id = cs.status_id
+               WHERE cs.customer_id = ?
+               ORDER BY cs.set_at DESC LIMIT 1""",
+            (cid,),
+        ).fetchone()
+        if last and last["status_name"] == status_name:
+            continue  # already at this status — no duplicate row needed
+        conn.execute(
+            """INSERT INTO customer_statuses (customer_id, status_id, notes)
+               VALUES (?, ?, ?)""",
+            (cid, sid, notes),
+        )
+
+
 def sync_player_status_with_terms(conn: sqlite3.Connection) -> dict:
     """Reconcile `customers.current_player_status` against `customer_memberships`.
 
@@ -265,31 +297,48 @@ def sync_player_status_with_terms(conn: sqlite3.Connection) -> dict:
           ) lp ON lp.customer_id = m.customer_id AND lp.latest = m.started_at
     """
 
-    downgraded = conn.execute(
-        f"""
-        UPDATE customers
-           SET current_player_status = 'expired_member',
-               updated_at = CURRENT_TIMESTAMP
-         WHERE customer_id IN (
-             SELECT customer_id FROM ({latest_sql})
-              WHERE expires_at < DATE('now')
-         )
-           AND current_player_status IN ('active_member', 'member_plus')
-        """
-    ).rowcount
+    # Customers whose latest term has lapsed and are still marked as active member
+    lapsed_ids = [
+        r["customer_id"]
+        for r in conn.execute(
+            f"""SELECT customer_id FROM ({latest_sql}) WHERE expires_at < DATE('now')"""
+        ).fetchall()
+    ]
+    downgraded = 0
+    if lapsed_ids:
+        placeholders = ",".join("?" * len(lapsed_ids))
+        downgraded = conn.execute(
+            f"""UPDATE customers
+                   SET current_player_status = 'expired_member',
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE customer_id IN ({placeholders})
+                   AND current_player_status IN ('active_member', 'member_plus')""",
+            lapsed_ids,
+        ).rowcount
+        # Mirror into customer_statuses for customers that actually changed
+        if downgraded:
+            _write_status_history(conn, lapsed_ids, "former", "membership lapsed")
 
-    upgraded = conn.execute(
-        f"""
-        UPDATE customers
-           SET current_player_status = 'active_member',
-               updated_at = CURRENT_TIMESTAMP
-         WHERE customer_id IN (
-             SELECT customer_id FROM ({latest_sql})
-              WHERE expires_at >= DATE('now')
-         )
-           AND current_player_status IN ('expired_member', 'inactive', 'first_timer', 'active_guest')
-        """
-    ).rowcount
+    # Customers whose latest term is active but stored as expired/guest/first_timer
+    renewed_ids = [
+        r["customer_id"]
+        for r in conn.execute(
+            f"""SELECT customer_id FROM ({latest_sql}) WHERE expires_at >= DATE('now')"""
+        ).fetchall()
+    ]
+    upgraded = 0
+    if renewed_ids:
+        placeholders = ",".join("?" * len(renewed_ids))
+        upgraded = conn.execute(
+            f"""UPDATE customers
+                   SET current_player_status = 'active_member',
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE customer_id IN ({placeholders})
+                   AND current_player_status IN ('expired_member', 'inactive', 'first_timer', 'active_guest')""",
+            renewed_ids,
+        ).rowcount
+        if upgraded:
+            _write_status_history(conn, renewed_ids, "member", "membership active/renewed")
 
     if downgraded or upgraded:
         conn.commit()

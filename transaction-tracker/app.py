@@ -3377,11 +3377,21 @@ def api_customer_roles():
                 result[cid] = {"roles": [], "first_timer_ever": True}
             result[cid]["roles"].append(r["role_type"])
 
-        # Add first_timer_ever, current_player_status, and chapter for every
-        # customer (even those without roles). Chapter is read from the
-        # customers master record so the Info-tab edit is authoritative.
+        # Add first_timer_ever, current status, and chapter for every customer.
+        # Status is read from customer_statuses (canonical) with fallback to
+        # current_player_status for customers not yet in the new table.
         customer_rows = conn.execute(
-            "SELECT customer_id, first_name, last_name, first_timer_ever, current_player_status, chapter FROM customers"
+            """SELECT c.customer_id, c.first_name, c.last_name,
+                      c.first_timer_ever, c.current_player_status, c.chapter,
+                      s.status_name, s.display_name
+               FROM customers c
+               LEFT JOIN customer_statuses cs_latest
+                      ON cs_latest.id = (
+                          SELECT id FROM customer_statuses
+                          WHERE customer_id = c.customer_id
+                          ORDER BY set_at DESC LIMIT 1
+                      )
+               LEFT JOIN statuses s ON s.status_id = cs_latest.status_id"""
         ).fetchall()
         name_to_id = {}
         for c in customer_rows:
@@ -3390,6 +3400,9 @@ def api_customer_roles():
                 result[cid] = {"roles": [], "first_timer_ever": bool(c["first_timer_ever"])}
             else:
                 result[cid]["first_timer_ever"] = bool(c["first_timer_ever"])
+            # Prefer status_name from customer_statuses; fall back to current_player_status
+            result[cid]["status_name"] = c["status_name"] or None
+            result[cid]["status_display_name"] = c["display_name"] or None
             result[cid]["current_player_status"] = c["current_player_status"]
             result[cid]["chapter"] = c["chapter"]
             # Build name→id map for frontend fallback when items.customer_id is null
@@ -3412,6 +3425,45 @@ def api_customer_roles():
                 result[cid]["first_timer_used"] = t["cnt"]
 
     return jsonify(result)
+
+
+@app.route("/api/customers/<int:customer_id>/status", methods=["POST"])
+@require_role("manager")
+def api_set_customer_status(customer_id):
+    """Insert a new row into customer_statuses (status history).
+
+    Body: { status_name: str, notes?: str }
+    Valid status_name values: member, member_plus, guest, 1st_timer, former
+    """
+    from email_parser.database import set_customer_status, _connect
+    data = request.get_json(silent=True) or {}
+    status_name = (data.get("status_name") or "").strip().lower()
+    valid = {"member", "member_plus", "guest", "1st_timer", "former"}
+    if status_name not in valid:
+        return jsonify({"error": f"Invalid status_name. Must be one of: {', '.join(sorted(valid))}"}), 400
+    notes = data.get("notes") or "manual status change"
+    try:
+        new_id = set_customer_status(customer_id, status_name, db_path=None, notes=notes)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"status": "ok", "id": new_id, "status_name": status_name})
+
+
+@app.route("/api/customers/<int:customer_id>/status-history")
+@require_role("view-only")
+def api_customer_status_history(customer_id):
+    """Return full status history for a customer (newest first)."""
+    from email_parser.database import _connect
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT cs.id, cs.set_at, s.status_name, s.display_name, cs.notes
+               FROM customer_statuses cs
+               JOIN statuses s ON s.status_id = cs.status_id
+               WHERE cs.customer_id = ?
+               ORDER BY cs.set_at DESC""",
+            (customer_id,),
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
 
 
 @app.route("/api/customers/create", methods=["POST"])
