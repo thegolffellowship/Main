@@ -883,6 +883,40 @@ class DuplicateReverseTestCase(unittest.TestCase):
         self.assertEqual(r["merged_status"], "merged")
         self.assertIsNone(r["reversed_at"])
 
+    def test_merged_rows_excluded_from_account_balances(self):
+        """get_acct_account_balances() must not count rows that have been
+        merged away — that's the whole point of Commit 8."""
+        from email_parser.database import get_acct_account_balances
+        with _connect(self.db_path) as conn:
+            cur = conn.execute(
+                "INSERT INTO acct_accounts (name, account_type, opening_balance, is_active) "
+                "VALUES ('TGF Checking', 'checking', 0.0, 1)"
+            )
+            account_id = cur.lastrowid
+            survivor = _insert_txn(
+                conn, account_id=account_id, type="income", entry_type="income",
+                amount=100.0, total_amount=100.0, source="venmo",
+                source_ref="venmo-1", customer_id=42,
+            )
+            merged = _insert_txn(
+                conn, account_id=account_id, type="income", entry_type="income",
+                amount=100.0, total_amount=100.0, source_ref="exp-promoted-1",
+                customer_id=42,
+            )
+            conn.commit()
+
+        before = get_acct_account_balances(self.db_path)
+        before_bal = next(b for b in before if b["id"] == account_id)["current_balance"]
+        # Both rows are active income — balance counts both = 200
+        self.assertAlmostEqual(before_bal, 200.0, places=2)
+
+        merge_duplicate_pair(survivor, merged, db_path=self.db_path)
+
+        after = get_acct_account_balances(self.db_path)
+        after_bal = next(b for b in after if b["id"] == account_id)["current_balance"]
+        # After merge, only the survivor counts = 100
+        self.assertAlmostEqual(after_bal, 100.0, places=2)
+
     def test_audit_rows_ordered_newest_first(self):
         with _connect(self.db_path) as conn:
             ids = []

@@ -13316,20 +13316,28 @@ def update_acct_account(account_id: int, db_path: str | Path | None = None, **fi
 
 
 def get_acct_account_balances(db_path: str | Path | None = None) -> list[dict]:
-    """Return all active accounts with computed current balance."""
+    """Return all active accounts with computed current balance.
+
+    Excludes rows with status='merged' or 'reversed' from every SUM so the
+    book balance reflects the Duplicate Detective + ledger cleanup state.
+    """
     with _connect(db_path) as conn:
         rows = conn.execute(
             """
             SELECT a.*,
                    a.opening_balance
                    + COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
-                               WHERE t.account_id = a.id AND t.type = 'income'), 0)
+                               WHERE t.account_id = a.id AND t.type = 'income'
+                               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')), 0)
                    - COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
-                               WHERE t.account_id = a.id AND t.type = 'expense'), 0)
+                               WHERE t.account_id = a.id AND t.type = 'expense'
+                               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')), 0)
                    + COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
-                               WHERE t.transfer_to_account_id = a.id AND t.type = 'transfer'), 0)
+                               WHERE t.transfer_to_account_id = a.id AND t.type = 'transfer'
+                               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')), 0)
                    - COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
-                               WHERE t.account_id = a.id AND t.type = 'transfer'), 0)
+                               WHERE t.account_id = a.id AND t.type = 'transfer'
+                               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')), 0)
                    AS current_balance
             FROM acct_accounts a
             WHERE a.is_active = 1
@@ -20829,7 +20837,8 @@ def get_reconciliation_dashboard(db_path: str | Path | None = None) -> dict:
                 """SELECT COALESCE(SUM(t.amount), 0) as total
                    FROM acct_transactions t
                    JOIN reconciliation_matches rm ON rm.acct_transaction_id = t.id
-                   JOIN bank_deposits d ON d.id = rm.bank_deposit_id AND d.account_id = ?""",
+                   JOIN bank_deposits d ON d.id = rm.bank_deposit_id AND d.account_id = ?
+                   WHERE COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')""",
                 (aid,),
             ).fetchone()["total"]
 
