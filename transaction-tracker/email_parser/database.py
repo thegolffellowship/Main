@@ -3196,6 +3196,66 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_acct_txn_customer_id ON acct_transactions(customer_id)"
         )
 
+        # ── Duplicate Detective — soft-delete + audit infrastructure ──
+        # Adds the link from a merged row back to its survivor, plus two
+        # tracking tables. See docs/claude/duplicate-detective.md.
+        try:
+            conn.execute(
+                "ALTER TABLE acct_transactions ADD COLUMN merged_into_id INTEGER "
+                "REFERENCES acct_transactions(id)"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_txn_merged_into ON acct_transactions(merged_into_id)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS duplicate_merge_audit (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                surviving_txn_id   INTEGER NOT NULL REFERENCES acct_transactions(id),
+                merged_txn_id      INTEGER NOT NULL REFERENCES acct_transactions(id),
+                merge_reason       TEXT,
+                confidence_score   REAL,
+                merged_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                merged_by          TEXT DEFAULT 'kerry',
+                notes              TEXT,
+                reversible         INTEGER NOT NULL DEFAULT 1,
+                reversed_at        TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_audit_survivor ON duplicate_merge_audit(surviving_txn_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_audit_merged ON duplicate_merge_audit(merged_txn_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_audit_reversed ON duplicate_merge_audit(reversed_at)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS duplicate_dismissed_pairs (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                txn_a_id       INTEGER NOT NULL,
+                txn_b_id       INTEGER NOT NULL,
+                dismissed_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                dismissed_by   TEXT DEFAULT 'kerry',
+                reason         TEXT,
+                UNIQUE(txn_a_id, txn_b_id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_dismissed_a ON duplicate_dismissed_pairs(txn_a_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_dismissed_b ON duplicate_dismissed_pairs(txn_b_id)"
+        )
+
         # ── Order-level GoDaddy columns ─────────────────────────────
         for col, col_type in [
             ("net_deposit", "REAL"),
