@@ -14,7 +14,8 @@
 `expense_transactions`, `acct_keyword_rules`,
 `coo_agents`, `coo_chat_sessions`, `coo_chat_messages`, `coo_manual_values`,
 `agent_action_log`, `tgf_events`, `tgf_payouts`, `contractor_payouts`,
-`event_pairings`, `pairing_history`
+`event_pairings`, `pairing_history`,
+`duplicate_merge_audit`, `duplicate_dismissed_pairs`
 
 Key tables not documented elsewhere in CLAUDE sub-docs:
 - `chapters` — chapter dimension table. Five canonical entries: San Antonio, Austin, DFW, Houston, Hill Country (Hill Country added via `_migrate_canonicalize_chapters` after the original seed block early-returns once initialized). Maps to Platform `org_units`. FK from `items.chapter_id` and `events.chapter_id`. **Note:** `customers.chapter` is still a `VARCHAR(50)` text column — it does **not** have a `chapter_id` FK. Chapter selection on the Customers Info tab is constrained to canonical names via the UI, and `update_customer_info` writes the chapter string to both `items.chapter` (per-row) and `customers.chapter` (master). Adding `customers.chapter_id INTEGER REFERENCES chapters(chapter_id)` and phasing out the text column is deferred — see "Deferred / Known Concessions" below.
@@ -28,7 +29,9 @@ Key tables not documented elsewhere in CLAUDE sub-docs:
 - `season_contests` — contest enrollment tracking (NET/GROSS points race, city match play)
 - `parse_warnings` — flagged items with potential parsing errors (open/dismissed/resolved)
 - `acct_allocations` — per-player event cost breakdown (course, prizes, fees, operating margin, payment_method, acct_transaction_id). Covers GoDaddy orders AND non-GoDaddy items (Venmo, cash, credit transfers) via synthetic order_ids.
-- `acct_transactions` — single source of truth flat ledger. Every financial event writes entry_type/category/amount/account/status. Flat entries link to items via item_id. Status transitions: active → reconciled (matched to bank) or reversed.
+- `acct_transactions` — single source of truth flat ledger. Every financial event writes entry_type/category/amount/account/status. Flat entries link to items via item_id. Status transitions: active → reconciled (matched to bank), reversed, or **merged** (soft-deleted by Duplicate Detective; `merged_into_id` FK points at the surviving row).
+- `duplicate_merge_audit` — one row per Duplicate Detective merge: surviving_txn_id, merged_txn_id, merge_reason, confidence_score, merged_at, merged_by, notes, reversible flag, reversed_at. Every merge is logged here; reverse is a 1-click operation from `/admin/duplicate-detective/audit`. See `docs/claude/duplicate-detective.md`.
+- `duplicate_dismissed_pairs` — pairs Kerry has explicitly rejected as not a duplicate. UNIQUE(txn_a_id, txn_b_id) so re-running the detector does not resurface them.
 - `bank_statement_rows` — legacy imported bank statement data (older reconciliation system)
 - `bank_accounts` — bank/payment accounts: TGF Checking (checking), Venmo (venmo). Seeded at init.
 - `bank_deposits` — imported bank statement rows with status (unmatched/partial/matched). Linked to bank_accounts. Deduped on account + date + amount + description.

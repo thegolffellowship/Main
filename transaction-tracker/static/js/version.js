@@ -1,5 +1,21 @@
-window.TGF_VERSION = "2.13.0";
+window.TGF_VERSION = "2.14.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.0",
+    date: "2026-05-11",
+    title: "Duplicate Detective: ledger cleanup admin tool",
+    changes: [
+      "New admin tool at /admin/duplicate-detective that detects and merges duplicate acct_transactions rows accumulated from multiple writers recording the same financial event (Venmo CSV import, Venmo email parser via exp-promoted-N, in-app refund/credit-payout operations). The Frost Checking variance bloat — caused by Venmo + email parser + in-app ops all double-booking the same refund — is what this is designed to clean up.",
+      "Four detection patterns: A) Venmo CSV ↔ exp-promoted, B) in-app refund/credit-payout/wd-credit-payout ↔ exp-promoted, C) in-app ↔ Venmo CSV, D) manual fallback (same customer_id, different source_ref, within 7 days). Confidence scored 0.95 (customer_id match) / 0.85 (name-only match) / 0.65 (Pattern D), with penalties for date gap, amount delta, and FK warnings. Survivor selection prefers Venmo CSV (bank truth) > GoDaddy order detail > in-app op > exp-promoted (least specific).",
+      "First-run mode defaults to dry_run_only — UI renders but action buttons are disabled, every card shows the exact UPDATE SQL inline, and CSV + Markdown report exports work for offline review. Switch to review_each for per-card merge/swap/dismiss buttons, or auto_high_confidence for a batch button that merges every pair ≥0.90 confidence with no FK warnings. Mode flag persisted in app_settings.",
+      "Soft-delete pattern: merged rows are marked status='merged' with merged_into_id pointing at the survivor. Never hard-deletes. Every merge logs one row to duplicate_merge_audit with confidence, reason, operator, and notes. Reverse a bad merge from /admin/duplicate-detective/audit — flips status back to active. FK re-points (allocations / reconciliation matches / expense_transactions) are NOT auto-restored on reverse; the audit notes flag manual cleanup required.",
+      "Read paths that aggregate ledger totals now exclude merged rows: get_acct_account_balances, get_reconciliation_dashboard book_balance, and mcp_server._get_ledger_entries (defaults to filtering when no status arg supplied). Other aggregates (get_acct_transactions, get_monthly_reconciliation, get_cashflow_data, get_event_financial_summary) were already filtering.",
+      "HARD ERROR safety net: if survivor and merged row are both matched to DIFFERENT bank_deposits, auto-merge refuses; per-card merge requires explicit allow_fk_hard_error=True override (UI surfaces a stronger confirmation dialog). Override is logged in the audit row's notes for traceability.",
+      "Schema additions (idempotent migrations in init_db): acct_transactions.merged_into_id (nullable FK), duplicate_merge_audit table, duplicate_dismissed_pairs table (UNIQUE on pair so dismissed pairs do not resurface).",
+      "35 unit tests in test_duplicate_detective.py cover all four patterns, customer-id vs name-only match scoring, idempotency, FK re-pointing including the UNIQUE constraint conflict case, HARD ERROR refusal + override, reverse round-trip, audit ordering, and the book-balance exclusion behaviour.",
+      "Full reference doc at docs/claude/duplicate-detective.md; cross-refs added to CLAUDE.md, docs/claude/schema.md, and docs/claude/bank-reconciliation.md.",
+    ],
+  },
   {
     version: "2.13.0",
     date: "2026-05-08",

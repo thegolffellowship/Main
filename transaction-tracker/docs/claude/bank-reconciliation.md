@@ -1,5 +1,7 @@
 # Bank Reconciliation System
 
+> **Related but separate concern:** If reconciliation variance is unexplained — book balance and bank balance drift apart without a clear cause — the culprit is often duplicate ledger entries written by multiple writers, not a bank-match miss. See `docs/claude/duplicate-detective.md` for the admin tool that detects and merges those duplicates safely.
+
 ## Architecture
 Three new tables link bank statement data to the accounting ledger:
 - `bank_accounts` → `bank_deposits` → `reconciliation_matches` → `acct_transactions`
