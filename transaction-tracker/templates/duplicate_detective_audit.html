@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — Duplicate Detective Audit</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#1e40af">
+    <style>
+        .audit-table {
+            width: 100%; border-collapse: collapse; background: var(--surface);
+            border: 1px solid var(--border); border-radius: var(--radius);
+            overflow: hidden; font-size: 0.82rem;
+        }
+        .audit-table th, .audit-table td { padding: 0.55rem 0.7rem; text-align: left; vertical-align: top; }
+        .audit-table th { background: #f1f5f9; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+        .audit-table tr { border-top: 1px solid var(--border); }
+        .audit-table tr.reversed { opacity: 0.55; background: #f8fafc; }
+        .src-ref { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem; }
+        .reverse-btn {
+            font-size: 0.74rem; padding: 0.3rem 0.6rem;
+            background: #fff; border: 1px solid var(--border); border-radius: 4px;
+            cursor: pointer;
+        }
+        .reverse-btn:hover { background: #fef3c7; border-color: #f59e0b; }
+        .badge { display: inline-block; font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 10px; }
+        .badge.merged { background: #fee2e2; color: #991b1b; }
+        .badge.active { background: #dbeafe; color: #1e40af; }
+        .badge.reversed { background: #fef3c7; color: #92400e; }
+        .notes { font-size: 0.72rem; color: var(--text-muted); max-width: 320px; white-space: pre-wrap; }
+        .login-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .login-box { background: var(--surface); padding: 2rem; border-radius: var(--radius); text-align: center; min-width: 280px; }
+        .login-box input { margin: 1rem 0 0.5rem; padding: 0.6rem; width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--radius); font-size: 1rem; text-align: center; }
+        .login-error { color: var(--red); font-size: 0.85rem; min-height: 1.2em; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Duplicate Detective — Audit log</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+
+    <main>
+        <nav class="tab-nav">
+            <a href="/accounting" class="active">Admin</a>
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/tgf">Payouts</a>
+        </nav>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/database">Database</a>
+            <a href="/admin/duplicate-detective">Duplicate Detective</a>
+            <a href="/admin/duplicate-detective/audit" class="active">Detective Audit</a>
+            <a href="/changelog">Changelog</a>
+        </nav>
+
+        <div style="margin: 1rem 0; display: flex; align-items: center; gap: 0.75rem;">
+            <h2 style="margin:0; font-size:1.05rem;">Merge history</h2>
+            <span id="audit-count" style="font-size:0.82rem; color: var(--text-muted);"></span>
+            <span style="flex:1;"></span>
+            <a class="btn btn-secondary" href="/admin/duplicate-detective" style="font-size:0.8rem;">← Back to detective</a>
+        </div>
+
+        <table class="audit-table">
+            <thead>
+                <tr>
+                    <th>Audit #</th>
+                    <th>Merged at</th>
+                    <th>By</th>
+                    <th>Confidence</th>
+                    <th>Survivor (kept)</th>
+                    <th>Merged (soft-deleted)</th>
+                    <th>Reason / notes</th>
+                    <th>State</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="audit-body"></tbody>
+        </table>
+    </main>
+
+    <div class="login-overlay" id="login-overlay">
+        <div class="login-box">
+            <h2>Admin Access Required</h2>
+            <p>Enter PIN to continue</p>
+            <input type="password" id="login-pin" placeholder="PIN" maxlength="20"
+                   inputmode="numeric" autocomplete="off">
+            <p class="login-error" id="login-error"></p>
+            <button class="btn btn-primary" id="login-submit">Log In</button>
+        </div>
+    </div>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script id="audit-bootstrap" type="application/json">{{ audit_json|safe }}</script>
+    <script>
+    (function() {
+        const rows = JSON.parse(document.getElementById("audit-bootstrap").textContent);
+        const tbody = document.getElementById("audit-body");
+        document.getElementById("audit-count").textContent =
+            `${rows.length} merge${rows.length===1?"":"s"} logged`;
+
+        function fmt$(v) { v = Number(v||0); return (v<0?"-$":"$") + Math.abs(v).toFixed(2); }
+        function escapeHtml(s) {
+            return String(s==null?"":s).replace(/[&<>"']/g, ch =>
+                ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+        }
+
+        function render() {
+            if (!rows.length) {
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:1.5rem;">No merges recorded.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = rows.map(r => {
+                const reversed = !!r.reversed_at;
+                const state = reversed
+                    ? `<span class="badge reversed">reversed ${escapeHtml(String(r.reversed_at).slice(0,16))}</span>`
+                    : `<span class="badge ${r.merged_status||"merged"}">${escapeHtml(r.merged_status||"merged")}</span>`;
+                const actions = reversed
+                    ? ""
+                    : `<button class="reverse-btn" data-audit="${r.id}">Reverse merge</button>`;
+                return `
+                    <tr class="${reversed?"reversed":""}" data-audit="${r.id}">
+                      <td>#${r.id}</td>
+                      <td>${escapeHtml(String(r.merged_at||"").slice(0,16))}</td>
+                      <td>${escapeHtml(r.merged_by||"")}</td>
+                      <td>${r.confidence_score!=null?Math.round(r.confidence_score*100)+"%":""}</td>
+                      <td>
+                        txn #${r.surviving_txn_id}<br>
+                        <span class="src-ref">${escapeHtml(r.surviving_source_ref||"")}</span><br>
+                        ${fmt$(r.surviving_amount)} · ${escapeHtml((r.surviving_description||"").slice(0,40))}
+                      </td>
+                      <td>
+                        txn #${r.merged_txn_id}<br>
+                        <span class="src-ref">${escapeHtml(r.merged_source_ref||"")}</span><br>
+                        ${fmt$(r.merged_amount)} · ${escapeHtml((r.merged_description||"").slice(0,40))}
+                      </td>
+                      <td class="notes">${escapeHtml(r.merge_reason||"")}${r.notes?"\n\n"+escapeHtml(r.notes):""}</td>
+                      <td>${state}</td>
+                      <td>${actions}</td>
+                    </tr>
+                `;
+            }).join("");
+            tbody.querySelectorAll(".reverse-btn").forEach(b => {
+                b.addEventListener("click", async () => {
+                    const id = b.dataset.audit;
+                    if (!confirm(
+                        `Reverse merge audit #${id}?\n\n`
+                        + `This restores the merged transaction to status='active'. `
+                        + `Any FK re-points (allocations, reconciliation matches, `
+                        + `expense_transactions) made during the original merge will NOT `
+                        + `be automatically restored — re-point manually if needed.`
+                    )) return;
+                    const r = await fetch(`/admin/duplicate-detective/reverse/${id}`, {method: "POST"});
+                    const j = await r.json();
+                    if (r.ok) { location.reload(); }
+                    else { alert("Reverse failed: " + (j && j.error || r.status)); }
+                });
+            });
+        }
+        render();
+    })();
+    </script>
+</body>
+</html>

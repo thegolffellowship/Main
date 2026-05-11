@@ -23464,3 +23464,113 @@ def merge_duplicate_pair(
             "recon_match_deleted": recon_deleted,
             "noop": False,
         }
+
+
+def reverse_duplicate_merge(
+    audit_id: int, *, reversed_by: str = "kerry", db_path=None
+) -> dict:
+    """Undo a prior merge.
+
+    Restores the merged row to status='active' and clears merged_into_id;
+    stamps reversed_at on the audit row. FK re-points performed during the
+    original merge are NOT automatically restored — there's no record of
+    which rows previously pointed at the merged txn. The audit row's notes
+    field records this caveat so the operator can re-point allocations or
+    reconciliation matches manually if needed.
+
+    Idempotent: re-reversing an already-reversed audit row raises
+    DuplicateMergeError so the caller can flag the click as a no-op.
+    """
+    with _connect(db_path) as conn:
+        cur = conn.cursor()
+        audit = cur.execute(
+            "SELECT id, surviving_txn_id, merged_txn_id, reversible, "
+            "reversed_at, notes FROM duplicate_merge_audit WHERE id = ?",
+            (int(audit_id),),
+        ).fetchone()
+        if not audit:
+            raise DuplicateMergeError(f"audit id {audit_id} does not exist")
+        if audit["reversed_at"]:
+            raise DuplicateMergeError(
+                f"audit id {audit_id} was already reversed at {audit['reversed_at']}"
+            )
+        if not audit["reversible"]:
+            raise DuplicateMergeError(
+                f"audit id {audit_id} is marked non-reversible"
+            )
+
+        merged_id = audit["merged_txn_id"]
+        merged_row = cur.execute(
+            "SELECT COALESCE(status, 'active') AS status, merged_into_id "
+            "FROM acct_transactions WHERE id = ?",
+            (merged_id,),
+        ).fetchone()
+        if not merged_row:
+            raise DuplicateMergeError(
+                f"merged_txn_id {merged_id} no longer exists — cannot reverse"
+            )
+
+        try:
+            cur.execute("BEGIN")
+            cur.execute(
+                "UPDATE acct_transactions "
+                "SET status = 'active', merged_into_id = NULL, "
+                "    updated_at = datetime('now') "
+                "WHERE id = ?",
+                (merged_id,),
+            )
+            extra_note = (
+                f"reversed at {datetime.now().isoformat(timespec='seconds')} "
+                f"by {reversed_by}; FK re-points (allocations / "
+                f"reconciliation_matches / expense_transactions) were NOT "
+                f"automatically restored — re-point manually if needed"
+            )
+            new_notes = (audit["notes"] + " ; " if audit["notes"] else "") + extra_note
+            cur.execute(
+                "UPDATE duplicate_merge_audit "
+                "SET reversed_at = CURRENT_TIMESTAMP, notes = ? "
+                "WHERE id = ?",
+                (new_notes, int(audit_id)),
+            )
+            conn.commit()
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise DuplicateMergeError(f"reverse failed; rolled back: {e}") from e
+
+        return {
+            "audit_id": int(audit_id),
+            "merged_txn_id": merged_id,
+            "surviving_txn_id": audit["surviving_txn_id"],
+            "fk_repoint_restored": False,
+            "manual_cleanup_required": True,
+        }
+
+
+def get_duplicate_merge_audit(db_path=None, *, limit: int = 500) -> list[dict]:
+    """Return audit rows (newest first), with the survivor + merged
+    descriptions joined in for the audit UI."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT a.id, a.surviving_txn_id, a.merged_txn_id,
+                   a.merge_reason, a.confidence_score,
+                   a.merged_at, a.merged_by, a.notes,
+                   a.reversible, a.reversed_at,
+                   s.description AS surviving_description,
+                   s.source_ref  AS surviving_source_ref,
+                   COALESCE(s.amount, s.total_amount) AS surviving_amount,
+                   m.description AS merged_description,
+                   m.source_ref  AS merged_source_ref,
+                   COALESCE(m.amount, m.total_amount) AS merged_amount,
+                   COALESCE(m.status, 'active') AS merged_status
+            FROM duplicate_merge_audit a
+            LEFT JOIN acct_transactions s ON s.id = a.surviving_txn_id
+            LEFT JOIN acct_transactions m ON m.id = a.merged_txn_id
+            ORDER BY a.merged_at DESC, a.id DESC
+            LIMIT {int(limit)}
+            """
+        ).fetchall()
+        return [dict(r) for r in rows]

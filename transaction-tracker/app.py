@@ -271,6 +271,8 @@ from email_parser.database import (
     dismiss_duplicate_pair,
     get_duplicate_detective_mode,
     set_duplicate_detective_mode,
+    get_duplicate_merge_audit,
+    reverse_duplicate_merge,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -2181,6 +2183,33 @@ def api_duplicate_detective_dismiss(candidate_id):
     reason = (body.get("reason") or "").strip()
     inserted = dismiss_duplicate_pair(int(txn_a), int(txn_b), reason)
     return jsonify({"status": "ok", "inserted": inserted})
+
+
+@app.route("/admin/duplicate-detective/audit")
+def duplicate_detective_audit_page():
+    if session.get("role") != "admin":
+        return render_template("index.html")
+    rows = get_duplicate_merge_audit(limit=500)
+    return render_template(
+        "duplicate_detective_audit.html",
+        audit_json=json.dumps(rows, default=str),
+    )
+
+
+@app.route("/admin/duplicate-detective/reverse/<int:audit_id>", methods=["POST"])
+@require_role("admin")
+def api_duplicate_detective_reverse(audit_id):
+    from email_parser.database import DuplicateMergeError
+    try:
+        r = reverse_duplicate_merge(
+            audit_id, reversed_by=session.get("user") or "kerry"
+        )
+    except DuplicateMergeError as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception as e:
+        logger.exception("Duplicate merge reverse failed")
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"status": "ok", **r})
 
 
 @app.route("/admin/duplicate-detective/export.csv")

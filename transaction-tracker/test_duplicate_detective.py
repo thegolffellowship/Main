@@ -21,8 +21,10 @@ from email_parser.database import (
     dismiss_duplicate_pair,
     find_duplicate_candidates,
     get_duplicate_detective_mode,
+    get_duplicate_merge_audit,
     init_db,
     merge_duplicate_pair,
+    reverse_duplicate_merge,
     set_duplicate_detective_mode,
 )
 
@@ -779,6 +781,130 @@ class DuplicateMergeTestCase(unittest.TestCase):
             merge_duplicate_pair(survivor, 9999999, db_path=self.db_path)
         with self.assertRaises(DuplicateMergeError):
             merge_duplicate_pair(9999999, survivor, db_path=self.db_path)
+
+
+class DuplicateReverseTestCase(unittest.TestCase):
+    """Coverage for reverse_duplicate_merge() and get_duplicate_merge_audit()."""
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.tmp.close()
+        self.db_path = self.tmp.name
+        init_db(self.db_path)
+        init_db(self.db_path)
+
+    def tearDown(self):
+        try:
+            os.unlink(self.db_path)
+        except OSError:
+            pass
+
+    def _merged_pair(self):
+        with _connect(self.db_path) as conn:
+            survivor = _insert_txn(
+                conn, amount=93.06, total_amount=93.06, source="venmo",
+                source_ref="venmo-1", customer_id=42,
+            )
+            merged = _insert_txn(
+                conn, amount=93.06, total_amount=93.06, source="manual",
+                source_ref="exp-promoted-825", customer_id=42,
+            )
+            conn.commit()
+        r = merge_duplicate_pair(survivor, merged, confidence=0.95,
+                                 reason="test merge", db_path=self.db_path)
+        return survivor, merged, r["audit_id"]
+
+    def test_reverse_restores_status_and_stamps_audit(self):
+        survivor, merged, audit_id = self._merged_pair()
+        r = reverse_duplicate_merge(audit_id, db_path=self.db_path)
+        self.assertEqual(r["audit_id"], audit_id)
+        self.assertEqual(r["merged_txn_id"], merged)
+        self.assertEqual(r["surviving_txn_id"], survivor)
+        with _connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT status, merged_into_id FROM acct_transactions WHERE id = ?",
+                (merged,),
+            ).fetchone()
+            self.assertEqual(row["status"], "active")
+            self.assertIsNone(row["merged_into_id"])
+            audit = conn.execute(
+                "SELECT reversed_at, notes FROM duplicate_merge_audit WHERE id = ?",
+                (audit_id,),
+            ).fetchone()
+            self.assertIsNotNone(audit["reversed_at"])
+            self.assertIn("FK re-points", audit["notes"])
+
+    def test_reverse_rejects_already_reversed(self):
+        _, _, audit_id = self._merged_pair()
+        reverse_duplicate_merge(audit_id, db_path=self.db_path)
+        with self.assertRaises(DuplicateMergeError) as ctx:
+            reverse_duplicate_merge(audit_id, db_path=self.db_path)
+        self.assertIn("already reversed", str(ctx.exception))
+
+    def test_reverse_rejects_unknown_audit_id(self):
+        with self.assertRaises(DuplicateMergeError):
+            reverse_duplicate_merge(9999, db_path=self.db_path)
+
+    def test_reverse_rejects_non_reversible_row(self):
+        survivor, merged, audit_id = self._merged_pair()
+        with _connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE duplicate_merge_audit SET reversible = 0 WHERE id = ?",
+                (audit_id,),
+            )
+            conn.commit()
+        with self.assertRaises(DuplicateMergeError) as ctx:
+            reverse_duplicate_merge(audit_id, db_path=self.db_path)
+        self.assertIn("non-reversible", str(ctx.exception))
+
+    def test_reverse_lets_pair_resurface_in_finder(self):
+        """After reverse, the original duplicate should reappear in
+        find_duplicate_candidates() since the merged row is active again."""
+        survivor, merged, audit_id = self._merged_pair()
+        self.assertEqual(find_duplicate_candidates(self.db_path), [])
+        reverse_duplicate_merge(audit_id, db_path=self.db_path)
+        cands = find_duplicate_candidates(self.db_path)
+        self.assertEqual(len(cands), 1)
+        self.assertEqual(
+            {cands[0]["suggested_survivor_id"], cands[0]["suggested_merged_id"]},
+            {survivor, merged},
+        )
+
+    def test_get_audit_returns_joined_rows(self):
+        survivor, merged, audit_id = self._merged_pair()
+        rows = get_duplicate_merge_audit(db_path=self.db_path)
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r["id"], audit_id)
+        self.assertEqual(r["surviving_txn_id"], survivor)
+        self.assertEqual(r["merged_txn_id"], merged)
+        self.assertEqual(r["surviving_source_ref"], "venmo-1")
+        self.assertEqual(r["merged_source_ref"], "exp-promoted-825")
+        self.assertEqual(r["merged_status"], "merged")
+        self.assertIsNone(r["reversed_at"])
+
+    def test_audit_rows_ordered_newest_first(self):
+        with _connect(self.db_path) as conn:
+            ids = []
+            for i in range(3):
+                a = _insert_txn(
+                    conn, amount=10 + i, total_amount=10 + i,
+                    source="venmo", source_ref=f"venmo-{i}", customer_id=100 + i,
+                )
+                b = _insert_txn(
+                    conn, amount=10 + i, total_amount=10 + i,
+                    source="manual", source_ref=f"exp-promoted-{i}",
+                    customer_id=100 + i,
+                )
+                conn.commit()
+                ids.append((a, b))
+        audit_ids = []
+        for s, m in ids:
+            r = merge_duplicate_pair(s, m, db_path=self.db_path)
+            audit_ids.append(r["audit_id"])
+        rows = get_duplicate_merge_audit(db_path=self.db_path)
+        # Newest first
+        self.assertEqual([r["id"] for r in rows[:3]], list(reversed(audit_ids)))
 
 
 if __name__ == "__main__":
