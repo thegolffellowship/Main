@@ -2058,6 +2058,78 @@ def api_duplicate_detective_set_mode():
     return jsonify({"status": "ok", "mode": mode})
 
 
+@app.route("/admin/duplicate-detective/merge-batch", methods=["POST"])
+@require_role("admin")
+def api_duplicate_detective_merge_batch():
+    """Auto-merge every candidate with confidence >= 0.90 and no FK
+    warnings. Only allowed in auto_high_confidence mode. Each pair runs in
+    its own transaction (merge_duplicate_pair) so a single failure does
+    not abort the batch."""
+    from email_parser.database import (
+        merge_duplicate_pair,
+        DuplicateMergeError,
+    )
+
+    mode = get_duplicate_detective_mode()
+    if mode != "auto_high_confidence":
+        return jsonify({
+            "error": "Batch merge requires mode=auto_high_confidence "
+                     f"(current mode: {mode})",
+        }), 409
+
+    body = request.get_json(silent=True) or {}
+    threshold = float(body.get("min_confidence", 0.90))
+    candidates = find_duplicate_candidates(min_confidence=threshold)
+    qualifying = [c for c in candidates if not c.get("fk_warnings")]
+    skipped_fk = [c for c in candidates if c.get("fk_warnings")]
+
+    merged_by = session.get("user") or "kerry"
+    merged_results = []
+    errors = []
+    for c in qualifying:
+        try:
+            r = merge_duplicate_pair(
+                int(c["suggested_survivor_id"]),
+                int(c["suggested_merged_id"]),
+                confidence=c["confidence"],
+                reason=f"auto-batch: pattern {c['pattern']} | {c['rationale']}",
+                merged_by=merged_by,
+                allow_fk_hard_error=False,
+            )
+            merged_results.append({
+                "candidate_id": c["candidate_id"],
+                "audit_id": r["audit_id"],
+                "variance_impact": c["variance_impact"],
+                "noop": r["noop"],
+            })
+        except DuplicateMergeError as e:
+            errors.append({
+                "candidate_id": c["candidate_id"],
+                "error": str(e),
+            })
+        except Exception as e:
+            logger.exception("Auto-batch merge failed for candidate %s", c["candidate_id"])
+            errors.append({
+                "candidate_id": c["candidate_id"],
+                "error": str(e),
+            })
+
+    return jsonify({
+        "status": "ok",
+        "mode": mode,
+        "threshold": threshold,
+        "qualifying": len(qualifying),
+        "merged": len([r for r in merged_results if not r["noop"]]),
+        "noop": len([r for r in merged_results if r["noop"]]),
+        "errors": errors,
+        "skipped_fk_warnings": [c["candidate_id"] for c in skipped_fk],
+        "variance_recovered": round(
+            sum(r["variance_impact"] for r in merged_results if not r["noop"]), 2
+        ),
+        "results": merged_results,
+    })
+
+
 @app.route("/admin/duplicate-detective/merge/<candidate_id>", methods=["POST"])
 @require_role("admin")
 def api_duplicate_detective_merge(candidate_id):

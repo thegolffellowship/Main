@@ -262,11 +262,36 @@
         function modeNote() {
             if (mode === "dry_run_only") return "DRY RUN MODE — no changes will be made to the database.";
             if (mode === "review_each")  return "REVIEW EACH — click Merge / Swap survivor / Dismiss on each pair.";
-            return "AUTO HIGH CONFIDENCE — batch button enabled for pairs ≥0.90 with no FK warnings. (Wire-up lands in Commit 6.)";
+            return "AUTO HIGH CONFIDENCE — batch button enabled for pairs ≥0.90 with no FK warnings.";
+        }
+
+        function batchEligible() {
+            // High-confidence pairs that ALSO have no FK warnings.
+            return candidates.filter(c =>
+                c.confidence >= 0.90 && (!c.fk_warnings || c.fk_warnings.length === 0)
+            );
         }
 
         function renderBanner() {
             const fmt$ = v => "$" + (Math.round(v*100)/100).toFixed(2);
+            let batchCta = "";
+            if (mode === "auto_high_confidence") {
+                const eligible = batchEligible();
+                const variance = eligible.reduce((s, c) => s + c.variance_impact, 0);
+                batchCta = `
+                  <div style="margin-top:0.6rem;">
+                    <button class="btn btn-primary" id="btn-batch-merge"
+                            style="background:#dc2626;border-color:#dc2626;font-weight:600;"
+                            ${eligible.length===0 ? "disabled" : ""}>
+                      Auto-merge ${eligible.length} qualifying pair${eligible.length===1?"":"s"}
+                      (${fmt$(variance)} recovery)
+                    </button>
+                    <span style="font-size:0.78rem;color:var(--text-muted);margin-left:0.5rem;">
+                      Pairs with confidence ≥0.90 AND no FK warnings only.
+                    </span>
+                  </div>
+                `;
+            }
             bannerHost.innerHTML = `
               <div class="dd-banner ${bannerClass()}">
                 <h2>${modeNote()}</h2>
@@ -279,8 +304,42 @@
                   <div class="dd-stat">By pattern — A: <strong>${summary.by_pattern.A||0}</strong>  B: <strong>${summary.by_pattern.B||0}</strong>  C: <strong>${summary.by_pattern.C||0}</strong>  D: <strong>${summary.by_pattern.D||0}</strong></div>
                   <div class="dd-stat">With FK warnings: <strong>${summary.fk_warned||0}</strong></div>
                 </div>
+                ${batchCta}
               </div>
             `;
+            const btn = document.getElementById("btn-batch-merge");
+            if (btn) btn.addEventListener("click", runBatchMerge);
+        }
+
+        async function runBatchMerge() {
+            const eligible = batchEligible();
+            if (!eligible.length) return;
+            const variance = eligible.reduce((s, c) => s + c.variance_impact, 0).toFixed(2);
+            if (!confirm(
+                `Auto-merge ${eligible.length} pairs?\n\n`
+                + `This will mark ${eligible.length} acct_transactions rows as status='merged' `
+                + `and re-point their FK references to the surviving rows.\n\n`
+                + `Estimated variance recovery: $${variance}\n\n`
+                + `All merges are individually transactional and logged to duplicate_merge_audit. `
+                + `Each can be reversed from the audit page.`
+            )) return;
+            const btn = document.getElementById("btn-batch-merge");
+            if (btn) { btn.disabled = true; btn.textContent = "Merging…"; }
+            const res = await postJSON("/admin/duplicate-detective/merge-batch", {min_confidence: 0.90});
+            if (!res.ok) {
+                alert("Batch merge failed: " + (res.body && res.body.error || res.status));
+                if (btn) btn.disabled = false;
+                return;
+            }
+            const r = res.body;
+            alert(
+                `Batch merge complete.\n\n`
+                + `Merged: ${r.merged}\nNo-op (already merged): ${r.noop}\n`
+                + `Errors: ${r.errors.length}\n`
+                + `Variance recovered: $${r.variance_recovered.toFixed(2)}\n\n`
+                + (r.errors.length ? `Errors:\n` + r.errors.map(e => `• ${e.error}`).join("\n") : "")
+            );
+            await refreshCandidates();
         }
 
         function confBucket(c) {
