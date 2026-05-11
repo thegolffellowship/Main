@@ -676,6 +676,10 @@ def get_acct_transactions(
     if status:
         clauses.append("COALESCE(status, 'active') = ?")
         params.append(status)
+    else:
+        # Default: exclude soft-deleted Duplicate Detective rows and
+        # reversed entries so callers don't unknowingly aggregate them.
+        clauses.append("COALESCE(status, 'active') NOT IN ('reversed', 'merged')")
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     params.append(limit)
 

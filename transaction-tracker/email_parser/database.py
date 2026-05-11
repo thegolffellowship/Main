@@ -3196,6 +3196,66 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_acct_txn_customer_id ON acct_transactions(customer_id)"
         )
 
+        # ── Duplicate Detective — soft-delete + audit infrastructure ──
+        # Adds the link from a merged row back to its survivor, plus two
+        # tracking tables. See docs/claude/duplicate-detective.md.
+        try:
+            conn.execute(
+                "ALTER TABLE acct_transactions ADD COLUMN merged_into_id INTEGER "
+                "REFERENCES acct_transactions(id)"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_acct_txn_merged_into ON acct_transactions(merged_into_id)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS duplicate_merge_audit (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                surviving_txn_id   INTEGER NOT NULL REFERENCES acct_transactions(id),
+                merged_txn_id      INTEGER NOT NULL REFERENCES acct_transactions(id),
+                merge_reason       TEXT,
+                confidence_score   REAL,
+                merged_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                merged_by          TEXT DEFAULT 'kerry',
+                notes              TEXT,
+                reversible         INTEGER NOT NULL DEFAULT 1,
+                reversed_at        TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_audit_survivor ON duplicate_merge_audit(surviving_txn_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_audit_merged ON duplicate_merge_audit(merged_txn_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_audit_reversed ON duplicate_merge_audit(reversed_at)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS duplicate_dismissed_pairs (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                txn_a_id       INTEGER NOT NULL,
+                txn_b_id       INTEGER NOT NULL,
+                dismissed_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                dismissed_by   TEXT DEFAULT 'kerry',
+                reason         TEXT,
+                UNIQUE(txn_a_id, txn_b_id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_dismissed_a ON duplicate_dismissed_pairs(txn_a_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dup_dismissed_b ON duplicate_dismissed_pairs(txn_b_id)"
+        )
+
         # ── Order-level GoDaddy columns ─────────────────────────────
         for col, col_type in [
             ("net_deposit", "REAL"),
@@ -13256,20 +13316,28 @@ def update_acct_account(account_id: int, db_path: str | Path | None = None, **fi
 
 
 def get_acct_account_balances(db_path: str | Path | None = None) -> list[dict]:
-    """Return all active accounts with computed current balance."""
+    """Return all active accounts with computed current balance.
+
+    Excludes rows with status='merged' or 'reversed' from every SUM so the
+    book balance reflects the Duplicate Detective + ledger cleanup state.
+    """
     with _connect(db_path) as conn:
         rows = conn.execute(
             """
             SELECT a.*,
                    a.opening_balance
                    + COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
-                               WHERE t.account_id = a.id AND t.type = 'income'), 0)
+                               WHERE t.account_id = a.id AND t.type = 'income'
+                               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')), 0)
                    - COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
-                               WHERE t.account_id = a.id AND t.type = 'expense'), 0)
+                               WHERE t.account_id = a.id AND t.type = 'expense'
+                               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')), 0)
                    + COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
-                               WHERE t.transfer_to_account_id = a.id AND t.type = 'transfer'), 0)
+                               WHERE t.transfer_to_account_id = a.id AND t.type = 'transfer'
+                               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')), 0)
                    - COALESCE((SELECT SUM(t.total_amount) FROM acct_transactions t
-                               WHERE t.account_id = a.id AND t.type = 'transfer'), 0)
+                               WHERE t.account_id = a.id AND t.type = 'transfer'
+                               AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')), 0)
                    AS current_balance
             FROM acct_accounts a
             WHERE a.is_active = 1
@@ -20769,7 +20837,8 @@ def get_reconciliation_dashboard(db_path: str | Path | None = None) -> dict:
                 """SELECT COALESCE(SUM(t.amount), 0) as total
                    FROM acct_transactions t
                    JOIN reconciliation_matches rm ON rm.acct_transaction_id = t.id
-                   JOIN bank_deposits d ON d.id = rm.bank_deposit_id AND d.account_id = ?""",
+                   JOIN bank_deposits d ON d.id = rm.bank_deposit_id AND d.account_id = ?
+                   WHERE COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')""",
                 (aid,),
             ).fetchone()["total"]
 
@@ -22742,3 +22811,775 @@ def _abcd_groups(players: list[str], hcp_map: dict) -> list[list[str]]:
         groups[i % num_groups].append(player)
 
     return groups
+
+
+# ============================================================================
+# Duplicate Detective
+# ----------------------------------------------------------------------------
+# Detection layer for the /admin/duplicate-detective admin tool. Identifies
+# acct_transactions rows that represent the same financial event recorded by
+# multiple writers (Venmo CSV import, Venmo email parser via exp-promoted-N,
+# in-app refund/credit-payout operations). Returns a candidate list that the
+# UI surfaces; merging and reversing live in separate functions added in
+# later commits.
+#
+# See docs/claude/duplicate-detective.md for the full specification.
+# ============================================================================
+
+import hashlib as _dd_hashlib
+import re as _dd_re
+
+
+_DUP_PROMOTED_PREFIXES = ("exp-promoted-",)
+_DUP_INAPP_PREFIXES = ("credit-payout-", "refund-flat-", "wd-credit-payout-")
+_DUP_GODADDY_PREFIXES = ("godaddy-order-",)
+
+
+def _dd_normalize_name(value) -> str:
+    """Lowercase, strip punctuation/digits, collapse whitespace. Returns ''
+    when there is nothing usable to match on."""
+    if not value:
+        return ""
+    s = str(value).lower()
+    s = _dd_re.sub(r"[^a-z\s]+", " ", s)
+    s = _dd_re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _dd_names_overlap(a, b) -> bool:
+    """True when two free-form name/description fields likely refer to the
+    same person. Match rules (any one wins):
+      1. Either normalized string is a substring of the other (after both
+         are reduced to at least 3 chars).
+      2. They share at least 2 word tokens of length >= 3.
+      3. The last token of one appears as a token in the other AND that
+         token is at least 4 chars (catches "Todd McConahy" vs
+         "McConahy: $93.06" style descriptions).
+    """
+    na, nb = _dd_normalize_name(a), _dd_normalize_name(b)
+    if not na or not nb:
+        return False
+    if len(na) >= 3 and len(nb) >= 3 and (na in nb or nb in na):
+        return True
+    ta = [t for t in na.split() if len(t) >= 3]
+    tb = [t for t in nb.split() if len(t) >= 3]
+    shared = set(ta) & set(tb)
+    if len(shared) >= 2:
+        return True
+    if ta and tb:
+        if len(ta[-1]) >= 4 and ta[-1] in tb:
+            return True
+        if len(tb[-1]) >= 4 and tb[-1] in ta:
+            return True
+    return False
+
+
+def _dd_source_ref_starts_with(source_ref, prefixes) -> bool:
+    if not source_ref:
+        return False
+    return any(source_ref.startswith(p) for p in prefixes)
+
+
+def _dd_is_venmo_csv(row) -> bool:
+    """Venmo CSV import: source starts with 'venmo' AND source_ref is not the
+    exp-promoted pattern (which is the email parser, not the CSV)."""
+    source = (row["source"] or "").lower()
+    if not source.startswith("venmo"):
+        return False
+    sref = row["source_ref"] or ""
+    if _dd_source_ref_starts_with(sref, _DUP_PROMOTED_PREFIXES):
+        return False
+    return True
+
+
+def _dd_classify_pattern(row_a, row_b):
+    """Return (pattern_letter, base_confidence, customer_match_kind) or
+    (None, 0.0, None) if the pair does not match any pattern.
+
+    customer_match_kind is 'id' for customer_id match, 'name' for normalized
+    name match, '' for amount/date-only (Pattern D).
+    """
+    sref_a = row_a["source_ref"] or ""
+    sref_b = row_b["source_ref"] or ""
+
+    a_promoted = _dd_source_ref_starts_with(sref_a, _DUP_PROMOTED_PREFIXES)
+    b_promoted = _dd_source_ref_starts_with(sref_b, _DUP_PROMOTED_PREFIXES)
+    a_inapp = _dd_source_ref_starts_with(sref_a, _DUP_INAPP_PREFIXES)
+    b_inapp = _dd_source_ref_starts_with(sref_b, _DUP_INAPP_PREFIXES)
+    a_venmo = _dd_is_venmo_csv(row_a)
+    b_venmo = _dd_is_venmo_csv(row_b)
+
+    cust_a = row_a["customer_id"] if "customer_id" in row_a.keys() else None
+    cust_b = row_b["customer_id"] if "customer_id" in row_b.keys() else None
+    same_cid = cust_a is not None and cust_b is not None and cust_a == cust_b
+
+    name_a = row_a["customer"] or row_a["description"]
+    name_b = row_b["customer"] or row_b["description"]
+    same_name = _dd_names_overlap(name_a, name_b)
+
+    def _customer_match_kind():
+        if same_cid:
+            return "id"
+        if same_name:
+            return "name"
+        return None
+
+    # Pattern A — Venmo CSV vs exp-promoted (email parser → expense)
+    if (a_venmo and b_promoted) or (b_venmo and a_promoted):
+        kind = _customer_match_kind()
+        if kind:
+            return "A", 0.95 if kind == "id" else 0.85, kind
+
+    # Pattern B — in-app refund/credit/wd-credit vs exp-promoted
+    if (a_inapp and b_promoted) or (b_inapp and a_promoted):
+        kind = _customer_match_kind()
+        if kind:
+            return "B", 0.95 if kind == "id" else 0.85, kind
+
+    # Pattern C — in-app refund/credit vs Venmo CSV
+    if (a_inapp and b_venmo) or (b_inapp and a_venmo):
+        kind = _customer_match_kind()
+        if kind:
+            return "C", 0.95 if kind == "id" else 0.85, kind
+
+    # Pattern D — manual fallback: same customer_id, different source_ref,
+    # not already covered above
+    if same_cid and sref_a != sref_b:
+        return "D", 0.65, "id"
+
+    return None, 0.0, None
+
+
+def _dd_select_survivor(row_a, row_b):
+    """Survivor selection rule (highest priority kept). Returns (survivor_row,
+    merged_row, rationale_str). Tie-breaks by older id."""
+    def priority(row):
+        sref = row["source_ref"] or ""
+        source = (row["source"] or "").lower()
+        # 1. Venmo CSV bank truth (highest)
+        if source.startswith("venmo") and not _dd_source_ref_starts_with(
+            sref, _DUP_PROMOTED_PREFIXES
+        ):
+            return 1
+        # 2. GoDaddy order detail
+        if _dd_source_ref_starts_with(sref, _DUP_GODADDY_PREFIXES):
+            return 2
+        # 3. In-app operation (has user context)
+        if _dd_source_ref_starts_with(sref, _DUP_INAPP_PREFIXES):
+            return 3
+        # 4. Email parser exp-promoted (least specific)
+        if _dd_source_ref_starts_with(sref, _DUP_PROMOTED_PREFIXES):
+            return 4
+        return 5  # everything else — lowest preference
+
+    pa, pb = priority(row_a), priority(row_b)
+    labels = {
+        1: "Venmo CSV (bank truth)",
+        2: "GoDaddy order detail",
+        3: "in-app operation",
+        4: "email parser exp-promoted",
+        5: "other source",
+    }
+    if pa < pb:
+        return row_a, row_b, f"keep {labels[pa]} over {labels[pb]}"
+    if pb < pa:
+        return row_b, row_a, f"keep {labels[pb]} over {labels[pa]}"
+    # Equal priority — keep the older id (stable, deterministic)
+    if row_a["id"] <= row_b["id"]:
+        return row_a, row_b, f"equal priority ({labels[pa]}); kept older id"
+    return row_b, row_a, f"equal priority ({labels[pa]}); kept older id"
+
+
+def _dd_candidate_id(id_a: int, id_b: int) -> str:
+    """Deterministic candidate id = sha1 of sorted id pair."""
+    lo, hi = sorted((int(id_a), int(id_b)))
+    return _dd_hashlib.sha1(f"{lo}:{hi}".encode("utf-8")).hexdigest()[:16]
+
+
+def _dd_date_delta_days(date_a: str, date_b: str) -> int | None:
+    """Absolute day delta between two ISO date strings. None on parse error."""
+    from datetime import datetime
+    fmts = ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S")
+    def _parse(s):
+        if not s:
+            return None
+        s = str(s)[:19]
+        for f in fmts:
+            try:
+                return datetime.strptime(s, f)
+            except ValueError:
+                continue
+        try:
+            return datetime.strptime(s[:10], "%Y-%m-%d")
+        except ValueError:
+            return None
+    da, db = _parse(date_a), _parse(date_b)
+    if not da or not db:
+        return None
+    return abs((da - db).days)
+
+
+def _dd_check_fk_warnings(conn, survivor_id: int, merged_id: int) -> list[str]:
+    """Return a list of human-readable FK warning strings for a candidate
+    pair. Empty list means the merge is safe to auto-process.
+
+    HARD ERROR: survivor and merged both have reconciliation_matches to
+    DIFFERENT bank_deposits — auto-merge must refuse.
+    """
+    warnings = []
+    s_match = conn.execute(
+        "SELECT bank_deposit_id FROM reconciliation_matches "
+        "WHERE acct_transaction_id = ?",
+        (survivor_id,),
+    ).fetchone()
+    m_match = conn.execute(
+        "SELECT bank_deposit_id FROM reconciliation_matches "
+        "WHERE acct_transaction_id = ?",
+        (merged_id,),
+    ).fetchone()
+    if s_match and m_match and s_match[0] != m_match[0]:
+        warnings.append(
+            f"HARD ERROR: survivor txn {survivor_id} is matched to bank "
+            f"deposit {s_match[0]} and merged txn {merged_id} is matched "
+            f"to bank deposit {m_match[0]} — manual review required"
+        )
+    return warnings
+
+
+def find_duplicate_candidates(
+    db_path=None,
+    *,
+    min_confidence: float = 0.0,
+    pattern_filter=None,
+    include_dismissed: bool = False,
+) -> list[dict]:
+    """Scan acct_transactions for probable duplicate pairs.
+
+    Returns a deterministic list of candidate dicts (ordered by descending
+    confidence, then ascending pair id) ready for the Duplicate Detective UI.
+    See docs/claude/duplicate-detective.md for full pattern + scoring rules.
+    """
+    out: list[dict] = []
+    seen_pairs: set[tuple[int, int]] = set()
+
+    with _connect(db_path) as conn:
+        dismissed: set[tuple[int, int]] = set()
+        if not include_dismissed:
+            for r in conn.execute(
+                "SELECT txn_a_id, txn_b_id FROM duplicate_dismissed_pairs"
+            ).fetchall():
+                lo, hi = sorted((int(r["txn_a_id"]), int(r["txn_b_id"])))
+                dismissed.add((lo, hi))
+
+        # Narrow with SQL: active rows, expense or income only (skip transfers).
+        rows = conn.execute(
+            """
+            SELECT id, date, description, total_amount, type, amount,
+                   entry_type, customer, customer_id, event_name, category,
+                   account_id, source, source_ref, account,
+                   COALESCE(status, 'active') AS status
+            FROM acct_transactions
+            WHERE COALESCE(status, 'active') = 'active'
+              AND COALESCE(entry_type, type) IN ('income', 'expense')
+            ORDER BY id
+            """
+        ).fetchall()
+
+        # Bucket by entry_type + rounded amount so we only compare candidates
+        # that can possibly be a pair.
+        from collections import defaultdict
+        buckets = defaultdict(list)
+        for r in rows:
+            et = (r["entry_type"] or r["type"] or "").lower()
+            amt = r["amount"] if r["amount"] is not None else r["total_amount"]
+            if amt is None or et not in ("income", "expense"):
+                continue
+            # Round to nearest cent so within-0.01 pairs share a bucket
+            key = (et, round(float(amt), 2))
+            buckets[key].append(r)
+            # Also place into ±$0.01 neighbor buckets to absorb precision drift
+            buckets[(et, round(float(amt) + 0.01, 2))].append(r)
+            buckets[(et, round(float(amt) - 0.01, 2))].append(r)
+
+        # Deduplicate bucket contents (the ±0.01 trick can list the same row
+        # multiple times)
+        unique_buckets = {}
+        for key, lst in buckets.items():
+            seen_ids = set()
+            uniq = []
+            for r in lst:
+                if r["id"] in seen_ids:
+                    continue
+                seen_ids.add(r["id"])
+                uniq.append(r)
+            unique_buckets[key] = uniq
+
+        for bucket in unique_buckets.values():
+            if len(bucket) < 2:
+                continue
+            for i in range(len(bucket)):
+                for j in range(i + 1, len(bucket)):
+                    a, b = bucket[i], bucket[j]
+                    if a["id"] == b["id"]:
+                        continue
+                    # Amount within $0.01
+                    amt_a = a["amount"] if a["amount"] is not None else a["total_amount"]
+                    amt_b = b["amount"] if b["amount"] is not None else b["total_amount"]
+                    if amt_a is None or amt_b is None:
+                        continue
+                    amt_delta = abs(float(amt_a) - float(amt_b))
+                    if amt_delta > 0.01 + 1e-9:
+                        continue
+                    # Dates within 7 days
+                    day_delta = _dd_date_delta_days(a["date"], b["date"])
+                    if day_delta is None or day_delta > 7:
+                        continue
+                    # Pair already seen via the ±0.01 trick?
+                    lo, hi = sorted((int(a["id"]), int(b["id"])))
+                    if (lo, hi) in seen_pairs:
+                        continue
+                    seen_pairs.add((lo, hi))
+                    # Dismissed?
+                    if (lo, hi) in dismissed:
+                        continue
+                    pattern, conf, match_kind = _dd_classify_pattern(a, b)
+                    if not pattern:
+                        continue
+
+                    # Scoring adjustments
+                    if day_delta > 3:
+                        conf -= 0.10
+                    if amt_delta > 0.001:
+                        conf -= 0.10
+
+                    survivor, merged, surv_rationale = _dd_select_survivor(a, b)
+                    fk_warnings = _dd_check_fk_warnings(
+                        conn, survivor["id"], merged["id"]
+                    )
+                    if fk_warnings:
+                        conf -= 0.20
+                    conf = max(0.0, min(1.0, round(conf, 4)))
+
+                    if conf < min_confidence:
+                        continue
+                    if pattern_filter and pattern not in pattern_filter:
+                        continue
+
+                    # variance_impact: the merged row's signed effect on the
+                    # ledger that will be removed. Positive number = book
+                    # balance drops by this much when merged.
+                    merged_amt = (
+                        merged["amount"]
+                        if merged["amount"] is not None
+                        else merged["total_amount"]
+                    )
+                    merged_type = (merged["entry_type"] or merged["type"] or "").lower()
+                    variance = float(merged_amt or 0)
+                    if merged_type == "income":
+                        variance = -variance
+
+                    rationale_bits = [
+                        f"Pattern {pattern}",
+                        f"customer match: {match_kind}",
+                        f"date delta {day_delta}d",
+                        f"amount delta ${amt_delta:.2f}",
+                        surv_rationale,
+                    ]
+
+                    out.append({
+                        "candidate_id": _dd_candidate_id(a["id"], b["id"]),
+                        "txn_a": dict(a),
+                        "txn_b": dict(b),
+                        "pattern": pattern,
+                        "confidence": conf,
+                        "suggested_survivor_id": survivor["id"],
+                        "suggested_merged_id": merged["id"],
+                        "rationale": "; ".join(rationale_bits),
+                        "fk_warnings": fk_warnings,
+                        "variance_impact": round(variance, 2),
+                        "match_kind": match_kind,
+                        "date_delta_days": day_delta,
+                        "amount_delta": round(amt_delta, 4),
+                    })
+
+    # Deterministic ordering: by confidence desc, then by sorted pair id asc
+    out.sort(
+        key=lambda c: (
+            -c["confidence"],
+            min(c["suggested_survivor_id"], c["suggested_merged_id"]),
+            max(c["suggested_survivor_id"], c["suggested_merged_id"]),
+        )
+    )
+    return out
+
+
+def get_duplicate_detective_mode(db_path=None) -> str:
+    """Read the current mode from app_settings; default 'dry_run_only'."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = 'duplicate_detective_mode'"
+        ).fetchone()
+    if not row:
+        return "dry_run_only"
+    val = (row["value"] or "").strip()
+    if val not in ("dry_run_only", "auto_high_confidence", "review_each"):
+        return "dry_run_only"
+    return val
+
+
+def set_duplicate_detective_mode(mode: str, db_path=None) -> str:
+    """Persist the mode flag. Returns the value actually written."""
+    if mode not in ("dry_run_only", "auto_high_confidence", "review_each"):
+        raise ValueError(f"Invalid duplicate_detective_mode: {mode!r}")
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO app_settings (key, value, updated_at) "
+            "VALUES ('duplicate_detective_mode', ?, datetime('now')) "
+            "ON CONFLICT(key) DO UPDATE SET "
+            "  value = excluded.value, updated_at = excluded.updated_at",
+            (mode,),
+        )
+        conn.commit()
+    return mode
+
+
+def dismiss_duplicate_pair(
+    txn_a_id: int, txn_b_id: int, reason: str = "", db_path=None
+) -> bool:
+    """Record a pair as dismissed so it is skipped on subsequent scans.
+    Returns True if a new row was inserted, False if the pair was already
+    dismissed."""
+    lo, hi = sorted((int(txn_a_id), int(txn_b_id)))
+    with _connect(db_path) as conn:
+        try:
+            conn.execute(
+                "INSERT INTO duplicate_dismissed_pairs "
+                "(txn_a_id, txn_b_id, reason) VALUES (?, ?, ?)",
+                (lo, hi, reason or None),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+
+class DuplicateMergeError(Exception):
+    """Raised when a duplicate-detective merge cannot proceed safely. The
+    caller should surface the message to the operator; nothing has been
+    written to the DB."""
+
+
+def merge_duplicate_pair(
+    surviving_txn_id: int,
+    merged_txn_id: int,
+    *,
+    confidence: float | None = None,
+    reason: str = "",
+    merged_by: str = "kerry",
+    allow_fk_hard_error: bool = False,
+    db_path=None,
+) -> dict:
+    """Execute a duplicate merge inside a single transaction.
+
+    Steps (all-or-nothing — any failure rolls back):
+      1. Validate both rows exist and are 'active'.
+      2. Check FK warnings; HARD ERROR refuses unless allow_fk_hard_error=True.
+      3. INSERT audit row capturing survivor + merged ids, reason, confidence.
+      4. Re-point reconciliation_matches.acct_transaction_id to survivor;
+         on UNIQUE(bank_deposit_id, acct_transaction_id) conflict, DELETE
+         the merged-side row and record the deletion in audit.notes.
+      5. Re-point acct_allocations.acct_transaction_id to survivor.
+      6. Re-point expense_transactions.acct_transaction_id to survivor.
+      7. UPDATE acct_transactions SET status='merged', merged_into_id=survivor
+         on the merged row.
+
+    Re-running with the same pair is a no-op (returns the existing audit
+    row) — the merged row will already have status='merged'.
+
+    Returns a dict describing what changed:
+      {
+        "audit_id": int,
+        "surviving_txn_id": int,
+        "merged_txn_id": int,
+        "fk_repointed": {"recon": int, "allocations": int, "expense_txns": int},
+        "recon_match_deleted": list[int],
+        "noop": bool,
+      }
+    """
+    if int(surviving_txn_id) == int(merged_txn_id):
+        raise DuplicateMergeError(
+            f"surviving and merged txn ids are identical ({surviving_txn_id})"
+        )
+
+    with _connect(db_path) as conn:
+        cur = conn.cursor()
+
+        survivor = cur.execute(
+            "SELECT id, COALESCE(status, 'active') AS status FROM acct_transactions "
+            "WHERE id = ?",
+            (int(surviving_txn_id),),
+        ).fetchone()
+        merged = cur.execute(
+            "SELECT id, COALESCE(status, 'active') AS status, merged_into_id "
+            "FROM acct_transactions WHERE id = ?",
+            (int(merged_txn_id),),
+        ).fetchone()
+        if not survivor:
+            raise DuplicateMergeError(
+                f"surviving_txn_id {surviving_txn_id} does not exist"
+            )
+        if not merged:
+            raise DuplicateMergeError(
+                f"merged_txn_id {merged_txn_id} does not exist"
+            )
+
+        # Idempotency: if merged row is already 'merged' and points at the
+        # same survivor, return the existing audit row unchanged.
+        if merged["status"] == "merged" and merged["merged_into_id"] == survivor["id"]:
+            existing = cur.execute(
+                "SELECT id FROM duplicate_merge_audit "
+                "WHERE merged_txn_id = ? AND surviving_txn_id = ? "
+                "AND reversed_at IS NULL ORDER BY id DESC LIMIT 1",
+                (int(merged_txn_id), int(surviving_txn_id)),
+            ).fetchone()
+            return {
+                "audit_id": existing["id"] if existing else None,
+                "surviving_txn_id": int(surviving_txn_id),
+                "merged_txn_id": int(merged_txn_id),
+                "fk_repointed": {"recon": 0, "allocations": 0, "expense_txns": 0},
+                "recon_match_deleted": [],
+                "noop": True,
+            }
+
+        if survivor["status"] != "active":
+            raise DuplicateMergeError(
+                f"surviving txn {survivor['id']} is not active "
+                f"(status={survivor['status']!r})"
+            )
+        if merged["status"] != "active":
+            raise DuplicateMergeError(
+                f"merged txn {merged['id']} is not active "
+                f"(status={merged['status']!r})"
+            )
+
+        # FK warning check — HARD ERROR blocks unless caller opts in
+        fk_warnings = _dd_check_fk_warnings(conn, survivor["id"], merged["id"])
+        if fk_warnings and not allow_fk_hard_error:
+            raise DuplicateMergeError(
+                "FK warning blocks auto-merge — pass allow_fk_hard_error=True "
+                "to override: " + " | ".join(fk_warnings)
+            )
+
+        notes_extras: list[str] = []
+        if fk_warnings:
+            notes_extras.append("HARD ERROR override: " + " | ".join(fk_warnings))
+
+        try:
+            cur.execute("BEGIN")
+
+            cur.execute(
+                "INSERT INTO duplicate_merge_audit "
+                "(surviving_txn_id, merged_txn_id, merge_reason, "
+                " confidence_score, merged_by, notes) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    int(surviving_txn_id),
+                    int(merged_txn_id),
+                    reason or None,
+                    confidence,
+                    merged_by,
+                    None,  # filled in at COMMIT after we know what changed
+                ),
+            )
+            audit_id = cur.lastrowid
+
+            recon_deleted: list[int] = []
+            recon_repointed = 0
+            # Re-point reconciliation_matches; handle UNIQUE conflict by
+            # deleting the merged-side match row and logging the bank_deposit_id.
+            merged_matches = cur.execute(
+                "SELECT id, bank_deposit_id FROM reconciliation_matches "
+                "WHERE acct_transaction_id = ?",
+                (int(merged_txn_id),),
+            ).fetchall()
+            for m in merged_matches:
+                dup = cur.execute(
+                    "SELECT id FROM reconciliation_matches "
+                    "WHERE bank_deposit_id = ? AND acct_transaction_id = ?",
+                    (m["bank_deposit_id"], int(surviving_txn_id)),
+                ).fetchone()
+                if dup:
+                    cur.execute(
+                        "DELETE FROM reconciliation_matches WHERE id = ?",
+                        (m["id"],),
+                    )
+                    recon_deleted.append(m["bank_deposit_id"])
+                    notes_extras.append(
+                        f"deleted duplicate reconciliation_match id={m['id']} "
+                        f"(survivor already matched bank_deposit {m['bank_deposit_id']})"
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE reconciliation_matches SET acct_transaction_id = ? "
+                        "WHERE id = ?",
+                        (int(surviving_txn_id), m["id"]),
+                    )
+                    recon_repointed += 1
+
+            alloc_repointed = cur.execute(
+                "UPDATE acct_allocations SET acct_transaction_id = ? "
+                "WHERE acct_transaction_id = ?",
+                (int(surviving_txn_id), int(merged_txn_id)),
+            ).rowcount or 0
+
+            exp_repointed = cur.execute(
+                "UPDATE expense_transactions SET acct_transaction_id = ? "
+                "WHERE acct_transaction_id = ?",
+                (int(surviving_txn_id), int(merged_txn_id)),
+            ).rowcount or 0
+
+            cur.execute(
+                "UPDATE acct_transactions "
+                "SET status = 'merged', merged_into_id = ?, "
+                "    updated_at = datetime('now') "
+                "WHERE id = ?",
+                (int(surviving_txn_id), int(merged_txn_id)),
+            )
+
+            # Patch the audit row's notes now that we know the full picture.
+            if notes_extras:
+                cur.execute(
+                    "UPDATE duplicate_merge_audit SET notes = ? WHERE id = ?",
+                    (" ; ".join(notes_extras), audit_id),
+                )
+
+            conn.commit()
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise DuplicateMergeError(f"merge failed; rolled back: {e}") from e
+
+        return {
+            "audit_id": audit_id,
+            "surviving_txn_id": int(surviving_txn_id),
+            "merged_txn_id": int(merged_txn_id),
+            "fk_repointed": {
+                "recon": recon_repointed,
+                "allocations": alloc_repointed,
+                "expense_txns": exp_repointed,
+            },
+            "recon_match_deleted": recon_deleted,
+            "noop": False,
+        }
+
+
+def reverse_duplicate_merge(
+    audit_id: int, *, reversed_by: str = "kerry", db_path=None
+) -> dict:
+    """Undo a prior merge.
+
+    Restores the merged row to status='active' and clears merged_into_id;
+    stamps reversed_at on the audit row. FK re-points performed during the
+    original merge are NOT automatically restored — there's no record of
+    which rows previously pointed at the merged txn. The audit row's notes
+    field records this caveat so the operator can re-point allocations or
+    reconciliation matches manually if needed.
+
+    Idempotent: re-reversing an already-reversed audit row raises
+    DuplicateMergeError so the caller can flag the click as a no-op.
+    """
+    with _connect(db_path) as conn:
+        cur = conn.cursor()
+        audit = cur.execute(
+            "SELECT id, surviving_txn_id, merged_txn_id, reversible, "
+            "reversed_at, notes FROM duplicate_merge_audit WHERE id = ?",
+            (int(audit_id),),
+        ).fetchone()
+        if not audit:
+            raise DuplicateMergeError(f"audit id {audit_id} does not exist")
+        if audit["reversed_at"]:
+            raise DuplicateMergeError(
+                f"audit id {audit_id} was already reversed at {audit['reversed_at']}"
+            )
+        if not audit["reversible"]:
+            raise DuplicateMergeError(
+                f"audit id {audit_id} is marked non-reversible"
+            )
+
+        merged_id = audit["merged_txn_id"]
+        merged_row = cur.execute(
+            "SELECT COALESCE(status, 'active') AS status, merged_into_id "
+            "FROM acct_transactions WHERE id = ?",
+            (merged_id,),
+        ).fetchone()
+        if not merged_row:
+            raise DuplicateMergeError(
+                f"merged_txn_id {merged_id} no longer exists — cannot reverse"
+            )
+
+        try:
+            cur.execute("BEGIN")
+            cur.execute(
+                "UPDATE acct_transactions "
+                "SET status = 'active', merged_into_id = NULL, "
+                "    updated_at = datetime('now') "
+                "WHERE id = ?",
+                (merged_id,),
+            )
+            extra_note = (
+                f"reversed at {datetime.now().isoformat(timespec='seconds')} "
+                f"by {reversed_by}; FK re-points (allocations / "
+                f"reconciliation_matches / expense_transactions) were NOT "
+                f"automatically restored — re-point manually if needed"
+            )
+            new_notes = (audit["notes"] + " ; " if audit["notes"] else "") + extra_note
+            cur.execute(
+                "UPDATE duplicate_merge_audit "
+                "SET reversed_at = CURRENT_TIMESTAMP, notes = ? "
+                "WHERE id = ?",
+                (new_notes, int(audit_id)),
+            )
+            conn.commit()
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise DuplicateMergeError(f"reverse failed; rolled back: {e}") from e
+
+        return {
+            "audit_id": int(audit_id),
+            "merged_txn_id": merged_id,
+            "surviving_txn_id": audit["surviving_txn_id"],
+            "fk_repoint_restored": False,
+            "manual_cleanup_required": True,
+        }
+
+
+def get_duplicate_merge_audit(db_path=None, *, limit: int = 500) -> list[dict]:
+    """Return audit rows (newest first), with the survivor + merged
+    descriptions joined in for the audit UI."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT a.id, a.surviving_txn_id, a.merged_txn_id,
+                   a.merge_reason, a.confidence_score,
+                   a.merged_at, a.merged_by, a.notes,
+                   a.reversible, a.reversed_at,
+                   s.description AS surviving_description,
+                   s.source_ref  AS surviving_source_ref,
+                   COALESCE(s.amount, s.total_amount) AS surviving_amount,
+                   m.description AS merged_description,
+                   m.source_ref  AS merged_source_ref,
+                   COALESCE(m.amount, m.total_amount) AS merged_amount,
+                   COALESCE(m.status, 'active') AS merged_status
+            FROM duplicate_merge_audit a
+            LEFT JOIN acct_transactions s ON s.id = a.surviving_txn_id
+            LEFT JOIN acct_transactions m ON m.id = a.merged_txn_id
+            ORDER BY a.merged_at DESC, a.id DESC
+            LIMIT {int(limit)}
+            """
+        ).fetchall()
+        return [dict(r) for r in rows]

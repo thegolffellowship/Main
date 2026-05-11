@@ -4,12 +4,41 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/schema.md` (database/FKs)
 - `docs/claude/unified-financial-model.md` (acct_transactions, GoDaddy model, P&L)
 - `docs/claude/bank-reconciliation.md` (bank match queue, cash flow)
+- `docs/claude/duplicate-detective.md` (ledger cleanup admin tool — see below)
 - `docs/claude/expense-workflow.md` (CC/bank alert ingestion, vendor categorization)
 - `docs/claude/events.md` (events/RSVPs/pricing/cancellation/TGF payouts)
 - `docs/claude/customers.md` (customer identity, **membership renewal system**)
 - `docs/claude/handicaps.md` (handicap rules)
 - `docs/claude/coo.md` (COO dashboard + AI chat)
 - `docs/claude/customer-merge-repair.md` (playbook for fixing absorbed customer profiles)
+
+## Duplicate Detective
+
+Admin tool at `/admin/duplicate-detective` that detects duplicate
+`acct_transactions` rows accumulated from the multiple writers that
+record the same financial event (Venmo CSV import, Venmo email parser
+via `exp-promoted-N`, in-app refund/credit-payout operations). Use it
+when reconciliation variance is unexplained.
+
+- Code: `email_parser/database.py` `find_duplicate_candidates()`,
+  `merge_duplicate_pair()`, `reverse_duplicate_merge()`,
+  `get_duplicate_merge_audit()`.
+- Routes: in `app.py` under `# Duplicate Detective (admin)`.
+- First-run default is `dry_run_only` (no DB changes — exports CSV +
+  Markdown reports only). Switch mode in the UI dropdown:
+  `review_each` (per-card buttons) or `auto_high_confidence` (batch
+  button for pairs ≥0.90 confidence with no FK warnings).
+- Soft-delete: merging sets the loser to `status='merged'` and
+  populates `acct_transactions.merged_into_id` (FK to the survivor).
+  Read paths that aggregate (`get_acct_account_balances`,
+  `get_reconciliation_dashboard`, MCP ledger entries) exclude merged
+  rows by default.
+- Reverse a bad merge from `/admin/duplicate-detective/audit`. Reverse
+  flips status back to active but does NOT restore FK re-points
+  (allocations / reconciliation matches / expense_transactions) — the
+  audit row notes record this caveat for manual cleanup.
+- See `docs/claude/duplicate-detective.md` for the full pattern matrix,
+  confidence scoring, survivor selection rule, and schema additions.
 
 ## Workflow rules (always)
 

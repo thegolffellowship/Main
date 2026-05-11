@@ -1536,6 +1536,95 @@ The app is installable as a Progressive Web App:
 
 ## Version History
 
+### v2.14.0 — May 11, 2026 — "Duplicate Detective: Ledger Cleanup Tool"
+
+New admin tool at `/admin/duplicate-detective` for identifying and merging
+duplicate `acct_transactions` rows produced by multiple writers recording the
+same financial event (Venmo CSV import, Venmo email parser via
+`exp-promoted-N`, in-app refund/credit-payout operations). Designed to recover
+the variance accumulated when those writers double-book the same event.
+
+#### Default first-run behaviour
+- Mode flag persisted in `app_settings.duplicate_detective_mode`; defaults to
+  `dry_run_only` on first load.
+- In dry-run mode every action button is disabled and the per-card UI shows the
+  exact `UPDATE acct_transactions ...` SQL inline so the operator can audit
+  proposed merges before any data changes.
+- CSV + Markdown report exports work in dry-run mode and are the
+  recommended first deliverable: scan the markdown summary, sanity-check
+  the top 10 highest-impact pairs and any FK-warning pairs, then switch
+  to `auto_high_confidence` for batch merge or `review_each` for per-pair
+  review.
+
+#### Detection
+- `find_duplicate_candidates()` in `email_parser/database.py` scans active
+  income/expense rows, buckets by entry_type + amount, and classifies pairs
+  against four fingerprint patterns:
+  - **A** — Venmo CSV (`source LIKE 'venmo%'`) ↔ exp-promoted email parser row
+  - **B** — in-app credit-payout / refund-flat / wd-credit-payout ↔ exp-promoted
+  - **C** — in-app credit/refund ↔ Venmo CSV
+  - **D** — manual fallback: same customer_id, different source_ref, within 7 days
+- Confidence scoring: 0.95 base (matching customer_id), 0.85 (name-only),
+  0.65 (Pattern D); penalties of −0.10 for date gap >3d, −0.10 for amount
+  delta >$0.001, −0.20 for FK warnings.
+- Survivor selection priority: Venmo CSV (bank truth) > GoDaddy order detail
+  > in-app operation > exp-promoted (least specific).
+
+#### Reversibility
+- Every merge writes one row to `duplicate_merge_audit` with confidence,
+  reason, operator, and notes.
+- Soft-delete pattern: merged row is flagged `status='merged'` and gains
+  `merged_into_id` (FK to the surviving row). No rows are ever hard-deleted.
+- Reverse from `/admin/duplicate-detective/audit` flips the status back to
+  `active` and clears `merged_into_id`; FK re-points (allocations,
+  reconciliation matches, expense_transactions) are NOT auto-restored — the
+  audit row's notes flag "manual cleanup required" if needed.
+
+#### Schema changes
+- `acct_transactions.merged_into_id` (new column, nullable, references
+  acct_transactions(id))
+- `duplicate_merge_audit` (new table)
+- `duplicate_dismissed_pairs` (new table, UNIQUE on pair so dismissed pairs
+  do not resurface)
+- All migrations idempotent and wrapped in try/except inside `init_db()`.
+
+#### Read paths now filter merged rows
+- `get_acct_account_balances()` — book-balance SUMs exclude
+  `('reversed', 'merged')` so merged duplicates do not contribute to
+  account totals.
+- `get_reconciliation_dashboard()` — book_balance subquery filtered.
+- `mcp_server._get_ledger_entries()` — defaults to excluding
+  `('reversed', 'merged')` when no `status` argument supplied.
+- Other aggregates already filtered (`get_acct_transactions`,
+  `get_monthly_reconciliation`, `get_cashflow_data`, etc.).
+
+#### Files touched
+- `email_parser/database.py` — schema migrations, detection,
+  merge/reverse functions, mode helpers, audit reader (+ ~500 LoC at end
+  of file)
+- `app.py` — 7 new admin routes
+- `mcp_server.py` — default-status filter in `_get_ledger_entries`
+- `templates/duplicate_detective.html` — main UI (new)
+- `templates/duplicate_detective_audit.html` — merge history UI (new)
+- `test_duplicate_detective.py` — 35 unit tests (new)
+- `docs/claude/duplicate-detective.md` — full reference (new)
+- `docs/claude/schema.md`, `docs/claude/bank-reconciliation.md`,
+  `CLAUDE.md` — cross-references added
+
+#### Technical Debt & Known Concessions
+- Pattern D matching (same customer, same amount, same week, different
+  source_ref) is intentionally permissive and can surface false positives
+  when a customer legitimately has two same-amount transactions in the
+  same week. Always review Pattern D pairs in `review_each` mode before
+  merging.
+- Reverse does not restore FK re-points (no record of which rows
+  previously pointed at the merged txn). Manual cleanup is logged in the
+  audit row's notes when reversed.
+- Integration test against a fresh Railway production DB copy
+  (originally Commit 9 in the implementation plan) is deferred to
+  deployment validation — the first production dry-run report serves as
+  the real integration test.
+
 ### v2.10.0 — April 26, 2026 — "Full Data Connectivity: Customer Identity & Event FK Integrity"
 
 Major data-integrity release. No new user-facing features — focuses on closing every structural

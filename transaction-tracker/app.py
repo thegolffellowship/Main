@@ -266,6 +266,13 @@ from email_parser.database import (
     generate_event_pairings,
     get_pairing_history_counts,
     _pairing_time_slots,
+    # Duplicate Detective
+    find_duplicate_candidates,
+    dismiss_duplicate_pair,
+    get_duplicate_detective_mode,
+    set_duplicate_detective_mode,
+    get_duplicate_merge_audit,
+    reverse_duplicate_merge,
 )
 from email_parser.database import DB_PATH, get_connection
 from email_parser.fetcher import (
@@ -1982,6 +1989,343 @@ def database_page():
     if session.get("role") != "admin":
         return render_template("index.html")
     return render_template("database.html")
+
+
+# ---------------------------------------------------------------------------
+# Duplicate Detective (admin)
+# ---------------------------------------------------------------------------
+def _dd_build_summary(candidates):
+    """Build the summary block embedded in the page banner + report exports."""
+    high = sum(1 for c in candidates if c["confidence"] >= 0.90)
+    medium = sum(1 for c in candidates if 0.70 <= c["confidence"] < 0.90)
+    low = sum(1 for c in candidates if c["confidence"] < 0.70)
+    by_pattern = {"A": 0, "B": 0, "C": 0, "D": 0}
+    for c in candidates:
+        by_pattern[c["pattern"]] = by_pattern.get(c["pattern"], 0) + 1
+    variance = sum(c["variance_impact"] for c in candidates)
+    fk_warned = sum(1 for c in candidates if c.get("fk_warnings"))
+    return {
+        "total": len(candidates),
+        "high": high,
+        "medium": medium,
+        "low": low,
+        "by_pattern": by_pattern,
+        "variance_recovery": round(variance, 2),
+        "fk_warned": fk_warned,
+    }
+
+
+@app.route("/admin/duplicate-detective")
+def duplicate_detective_page():
+    if session.get("role") != "admin":
+        return render_template("index.html")
+    candidates = find_duplicate_candidates()
+    bootstrap = {
+        "candidates": candidates,
+        "mode": get_duplicate_detective_mode(),
+        "summary": _dd_build_summary(candidates),
+    }
+    return render_template(
+        "duplicate_detective.html",
+        bootstrap_json=json.dumps(bootstrap, default=str),
+    )
+
+
+@app.route("/admin/duplicate-detective/api/candidates")
+@require_role("admin")
+def api_duplicate_detective_candidates():
+    include_dismissed = request.args.get("include_dismissed", "0") in ("1", "true", "yes")
+    pattern = request.args.getlist("pattern") or None
+    try:
+        min_conf = float(request.args.get("min_confidence", "0"))
+    except ValueError:
+        min_conf = 0.0
+    cands = find_duplicate_candidates(
+        include_dismissed=include_dismissed,
+        pattern_filter=pattern,
+        min_confidence=min_conf,
+    )
+    return jsonify({"candidates": cands, "summary": _dd_build_summary(cands)})
+
+
+@app.route("/admin/duplicate-detective/set-mode", methods=["POST"])
+@require_role("admin")
+def api_duplicate_detective_set_mode():
+    body = request.get_json(silent=True) or {}
+    mode = body.get("mode")
+    try:
+        set_duplicate_detective_mode(mode)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"status": "ok", "mode": mode})
+
+
+@app.route("/admin/duplicate-detective/merge-batch", methods=["POST"])
+@require_role("admin")
+def api_duplicate_detective_merge_batch():
+    """Auto-merge every candidate with confidence >= 0.90 and no FK
+    warnings. Only allowed in auto_high_confidence mode. Each pair runs in
+    its own transaction (merge_duplicate_pair) so a single failure does
+    not abort the batch."""
+    from email_parser.database import (
+        merge_duplicate_pair,
+        DuplicateMergeError,
+    )
+
+    mode = get_duplicate_detective_mode()
+    if mode != "auto_high_confidence":
+        return jsonify({
+            "error": "Batch merge requires mode=auto_high_confidence "
+                     f"(current mode: {mode})",
+        }), 409
+
+    body = request.get_json(silent=True) or {}
+    threshold = float(body.get("min_confidence", 0.90))
+    candidates = find_duplicate_candidates(min_confidence=threshold)
+    qualifying = [c for c in candidates if not c.get("fk_warnings")]
+    skipped_fk = [c for c in candidates if c.get("fk_warnings")]
+
+    merged_by = session.get("user") or "kerry"
+    merged_results = []
+    errors = []
+    for c in qualifying:
+        try:
+            r = merge_duplicate_pair(
+                int(c["suggested_survivor_id"]),
+                int(c["suggested_merged_id"]),
+                confidence=c["confidence"],
+                reason=f"auto-batch: pattern {c['pattern']} | {c['rationale']}",
+                merged_by=merged_by,
+                allow_fk_hard_error=False,
+            )
+            merged_results.append({
+                "candidate_id": c["candidate_id"],
+                "audit_id": r["audit_id"],
+                "variance_impact": c["variance_impact"],
+                "noop": r["noop"],
+            })
+        except DuplicateMergeError as e:
+            errors.append({
+                "candidate_id": c["candidate_id"],
+                "error": str(e),
+            })
+        except Exception as e:
+            logger.exception("Auto-batch merge failed for candidate %s", c["candidate_id"])
+            errors.append({
+                "candidate_id": c["candidate_id"],
+                "error": str(e),
+            })
+
+    return jsonify({
+        "status": "ok",
+        "mode": mode,
+        "threshold": threshold,
+        "qualifying": len(qualifying),
+        "merged": len([r for r in merged_results if not r["noop"]]),
+        "noop": len([r for r in merged_results if r["noop"]]),
+        "errors": errors,
+        "skipped_fk_warnings": [c["candidate_id"] for c in skipped_fk],
+        "variance_recovered": round(
+            sum(r["variance_impact"] for r in merged_results if not r["noop"]), 2
+        ),
+        "results": merged_results,
+    })
+
+
+@app.route("/admin/duplicate-detective/merge/<candidate_id>", methods=["POST"])
+@require_role("admin")
+def api_duplicate_detective_merge(candidate_id):
+    """Merge a single candidate pair. Refused in dry_run_only mode."""
+    from email_parser.database import (
+        merge_duplicate_pair,
+        DuplicateMergeError,
+    )
+
+    mode = get_duplicate_detective_mode()
+    if mode == "dry_run_only":
+        return jsonify({
+            "error": "Mode is dry_run_only — merges are disabled. "
+                     "Switch to review_each or auto_high_confidence first.",
+        }), 409
+
+    body = request.get_json(silent=True) or {}
+    survivor = body.get("surviving_txn_id")
+    merged = body.get("merged_txn_id")
+    if not survivor or not merged:
+        return jsonify({
+            "error": "surviving_txn_id and merged_txn_id required",
+        }), 400
+    try:
+        result = merge_duplicate_pair(
+            int(survivor),
+            int(merged),
+            confidence=body.get("confidence"),
+            reason=body.get("reason") or f"manual merge via candidate {candidate_id}",
+            merged_by=session.get("user") or "kerry",
+            allow_fk_hard_error=bool(body.get("allow_fk_hard_error")),
+        )
+    except DuplicateMergeError as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception as e:
+        logger.exception("Duplicate merge failed")
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"status": "ok", **result})
+
+
+@app.route("/admin/duplicate-detective/dismiss/<candidate_id>", methods=["POST"])
+@require_role("admin")
+def api_duplicate_detective_dismiss(candidate_id):
+    body = request.get_json(silent=True) or {}
+    txn_a = body.get("txn_a_id")
+    txn_b = body.get("txn_b_id")
+    if not txn_a or not txn_b:
+        return jsonify({"error": "txn_a_id and txn_b_id required"}), 400
+    reason = (body.get("reason") or "").strip()
+    inserted = dismiss_duplicate_pair(int(txn_a), int(txn_b), reason)
+    return jsonify({"status": "ok", "inserted": inserted})
+
+
+@app.route("/admin/duplicate-detective/audit")
+def duplicate_detective_audit_page():
+    if session.get("role") != "admin":
+        return render_template("index.html")
+    rows = get_duplicate_merge_audit(limit=500)
+    return render_template(
+        "duplicate_detective_audit.html",
+        audit_json=json.dumps(rows, default=str),
+    )
+
+
+@app.route("/admin/duplicate-detective/reverse/<int:audit_id>", methods=["POST"])
+@require_role("admin")
+def api_duplicate_detective_reverse(audit_id):
+    from email_parser.database import DuplicateMergeError
+    try:
+        r = reverse_duplicate_merge(
+            audit_id, reversed_by=session.get("user") or "kerry"
+        )
+    except DuplicateMergeError as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception as e:
+        logger.exception("Duplicate merge reverse failed")
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"status": "ok", **r})
+
+
+@app.route("/admin/duplicate-detective/export.csv")
+@require_role("admin")
+def api_duplicate_detective_export_csv():
+    """CSV: one row per candidate pair, all detection fields."""
+    import csv
+    import io
+
+    cands = find_duplicate_candidates()
+    fieldnames = [
+        "candidate_id", "pattern", "confidence", "match_kind",
+        "date_delta_days", "amount_delta", "variance_impact",
+        "suggested_survivor_id", "suggested_merged_id",
+        "txn_a_id", "txn_a_date", "txn_a_source", "txn_a_source_ref",
+        "txn_a_customer", "txn_a_customer_id", "txn_a_amount",
+        "txn_a_description",
+        "txn_b_id", "txn_b_date", "txn_b_source", "txn_b_source_ref",
+        "txn_b_customer", "txn_b_customer_id", "txn_b_amount",
+        "txn_b_description",
+        "rationale", "fk_warnings",
+    ]
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=fieldnames)
+    w.writeheader()
+    for c in cands:
+        a, b = c["txn_a"], c["txn_b"]
+        w.writerow({
+            "candidate_id": c["candidate_id"],
+            "pattern": c["pattern"],
+            "confidence": c["confidence"],
+            "match_kind": c.get("match_kind") or "",
+            "date_delta_days": c["date_delta_days"],
+            "amount_delta": c["amount_delta"],
+            "variance_impact": c["variance_impact"],
+            "suggested_survivor_id": c["suggested_survivor_id"],
+            "suggested_merged_id": c["suggested_merged_id"],
+            "txn_a_id": a["id"], "txn_a_date": a.get("date"),
+            "txn_a_source": a.get("source"), "txn_a_source_ref": a.get("source_ref"),
+            "txn_a_customer": a.get("customer"), "txn_a_customer_id": a.get("customer_id"),
+            "txn_a_amount": a.get("amount") if a.get("amount") is not None else a.get("total_amount"),
+            "txn_a_description": (a.get("description") or "")[:200],
+            "txn_b_id": b["id"], "txn_b_date": b.get("date"),
+            "txn_b_source": b.get("source"), "txn_b_source_ref": b.get("source_ref"),
+            "txn_b_customer": b.get("customer"), "txn_b_customer_id": b.get("customer_id"),
+            "txn_b_amount": b.get("amount") if b.get("amount") is not None else b.get("total_amount"),
+            "txn_b_description": (b.get("description") or "")[:200],
+            "rationale": c["rationale"],
+            "fk_warnings": " | ".join(c.get("fk_warnings") or []),
+        })
+    fname = f"duplicate_detective_report_{datetime.now().strftime('%Y-%m-%d')}.csv"
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
+
+
+@app.route("/admin/duplicate-detective/export.md")
+@require_role("admin")
+def api_duplicate_detective_export_md():
+    """Markdown summary suitable for sharing in chat/email."""
+    cands = find_duplicate_candidates()
+    summary = _dd_build_summary(cands)
+    today = datetime.now().strftime("%Y-%m-%d")
+    lines = [
+        f"# Duplicate Detective — Dry-Run Report",
+        f"Generated: {today}",
+        "",
+        "## Summary",
+        f"- Total probable duplicates: **{summary['total']}**",
+        f"- Estimated variance recovery: **${summary['variance_recovery']:.2f}**",
+        f"- Confidence: high ≥0.90: **{summary['high']}** · "
+        f"medium 0.70–0.90: **{summary['medium']}** · "
+        f"low <0.70: **{summary['low']}**",
+        f"- Pattern A (Venmo CSV ↔ exp-promoted): **{summary['by_pattern']['A']}**",
+        f"- Pattern B (in-app ↔ exp-promoted): **{summary['by_pattern']['B']}**",
+        f"- Pattern C (in-app ↔ Venmo CSV): **{summary['by_pattern']['C']}**",
+        f"- Pattern D (manual fallback): **{summary['by_pattern']['D']}**",
+        f"- Pairs with FK warnings (manual review): **{summary['fk_warned']}**",
+        "",
+        "## Top 10 highest-impact pairs",
+    ]
+    top = sorted(cands, key=lambda c: -abs(c["variance_impact"]))[:10]
+    if not top:
+        lines.append("_None._")
+    else:
+        for c in top:
+            a, b = c["txn_a"], c["txn_b"]
+            survivor_id = c["suggested_survivor_id"]
+            merged_id = c["suggested_merged_id"]
+            cust = a.get("customer") or b.get("customer") or "(unknown)"
+            lines.append(
+                f"- **${c['variance_impact']:.2f}** · {cust} · "
+                f"Pattern {c['pattern']} · confidence {int(c['confidence']*100)}% · "
+                f"keep txn #{survivor_id}, merge txn #{merged_id} "
+                f"({a.get('source_ref') or '(no ref)'} vs "
+                f"{b.get('source_ref') or '(no ref)'})"
+            )
+    if summary["fk_warned"]:
+        lines.append("")
+        lines.append("## Pairs with FK warnings (require manual review)")
+        for c in cands:
+            if not c.get("fk_warnings"):
+                continue
+            lines.append(
+                f"- txn #{c['suggested_survivor_id']} ↔ txn #{c['suggested_merged_id']}: "
+                + " | ".join(c["fk_warnings"])
+            )
+    body = "\n".join(lines) + "\n"
+    fname = f"duplicate_detective_summary_{today}.md"
+    return Response(
+        body,
+        mimetype="text/markdown",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
 
 
 @app.route("/api/database/tables")
