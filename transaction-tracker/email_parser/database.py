@@ -23252,3 +23252,215 @@ def dismiss_duplicate_pair(
             return True
         except sqlite3.IntegrityError:
             return False
+
+
+class DuplicateMergeError(Exception):
+    """Raised when a duplicate-detective merge cannot proceed safely. The
+    caller should surface the message to the operator; nothing has been
+    written to the DB."""
+
+
+def merge_duplicate_pair(
+    surviving_txn_id: int,
+    merged_txn_id: int,
+    *,
+    confidence: float | None = None,
+    reason: str = "",
+    merged_by: str = "kerry",
+    allow_fk_hard_error: bool = False,
+    db_path=None,
+) -> dict:
+    """Execute a duplicate merge inside a single transaction.
+
+    Steps (all-or-nothing — any failure rolls back):
+      1. Validate both rows exist and are 'active'.
+      2. Check FK warnings; HARD ERROR refuses unless allow_fk_hard_error=True.
+      3. INSERT audit row capturing survivor + merged ids, reason, confidence.
+      4. Re-point reconciliation_matches.acct_transaction_id to survivor;
+         on UNIQUE(bank_deposit_id, acct_transaction_id) conflict, DELETE
+         the merged-side row and record the deletion in audit.notes.
+      5. Re-point acct_allocations.acct_transaction_id to survivor.
+      6. Re-point expense_transactions.acct_transaction_id to survivor.
+      7. UPDATE acct_transactions SET status='merged', merged_into_id=survivor
+         on the merged row.
+
+    Re-running with the same pair is a no-op (returns the existing audit
+    row) — the merged row will already have status='merged'.
+
+    Returns a dict describing what changed:
+      {
+        "audit_id": int,
+        "surviving_txn_id": int,
+        "merged_txn_id": int,
+        "fk_repointed": {"recon": int, "allocations": int, "expense_txns": int},
+        "recon_match_deleted": list[int],
+        "noop": bool,
+      }
+    """
+    if int(surviving_txn_id) == int(merged_txn_id):
+        raise DuplicateMergeError(
+            f"surviving and merged txn ids are identical ({surviving_txn_id})"
+        )
+
+    with _connect(db_path) as conn:
+        cur = conn.cursor()
+
+        survivor = cur.execute(
+            "SELECT id, COALESCE(status, 'active') AS status FROM acct_transactions "
+            "WHERE id = ?",
+            (int(surviving_txn_id),),
+        ).fetchone()
+        merged = cur.execute(
+            "SELECT id, COALESCE(status, 'active') AS status, merged_into_id "
+            "FROM acct_transactions WHERE id = ?",
+            (int(merged_txn_id),),
+        ).fetchone()
+        if not survivor:
+            raise DuplicateMergeError(
+                f"surviving_txn_id {surviving_txn_id} does not exist"
+            )
+        if not merged:
+            raise DuplicateMergeError(
+                f"merged_txn_id {merged_txn_id} does not exist"
+            )
+
+        # Idempotency: if merged row is already 'merged' and points at the
+        # same survivor, return the existing audit row unchanged.
+        if merged["status"] == "merged" and merged["merged_into_id"] == survivor["id"]:
+            existing = cur.execute(
+                "SELECT id FROM duplicate_merge_audit "
+                "WHERE merged_txn_id = ? AND surviving_txn_id = ? "
+                "AND reversed_at IS NULL ORDER BY id DESC LIMIT 1",
+                (int(merged_txn_id), int(surviving_txn_id)),
+            ).fetchone()
+            return {
+                "audit_id": existing["id"] if existing else None,
+                "surviving_txn_id": int(surviving_txn_id),
+                "merged_txn_id": int(merged_txn_id),
+                "fk_repointed": {"recon": 0, "allocations": 0, "expense_txns": 0},
+                "recon_match_deleted": [],
+                "noop": True,
+            }
+
+        if survivor["status"] != "active":
+            raise DuplicateMergeError(
+                f"surviving txn {survivor['id']} is not active "
+                f"(status={survivor['status']!r})"
+            )
+        if merged["status"] != "active":
+            raise DuplicateMergeError(
+                f"merged txn {merged['id']} is not active "
+                f"(status={merged['status']!r})"
+            )
+
+        # FK warning check — HARD ERROR blocks unless caller opts in
+        fk_warnings = _dd_check_fk_warnings(conn, survivor["id"], merged["id"])
+        if fk_warnings and not allow_fk_hard_error:
+            raise DuplicateMergeError(
+                "FK warning blocks auto-merge — pass allow_fk_hard_error=True "
+                "to override: " + " | ".join(fk_warnings)
+            )
+
+        notes_extras: list[str] = []
+        if fk_warnings:
+            notes_extras.append("HARD ERROR override: " + " | ".join(fk_warnings))
+
+        try:
+            cur.execute("BEGIN")
+
+            cur.execute(
+                "INSERT INTO duplicate_merge_audit "
+                "(surviving_txn_id, merged_txn_id, merge_reason, "
+                " confidence_score, merged_by, notes) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    int(surviving_txn_id),
+                    int(merged_txn_id),
+                    reason or None,
+                    confidence,
+                    merged_by,
+                    None,  # filled in at COMMIT after we know what changed
+                ),
+            )
+            audit_id = cur.lastrowid
+
+            recon_deleted: list[int] = []
+            recon_repointed = 0
+            # Re-point reconciliation_matches; handle UNIQUE conflict by
+            # deleting the merged-side match row and logging the bank_deposit_id.
+            merged_matches = cur.execute(
+                "SELECT id, bank_deposit_id FROM reconciliation_matches "
+                "WHERE acct_transaction_id = ?",
+                (int(merged_txn_id),),
+            ).fetchall()
+            for m in merged_matches:
+                dup = cur.execute(
+                    "SELECT id FROM reconciliation_matches "
+                    "WHERE bank_deposit_id = ? AND acct_transaction_id = ?",
+                    (m["bank_deposit_id"], int(surviving_txn_id)),
+                ).fetchone()
+                if dup:
+                    cur.execute(
+                        "DELETE FROM reconciliation_matches WHERE id = ?",
+                        (m["id"],),
+                    )
+                    recon_deleted.append(m["bank_deposit_id"])
+                    notes_extras.append(
+                        f"deleted duplicate reconciliation_match id={m['id']} "
+                        f"(survivor already matched bank_deposit {m['bank_deposit_id']})"
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE reconciliation_matches SET acct_transaction_id = ? "
+                        "WHERE id = ?",
+                        (int(surviving_txn_id), m["id"]),
+                    )
+                    recon_repointed += 1
+
+            alloc_repointed = cur.execute(
+                "UPDATE acct_allocations SET acct_transaction_id = ? "
+                "WHERE acct_transaction_id = ?",
+                (int(surviving_txn_id), int(merged_txn_id)),
+            ).rowcount or 0
+
+            exp_repointed = cur.execute(
+                "UPDATE expense_transactions SET acct_transaction_id = ? "
+                "WHERE acct_transaction_id = ?",
+                (int(surviving_txn_id), int(merged_txn_id)),
+            ).rowcount or 0
+
+            cur.execute(
+                "UPDATE acct_transactions "
+                "SET status = 'merged', merged_into_id = ?, "
+                "    updated_at = datetime('now') "
+                "WHERE id = ?",
+                (int(surviving_txn_id), int(merged_txn_id)),
+            )
+
+            # Patch the audit row's notes now that we know the full picture.
+            if notes_extras:
+                cur.execute(
+                    "UPDATE duplicate_merge_audit SET notes = ? WHERE id = ?",
+                    (" ; ".join(notes_extras), audit_id),
+                )
+
+            conn.commit()
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise DuplicateMergeError(f"merge failed; rolled back: {e}") from e
+
+        return {
+            "audit_id": audit_id,
+            "surviving_txn_id": int(surviving_txn_id),
+            "merged_txn_id": int(merged_txn_id),
+            "fk_repointed": {
+                "recon": recon_repointed,
+                "allocations": alloc_repointed,
+                "expense_txns": exp_repointed,
+            },
+            "recon_match_deleted": recon_deleted,
+            "noop": False,
+        }

@@ -16,11 +16,13 @@ import tempfile
 import unittest
 
 from email_parser.database import (
+    DuplicateMergeError,
     _connect,
     dismiss_duplicate_pair,
     find_duplicate_candidates,
     get_duplicate_detective_mode,
     init_db,
+    merge_duplicate_pair,
     set_duplicate_detective_mode,
 )
 
@@ -57,6 +59,11 @@ class DuplicateDetectiveTestCase(unittest.TestCase):
         self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         self.tmp.close()
         self.db_path = self.tmp.name
+        # init_db twice to mirror production: the first call creates tables,
+        # the second call runs forward-migration ALTERs that were authored
+        # against tables that didn't exist on the first pass (see
+        # acct_allocations.acct_transaction_id and other unified-model cols).
+        init_db(self.db_path)
         init_db(self.db_path)
 
     def tearDown(self):
@@ -478,6 +485,300 @@ class DuplicateDetectiveTestCase(unittest.TestCase):
         self.assertEqual(len(cands), 1)
         self.assertEqual(cands[0]["suggested_survivor_id"], id_gd)
         self.assertEqual(cands[0]["suggested_merged_id"], id_prom)
+
+
+class DuplicateMergeTestCase(unittest.TestCase):
+    """Coverage for merge_duplicate_pair() — FK re-pointing, soft delete,
+    rollback, idempotency, HARD ERROR gating."""
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.tmp.close()
+        self.db_path = self.tmp.name
+        # init_db twice to mirror production: the first call creates tables,
+        # the second call runs forward-migration ALTERs that were authored
+        # against tables that didn't exist on the first pass (see
+        # acct_allocations.acct_transaction_id and other unified-model cols).
+        init_db(self.db_path)
+        init_db(self.db_path)
+
+    def tearDown(self):
+        try:
+            os.unlink(self.db_path)
+        except OSError:
+            pass
+
+    def _seed_pair(self, conn, **overrides):
+        """Helper: seed a basic Pattern A pair, return (survivor_id, merged_id)."""
+        a = _insert_txn(
+            conn, date="2026-05-01", amount=93.06, total_amount=93.06,
+            source="venmo", source_ref="venmo-1",
+            customer="Todd McConahy", customer_id=42, **overrides,
+        )
+        b = _insert_txn(
+            conn, date="2026-05-02", amount=93.06, total_amount=93.06,
+            source="manual", source_ref="exp-promoted-825",
+            customer="Todd McConahy", customer_id=42, **overrides,
+        )
+        return a, b  # a is venmo (survivor), b is exp-promoted (merged)
+
+    def test_merge_marks_status_and_sets_merged_into_id(self):
+        with _connect(self.db_path) as conn:
+            survivor, merged = self._seed_pair(conn)
+            conn.commit()
+
+        result = merge_duplicate_pair(
+            survivor, merged, confidence=0.95, reason="test", db_path=self.db_path
+        )
+        self.assertFalse(result["noop"])
+        self.assertGreater(result["audit_id"], 0)
+
+        with _connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT status, merged_into_id FROM acct_transactions WHERE id = ?",
+                (merged,),
+            ).fetchone()
+            self.assertEqual(row["status"], "merged")
+            self.assertEqual(row["merged_into_id"], survivor)
+
+            row = conn.execute(
+                "SELECT status, merged_into_id FROM acct_transactions WHERE id = ?",
+                (survivor,),
+            ).fetchone()
+            # Survivor untouched
+            self.assertEqual(row["status"], "active")
+            self.assertIsNone(row["merged_into_id"])
+
+            audit = conn.execute(
+                "SELECT * FROM duplicate_merge_audit WHERE id = ?",
+                (result["audit_id"],),
+            ).fetchone()
+            self.assertEqual(audit["surviving_txn_id"], survivor)
+            self.assertEqual(audit["merged_txn_id"], merged)
+            self.assertAlmostEqual(audit["confidence_score"], 0.95, places=4)
+            self.assertEqual(audit["merge_reason"], "test")
+            self.assertIsNone(audit["reversed_at"])
+
+    def test_merge_repoints_acct_allocations(self):
+        with _connect(self.db_path) as conn:
+            survivor, merged = self._seed_pair(conn)
+            conn.execute(
+                "INSERT INTO acct_allocations (order_id, item_id, "
+                "allocation_date, total_collected, acct_transaction_id) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("R999", None, "2026-05-01", 93.06, merged),
+            )
+            conn.commit()
+        result = merge_duplicate_pair(survivor, merged, db_path=self.db_path)
+        self.assertEqual(result["fk_repointed"]["allocations"], 1)
+        with _connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT acct_transaction_id FROM acct_allocations "
+                "WHERE order_id = 'R999'"
+            ).fetchone()
+            self.assertEqual(row["acct_transaction_id"], survivor)
+
+    def test_merge_repoints_expense_transactions(self):
+        with _connect(self.db_path) as conn:
+            survivor, merged = self._seed_pair(conn)
+            conn.execute(
+                "INSERT INTO expense_transactions (email_uid, source_type, "
+                "amount, transaction_date, acct_transaction_id) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("uid-1", "venmo_alert", 93.06, "2026-05-01", merged),
+            )
+            conn.commit()
+        result = merge_duplicate_pair(survivor, merged, db_path=self.db_path)
+        self.assertEqual(result["fk_repointed"]["expense_txns"], 1)
+        with _connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT acct_transaction_id FROM expense_transactions "
+                "WHERE email_uid = 'uid-1'"
+            ).fetchone()
+            self.assertEqual(row["acct_transaction_id"], survivor)
+
+    def test_merge_repoints_reconciliation_match(self):
+        with _connect(self.db_path) as conn:
+            survivor, merged = self._seed_pair(conn)
+            conn.execute(
+                "INSERT INTO bank_accounts (name, account_type) "
+                "VALUES ('test-bank', 'checking')"
+            )
+            ba = conn.execute(
+                "SELECT id FROM bank_accounts ORDER BY id DESC LIMIT 1"
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT INTO bank_deposits (account_id, deposit_date, amount, "
+                "description, status) VALUES (?, '2026-05-01', 93.06, 'd1', 'unmatched')",
+                (ba,),
+            )
+            dep = conn.execute("SELECT id FROM bank_deposits ORDER BY id DESC LIMIT 1").fetchone()[0]
+            # Only the merged row is matched — survivor isn't
+            conn.execute(
+                "INSERT INTO reconciliation_matches (bank_deposit_id, "
+                "acct_transaction_id, match_type) VALUES (?, ?, 'manual')",
+                (dep, merged),
+            )
+            conn.commit()
+        result = merge_duplicate_pair(survivor, merged, db_path=self.db_path)
+        self.assertEqual(result["fk_repointed"]["recon"], 1)
+        self.assertEqual(result["recon_match_deleted"], [])
+        with _connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT acct_transaction_id FROM reconciliation_matches "
+                "WHERE bank_deposit_id = ?", (dep,),
+            ).fetchone()
+            self.assertEqual(row["acct_transaction_id"], survivor)
+
+    def test_merge_deletes_duplicate_match_when_survivor_already_matched(self):
+        """When BOTH rows are matched to the SAME bank_deposit, the
+        UNIQUE(bank_deposit_id, acct_transaction_id) constraint would block
+        a naive re-point. We DELETE the merged-side row and log it."""
+        with _connect(self.db_path) as conn:
+            survivor, merged = self._seed_pair(conn)
+            conn.execute(
+                "INSERT INTO bank_accounts (name, account_type) "
+                "VALUES ('test-bank', 'checking')"
+            )
+            ba = conn.execute(
+                "SELECT id FROM bank_accounts ORDER BY id DESC LIMIT 1"
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT INTO bank_deposits (account_id, deposit_date, amount, "
+                "description, status) VALUES (?, '2026-05-01', 93.06, 'd1', 'unmatched')",
+                (ba,),
+            )
+            dep = conn.execute("SELECT id FROM bank_deposits ORDER BY id DESC LIMIT 1").fetchone()[0]
+            conn.execute(
+                "INSERT INTO reconciliation_matches (bank_deposit_id, "
+                "acct_transaction_id, match_type) VALUES (?, ?, 'manual')",
+                (dep, survivor),
+            )
+            conn.execute(
+                "INSERT INTO reconciliation_matches (bank_deposit_id, "
+                "acct_transaction_id, match_type) VALUES (?, ?, 'manual')",
+                (dep, merged),
+            )
+            conn.commit()
+        result = merge_duplicate_pair(survivor, merged, db_path=self.db_path)
+        self.assertEqual(result["recon_match_deleted"], [dep])
+        with _connect(self.db_path) as conn:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM reconciliation_matches "
+                "WHERE bank_deposit_id = ?", (dep,),
+            ).fetchone()[0]
+            self.assertEqual(n, 1)
+            audit = conn.execute(
+                "SELECT notes FROM duplicate_merge_audit WHERE id = ?",
+                (result["audit_id"],),
+            ).fetchone()
+            self.assertIn("deleted duplicate reconciliation_match", audit["notes"])
+
+    def test_merge_blocks_on_hard_error_unless_override(self):
+        """Both rows reconciled to DIFFERENT deposits — must refuse without
+        an explicit override flag."""
+        with _connect(self.db_path) as conn:
+            survivor, merged = self._seed_pair(conn)
+            conn.execute(
+                "INSERT INTO bank_accounts (name, account_type) "
+                "VALUES ('test-bank', 'checking')"
+            )
+            ba = conn.execute(
+                "SELECT id FROM bank_accounts ORDER BY id DESC LIMIT 1"
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT INTO bank_deposits (account_id, deposit_date, amount, "
+                "description, status) VALUES (?, '2026-05-01', 93.06, 'd1', 'unmatched')",
+                (ba,),
+            )
+            d1 = conn.execute("SELECT id FROM bank_deposits ORDER BY id DESC LIMIT 1").fetchone()[0]
+            conn.execute(
+                "INSERT INTO bank_deposits (account_id, deposit_date, amount, "
+                "description, status) VALUES (?, '2026-05-01', 93.06, 'd2', 'unmatched')",
+                (ba,),
+            )
+            d2 = conn.execute("SELECT id FROM bank_deposits ORDER BY id DESC LIMIT 1").fetchone()[0]
+            conn.execute(
+                "INSERT INTO reconciliation_matches (bank_deposit_id, "
+                "acct_transaction_id, match_type) VALUES (?, ?, 'manual')",
+                (d1, survivor),
+            )
+            conn.execute(
+                "INSERT INTO reconciliation_matches (bank_deposit_id, "
+                "acct_transaction_id, match_type) VALUES (?, ?, 'manual')",
+                (d2, merged),
+            )
+            conn.commit()
+        with self.assertRaises(DuplicateMergeError) as ctx:
+            merge_duplicate_pair(survivor, merged, db_path=self.db_path)
+        self.assertIn("FK warning", str(ctx.exception))
+
+        # Verify NOTHING was written
+        with _connect(self.db_path) as conn:
+            n = conn.execute("SELECT COUNT(*) FROM duplicate_merge_audit").fetchone()[0]
+            self.assertEqual(n, 0)
+            row = conn.execute(
+                "SELECT status FROM acct_transactions WHERE id = ?", (merged,)
+            ).fetchone()
+            self.assertEqual(row["status"], "active")
+
+        # Override succeeds and logs the override in notes
+        result = merge_duplicate_pair(
+            survivor, merged, allow_fk_hard_error=True, db_path=self.db_path
+        )
+        with _connect(self.db_path) as conn:
+            audit = conn.execute(
+                "SELECT notes FROM duplicate_merge_audit WHERE id = ?",
+                (result["audit_id"],),
+            ).fetchone()
+            self.assertIn("HARD ERROR override", audit["notes"])
+
+    def test_merge_is_idempotent(self):
+        """Calling merge twice with the same pair returns a noop on the
+        second call. No new audit row, no double-write."""
+        with _connect(self.db_path) as conn:
+            survivor, merged = self._seed_pair(conn)
+            conn.commit()
+        r1 = merge_duplicate_pair(survivor, merged, db_path=self.db_path)
+        r2 = merge_duplicate_pair(survivor, merged, db_path=self.db_path)
+        self.assertFalse(r1["noop"])
+        self.assertTrue(r2["noop"])
+        self.assertEqual(r2["audit_id"], r1["audit_id"])
+        with _connect(self.db_path) as conn:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM duplicate_merge_audit WHERE merged_txn_id = ?",
+                (merged,),
+            ).fetchone()[0]
+            self.assertEqual(n, 1)
+
+    def test_merge_refuses_to_merge_already_merged_into_different_survivor(self):
+        with _connect(self.db_path) as conn:
+            s1, m1 = self._seed_pair(conn)
+            s2 = _insert_txn(
+                conn, amount=93.06, total_amount=93.06, source="venmo",
+                source_ref="venmo-2", customer_id=42,
+            )
+            conn.commit()
+        merge_duplicate_pair(s1, m1, db_path=self.db_path)
+        # m1 is now status=merged into s1. Trying to merge m1 into s2 must fail.
+        with self.assertRaises(DuplicateMergeError):
+            merge_duplicate_pair(s2, m1, db_path=self.db_path)
+
+    def test_merge_refuses_when_same_id_passed(self):
+        with _connect(self.db_path) as conn:
+            survivor, _ = self._seed_pair(conn)
+            conn.commit()
+        with self.assertRaises(DuplicateMergeError):
+            merge_duplicate_pair(survivor, survivor, db_path=self.db_path)
+
+    def test_merge_refuses_when_either_id_missing(self):
+        with _connect(self.db_path) as conn:
+            survivor, _ = self._seed_pair(conn)
+            conn.commit()
+        with self.assertRaises(DuplicateMergeError):
+            merge_duplicate_pair(survivor, 9999999, db_path=self.db_path)
+        with self.assertRaises(DuplicateMergeError):
+            merge_duplicate_pair(9999999, survivor, db_path=self.db_path)
 
 
 if __name__ == "__main__":
