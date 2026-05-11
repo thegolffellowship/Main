@@ -2058,6 +2058,46 @@ def api_duplicate_detective_set_mode():
     return jsonify({"status": "ok", "mode": mode})
 
 
+@app.route("/admin/duplicate-detective/merge/<candidate_id>", methods=["POST"])
+@require_role("admin")
+def api_duplicate_detective_merge(candidate_id):
+    """Merge a single candidate pair. Refused in dry_run_only mode."""
+    from email_parser.database import (
+        merge_duplicate_pair,
+        DuplicateMergeError,
+    )
+
+    mode = get_duplicate_detective_mode()
+    if mode == "dry_run_only":
+        return jsonify({
+            "error": "Mode is dry_run_only — merges are disabled. "
+                     "Switch to review_each or auto_high_confidence first.",
+        }), 409
+
+    body = request.get_json(silent=True) or {}
+    survivor = body.get("surviving_txn_id")
+    merged = body.get("merged_txn_id")
+    if not survivor or not merged:
+        return jsonify({
+            "error": "surviving_txn_id and merged_txn_id required",
+        }), 400
+    try:
+        result = merge_duplicate_pair(
+            int(survivor),
+            int(merged),
+            confidence=body.get("confidence"),
+            reason=body.get("reason") or f"manual merge via candidate {candidate_id}",
+            merged_by=session.get("user") or "kerry",
+            allow_fk_hard_error=bool(body.get("allow_fk_hard_error")),
+        )
+    except DuplicateMergeError as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception as e:
+        logger.exception("Duplicate merge failed")
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"status": "ok", **result})
+
+
 @app.route("/admin/duplicate-detective/dismiss/<candidate_id>", methods=["POST"])
 @require_role("admin")
 def api_duplicate_detective_dismiss(candidate_id):

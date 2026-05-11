@@ -261,7 +261,7 @@
         }
         function modeNote() {
             if (mode === "dry_run_only") return "DRY RUN MODE — no changes will be made to the database.";
-            if (mode === "review_each")  return "REVIEW EACH — merge buttons enabled per card. (Wire-up lands in Commit 5.)";
+            if (mode === "review_each")  return "REVIEW EACH — click Merge / Swap survivor / Dismiss on each pair.";
             return "AUTO HIGH CONFIDENCE — batch button enabled for pairs ≥0.90 with no FK warnings. (Wire-up lands in Commit 6.)";
         }
 
@@ -367,6 +367,101 @@
                 return;
             }
             listEl.innerHTML = filtered.map(cardHtml).join("");
+            attachCardHandlers();
+        }
+
+        async function refreshCandidates() {
+            const url = "/admin/duplicate-detective/api/candidates"
+                + (showDismissed ? "?include_dismissed=1" : "");
+            const r = await fetch(url);
+            const j = await r.json();
+            candidates = j.candidates;
+            Object.assign(summary, j.summary);
+            renderBanner();
+            renderList();
+        }
+
+        function findCandidate(candidateId) {
+            return candidates.find(c => c.candidate_id === candidateId);
+        }
+
+        async function postJSON(url, body) {
+            const r = await fetch(url, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(body || {}),
+            });
+            let j = null;
+            try { j = await r.json(); } catch (_) {}
+            return {ok: r.ok, status: r.status, body: j};
+        }
+
+        function attachCardHandlers() {
+            if (mode === "dry_run_only") return;  // buttons are disabled
+            document.querySelectorAll(".dd-card").forEach(card => {
+                const cid = card.dataset.candidate;
+                const cand = findCandidate(cid);
+                if (!cand) return;
+                card.querySelectorAll("[data-action]").forEach(btn => {
+                    btn.addEventListener("click", () => handleAction(btn.dataset.action, cand, card));
+                });
+            });
+        }
+
+        async function handleAction(action, cand, cardEl) {
+            if (action === "merge") {
+                const hasFk = cand.fk_warnings && cand.fk_warnings.length;
+                const prompt = hasFk
+                    ? `⚠ FK WARNING — this pair has a reconciliation conflict:\n\n${cand.fk_warnings.join('\n')}\n\nMerge anyway?`
+                    : `Merge txn #${cand.suggested_merged_id} into txn #${cand.suggested_survivor_id}?\n\nVariance recovery: $${cand.variance_impact.toFixed(2)}\nConfidence: ${Math.round(cand.confidence*100)}%`;
+                if (!confirm(prompt)) return;
+                const res = await postJSON(`/admin/duplicate-detective/merge/${cand.candidate_id}`, {
+                    surviving_txn_id: cand.suggested_survivor_id,
+                    merged_txn_id: cand.suggested_merged_id,
+                    confidence: cand.confidence,
+                    reason: cand.rationale,
+                    allow_fk_hard_error: !!hasFk,
+                });
+                if (res.ok) {
+                    cardEl.style.opacity = "0.4";
+                    cardEl.querySelectorAll("button").forEach(b => b.disabled = true);
+                    cardEl.querySelector(".dd-actions").insertAdjacentHTML(
+                        "beforeend",
+                        `<span style="font-size:0.8rem;color:#047857;font-weight:600;">✓ Merged (audit #${res.body.audit_id})</span>`
+                    );
+                    refreshCandidates();
+                } else {
+                    alert("Merge failed: " + (res.body && res.body.error || res.status));
+                }
+            } else if (action === "swap") {
+                // Flip survivor + merged on the candidate object (client-side only)
+                const tmp = cand.suggested_survivor_id;
+                cand.suggested_survivor_id = cand.suggested_merged_id;
+                cand.suggested_merged_id = tmp;
+                renderList();
+            } else if (action === "dismiss") {
+                const reason = prompt(
+                    "Reason for dismissing this pair (optional):",
+                    "not a duplicate"
+                );
+                if (reason === null) return;  // user cancelled
+                const res = await postJSON(`/admin/duplicate-detective/dismiss/${cand.candidate_id}`, {
+                    txn_a_id: cand.suggested_survivor_id,
+                    txn_b_id: cand.suggested_merged_id,
+                    reason: reason,
+                });
+                if (res.ok) {
+                    cardEl.style.opacity = "0.4";
+                    cardEl.querySelectorAll("button").forEach(b => b.disabled = true);
+                    cardEl.querySelector(".dd-actions").insertAdjacentHTML(
+                        "beforeend",
+                        `<span style="font-size:0.8rem;color:#6b7280;font-weight:600;">✓ Dismissed</span>`
+                    );
+                    refreshCandidates();
+                } else {
+                    alert("Dismiss failed: " + (res.body && res.body.error || res.status));
+                }
+            }
         }
 
         function attachFilterHandlers() {
