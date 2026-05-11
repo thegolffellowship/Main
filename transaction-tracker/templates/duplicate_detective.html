@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — Duplicate Detective</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#1e40af">
+    <style>
+        .dd-banner {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem 1.25rem;
+            margin: 1rem 0;
+            box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,0.05));
+        }
+        .dd-banner.dry-run { background: #fef3c7; border-color: #f59e0b; }
+        .dd-banner.review { background: #dbeafe; border-color: #3b82f6; }
+        .dd-banner.batch  { background: #fee2e2; border-color: #ef4444; }
+        .dd-banner h2 { margin: 0 0 0.4rem; font-size: 1.05rem; }
+        .dd-banner .row {
+            display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem;
+            align-items: center; margin-top: 0.6rem;
+        }
+        .dd-stat { font-size: 0.85rem; }
+        .dd-stat strong { font-size: 1rem; color: var(--text); }
+        .dd-mode-select { display: flex; gap: 0.5rem; align-items: center; }
+        .dd-mode-select select { padding: 0.4rem 0.6rem; font-size: 0.85rem; }
+
+        .dd-filters {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 0.85rem 1rem; margin-bottom: 1rem;
+            display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: center;
+        }
+        .dd-filters label { font-size: 0.78rem; color: var(--text-muted); }
+        .dd-filters input, .dd-filters select {
+            padding: 0.35rem 0.5rem; font-size: 0.85rem;
+            border: 1px solid var(--border); border-radius: 4px;
+        }
+        .dd-filters .chip {
+            font-size: 0.75rem; padding: 0.2rem 0.55rem;
+            border-radius: 12px; background: #e5e7eb; cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .dd-filters .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        .dd-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); margin-bottom: 0.85rem;
+            box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,0.05));
+            overflow: hidden;
+        }
+        .dd-card-head {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.55rem 0.85rem; background: #f8fafc;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.82rem;
+        }
+        .dd-pattern-badge {
+            display: inline-block; padding: 0.12rem 0.5rem;
+            border-radius: 4px; font-weight: 600; font-size: 0.75rem;
+        }
+        .dd-pattern-badge.A { background: #fee2e2; color: #991b1b; }
+        .dd-pattern-badge.B { background: #fed7aa; color: #9a3412; }
+        .dd-pattern-badge.C { background: #fef9c3; color: #854d0e; }
+        .dd-pattern-badge.D { background: #e0e7ff; color: #3730a3; }
+        .dd-conf {
+            font-weight: 600; padding: 0.1rem 0.45rem;
+            border-radius: 4px; font-size: 0.75rem;
+        }
+        .dd-conf.high   { background: #d1fae5; color: #065f46; }
+        .dd-conf.med    { background: #fef3c7; color: #92400e; }
+        .dd-conf.low    { background: #fee2e2; color: #991b1b; }
+        .dd-rationale {
+            color: var(--text-muted); font-size: 0.75rem; flex: 1; min-width: 0;
+        }
+        .dd-variance { font-size: 0.8rem; color: #047857; font-weight: 600; }
+
+        .dd-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+        @media (max-width: 760px) { .dd-body { grid-template-columns: 1fr; } }
+        .dd-side {
+            padding: 0.7rem 0.9rem; font-size: 0.82rem;
+            border-right: 1px solid var(--border);
+        }
+        .dd-body > .dd-side:last-child { border-right: none; }
+        .dd-side.keep { background: #ecfdf5; }
+        .dd-side.merge { background: #fef2f2; }
+        .dd-side-label {
+            font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.05em; margin-bottom: 0.4rem;
+        }
+        .dd-side.keep .dd-side-label { color: #047857; }
+        .dd-side.merge .dd-side-label { color: #b91c1c; }
+        .dd-side dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.6rem; }
+        .dd-side dt { color: var(--text-muted); font-size: 0.72rem; }
+        .dd-side dd { margin: 0; font-size: 0.8rem; word-break: break-word; }
+        .dd-side .src-ref {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.72rem;
+        }
+
+        .dd-fk-warn {
+            margin: 0.4rem 0.9rem; padding: 0.5rem 0.7rem;
+            background: #fee2e2; border: 1px solid #f87171;
+            border-radius: 4px; font-size: 0.78rem; color: #991b1b;
+        }
+        .dd-actions {
+            display: flex; gap: 0.4rem; padding: 0.55rem 0.9rem;
+            background: #f8fafc; border-top: 1px solid var(--border);
+            align-items: center; flex-wrap: wrap;
+        }
+        .dd-actions .btn { font-size: 0.78rem; padding: 0.35rem 0.7rem; }
+        .dd-actions .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+        .dd-actions .spacer { flex: 1; }
+        .dd-actions .preview-sql {
+            font-size: 0.72rem; color: var(--text-muted);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            background: #f1f5f9; padding: 0.2rem 0.45rem; border-radius: 3px;
+        }
+
+        .dd-empty {
+            background: var(--surface); border: 1px dashed var(--border);
+            border-radius: var(--radius); padding: 2rem; text-align: center;
+            color: var(--text-muted);
+        }
+
+        .login-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5);
+            justify-content: center; align-items: center;
+            z-index: 1000;
+        }
+        .login-box {
+            background: var(--surface); padding: 2rem;
+            border-radius: var(--radius); text-align: center; min-width: 280px;
+        }
+        .login-box input {
+            margin: 1rem 0 0.5rem; padding: 0.6rem; width: 100%;
+            box-sizing: border-box; border: 1px solid var(--border);
+            border-radius: var(--radius); font-size: 1rem; text-align: center;
+        }
+        .login-error { color: var(--red); font-size: 0.85rem; min-height: 1.2em; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Duplicate Detective — Ledger cleanup tool</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+
+    <main>
+        <nav class="tab-nav">
+            <a href="/accounting" class="active">Admin</a>
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/tgf">Payouts</a>
+        </nav>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/database">Database</a>
+            <a href="/admin/duplicate-detective" class="active">Duplicate Detective</a>
+            <a href="/changelog">Changelog</a>
+        </nav>
+
+        <div id="dd-banner-host"></div>
+
+        <div class="dd-filters">
+            <div class="dd-mode-select">
+                <label for="dd-mode">Mode:</label>
+                <select id="dd-mode">
+                    <option value="dry_run_only">Dry-Run (no changes)</option>
+                    <option value="review_each">Review each pair</option>
+                    <option value="auto_high_confidence">Auto-merge high confidence</option>
+                </select>
+                <button class="btn btn-secondary" id="btn-save-mode" style="font-size:0.78rem;">Save mode</button>
+            </div>
+            <span style="flex:1;"></span>
+            <a class="btn btn-primary" href="/admin/duplicate-detective/export.csv" style="font-size:0.78rem;">Export CSV</a>
+            <a class="btn btn-primary" href="/admin/duplicate-detective/export.md"  style="font-size:0.78rem;">Export Markdown</a>
+        </div>
+
+        <div class="dd-filters">
+            <label>Pattern:
+                <span class="chip active" data-pat="A">A: Venmo+exp</span>
+                <span class="chip active" data-pat="B">B: in-app+exp</span>
+                <span class="chip active" data-pat="C">C: in-app+Venmo</span>
+                <span class="chip active" data-pat="D">D: manual</span>
+            </label>
+            <label>Min confidence:
+                <input type="range" id="filter-confidence" min="0" max="100" step="5" value="0" style="width:120px;">
+                <span id="filter-confidence-display">0%</span>
+            </label>
+            <label>Customer:
+                <input type="text" id="filter-customer" placeholder="search by name" style="width:170px;">
+            </label>
+            <label>
+                <input type="checkbox" id="filter-show-dismissed"> Show dismissed
+            </label>
+        </div>
+
+        <div id="dd-list"></div>
+    </main>
+
+    <!-- Login modal (admin-only page) -->
+    <div class="login-overlay" id="login-overlay">
+        <div class="login-box">
+            <h2>Admin Access Required</h2>
+            <p>Enter PIN to continue</p>
+            <input type="password" id="login-pin" placeholder="PIN" maxlength="20"
+                   inputmode="numeric" autocomplete="off">
+            <p class="login-error" id="login-error"></p>
+            <button class="btn btn-primary" id="login-submit">Log In</button>
+        </div>
+    </div>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script id="dd-bootstrap" type="application/json">{{ bootstrap_json|safe }}</script>
+    <script>
+    (function() {
+        const bootstrap = JSON.parse(document.getElementById("dd-bootstrap").textContent);
+        let candidates = bootstrap.candidates || [];
+        let mode = bootstrap.mode || "dry_run_only";
+        const summary = bootstrap.summary || {};
+
+        const activePatterns = new Set(["A", "B", "C", "D"]);
+        let minConfidence = 0;
+        let customerQuery = "";
+        let showDismissed = false;
+
+        const bannerHost = document.getElementById("dd-banner-host");
+        const listEl     = document.getElementById("dd-list");
+        const modeSel    = document.getElementById("dd-mode");
+        const saveBtn    = document.getElementById("btn-save-mode");
+        const confEl     = document.getElementById("filter-confidence");
+        const confDisp   = document.getElementById("filter-confidence-display");
+        const custEl     = document.getElementById("filter-customer");
+        const dismissedEl= document.getElementById("filter-show-dismissed");
+
+        modeSel.value = mode;
+
+        function bannerClass() {
+            if (mode === "dry_run_only") return "dry-run";
+            if (mode === "review_each") return "review";
+            return "batch";
+        }
+        function modeNote() {
+            if (mode === "dry_run_only") return "DRY RUN MODE — no changes will be made to the database.";
+            if (mode === "review_each")  return "REVIEW EACH — merge buttons enabled per card. (Wire-up lands in Commit 5.)";
+            return "AUTO HIGH CONFIDENCE — batch button enabled for pairs ≥0.90 with no FK warnings. (Wire-up lands in Commit 6.)";
+        }
+
+        function renderBanner() {
+            const fmt$ = v => "$" + (Math.round(v*100)/100).toFixed(2);
+            bannerHost.innerHTML = `
+              <div class="dd-banner ${bannerClass()}">
+                <h2>${modeNote()}</h2>
+                <div class="row">
+                  <div class="dd-stat">Probable duplicates: <strong>${summary.total||0}</strong></div>
+                  <div class="dd-stat">Estimated variance recovery: <strong>${fmt$(summary.variance_recovery||0)}</strong></div>
+                  <div class="dd-stat">High (≥0.90): <strong>${summary.high||0}</strong></div>
+                  <div class="dd-stat">Medium (0.70–0.90): <strong>${summary.medium||0}</strong></div>
+                  <div class="dd-stat">Low (&lt;0.70): <strong>${summary.low||0}</strong></div>
+                  <div class="dd-stat">By pattern — A: <strong>${summary.by_pattern.A||0}</strong>  B: <strong>${summary.by_pattern.B||0}</strong>  C: <strong>${summary.by_pattern.C||0}</strong>  D: <strong>${summary.by_pattern.D||0}</strong></div>
+                  <div class="dd-stat">With FK warnings: <strong>${summary.fk_warned||0}</strong></div>
+                </div>
+              </div>
+            `;
+        }
+
+        function confBucket(c) {
+            if (c >= 0.90) return "high";
+            if (c >= 0.70) return "med";
+            return "low";
+        }
+
+        function fmtDate(s) { return s ? String(s).slice(0,10) : ""; }
+        function fmt$(v)    { v = Number(v||0); return (v<0?"-$":"$") + Math.abs(v).toFixed(2); }
+
+        function applyFilters() {
+            const minC = minConfidence / 100;
+            const q = (customerQuery || "").toLowerCase().trim();
+            return candidates.filter(c => {
+                if (!activePatterns.has(c.pattern)) return false;
+                if (c.confidence < minC - 1e-9) return false;
+                if (q) {
+                    const hay = [
+                        c.txn_a.customer, c.txn_b.customer,
+                        c.txn_a.description, c.txn_b.description
+                    ].filter(Boolean).join(" ").toLowerCase();
+                    if (!hay.includes(q)) return false;
+                }
+                return true;
+            });
+        }
+
+        function sideHtml(side, txn, label) {
+            return `
+              <div class="dd-side ${side}">
+                <div class="dd-side-label">${label} — txn #${txn.id}</div>
+                <dl>
+                  <dt>Date</dt><dd>${fmtDate(txn.date)}</dd>
+                  <dt>Amount</dt><dd>${fmt$(txn.amount ?? txn.total_amount)}</dd>
+                  <dt>Type</dt><dd>${txn.entry_type || txn.type || ""}</dd>
+                  <dt>Source</dt><dd>${txn.source||""}</dd>
+                  <dt>Source ref</dt><dd class="src-ref">${txn.source_ref||""}</dd>
+                  <dt>Customer</dt><dd>${txn.customer||""}${txn.customer_id?` <span style="color:var(--text-muted)">#${txn.customer_id}</span>`:""}</dd>
+                  <dt>Event</dt><dd>${txn.event_name||""}</dd>
+                  <dt>Description</dt><dd>${(txn.description||"").slice(0,140)}</dd>
+                </dl>
+              </div>
+            `;
+        }
+
+        function cardHtml(c) {
+            const survivor = c.txn_a.id === c.suggested_survivor_id ? c.txn_a : c.txn_b;
+            const merged   = c.txn_a.id === c.suggested_merged_id   ? c.txn_a : c.txn_b;
+            const fkWarn = (c.fk_warnings && c.fk_warnings.length)
+                ? `<div class="dd-fk-warn">⚠ ${c.fk_warnings.join(" • ")}</div>` : "";
+            const disabled = (mode === "dry_run_only") ? "disabled" : "";
+            const previewSql = (mode === "dry_run_only")
+                ? `<span class="preview-sql">Preview: UPDATE acct_transactions SET status='merged', merged_into_id=${survivor.id} WHERE id=${merged.id};</span>`
+                : "";
+            return `
+              <div class="dd-card" data-candidate="${c.candidate_id}">
+                <div class="dd-card-head">
+                  <span class="dd-pattern-badge ${c.pattern}">Pattern ${c.pattern}</span>
+                  <span class="dd-conf ${confBucket(c.confidence)}">${Math.round(c.confidence*100)}%</span>
+                  <span class="dd-variance">+${fmt$(c.variance_impact)} recovery</span>
+                  <span class="dd-rationale">${c.rationale}</span>
+                </div>
+                <div class="dd-body">
+                  ${sideHtml("keep", survivor, "KEEP")}
+                  ${sideHtml("merge", merged, "MERGE")}
+                </div>
+                ${fkWarn}
+                <div class="dd-actions">
+                  <button class="btn btn-primary"   data-action="merge"   ${disabled}>Merge</button>
+                  <button class="btn btn-secondary" data-action="swap"    ${disabled}>Swap survivor</button>
+                  <button class="btn btn-secondary" data-action="dismiss" ${disabled}>Dismiss</button>
+                  <span class="spacer"></span>
+                  ${previewSql}
+                </div>
+              </div>
+            `;
+        }
+
+        function renderList() {
+            const filtered = applyFilters();
+            if (!filtered.length) {
+                listEl.innerHTML = `<div class="dd-empty">No candidates match current filters.</div>`;
+                return;
+            }
+            listEl.innerHTML = filtered.map(cardHtml).join("");
+        }
+
+        function attachFilterHandlers() {
+            document.querySelectorAll(".chip[data-pat]").forEach(chip => {
+                chip.addEventListener("click", () => {
+                    const p = chip.dataset.pat;
+                    if (activePatterns.has(p)) { activePatterns.delete(p); chip.classList.remove("active"); }
+                    else { activePatterns.add(p); chip.classList.add("active"); }
+                    renderList();
+                });
+            });
+            confEl.addEventListener("input", () => {
+                minConfidence = parseInt(confEl.value, 10) || 0;
+                confDisp.textContent = `${minConfidence}%`;
+                renderList();
+            });
+            custEl.addEventListener("input", () => { customerQuery = custEl.value; renderList(); });
+            dismissedEl.addEventListener("change", async () => {
+                showDismissed = dismissedEl.checked;
+                const r = await fetch("/admin/duplicate-detective/api/candidates?include_dismissed=" + (showDismissed?"1":"0"));
+                const j = await r.json();
+                candidates = j.candidates;
+                Object.assign(summary, j.summary);
+                renderBanner();
+                renderList();
+            });
+        }
+
+        saveBtn.addEventListener("click", async () => {
+            const newMode = modeSel.value;
+            const r = await fetch("/admin/duplicate-detective/set-mode", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({mode: newMode}),
+            });
+            if (r.ok) { mode = newMode; renderBanner(); renderList(); }
+        });
+
+        renderBanner();
+        renderList();
+        attachFilterHandlers();
+    })();
+    </script>
+</body>
+</html>
