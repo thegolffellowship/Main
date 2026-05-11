@@ -22802,3 +22802,453 @@ def _abcd_groups(players: list[str], hcp_map: dict) -> list[list[str]]:
         groups[i % num_groups].append(player)
 
     return groups
+
+
+# ============================================================================
+# Duplicate Detective
+# ----------------------------------------------------------------------------
+# Detection layer for the /admin/duplicate-detective admin tool. Identifies
+# acct_transactions rows that represent the same financial event recorded by
+# multiple writers (Venmo CSV import, Venmo email parser via exp-promoted-N,
+# in-app refund/credit-payout operations). Returns a candidate list that the
+# UI surfaces; merging and reversing live in separate functions added in
+# later commits.
+#
+# See docs/claude/duplicate-detective.md for the full specification.
+# ============================================================================
+
+import hashlib as _dd_hashlib
+import re as _dd_re
+
+
+_DUP_PROMOTED_PREFIXES = ("exp-promoted-",)
+_DUP_INAPP_PREFIXES = ("credit-payout-", "refund-flat-", "wd-credit-payout-")
+_DUP_GODADDY_PREFIXES = ("godaddy-order-",)
+
+
+def _dd_normalize_name(value) -> str:
+    """Lowercase, strip punctuation/digits, collapse whitespace. Returns ''
+    when there is nothing usable to match on."""
+    if not value:
+        return ""
+    s = str(value).lower()
+    s = _dd_re.sub(r"[^a-z\s]+", " ", s)
+    s = _dd_re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _dd_names_overlap(a, b) -> bool:
+    """True when two free-form name/description fields likely refer to the
+    same person. Match rules (any one wins):
+      1. Either normalized string is a substring of the other (after both
+         are reduced to at least 3 chars).
+      2. They share at least 2 word tokens of length >= 3.
+      3. The last token of one appears as a token in the other AND that
+         token is at least 4 chars (catches "Todd McConahy" vs
+         "McConahy: $93.06" style descriptions).
+    """
+    na, nb = _dd_normalize_name(a), _dd_normalize_name(b)
+    if not na or not nb:
+        return False
+    if len(na) >= 3 and len(nb) >= 3 and (na in nb or nb in na):
+        return True
+    ta = [t for t in na.split() if len(t) >= 3]
+    tb = [t for t in nb.split() if len(t) >= 3]
+    shared = set(ta) & set(tb)
+    if len(shared) >= 2:
+        return True
+    if ta and tb:
+        if len(ta[-1]) >= 4 and ta[-1] in tb:
+            return True
+        if len(tb[-1]) >= 4 and tb[-1] in ta:
+            return True
+    return False
+
+
+def _dd_source_ref_starts_with(source_ref, prefixes) -> bool:
+    if not source_ref:
+        return False
+    return any(source_ref.startswith(p) for p in prefixes)
+
+
+def _dd_is_venmo_csv(row) -> bool:
+    """Venmo CSV import: source starts with 'venmo' AND source_ref is not the
+    exp-promoted pattern (which is the email parser, not the CSV)."""
+    source = (row["source"] or "").lower()
+    if not source.startswith("venmo"):
+        return False
+    sref = row["source_ref"] or ""
+    if _dd_source_ref_starts_with(sref, _DUP_PROMOTED_PREFIXES):
+        return False
+    return True
+
+
+def _dd_classify_pattern(row_a, row_b):
+    """Return (pattern_letter, base_confidence, customer_match_kind) or
+    (None, 0.0, None) if the pair does not match any pattern.
+
+    customer_match_kind is 'id' for customer_id match, 'name' for normalized
+    name match, '' for amount/date-only (Pattern D).
+    """
+    sref_a = row_a["source_ref"] or ""
+    sref_b = row_b["source_ref"] or ""
+
+    a_promoted = _dd_source_ref_starts_with(sref_a, _DUP_PROMOTED_PREFIXES)
+    b_promoted = _dd_source_ref_starts_with(sref_b, _DUP_PROMOTED_PREFIXES)
+    a_inapp = _dd_source_ref_starts_with(sref_a, _DUP_INAPP_PREFIXES)
+    b_inapp = _dd_source_ref_starts_with(sref_b, _DUP_INAPP_PREFIXES)
+    a_venmo = _dd_is_venmo_csv(row_a)
+    b_venmo = _dd_is_venmo_csv(row_b)
+
+    cust_a = row_a["customer_id"] if "customer_id" in row_a.keys() else None
+    cust_b = row_b["customer_id"] if "customer_id" in row_b.keys() else None
+    same_cid = cust_a is not None and cust_b is not None and cust_a == cust_b
+
+    name_a = row_a["customer"] or row_a["description"]
+    name_b = row_b["customer"] or row_b["description"]
+    same_name = _dd_names_overlap(name_a, name_b)
+
+    def _customer_match_kind():
+        if same_cid:
+            return "id"
+        if same_name:
+            return "name"
+        return None
+
+    # Pattern A — Venmo CSV vs exp-promoted (email parser → expense)
+    if (a_venmo and b_promoted) or (b_venmo and a_promoted):
+        kind = _customer_match_kind()
+        if kind:
+            return "A", 0.95 if kind == "id" else 0.85, kind
+
+    # Pattern B — in-app refund/credit/wd-credit vs exp-promoted
+    if (a_inapp and b_promoted) or (b_inapp and a_promoted):
+        kind = _customer_match_kind()
+        if kind:
+            return "B", 0.95 if kind == "id" else 0.85, kind
+
+    # Pattern C — in-app refund/credit vs Venmo CSV
+    if (a_inapp and b_venmo) or (b_inapp and a_venmo):
+        kind = _customer_match_kind()
+        if kind:
+            return "C", 0.95 if kind == "id" else 0.85, kind
+
+    # Pattern D — manual fallback: same customer_id, different source_ref,
+    # not already covered above
+    if same_cid and sref_a != sref_b:
+        return "D", 0.65, "id"
+
+    return None, 0.0, None
+
+
+def _dd_select_survivor(row_a, row_b):
+    """Survivor selection rule (highest priority kept). Returns (survivor_row,
+    merged_row, rationale_str). Tie-breaks by older id."""
+    def priority(row):
+        sref = row["source_ref"] or ""
+        source = (row["source"] or "").lower()
+        # 1. Venmo CSV bank truth (highest)
+        if source.startswith("venmo") and not _dd_source_ref_starts_with(
+            sref, _DUP_PROMOTED_PREFIXES
+        ):
+            return 1
+        # 2. GoDaddy order detail
+        if _dd_source_ref_starts_with(sref, _DUP_GODADDY_PREFIXES):
+            return 2
+        # 3. In-app operation (has user context)
+        if _dd_source_ref_starts_with(sref, _DUP_INAPP_PREFIXES):
+            return 3
+        # 4. Email parser exp-promoted (least specific)
+        if _dd_source_ref_starts_with(sref, _DUP_PROMOTED_PREFIXES):
+            return 4
+        return 5  # everything else — lowest preference
+
+    pa, pb = priority(row_a), priority(row_b)
+    labels = {
+        1: "Venmo CSV (bank truth)",
+        2: "GoDaddy order detail",
+        3: "in-app operation",
+        4: "email parser exp-promoted",
+        5: "other source",
+    }
+    if pa < pb:
+        return row_a, row_b, f"keep {labels[pa]} over {labels[pb]}"
+    if pb < pa:
+        return row_b, row_a, f"keep {labels[pb]} over {labels[pa]}"
+    # Equal priority — keep the older id (stable, deterministic)
+    if row_a["id"] <= row_b["id"]:
+        return row_a, row_b, f"equal priority ({labels[pa]}); kept older id"
+    return row_b, row_a, f"equal priority ({labels[pa]}); kept older id"
+
+
+def _dd_candidate_id(id_a: int, id_b: int) -> str:
+    """Deterministic candidate id = sha1 of sorted id pair."""
+    lo, hi = sorted((int(id_a), int(id_b)))
+    return _dd_hashlib.sha1(f"{lo}:{hi}".encode("utf-8")).hexdigest()[:16]
+
+
+def _dd_date_delta_days(date_a: str, date_b: str) -> int | None:
+    """Absolute day delta between two ISO date strings. None on parse error."""
+    from datetime import datetime
+    fmts = ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S")
+    def _parse(s):
+        if not s:
+            return None
+        s = str(s)[:19]
+        for f in fmts:
+            try:
+                return datetime.strptime(s, f)
+            except ValueError:
+                continue
+        try:
+            return datetime.strptime(s[:10], "%Y-%m-%d")
+        except ValueError:
+            return None
+    da, db = _parse(date_a), _parse(date_b)
+    if not da or not db:
+        return None
+    return abs((da - db).days)
+
+
+def _dd_check_fk_warnings(conn, survivor_id: int, merged_id: int) -> list[str]:
+    """Return a list of human-readable FK warning strings for a candidate
+    pair. Empty list means the merge is safe to auto-process.
+
+    HARD ERROR: survivor and merged both have reconciliation_matches to
+    DIFFERENT bank_deposits — auto-merge must refuse.
+    """
+    warnings = []
+    s_match = conn.execute(
+        "SELECT bank_deposit_id FROM reconciliation_matches "
+        "WHERE acct_transaction_id = ?",
+        (survivor_id,),
+    ).fetchone()
+    m_match = conn.execute(
+        "SELECT bank_deposit_id FROM reconciliation_matches "
+        "WHERE acct_transaction_id = ?",
+        (merged_id,),
+    ).fetchone()
+    if s_match and m_match and s_match[0] != m_match[0]:
+        warnings.append(
+            f"HARD ERROR: survivor txn {survivor_id} is matched to bank "
+            f"deposit {s_match[0]} and merged txn {merged_id} is matched "
+            f"to bank deposit {m_match[0]} — manual review required"
+        )
+    return warnings
+
+
+def find_duplicate_candidates(
+    db_path=None,
+    *,
+    min_confidence: float = 0.0,
+    pattern_filter=None,
+    include_dismissed: bool = False,
+) -> list[dict]:
+    """Scan acct_transactions for probable duplicate pairs.
+
+    Returns a deterministic list of candidate dicts (ordered by descending
+    confidence, then ascending pair id) ready for the Duplicate Detective UI.
+    See docs/claude/duplicate-detective.md for full pattern + scoring rules.
+    """
+    out: list[dict] = []
+    seen_pairs: set[tuple[int, int]] = set()
+
+    with _connect(db_path) as conn:
+        dismissed: set[tuple[int, int]] = set()
+        if not include_dismissed:
+            for r in conn.execute(
+                "SELECT txn_a_id, txn_b_id FROM duplicate_dismissed_pairs"
+            ).fetchall():
+                lo, hi = sorted((int(r["txn_a_id"]), int(r["txn_b_id"])))
+                dismissed.add((lo, hi))
+
+        # Narrow with SQL: active rows, expense or income only (skip transfers).
+        rows = conn.execute(
+            """
+            SELECT id, date, description, total_amount, type, amount,
+                   entry_type, customer, customer_id, event_name, category,
+                   account_id, source, source_ref, account,
+                   COALESCE(status, 'active') AS status
+            FROM acct_transactions
+            WHERE COALESCE(status, 'active') = 'active'
+              AND COALESCE(entry_type, type) IN ('income', 'expense')
+            ORDER BY id
+            """
+        ).fetchall()
+
+        # Bucket by entry_type + rounded amount so we only compare candidates
+        # that can possibly be a pair.
+        from collections import defaultdict
+        buckets = defaultdict(list)
+        for r in rows:
+            et = (r["entry_type"] or r["type"] or "").lower()
+            amt = r["amount"] if r["amount"] is not None else r["total_amount"]
+            if amt is None or et not in ("income", "expense"):
+                continue
+            # Round to nearest cent so within-0.01 pairs share a bucket
+            key = (et, round(float(amt), 2))
+            buckets[key].append(r)
+            # Also place into ±$0.01 neighbor buckets to absorb precision drift
+            buckets[(et, round(float(amt) + 0.01, 2))].append(r)
+            buckets[(et, round(float(amt) - 0.01, 2))].append(r)
+
+        # Deduplicate bucket contents (the ±0.01 trick can list the same row
+        # multiple times)
+        unique_buckets = {}
+        for key, lst in buckets.items():
+            seen_ids = set()
+            uniq = []
+            for r in lst:
+                if r["id"] in seen_ids:
+                    continue
+                seen_ids.add(r["id"])
+                uniq.append(r)
+            unique_buckets[key] = uniq
+
+        for bucket in unique_buckets.values():
+            if len(bucket) < 2:
+                continue
+            for i in range(len(bucket)):
+                for j in range(i + 1, len(bucket)):
+                    a, b = bucket[i], bucket[j]
+                    if a["id"] == b["id"]:
+                        continue
+                    # Amount within $0.01
+                    amt_a = a["amount"] if a["amount"] is not None else a["total_amount"]
+                    amt_b = b["amount"] if b["amount"] is not None else b["total_amount"]
+                    if amt_a is None or amt_b is None:
+                        continue
+                    amt_delta = abs(float(amt_a) - float(amt_b))
+                    if amt_delta > 0.01 + 1e-9:
+                        continue
+                    # Dates within 7 days
+                    day_delta = _dd_date_delta_days(a["date"], b["date"])
+                    if day_delta is None or day_delta > 7:
+                        continue
+                    # Pair already seen via the ±0.01 trick?
+                    lo, hi = sorted((int(a["id"]), int(b["id"])))
+                    if (lo, hi) in seen_pairs:
+                        continue
+                    seen_pairs.add((lo, hi))
+                    # Dismissed?
+                    if (lo, hi) in dismissed:
+                        continue
+                    pattern, conf, match_kind = _dd_classify_pattern(a, b)
+                    if not pattern:
+                        continue
+
+                    # Scoring adjustments
+                    if day_delta > 3:
+                        conf -= 0.10
+                    if amt_delta > 0.001:
+                        conf -= 0.10
+
+                    survivor, merged, surv_rationale = _dd_select_survivor(a, b)
+                    fk_warnings = _dd_check_fk_warnings(
+                        conn, survivor["id"], merged["id"]
+                    )
+                    if fk_warnings:
+                        conf -= 0.20
+                    conf = max(0.0, min(1.0, round(conf, 4)))
+
+                    if conf < min_confidence:
+                        continue
+                    if pattern_filter and pattern not in pattern_filter:
+                        continue
+
+                    # variance_impact: the merged row's signed effect on the
+                    # ledger that will be removed. Positive number = book
+                    # balance drops by this much when merged.
+                    merged_amt = (
+                        merged["amount"]
+                        if merged["amount"] is not None
+                        else merged["total_amount"]
+                    )
+                    merged_type = (merged["entry_type"] or merged["type"] or "").lower()
+                    variance = float(merged_amt or 0)
+                    if merged_type == "income":
+                        variance = -variance
+
+                    rationale_bits = [
+                        f"Pattern {pattern}",
+                        f"customer match: {match_kind}",
+                        f"date delta {day_delta}d",
+                        f"amount delta ${amt_delta:.2f}",
+                        surv_rationale,
+                    ]
+
+                    out.append({
+                        "candidate_id": _dd_candidate_id(a["id"], b["id"]),
+                        "txn_a": dict(a),
+                        "txn_b": dict(b),
+                        "pattern": pattern,
+                        "confidence": conf,
+                        "suggested_survivor_id": survivor["id"],
+                        "suggested_merged_id": merged["id"],
+                        "rationale": "; ".join(rationale_bits),
+                        "fk_warnings": fk_warnings,
+                        "variance_impact": round(variance, 2),
+                        "match_kind": match_kind,
+                        "date_delta_days": day_delta,
+                        "amount_delta": round(amt_delta, 4),
+                    })
+
+    # Deterministic ordering: by confidence desc, then by sorted pair id asc
+    out.sort(
+        key=lambda c: (
+            -c["confidence"],
+            min(c["suggested_survivor_id"], c["suggested_merged_id"]),
+            max(c["suggested_survivor_id"], c["suggested_merged_id"]),
+        )
+    )
+    return out
+
+
+def get_duplicate_detective_mode(db_path=None) -> str:
+    """Read the current mode from app_settings; default 'dry_run_only'."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = 'duplicate_detective_mode'"
+        ).fetchone()
+    if not row:
+        return "dry_run_only"
+    val = (row["value"] or "").strip()
+    if val not in ("dry_run_only", "auto_high_confidence", "review_each"):
+        return "dry_run_only"
+    return val
+
+
+def set_duplicate_detective_mode(mode: str, db_path=None) -> str:
+    """Persist the mode flag. Returns the value actually written."""
+    if mode not in ("dry_run_only", "auto_high_confidence", "review_each"):
+        raise ValueError(f"Invalid duplicate_detective_mode: {mode!r}")
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO app_settings (key, value, updated_at) "
+            "VALUES ('duplicate_detective_mode', ?, datetime('now')) "
+            "ON CONFLICT(key) DO UPDATE SET "
+            "  value = excluded.value, updated_at = excluded.updated_at",
+            (mode,),
+        )
+        conn.commit()
+    return mode
+
+
+def dismiss_duplicate_pair(
+    txn_a_id: int, txn_b_id: int, reason: str = "", db_path=None
+) -> bool:
+    """Record a pair as dismissed so it is skipped on subsequent scans.
+    Returns True if a new row was inserted, False if the pair was already
+    dismissed."""
+    lo, hi = sorted((int(txn_a_id), int(txn_b_id)))
+    with _connect(db_path) as conn:
+        try:
+            conn.execute(
+                "INSERT INTO duplicate_dismissed_pairs "
+                "(txn_a_id, txn_b_id, reason) VALUES (?, ?, ?)",
+                (lo, hi, reason or None),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
