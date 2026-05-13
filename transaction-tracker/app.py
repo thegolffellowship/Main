@@ -2368,9 +2368,21 @@ def api_database_table(table_name):
         sort_col = request.args.get("sort", "").strip()
         sort_dir = request.args.get("dir", "asc").strip().lower()
 
-        # Get column names
+        # Get column names (and full schema for the empty-table view in
+        # /database — name/type/notnull/default/pk so the admin can still see
+        # the table structure when no rows exist yet).
         cols_info = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
         columns = [c["name"] for c in cols_info]
+        schema = [
+            {
+                "name": c["name"],
+                "type": c["type"],
+                "notnull": bool(c["notnull"]),
+                "default": c["dflt_value"],
+                "pk": bool(c["pk"]),
+            }
+            for c in cols_info
+        ]
 
         # Build query
         where_clause = ""
@@ -2402,6 +2414,7 @@ def api_database_table(table_name):
         return jsonify({
             "table": table_name,
             "columns": columns,
+            "schema": schema,
             "rows": [dict(r) for r in rows],
             "total": total,
             "limit": limit,

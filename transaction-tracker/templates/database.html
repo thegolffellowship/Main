@@ -17,16 +17,44 @@
             display: flex;
             gap: 1.5rem;
             margin-top: 1rem;
+            align-items: flex-start;       /* keep sidebar pinned to its own top */
         }
         .db-sidebar {
             min-width: 220px;
             max-width: 240px;
             flex-shrink: 0;
+            /* Sticky + independent scroll: the sidebar stays visible while the
+               main pane scrolls, and the sidebar's own table list scrolls
+               internally when it overflows. */
+            position: sticky;
+            top: 1rem;
+            max-height: calc(100vh - 2rem);
+            overflow-y: auto;
         }
         .db-main {
             flex: 1;
             min-width: 0;
             overflow-x: auto;
+        }
+        .schema-view {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            margin-top: 0.75rem;
+        }
+        .schema-view table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .schema-view th, .schema-view td {
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .schema-view th { background: var(--hover); font-weight: 600; }
+        .schema-view .col-flags { color: var(--text-muted); font-size: 0.75rem; }
+        .schema-empty-note {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-style: italic;
+            margin: 0.5rem 0 0;
         }
         .table-list {
             list-style: none;
@@ -359,9 +387,37 @@
                     <span class="page-info">${total.toLocaleString()} rows total</span>
                 </div>`;
 
+            // Schema view — always available regardless of row count so the
+            // admin can verify a table's structure even when it's empty. Built
+            // from the `schema` field returned by /api/database/table/<name>.
+            const schemaHtml = (currentData.schema && currentData.schema.length) ? `
+                <details class="schema-view" ${rows.length === 0 ? "open" : ""}>
+                    <summary style="padding:0.5rem 0.75rem;cursor:pointer;font-weight:600;background:var(--hover);">
+                        Schema (${currentData.schema.length} columns)
+                    </summary>
+                    <table>
+                        <thead><tr>
+                            <th>Column</th><th>Type</th><th>Constraints</th><th>Default</th>
+                        </tr></thead>
+                        <tbody>
+                            ${currentData.schema.map(c => {
+                                const flags = [];
+                                if (c.pk) flags.push("PRIMARY KEY");
+                                if (c.notnull) flags.push("NOT NULL");
+                                return `<tr>
+                                    <td><code>${escapeHtml(c.name)}</code></td>
+                                    <td>${escapeHtml(c.type || "")}</td>
+                                    <td class="col-flags">${flags.join(", ")}</td>
+                                    <td>${c.default !== null ? `<code>${escapeHtml(String(c.default))}</code>` : ""}</td>
+                                </tr>`;
+                            }).join("")}
+                        </tbody>
+                    </table>
+                </details>` : "";
+
             let tableHtml = "";
             if (rows.length === 0) {
-                tableHtml = '<div class="empty-state">No rows found.</div>';
+                tableHtml = '<div class="empty-state">No rows found.<p class="schema-empty-note">Table exists with the schema shown above.</p></div>';
             } else {
                 const thCells = columns.map(col => {
                     let arrow = "";
@@ -404,7 +460,7 @@
                     <button onclick="goPage(${totalPages})" ${page>=totalPages?'disabled':''}>Last</button>
                 </div>` : "";
 
-            dbMainEl.innerHTML = toolbarHtml + tableHtml + paginationHtml;
+            dbMainEl.innerHTML = toolbarHtml + schemaHtml + tableHtml + paginationHtml;
         }
 
         window.doSearch = function() {
