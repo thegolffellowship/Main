@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.14.3";
+window.TGF_VERSION = "2.14.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.4",
+    date: "2026-05-13",
+    title: "Handicap diffs stored at tenths — card math reconciles with displayed DIFFs",
+    changes: [
+      "Per-round differentials in handicap_rounds were stored at 2-decimal precision while the handicap card displayed each DIFF rounded to 1 decimal. Result: the printed 'Avg of lowest N' line averaged the hidden hundredths and didn't match the eye-test sum of the visible tenths (e.g. seven visible diffs summing to -0.5 but the card showing avg = -0.07 from underlying -0.67/0.47/etc.). Per WHS Rule 5.2 ('round to the nearest tenth'), every DIFF in the system is now stored at 1-decimal precision.",
+      "email_parser/database.py: import_handicap_rounds() rounds incoming and computed differentials to 1 decimal (was 2). The display in build_handicap_card_html keeps the 2-decimal format for the averaged value (it's an average of tenths — typically a hundredth) but the underlying numbers being averaged are now the same tenths a manager sees in the DIFF column.",
+      "One-time idempotent boot migration _migrate_round_handicap_diffs_to_tenths runs in init_db: UPDATE handicap_rounds SET differential = ROUND(differential, 1) WHERE differential != ROUND(differential, 1). Existing rows with hidden hundredths are normalised on first boot; subsequent boots find nothing to update.",
+    ],
+  },
   {
     version: "2.14.3",
     date: "2026-05-13",
