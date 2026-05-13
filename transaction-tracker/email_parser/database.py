@@ -2120,6 +2120,34 @@ def _match_pending_payouts_to_new_venmo(conn: sqlite3.Connection) -> int:
     return matched
 
 
+def _migrate_round_handicap_diffs_to_tenths(conn: sqlite3.Connection) -> int:
+    """Round legacy handicap_rounds.differential values to 1 decimal.
+
+    Earlier imports stored DIFFs at 2-decimal precision while the
+    handicap card displayed them at tenths — making the printed
+    "Avg of lowest N" disagree with the visible diffs. WHS Rule 5.2
+    rounds to the nearest tenth, so every stored DIFF is normalised
+    to one decimal. Idempotent: a second run finds nothing to update.
+    """
+    row = conn.execute(
+        "SELECT name FROM sqlite_master "
+        "WHERE type='table' AND name='handicap_rounds'"
+    ).fetchone()
+    if not row:
+        return 0
+
+    cur = conn.execute(
+        "UPDATE handicap_rounds "
+        "SET differential = ROUND(differential, 1) "
+        "WHERE differential IS NOT NULL "
+        "  AND differential != ROUND(differential, 1)"
+    )
+    updated = cur.rowcount or 0
+    if updated:
+        logger.info("Rounded %d handicap_rounds differential(s) to tenths", updated)
+    return updated
+
+
 def init_db(db_path: str | Path | None = None) -> None:
     """Create the items table if it doesn't exist."""
     with _connect(db_path) as conn:
@@ -2961,6 +2989,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_create_status_tables(conn)
         except Exception as e:
             logger.warning("status tables migration failed: %s", e)
+
+        # Re-round legacy handicap_rounds.differential values to tenths so
+        # the card's "Avg of lowest N" reconciles with the displayed diffs.
+        try:
+            _migrate_round_handicap_diffs_to_tenths(conn)
+        except Exception as e:
+            logger.warning("handicap diff rounding migration failed: %s", e)
 
         # Enforce NOT NULL on critical columns via triggers (SQLite doesn't
         # support ALTER TABLE ADD CONSTRAINT).  The triggers reject inserts
@@ -12216,15 +12251,18 @@ def import_handicap_rounds(rounds: list[dict],
                     )
                     continue
 
-                # Use pre-calculated differential when available
+                # Use pre-calculated differential when available.
+                # Per WHS Rule 5.2 ("nearest tenth"), every DIFF in the
+                # system is stored at 1-decimal precision so the values
+                # shown on the handicap card match what's averaged.
                 raw_diff = r.get("differential")
                 if raw_diff is not None and str(raw_diff).strip() not in ("", "None"):
-                    differential = round(float(str(raw_diff).strip()), 2)
+                    differential = round(float(str(raw_diff).strip()), 1)
                 else:
                     if slope == 0:
                         errors.append(f"Row {i+1}: slope is 0 (invalid)")
                         continue
-                    differential = round((adjusted_score - rating) * 113.0 / slope, 2)
+                    differential = round((adjusted_score - rating) * 113.0 / slope, 1)
 
                 # Dedup check
                 if round_id:

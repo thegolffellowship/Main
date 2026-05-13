@@ -30,6 +30,13 @@ Formula: `round((avg_of_lowest_N × 0.96) + adjustment, 1)`
   *"The result of the calculation is rounded to the nearest tenth."* (.5 rounds up)
   e.g. 6.282 → 6.3; 6.24 → 6.2; −0.228 → −0.2N (plus-handicapper, rounds toward +∞)
   NOTE: the pre-2020 USGA system used truncation — that rule no longer applies.
+- **DIFF precision is tenths.** Every per-round differential is rounded to
+  1 decimal at write time in `import_handicap_rounds()` and the boot
+  migration `_migrate_round_handicap_diffs_to_tenths` keeps legacy rows
+  in sync. The handicap-card DIFF column and the underlying averaged
+  values are guaranteed to reconcile — earlier versions stored hundredths
+  but displayed tenths, so the printed "Avg of lowest N" disagreed with
+  the visible numbers.
 - **18-hole scores are rejected** at import time (course rating > 50 = error)
 - **Handicap index suffix:** "N" indicates a 9-hole index
 - **Plus handicap display:** negative computed value → shown with "+" prefix
