@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.14.6";
+window.TGF_VERSION = "2.14.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.7",
+    date: "2026-05-13",
+    title: "Gzip-compress all text responses (flask-compress)",
+    changes: [
+      "Network-tab timing on /api/handicaps/rounds for a high-volume player (Kerry Niester, ~262 rounds) showed 214 ms server time and 4.82 s content download — the response itself was the bottleneck, not the server. flask-compress is added to requirements.txt and initialized once in app.py right after Flask() so every HTML/CSS/JS/JSON response above the default min length is gzipped. The handicap rounds payload drops from ~80 KB to ~10–15 KB on the wire; the Transactions and Customers dashboards also benefit since they ship large JSON dumps. Browsers that don't advertise gzip support continue to receive uncompressed responses unchanged.",
+    ],
+  },
   {
     version: "2.14.6",
     date: "2026-05-13",
