@@ -2292,6 +2292,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("rescheduled_to_event_id", "INTEGER"),
             ("status_changed_at", "TEXT"),
             ("per_game_addon", "REAL"),
+            # Payout Templates (v2.14.x): snapshot of which template version this
+            # event's GAMES tab uses. Nullable — events created before Payout
+            # Templates rolled out fall back to the default template for their
+            # `format` (9-hole vs 18-hole). Once stamped, never auto-updated:
+            # editing a template after the event was created has no effect on it.
+            ("payout_template_version_id", "INTEGER REFERENCES payout_template_versions(id)"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_type}")
@@ -4169,6 +4175,77 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_pairing_history_date ON pairing_history(event_date)"
         )
+
+        # ──────────────────────────────────────────────────────────────────
+        # Payout Templates (v2.14.x) — DB-backed replacement for the static
+        # 25-SideGame-PrizeMatrix.xlsx + games-matrix.js. See PROJECT.md
+        # "Backlog → High Priority → Payout Templates" and CLAUDE.md
+        # "Guiding Principles" for the design rationale. Schema only in this
+        # chunk; seed data + read API + GAMES tab cutover follow.
+        # ──────────────────────────────────────────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS payout_templates (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                name                TEXT NOT NULL UNIQUE,
+                holes               INTEGER NOT NULL CHECK(holes IN (9, 18)),
+                is_default          INTEGER NOT NULL DEFAULT 0,
+                current_version_id  INTEGER REFERENCES payout_template_versions(id),
+                notes               TEXT,
+                created_at          TEXT DEFAULT (datetime('now')),
+                created_by          TEXT,
+                archived            INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        # Only one default per `holes` value. SQLite supports partial unique
+        # indexes; this enforces "at most one default 9-hole template, at most
+        # one default 18-hole template" without blocking multiple non-defaults.
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_payout_templates_default "
+            "ON payout_templates(holes) WHERE is_default = 1 AND archived = 0"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS payout_template_versions (
+                id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_id           INTEGER NOT NULL REFERENCES payout_templates(id),
+                version_no            INTEGER NOT NULL,
+                rates_json            TEXT NOT NULL,
+                rules_json            TEXT NOT NULL,
+                computed_matrix_json  TEXT NOT NULL,
+                max_players           INTEGER NOT NULL DEFAULT 64,
+                saved_at              TEXT DEFAULT (datetime('now')),
+                saved_by              TEXT,
+                notes                 TEXT,
+                UNIQUE(template_id, version_no)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_payout_template_versions_template "
+            "ON payout_template_versions(template_id)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS event_type_template_map (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type      TEXT NOT NULL,
+                holes           INTEGER NOT NULL CHECK(holes IN (9, 18)),
+                template_id     INTEGER NOT NULL REFERENCES payout_templates(id),
+                created_at      TEXT DEFAULT (datetime('now')),
+                UNIQUE(event_type, holes)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_event_type_template_map_lookup "
+            "ON event_type_template_map(event_type, holes)"
+        )
+        conn.commit()  # required: _connect() does not autocommit; without this,
+                       # the three CREATE TABLEs above are rolled back on close.
 
         logger.info("Database initialized at %s", db_path or DB_PATH)
 

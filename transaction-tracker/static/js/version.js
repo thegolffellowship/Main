@@ -1,5 +1,28 @@
-window.TGF_VERSION = "2.14.0";
+window.TGF_VERSION = "2.14.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.2",
+    date: "2026-05-13",
+    title: "Payout Templates schema (chunk 1 of 8) — DB tables only, no UI yet",
+    changes: [
+      "init_db now creates three new tables behind the upcoming Payout Templates system: payout_templates (named templates with one default per holes value, enforced by partial unique index), payout_template_versions (append-only history; every save makes a new row with rates_json, rules_json, computed_matrix_json, max_players), and event_type_template_map (event_type + holes → default template lookup). All three are idempotent CREATE TABLE IF NOT EXISTS — safe to run on every boot.",
+      "events table gains payout_template_version_id (INTEGER FK → payout_template_versions(id), nullable). Stamped at event creation from the event_type_template_map; never auto-updated after that. Per-event override on the event detail page rewrites it explicitly. Editing a template later creates a new version row but does not touch already-stamped events — past events keep the rules they ran under.",
+      "Schema only — no UI, no API, no behavior change in this chunk. The existing /matrix admin page, the games-matrix.js static file, and the app_settings.games_matrix_9/18 JSON keys all keep functioning unchanged. Subsequent chunks (seed templates from live values, read API, GAMES tab cutover, event-type mapping, admin editor, history/rollback) land incrementally on the same branch.",
+      "Implementation note: the new CREATE TABLE block sits below init_db's last explicit conn.commit() (line 4134), and _connect() does not autocommit — so the block ends with its own conn.commit() to ensure tables persist. docs/claude/schema.md updated with the new tables, the new events column, and the commit caveat for any future additions at the bottom of init_db.",
+      "Source-of-truth correction: the matrix values to seed from live in app_settings.games_matrix_9/games_matrix_18 (DB override, set when admin edits via /matrix) and fall back to static/js/games-matrix.js. The 25-SideGame-PrizeMatrix.xlsx is stale and is no longer used as a seed source.",
+    ],
+  },
+  {
+    version: "2.14.1",
+    date: "2026-05-13",
+    title: "Guiding Principles + Payout Templates design captured in docs",
+    changes: [
+      "CLAUDE.md and PROJECT.md gain a new top-level Guiding Principles section: (1) automate toward 0% manual input, (2) rules-based not magic, (3) portable to TGF Platform, (4) past events are frozen (snapshot rules-in-effect), (5) admin-edits / manager-runs / customer-views access layers. These apply to every feature in this product and to the future Platform.",
+      "PROJECT.md Backlog / Roadmap gains a High Priority entry for Payout Templates — the DB-backed replacement for the static 25-SideGame-PrizeMatrix.xlsx + games-matrix.js. New tables: payout_templates, payout_template_versions, event_type_template_map. New column: events.payout_template_version_id (snapshot per event so completed events never change retroactively). Admin UI has Rates (per-player $/game) and Rules (flight/place/min-player thresholds, overflow rules) panels with a live-preview matrix. Manager-side GAMES tab stays identical — same auto-compute, no manual input added. xlsx kept as historical reference for the Tracker, not migrated to Platform.",
+      "PROJECT.md Future Considerations gains a Side Games section capturing the longer-horizon items raised during design review: customer-facing matrix view (Platform), full games builder/editor with add/remove/reorder, 9/18 combo per-side game enablement (data shape ready, UI later), Owner-configurable Permissions UI for role assignment, generic overflow rule shape (Gross→Skins when Individual Gross can't run), max_players-per-template (64 default 9-hole, 128+ for 18-hole), and the direct port path to TGF Platform backend.",
+      "No code or behavior changes in this version — documentation only. Implementation begins after final go-ahead.",
+    ],
+  },
   {
     version: "2.14.0",
     date: "2026-05-11",

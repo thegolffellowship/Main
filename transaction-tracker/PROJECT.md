@@ -47,6 +47,18 @@ The TGF Transaction Tracker is a web application built for The Golf Fellowship t
 
 ---
 
+## Guiding Principles
+
+These are durable design principles for this product and the future TGF Platform. The Tracker is the live sandbox/bridge; the Platform is the destination. Every feature should be designed with the principles below.
+
+1. **Automate toward 0% manual input.** Manager-side screens should compute, not collect. Anything that can be derived (from rules, event type, player count, history) is derived. Manual input is a fallback, not a default.
+2. **Rules-based, not magic.** Behavior that changes by player count, event type, chapter, etc., lives in named rules editable through a UI by a non-developer. Hard-coded thresholds in code are a smell — they should be data.
+3. **Portable to TGF Platform.** Domain models built here should be implementable on the Platform backend with minimal rework. Cross-reference Platform docs (built separately) for any concept that exists in both products and keep the shapes aligned.
+4. **Past events are frozen.** Anything that affects how an event was scored, paid, or invoiced must snapshot the rules in effect at the time. Editing a rule, rate, or template later must never silently change a completed event.
+5. **Admin-edits, manager-runs, customer-views.** Three layers of access. Admins configure (templates, rules, rates, permissions). Managers operate (run events, see auto-computed numbers, no settings). Customers view (their own data, public schedules). Build pages with the layer in mind.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -2120,6 +2132,7 @@ Features discussed or planned but not yet implemented:
   surfaced in the Audit page so admins can manually resolve unknown customers.
 
 ### High Priority
+- **Payout Templates (replaces Side Games Matrix as source of truth)** — Move the prize matrix from the static `25-SideGame-PrizeMatrix.xlsx` + auto-generated `static/js/games-matrix.js` into a DB-backed, versioned **Payout Templates** system. New tables: `payout_templates`, `payout_template_versions`, `event_type_template_map`. New column: `events.payout_template_version_id` (snapshots the version each event uses so completed events never change retroactively). Admin UI lets the owner edit a simple **Rates** column ($/player per game) and an editable **Rules** panel (thresholds for flights/places/min-players, overflow rules like "Gross→Skins" when Individual Gross can't run, max-player-count per template, etc.). The Manager-side GAMES tab (`renderGamesPanel` in `events.html`) keeps reading "matrix by player count" and behaves identically — no manual input added. Templates auto-assign to events by event type; admins can swap on a per-event basis. xlsx stays in the repo as historical reference for the Tracker and is **not** migrated to the Platform. Approach (v1): seed templates with the existing matrix bit-for-bit, then extract rules incrementally so behavior never breaks. Permissions: admin-only edits for now, with hooks for an Owner-defined permissions UI later.
 - ~~**Bulk Event Communications (Email + SMS)**~~ — **DONE** (v1.3.0). Email messaging implemented with audience filtering, reusable templates, preview, and message log. SMS (Twilio) still pending.
 - ~~**SUPPORT button**~~ — **DONE** (v1.3.0). Support feedback system with bug/feature submission, admin review, and daily digest.
 - **Player-facing event page** — Public page where players can see their upcoming events, RSVP status, and payment status without needing a PIN
@@ -2283,6 +2296,28 @@ Each line item within an expanded order shows the **full transaction columns** �
 ---
 
 ## Future Considerations
+
+### Side Games — Future Capabilities (mostly TGF Platform scope)
+
+Captured here so the Payout Templates build (see Backlog → High Priority) leaves room for them. Cross-reference: the TGF Platform docs (built separately with Claude) cover the customer-facing side of these in more depth — keep data shapes aligned when those docs are imported.
+
+1. **Customer-facing matrix view.** On the Platform, customers should be able to see the side games structure for an event they're registered for (which games will run, expected prize pools at current player count, their flight, etc.). UI/UX shape TBD. Build Payout Templates so the rendered matrix is read-safely from a customer route — no admin data leaks. Owner-only fields (rates) stay server-side.
+2. **Full Games Builder/Editor.** The Rates + Rules editor is the v1. Eventually admins need to **add new games, remove games, and reorder games** within a template — not just adjust the existing eight. Data model: keep games as rows in `payout_template_versions.rules_json` (not enum columns) so add/remove/reorder is just a JSON edit. Add a `display_order` field per game. UI affordances (drag-and-drop, "+ Add Game") come with the Platform build.
+3. **9/18 Combo per-side game enablement.** Today combo events parse the 9 or 18 prefix off the event name and use one matrix accordingly. In the future, when player counts grow, we'll want to offer **separate side games for the 18-hole side** of a combo event (e.g. "Skins runs on both sides," "Individual Gross only on the 18-side when N≥20"). Data model: a combo event holds *two* template references (`payout_template_version_id_9` + `payout_template_version_id_18`); when only one is set the behavior matches today's. Don't enable in the v1 UI — just leave the column shape ready.
+4. **Permissions UI for Owner/Admin role assignment.** v1 of Payout Templates is admin-only via the existing role system. Later, the Owner should be able to assign a fine-grained permission matrix through a UI: e.g. "Bob can edit templates but not rates," "Linda can clone but not save." Build the v1 permission check as a single `can_edit_payout_templates(user)` function so the rule can become a DB-driven permission lookup without touching call sites. The same pattern applies to other admin areas — a generic permissions table that the Owner manages.
+5. **Gross→Skins overflow rule (capture for the rules engine).** When Gross-side player count is below the threshold for Individual Gross, that portion of the buy-in **rolls into the Skins pot** instead of being held out. The current xlsx doesn't model this — it's a known gap. Encode as an explicit rule in `rules_json`: `{ "overflow": { "from": "individual_gross", "to": "skins", "when": "players < min_for_individual_gross" } }`. Other games may grow similar overflow rules over time — keep the rule shape generic.
+
+   **Important — rules must be flexible and dependency-aware.** Thresholds and overflow targets will change over time as TGF adds, removes, or rebalances games. Two engineering constraints:
+   - **Every threshold is data, not code.** Min-players, payout splits, flight counts, and overflow targets all live in `rules_json` and are edited through the admin UI. Hard-coded values in Python or JS are a smell.
+   - **Game-to-game dependencies are first-class.** When new games are added (e.g., a fourth gross-side game in the bundle), they may declare overflow routing to any other game in the template, conditional on player count or other state. The engine should:
+     1. Evaluate game eligibility per the rules,
+     2. For ineligible games, look up their `overflow_to` target,
+     3. Redirect the `$/player` to the target's pot before computing payouts,
+     4. Detect circular overflow chains and reject the template at save time.
+
+   **Verified threshold discrepancy (May 2026).** Owner stated Individual Gross "kicks in" at N=16 (9-hole) / N=12 (18-hole), but the existing matrix only begins paying Ind Gross at N=20 (9-hole) / N=16 (18-hole) — an off-by-4 gap. v1 of Payout Templates seeds the matrix bit-for-bit (no behavior change). The threshold is editable in the admin UI so the Owner can correct it post-seed without code changes.
+6. **Max player count per template.** Different formats need different ceilings. 9-hole is typically 64; 18-hole can exceed 128. The expanded matrix table in `computed_matrix_json` should respect a `max_players` field on the template (default 64 for 9-hole, 128 for 18-hole) and be regenerable if the ceiling changes.
+7. **Direct port to TGF Platform backend.** This entire design is intended as the source for the Platform's side games module. When the Platform comes online, the Tracker's Payout Templates schema and Rules engine should transplant with minimal rework. SQLite-specific bits (lack of FK enforcement, JSON-as-TEXT) become real columns/JSONB in Postgres without changing the domain shape.
 
 ### Auth Scalability: Per-User PINs
 

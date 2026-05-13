@@ -15,7 +15,8 @@
 `coo_agents`, `coo_chat_sessions`, `coo_chat_messages`, `coo_manual_values`,
 `agent_action_log`, `tgf_events`, `tgf_payouts`, `contractor_payouts`,
 `event_pairings`, `pairing_history`,
-`duplicate_merge_audit`, `duplicate_dismissed_pairs`
+`duplicate_merge_audit`, `duplicate_dismissed_pairs`,
+`payout_templates`, `payout_template_versions`, `event_type_template_map`
 
 Key tables not documented elsewhere in CLAUDE sub-docs:
 - `chapters` — chapter dimension table. Five canonical entries: San Antonio, Austin, DFW, Houston, Hill Country (Hill Country added via `_migrate_canonicalize_chapters` after the original seed block early-returns once initialized). Maps to Platform `org_units`. FK from `items.chapter_id` and `events.chapter_id`. **Note:** `customers.chapter` is still a `VARCHAR(50)` text column — it does **not** have a `chapter_id` FK. Chapter selection on the Customers Info tab is constrained to canonical names via the UI, and `update_customer_info` writes the chapter string to both `items.chapter` (per-row) and `customers.chapter` (master). Adding `customers.chapter_id INTEGER REFERENCES chapters(chapter_id)` and phasing out the text column is deferred — see "Deferred / Known Concessions" below.
@@ -120,6 +121,55 @@ rows that don't already match the canonical state.
 |---|---|---|
 | `per_game_addon` | REAL | Per-event game add-on price for NET / GROSS / BOTH tiers. Defaults to $27 on the new "27 Holes" format. Plumbed through `create_event()`, `_validate_update_fields` allow-list, and `POST /api/events`. The server-side `_calc_event_pricing_breakdown` reads this when present; the client-side modal also picks it up. Existing 9-hole / 18-hole / Combo formats fall back to the old $16 / $30 constants. |
 | `format` | TEXT | Now accepts `9 Holes`, `18 Holes`, `9/18 Combo`, **or `27 Holes`**. 27 Holes is treated as a single-day event using the same start-time / tee-sheet / 5-hour-duration rules as 18 Holes; pairings, default holes, and the side-games matrix all map 27 Holes to the 18-hole code path. **Combo detection bug fix:** `is_combo` was comparing `format.lower() == "combo"`, but the actual string is `"9/18 Combo"` — the equality check never matched. Use `"combo" in format.lower()` (or pre-canonicalize) in any new code. |
+| `payout_template_version_id` | INTEGER FK → `payout_template_versions(id)` | Snapshots the template version this event uses for its GAMES tab. Nullable — events created before Payout Templates rolled out (or before any default template was seeded) fall back to the chapter-default 9-hole or 18-hole template at render time. **Once stamped, never auto-updated** — editing a template after this column is set has no effect on this event. Per-event override on the event detail page rewrites the column to a different version_id. See "Payout Templates" section below. |
+
+## Payout Templates (v2.14.x — schema only; UI in subsequent chunks)
+
+DB-backed replacement for the static `25-SideGame-PrizeMatrix.xlsx` + auto-generated `static/js/games-matrix.js`. Three tables introduced; the existing `app_settings.games_matrix_9` / `games_matrix_18` JSON keys remain temporarily as the seed source for v1 templates and will be retired once the cutover (Chunk 4) ships.
+
+### `payout_templates`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `name` | TEXT NOT NULL UNIQUE | Human-readable: `"Standard 9-Hole"`, `"Major Championship 18"`, etc. |
+| `holes` | INTEGER NOT NULL CHECK(holes IN (9, 18)) | 9 or 18 only. 27-Hole and 9/18 Combo events use the 18-hole template (mirrors the existing matrix mapping; the per-side combo enablement noted in PROJECT.md Future Considerations is a later enhancement). |
+| `is_default` | INTEGER NOT NULL DEFAULT 0 | At most one default per `holes` value, enforced by the partial unique index `idx_payout_templates_default ON payout_templates(holes) WHERE is_default = 1 AND archived = 0`. |
+| `current_version_id` | INTEGER FK → `payout_template_versions(id)` | Points at the active version. Updated on every save. Reads should join to this for "current" template state. |
+| `notes`, `created_at`, `created_by`, `archived` | | Standard metadata. `archived = 1` hides from list views and frees the default slot for that `holes` value. |
+
+### `payout_template_versions`
+
+Append-only — every save creates a new row. Never UPDATE in place; never DELETE (rollback creates a *new* version with the older payload).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `template_id` | INTEGER NOT NULL FK → `payout_templates(id)` | |
+| `version_no` | INTEGER NOT NULL | 1, 2, 3, … per template. UNIQUE per `(template_id, version_no)`. |
+| `rates_json` | TEXT NOT NULL | The simple `$/player` per game. Shape: `{ "team": 4, "ctp": 1, "hole_in_one": 1, "individual_net": 9, "city_mvp": 2, "tgf_mvp": 2, "skins": 9, "individual_gross": 4 }`. Editable in the admin Rates panel. |
+| `rules_json` | TEXT NOT NULL | The harder business logic: per-game flight thresholds, place splits, min-players, overflow targets (e.g. `individual_gross.overflow_to = "skins"` when below threshold). The rules engine is the read-side that turns rates+rules into the computed matrix. See PROJECT.md "Future Considerations → Side Games" for the rule-shape requirements (flexibility + game-to-game dependencies). |
+| `computed_matrix_json` | TEXT NOT NULL | The expanded "matrix by player count" — the same shape `static/js/games-matrix.js` exports today. Recomputed and persisted on every save so reads (the GAMES tab) are O(1) lookups, not O(rules-engine-eval). |
+| `max_players` | INTEGER NOT NULL DEFAULT 64 | Ceiling for the expanded matrix. 9-hole templates default to 64; 18-hole templates can be raised (128+) when player counts grow. Editable in admin UI. |
+| `saved_at`, `saved_by`, `notes` | | Audit fields. `notes` holds a free-text reason for the change shown in the History view. |
+
+### `event_type_template_map`
+
+Maps an event's `event_type` (and `holes`) to its default template. Used at event creation to auto-stamp `events.payout_template_version_id`. UNIQUE on `(event_type, holes)`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `event_type` | TEXT NOT NULL | Matches `events.event_type` (today defaults to `'event'`; future values per Future Considerations). |
+| `holes` | INTEGER NOT NULL CHECK(holes IN (9, 18)) | Two rows per event_type — one for 9-hole, one for 18-hole — so the same event type can have different templates per hole count. |
+| `template_id` | INTEGER NOT NULL FK → `payout_templates(id)` | |
+| `created_at` | | |
+
+### Important constraints to know about
+
+- **`init_db` requires `conn.commit()` after the new tables** — `_connect()` (alias for `managed_connection`) does **not** autocommit. CREATE TABLE statements added after the last explicit commit (line 4134) are rolled back on connection close. The Payout Templates block at the bottom of `init_db` ends with an explicit `conn.commit()`. The existing `event_pairings` / `pairing_history` blocks just above also lack a commit, but they're self-healed by `_ensure_pairing_tables()` on demand. If anyone adds further tables at the bottom of `init_db`, they need their own commit.
+- **Snapshot semantics on `events.payout_template_version_id`** — never overwrite this without explicit user action (per-event override). Auto-stamp at event create only. Editing a template version is a forward-only operation that creates a new version_id; existing events stay pointed at the version they were stamped with.
+- **Read path for "the current matrix for this event"** — join `events → payout_template_versions ON events.payout_template_version_id`. If null, look up `event_type_template_map(event_type, holes) → payout_templates → current_version_id`. If still null, fall back to `app_settings.games_matrix_9` or `static/js/games-matrix.js` (legacy). The fallback path is removed once Chunk 4 cutover is verified.
 
 ## `items` cross-uid dedup gate
 
