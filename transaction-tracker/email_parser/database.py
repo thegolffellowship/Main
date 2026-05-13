@@ -12804,7 +12804,9 @@ def build_handicap_card_html(card_data: dict) -> str:
             f"(last {lookback} months)"
         )
 
-        # Compact calculation line
+        # Compact calculation line \u2014 show the sum and divide explicitly so the
+        # numbers reconcile with the visible DIFF column (sum of tenths \u00f7 N).
+        sum_used = sum(used_diffs)
         after_mult = avg_used * multiplier
         adj_str = ""
         if adjustment != 0.0:
@@ -12812,7 +12814,8 @@ def build_handicap_card_html(card_data: dict) -> str:
             adj_str = f" {sign} {abs(adjustment):.1f}"
 
         calc_html = (
-            f'Avg of lowest {rounds_used}: {avg_used:.2f} &#215; {multiplier} = '
+            f'Sum of lowest {rounds_used}: {sum_used:.1f} &#247; {rounds_used} = '
+            f'{avg_used:.2f} &#215; {multiplier} = '
             f'{after_mult:.2f}{adj_str} &#8594; <strong style="color:#64748b;">{idx_9_display}</strong>'
         )
     else:

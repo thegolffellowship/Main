@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.14.4";
+window.TGF_VERSION = "2.14.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.5",
+    date: "2026-05-13",
+    title: "Handicap card: show sum-then-divide so the math reconciles with the DIFF column",
+    changes: [
+      "The calculation line on the handicap card preview now reads 'Sum of lowest N: {sum} ÷ N = {avg} × 0.96 = {after_mult} → {index}'. Earlier wording showed only the average ('Avg of lowest 7: -0.07 × 0.96 = ...'), which was correct but disagreed with the visible DIFF column at a glance — a manager adding the seven starred diffs got -0.5 and couldn't see how that became -0.07 without doing the division mentally. The sum is now printed at 1 decimal (matching the DIFFs), divided by N, then multiplied by 0.96, then floored to the nearest tenth per WHS Rule 5.2.",
+      "Build/file: email_parser/database.py → build_handicap_card_html, calc_html. No behavior change to the index value itself.",
+    ],
+  },
   {
     version: "2.14.4",
     date: "2026-05-13",
