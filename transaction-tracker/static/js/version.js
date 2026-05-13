@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.14.0";
+window.TGF_VERSION = "2.14.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.1",
+    date: "2026-05-13",
+    title: "Guiding Principles + Payout Templates design captured in docs",
+    changes: [
+      "CLAUDE.md and PROJECT.md gain a new top-level Guiding Principles section: (1) automate toward 0% manual input, (2) rules-based not magic, (3) portable to TGF Platform, (4) past events are frozen (snapshot rules-in-effect), (5) admin-edits / manager-runs / customer-views access layers. These apply to every feature in this product and to the future Platform.",
+      "PROJECT.md Backlog / Roadmap gains a High Priority entry for Payout Templates — the DB-backed replacement for the static 25-SideGame-PrizeMatrix.xlsx + games-matrix.js. New tables: payout_templates, payout_template_versions, event_type_template_map. New column: events.payout_template_version_id (snapshot per event so completed events never change retroactively). Admin UI has Rates (per-player $/game) and Rules (flight/place/min-player thresholds, overflow rules) panels with a live-preview matrix. Manager-side GAMES tab stays identical — same auto-compute, no manual input added. xlsx kept as historical reference for the Tracker, not migrated to Platform.",
+      "PROJECT.md Future Considerations gains a Side Games section capturing the longer-horizon items raised during design review: customer-facing matrix view (Platform), full games builder/editor with add/remove/reorder, 9/18 combo per-side game enablement (data shape ready, UI later), Owner-configurable Permissions UI for role assignment, generic overflow rule shape (Gross→Skins when Individual Gross can't run), max_players-per-template (64 default 9-hole, 128+ for 18-hole), and the direct port path to TGF Platform backend.",
+      "No code or behavior changes in this version — documentation only. Implementation begins after final go-ahead.",
+    ],
+  },
   {
     version: "2.14.0",
     date: "2026-05-11",

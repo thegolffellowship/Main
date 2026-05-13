@@ -12,6 +12,16 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/coo.md` (COO dashboard + AI chat)
 - `docs/claude/customer-merge-repair.md` (playbook for fixing absorbed customer profiles)
 
+## Guiding Principles
+
+These are durable design principles that apply to **every** feature in this app and to the future TGF Platform. When in doubt, default to these.
+
+1. **Automate toward 0% manual input.** The ultimate TGF Platform is the goal; this Tracker is the live sandbox/bridge that preps for it. Every feature should drive manual user input as close to zero as possible by encoding behavior in rules, defaults, and auto-derived data. Manager-side screens should compute, not collect. If a value can be derived (from rules, from event type, from player count, from history) — derive it, don't ask for it.
+2. **Rules-based, not magic.** Behavior that changes by player count, event type, chapter, etc., lives in named rules a non-developer can read and edit through a UI. Hard-coded thresholds in code are a smell — they should be data.
+3. **Portable to TGF Platform.** Anything we build here should be implementable on the Platform backend with minimal rework. Avoid baking SQLite-specific quirks or Flask-specific shapes into the domain model. When the same concept exists in both products (e.g. side games matrix), cross-reference the Platform docs and keep the data model aligned.
+4. **Past events are frozen.** Anything that affects how an event was scored, paid, or invoiced must snapshot the rules in effect at the time. Editing a template later must never silently change historical events.
+5. **Admin-edits, manager-runs, customer-views.** Three layers of access. Admins configure (templates, rules, rates, permissions). Managers operate (run events, see auto-computed numbers). Customers view (their own data, public schedules). Build pages with the layer in mind.
+
 ## Duplicate Detective
 
 Admin tool at `/admin/duplicate-detective` that detects duplicate
