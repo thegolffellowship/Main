@@ -347,6 +347,14 @@ def _check_login_rate_limit() -> bool:
 
 
 app = Flask(__name__)
+# Gzip-compress text responses (HTML/CSS/JS/JSON) so large API payloads
+# like /api/handicaps/rounds for high-volume players shrink from ~80 KB
+# to ~10 KB on the wire. flask-compress only compresses responses with
+# a compressible MIME type and at or above its default min length, and
+# it respects the client's Accept-Encoding header so non-supporting
+# clients still get a plain response.
+from flask_compress import Compress
+Compress(app)
 _secret_key = os.getenv("SECRET_KEY")
 if not _secret_key:
     raise RuntimeError(
