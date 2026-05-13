@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.14.5";
+window.TGF_VERSION = "2.14.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.6",
+    date: "2026-05-13",
+    title: "Handicaps page: server-side running INDEX so player expand is fast",
+    changes: [
+      "Clicking on a player to view their score history used to feel sluggish because the browser was recomputing the running INDEX column from scratch — for every historical round, re-running the full WHS lookup/sort/average — on every expand. For a player with 70 rounds that's thousands of operations in the main thread before the table renders. Computation moved to the server: get_handicap_rounds now attaches a running_index_9 field to each row when called with a player_name, mirroring the same WHS algorithm and today's lookback cutoff so values are byte-for-byte identical. The browser just reads the field and renders.",
+      "templates/handicaps.html: removed the O(N²) running-handicap loop and the same-date canonical override in renderRoundsTable. The DIFF_LOOKUP / ADJ_LOOKUP constants are still needed for the per-card breakdown HTML below so they remain in the file.",
+      "email_parser/database.py: added _attach_running_index_9 helper next to compute_handicap_index, wired into get_handicap_rounds(player_name=…). build_handicap_card_data passes include_running_index=False since it ignores the field. New composite index idx_handicap_rounds_player_date on (player_name, round_date DESC, id DESC) so the per-player history query reads pre-sorted.",
+      "No behavior change to the index value itself — the running INDEX column on each historical row shows exactly the same number as before, just rendered ~10–100× faster on larger histories. Today's fixed lookback cutoff is still used (per docs/claude/handicaps.md), so older rounds still reflect what the handicap would have been with today's 12-month window applied.",
+    ],
+  },
   {
     version: "2.14.5",
     date: "2026-05-13",

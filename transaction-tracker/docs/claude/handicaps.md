@@ -48,6 +48,13 @@ recent round's INDEX always matches the player's current displayed handicap. Old
 show what the handicap would have been including all rounds up to that point, with today's
 12-month window applied.
 
+The running index is computed **server-side** in `_attach_running_index_9` (in
+`email_parser/database.py`) and returned as `running_index_9` on each row from
+`/api/handicaps/rounds?player=…`. The browser used to do this in JS on every
+expand — an O(N²) loop per player that was the dominant source of slow page
+expands. The server version mirrors the same WHS algorithm and lookback cutoff,
+so values are identical and `templates/handicaps.html` just reads the field.
+
 ## Expanded rounds view — cutoff lines
 Two visual separator rows appear in the expanded rounds table:
 - **Red line** — 12-month lookback boundary; rounds below are excluded from the pool

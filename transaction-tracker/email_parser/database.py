@@ -2585,6 +2585,13 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_handicap_rounds_date ON handicap_rounds(round_date DESC)"
         )
+        # Composite index for the per-player history query
+        # (WHERE player_name = ? ORDER BY round_date DESC, id DESC) used
+        # by the handicaps page expand action.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_handicap_rounds_player_date "
+            "ON handicap_rounds(player_name, round_date DESC, id DESC)"
+        )
 
         # Handicap player → customer links
         conn.execute(
@@ -11970,6 +11977,79 @@ def compute_handicap_index(differentials: list[float],
     return round(index * 10) / 10
 
 
+def _attach_running_index_9(rounds: list[dict], settings: dict | None = None) -> None:
+    """Mutate `rounds` in place to add a 'running_index_9' field on each row.
+
+    The running index is "the handicap that would have been in effect
+    after this round was entered" — using today's fixed lookback cutoff
+    so the most-recent round always equals the player's current displayed
+    handicap. Computing this server-side replaces an O(N^2) loop the
+    browser used to run on every player expand, which is the dominant
+    cost of opening a player's score history.
+
+    Mirrors the JS algorithm in templates/handicaps.html so values match
+    byte-for-byte and the client can render without recomputing.
+    """
+    if not rounds:
+        return
+
+    cfg = settings or _HANDICAP_SETTINGS_DEFAULTS
+    lookback_months = int(cfg.get("lookback_months", 12))
+    min_rounds = int(cfg.get("min_rounds", 3))
+    multiplier = float(cfg.get("multiplier", 0.96))
+
+    # Match build_handicap_card_data's cutoff (~30.44 days/month) so the
+    # running index at the latest date agrees with the canonical current
+    # value rendered on the handicap card.
+    cutoff = datetime.now() - timedelta(days=lookback_months * 30.44)
+    cutoff_str = cutoff.strftime("%Y-%m-%d")
+
+    def _index_for(window: list[dict]) -> float | None:
+        n = len(window)
+        if n < min_rounds:
+            return None
+        n_capped = min(n, 20)
+        count = _HANDICAP_DIFF_LOOKUP.get(n_capped, 0)
+        if count == 0:
+            return None
+        diffs = sorted(
+            r["differential"] for r in window if r.get("differential") is not None
+        )
+        if len(diffs) < count:
+            return None
+        avg = sum(diffs[:count]) / count
+        adj = _HANDICAP_ADJUSTMENT.get(n_capped, 0.0)
+        return round((avg * multiplier + adj) * 10) / 10
+
+    # Chronological order (oldest first); ties broken by id descending to
+    # match the DB's "round_date DESC, id DESC" secondary sort when read
+    # back chronologically — keeps running indices stable for same-date rounds.
+    chrono = sorted(rounds, key=lambda r: (r["round_date"], -(r.get("id") or 0)))
+
+    running: dict = {}
+    for i, rnd in enumerate(chrono):
+        pool = [r for r in chrono[: i + 1] if r["round_date"] >= cutoff_str]
+        running[rnd["id"]] = _index_for(pool[-20:])
+
+    # Canonical override on the latest date — the sequential loop can
+    # diverge from the server's canonical "current index" when same-date
+    # ties shuffle the tail of the pool. Force rounds on the most recent
+    # date to the same value the handicap card displays.
+    latest_date = max(r["round_date"] for r in rounds)
+    active = [r for r in rounds if r["round_date"] >= cutoff_str]
+    active_sorted = sorted(
+        active, key=lambda r: (r["round_date"], r.get("id") or 0), reverse=True
+    )
+    current_idx = _index_for(active_sorted[:20])
+    if current_idx is not None:
+        for r in rounds:
+            if r["round_date"] == latest_date:
+                running[r["id"]] = current_idx
+
+    for r in rounds:
+        r["running_index_9"] = running.get(r["id"])
+
+
 def _match_customer_by_email(conn: sqlite3.Connection, email: str,
                              player_name: str = "") -> str | None:
     """Match a player to a customer by email address.
@@ -12302,8 +12382,16 @@ def import_handicap_rounds(rounds: list[dict],
 
 
 def get_handicap_rounds(player_name: str | None = None,
-                         db_path: str | Path | None = None) -> list[dict]:
-    """Return handicap rounds, optionally filtered to one player, newest first."""
+                         db_path: str | Path | None = None,
+                         include_running_index: bool = True) -> list[dict]:
+    """Return handicap rounds, optionally filtered to one player, newest first.
+
+    When called with a player_name, each row is enriched with
+    'running_index_9' — the handicap-after-this-round value — so the UI
+    can render directly instead of recomputing O(N^2) in the browser.
+    Pass include_running_index=False to skip the compute when the caller
+    only needs the raw rows (e.g. build_handicap_card_data).
+    """
     with _connect(db_path) as conn:
         if player_name:
             round_rows = conn.execute(
@@ -12315,7 +12403,15 @@ def get_handicap_rounds(player_name: str | None = None,
             round_rows = conn.execute(
                 "SELECT * FROM handicap_rounds ORDER BY round_date DESC, id DESC"
             ).fetchall()
-        return [dict(r) for r in round_rows]
+        rounds = [dict(r) for r in round_rows]
+        if include_running_index and player_name and rounds:
+            cfg = dict(_HANDICAP_SETTINGS_DEFAULTS)
+            for row in conn.execute(
+                "SELECT key, value FROM handicap_settings"
+            ).fetchall():
+                cfg[row["key"]] = row["value"]
+            _attach_running_index_9(rounds, cfg)
+        return rounds
 
 
 def delete_handicap_round(round_id: int,
@@ -12612,7 +12708,9 @@ def build_handicap_card_data(player_name: str,
     cutoff_str = cutoff.strftime("%Y-%m-%d")
 
     # Get all rounds for this player
-    all_rounds = get_handicap_rounds(player_name=player_name, db_path=db_path)
+    all_rounds = get_handicap_rounds(
+        player_name=player_name, db_path=db_path, include_running_index=False
+    )
 
     # Filter to active rounds (within lookback window, with a differential)
     active_rounds = [
