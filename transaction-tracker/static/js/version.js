@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.14.2";
+window.TGF_VERSION = "2.14.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.3",
+    date: "2026-05-13",
+    title: "Database admin: schema view for empty tables + sidebar sticky-scroll",
+    changes: [
+      "/database admin page now shows a collapsible Schema panel above the rows table — column name, type, NOT NULL / PRIMARY KEY constraints, default values. Auto-opens when the table is empty so an admin can still verify a table's structure (matters for newly added tables like the chunk-1 payout_templates trio which start with zero rows). Reads from a new schema field in /api/database/table/<name>, derived from PRAGMA table_info.",
+      "Database browser sidebar is now sticky and scrolls independently of the main content. On long-scrolling tables, the table list stays pinned in view; if the list itself overflows the viewport, it scrolls inside the sidebar rather than carrying the page along with it.",
+    ],
+  },
   {
     version: "2.14.2",
     date: "2026-05-13",
