@@ -2120,6 +2120,238 @@ def _match_pending_payouts_to_new_venmo(conn: sqlite3.Connection) -> int:
     return matched
 
 
+# ---------------------------------------------------------------------------
+# Payout Templates — canonical games + v1 seed
+# ---------------------------------------------------------------------------
+
+# 11 canonical games. `code` is the stable identifier used by the rules engine
+# and any cross-table joins; `name` is what admins/managers see. `category`
+# groups the game into one of three buy-in pots (event / net / gross) — the
+# same shape `payout_template_version_games.source` uses.
+_CANONICAL_GAMES = [
+    # code,             name,                category,  sort_order
+    ("team_net",         "Team Net",         "event",   10),
+    ("ctp_1",            "CTP #1",           "event",   20),
+    ("ctp_2",            "CTP #2",           "event",   30),
+    ("ctp_3",            "CTP #3",           "event",   40),
+    ("ctp_4",            "CTP #4",           "event",   50),
+    ("hole_in_one",      "Hole-in-One",      "event",   60),
+    ("individual_net",   "Individual Net",   "net",     70),
+    ("city_mvp",         "City MVP",         "net",     80),
+    ("tgf_mvp",          "TGF MVP",          "net",     90),
+    ("skins",            "Skins",           "gross",  100),
+    ("individual_gross", "Individual Gross", "gross",  110),
+]
+
+
+# Default $/player buy-ins per game, matching the existing rates_json shape:
+# { "team": 4, "ctp": 1, "hole_in_one": 1, "individual_net": 9,
+#   "city_mvp": 2, "tgf_mvp": 2, "skins": 9, "individual_gross": 4 }
+_DEFAULT_BUY_INS = {
+    "team_net":         4.0,
+    "ctp_1":            1.0,
+    "ctp_2":            1.0,
+    "ctp_3":            1.0,
+    "ctp_4":            1.0,
+    "hole_in_one":      1.0,
+    "individual_net":   9.0,
+    "city_mvp":         2.0,
+    "tgf_mvp":          2.0,
+    "skins":            9.0,
+    "individual_gross": 4.0,
+}
+
+# Per-template game manifest. 9-Hole has 2 CTPs; 18-Hole has 4. Both include
+# all three buy-in pots. Order in the list = display_order.
+_TEMPLATE_GAME_MANIFEST = {
+    9: [
+        "team_net", "ctp_1", "ctp_2", "hole_in_one",
+        "individual_net", "city_mvp", "tgf_mvp",
+        "skins", "individual_gross",
+    ],
+    18: [
+        "team_net", "ctp_1", "ctp_2", "ctp_3", "ctp_4", "hole_in_one",
+        "individual_net", "city_mvp", "tgf_mvp",
+        "skins", "individual_gross",
+    ],
+}
+
+
+def _load_seed_matrix() -> tuple[dict | None, dict | None]:
+    """Load the live games matrix for use as v1 seed data.
+
+    Source priority (matches `app._load_matrix`):
+    1. `app_settings.games_matrix_9` / `games_matrix_18` — the DB override
+       written when an admin edits via /matrix. Survives Railway redeploys.
+    2. `static/js/games-matrix.js` — the on-disk fallback baked into the repo.
+
+    Returns (matrix9, matrix18). Either may be None if both sources are
+    unreadable; the seed routine then skips that template.
+    """
+    matrix9 = matrix18 = None
+    try:
+        db9 = get_app_setting("games_matrix_9")
+        db18 = get_app_setting("games_matrix_18")
+        if db9 and db18:
+            return json.loads(db9), json.loads(db18)
+    except Exception:
+        logger.debug("app_settings matrix read failed; falling back to static file", exc_info=True)
+
+    try:
+        # database.py lives at email_parser/database.py; the static file is one
+        # directory up at static/js/games-matrix.js.
+        matrix_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "static", "js", "games-matrix.js",
+        )
+        with open(matrix_path, "r") as f:
+            content = f.read()
+        m9 = re.search(r"window\.GAMES_MATRIX_9\s*=\s*(\{.*?\});", content, re.DOTALL)
+        m18 = re.search(r"window\.GAMES_MATRIX_18\s*=\s*(\{.*?\});", content, re.DOTALL)
+        if m9 and m18:
+            matrix9 = json.loads(m9.group(1))
+            matrix18 = json.loads(m18.group(1))
+    except Exception:
+        logger.debug("Static games-matrix.js read failed", exc_info=True)
+
+    return matrix9, matrix18
+
+
+def _seed_payout_templates_v1(conn: sqlite3.Connection) -> None:
+    """Seed the games catalog and the two Standard templates (9-Hole, 18-Hole).
+
+    Idempotent on every layer:
+    - games inserted with INSERT OR IGNORE on UNIQUE(code).
+    - payout_templates inserted with INSERT OR IGNORE on UNIQUE(name).
+    - payout_template_versions only inserted if version_no=1 doesn't already
+      exist for the template.
+    - payout_template_version_games inserted with INSERT OR IGNORE on
+      UNIQUE(template_version_id, game_id).
+    """
+    # 1. Seed the canonical games catalog.
+    for code, name, category, sort_order in _CANONICAL_GAMES:
+        conn.execute(
+            "INSERT OR IGNORE INTO games (code, name, category, sort_order) "
+            "VALUES (?, ?, ?, ?)",
+            (code, name, category, sort_order),
+        )
+
+    # Cache code → game_id so the join-table inserts don't re-query per row.
+    games_by_code = {
+        r["code"]: r["id"]
+        for r in conn.execute("SELECT id, code FROM games").fetchall()
+    }
+
+    # 2. Load the live matrix (DB override → static file fallback).
+    matrix9, matrix18 = _load_seed_matrix()
+
+    template_specs = [
+        # (name,             holes, max_players, default, matrix)
+        ("Standard 9-Hole",   9,    64,          1,       matrix9),
+        ("Standard 18-Hole", 18,   128,          1,       matrix18),
+    ]
+
+    for tpl_name, holes, max_players, is_default, matrix in template_specs:
+        if not matrix:
+            logger.warning(
+                "Skipping seed of '%s' — no matrix data available", tpl_name
+            )
+            continue
+
+        # 3. Insert the template row (idempotent on UNIQUE name).
+        conn.execute(
+            "INSERT OR IGNORE INTO payout_templates "
+            "(name, holes, is_default, notes, created_by) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                tpl_name, holes, is_default,
+                "Seeded from live games-matrix at chunk-2 cutover (v2.14.4).",
+                "system",
+            ),
+        )
+        tpl_row = conn.execute(
+            "SELECT id FROM payout_templates WHERE name = ?", (tpl_name,)
+        ).fetchone()
+        if not tpl_row:
+            continue
+        template_id = tpl_row["id"]
+
+        # 4. Insert v1 if no version exists yet for this template.
+        existing_v1 = conn.execute(
+            "SELECT id FROM payout_template_versions "
+            "WHERE template_id = ? AND version_no = 1",
+            (template_id,),
+        ).fetchone()
+        if existing_v1:
+            version_id = existing_v1["id"]
+        else:
+            # rates_json kept populated for back-compat — readers that haven't
+            # cut over yet still work. New rates are normalized into
+            # payout_template_version_games rows below.
+            rates_json = json.dumps({
+                "team":              _DEFAULT_BUY_INS["team_net"],
+                "ctp":               _DEFAULT_BUY_INS["ctp_1"],
+                "hole_in_one":       _DEFAULT_BUY_INS["hole_in_one"],
+                "individual_net":    _DEFAULT_BUY_INS["individual_net"],
+                "city_mvp":          _DEFAULT_BUY_INS["city_mvp"],
+                "tgf_mvp":           _DEFAULT_BUY_INS["tgf_mvp"],
+                "skins":             _DEFAULT_BUY_INS["skins"],
+                "individual_gross":  _DEFAULT_BUY_INS["individual_gross"],
+            })
+            # rules_json is intentionally a stub at v1 — the matrix is the
+            # source of truth for behavior at seed time. Rule extraction
+            # (thresholds, overflow rules, place splits) lands in a later chunk.
+            rules_json = json.dumps({})
+            conn.execute(
+                "INSERT INTO payout_template_versions "
+                "(template_id, version_no, rates_json, rules_json, "
+                " computed_matrix_json, max_players, saved_by, notes) "
+                "VALUES (?, 1, ?, ?, ?, ?, ?, ?)",
+                (
+                    template_id,
+                    rates_json,
+                    rules_json,
+                    json.dumps(matrix),
+                    max_players,
+                    "system",
+                    "v1 seed from live games-matrix.",
+                ),
+            )
+            version_id = conn.execute(
+                "SELECT id FROM payout_template_versions "
+                "WHERE template_id = ? AND version_no = 1",
+                (template_id,),
+            ).fetchone()["id"]
+
+        # 5. Point the template at v1 (idempotent — same id every time).
+        conn.execute(
+            "UPDATE payout_templates SET current_version_id = ? WHERE id = ?",
+            (version_id, template_id),
+        )
+
+        # 6. Seed the per-game junction rows for this version.
+        for display_order, game_code in enumerate(_TEMPLATE_GAME_MANIFEST[holes]):
+            game_id = games_by_code.get(game_code)
+            if not game_id:
+                continue
+            buy_in = _DEFAULT_BUY_INS.get(game_code, 0.0)
+            # `source` mirrors games.category — kept denormalized on the
+            # junction so per-template overrides (e.g. moving a game between
+            # pots for one template) don't require touching the catalog.
+            source = next(
+                (cat for code, _, cat, _ in _CANONICAL_GAMES if code == game_code),
+                None,
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO payout_template_version_games "
+                "(template_version_id, game_id, buy_in, source, display_order) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (version_id, game_id, buy_in, source, display_order),
+            )
+
+    conn.commit()
+
+
 def init_db(db_path: str | Path | None = None) -> None:
     """Create the items table if it doesn't exist."""
     with _connect(db_path) as conn:
@@ -4206,6 +4438,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             "ON payout_templates(holes) WHERE is_default = 1 AND archived = 0"
         )
 
+        # NOTE: rates_json is DEPRECATED as of chunk 1.5 (v2.14.4). The simple
+        # $/player-per-game shape it stored is now normalized into rows of
+        # `payout_template_version_games` (one row per game per version, with
+        # `buy_in` and `source`). Existing rows keep `rates_json` populated for
+        # back-compat while the read paths are migrated; new versions can write
+        # `'{}'` and rely on the join. Remove the column once chunk 4 cutover
+        # is verified and no readers reference it.
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS payout_template_versions (
@@ -4244,8 +4483,75 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_event_type_template_map_lookup "
             "ON event_type_template_map(event_type, holes)"
         )
+
+        # Chunk 1.5 (v2.14.4) — normalize games out of rates_json into a
+        # canonical catalog (`games`) plus a per-version junction
+        # (`payout_template_version_games`). This is the data shape the rules
+        # engine and the future Platform port both want: games as rows, not
+        # enum keys baked into a JSON blob. Existing payout_template_versions
+        # rows continue to carry `rates_json` for back-compat; the read path
+        # cutover happens in a later chunk.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS games (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                code         TEXT NOT NULL UNIQUE,
+                name         TEXT NOT NULL UNIQUE,
+                category     TEXT,
+                sort_order   INTEGER NOT NULL DEFAULT 0,
+                archived     INTEGER NOT NULL DEFAULT 0,
+                notes        TEXT,
+                created_at   TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_games_sort ON games(sort_order)"
+        )
+
+        # One row per game included in a given template version. `buy_in` is
+        # the $/player charged for that game (replaces the corresponding
+        # rates_json key); `source` flags which buy-in pot the entry belongs
+        # to ('event' / 'net' / 'gross') so the matrix/pot math can stay
+        # consistent across templates. `rules_json` is per-game (overflow
+        # targets, min-players, flight thresholds) — the template-wide
+        # rules_json is reserved for cross-game logic.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS payout_template_version_games (
+                id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_version_id      INTEGER NOT NULL REFERENCES payout_template_versions(id) ON DELETE CASCADE,
+                game_id                  INTEGER NOT NULL REFERENCES games(id),
+                buy_in                   REAL NOT NULL DEFAULT 0,
+                source                   TEXT,
+                display_order            INTEGER NOT NULL DEFAULT 0,
+                rules_json               TEXT,
+                created_at               TEXT DEFAULT (datetime('now')),
+                UNIQUE(template_version_id, game_id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ptvg_version "
+            "ON payout_template_version_games(template_version_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ptvg_game "
+            "ON payout_template_version_games(game_id)"
+        )
+
         conn.commit()  # required: _connect() does not autocommit; without this,
-                       # the three CREATE TABLEs above are rolled back on close.
+                       # the CREATE TABLEs above are rolled back on close.
+
+        # Chunk 2 (v2.14.4) — seed the canonical games catalog and the two
+        # Standard templates (9-Hole and 18-Hole) from the live matrix. Safe
+        # to re-run: `_seed_payout_templates_v1` is idempotent (skips games
+        # whose code already exists, skips templates whose name already
+        # exists, skips template versions whose version_no already exists).
+        try:
+            _seed_payout_templates_v1(conn)
+        except Exception:
+            logger.exception("Payout templates v1 seed failed (non-fatal)")
 
         logger.info("Database initialized at %s", db_path or DB_PATH)
 

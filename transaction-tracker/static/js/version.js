@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.14.3";
+window.TGF_VERSION = "2.14.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.4",
+    date: "2026-05-14",
+    title: "Payout Templates chunks 1.5 + 2 — games catalog, junction table, v1 seed",
+    changes: [
+      "init_db now creates two more Payout Templates tables: games (the canonical 11-game catalog with code/name/category/sort_order — team_net, ctp_1..ctp_4, hole_in_one, individual_net, city_mvp, tgf_mvp, skins, individual_gross) and payout_template_version_games (one row per game per template version with buy_in, source, display_order, and per-game rules_json). Both are CREATE TABLE IF NOT EXISTS — safe to re-run on every boot. The junction's UNIQUE(template_version_id, game_id) keeps a game from appearing twice in one version.",
+      "payout_template_versions.rates_json is now marked DEPRECATED in code comments and in docs/claude/schema.md. The simple $/player-per-game shape it stored is replaced by normalized rows in payout_template_version_games (buy_in + source). Existing rows keep rates_json populated for back-compat while readers are migrated; new versions can write '{}' and rely on the junction. Column is removed once Chunk 4 cutover is verified.",
+      "Chunk 2 seed: _seed_payout_templates_v1 runs at the bottom of init_db and seeds the 11 canonical games, both Standard templates (Standard 9-Hole at max_players=64, Standard 18-Hole at max_players=128, both is_default=1 for their holes value), one v1 row per template into payout_template_versions (computed_matrix_json populated from the live matrix in app_settings.games_matrix_9/18 or the static games-matrix.js fallback; rates_json kept populated for back-compat; rules_json is a stub at v1), and the payout_template_version_games rows (9-hole gets 9 games, 18-hole gets all 11). Idempotent across all four tables — verified by running init_db three times against an empty DB and confirming row counts don't change.",
+      "Schema-only chunk by behavior — no UI, no API, no read path changes. The /matrix admin page, the games-matrix.js static file, and the app_settings.games_matrix_9/18 JSON keys all keep functioning unchanged. Subsequent chunks (read API, GAMES tab cutover, event-type mapping, admin editor, history/rollback) land incrementally on the same branch.",
+      "docs/claude/schema.md updated: new sections for `games` and `payout_template_version_games` tables, new section on the v1 seed routine, deprecation note on rates_json, and a new read-path note for 'what games does this template version include?' (join payout_template_version_games → games ordered by display_order).",
+    ],
+  },
   {
     version: "2.14.3",
     date: "2026-05-13",

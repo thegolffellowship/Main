@@ -123,9 +123,9 @@ rows that don't already match the canonical state.
 | `format` | TEXT | Now accepts `9 Holes`, `18 Holes`, `9/18 Combo`, **or `27 Holes`**. 27 Holes is treated as a single-day event using the same start-time / tee-sheet / 5-hour-duration rules as 18 Holes; pairings, default holes, and the side-games matrix all map 27 Holes to the 18-hole code path. **Combo detection bug fix:** `is_combo` was comparing `format.lower() == "combo"`, but the actual string is `"9/18 Combo"` — the equality check never matched. Use `"combo" in format.lower()` (or pre-canonicalize) in any new code. |
 | `payout_template_version_id` | INTEGER FK → `payout_template_versions(id)` | Snapshots the template version this event uses for its GAMES tab. Nullable — events created before Payout Templates rolled out (or before any default template was seeded) fall back to the chapter-default 9-hole or 18-hole template at render time. **Once stamped, never auto-updated** — editing a template after this column is set has no effect on this event. Per-event override on the event detail page rewrites the column to a different version_id. See "Payout Templates" section below. |
 
-## Payout Templates (v2.14.x — schema only; UI in subsequent chunks)
+## Payout Templates (v2.14.x — schema + v1 seed; UI in subsequent chunks)
 
-DB-backed replacement for the static `25-SideGame-PrizeMatrix.xlsx` + auto-generated `static/js/games-matrix.js`. Three tables introduced; the existing `app_settings.games_matrix_9` / `games_matrix_18` JSON keys remain temporarily as the seed source for v1 templates and will be retired once the cutover (Chunk 4) ships.
+DB-backed replacement for the static `25-SideGame-PrizeMatrix.xlsx` + auto-generated `static/js/games-matrix.js`. Five tables introduced (three core + a games catalog + a per-version games junction). The existing `app_settings.games_matrix_9` / `games_matrix_18` JSON keys remain temporarily as the seed source for v1 templates and will be retired once the cutover (Chunk 4) ships.
 
 ### `payout_templates`
 
@@ -147,7 +147,7 @@ Append-only — every save creates a new row. Never UPDATE in place; never DELET
 | `id` | INTEGER PK | |
 | `template_id` | INTEGER NOT NULL FK → `payout_templates(id)` | |
 | `version_no` | INTEGER NOT NULL | 1, 2, 3, … per template. UNIQUE per `(template_id, version_no)`. |
-| `rates_json` | TEXT NOT NULL | The simple `$/player` per game. Shape: `{ "team": 4, "ctp": 1, "hole_in_one": 1, "individual_net": 9, "city_mvp": 2, "tgf_mvp": 2, "skins": 9, "individual_gross": 4 }`. Editable in the admin Rates panel. |
+| `rates_json` | TEXT NOT NULL | **DEPRECATED as of chunk 1.5 (v2.14.4).** The simple `$/player` per game. Shape: `{ "team": 4, "ctp": 1, "hole_in_one": 1, "individual_net": 9, "city_mvp": 2, "tgf_mvp": 2, "skins": 9, "individual_gross": 4 }`. Replaced by per-game rows in `payout_template_version_games` (`buy_in` + `source`). New versions can write `'{}'`; existing rows keep the populated payload until Chunk 4 cutover removes the column. |
 | `rules_json` | TEXT NOT NULL | The harder business logic: per-game flight thresholds, place splits, min-players, overflow targets (e.g. `individual_gross.overflow_to = "skins"` when below threshold). The rules engine is the read-side that turns rates+rules into the computed matrix. See PROJECT.md "Future Considerations → Side Games" for the rule-shape requirements (flexibility + game-to-game dependencies). |
 | `computed_matrix_json` | TEXT NOT NULL | The expanded "matrix by player count" — the same shape `static/js/games-matrix.js` exports today. Recomputed and persisted on every save so reads (the GAMES tab) are O(1) lookups, not O(rules-engine-eval). |
 | `max_players` | INTEGER NOT NULL DEFAULT 64 | Ceiling for the expanded matrix. 9-hole templates default to 64; 18-hole templates can be raised (128+) when player counts grow. Editable in admin UI. |
@@ -165,11 +165,57 @@ Maps an event's `event_type` (and `holes`) to its default template. Used at even
 | `template_id` | INTEGER NOT NULL FK → `payout_templates(id)` | |
 | `created_at` | | |
 
+### `games`
+
+Canonical games catalog. One row per side game the system knows about. Codes are stable identifiers used by the rules engine and any cross-table joins; names are admin-/manager-facing. Categories group the game into one of three buy-in pots and mirror what `payout_template_version_games.source` carries.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `code` | TEXT NOT NULL UNIQUE | `'team_net'`, `'ctp_1'`, `'individual_net'`, etc. Stable across templates and versions. |
+| `name` | TEXT NOT NULL UNIQUE | Display name: `'Team Net'`, `'CTP #1'`, `'Individual Net'`, etc. |
+| `category` | TEXT | Buy-in pot grouping: `'event'` / `'net'` / `'gross'`. |
+| `sort_order` | INTEGER NOT NULL DEFAULT 0 | Default render order. |
+| `archived` | INTEGER NOT NULL DEFAULT 0 | Hides from new template editors without breaking old templates that reference the row. |
+| `notes`, `created_at` | | |
+
+Seed = 11 canonical games matching the live matrix: `team_net`, `ctp_1`, `ctp_2`, `ctp_3`, `ctp_4`, `hole_in_one`, `individual_net`, `city_mvp`, `tgf_mvp`, `skins`, `individual_gross`. Inserted via `INSERT OR IGNORE` so re-running `init_db` is a no-op.
+
+### `payout_template_version_games`
+
+One row per game included in a given template version. Replaces the simple key→amount shape of `rates_json` with normalized rows so games can be added, removed, reordered, and re-rated without touching a JSON blob — the same data shape that ports cleanly to the future Platform backend.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `template_version_id` | INTEGER NOT NULL FK → `payout_template_versions(id)` ON DELETE CASCADE | Junction key. Cascade delete because a version's game list dies with the version. |
+| `game_id` | INTEGER NOT NULL FK → `games(id)` | Catalog reference. |
+| `buy_in` | REAL NOT NULL DEFAULT 0 | `$/player` charged for this game in this template version. Replaces the corresponding `rates_json` key. |
+| `source` | TEXT | Buy-in pot: `'event'` / `'net'` / `'gross'`. Denormalized from `games.category` so a per-template override (moving a game between pots for one template only) doesn't have to mutate the catalog. |
+| `display_order` | INTEGER NOT NULL DEFAULT 0 | Ordering within the template's game list. |
+| `rules_json` | TEXT | Per-game rule overrides (overflow target, min-players, flight thresholds). Distinct from the template-wide `payout_template_versions.rules_json` which holds cross-game logic. |
+| `created_at` | | |
+| **UNIQUE** `(template_version_id, game_id)` | | A game appears at most once per version. |
+
+Seeded for v1 by `_seed_payout_templates_v1`: 9-Hole template gets 9 games (drops `ctp_3`, `ctp_4`); 18-Hole template gets all 11. Buy-ins seeded from the legacy rates-json shape (`team=4`, `ctp=1`, `hole_in_one=1`, `individual_net=9`, `city_mvp=2`, `tgf_mvp=2`, `skins=9`, `individual_gross=4`).
+
+### v1 seed (Chunk 2 — v2.14.4)
+
+`_seed_payout_templates_v1` runs at the bottom of `init_db` after the games / junction tables are created. It seeds:
+
+- 11 canonical games into `games` (idempotent on UNIQUE `code`).
+- Two templates into `payout_templates`: **Standard 9-Hole** (`max_players=64`) and **Standard 18-Hole** (`max_players=128`), both `is_default=1` for their `holes` value.
+- One v1 row each into `payout_template_versions`. `computed_matrix_json` is the full live matrix (loaded from `app_settings.games_matrix_9/18` if present, else parsed out of `static/js/games-matrix.js`); `rates_json` is the legacy shape (kept for back-compat, deprecated); `rules_json` is `'{}'` (rule extraction lands in a later chunk).
+- `payout_template_version_games` rows for every game in each template's manifest, using `_DEFAULT_BUY_INS` for `buy_in` and `games.category` for `source`.
+
+Seed is idempotent across all four tables. `payout_templates.current_version_id` is set to the v1 id after every run (a no-op once stamped).
+
 ### Important constraints to know about
 
-- **`init_db` requires `conn.commit()` after the new tables** — `_connect()` (alias for `managed_connection`) does **not** autocommit. CREATE TABLE statements added after the last explicit commit (line 4134) are rolled back on connection close. The Payout Templates block at the bottom of `init_db` ends with an explicit `conn.commit()`. The existing `event_pairings` / `pairing_history` blocks just above also lack a commit, but they're self-healed by `_ensure_pairing_tables()` on demand. If anyone adds further tables at the bottom of `init_db`, they need their own commit.
+- **`init_db` requires `conn.commit()` after the new tables** — `_connect()` (alias for `managed_connection`) does **not** autocommit. CREATE TABLE statements added after the last explicit commit (line 4134) are rolled back on connection close. The Payout Templates block at the bottom of `init_db` ends with an explicit `conn.commit()`, then `_seed_payout_templates_v1` runs (it commits internally). The existing `event_pairings` / `pairing_history` blocks just above also lack a commit, but they're self-healed by `_ensure_pairing_tables()` on demand. If anyone adds further tables at the bottom of `init_db`, they need their own commit.
 - **Snapshot semantics on `events.payout_template_version_id`** — never overwrite this without explicit user action (per-event override). Auto-stamp at event create only. Editing a template version is a forward-only operation that creates a new version_id; existing events stay pointed at the version they were stamped with.
 - **Read path for "the current matrix for this event"** — join `events → payout_template_versions ON events.payout_template_version_id`. If null, look up `event_type_template_map(event_type, holes) → payout_templates → current_version_id`. If still null, fall back to `app_settings.games_matrix_9` or `static/js/games-matrix.js` (legacy). The fallback path is removed once Chunk 4 cutover is verified.
+- **Read path for "what games does this template version include?"** — join `payout_template_version_games → games ON game_id` ordered by `display_order`. The legacy `rates_json` blob is deprecated but still populated on existing rows; new readers should always go through the junction.
 
 ## `items` cross-uid dedup gate
 
