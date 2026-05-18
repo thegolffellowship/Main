@@ -837,46 +837,66 @@ def _validate_parsed_items(rows: list[dict]) -> list[dict]:
                     item_name, row.get("customer"), row.get("order_id"),
                 )
 
-        # 4. item_price doesn't match total_amount - transaction_fees + coupon_amount
-        #    (parser grabbed "MEMBER = $88" instead of Subtotal $148)
-        #    Works for ALL events and pricing tiers — no hardcoded rates.
-        #    Coupon discounts reduce total_amount but not item_price, so add them back.
-        raw_price = (row.get("item_price") or "").replace("$", "").replace(",", "").strip()
-        raw_total = (row.get("total_amount") or "").replace("$", "").replace(",", "").strip()
-        raw_fees = (row.get("transaction_fees") or "").replace("$", "").replace(",", "").strip()
-        raw_coupon = (row.get("coupon_amount") or "").replace("$", "").replace(",", "").strip()
-        try:
-            price = float(raw_price) if raw_price else 0
-            total = float(raw_total) if raw_total else 0
-            fees = float(raw_fees) if raw_fees else 0
-            coupon = abs(float(raw_coupon)) if raw_coupon else 0
-        except (ValueError, TypeError):
-            price, total, fees, coupon = 0, 0, 0, 0
-
-        if price > 0 and total > 0 and fees >= 0:
-            expected_price = round(total - fees + coupon, 2)
-            # Allow $1 tolerance for rounding differences
-            if abs(price - expected_price) > 1.0:
-                row_warnings.append({
-                    "code": "price_total_mismatch",
-                    "message": (
-                        f"item_price=${price:.2f} does not match "
-                        f"total_amount=${total:.2f} - transaction_fees=${fees:.2f}"
-                        f"{f' + coupon=${coupon:.2f}' if coupon > 0 else ''} = "
-                        f"${expected_price:.2f}. Parser may have grabbed a description "
-                        f"price instead of the actual charged amount. "
-                        f"Order: {row.get('order_id', '?')}"
-                    ),
-                })
-                logger.warning(
-                    "Parse validation: price_total_mismatch — price=$%.2f vs "
-                    "expected=$%.2f (order_id=%s, customer=%s)",
-                    price, expected_price, row.get("order_id"), row.get("customer"),
-                )
-
         if row_warnings:
             row["_parse_warnings"] = row_warnings
             warnings.extend(row_warnings)
+
+    # Order-level price reconciliation.
+    # total_amount is the whole-order charge (and is copied unchanged onto
+    # every line item and every expanded per-player row), while item_price is
+    # PER-UNIT. So an order reconciles only in aggregate:
+    #   sum(item_price across the order's rows) + fees - coupon == total_amount
+    # A per-row check (item_price vs total_amount) would falsely fire on every
+    # multi-quantity order (2 players x $65 = $130) and every multi-line order
+    # (membership + event). Emit at most one warning per order, anchored to
+    # its first row, and only when the order genuinely fails to reconcile
+    # (the parser grabbed a description price for one of the line items).
+    def _money(v) -> float:
+        s = (v or "").replace("$", "").replace(",", "").strip()
+        try:
+            return float(s) if s else 0.0
+        except (ValueError, TypeError):
+            return 0.0
+
+    orders: dict[str, list] = {}
+    for row in rows:
+        if not (row.get("item_name") or "").strip():
+            continue
+        key = (row.get("order_id") or "").strip() or \
+            f"uid:{row.get('email_uid') or ''}"
+        orders.setdefault(key, []).append(row)
+
+    for orows in orders.values():
+        subtotal = round(sum(_money(r.get("item_price")) for r in orows), 2)
+        total = max(_money(r.get("total_amount")) for r in orows)
+        fees = max(_money(r.get("transaction_fees")) for r in orows)
+        coupon = max(abs(_money(r.get("coupon_amount"))) for r in orows)
+        if subtotal <= 0 or total <= 0:
+            continue
+        if abs(subtotal + fees - coupon - total) <= 1.0:
+            continue  # order reconciles — no warning
+        anchor = orows[0]
+        coupon_msg = f" - coupon=${coupon:.2f}" if coupon > 0 else ""
+        w = {
+            "code": "price_total_mismatch",
+            "message": (
+                f"Order line items sum to ${subtotal:.2f} + "
+                f"transaction_fees=${fees:.2f}{coupon_msg} = "
+                f"${subtotal + fees - coupon:.2f}, but total_amount is "
+                f"${total:.2f}. The parser may have grabbed a description "
+                f"price for one of this order's line items. "
+                f"Order: {anchor.get('order_id', '?')}"
+            ),
+        }
+        anchor.setdefault("_parse_warnings", []).append(w)
+        warnings.append(w)
+        logger.warning(
+            "Parse validation: price_total_mismatch (order-level) — "
+            "subtotal=$%.2f + fees=$%.2f - coupon=$%.2f vs total=$%.2f "
+            "(order_id=%s, customer=%s)",
+            subtotal, fees, coupon, total,
+            anchor.get("order_id"), anchor.get("customer"),
+        )
 
     return rows
 
