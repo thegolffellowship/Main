@@ -359,9 +359,13 @@ without going through one of:
   resolve to no email at send time, so manually-added RSVPs whose email lives only in
   `customer_emails` are no longer excluded.
 
-`save_items()` raises `EMAIL_DRIFT` / `PHONE_DRIFT` / `CHAPTER_DRIFT` parse warnings
-when a new GoDaddy order's value differs from the canonical record (canonical wins; the
-manager sees the discrepancy in the COO action-items banner).
+`save_items()` raises `EMAIL_DRIFT` / `PHONE_DRIFT` parse warnings when a new GoDaddy
+order's value differs from the canonical record (canonical wins; the manager sees the
+discrepancy in the COO action-items banner). `chapter` is intentionally NOT drift-checked:
+`items.chapter` is the event/course location while `customers.chapter` is the member's
+home chapter, so cross-chapter play would drift every time and the canonical overwrite
+would corrupt the correct event-location value. A boot step resolves any historical open
+`CHAPTER_DRIFT` warnings.
 
 Three idempotent boot migrations enforce the same shape:
 `capture_email_aliases_from_items` (promotes typos to aliases),
