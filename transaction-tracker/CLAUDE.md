@@ -150,7 +150,15 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   inbox and the RSVP inbox use a 7-day lookback window when fetching
   from Microsoft Graph (was 90 days). Dedup via `processed_emails`
   ensures already-parsed emails are skipped, so the lookback only
-  bounds the Graph query — Anthropic spend is unchanged.
+  bounds the Graph query — Anthropic spend is unchanged. The **expense
+  classifier** (`check_expense_inbox`) now follows the same rule via the
+  `expense_seen_emails` table: every email it touches is recorded once,
+  so frequency is decoupled from cost (kept at 5 min, 24/7). Its window
+  is 48h steady-state (`EXPENSE_LOOKBACK_HOURS`) with a one-time
+  `EXPENSE_BACKFILL_DAYS` cold-start backfill. See
+  `docs/claude/expense-workflow.md` → **Dedup & Cost Control**. Boot logs
+  a loud warning if `DATABASE_PATH` is unset (dedup memory is ephemeral
+  without a Railway volume → re-bills the backfill window every redeploy).
 - **Dashboard** at `/` with search, filter, sort, CSV export
 - **COO AI** — Claude-powered business intelligence chat with 6 specialist agents
 - **TGF Payouts** — tournament payout tracking with screenshot import via Claude Vision

@@ -28,6 +28,8 @@ from email_parser.database import (
     get_all_items,
     get_item,
     get_known_email_uids,
+    get_expense_seen_uids,
+    mark_expense_email_seen,
     get_item_stats,
     get_audit_report,
     get_data_snapshot,
@@ -532,12 +534,22 @@ def send_coo_daily_email():
         return False
 
 
-def check_expense_inbox(force=False, days_back=14):
+def check_expense_inbox(force=False, days_back=None):
     """Classify and extract data from non-order emails (Chase alerts, Venmo, receipts).
 
+    Cost note: every email the classifier touches is recorded in
+    `expense_seen_emails`, so each email is classified (and billed to Anthropic)
+    at most once — regardless of how often the scheduler runs. Polling frequency
+    is therefore decoupled from cost; the lookback window only bounds a cheap
+    Microsoft Graph fetch.
+
     Args:
-        force: If True, reprocess ALL emails (ignore already-processed check)
-        days_back: How many days of emails to fetch (default 14)
+        force: If True, reprocess expense/action emails (ignore expense dedup).
+        days_back: Explicit lookback in days (admin/manual runs). When None
+            (the scheduled call), the window is 48h steady-state
+            (EXPENSE_LOOKBACK_HOURS) — or a one-time wider backfill
+            (EXPENSE_BACKFILL_DAYS, default 14) on a cold start, i.e. a fresh
+            DB or a Railway volume that was wiped.
     """
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
@@ -548,10 +560,29 @@ def check_expense_inbox(force=False, days_back=14):
     if not all([tenant_id, client_id, client_secret, address]):
         return {"error": "Azure AD credentials not configured"}
 
+    # Decide the lookback window. Dedup makes a wide window free (already-seen
+    # uids are filtered before any AI call), so the window is sized for SAFETY
+    # — wide enough to clear a Railway redeploy gap — not minimized.
+    seen_uids = get_expense_seen_uids()
+    if days_back is not None:
+        since_date = datetime.now() - timedelta(days=days_back)
+    elif not seen_uids:
+        backfill_days = int(os.getenv("EXPENSE_BACKFILL_DAYS", "14"))
+        since_date = datetime.now() - timedelta(days=backfill_days)
+        logger.warning(
+            "Expense classifier cold start (no prior seen-email records) — "
+            "one-time backfill of %d days. If this logs on every redeploy, the "
+            "Railway persistent volume is not configured (see CLAUDE.md).",
+            backfill_days,
+        )
+    else:
+        lookback_hours = int(os.getenv("EXPENSE_LOOKBACK_HOURS", "48"))
+        since_date = datetime.now() - timedelta(hours=lookback_hours)
+
     try:
         emails = fetch_all_emails(
             tenant_id=tenant_id, client_id=client_id, client_secret=client_secret,
-            email_address=address, since_date=datetime.now() - timedelta(days=days_back),
+            email_address=address, since_date=since_date,
             max_emails=300,
             include_subfolders=["2025 Chase", "2025 Venmo", "Payouts", "Invoices"],
         )
@@ -575,7 +606,10 @@ def check_expense_inbox(force=False, days_back=14):
     finally:
         conn.close()
 
-    all_known = known_uids | expense_uids | action_uids
+    # seen_uids (expense_seen_emails) is the comprehensive gate going forward;
+    # expense_uids/action_uids are kept as defense-in-depth for rows that
+    # predate this table.
+    all_known = known_uids | expense_uids | action_uids | seen_uids
     if force:
         # In force mode, only skip order emails (processed_emails) — reprocess expense/action
         new_emails = [e for e in emails if e.get("uid") not in known_uids]
@@ -600,6 +634,15 @@ def check_expense_inbox(force=False, days_back=14):
             )
             email_type = classification["type"]
             confidence = classification["confidence"]
+
+            # Record the email as seen the moment it is classified — BEFORE the
+            # per-type branches (several of which `continue`). This is the fix
+            # that stops `unknown`/order/RSVP emails from being re-classified
+            # and re-billed to Anthropic on every scheduler cycle. A rare
+            # classify_email() exception falls through to the except handler
+            # below and is left unmarked so it can retry next cycle (matches
+            # the GoDaddy parser's behavior).
+            mark_expense_email_seen(email_data.get("uid", ""), email_type)
 
             if email_type == "godaddy_order" or email_type == "golf_genius_rsvp":
                 continue  # Handled by existing parsers
@@ -1101,6 +1144,20 @@ scheduler = BackgroundScheduler(daemon=True)
 
 
 def start_scheduler():
+    # Email-dedup memory (processed_emails / expense_seen_emails) lives in
+    # SQLite. On Railway without a persistent volume the DB is wiped on every
+    # redeploy, which resets dedup and re-bills the entire expense backfill
+    # window of Anthropic calls on the next run. Make a misconfig loud.
+    if not os.getenv("DATABASE_PATH"):
+        logger.warning(
+            "DATABASE_PATH is NOT set — SQLite DB at %s is EPHEMERAL on Railway. "
+            "Every redeploy wipes email-dedup memory and re-bills the expense "
+            "backfill window. Configure a persistent volume + DATABASE_PATH "
+            "(see CLAUDE.md -> Railway Persistent Volume).", DB_PATH,
+        )
+    else:
+        logger.info("DB persistence OK — DATABASE_PATH=%s", os.getenv("DATABASE_PATH"))
+
     interval = int(os.getenv("CHECK_INTERVAL_MINUTES", "5"))
     scheduler.add_job(
         check_inbox,
