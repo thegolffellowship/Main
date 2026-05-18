@@ -277,6 +277,7 @@ from email_parser.database import (
     reverse_duplicate_merge,
 )
 from email_parser.database import DB_PATH, get_connection
+from email_parser.timezone_utils import now_central, today_central_str
 from email_parser.fetcher import (
     fetch_transaction_emails, fetch_all_emails, fetch_email_by_id,
     send_mail_graph, render_msg_template, send_bulk_emails,
@@ -1323,7 +1324,7 @@ def send_auto_payment_reminders():
         logger.warning("Auto reminders: email credentials not configured, skipping")
         return
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = today_central_str()
     events = get_all_events()
     items = get_all_items()
 
@@ -2339,7 +2340,7 @@ def api_duplicate_detective_export_md():
     """Markdown summary suitable for sharing in chat/email."""
     cands = find_duplicate_candidates()
     summary = _dd_build_summary(cands)
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = today_central_str()
     lines = [
         f"# Duplicate Detective — Dry-Run Report",
         f"Generated: {today}",
@@ -5626,7 +5627,7 @@ def api_partial_refund_item(item_id):
              refund_desc + (f" — {note}" if note else ""),
              item_id,
              json.dumps(parent_snap) if parent_snap else None,
-             datetime.now().strftime("%Y-%m-%d")),
+             today_central_str()),
         )
         new_child_id = cur.lastrowid
 
@@ -5649,7 +5650,7 @@ def api_partial_refund_item(item_id):
                 description=f"Partial refund ({method}): {parent['customer']} — {parent['item_name']}",
                 account=refund_account,
                 source_ref=f"partial-refund-{new_child_id}",
-                date=datetime.now().strftime("%Y-%m-%d"),
+                date=today_central_str(),
             )
         except Exception:
             logger.warning("Failed to create accounting entry for partial refund %d", item_id, exc_info=True)
@@ -7244,8 +7245,7 @@ def api_create_customers_for_unlinked():
             parts = player_name.split(None, 1)
             first_name = parts[0] if parts else player_name
             last_name = parts[1] if len(parts) > 1 else ""
-            from datetime import datetime
-            today = datetime.now().strftime("%Y-%m-%d")
+            today = today_central_str()
 
             conn3 = get_connection()
             try:

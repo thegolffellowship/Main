@@ -32,6 +32,8 @@ import sqlite3
 from datetime import datetime, timedelta, date
 from typing import Callable, Optional
 
+from .timezone_utils import today_central
+
 from .database import _connect, get_connection, _lookup_customer_id
 
 logger = logging.getLogger(__name__)
@@ -131,7 +133,7 @@ def compute_expires_at(started_at: str) -> str:
         d = datetime.strptime(started_at[:10], "%Y-%m-%d").date()
     except (ValueError, TypeError):
         # Fall back to today + 365 if the input is malformed.
-        d = date.today()
+        d = today_central()
     if d.year >= POLICY_365_FROM_YEAR:
         return (d + timedelta(days=365)).strftime("%Y-%m-%d")
     return f"{d.year}-12-31"
@@ -696,7 +698,7 @@ def render_notice_email(
     first_name = customer.get("first_name") or "there"
 
     # Compute days_left — drives the state-aware phrasing below.
-    today = date.today()
+    today = today_central()
     try:
         exp_d = datetime.strptime(term["expires_at"][:10], "%Y-%m-%d").date()
     except (ValueError, KeyError, TypeError):
@@ -1111,7 +1113,7 @@ def daily_membership_job(send_email: Callable) -> dict:
         "confirmations": 0, "digest_sent": 0, "skipped_renewed": 0,
         "status_downgraded": 0, "status_upgraded": 0,
     }
-    today = date.today()
+    today = today_central()
 
     with _connect() as conn:
         ensure_membership_tables(conn)

@@ -7,6 +7,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 
+from .timezone_utils import now_central
 from .database import (
     get_connection,
     get_db_health_metrics,
@@ -359,7 +360,7 @@ def _build_health_section(metrics: dict) -> str:
 def build_digest_html(items, rsvps, upcoming_events, recent_feedback, open_feedback,
                       health_metrics: dict | None = None) -> str:
     """Build the full daily digest HTML email."""
-    now = datetime.now().strftime("%B %d, %Y")
+    now = now_central().strftime("%B %d, %Y")
 
     sections = [
         _build_transactions_section(items),
@@ -462,7 +463,7 @@ def send_daily_report():
             parts.append(f"⚠ {problem_count} DB issue(s)")
     summary = ", ".join(parts) if parts else "No new activity"
 
-    subject = f"TGF Daily Digest — {datetime.now().strftime('%b %d, %Y')} — {summary}"
+    subject = f"TGF Daily Digest — {now_central().strftime('%b %d, %Y')} — {summary}"
 
     send_mail_graph(
         tenant_id=tenant_id,
