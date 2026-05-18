@@ -2910,6 +2910,16 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("CHAPTER_DRIFT drain failed: %s", e)
 
+        # Auto-resolve open EMAIL_DRIFT warnings whose drifted email plausibly
+        # belongs to the same customer (surname token or same address family).
+        # The drift guard discards the order email before it reaches
+        # items.customer_email, so for low-risk ones we capture it as an alias
+        # here. Genuine stranger-email drift stays open for human review.
+        try:
+            resolve_low_risk_email_drift_warnings(conn)
+        except Exception as e:
+            logger.warning("Low-risk EMAIL_DRIFT sweep failed: %s", e)
+
         # Rename 'member' role → 'golfer' (no-op if already migrated).
         # Must run before the seed so the seed sees the new CHECK constraint.
         try:
@@ -16943,6 +16953,164 @@ def capture_email_aliases_from_items(db_path: str | Path | None = None) -> int:
                 inserted,
             )
         return inserted
+
+
+def _levenshtein(a: str, b: str) -> int:
+    """Plain edit distance (insert/delete/substitute), no deps."""
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(
+                prev[j] + 1,        # delete
+                cur[j - 1] + 1,     # insert
+                prev[j - 1] + (ca != cb),  # substitute
+            ))
+        prev = cur
+    return prev[-1]
+
+
+_EMAIL_DRIFT_MSG_RE = re.compile(
+    r"Order customer_email '([^']*)' differs from canonical '([^']*)'"
+)
+
+
+def _email_drift_is_low_risk(drift_email: str,
+                             canonical_email: str | None,
+                             last_name: str | None) -> bool:
+    """A drifted order email is low-risk (auto-capture as alias + resolve the
+    EMAIL_DRIFT warning) when it plausibly belongs to the same person:
+
+      - surname token: the customer's last name (>=3 chars) appears in the
+        drifted local-part (jgoretzke contains 'goretzke', goretzke1933, ...)
+      - same address family: same domain and the local-part is within edit
+        distance 2 of the primary's local-part (fredwickee -> fredwicker),
+        or an identical handle on a different domain (same person, new host).
+
+    Anything else (a stranger's email — different name, unrelated address)
+    is high-risk: return False so the warning stays open for human review.
+    """
+    drift_email = (drift_email or "").strip().lower()
+    if not drift_email or "@" not in drift_email:
+        return False
+    d_local, d_dom = drift_email.rsplit("@", 1)
+
+    ln = (last_name or "").strip().lower()
+    if len(ln) >= 3 and ln in d_local:
+        return True
+
+    canonical_email = (canonical_email or "").strip().lower()
+    if canonical_email and "@" in canonical_email:
+        c_local, c_dom = canonical_email.rsplit("@", 1)
+        if d_dom == c_dom and _levenshtein(d_local, c_local) <= 2:
+            return True
+        if d_local == c_local and d_dom != c_dom:
+            return True
+    return False
+
+
+def resolve_low_risk_email_drift_warnings(conn: sqlite3.Connection) -> dict:
+    """Auto-resolve open EMAIL_DRIFT warnings whose drifted email plausibly
+    belongs to the same customer (see _email_drift_is_low_risk).
+
+    The drift guard in save_items() overwrites the order email with canonical
+    BEFORE the row is inserted, so the drifted value never reaches
+    items.customer_email and capture_email_aliases_from_items() never sees it
+    — it survives only in parse_warnings.message. For low-risk warnings we
+    therefore capture the drifted email as a customer alias ourselves (so it
+    becomes visible/usable on the customer page, the same outcome the warning
+    text prescribes for "capture as alias") and mark the warning resolved.
+    High-risk drift (a different person's email landed on this order) is left
+    open so a human can decide before it pollutes customer resolution.
+
+    Idempotent. Returns counts {resolved, aliased, kept_open}.
+    """
+    counts = {"resolved": 0, "aliased": 0, "kept_open": 0}
+    rows = conn.execute(
+        "SELECT id, customer, customer_id, message FROM parse_warnings "
+        "WHERE warning_code = 'EMAIL_DRIFT' AND status = 'open'"
+    ).fetchall()
+
+    for w in rows:
+        m = _EMAIL_DRIFT_MSG_RE.search(w["message"] or "")
+        if not m:
+            counts["kept_open"] += 1
+            continue
+        drift_email = (m.group(1) or "").strip()
+        canonical_email = (m.group(2) or "").strip()
+
+        last_name = None
+        alias_name = (w["customer"] or "").strip()
+        cid = w["customer_id"]
+        if cid:
+            crow = conn.execute(
+                "SELECT first_name, last_name FROM customers "
+                "WHERE customer_id = ? LIMIT 1",
+                (cid,),
+            ).fetchone()
+            if crow:
+                last_name = crow["last_name"]
+                _full = f"{(crow['first_name'] or '').strip()} " \
+                        f"{(crow['last_name'] or '').strip()}".strip()
+                if _full:
+                    alias_name = _full
+            prim = conn.execute(
+                "SELECT email FROM customer_emails "
+                "WHERE customer_id = ? AND is_primary = 1 LIMIT 1",
+                (cid,),
+            ).fetchone()
+            if prim and prim["email"]:
+                canonical_email = prim["email"].strip()
+        if not last_name and alias_name:
+            parts = alias_name.split()
+            if len(parts) >= 2:
+                last_name = parts[-1]
+
+        if not _email_drift_is_low_risk(drift_email, canonical_email, last_name):
+            counts["kept_open"] += 1
+            continue
+
+        if drift_email and alias_name:
+            exists = conn.execute(
+                "SELECT 1 FROM customer_aliases WHERE customer_name = ? "
+                "AND alias_type = 'email' AND LOWER(alias_value) = LOWER(?)",
+                (alias_name, drift_email),
+            ).fetchone()
+            if not exists:
+                try:
+                    conn.execute(
+                        "INSERT INTO customer_aliases "
+                        "(customer_name, alias_type, alias_value) "
+                        "VALUES (?, 'email', ?)",
+                        (alias_name, drift_email.lower()),
+                    )
+                    counts["aliased"] += 1
+                except Exception:
+                    logger.warning(
+                        "resolve_low_risk_email_drift_warnings: alias insert "
+                        "failed for %s / %s", alias_name, drift_email,
+                        exc_info=True,
+                    )
+
+        conn.execute(
+            "UPDATE parse_warnings SET status = 'resolved' WHERE id = ?",
+            (w["id"],),
+        )
+        counts["resolved"] += 1
+
+    if counts["resolved"] or counts["aliased"]:
+        conn.commit()
+        logger.info(
+            "Low-risk EMAIL_DRIFT sweep: resolved=%d aliased=%d kept_open=%d",
+            counts["resolved"], counts["aliased"], counts["kept_open"],
+        )
+    return counts
 
 
 def repair_orphan_pay_children(db_path: str | Path | None = None) -> dict:

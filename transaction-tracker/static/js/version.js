@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.14.11";
+window.TGF_VERSION = "2.14.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.12",
+    date: "2026-05-18",
+    title: "Auto-clear EMAIL_DRIFT action items when the drifted email is obviously the same person",
+    changes: [
+      "EMAIL_DRIFT warnings fire when a new order's email differs from the customer's canonical email. The vast majority are a legitimate alternate address (jgoretzke@gmail.com vs jmsg1933@gmail.com) or an obvious typo of the same address (fredwickee vs fredwicker) — both safe — but the warning sat open in the COO action-items banner until a human dismissed it one by one.",
+      "New resolve_low_risk_email_drift_warnings() boot step classifies each open EMAIL_DRIFT as low-risk when the drifted email plausibly belongs to the same person: the customer's surname (>=3 chars) appears in the local-part, OR it is within edit-distance 2 of the canonical local-part on the same domain, OR it is the identical handle on a different provider. Low-risk warnings are auto-resolved.",
+      "Because the identity-drift guard overwrites the order email with canonical BEFORE the row is inserted, the drifted value never reaches items.customer_email and the existing capture_email_aliases_from_items() never sees it — it lives only in the warning message. So for low-risk warnings this step now also captures the drifted email into customer_aliases (type 'email', keyed to the canonical name so customer resolution can use it), making it visible on the Customer Info page — the same outcome the warning text prescribed for 'capture as alias', just automated.",
+      "Genuine cross-person contamination (a different person's email landing on this order — the 'fredwickee class' bug the warning exists to catch) is NOT low-risk, so it stays open in the banner for a human to review before it can pollute customer resolution. The human gate is preserved exactly where the risk actually lives.",
+      "Idempotent and conservative: unparseable messages and anything that does not clearly look like the same person are left open, never auto-captured.",
+    ],
+  },
   {
     version: "2.14.11",
     date: "2026-05-18",
