@@ -2892,6 +2892,24 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Massey attribution repair failed: %s", e)
 
+        # One-time drain: CHAPTER_DRIFT is no longer raised (items.chapter is the
+        # event/course location, not the member's home chapter, so it drifts on
+        # every cross-chapter registration). Resolve any historical open ones so
+        # they clear from the COO action-items banner. No-op once drained.
+        try:
+            _chapter_drift_n = conn.execute(
+                "UPDATE parse_warnings SET status = 'resolved' "
+                "WHERE warning_code = 'CHAPTER_DRIFT' AND status = 'open'"
+            ).rowcount
+            if _chapter_drift_n:
+                conn.commit()
+                logger.info(
+                    "Resolved %d stale open CHAPTER_DRIFT parse warning(s)",
+                    _chapter_drift_n,
+                )
+        except Exception as e:
+            logger.warning("CHAPTER_DRIFT drain failed: %s", e)
+
         # Rename 'member' role → 'golfer' (no-op if already migrated).
         # Must run before the seed so the seed sees the new CHECK constraint.
         try:
@@ -5480,12 +5498,17 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
                 )
 
             # ── Identity-drift guard ──
-            # If the order's customer_email/phone/chapter differs from what the
+            # If the order's customer_email/phone differs from what the
             # manager has on the Customer Info page, the canonical record wins.
             # The order's value is overwritten to canonical AND a parse_warning
             # is raised so the manager can review the drift in the COO action-
             # items banner. Prevents the "fredwickee@att.net" class of bug
             # where a single typo'd order keeps polluting downstream reads.
+            # NOTE: chapter is intentionally NOT checked — items.chapter is the
+            # event/course location (see parser.py prompt), while
+            # customers.chapter is the member's home chapter. Comparing them
+            # drifts on every cross-chapter registration, and the canonical
+            # overwrite would corrupt the correct event-location value.
             _drift_cid = row.get("customer_id")
             if _drift_cid:
                 _drift_canonical = conn.execute(
@@ -5493,8 +5516,7 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
                           (SELECT email FROM customer_emails
                            WHERE customer_id = c.customer_id AND is_primary = 1
                            LIMIT 1) AS canonical_email,
-                          c.phone   AS canonical_phone,
-                          c.chapter AS canonical_chapter
+                          c.phone   AS canonical_phone
                        FROM customers c
                        WHERE c.customer_id = ?
                        LIMIT 1""",
@@ -5506,8 +5528,6 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
                          _drift_canonical["canonical_email"], True),
                         ("customer_phone", "PHONE_DRIFT",
                          _drift_canonical["canonical_phone"], False),
-                        ("chapter", "CHAPTER_DRIFT",
-                         _drift_canonical["canonical_chapter"], False),
                     )
                     for _field, _code, _canonical, _normalize_lower in _checks:
                         if not _canonical:

@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.14.10";
+window.TGF_VERSION = "2.14.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.11",
+    date: "2026-05-18",
+    title: "Stop bogus CHAPTER_DRIFT action items + the silent items.chapter corruption behind them",
+    changes: [
+      "The identity-drift guard in save_items() compared a new order's chapter against customers.chapter and, on mismatch, raised a CHAPTER_DRIFT parse warning AND overwrote the order's chapter with the member's home chapter. But items.chapter is the event/course location (the AI parser is explicitly told to use the course, not the buyer's address), while customers.chapter is the member's home chapter — so any time an Austin member played a San Antonio event the two legitimately differed. This fired a false-positive action item in the COO banner on every cross-chapter registration, and worse, silently rewrote the correct event-location chapter (e.g. 'San Antonio' for a Hill Country / TPC Canyons order) to the member's home chapter, corrupting the column the dashboard filters/sorts/groups events by.",
+      "Fix: chapter is removed from the drift _checks tuple, so save_items() no longer raises CHAPTER_DRIFT and no longer overwrites items.chapter. EMAIL_DRIFT and PHONE_DRIFT are unchanged — a typo'd email or phone on an order is still caught and canonical still wins.",
+      "An idempotent boot step resolves any historical open CHAPTER_DRIFT parse warnings so the stale ones (Youngs / Marques / Goretzke and any others) clear out of the COO action-items banner on deploy; it is a no-op on every subsequent boot.",
+      "Not addressed here: items.chapter rows that were already overwritten to a member's home chapter by the old behavior are left as-is — restoring them needs each order's true event location and is a separate historical migration (the 'past events are frozen' principle means we don't rewrite stored rows casually).",
+    ],
+  },
   {
     version: "2.14.10",
     date: "2026-05-18",
