@@ -13,6 +13,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 
+from email_parser.timezone_utils import now_central
 import anthropic as _anthropic
 
 from email_parser.database import (
@@ -47,7 +48,7 @@ def _urgency_emoji(u):
 
 def build_coo_email_html() -> tuple[str, str]:
     """Build the COO daily email. Returns (subject, html_body)."""
-    today = datetime.now()
+    today = now_central()
     day_str = today.strftime("%A, %B %d")
 
     # ── Gather data ──

@@ -17,6 +17,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 from contextlib import contextmanager
+from .timezone_utils import now_central, today_central, today_central_str
 from pathlib import Path
 
 import anthropic as _anthropic
@@ -7207,7 +7208,7 @@ def create_customer(name: str, email: str = "", phone: str = "",
         if existing:
             return None
 
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = today_central_str()
         new_values = {c: None for c in ITEM_COLUMNS}
         new_values["customer"] = name
         new_values["first_name"] = first_name or None
@@ -7295,7 +7296,7 @@ def create_customer_from_rsvp(
             parsed = parse_names_ai([name])
             parts = parsed[0] if parsed else {}
 
-            today = datetime.now().strftime("%Y-%m-%d")
+            today = today_central_str()
             new_values = {c: None for c in ITEM_COLUMNS}
             new_values["customer"] = name
             new_values["first_name"] = parts.get("first_name") or None
@@ -7372,7 +7373,7 @@ def link_rsvp_to_customer(
         elif existing_email != rsvp_email:
             # Customer has a DIFFERENT email — create a secondary item entry
             # with the RSVP email so has_player_card can find them
-            today = datetime.now().strftime("%Y-%m-%d")
+            today = today_central_str()
             new_values = {c: None for c in ITEM_COLUMNS}
             new_values["customer"] = target_customer_name
             new_values["customer_email"] = rsvp_email
@@ -7462,7 +7463,7 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
     }
     result = {"created": 0, "updated": 0, "skipped": 0, "errors": [],
               "validation_warnings": []}
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = today_central_str()
 
     # --- Phase 1: resolve names via AI parsing if needed ---
     needs_parsing = []
@@ -8358,7 +8359,7 @@ def payout_credit(
         else:
             return {"ok": False, "error": "Item is not in WD or credited status"}
 
-        date_str = (refund_date or "").strip() or _dt.datetime.now().strftime("%Y-%m-%d")
+        date_str = (refund_date or "").strip() or today_central_str()
 
         try:
             refund_source = method.lower().replace(" ", "_") if method else "manual"
@@ -8920,8 +8921,8 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
         new_values["customer_email"] = customer_email or None
         new_values["customer_phone"] = customer_phone or None
         new_values["item_name"] = event_name
-        # Use client-provided local date if available, otherwise server UTC
-        new_values["order_date"] = order_date if order_date else datetime.now().strftime("%Y-%m-%d")
+        # Use client-provided local date if available, otherwise US/Central today
+        new_values["order_date"] = order_date if order_date else today_central_str()
         new_values["course"] = event.get("course") or ""
         new_values["chapter"] = event.get("chapter") or ""
         new_values["transaction_status"] = "active"
@@ -9112,7 +9113,7 @@ def add_payment_to_event(event_name: str, customer: str,
         new_values["customer_email"] = parent.get("customer_email")
         new_values["customer_phone"] = parent.get("customer_phone")
         new_values["item_name"] = event_name
-        new_values["order_date"] = order_date if order_date else datetime.now().strftime("%Y-%m-%d")
+        new_values["order_date"] = order_date if order_date else today_central_str()
         new_values["course"] = event.get("course") or ""
         new_values["chapter"] = event.get("chapter") or ""
         new_values["transaction_status"] = "active"
@@ -11657,7 +11658,7 @@ def get_recent_rsvps(hours: int = 24, db_path: str | Path | None = None) -> list
 def get_upcoming_events(db_path: str | Path | None = None) -> list[dict]:
     """Return future events with registration counts, sorted by date ascending."""
     with _connect(db_path) as conn:
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = today_central_str()
         rows = conn.execute(
             """
             SELECT e.*,
@@ -11723,7 +11724,7 @@ def get_db_health_metrics(db_path: str | Path | None = None) -> dict:
             )
         """)
 
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = today_central_str()
 
         total_items = conn.execute("SELECT COUNT(*) FROM items").fetchone()[0]
 
@@ -14663,7 +14664,7 @@ def delete_acct_recurring(rec_id: int, db_path: str | Path | None = None) -> boo
 def process_acct_recurring(db_path: str | Path | None = None) -> int:
     """Create transactions for any recurring entries whose next_date has passed."""
     from dateutil.relativedelta import relativedelta
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = today_central_str()
     created = 0
     with _connect(db_path) as conn:
         due = conn.execute(
@@ -17943,7 +17944,7 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
     if not amount:
         return None
     merchant = exp.get("merchant") or "(unknown)"
-    txn_date = exp.get("transaction_date") or datetime.utcnow().strftime("%Y-%m-%d")
+    txn_date = exp.get("transaction_date") or today_central_str()
     raw_txn_type = exp.get("transaction_type") or "expense"
     # acct_transactions.type has a CHECK constraint: only income/expense/transfer.
     # Map the raw expense_transactions.transaction_type (which can be 'received',
@@ -18387,8 +18388,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
     current state of the business, condensed into a format the AI can reason over."""
     from datetime import datetime, timedelta
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    month_prefix = datetime.now().strftime("%Y-%m")
+    today = today_central_str()
+    month_prefix = now_central().strftime("%Y-%m")
     sections = []
 
     with _connect(db_path) as conn:
@@ -18874,8 +18875,8 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
 def get_coo_financial_snapshot(db_path: str | Path | None = None) -> dict:
     """Build the complete financial snapshot for the COO dashboard."""
     manual = get_all_coo_manual_values(db_path)
-    today = datetime.now().strftime("%Y-%m-%d")
-    month_prefix = datetime.now().strftime("%Y-%m")
+    today = today_central_str()
+    month_prefix = now_central().strftime("%Y-%m")
 
     with _connect(db_path) as conn:
         # Prize pools owed (future events)
@@ -19035,8 +19036,8 @@ def get_contractor_liability_total(db_path: str | Path | None = None) -> float:
 def get_accounting_liabilities(db_path: str | Path | None = None) -> dict:
     """Return all 9 liability buckets for the Liabilities Dashboard."""
     manual = get_all_coo_manual_values(db_path)
-    today = datetime.now().strftime("%Y-%m-%d")
-    month_prefix = datetime.now().strftime("%Y-%m")
+    today = today_central_str()
+    month_prefix = now_central().strftime("%Y-%m")
 
     with _connect(db_path) as conn:
         # Prize pools owed — broken out per event (upcoming/future allocations)
@@ -20674,7 +20675,7 @@ def create_entry_from_deposit(deposit_id: int, txn_type: str = "expense",
 
         amount    = amount_override if amount_override is not None else float(dep.get("amount") or 0)
         desc      = description or dep.get("description") or "Bank deposit"
-        date      = date_override or dep.get("deposit_date") or datetime.utcnow().strftime("%Y-%m-%d")
+        date      = date_override or dep.get("deposit_date") or today_central_str()
         source_ref = f"bank-deposit-{deposit_id}"
         # Map entry_type to legacy type column
         if entry_type:
@@ -22347,7 +22348,7 @@ def promote_expense_to_ledger(expense_id: int, category_name: str | None,
         txn_type = _type_map.get(_raw_txn_type, "expense")
         amount = float(exp.get("amount") or 0)
         merchant = exp.get("merchant") or "(unknown)"
-        txn_date = exp.get("transaction_date") or datetime.utcnow().strftime("%Y-%m-%d")
+        txn_date = exp.get("transaction_date") or today_central_str()
         source = exp.get("source_type") or "manual"
         source_ref = f"exp-promoted-{expense_id}"
         final_notes = notes or exp.get("notes")

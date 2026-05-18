@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.14.8";
+window.TGF_VERSION = "2.14.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.9",
+    date: "2026-05-18",
+    title: "Fix UTC day-boundary bug — dates now roll at midnight US/Central, not ~7 PM",
+    changes: [
+      "The Railway container runs in UTC, so every 'what day is it' computation done with a naive datetime.now()/utcnow()/date.today() rolled over to the next day at 00:00 UTC — roughly 6–7 PM US/Central. Most visibly: an order or expense email that arrived in the evening and didn't carry its own date was stamped with TOMORROW's date, quietly skewing daily totals and reconciliation; the daily digest / COO email headers showed tomorrow's date; and membership 'expires today' notices fired a day early.",
+      "New email_parser/timezone_utils.py with now_central()/today_central()/today_central_str() (pytz America/Chicago, returns naive values to match existing date arithmetic). Applied to ~26 user-facing day-boundary/date-stamp sites across app.py, email_parser/database.py, report.py, coo_email.py and memberships.py: new-record date defaults (order_date, transaction_date, deposit/refund dates), dashboard/COO 'today' and month-prefix windows, get_upcoming_events, recurring-transaction due dates, daily digest + COO email date labels, and membership renewal/'expires today' logic.",
+      "Stored history is intentionally untouched — only new-record defaults and live 'today'-relative computations changed, so closed/month-end periods and the 'past events are frozen' principle are preserved. Existing rows keep whatever date they were saved with.",
+      "Deliberately NOT changed: report.py get_recent_items() 24h cutoff (it is a rolling window compared against the UTC-stored items.created_at — switching it to Central would introduce a 5-hour skew), audit-only created_at columns (SQLite datetime('now'), read back consistently in UTC), and signed-roster token TTLs in memberships.py (epoch-based, correctly UTC). The ~55 benign datetime.now() uses (logging, elapsed timers, rate limiting) are untouched.",
+    ],
+  },
   {
     version: "2.14.8",
     date: "2026-05-18",

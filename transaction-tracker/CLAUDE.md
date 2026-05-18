@@ -269,6 +269,27 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `static/js/chat-widget.js` — Support/feedback chat widget
 - `golf_genius_sync.py` — Golf Genius handicap sync via HTTP
 - `mcp_server.py` — MCP server (31 tools for Claude direct DB access)
+- `email_parser/timezone_utils.py` — `now_central()`/`today_central()`/
+  `today_central_str()` (pytz America/Chicago, naive). See **Timezone** below.
+
+## Timezone (IMPORTANT — Railway runs in UTC)
+
+The container clock is UTC, so any naive `datetime.now()`/`utcnow()`/
+`date.today()` used for a **calendar-day boundary or a stamped business
+date** rolls over at 00:00 UTC ≈ 6–7 PM US/Central. For every user-facing
+"what day is it", date default (order_date, transaction_date, deposit/refund
+date), "today/this month" dashboard window, daily-email date label, and
+membership "expires today" check, use `email_parser/timezone_utils.py`
+(`now_central` / `today_central` / `today_central_str`).
+
+Do **not** Central-ize: audit `created_at` columns
+(SQLite `datetime('now')`, stored and read back consistently in UTC),
+`report.py get_recent_items()`'s rolling 24h cutoff (it compares against
+the UTC `items.created_at` — Central-izing it would add a 5h skew), signed
+roster token TTLs in `memberships.py` (epoch, correctly UTC), and the many
+benign elapsed-time/logging/rate-limit `datetime.now()` calls. Never rewrite
+stored historical timestamps — fix only new-record defaults and live
+"today"-relative computations so the **past-events-are-frozen** principle holds.
 
 ## Jinja gotcha in inline CSS (IMPORTANT)
 
