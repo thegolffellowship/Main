@@ -1067,6 +1067,8 @@ def _check_inbox_background():
     except Exception as e:
         logger.exception("Background inbox check failed")
         msg = str(e)
+        from email_parser.ops_alerts import maybe_alert_anthropic_billing
+        maybe_alert_anthropic_billing(e)
         # Provide user-friendly messages for known Anthropic API errors
         if "credit balance is too low" in msg.lower():
             _inbox_check_status["error"] = (
