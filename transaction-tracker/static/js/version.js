@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.14.12";
+window.TGF_VERSION = "2.14.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.13",
+    date: "2026-05-18",
+    title: "Fix false price_total_mismatch action items on multi-quantity & multi-line orders",
+    changes: [
+      "The price-mismatch check compared a single row's PER-UNIT item_price against the order's WHOLE-ORDER total_amount. Because total_amount is the full order charge and is copied unchanged onto every line item and every expanded per-player row, the check could only ever balance for single-line, single-quantity orders. It false-fired on every multi-quantity order (Doug Hamilton paying 2 x $205 for guests = $410; Victor Arias 2 x $65 = $130) and every multi-line order (Wade Fieber: $75 membership + $81 event = $156). No price was ever mis-extracted — the validation invariant was simply wrong.",
+      "Both code paths now reconcile at the ORDER level: sum(item_price across the order's rows) + transaction_fees - coupon must equal total_amount (within $1). scan_price_games_mismatches() groups items by order_id (fallback email_uid) and emits at most one warning per non-reconciling order; _validate_parsed_items() does the same at parse time. A genuine parser price grab (e.g. an $88 description price on a $148 single-reg order) still fails to reconcile and is still flagged.",
+      "New resolve_reconciled_price_warnings() boot step drains the backlog conservatively: it recomputes order-level reconciliation from current items for every OPEN price_total_mismatch warning and resolves only the ones that now balance (the multi-qty / multi-line false positives). Anything that still doesn't reconcile — a real single-line price grab — is left open for human review. Idempotent.",
+      "No item prices are rewritten and no rows are created/merged: the orders' data was already correct (N players = N rows at the unit price); only the validation logic and the stale warnings were wrong. The separate guest-naming issue on quantity orders (e.g. Hamilton's two spots are for 'Casey Purvis' / 'Will Drewry') is unaffected and still handled by the existing GUEST_NAME_MISSING path.",
+    ],
+  },
   {
     version: "2.14.12",
     date: "2026-05-18",

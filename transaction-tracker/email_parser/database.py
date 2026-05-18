@@ -2920,6 +2920,15 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Low-risk EMAIL_DRIFT sweep failed: %s", e)
 
+        # Drain false-positive price_total_mismatch warnings. The old per-row
+        # check fired on every multi-quantity / multi-line order; re-evaluate
+        # each open one with order-level reconciliation and resolve the ones
+        # that now balance. Genuine single-line price grabs stay open.
+        try:
+            resolve_reconciled_price_warnings(conn)
+        except Exception as e:
+            logger.warning("Reconciled-price sweep failed: %s", e)
+
         # Rename 'member' role → 'golfer' (no-op if already migrated).
         # Must run before the seed so the seed sees the new CHECK constraint.
         try:
@@ -6794,15 +6803,22 @@ def resolve_parse_warning(warning_id: int,
 
 
 def scan_price_games_mismatches(db_path: str | Path | None = None) -> dict:
-    """Scan all existing items for item_price vs total_amount mismatches.
+    """Scan existing items for orders whose line items don't reconcile to the
+    charged total.
 
-    For each GoDaddy item, compares item_price against (total_amount - transaction_fees).
-    If they don't match (> $1 tolerance), the parser likely grabbed a description price
-    instead of the actual charged amount. Works for ALL events and pricing tiers.
+    `total_amount` is the WHOLE-ORDER charge (and is copied onto every line /
+    expanded per-player row), while `item_price` is PER-UNIT. So an order only
+    reconciles at the order level: the sum of its line items' item_price, plus
+    fees, minus any coupon, should equal total_amount. A per-row check
+    (item_price vs total_amount) falsely fires on every multi-quantity order
+    (2 players x $65 = $130) and every multi-line order (membership + event).
 
-    Creates parse_warnings for any mismatches found. Returns a summary dict.
+    Creates one parse_warning per order that fails to reconcile (a genuine
+    parser price grab, e.g. it took an $88 description price on a $148
+    single-reg order). Returns a summary dict.
     """
-    results = {"scanned": 0, "warnings_created": 0, "already_warned": 0, "details": []}
+    results = {"scanned": 0, "orders_checked": 0, "reconciled": 0,
+               "warnings_created": 0, "already_warned": 0, "details": []}
 
     with _connect(db_path) as conn:
         items = conn.execute(
@@ -6816,59 +6832,140 @@ def scan_price_games_mismatches(db_path: str | Path | None = None) -> dict:
                AND merchant NOT IN ('Manual Entry', 'RSVP Only', 'Roster Import',
                                      'Customer Entry', 'RSVP Import', 'RSVP Email Link')
                AND email_uid NOT LIKE 'manual-%'
-               AND email_uid NOT LIKE 'transfer-%'"""
+               AND email_uid NOT LIKE 'transfer-%'
+               ORDER BY id"""
         ).fetchall()
 
         results["scanned"] = len(items)
 
-        for item in items:
-            price = _parse_dollar(item["item_price"])
-            total = _parse_dollar(item["total_amount"])
-            fees = _parse_dollar(item["transaction_fees"])
-            coupon = abs(_parse_dollar(item["coupon_amount"]))
+        # Group the charged line items by order (order_id, falling back to
+        # email_uid when GoDaddy didn't supply one).
+        orders: dict[str, list] = {}
+        for it in items:
+            key = (it["order_id"] or "").strip() or f"uid:{it['email_uid']}"
+            orders.setdefault(key, []).append(it)
 
-            if price <= 0 or total <= 0:
+        for key, rows in orders.items():
+            results["orders_checked"] += 1
+            subtotal = round(sum(_parse_dollar(r["item_price"]) for r in rows), 2)
+            # fees / coupon / total are order-level and repeated on every row;
+            # take the max to be robust against a stray 0/NULL on one row.
+            total = max(_parse_dollar(r["total_amount"]) for r in rows)
+            fees = max(_parse_dollar(r["transaction_fees"]) for r in rows)
+            coupon = max(abs(_parse_dollar(r["coupon_amount"])) for r in rows)
+
+            if subtotal <= 0 or total <= 0:
                 continue
 
-            # Coupon discounts reduce total_amount but not item_price; add back.
-            expected_price = round(total - fees + coupon, 2)
-            if abs(price - expected_price) <= 1.0:
-                continue  # within tolerance
+            # Order reconciles: subtotal + fees - coupon == total_amount.
+            if abs(subtotal + fees - coupon - total) <= 1.0:
+                results["reconciled"] += 1
+                continue
 
-            # Check if warning already exists
+            rep = rows[0]  # one warning per order, anchored to the first row
             existing = conn.execute(
-                "SELECT id FROM parse_warnings WHERE email_uid = ? AND warning_code = ? AND item_name = ?",
-                (item["email_uid"], "price_total_mismatch", item["item_name"]),
+                "SELECT id FROM parse_warnings WHERE email_uid = ? "
+                "AND warning_code = ? AND item_name = ?",
+                (rep["email_uid"], "price_total_mismatch", rep["item_name"]),
             ).fetchone()
-
             if existing:
                 results["already_warned"] += 1
                 continue
 
-            coupon_msg = f" + coupon=${coupon:.2f}" if coupon > 0 else ""
-            msg = (f"item_price=${price:.2f} does not match "
-                   f"total_amount=${total:.2f} - transaction_fees=${fees:.2f}{coupon_msg} = "
-                   f"${expected_price:.2f}. Parser may have grabbed a description "
-                   f"price instead of the actual charged amount. "
-                   f"Order: {item['order_id'] or '?'}")
+            coupon_msg = f" - coupon=${coupon:.2f}" if coupon > 0 else ""
+            msg = (f"Order line items sum to ${subtotal:.2f} + "
+                   f"transaction_fees=${fees:.2f}{coupon_msg} = "
+                   f"${subtotal + fees - coupon:.2f}, but total_amount is "
+                   f"${total:.2f}. The parser may have grabbed a description "
+                   f"price for one of this order's line items. "
+                   f"Order: {rep['order_id'] or '?'}")
 
             conn.execute(
                 """INSERT OR IGNORE INTO parse_warnings
                    (email_uid, order_id, customer, item_name, warning_code, message)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (item["email_uid"], item["order_id"], item["customer"],
-                 item["item_name"], "price_total_mismatch", msg),
+                (rep["email_uid"], rep["order_id"], rep["customer"],
+                 rep["item_name"], "price_total_mismatch", msg),
             )
             results["warnings_created"] += 1
             results["details"].append({
-                "id": item["id"], "customer": item["customer"],
-                "item_name": item["item_name"], "item_price": price,
-                "expected": expected_price, "order_id": item["order_id"],
+                "order": rep["order_id"] or key, "customer": rep["customer"],
+                "subtotal": subtotal, "fees": fees, "coupon": coupon,
+                "total_amount": total, "rows": len(rows),
             })
 
         conn.commit()
 
     return results
+
+
+def resolve_reconciled_price_warnings(conn: sqlite3.Connection) -> dict:
+    """Drain false-positive price_total_mismatch warnings.
+
+    The old per-row check fired on every multi-quantity / multi-line order.
+    For each OPEN price_total_mismatch warning, recompute the order-level
+    reconciliation from current items; if the order now reconciles
+    (subtotal + fees - coupon == total_amount) the warning was a false
+    positive — resolve it. A genuine single-line price grab still fails to
+    reconcile and is left open for human review. Idempotent.
+    """
+    counts = {"resolved": 0, "kept_open": 0}
+    warns = conn.execute(
+        "SELECT id, email_uid, order_id FROM parse_warnings "
+        "WHERE warning_code = 'price_total_mismatch' AND status = 'open'"
+    ).fetchall()
+
+    for w in warns:
+        oid = (w["order_id"] or "").strip()
+        if oid:
+            rows = conn.execute(
+                """SELECT item_price, total_amount, transaction_fees,
+                          coupon_amount FROM items
+                   WHERE order_id = ?
+                   AND COALESCE(transaction_status, 'active') = 'active'
+                   AND parent_item_id IS NULL
+                   AND item_price IS NOT NULL AND total_amount IS NOT NULL
+                   AND merchant NOT IN ('Manual Entry', 'RSVP Only',
+                        'Roster Import', 'Customer Entry', 'RSVP Import',
+                        'RSVP Email Link')""",
+                (oid,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT item_price, total_amount, transaction_fees,
+                          coupon_amount FROM items
+                   WHERE email_uid = ?
+                   AND COALESCE(transaction_status, 'active') = 'active'
+                   AND parent_item_id IS NULL
+                   AND item_price IS NOT NULL AND total_amount IS NOT NULL""",
+                (w["email_uid"],),
+            ).fetchall()
+
+        if not rows:
+            counts["kept_open"] += 1
+            continue
+
+        subtotal = round(sum(_parse_dollar(r["item_price"]) for r in rows), 2)
+        total = max(_parse_dollar(r["total_amount"]) for r in rows)
+        fees = max(_parse_dollar(r["transaction_fees"]) for r in rows)
+        coupon = max(abs(_parse_dollar(r["coupon_amount"])) for r in rows)
+
+        if subtotal > 0 and total > 0 and abs(subtotal + fees - coupon - total) <= 1.0:
+            conn.execute(
+                "UPDATE parse_warnings SET status = 'resolved' WHERE id = ?",
+                (w["id"],),
+            )
+            counts["resolved"] += 1
+        else:
+            counts["kept_open"] += 1
+
+    if counts["resolved"]:
+        conn.commit()
+        logger.info(
+            "Reconciled-price sweep: resolved=%d false price_total_mismatch "
+            "warning(s), kept_open=%d", counts["resolved"], counts["kept_open"],
+        )
+    return counts
 
 
 # ---------------------------------------------------------------------------
