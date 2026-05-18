@@ -3415,6 +3415,23 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
 
         # ── Expense tracking tables ──────────────────────────────────
+        # Dedup memory for the expense classifier. The GoDaddy parser tracks
+        # every email it touches in `processed_emails`; the expense classifier
+        # historically only recorded emails that produced an
+        # expense_transaction/action_item, so `unknown`/passthrough emails were
+        # re-classified (and re-billed to Anthropic) every scheduler cycle. This
+        # table records EVERY email the classifier has looked at, regardless of
+        # outcome, so each email is classified at most once. Kept separate from
+        # `processed_emails` so it never hides a GoDaddy order from check_inbox.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS expense_seen_emails (
+                email_uid     TEXT PRIMARY KEY,
+                classified_as TEXT,
+                seen_at       TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS expense_transactions (
@@ -5753,6 +5770,43 @@ def clear_failed_processed(db_path: str | Path | None = None) -> int:
         )
         conn.commit()
         return cursor.rowcount
+
+
+def get_expense_seen_uids(db_path: str | Path | None = None) -> set[str]:
+    """Return every email_uid the expense classifier has already looked at.
+
+    This is the dedup gate that stops the classifier from re-billing Anthropic
+    for the same email every scheduler cycle. Returns an empty set if the table
+    doesn't exist yet (pre-migration) — callers treat empty as a cold start.
+    """
+    with _connect(db_path) as conn:
+        try:
+            rows = conn.execute(
+                "SELECT email_uid FROM expense_seen_emails"
+            ).fetchall()
+            return {row["email_uid"] for row in rows}
+        except sqlite3.OperationalError:
+            return set()  # table not created yet
+
+
+def mark_expense_email_seen(email_uid: str, classified_as: str | None = None,
+                            db_path: str | Path | None = None) -> None:
+    """Record that the expense classifier has classified this email.
+
+    Called for EVERY email the classifier touches — including `unknown`,
+    `godaddy_order`, and `golf_genius_rsvp` — so it is never re-classified
+    (and never re-billed) on a later cycle. INSERT OR IGNORE keeps it
+    idempotent if the same uid is seen again before the next fetch.
+    """
+    if not email_uid:
+        return
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO expense_seen_emails (email_uid, classified_as) "
+            "VALUES (?, ?)",
+            (email_uid, classified_as),
+        )
+        conn.commit()
 
 
 def get_all_items(db_path: str | Path | None = None) -> list[dict]:
@@ -17715,6 +17769,53 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
 
         # Try email_uid upsert when uid is present
         if email_uid is not None:
+            # Re-key guard: Microsoft Graph occasionally re-keys an
+            # already-seen email under a brand-new uid (folder rebuild, mass
+            # reply, PWA resync — see CLAUDE.md). A pure ON CONFLICT(email_uid)
+            # upsert treats the new uid as a brand-new transaction and
+            # double-inserts. If the same economic event already exists under a
+            # different uid, adopt that row instead of inserting a duplicate.
+            # Note: amount/transaction_date NULL → equality is never true, so
+            # this conservatively falls through to the normal path.
+            rekey = conn.execute(
+                """SELECT id FROM expense_transactions
+                   WHERE source_type = ?
+                     AND LOWER(COALESCE(merchant, '')) = LOWER(COALESCE(?, ''))
+                     AND amount = ?
+                     AND transaction_date = ?
+                     AND COALESCE(email_uid, '') != ?
+                   LIMIT 1""",
+                (data.get("source_type"), data.get("merchant"),
+                 data.get("amount"), data.get("transaction_date"), email_uid),
+            ).fetchone()
+            if rekey:
+                conn.execute(
+                    """UPDATE expense_transactions SET
+                        email_uid=?, account_last4=?, account_name=?,
+                        transaction_type=?, category=?, entity=?, event_name=?,
+                        customer_id=?, confidence=?,
+                        review_status=CASE WHEN review_status IN ('ignored','approved','corrected')
+                                           THEN review_status ELSE ? END,
+                        notes=?, raw_extract=?,
+                        other_party_handle=COALESCE(other_party_handle, ?)
+                       WHERE id=?""",
+                    (email_uid, data.get("account_last4"),
+                     data.get("account_name"),
+                     data.get("transaction_type", "expense"),
+                     data.get("category"), data.get("entity", "TGF"),
+                     data.get("event_name"), data.get("customer_id"),
+                     data.get("confidence", 0),
+                     data.get("review_status", "pending"), data.get("notes"),
+                     data.get("raw_extract"), data.get("other_party_handle"),
+                     rekey["id"]),
+                )
+                conn.commit()
+                row = conn.execute(
+                    "SELECT * FROM expense_transactions WHERE id = ?",
+                    (rekey["id"],),
+                ).fetchone()
+                return dict(row) if row else data
+
             conn.execute(
                 """INSERT INTO expense_transactions
                    (email_uid, source_type, merchant, amount, transaction_date,

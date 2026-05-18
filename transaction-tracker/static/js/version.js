@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.14.7";
+window.TGF_VERSION = "2.14.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.8",
+    date: "2026-05-18",
+    title: "Expense classifier: stop re-billing Anthropic for already-seen emails",
+    changes: [
+      "Root cause of large, variable daily Anthropic API charges ($20–$200+/day): the expense email classifier (check_expense_inbox) only recorded an email as processed if it produced an expense_transaction or action_item. Emails classified as 'unknown' — and order/RSVP emails it deliberately skips — were never recorded, so the scheduler re-sent every one of them to Claude for classification on every cycle (every 5 minutes), for the full lookback window. With a general mailbox of newsletters/replies/etc. that is tens of thousands of wasted classification calls per day. The GoDaddy order parser already solved this via processed_emails; the lesson was never applied to expenses.",
+      "Fix: new expense_seen_emails table (email_uid PK) plus get_expense_seen_uids()/mark_expense_email_seen() in email_parser/database.py. check_expense_inbox now marks EVERY email seen the moment it is classified — before the per-type branches that early-continue — and adds that set to the dedup gate. Each email is therefore classified (and billed) at most once, regardless of how often the scheduler runs. The table is intentionally separate from processed_emails so it can never hide a GoDaddy order from the order parser. A rare classify_email() exception is left unmarked so it retries next cycle (matches the GoDaddy parser).",
+      "Polling frequency is now fully decoupled from cost, so near-real-time checks are kept (every CHECK_INTERVAL_MINUTES, default 5, 24/7 — unchanged). The expense lookback window dropped from a flat 14 days to a safe 48h steady-state (EXPENSE_LOOKBACK_HOURS), with a one-time wider backfill on a cold start (EXPENSE_BACKFILL_DAYS, default 14) — i.e. a fresh DB or a wiped Railway volume. Admin/manual runs (/api/accounting/check-expense-inbox) can still pass an explicit days_back.",
+      "Re-key protection: save_expense_transaction() previously did a content-dedup ONLY when no email_uid was present; with a uid it did a pure ON CONFLICT(email_uid) upsert, so a Graph-re-keyed email (new uid, same economic event — folder rebuild, mass reply, PWA resync) double-inserted. It now probes for an existing row with the same (source_type, merchant, amount, transaction_date) under a different uid and adopts that row instead of inserting a duplicate. NULL amount/date conservatively falls through to the normal path so genuinely distinct transactions still insert.",
+      "Operational safety: start_scheduler() now logs a loud warning at boot if DATABASE_PATH is unset, because the dedup memory lives in SQLite — without a Railway persistent volume every redeploy wipes it and re-bills the entire backfill window. Recommend also setting a hard spend cap in console.anthropic.com as a backstop.",
+    ],
+  },
   {
     version: "2.14.7",
     date: "2026-05-13",
