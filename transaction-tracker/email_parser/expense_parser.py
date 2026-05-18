@@ -52,6 +52,8 @@ def _call_llm(prompt: str, max_tokens: int = 1500) -> str | None:
         return resp.content[0].text.strip()
     except Exception as e:
         logger.error("LLM call failed: %s", e)
+        from email_parser.ops_alerts import maybe_alert_anthropic_billing
+        maybe_alert_anthropic_billing(e)
         return None
 
 

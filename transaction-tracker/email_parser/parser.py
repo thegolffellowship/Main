@@ -997,6 +997,8 @@ def parse_emails(email_list: list[dict]) -> list[dict]:
             logger.error(
                 "Stopping batch — Anthropic API returned a fatal error: %s", e.message,
             )
+            from email_parser.ops_alerts import maybe_alert_anthropic_billing
+            maybe_alert_anthropic_billing(e)
             break
         except Exception:
             logger.exception("Failed to parse email uid=%s", email_data.get("uid"))

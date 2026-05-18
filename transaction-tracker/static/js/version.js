@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.14.9";
+window.TGF_VERSION = "2.14.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.10",
+    date: "2026-05-18",
+    title: "Proactively email the owner when the Anthropic/Claude budget is exhausted",
+    changes: [
+      "New email_parser/ops_alerts.py: maybe_alert_anthropic_billing(exc) detects the two owner-actionable Claude failures — 'credit balance is too low' (out of API credit) and a revoked/invalid key (AuthenticationError / PermissionDeniedError) — and emails the owner via the existing Microsoft Graph mail path so a billing problem shows up in the inbox instead of as a surprise bank charge or a silent dashboard gap.",
+      "Wired into the three recurring automated Claude paths: the expense classifier (expense_parser._call_llm), the order parser batch (parser.parse_emails), and the inbox check (app._check_inbox_background). Generic bad-prompt errors and transient rate limits are intentionally NOT alerted.",
+      "Throttled to one email per 6 hours, with the marker persisted in the SQLite DB (on the Railway /data volume) so neither the every-5-minute classifier nor a redeploy crash-loop can turn it into an email storm. The throttle is stamped only after a successful send, so a failed alert retries next cycle instead of going silent.",
+      "Recipient resolves ANTHROPIC_ALERT_EMAIL_TO -> COO_EMAIL_TO -> EMAIL_ADDRESS. The alert is best-effort and never raises, so it cannot break the caller's own error handling. The email reassures that queued orders/expenses are not lost (they reprocess once Claude works) and links straight to console.anthropic.com billing.",
+    ],
+  },
   {
     version: "2.14.9",
     date: "2026-05-18",

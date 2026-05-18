@@ -271,6 +271,14 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `mcp_server.py` — MCP server (31 tools for Claude direct DB access)
 - `email_parser/timezone_utils.py` — `now_central()`/`today_central()`/
   `today_central_str()` (pytz America/Chicago, naive). See **Timezone** below.
+- `email_parser/ops_alerts.py` — `maybe_alert_anthropic_billing(exc)`:
+  call it from any "Claude call failed" except handler. Emails the owner
+  (env `ANTHROPIC_ALERT_EMAIL_TO` → `COO_EMAIL_TO` → `EMAIL_ADDRESS`) when
+  the org is out of API credit or the key is dead. Throttled to 1/6h via
+  the `system_alert_state` table; never raises. Already wired into
+  `expense_parser._call_llm`, `parser.parse_emails`, and
+  `app._check_inbox_background` — add a call to any new recurring
+  Anthropic path you introduce.
 
 ## Timezone (IMPORTANT — Railway runs in UTC)
 
