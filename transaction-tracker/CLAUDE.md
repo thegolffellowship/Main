@@ -361,7 +361,13 @@ without going through one of:
 
 `save_items()` raises `EMAIL_DRIFT` / `PHONE_DRIFT` parse warnings when a new GoDaddy
 order's value differs from the canonical record (canonical wins; the manager sees the
-discrepancy in the COO action-items banner). `chapter` is intentionally NOT drift-checked:
+discrepancy in the COO action-items banner). `resolve_low_risk_email_drift_warnings()`
+(boot step) auto-resolves an `EMAIL_DRIFT` when the drifted email plausibly belongs to
+the same person (surname token in the local-part, or same address family / typo of the
+canonical) and captures it into `customer_aliases` — the drift guard overwrites the order
+email before insert, so `capture_email_aliases_from_items()` never sees it. Genuine
+stranger-email drift (the cross-person contamination class) stays open for human review.
+`chapter` is intentionally NOT drift-checked:
 `items.chapter` is the event/course location while `customers.chapter` is the member's
 home chapter, so cross-chapter play would drift every time and the canonical overwrite
 would corrupt the correct event-location value. A boot step resolves any historical open
