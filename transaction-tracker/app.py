@@ -5527,8 +5527,8 @@ def api_refund_item(item_id):
     """Mark an item as refunded via GoDaddy or Venmo."""
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
-    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal"):
-        return jsonify({"error": "Invalid refund method. Must be GoDaddy, Venmo, Zelle, or PayPal."}), 400
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App"):
+        return jsonify({"error": "Invalid refund method. Must be GoDaddy, Venmo, Zelle, PayPal, or Cash App."}), 400
     if refund_item(item_id, method=method, note=data.get("note", "")):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
@@ -5544,8 +5544,8 @@ def api_payout_credit(item_id):
     """
     data = request.get_json(silent=True) or {}
     method = (data.get("method") or "").strip()
-    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check", "PayPal"):
-        return jsonify({"error": "Invalid method. Must be GoDaddy, Venmo, Zelle, Check, or PayPal."}), 400
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check", "PayPal", "Cash App"):
+        return jsonify({"error": "Invalid method. Must be GoDaddy, Venmo, Zelle, Check, PayPal, or Cash App."}), 400
     refund_date = (data.get("date") or "").strip()
     if refund_date:
         try:
@@ -5569,7 +5569,7 @@ def api_partial_refund_item(item_id):
     """
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
-    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal"):
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App"):
         return jsonify({"error": "Invalid refund method."}), 400
     refunded_components = data.get("components", {})  # e.g. {"gross_games": 30}
     new_side_games = data.get("new_side_games")  # e.g. "NET" (after removing GROSS)
