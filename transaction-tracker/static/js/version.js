@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.14.14";
+window.TGF_VERSION = "2.14.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.15",
+    date: "2026-05-19",
+    title: "Add Cash App as a refund method option",
+    changes: [
+      "Cash App added to the Refund Method dropdown in the Credit / Transfer / Refund modal, and accepted by all three refund/partial-refund API endpoints.",
+    ],
+  },
   {
     version: "2.14.14",
     date: "2026-05-19",
