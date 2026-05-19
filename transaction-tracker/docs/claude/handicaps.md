@@ -113,6 +113,15 @@ joined via `handicap_player_links`. Stale `items.handicap` values on old order r
 looked authoritative but didn't update when the player's real handicap changed, so any
 code path that read them silently drifted.
 
+## Import dedup logic
+
+When a handicap file contains a `round_id` column, the duplicate check matches on
+`(player_name, round_date, round_id, course_name)`. This allows multi-course events
+(e.g. Comanche Trace VALLEY / HILLS / CREEKS on the same day) to import correctly even
+when Golf Genius assigns the same `round_id` to every round in the event.
+
+When no `round_id` is present the fallback key is `(player_name, round_date, course_name, tee_name)`.
+
 ## Key files
 - `email_parser/database.py` — `_HANDICAP_DIFF_LOOKUP` (server-side table), `_match_customer_name()` (linking logic)
 - `templates/handicaps.html` — `DIFF_LOOKUP` (client-side JS table, must match)

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.14.13";
+window.TGF_VERSION = "2.14.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.14.14",
+    date: "2026-05-19",
+    title: "Fix duplicate-round rejection when importing multi-course events on the same day",
+    changes: [
+      "When a handicap file includes a round_id, the duplicate check previously matched on (player_name, round_date, round_id) alone. For multi-course events at the same facility — e.g. Comanche Trace VALLEY / HILLS / CREEKS all played on the same day — Golf Genius assigns the same round_id to every round in the event. This meant the second and third course files were rejected as duplicates after the first was imported, even though they were distinct 9-hole rounds at different courses.",
+      "The round_id dedup check now also includes course_name, so (player_name, round_date, round_id, course_name) must all match before a round is skipped. Two rounds at VALLEY and HILLS on the same day with the same round_id are now treated as distinct and both import correctly.",
+    ],
+  },
   {
     version: "2.14.13",
     date: "2026-05-18",

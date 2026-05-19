@@ -12528,10 +12528,14 @@ def import_handicap_rounds(rounds: list[dict],
 
                 # Dedup check
                 if round_id:
+                    # Include course_name so that multi-course events (e.g. VALLEY /
+                    # HILLS / CREEKS on the same day) sharing one round_id aren't
+                    # collapsed into a single round.
                     existing = conn.execute(
                         "SELECT id FROM handicap_rounds "
-                        "WHERE player_name = ? AND round_date = ? AND round_id = ?",
-                        (player_name, round_date, round_id),
+                        "WHERE player_name = ? AND round_date = ? AND round_id = ? "
+                        "AND COALESCE(course_name,'') = COALESCE(?,'')",
+                        (player_name, round_date, round_id, course_name),
                     ).fetchone()
                 else:
                     existing = conn.execute(
