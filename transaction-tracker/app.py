@@ -7696,6 +7696,150 @@ def api_customer_season_contests(customer_name):
 
 
 # ---------------------------------------------------------------------------
+# Routes — Contests page
+# ---------------------------------------------------------------------------
+
+@app.route("/contests")
+def contests_page():
+    return render_template("contests.html")
+
+
+# ---------------------------------------------------------------------------
+# Routes — City Match Play (CMP)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/cmp/pools")
+@require_role("view-only")
+def api_cmp_pools():
+    season = request.args.get("season", "")
+    chapter = request.args.get("chapter", "")
+    if not season or not chapter:
+        return jsonify({"error": "season and chapter required"}), 400
+    from email_parser.database import cmp_get_pools
+    return jsonify(cmp_get_pools(season, chapter))
+
+
+@app.route("/api/cmp/pools", methods=["POST"])
+@require_role("manager")
+def api_cmp_create_pool():
+    data = request.get_json(silent=True) or {}
+    season = (data.get("season") or "").strip()
+    chapter = (data.get("chapter") or "").strip()
+    pool_name = (data.get("pool_name") or "").strip()
+    if not season or not chapter or not pool_name:
+        return jsonify({"error": "season, chapter, and pool_name required"}), 400
+    from email_parser.database import cmp_create_pool
+    pool = cmp_create_pool(season, chapter, pool_name)
+    return jsonify(pool), 201
+
+
+@app.route("/api/cmp/pools/<int:pool_id>", methods=["DELETE"])
+@require_role("manager")
+def api_cmp_delete_pool(pool_id):
+    from email_parser.database import cmp_delete_pool
+    cmp_delete_pool(pool_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/cmp/pools/<int:pool_id>/members", methods=["POST"])
+@require_role("manager")
+def api_cmp_add_member(pool_id):
+    data = request.get_json(silent=True) or {}
+    customer_name = (data.get("customer_name") or "").strip()
+    customer_id = data.get("customer_id")
+    if not customer_name:
+        return jsonify({"error": "customer_name required"}), 400
+    from email_parser.database import cmp_add_member
+    member = cmp_add_member(pool_id, customer_name, customer_id)
+    return jsonify(member), 201
+
+
+@app.route("/api/cmp/pools/<int:pool_id>/members/<path:customer_name>", methods=["DELETE"])
+@require_role("manager")
+def api_cmp_remove_member(pool_id, customer_name):
+    from email_parser.database import cmp_remove_member
+    cmp_remove_member(pool_id, customer_name)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/cmp/matches", methods=["POST"])
+@require_role("manager")
+def api_cmp_save_match():
+    data = request.get_json(silent=True) or {}
+    pool_id = data.get("pool_id")
+    player1 = (data.get("player1_name") or "").strip()
+    player2 = (data.get("player2_name") or "").strip()
+    if not pool_id or not player1 or not player2:
+        return jsonify({"error": "pool_id, player1_name, player2_name required"}), 400
+    p1_score = data.get("player1_score")
+    p2_score = data.get("player2_score")
+    if p1_score is not None:
+        p1_score = float(p1_score)
+    if p2_score is not None:
+        p2_score = float(p2_score)
+    from email_parser.database import cmp_save_match
+    match = cmp_save_match(
+        pool_id, player1, player2, p1_score, p2_score,
+        data.get("match_date"), data.get("notes"),
+    )
+    return jsonify(match)
+
+
+@app.route("/api/cmp/matches")
+@require_role("view-only")
+def api_cmp_get_matches():
+    pool_id = request.args.get("pool_id", type=int)
+    if not pool_id:
+        return jsonify({"error": "pool_id required"}), 400
+    from email_parser.database import cmp_get_matches
+    return jsonify(cmp_get_matches(pool_id))
+
+
+@app.route("/api/cmp/standings")
+@require_role("view-only")
+def api_cmp_standings():
+    season = request.args.get("season", "")
+    chapter = request.args.get("chapter", "")
+    if not season or not chapter:
+        return jsonify({"error": "season and chapter required"}), 400
+    from email_parser.database import cmp_get_standings
+    return jsonify(cmp_get_standings(season, chapter))
+
+
+@app.route("/api/cmp/bracket")
+@require_role("view-only")
+def api_cmp_get_bracket():
+    season = request.args.get("season", "")
+    chapter = request.args.get("chapter", "")
+    if not season or not chapter:
+        return jsonify({"error": "season and chapter required"}), 400
+    from email_parser.database import cmp_get_bracket
+    return jsonify(cmp_get_bracket(season, chapter))
+
+
+@app.route("/api/cmp/bracket", methods=["POST"])
+@require_role("manager")
+def api_cmp_save_bracket():
+    data = request.get_json(silent=True) or {}
+    season = (data.get("season") or "").strip()
+    chapter = (data.get("chapter") or "").strip()
+    round_ = (data.get("round") or "").strip()
+    slot = data.get("slot")
+    if not season or not chapter or not round_ or slot is None:
+        return jsonify({"error": "season, chapter, round, slot required"}), 400
+    score = float(data["score"]) if data.get("score") is not None else None
+    opp_score = float(data["opponent_score"]) if data.get("opponent_score") is not None else None
+    from email_parser.database import cmp_save_bracket_slot
+    row = cmp_save_bracket_slot(
+        season, chapter, round_, int(slot),
+        data.get("player_name"), score,
+        data.get("opponent_name"), opp_score,
+        data.get("winner_name"),
+    )
+    return jsonify(row)
+
+
+# ---------------------------------------------------------------------------
 # Routes — Authentication
 # ---------------------------------------------------------------------------
 @app.route("/api/auth/login", methods=["POST"])
