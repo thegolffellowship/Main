@@ -13529,6 +13529,11 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                )"""
         )
 
+        # Backfill customer_id BEFORE reconciliation so rows that were never linked
+        # (e.g. Eduardo Melchor sourced from a NULL source_item_id) get resolved and
+        # the reconciliation below can act on them by customer_id.
+        _backfill_customer_id_on_season_contests(conn)
+
         # Reconcile: remove auto-synced enrollments that have no valid backing purchase.
         # Uses customer_id as the identity key (Guiding Principle #6).
         # Only removes rows where:
@@ -13557,9 +13562,30 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                  )"""
         )
 
-        # Backfill customer_id on any rows that lack it so the cleanup below can
-        # work by customer_id rather than by name string.
-        _backfill_customer_id_on_season_contests(conn)
+        # Fallback reconciliation for rows whose customer_id is STILL NULL after
+        # backfill (unresolvable aliases or orphaned rows).  Uses name-based item
+        # lookup.  Catches cases where source_item_id was also NULL so the
+        # source-item deletion above couldn't act on them.
+        conn.execute(
+            """DELETE FROM season_contests
+               WHERE manually_enrolled = 0
+                 AND customer_id IS NULL
+                 AND NOT EXISTS (
+                     SELECT 1 FROM items i
+                     WHERE LOWER(TRIM(i.customer)) = LOWER(TRIM(season_contests.customer_name))
+                       AND i.transaction_status IN ('active', NULL)
+                       AND (UPPER(i.item_name) = 'TGF MEMBERSHIP'
+                            OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
+                       AND (
+                           (season_contests.contest_type = 'NET Points Race'
+                                AND i.net_points_race = 'YES')
+                           OR (season_contests.contest_type = 'GROSS Points Race'
+                                AND i.gross_points_race = 'YES')
+                           OR (season_contests.contest_type = 'City Match Play'
+                                AND i.city_match_play = 'YES')
+                       )
+                 )"""
+        )
 
         # Build a customer_id → {chapter, canonical_name} map so the cleanup
         # works for alias names (e.g. "Stuart Kirksey" → customer_id 123 → "Austin").

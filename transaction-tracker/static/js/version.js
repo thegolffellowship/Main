@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.15.17";
+window.TGF_VERSION = "2.15.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.18",
+    date: "2026-05-26",
+    changes: [
+      "Fix: season contest cleanup now backfills customer_id BEFORE reconciliation so orphaned rows (e.g. Eduardo Melchor) are properly removed",
+      "Fix: added name-based fallback reconciliation for rows with NULL customer_id that still lack a valid backing purchase",
+    ],
+  },
   {
     version: "2.15.17",
     date: "2026-05-26",
