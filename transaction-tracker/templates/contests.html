@@ -1165,8 +1165,6 @@
                 const winner = s1.winner_name || s2.winner_name || null;
                 const slot1Win = winner && winner === s1.player_name;
                 const slot2Win = winner && winner === s2.player_name;
-                const stab1 = s1.player_stableford != null ? s1.player_stableford : '';
-                const stab2 = s2.player_stableford != null ? s2.player_stableford : '';
                 const margin = s1.margin || s2.margin || '';
                 const eventId = s1.event_id || s2.event_id || null;
                 const eventOptions = cmpState.events.map(ev => {
@@ -1180,25 +1178,9 @@
                 <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
                     <div class="bracket-slot${slot1Win ? ' winner' : ''}">
                         <span class="bracket-slot-name">${escapeHtml(s1.player_name || '—')}</span>
-                        ${isManager
-                            ? `<input type="number" class="bracket-stab-input"
-                                step="0.5" placeholder="Pts"
-                                data-round="${round.key}" data-slot="${mi * 2}"
-                                data-player="${escapeHtml(s1.player_name || '')}"
-                                data-opp="${escapeHtml(s2.player_name || '')}"
-                                value="${stab1}" title="Stableford points">`
-                            : `<span class="bracket-slot-score">${stab1 !== '' ? stab1 + ' pts' : ''}</span>`}
                     </div>
                     <div class="bracket-slot${slot2Win ? ' winner' : ''}">
                         <span class="bracket-slot-name">${escapeHtml(s2.player_name || '—')}</span>
-                        ${isManager
-                            ? `<input type="number" class="bracket-stab-input"
-                                step="0.5" placeholder="Pts"
-                                data-round="${round.key}" data-slot="${mi * 2 + 1}"
-                                data-player="${escapeHtml(s2.player_name || '')}"
-                                data-opp="${escapeHtml(s1.player_name || '')}"
-                                value="${stab2}" title="Stableford points">`
-                            : `<span class="bracket-slot-score">${stab2 !== '' ? stab2 + ' pts' : ''}</span>`}
                     </div>
                     ${isManager ? `
                     <div class="bracket-match-footer">
@@ -1249,14 +1231,12 @@
                     const mi = Number(btn.dataset.match);
                     const { season, chapter } = cmpState;
 
-                    const i1 = container.querySelector(`.bracket-stab-input[data-round="${round}"][data-slot="${mi * 2}"]`);
-                    const i2 = container.querySelector(`.bracket-stab-input[data-round="${round}"][data-slot="${mi * 2 + 1}"]`);
+                    const s1el = slotMap[`${round}:${mi * 2}`] || {};
+                    const s2el = slotMap[`${round}:${mi * 2 + 1}`] || {};
                     const winSel = container.querySelector(`.bracket-winner-sel[data-round="${round}"][data-match="${mi}"]`);
                     const marginEl = container.querySelector(`.bracket-margin-input[data-round="${round}"][data-match="${mi}"]`);
                     const evSel = container.querySelector(`.bracket-event-sel[data-round="${round}"][data-match="${mi}"]`);
 
-                    const stab1 = i1 && i1.value !== "" ? parseFloat(i1.value) : null;
-                    const stab2 = i2 && i2.value !== "" ? parseFloat(i2.value) : null;
                     const winnerVal = winSel ? winSel.value : "";
                     const marginVal = (marginEl ? marginEl.value.trim() : "") || null;
                     const event_id = evSel && evSel.value ? Number(evSel.value) : null;
@@ -1271,33 +1251,59 @@
 
                     btn.textContent = "Saving…"; btn.disabled = true;
 
-                    const saves = [];
-                    if (i1) saves.push(fetch("/api/cmp/bracket", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            season, chapter, round, slot: mi * 2,
-                            player_name: i1.dataset.player || null,
-                            player_stableford: stab1,
-                            opponent_name: i1.dataset.opp || null,
-                            opponent_stableford: stab2,
-                            winner_name, margin, event_id,
+                    // Save both slots with result (no stableford in bracket rounds)
+                    await Promise.all([
+                        fetch("/api/cmp/bracket", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                season, chapter, round, slot: mi * 2,
+                                player_name: s1el.player_name || null,
+                                player_stableford: null,
+                                opponent_name: s2el.player_name || null,
+                                opponent_stableford: null,
+                                winner_name, margin, event_id,
+                            }),
                         }),
-                    }));
-                    if (i2) saves.push(fetch("/api/cmp/bracket", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            season, chapter, round, slot: mi * 2 + 1,
-                            player_name: i2.dataset.player || null,
-                            player_stableford: stab2,
-                            opponent_name: i2.dataset.opp || null,
-                            opponent_stableford: stab1,
-                            winner_name, margin, event_id,
+                        fetch("/api/cmp/bracket", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                season, chapter, round, slot: mi * 2 + 1,
+                                player_name: s2el.player_name || null,
+                                player_stableford: null,
+                                opponent_name: s1el.player_name || null,
+                                opponent_stableford: null,
+                                winner_name, margin, event_id,
+                            }),
                         }),
-                    }));
+                    ]);
 
-                    await Promise.all(saves);
+                    // Auto-advance winner to next round slot
+                    if (winner_name) {
+                        const allRounds = buildBracketRounds(cmpState.pools.length * 2);
+                        const roundIdx = allRounds.findIndex(r => r.key === round);
+                        if (roundIdx >= 0 && roundIdx < allRounds.length - 1) {
+                            const nextRound = allRounds[roundIdx + 1];
+                            await fetch("/api/cmp/bracket", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    season, chapter,
+                                    round: nextRound.key,
+                                    slot: mi,
+                                    player_name: winner_name,
+                                    player_stableford: null,
+                                    opponent_name: null,
+                                    opponent_stableford: null,
+                                    winner_name: null,
+                                    margin: null,
+                                    event_id: null,
+                                }),
+                            });
+                        }
+                    }
+
                     btn.textContent = "Saved ✓";
                     setTimeout(() => { btn.textContent = "Save"; btn.disabled = false; }, 1800);
 

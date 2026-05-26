@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.15.20";
+window.TGF_VERSION = "2.15.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.21",
+    date: "2026-05-26",
+    changes: [
+      "Knockout Bracket: winner auto-advances to the correct slot in the next round when a match is saved",
+      "Knockout Bracket: removed Stableford Pts inputs — points are for pool play only; bracket tracks winner, margin, and event",
+    ],
+  },
   {
     version: "2.15.20",
     date: "2026-05-26",
