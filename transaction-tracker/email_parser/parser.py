@@ -152,8 +152,11 @@ FIELD-SPECIFIC GUIDANCE:
   Wolfdancer/Falconhead/Star Ranch = "Austin"). \
   For MEMBERSHIP items, extract from "CITY: AUS" or "CITY: SA" etc. \
   Normalise: AUS/ATX → "Austin", SA/SAT → "San Antonio", DAL/DFW → "DFW", HOU → "Houston". \
-  IMPORTANT: Do NOT use the customer's shipping/billing address city as chapter. \
-  The chapter must be inferred from the golf course or event location, not the customer address.
+  IMPORTANT: Do NOT use the customer's shipping/billing address city as chapter — \
+  NEVER. A player in Austin may have a San Antonio mailing address. Chapter must be \
+  inferred from the golf course or event location only. \
+  For SEASON CONTESTS items (SKU 26-SC or item_name "SEASON CONTESTS"), leave chapter \
+  blank/null — there is no golf course, so there is no chapter to extract.
 - "course": Use consistent canonical course names. Standard spellings: \
   "La Cantera", "TPC San Antonio", "The Quarry", "Cowboys Golf Club", \
   "TPC Craig Ranch", "Wolfdancer", "Falconhead", "Moody Gardens", \
@@ -963,7 +966,13 @@ def parse_email(email_data: dict) -> list[dict]:
             "item_name": _normalize_item_name(item.get("item_name")) or "",
             "item_price": item.get("item_price") or "",
             "quantity": item.get("quantity") or 1,
-            "chapter": _normalize_chapter(item.get("chapter")),
+            # Season contest purchases have no golf event/course, so there is no valid
+            # chapter to extract from the item itself.  The LLM sometimes uses the
+            # shipping address city (e.g. "San Antonio"), which is wrong — a player in
+            # Austin can have a San Antonio shipping address.  Force null here; the sync
+            # always derives chapter from customers.chapter instead.
+            "chapter": None if _normalize_item_name(item.get("item_name")) == "SEASON CONTESTS"
+                        else _normalize_chapter(item.get("chapter")),
             "course": _normalize_course_name(item.get("course")),
             # handicap intentionally NOT extracted from orders — canonical
             # source is handicap_rounds (computed) and handicap_player_links.

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.15.13";
+window.TGF_VERSION = "2.15.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.14",
+    date: "2026-05-26",
+    title: "Parser: SEASON CONTESTS chapter always null; address never sets chapter",
+    changes: [
+      "Shipping address (or any address) must never determine a player's chapter. Added a code-level guard in parser.py: if the item name is 'SEASON CONTESTS', chapter is forced to null regardless of what the LLM extracted. The LLM had no valid chapter source for contest-only items and was grabbing the shipping city.",
+      "Strengthened the parser prompt to explicitly state that SEASON CONTESTS items (SKU 26-SC) must always have a blank chapter — there is no golf course, therefore no chapter to infer.",
+    ],
+  },
   {
     version: "2.15.13",
     date: "2026-05-26",
