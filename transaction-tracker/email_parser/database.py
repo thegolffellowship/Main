@@ -4252,6 +4252,17 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.OperationalError:
                 pass  # column already exists
 
+        # ── manually_enrolled flag on season_contests ──────────────
+        # Distinguishes intentional manual enrollments (cash payment, admin override)
+        # from auto-synced rows so the reconciliation cleanup can safely remove
+        # orphaned auto-sync rows without touching admin-confirmed enrollments.
+        try:
+            conn.execute(
+                "ALTER TABLE season_contests ADD COLUMN manually_enrolled INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
         # ── Bridge tgf_events → events (main event registry) ────────
         try:
             conn.execute(
@@ -13308,17 +13319,22 @@ def build_handicap_card_html(card_data: dict) -> str:
 def enroll_season_contest(customer_name: str, contest_type: str,
                           chapter: str = "", season: str = "",
                           source_item_id: int | None = None,
+                          manually_enrolled: bool = False,
                           db_path: str | Path | None = None) -> dict:
     """Enroll a customer in a season contest (NET Points Race, GROSS Points Race, City Match Play).
 
     Returns the enrollment dict. Idempotent — re-enrolling is a no-op.
+    Set manually_enrolled=True for admin overrides (cash payments, etc.) so the
+    reconciliation cleanup does not auto-remove the row.
     """
     with _connect(db_path) as conn:
         try:
             conn.execute(
-                """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (customer_name, contest_type, chapter or "", season or "", source_item_id),
+                """INSERT INTO season_contests
+                   (customer_name, contest_type, chapter, season, source_item_id, manually_enrolled)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (customer_name, contest_type, chapter or "", season or "",
+                 source_item_id, 1 if manually_enrolled else 0),
             )
             conn.commit()
             logger.info("Enrolled %s in %s (%s/%s)", customer_name, contest_type, chapter, season)
@@ -13511,6 +13527,34 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                    WHERE UPPER(item_name) != 'TGF MEMBERSHIP'
                      AND UPPER(item_name) NOT LIKE '%SEASON CONTEST%'
                )"""
+        )
+
+        # Reconcile: remove auto-synced enrollments that have no valid backing purchase.
+        # Uses customer_id as the identity key (Guiding Principle #6).
+        # Only removes rows where:
+        #   - manually_enrolled = 0 (admin-confirmed enrollments are protected)
+        #   - customer_id is known (we can positively identify the customer)
+        #   - There is no MEMBERSHIP or SEASON CONTESTS item for this customer
+        #     that carries the matching contest flag
+        conn.execute(
+            """DELETE FROM season_contests
+               WHERE manually_enrolled = 0
+                 AND customer_id IS NOT NULL
+                 AND NOT EXISTS (
+                     SELECT 1 FROM items i
+                     WHERE i.customer_id = season_contests.customer_id
+                       AND i.transaction_status IN ('active', NULL)
+                       AND (UPPER(i.item_name) = 'TGF MEMBERSHIP'
+                            OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
+                       AND (
+                           (season_contests.contest_type = 'NET Points Race'
+                                AND i.net_points_race = 'YES')
+                           OR (season_contests.contest_type = 'GROSS Points Race'
+                                AND i.gross_points_race = 'YES')
+                           OR (season_contests.contest_type = 'City Match Play'
+                                AND i.city_match_play = 'YES')
+                       )
+                 )"""
         )
 
         # Backfill customer_id on any rows that lack it so the cleanup below can

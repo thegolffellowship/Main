@@ -7717,7 +7717,7 @@ def api_enroll_season_contest():
     if not row or not row["customer_name"]:
         return jsonify({"error": "Customer not found"}), 404
     customer_name = row["customer_name"]
-    enrollment = enroll_season_contest(customer_name, contest_type, chapter, season)
+    enrollment = enroll_season_contest(customer_name, contest_type, chapter, season, manually_enrolled=True)
     return jsonify(enrollment), 201
 
 
@@ -7737,6 +7737,19 @@ def api_customer_season_contests(customer_name):
     from email_parser.database import get_customer_season_contests
     enrollments = get_customer_season_contests(customer_name)
     return jsonify(enrollments)
+
+
+@app.route("/api/season-contests/<int:enrollment_id>", methods=["DELETE"])
+@require_role("manager")
+def api_delete_season_contest(enrollment_id):
+    """Delete a season contest enrollment by id."""
+    from email_parser.database import _connect
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM season_contests WHERE id = ?", (enrollment_id,))
+        conn.commit()
+    if cur.rowcount:
+        return jsonify({"ok": True})
+    return jsonify({"error": "Not found"}), 404
 
 
 # ---------------------------------------------------------------------------
