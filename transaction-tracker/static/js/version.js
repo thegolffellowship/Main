@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.15.23";
+window.TGF_VERSION = "2.15.24";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.24",
+    date: "2026-05-26",
+    changes: [
+      "Fix: resolve_player_email now checks customers.email directly (step 3) before falling back to items snapshot — fixes all customers whose email was entered via the UI edit form but not in customer_emails",
+      "Boot migration: _backfill_customer_emails_from_customers_table copies every customers.email into customer_emails at startup so future lookups hit the fast path",
+    ],
+  },
   {
     version: "2.15.23",
     date: "2026-05-26",
