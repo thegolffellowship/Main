@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.15.15";
+window.TGF_VERSION = "2.15.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.16",
+    date: "2026-05-26",
+    title: "Season Contests: customer_id-based dedup and chapter correction",
+    changes: [
+      "Enrollment cleanup now works by customer_id, not by customer_name string. 'Stuart Kirksey' and 'Stu Kirksey' share a customer_id, so the cleanup correctly identifies them as the same person and collapses to one canonical-name row.",
+      "Chapter correction now resolves via customer_id → customers.chapter instead of customer_name string lookup. This fixes cases where the enrollment name is an alias (not the canonical name) and the name-based chapter lookup returned blank.",
+      "Sync now calls _backfill_customer_id_on_season_contests before cleanup so alias names get their customer_id resolved (Stuart → Stu Kirksey's customer_id) before the dedup pass runs.",
+      "Added explicit dedup pass: after name/chapter correction, any remaining (customer_id, contest_type, season) group with > 1 row is collapsed to the canonical-name row.",
+    ],
+  },
   {
     version: "2.15.15",
     date: "2026-05-26",
