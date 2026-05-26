@@ -13406,18 +13406,21 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 linked += 1
 
     with _connect(db_path) as conn:
-        # Build customer→chapter lookup so blank-chapter items resolve to canonical chapter.
+        # Season contest chapter must ALWAYS come from the customer's canonical chapter,
+        # never from items.chapter.  items.chapter captures golf event/course location
+        # (e.g. "San Antonio" from a shipping address), which is irrelevant for a season
+        # contest purchase and actively wrong when the player's home chapter differs.
         cust_chapter = {}
-        for r in conn.execute("SELECT customer_name, chapter FROM customers WHERE chapter IS NOT NULL AND chapter != ''").fetchall():
+        for r in conn.execute(
+            "SELECT customer_name, chapter FROM customers WHERE chapter IS NOT NULL AND chapter != ''"
+        ).fetchall():
             cust_chapter[r["customer_name"].lower()] = r["chapter"]
 
-        def _resolve_chapter(item_chapter, customer_name):
-            if item_chapter:
-                return item_chapter
+        def _canonical_chapter(customer_name):
             return cust_chapter.get((customer_name or "").lower(), "")
 
         rows = conn.execute(
-            """SELECT id, customer, chapter, net_points_race, gross_points_race, city_match_play,
+            """SELECT id, customer, net_points_race, gross_points_race, city_match_play,
                       item_name, order_date
                FROM items
                WHERE transaction_status IN ('active', NULL)
@@ -13428,7 +13431,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         for row in rows:
             row = dict(row)
             customer = row.get("customer") or ""
-            chapter = _resolve_chapter(row.get("chapter") or "", customer)
+            chapter = _canonical_chapter(customer)
             order_date = row.get("order_date") or ""
             season = order_date[:4] if len(order_date) >= 4 else ""
             item_id = row["id"]
@@ -13440,9 +13443,10 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             if (row.get("city_match_play") or "").upper() == "YES":
                 _upsert(conn, customer, "City Match Play", chapter, season, item_id)
 
-        # Handle standalone "SEASON CONTESTS" items.
+        # Handle standalone "SEASON CONTESTS" items (fallback for items where the parser
+        # didn't populate the individual flag fields).
         bundle_rows = conn.execute(
-            """SELECT id, customer, chapter, item_name, notes, order_date
+            """SELECT id, customer, item_name, notes, order_date
                FROM items
                WHERE UPPER(item_name) LIKE '%SEASON CONTEST%'
                  AND transaction_status IN ('active', NULL)"""
@@ -13450,7 +13454,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         for row in bundle_rows:
             row = dict(row)
             customer = row.get("customer") or ""
-            chapter = _resolve_chapter(row.get("chapter") or "", customer)
+            chapter = _canonical_chapter(customer)
             order_date = row.get("order_date") or ""
             season = order_date[:4] if len(order_date) >= 4 else ""
             item_name = (row.get("item_name") or "").upper()
@@ -13487,20 +13491,35 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                     params.append(item_id)
                     conn.execute(f"UPDATE items SET {', '.join(updates)} WHERE id = ?", params)
 
-        # Clean up blank-chapter rows when a chaptered row now exists for the same
-        # (customer_name, contest_type, season).  This fixes rows created before the
-        # chapter-fallback logic was added.
-        conn.execute(
-            """DELETE FROM season_contests AS sc
-               WHERE sc.chapter = ''
-                 AND EXISTS (
-                     SELECT 1 FROM season_contests sc2
-                     WHERE sc2.customer_name = sc.customer_name
-                       AND sc2.contest_type  = sc.contest_type
-                       AND sc2.season        = sc.season
-                       AND sc2.chapter != ''
-                 )"""
-        )
+        # Correct any existing enrollment rows whose chapter doesn't match the customer's
+        # canonical chapter (covers both blank chapters and wrong chapters like "San Antonio"
+        # parsed from a shipping address).
+        all_sc = conn.execute(
+            "SELECT id, customer_name, contest_type, chapter, season FROM season_contests"
+        ).fetchall()
+        for sc in all_sc:
+            sc = dict(sc)
+            correct = cust_chapter.get((sc["customer_name"] or "").lower(), "")
+            if not correct or sc["chapter"] == correct:
+                continue
+            # This row has the wrong chapter.  Check if a correct-chapter row already exists.
+            dup = conn.execute(
+                """SELECT id FROM season_contests
+                   WHERE customer_name = ? AND contest_type = ? AND chapter = ? AND season = ?""",
+                (sc["customer_name"], sc["contest_type"], correct, sc["season"]),
+            ).fetchone()
+            if dup:
+                # Correct row exists — delete the bad one.
+                conn.execute("DELETE FROM season_contests WHERE id = ?", (sc["id"],))
+            else:
+                # No correct row yet — update in place.
+                try:
+                    conn.execute(
+                        "UPDATE season_contests SET chapter = ? WHERE id = ?",
+                        (correct, sc["id"]),
+                    )
+                except sqlite3.IntegrityError:
+                    conn.execute("DELETE FROM season_contests WHERE id = ?", (sc["id"],))
 
         conn.commit()
     logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)

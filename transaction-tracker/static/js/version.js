@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.15.12";
+window.TGF_VERSION = "2.15.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.13",
+    date: "2026-05-26",
+    title: "Season Contests: always use canonical customer chapter, never items.chapter",
+    changes: [
+      "Season contest enrollments now always derive chapter from the customer's canonical chapter in the Customers table. Previously, items.chapter (which captures golf event/course location or GoDaddy shipping address city) was used when non-blank — this caused Luke Youngs to show 'San Antonio' even though his profile chapter is 'Austin' because his shipping address is in San Antonio.",
+      "The chapter-correction cleanup now handles any chapter value that doesn't match the customer's canonical chapter, not just blank ones. On next sync, wrong-chapter rows are updated to the correct chapter (or deleted if the correct row already exists).",
+    ],
+  },
   {
     version: "2.15.12",
     date: "2026-05-26",
