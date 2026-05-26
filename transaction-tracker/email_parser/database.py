@@ -13424,6 +13424,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                       item_name, order_date
                FROM items
                WHERE transaction_status IN ('active', NULL)
+                 AND (UPPER(item_name) = 'TGF MEMBERSHIP' OR UPPER(item_name) LIKE '%SEASON CONTEST%')
                  AND (net_points_race = 'YES' OR gross_points_race = 'YES' OR city_match_play = 'YES'
                       OR UPPER(item_name) LIKE '%SEASON CONTEST%')"""
         ).fetchall()
@@ -13490,6 +13491,27 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 if updates:
                     params.append(item_id)
                     conn.execute(f"UPDATE items SET {', '.join(updates)} WHERE id = ?", params)
+
+        # Clear contest enrollment flags from event items where the parser set them
+        # incorrectly (e.g. Hill Country Matches with city_match_play='YES').
+        conn.execute(
+            """UPDATE items
+               SET net_points_race = NULL, gross_points_race = NULL, city_match_play = NULL
+               WHERE (net_points_race = 'YES' OR gross_points_race = 'YES' OR city_match_play = 'YES')
+                 AND UPPER(item_name) != 'TGF MEMBERSHIP'
+                 AND UPPER(item_name) NOT LIKE '%SEASON CONTEST%'"""
+        )
+
+        # Remove enrollments sourced from non-membership/contest items (e.g. Hill Country
+        # Matches erroneously had city_match_play='YES' set by the parser).
+        conn.execute(
+            """DELETE FROM season_contests
+               WHERE source_item_id IN (
+                   SELECT id FROM items
+                   WHERE UPPER(item_name) != 'TGF MEMBERSHIP'
+                     AND UPPER(item_name) NOT LIKE '%SEASON CONTEST%'
+               )"""
+        )
 
         # Correct any existing enrollment rows whose chapter doesn't match the customer's
         # canonical chapter (covers both blank chapters and wrong chapters like "San Antonio"

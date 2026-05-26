@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.15.14";
+window.TGF_VERSION = "2.15.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.15",
+    date: "2026-05-26",
+    title: "Season Contests: never enroll from golf event items (Hill Country Matches, etc.)",
+    changes: [
+      "net_points_race / gross_points_race / city_match_play flags are now enforced as null for all non-membership/contest item types. Hill Country Matches is a golf event, not a season contest — buying it must never create a season contest enrollment even if the event involves match play format.",
+      "Added _is_contest_item() guard in parser.py: flags are only carried through to the DB row when item_name is 'TGF MEMBERSHIP' or 'SEASON CONTESTS'. All other item types get null regardless of what the LLM extracted.",
+      "Sync query now explicitly restricts to MEMBERSHIP / SEASON CONTESTS item names, so flagged event items can never re-enter through the sync path.",
+      "On sync, bad flags are cleared from event items in the DB (UPDATE items SET ...=NULL) and any season_contests rows that were sourced from a non-membership/contest item are deleted.",
+    ],
+  },
   {
     version: "2.15.14",
     date: "2026-05-26",

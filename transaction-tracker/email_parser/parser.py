@@ -188,12 +188,16 @@ FIELD-SPECIFIC GUIDANCE:
   "Do you have a Current Handicap?" field. For events, set to null.
 - "returning_or_new": For MEMBERSHIP items — "New" or "Returning" from \
   the "RETURNING or NEW?" field. Extract just the keyword.
-- "net_points_race": "YES" or "NO" from "Add NET Points Race?" field. \
-  Can appear on MEMBERSHIP items or SEASON CONTESTS items. Normalise to YES/NO.
-- "gross_points_race": "YES" or "NO" from "Add GROSS Points Race?" field. \
-  Can appear on MEMBERSHIP items or SEASON CONTESTS items. Normalise to YES/NO.
-- "city_match_play": "YES" or "NO" from "Add City MATCH PLAY?" field. \
-  Can appear on MEMBERSHIP items or SEASON CONTESTS items. Normalise to YES/NO.
+- "net_points_race": "YES" or "NO" from "Add NET Points Race?" or "Points NET Bundle" field. \
+  ONLY valid on TGF MEMBERSHIP or SEASON CONTESTS items. For any golf event item \
+  (Hill Country Matches, Riverside, ShadowGlen, etc.) set to null — NEVER extract \
+  contest enrollment flags from event items even if the event name contains "Match Play".
+- "gross_points_race": "YES" or "NO" from "Add GROSS Points Race?" or "Points GROSS" field. \
+  ONLY valid on TGF MEMBERSHIP or SEASON CONTESTS items. Null for all event items.
+- "city_match_play": "YES" or "NO" from "Add City MATCH PLAY?" or "City MATCH PLAY" field. \
+  ONLY valid on TGF MEMBERSHIP or SEASON CONTESTS items. Null for all event items. \
+  A match-play-format golf event (e.g. "Hill Country Matches") is NOT the same as the \
+  City Match Play season contest — do not set this flag on event purchases.
 - "partner_request": If the player requested a specific playing partner, \
   extract the partner's name. Look for fields like "Playing Partner Request", \
   "Partner Request", "Who would you like to play with?", etc.
@@ -546,6 +550,20 @@ def _normalize_item_name(name: str | None) -> str | None:
     if _MEMBERSHIP_RE.match(name.strip()):
         return "TGF MEMBERSHIP"
     return name
+
+
+def _is_contest_item(normalized_item_name: str | None) -> bool:
+    """Return True only for item types that carry season contest enrollment flags.
+
+    net_points_race / gross_points_race / city_match_play are only meaningful on
+    TGF MEMBERSHIP and SEASON CONTESTS items.  Golf event purchases (Hill Country
+    Matches, Riverside, ShadowGlen, etc.) never carry these flags even when the
+    event involves match-play format.
+    """
+    if not normalized_item_name:
+        return False
+    upper = normalized_item_name.upper()
+    return upper == "TGF MEMBERSHIP" or "SEASON CONTEST" in upper
 
 
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
@@ -996,9 +1014,13 @@ def parse_email(email_data: dict) -> list[dict]:
             "shirt_size": item.get("shirt_size"),
             "guest_name": item.get("guest_name"),
             "date_of_birth": item.get("date_of_birth"),
-            "net_points_race": item.get("net_points_race"),
-            "gross_points_race": item.get("gross_points_race"),
-            "city_match_play": item.get("city_match_play"),
+            # Contest enrollment flags are only valid on MEMBERSHIP or SEASON CONTESTS
+            # items.  Null out these fields for all other item types (golf events, etc.)
+            # so that a match-play tournament (e.g. Hill Country Matches) never creates
+            # a spurious season contest enrollment.
+            "net_points_race": item.get("net_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
+            "gross_points_race": item.get("gross_points_race") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
+            "city_match_play": item.get("city_match_play") if _is_contest_item(_normalize_item_name(item.get("item_name"))) else None,
             "subject": subject,
             "from_addr": from_addr,
         })
