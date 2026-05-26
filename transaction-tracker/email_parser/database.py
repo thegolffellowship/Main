@@ -2741,6 +2741,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("player_id",           "INTEGER REFERENCES customers(customer_id)"),
             ("opponent_id",         "INTEGER REFERENCES customers(customer_id)"),
             ("winner_id",           "INTEGER REFERENCES customers(customer_id)"),
+            ("event_id",            "INTEGER REFERENCES events(id)"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE cmp_bracket ADD COLUMN {_col} {_def}")
@@ -13918,6 +13919,7 @@ def cmp_save_bracket_slot(season: str, chapter: str, round_: str, slot: int,
                            opponent_stableford: float | None = None,
                            winner_name: str | None = None,
                            margin: str | None = None,
+                           event_id: int | None = None,
                            db_path=None) -> dict:
     with _connect(db_path) as conn:
         conn.execute(
@@ -13925,19 +13927,20 @@ def cmp_save_bracket_slot(season: str, chapter: str, round_: str, slot: int,
                (season, chapter, round, slot,
                 player_name, player_stableford,
                 opponent_name, opponent_stableford,
-                winner_name, margin)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                winner_name, margin, event_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(season, chapter, round, slot)
                DO UPDATE SET player_name         = excluded.player_name,
                              player_stableford   = excluded.player_stableford,
                              opponent_name       = excluded.opponent_name,
                              opponent_stableford = excluded.opponent_stableford,
                              winner_name         = excluded.winner_name,
-                             margin              = excluded.margin""",
+                             margin              = excluded.margin,
+                             event_id            = excluded.event_id""",
             (season, chapter, round_, slot,
              player_name, player_stableford,
              opponent_name, opponent_stableford,
-             winner_name, margin),
+             winner_name, margin, event_id),
         )
         conn.commit()
         row = conn.execute(
@@ -13945,6 +13948,17 @@ def cmp_save_bracket_slot(season: str, chapter: str, round_: str, slot: int,
             (season, chapter, round_, slot),
         ).fetchone()
         return dict(row) if row else {}
+
+
+def cmp_clear_bracket(season: str, chapter: str, db_path=None) -> int:
+    """Delete all bracket slots for a given season + chapter. Returns rows deleted."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "DELETE FROM cmp_bracket WHERE season = ? AND chapter = ?",
+            (season, chapter),
+        )
+        conn.commit()
+        return cur.rowcount
 
 
 # ---------------------------------------------------------------------------

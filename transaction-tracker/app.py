@@ -7913,14 +7913,27 @@ def api_cmp_save_bracket():
     o_stab = float(data["opponent_stableford"]) if data.get("opponent_stableford") is not None else None
     winner = (data.get("winner_name") or "").strip() or None
     margin = (data.get("margin") or "").strip() or None
+    event_id = int(data["event_id"]) if data.get("event_id") else None
     from email_parser.database import cmp_save_bracket_slot
     row = cmp_save_bracket_slot(
         season, chapter, round_, int(slot),
         data.get("player_name"), p_stab,
         data.get("opponent_name"), o_stab,
-        winner, margin,
+        winner, margin, event_id,
     )
     return jsonify(row)
+
+
+@app.route("/api/cmp/bracket", methods=["DELETE"])
+@require_role("manager")
+def api_cmp_clear_bracket():
+    season = (request.args.get("season") or "").strip()
+    chapter = (request.args.get("chapter") or "").strip()
+    if not season or not chapter:
+        return jsonify({"error": "season and chapter required"}), 400
+    from email_parser.database import cmp_clear_bracket
+    deleted = cmp_clear_bracket(season, chapter)
+    return jsonify({"ok": True, "deleted": deleted})
 
 
 # ---------------------------------------------------------------------------

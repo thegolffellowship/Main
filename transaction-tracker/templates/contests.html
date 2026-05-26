@@ -390,6 +390,9 @@
                             <button class="btn manager-only" id="cmp-seed-bracket-btn" style="display:none;">
                                 &#8635; Seed from Pool Standings
                             </button>
+                            <button class="btn btn-danger manager-only" id="cmp-clear-bracket-btn" style="display:none;">
+                                &#215; Clear Bracket
+                            </button>
                         </div>
                         <div id="cmp-bracket-container">
                             <p style="color:var(--text-muted);font-size:0.85rem;">
@@ -574,6 +577,14 @@
 
     $("cmp-add-pool-btn").addEventListener("click", cmpAddPool);
     $("cmp-seed-bracket-btn").addEventListener("click", cmpSeedBracket);
+    $("cmp-clear-bracket-btn").addEventListener("click", async () => {
+        const { season, chapter } = cmpState;
+        if (!confirm(`Clear the entire knockout bracket for ${chapter} ${season}? This cannot be undone.`)) return;
+        const res = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`, { method: "DELETE" });
+        if (!res.ok) { alert("Failed to clear bracket."); return; }
+        cmpState.bracket = [];
+        cmpRenderBracket();
+    });
 
     function hcpLabel(name, customerId) {
         let entry = cmpState.handicapMap[(name || "").toLowerCase()];
@@ -1157,6 +1168,13 @@
                 const stab1 = s1.player_stableford != null ? s1.player_stableford : '';
                 const stab2 = s2.player_stableford != null ? s2.player_stableford : '';
                 const margin = s1.margin || s2.margin || '';
+                const eventId = s1.event_id || s2.event_id || null;
+                const eventOptions = cmpState.events.map(ev => {
+                    const d = (ev.event_date || '').slice(5).replace('-', '/');
+                    const nm = ev.item_name.length > 14 ? ev.item_name.slice(0, 14) + '…' : ev.item_name;
+                    return `<option value="${ev.id}" ${eventId === ev.id ? 'selected' : ''} title="${escapeHtml(ev.item_name)}">${escapeHtml(d ? d + ' ' + nm : nm)}</option>`;
+                }).join('');
+                const eventDisplay = eventId ? (cmpState.events.find(e => e.id === eventId) || {}).item_name || '' : '';
 
                 return `
                 <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
@@ -1198,8 +1216,15 @@
                             placeholder="Margin (e.g. 1 Up)"
                             data-round="${round.key}" data-match="${mi}"
                             value="${escapeHtml(margin)}" title="Match margin">
+                        <select class="match-event-sel bracket-event-sel"
+                            data-round="${round.key}" data-match="${mi}"
+                            title="Event where this match was played">
+                            <option value="">— event —</option>
+                            ${eventOptions}
+                        </select>
                     </div>` : (winner ? `<div style="padding:0.25rem 0.65rem;font-size:0.72rem;font-weight:700;color:#166534;">
                         ${escapeHtml(winner)} ${margin ? '(' + escapeHtml(margin) + ')' : ''}
+                        ${eventDisplay ? `<span style="font-weight:400;color:var(--text-muted);margin-left:0.4rem;">${escapeHtml(eventDisplay)}</span>` : ''}
                     </div>` : '')}
                 </div>`;
             }).join("");
@@ -1228,11 +1253,13 @@
                     const i2 = container.querySelector(`.bracket-stab-input[data-round="${round}"][data-slot="${mi * 2 + 1}"]`);
                     const winSel = container.querySelector(`.bracket-winner-sel[data-round="${round}"][data-match="${mi}"]`);
                     const marginEl = container.querySelector(`.bracket-margin-input[data-round="${round}"][data-match="${mi}"]`);
+                    const evSel = container.querySelector(`.bracket-event-sel[data-round="${round}"][data-match="${mi}"]`);
 
                     const stab1 = i1 && i1.value !== "" ? parseFloat(i1.value) : null;
                     const stab2 = i2 && i2.value !== "" ? parseFloat(i2.value) : null;
                     const winnerVal = winSel ? winSel.value : "";
                     const marginVal = (marginEl ? marginEl.value.trim() : "") || null;
+                    const event_id = evSel && evSel.value ? Number(evSel.value) : null;
 
                     let winner_name = null;
                     let margin = marginVal;
@@ -1254,7 +1281,7 @@
                             player_stableford: stab1,
                             opponent_name: i1.dataset.opp || null,
                             opponent_stableford: stab2,
-                            winner_name, margin,
+                            winner_name, margin, event_id,
                         }),
                     }));
                     if (i2) saves.push(fetch("/api/cmp/bracket", {
@@ -1266,7 +1293,7 @@
                             player_stableford: stab2,
                             opponent_name: i2.dataset.opp || null,
                             opponent_stableford: stab1,
-                            winner_name, margin,
+                            winner_name, margin, event_id,
                         }),
                     }));
 
