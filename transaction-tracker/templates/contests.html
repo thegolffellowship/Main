@@ -117,7 +117,7 @@
         .pool-matches { padding: 0.75rem; overflow-x: auto; }
         .match-entry {
             display: grid;
-            grid-template-columns: 1fr auto auto auto auto auto auto auto auto;
+            grid-template-columns: 1fr auto auto auto auto auto auto auto auto auto;
             gap: 0.35rem;
             align-items: center;
             padding: 0.4rem 0;
@@ -154,6 +154,12 @@
             white-space: nowrap; flex-shrink: 0;
         }
         .match-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .match-clear-btn {
+            padding: 0.18rem 0.4rem; font-size: 0.65rem; border-radius: 3px;
+            background: none; color: #9ca3af; border: 1px solid #d1d5db; cursor: pointer;
+            white-space: nowrap; flex-shrink: 0;
+        }
+        .match-clear-btn:hover { color: #dc2626; border-color: #dc2626; }
         .match-played-dot {
             width: 7px; height: 7px; border-radius: 50%;
             background: #22c55e; display: inline-block; margin-right: 2px;
@@ -162,7 +168,7 @@
         .match-played-dot.unplayed { background: #d1d5db; }
         .match-header-row {
             display: grid;
-            grid-template-columns: 1fr auto auto auto auto auto auto auto auto;
+            grid-template-columns: 1fr auto auto auto auto auto auto auto auto auto;
             gap: 0.35rem;
             padding: 0.2rem 0 0.35rem;
             border-bottom: 2px solid var(--border);
@@ -541,7 +547,8 @@
 
     let cmpState = {
         season: "2026", chapter: "Austin", pools: [], enrollees: [], bracket: [],
-        handicapMap: {}   // lowercase name → { index_9, index_18 }
+        handicapMap: {},        // lowercase name → { index_9, index_18 }
+        customerIdToName: {}    // customer_id → canonical customer_name (for hcp fallback)
     };
 
     // ── Chapter tabs ──
@@ -560,8 +567,12 @@
     $("cmp-add-pool-btn").addEventListener("click", cmpAddPool);
     $("cmp-seed-bracket-btn").addEventListener("click", cmpSeedBracket);
 
-    function hcpLabel(name) {
-        const entry = cmpState.handicapMap[(name || "").toLowerCase()];
+    function hcpLabel(name, customerId) {
+        let entry = cmpState.handicapMap[(name || "").toLowerCase()];
+        // Fallback: if enrollment name differs from canonical name, resolve via customer_id
+        if (!entry && customerId && cmpState.customerIdToName[customerId]) {
+            entry = cmpState.handicapMap[cmpState.customerIdToName[customerId].toLowerCase()];
+        }
         if (!entry || entry.index_18 == null) return "";
         const val = entry.index_18;
         return `<span class="hcp-badge">(${val >= 0 ? val : '+' + Math.abs(val)})</span>`;
@@ -573,15 +584,15 @@
         const chapter = cmpState.chapter;
         cmpState.season = season;
 
-        // Fetch pools, enrollees (all CMP for season, any chapter), and handicap map in parallel
-        const [poolsRes, enrollRes, hcpRes] = await Promise.all([
+        // Fetch pools, enrollees, handicap map, and (if not cached) customers in parallel
+        const fetches = [
             fetch(`/api/cmp/pools?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`),
-            // No chapter filter — include anyone enrolled for City Match Play this season
-            // regardless of which chapter's item they bought through, so manually-added
-            // or chapter-less enrollees still appear in the pool dropdown.
             fetch(`/api/season-contests?contest_type=City+Match+Play&season=${encodeURIComponent(season)}`),
             fetch(`/api/handicaps/index-map`),
-        ]);
+        ];
+        if (!_allCustomers) fetches.push(fetch("/api/customers"));
+        const [poolsRes, enrollRes, hcpRes, custRes] = await Promise.all(fetches);
+
         cmpState.pools = poolsRes.ok ? await poolsRes.json() : [];
         const rawEnrollees = enrollRes.ok ? await enrollRes.json() : [];
         const seenNames = new Set();
@@ -589,6 +600,28 @@
             .filter(e => e.customer_name && (!e.chapter || e.chapter === chapter) && !seenNames.has(e.customer_name) && seenNames.add(e.customer_name))
             .map(e => ({ customer_name: e.customer_name, customer_id: e.customer_id || null }));
         cmpState.handicapMap = hcpRes.ok ? await hcpRes.json() : {};
+
+        // Build/update customer_id → canonical name map for handicap fallback resolution
+        if (custRes) {
+            const STATUS_RANK = { 'MEMBER': 0, 'STAFF': 1, 'FORMER': 2 };
+            const byName = new Map();
+            (custRes.ok ? await custRes.json() : []).forEach(c => {
+                if (!c.customer_name) return;
+                const key = c.customer_name.toLowerCase();
+                if (!byName.has(key)) { byName.set(key, c); }
+                else {
+                    const cur = byName.get(key);
+                    if ((STATUS_RANK[c.current_player_status] ?? 99) < (STATUS_RANK[cur.current_player_status] ?? 99))
+                        byName.set(key, c);
+                }
+            });
+            _allCustomers = Array.from(byName.values())
+                .sort((a, b) => (a.customer_name || "").localeCompare(b.customer_name || ""));
+        }
+        cmpState.customerIdToName = {};
+        (_allCustomers || []).forEach(c => {
+            if (c.customer_id) cmpState.customerIdToName[c.customer_id] = c.customer_name;
+        });
 
         cmpRender();
 
@@ -649,7 +682,7 @@
             }
             return `
             <div class="unassigned-player-row">
-                <span class="unassigned-player-name">${escapeHtml(e.customer_name)}${hcpLabel(e.customer_name)}</span>
+                <span class="unassigned-player-name">${escapeHtml(e.customer_name)}${hcpLabel(e.customer_name, e.customer_id)}</span>
                 ${assignWidget}
             </div>`;
         }).join('');
@@ -727,6 +760,7 @@
                 <span class="match-col-label">Pts&nbsp;P1</span>
                 <span class="match-col-label">Pts&nbsp;P2</span>
                 <span></span><!-- save btn -->
+                <span></span><!-- clear btn -->
             </div>
         ` : '';
 
@@ -750,11 +784,13 @@
                 <input type="number" class="match-stab-input match-s1" step="0.5" placeholder="—" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="${ea} Stableford pts">
                 <input type="number" class="match-stab-input match-s2" step="0.5" placeholder="—" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="${eb} Stableford pts">
                 <button class="match-save-btn" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}">Save</button>
+                <button class="match-clear-btn" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="Clear result">✕</button>
                 ` : `
                 <span class="match-winner-display" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="font-size:0.75rem;color:var(--text-muted);">—</span>
                 <span style="width:80px;"></span>
                 <span class="match-stab-display1" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="width:48px;text-align:center;">—</span>
                 <span class="match-stab-display2" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="width:48px;text-align:center;">—</span>
+                <span></span>
                 `}
             </div>`;
         }).join("") : `<p style="color:var(--text-muted);font-size:0.82rem;padding:0.25rem 0;">Add at least 2 players to enter scores.</p>`;
@@ -889,6 +925,38 @@
         document.querySelectorAll(".open-player-search-btn").forEach(btn => {
             btn.addEventListener("click", () => {
                 openPlayerSearchModal(Number(btn.dataset.pool));
+            });
+        });
+
+        // Clear match result
+        document.querySelectorAll(".match-clear-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                if (!confirm("Clear all results for this match?")) return;
+                const pid = Number(btn.dataset.pool);
+                const p1 = btn.dataset.p1;
+                const p2 = btn.dataset.p2;
+                btn.disabled = true;
+                await fetch("/api/cmp/matches", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pool_id: pid, player1_name: p1, player2_name: p2 }),
+                });
+                // Reset the row inputs
+                const row = btn.closest(".match-entry");
+                if (row) {
+                    const winSel = row.querySelector(".match-winner-sel");
+                    const marginEl = row.querySelector(".match-margin-input");
+                    const s1 = row.querySelector(".match-s1");
+                    const s2 = row.querySelector(".match-s2");
+                    if (winSel) winSel.value = "";
+                    if (marginEl) marginEl.value = "";
+                    if (s1) s1.value = "";
+                    if (s2) s2.value = "";
+                }
+                const dot = document.querySelector(`.match-dot[data-pool="${pid}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`);
+                if (dot) { dot.classList.add("unplayed"); dot.title = "Not yet played"; }
+                btn.disabled = false;
+                loadPoolStandings(pid);
             });
         });
 
@@ -1225,9 +1293,24 @@
 
         if (!_allCustomers) {
             const res = await fetch("/api/customers");
-            _allCustomers = res.ok ? await res.json() : [];
-            // Sort by name
-            _allCustomers.sort((a, b) => (a.customer_name || "").localeCompare(b.customer_name || ""));
+            const raw = res.ok ? await res.json() : [];
+            // Deduplicate by name — keep the record with the best membership status
+            const STATUS_RANK = { 'MEMBER': 0, 'STAFF': 1, 'FORMER': 2 };
+            const byName = new Map();
+            raw.forEach(c => {
+                if (!c.customer_name) return;
+                const key = c.customer_name.toLowerCase();
+                if (!byName.has(key)) {
+                    byName.set(key, c);
+                } else {
+                    const cur = byName.get(key);
+                    const curRank = STATUS_RANK[cur.current_player_status] ?? 99;
+                    const newRank = STATUS_RANK[c.current_player_status] ?? 99;
+                    if (newRank < curRank) byName.set(key, c);
+                }
+            });
+            _allCustomers = Array.from(byName.values())
+                .sort((a, b) => (a.customer_name || "").localeCompare(b.customer_name || ""));
         }
         renderSearchResults("");
     }

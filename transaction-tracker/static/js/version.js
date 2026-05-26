@@ -1,5 +1,24 @@
-window.TGF_VERSION = "2.15.5";
+window.TGF_VERSION = "2.15.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.7",
+    date: "2026-05-26",
+    title: "Match Play: Clear button to reset a match result",
+    changes: [
+      "Each match row now has a small '✕' Clear button (next to Save) that removes the match result — winner, margin, and Stableford points are all wiped. The match dot reverts to gray (unplayed) and pool standings recalculate immediately. A confirmation prompt prevents accidental clears.",
+      "New API: DELETE /api/cmp/matches with pool_id + player names in the JSON body. New DB function: cmp_clear_match() deletes the row using the canonical sorted player name pair.",
+    ],
+  },
+  {
+    version: "2.15.6",
+    date: "2026-05-26",
+    title: "Match Play: fix duplicate in Add Player modal; fix missing handicap in unassigned panel",
+    changes: [
+      "Add Player modal no longer shows duplicate entries when a player has two customer records (e.g. one FORMER and one MEMBER). Deduplicates by name on load, keeping the record with the better membership status (MEMBER > STAFF > FORMER).",
+      "Handicap now shows correctly in the 'Enrolled — Not Yet in a Pool' panel even when the enrollment name differs from the canonical customer name (e.g. 'Stuart Kirksey' enrolled vs 'Stu Kirksey' in the handicap system). Resolved by looking up the canonical name via customer_id when the direct name lookup misses.",
+      "Customer data is now fetched in parallel with pools and handicaps on page load instead of lazily on first modal open, so the customer_id resolution map is always ready.",
+    ],
+  },
   {
     version: "2.15.5",
     date: "2026-05-26",
