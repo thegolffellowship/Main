@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.15.22";
+window.TGF_VERSION = "2.15.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.23",
+    date: "2026-05-26",
+    changes: [
+      "Fix: crash-loop on boot — customer_emails PK is email_id not id; fixed _promote_lone_customer_emails_to_primary and resolve_player_email to use correct column name",
+      "Fix: wrapped boot migration in try/except so a failure is non-fatal",
+    ],
+  },
   {
     version: "2.15.22",
     date: "2026-05-26",

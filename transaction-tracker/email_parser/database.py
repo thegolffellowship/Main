@@ -4292,7 +4292,10 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_message_log(conn)
         _backfill_customer_id_on_rsvp_email_overrides(conn)
         _backfill_customer_id_on_action_items(conn)
-        _promote_lone_customer_emails_to_primary(conn)
+        try:
+            _promote_lone_customer_emails_to_primary(conn)
+        except Exception:
+            logger.exception("Non-fatal: _promote_lone_customer_emails_to_primary failed")
         try:
             _backfill_events_id_on_tgf_events(conn)
         except Exception:
@@ -5403,8 +5406,8 @@ def _promote_lone_customer_emails_to_primary(conn: sqlite3.Connection) -> int:
     """
     affected = conn.execute(
         """UPDATE customer_emails SET is_primary = 1
-           WHERE id IN (
-               SELECT MIN(id)
+           WHERE email_id IN (
+               SELECT MIN(email_id)
                FROM customer_emails
                WHERE email IS NOT NULL AND TRIM(email) != ''
                GROUP BY customer_id
@@ -17370,7 +17373,7 @@ def resolve_player_email(item, conn=None, db_path=None) -> str:
             row = conn.execute(
                 """SELECT email FROM customer_emails
                    WHERE customer_id = ? AND email IS NOT NULL AND TRIM(email) != ''
-                   ORDER BY id ASC LIMIT 1""",
+                   ORDER BY email_id ASC LIMIT 1""",
                 (cid,),
             ).fetchone()
             if row and row["email"]:
