@@ -525,6 +525,7 @@
             ["match-play", "points-race", "enrollment"].forEach(k => {
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
+            if (top === "enrollment") enrAutoLoad();
         });
     });
 
@@ -1449,6 +1450,14 @@
     }
 
     // ═══════════ ENROLLMENT ═══════════
+
+    function enrAutoLoad() {
+        // Pre-fill season with current year if blank, then load.
+        if (!$("enr-season").value.trim()) {
+            $("enr-season").value = String(new Date().getFullYear());
+        }
+        enrLoad();
+    }
 
     $("enr-load-btn").addEventListener("click", enrLoad);
     $("enr-sync-btn").addEventListener("click", async () => {

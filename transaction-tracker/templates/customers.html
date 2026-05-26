@@ -1971,9 +1971,10 @@
         const dob = customer.items.map(i => i.date_of_birth).find(Boolean) || "";
         const chapter = customer.chapter || "";
         const returningNew = membershipItem ? (membershipItem.returning_or_new || "") : "";
-        const netPts = membershipItem ? (membershipItem.net_points_race || "") : "";
-        const grossPts = membershipItem ? (membershipItem.gross_points_race || "") : "";
-        const matchPlay = membershipItem ? (membershipItem.city_match_play || "") : "";
+        // Check ALL items (not just membership) so standalone "SEASON CONTESTS" purchases also show badges.
+        const netPts = customer.items.some(i => (i.net_points_race || "").toUpperCase() === "YES") ? "YES" : "";
+        const grossPts = customer.items.some(i => (i.gross_points_race || "").toUpperCase() === "YES") ? "YES" : "";
+        const matchPlay = customer.items.some(i => (i.city_match_play || "").toUpperCase() === "YES") ? "YES" : "";
         const hasHandicap = membershipItem ? (membershipItem.has_handicap || "") : "";
 
         const meta = [];

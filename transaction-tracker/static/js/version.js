@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.15.10";
+window.TGF_VERSION = "2.15.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.11",
+    date: "2026-05-26",
+    title: "Season Contests: enrollment auto-load, chapter fix, badges, full-bundle sync",
+    changes: [
+      "Enrollment tab now auto-loads when selected, pre-filling the current year so you see results immediately without clicking Load.",
+      "Sync now falls back to the customer's canonical chapter (from the Customers table) when an item's chapter field is blank — fixes Stuart/Isaac/Dow showing '—' in the enrollment table even though their profiles have a chapter set.",
+      "Standalone 'SEASON CONTESTS' items with no NET/GROSS qualifier are now treated as the full bundle (NET Points Race + GROSS Points Race + City Match Play). Previously they enrolled nobody.",
+      "After syncing a standalone SEASON CONTESTS item, the item's net_points_race / gross_points_race / city_match_play flags are stamped 'YES', so the customer profile badges (NET Pts, GROSS Pts, Match Play) now appear for players who bought a separate SEASON CONTESTS item rather than having it bundled into their membership.",
+      "Customer profile badge logic now checks all items (not just the membership item) so any item carrying contest flags contributes to the displayed badges.",
+      "Blank-chapter enrollment rows are cleaned up automatically during sync when a properly-chaptered row exists for the same customer/contest/season.",
+    ],
+  },
   {
     version: "2.15.10",
     date: "2026-05-26",
