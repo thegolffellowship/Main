@@ -1,5 +1,34 @@
-window.TGF_VERSION = "2.15.12";
+window.TGF_VERSION = "2.15.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.15",
+    date: "2026-05-26",
+    title: "Season Contests: never enroll from golf event items (Hill Country Matches, etc.)",
+    changes: [
+      "net_points_race / gross_points_race / city_match_play flags are now enforced as null for all non-membership/contest item types. Hill Country Matches is a golf event, not a season contest — buying it must never create a season contest enrollment even if the event involves match play format.",
+      "Added _is_contest_item() guard in parser.py: flags are only carried through to the DB row when item_name is 'TGF MEMBERSHIP' or 'SEASON CONTESTS'. All other item types get null regardless of what the LLM extracted.",
+      "Sync query now explicitly restricts to MEMBERSHIP / SEASON CONTESTS item names, so flagged event items can never re-enter through the sync path.",
+      "On sync, bad flags are cleared from event items in the DB (UPDATE items SET ...=NULL) and any season_contests rows that were sourced from a non-membership/contest item are deleted.",
+    ],
+  },
+  {
+    version: "2.15.14",
+    date: "2026-05-26",
+    title: "Parser: SEASON CONTESTS chapter always null; address never sets chapter",
+    changes: [
+      "Shipping address (or any address) must never determine a player's chapter. Added a code-level guard in parser.py: if the item name is 'SEASON CONTESTS', chapter is forced to null regardless of what the LLM extracted. The LLM had no valid chapter source for contest-only items and was grabbing the shipping city.",
+      "Strengthened the parser prompt to explicitly state that SEASON CONTESTS items (SKU 26-SC) must always have a blank chapter — there is no golf course, therefore no chapter to infer.",
+    ],
+  },
+  {
+    version: "2.15.13",
+    date: "2026-05-26",
+    title: "Season Contests: always use canonical customer chapter, never items.chapter",
+    changes: [
+      "Season contest enrollments now always derive chapter from the customer's canonical chapter in the Customers table. Previously, items.chapter (which captures golf event/course location or GoDaddy shipping address city) was used when non-blank — this caused Luke Youngs to show 'San Antonio' even though his profile chapter is 'Austin' because his shipping address is in San Antonio.",
+      "The chapter-correction cleanup now handles any chapter value that doesn't match the customer's canonical chapter, not just blank ones. On next sync, wrong-chapter rows are updated to the correct chapter (or deleted if the correct row already exists).",
+    ],
+  },
   {
     version: "2.15.12",
     date: "2026-05-26",
