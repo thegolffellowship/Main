@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.15.24";
+window.TGF_VERSION = "2.15.25";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.25",
+    date: "2026-05-26",
+    changes: [
+      "Fix: resolve_player_email step 3 is now a name-based customer_emails lookup (joins customers by first+last name and via name aliases) — fixes customers whose credit-transfer item has a stale/null customer_id so the customer_emails customer_id lookup fails silently",
+      "Fix: removed broken _backfill_customer_emails_from_customers_table (customers table has no email column); removed broken step 3 that queried customers.email",
+    ],
+  },
   {
     version: "2.15.24",
     date: "2026-05-26",
