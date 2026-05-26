@@ -2706,6 +2706,9 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("player1_stableford", "REAL"),
             ("player2_stableford", "REAL"),
             ("event_id",           "INTEGER REFERENCES events(id) ON DELETE SET NULL"),
+            ("player1_id",         "INTEGER REFERENCES customers(customer_id)"),
+            ("player2_id",         "INTEGER REFERENCES customers(customer_id)"),
+            ("winner_id",          "INTEGER REFERENCES customers(customer_id)"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE cmp_matches ADD COLUMN {_col} {_def}")
@@ -2735,6 +2738,9 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("player_stableford",   "REAL"),
             ("opponent_stableford", "REAL"),
             ("margin",              "TEXT"),
+            ("player_id",           "INTEGER REFERENCES customers(customer_id)"),
+            ("opponent_id",         "INTEGER REFERENCES customers(customer_id)"),
+            ("winner_id",           "INTEGER REFERENCES customers(customer_id)"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE cmp_bracket ADD COLUMN {_col} {_def}")
@@ -13451,33 +13457,32 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             notes_upper = (row.get("notes") or "").upper()
             item_id = row["id"]
 
+            # Each contest is independent.  "NET Bundle" does NOT imply City Match Play.
             has_net = "NET" in item_name or "NET" in notes_upper
             has_gross = "GROSS" in item_name or "GROSS" in notes_upper
-            # Plain "SEASON CONTESTS" with no qualifier = full bundle (all three)
-            full_bundle = not has_net and not has_gross
+            has_cmp = "MATCH PLAY" in item_name or "MATCH PLAY" in notes_upper
 
             contests_to_enroll = set()
-            if has_net or full_bundle:
-                contests_to_enroll.update(["NET Points Race", "City Match Play"])
-            if has_gross or full_bundle:
-                contests_to_enroll.update(["GROSS Points Race", "City Match Play"])
+            if has_net:
+                contests_to_enroll.add("NET Points Race")
+            if has_gross:
+                contests_to_enroll.add("GROSS Points Race")
+            if has_cmp:
+                contests_to_enroll.add("City Match Play")
 
             for ct in contests_to_enroll:
                 _upsert(conn, customer, ct, chapter, season, item_id)
 
             # Stamp item flags so customer profile badges reflect the purchase.
             if contests_to_enroll:
-                net_val = "YES" if "NET Points Race" in contests_to_enroll else None
-                gross_val = "YES" if "GROSS Points Race" in contests_to_enroll else None
-                cmp_val = "YES" if "City Match Play" in contests_to_enroll else None
                 updates = []
                 params = []
-                if net_val:
-                    updates.append("net_points_race = ?"); params.append(net_val)
-                if gross_val:
-                    updates.append("gross_points_race = ?"); params.append(gross_val)
-                if cmp_val:
-                    updates.append("city_match_play = ?"); params.append(cmp_val)
+                if "NET Points Race" in contests_to_enroll:
+                    updates.append("net_points_race = ?"); params.append("YES")
+                if "GROSS Points Race" in contests_to_enroll:
+                    updates.append("gross_points_race = ?"); params.append("YES")
+                if "City Match Play" in contests_to_enroll:
+                    updates.append("city_match_play = ?"); params.append("YES")
                 if updates:
                     params.append(item_id)
                     conn.execute(f"UPDATE items SET {', '.join(updates)} WHERE id = ?", params)
