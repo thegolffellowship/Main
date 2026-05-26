@@ -7771,16 +7771,20 @@ def api_cmp_save_match():
     player2 = (data.get("player2_name") or "").strip()
     if not pool_id or not player1 or not player2:
         return jsonify({"error": "pool_id, player1_name, player2_name required"}), 400
-    p1_score = data.get("player1_score")
-    p2_score = data.get("player2_score")
-    if p1_score is not None:
-        p1_score = float(p1_score)
-    if p2_score is not None:
-        p2_score = float(p2_score)
+    p1_stab = data.get("player1_stableford")
+    p2_stab = data.get("player2_stableford")
+    if p1_stab is not None:
+        p1_stab = float(p1_stab)
+    if p2_stab is not None:
+        p2_stab = float(p2_stab)
+    winner = (data.get("winner_name") or "").strip() or None
+    margin = (data.get("margin") or "").strip() or None
     from email_parser.database import cmp_save_match
     match = cmp_save_match(
-        pool_id, player1, player2, p1_score, p2_score,
-        data.get("match_date"), data.get("notes"),
+        pool_id, player1, player2,
+        winner_name=winner, margin=margin,
+        p1_stableford=p1_stab, p2_stableford=p2_stab,
+        match_date=data.get("match_date"), notes=data.get("notes"),
     )
     return jsonify(match)
 
@@ -7827,14 +7831,16 @@ def api_cmp_save_bracket():
     slot = data.get("slot")
     if not season or not chapter or not round_ or slot is None:
         return jsonify({"error": "season, chapter, round, slot required"}), 400
-    score = float(data["score"]) if data.get("score") is not None else None
-    opp_score = float(data["opponent_score"]) if data.get("opponent_score") is not None else None
+    p_stab = float(data["player_stableford"]) if data.get("player_stableford") is not None else None
+    o_stab = float(data["opponent_stableford"]) if data.get("opponent_stableford") is not None else None
+    winner = (data.get("winner_name") or "").strip() or None
+    margin = (data.get("margin") or "").strip() or None
     from email_parser.database import cmp_save_bracket_slot
     row = cmp_save_bracket_slot(
         season, chapter, round_, int(slot),
-        data.get("player_name"), score,
-        data.get("opponent_name"), opp_score,
-        data.get("winner_name"),
+        data.get("player_name"), p_stab,
+        data.get("opponent_name"), o_stab,
+        winner, margin,
     )
     return jsonify(row)
 
