@@ -94,6 +94,14 @@
             font-size: 0.68rem; color: var(--text-muted); font-weight: 500;
             margin-left: 0.3rem;
         }
+        .player-result-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.45rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--border);
+        }
+        .player-result-row:last-child { border-bottom: none; }
+        .player-result-row:hover { background: var(--row-hover); }
+        .player-result-name { font-weight: 600; }
+        .player-result-meta { font-size: 0.75rem; color: var(--text-muted); }
         .member-row {
             display: flex; justify-content: space-between; align-items: center;
             padding: 0.22rem 0; font-size: 0.82rem;
@@ -423,6 +431,21 @@
         <p>TGF Transaction Tracker &mdash; Powered by Claude AI</p>
     </footer>
 
+    <!-- Player Search Modal -->
+    <div id="cmp-player-modal" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:440px; width:92%;">
+            <h3 style="font-size:1rem; font-weight:700; margin-bottom:0.75rem;">Add Player to Pool</h3>
+            <input type="text" id="cmp-player-search-input" class="modal-input"
+                placeholder="Search by name…" autocomplete="off" style="margin-bottom:0.5rem;">
+            <div id="cmp-player-search-results"
+                style="max-height:280px; overflow-y:auto; border:1px solid var(--border); border-radius:4px; font-size:0.85rem;">
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top:0.75rem;">
+                <button id="cmp-player-modal-cancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Login Modal -->
     <div id="login-overlay" class="modal-overlay" style="display:none;">
         <div class="modal login-modal">
@@ -565,20 +588,12 @@
         // Players not yet in this pool
         const inPool = new Set(pool.members.map(m => m.customer_name));
         const available = cmpState.enrollees.filter(n => !inPool.has(n));
-        // Also allow typing in a name not yet in enrollment
         const addRow = isManager ? `
-            <div class="add-member-row" style="margin-top:0.5rem;">
-                <select class="add-member-select" data-pool="${pool.id}">
-                    <option value="">Select player...</option>
-                    ${available.map(n => {
-                        const hcpEntry = cmpState.handicapMap[(n || "").toLowerCase()];
-                        const hcpSuffix = hcpEntry ? ` (${hcpEntry.index_18 >= 0 ? hcpEntry.index_18 : '+' + Math.abs(hcpEntry.index_18)})` : "";
-                        return `<option value="${escapeHtml(n)}">${escapeHtml(n)}${hcpSuffix}</option>`;
-                    }).join("")}
-                    <option value="__manual__">Type name manually...</option>
-                </select>
-                <button class="btn add-member-btn" data-pool="${pool.id}" style="font-size:0.72rem;padding:0.2rem 0.5rem;">Add</button>
-            </div>
+            <button class="btn open-player-search-btn"
+                data-pool="${pool.id}"
+                style="margin-top:0.5rem; font-size:0.72rem; padding:0.2rem 0.6rem; width:100%;">
+                + Add Player
+            </button>
         ` : "";
 
         // All pairings in canonical (alphabetical) order
@@ -761,23 +776,10 @@
             });
         });
 
-        // Add member
-        document.querySelectorAll(".add-member-btn").forEach(btn => {
-            btn.addEventListener("click", async () => {
-                const pid = Number(btn.dataset.pool);
-                const sel = document.querySelector(`.add-member-select[data-pool="${pid}"]`);
-                let name = sel ? sel.value : "";
-                if (name === "__manual__") {
-                    name = (prompt("Enter player name:") || "").trim();
-                    if (!name) return;
-                }
-                if (!name) return;
-                await fetch(`/api/cmp/pools/${pid}/members`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ customer_name: name }),
-                });
-                cmpLoad();
+        // Open player search modal
+        document.querySelectorAll(".open-player-search-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                openPlayerSearchModal(Number(btn.dataset.pool));
             });
         });
 
@@ -1094,6 +1096,109 @@
         const bRes = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
         cmpState.bracket = bRes.ok ? await bRes.json() : [];
         cmpRenderBracket();
+    }
+
+    // ═══════════ PLAYER SEARCH MODAL ═══════════
+
+    let _allCustomers = null;   // cached after first fetch
+    let _searchPoolId = null;
+
+    async function openPlayerSearchModal(poolId) {
+        _searchPoolId = poolId;
+        $("cmp-player-search-input").value = "";
+        $("cmp-player-search-results").innerHTML =
+            '<div style="padding:0.75rem;color:var(--text-muted);">Loading customers…</div>';
+        $("cmp-player-modal").style.display = "flex";
+        $("cmp-player-search-input").focus();
+
+        if (!_allCustomers) {
+            const res = await fetch("/api/customers");
+            _allCustomers = res.ok ? await res.json() : [];
+            // Sort by name
+            _allCustomers.sort((a, b) => (a.customer_name || "").localeCompare(b.customer_name || ""));
+        }
+        renderSearchResults("");
+    }
+
+    function closePlayerModal() {
+        $("cmp-player-modal").style.display = "none";
+        _searchPoolId = null;
+    }
+
+    $("cmp-player-modal-cancel").addEventListener("click", closePlayerModal);
+    $("cmp-player-modal").addEventListener("click", e => {
+        if (e.target === $("cmp-player-modal")) closePlayerModal();
+    });
+
+    $("cmp-player-search-input").addEventListener("input", e => {
+        renderSearchResults(e.target.value);
+    });
+
+    function renderSearchResults(query) {
+        const q = query.trim().toLowerCase();
+        const pool = cmpState.pools.find(p => p.id === _searchPoolId);
+        const alreadyInPool = new Set((pool ? pool.members : []).map(m => m.customer_name.toLowerCase()));
+
+        const matches = (_allCustomers || []).filter(c => {
+            if (!c.customer_name) return false;
+            if (alreadyInPool.has(c.customer_name.toLowerCase())) return false;
+            return !q || c.customer_name.toLowerCase().includes(q);
+        }).slice(0, 60);
+
+        if (!matches.length) {
+            $("cmp-player-search-results").innerHTML =
+                '<div style="padding:0.75rem;color:var(--text-muted);">No customers found.</div>';
+            return;
+        }
+
+        $("cmp-player-search-results").innerHTML = matches.map(c => {
+            const hcpEntry = cmpState.handicapMap[(c.customer_name || "").toLowerCase()];
+            const hcpText = hcpEntry ? ` · HCP ${hcpEntry.index_18 >= 0 ? hcpEntry.index_18 : '+' + Math.abs(hcpEntry.index_18)}` : "";
+            const meta = [c.chapter, c.status_display_name || c.current_player_status].filter(Boolean).join(" · ");
+            return `<div class="player-result-row"
+                data-customer-id="${c.customer_id}"
+                data-customer-name="${escapeHtml(c.customer_name)}">
+                <span class="player-result-name">${escapeHtml(c.customer_name)}${hcpText ? `<span class="hcp-badge">${escapeHtml(hcpText)}</span>` : ""}</span>
+                <span class="player-result-meta">${escapeHtml(meta)}</span>
+            </div>`;
+        }).join("");
+
+        $("cmp-player-search-results").querySelectorAll(".player-result-row").forEach(row => {
+            row.addEventListener("click", () => addPlayerFromModal(
+                Number(row.dataset.customerId),
+                row.dataset.customerName,
+            ));
+        });
+    }
+
+    async function addPlayerFromModal(customerId, customerName) {
+        const poolId = _searchPoolId;
+        const { season, chapter } = cmpState;
+        closePlayerModal();
+
+        // 1. Enroll in season_contests (idempotent — won't double-enroll)
+        await fetch("/api/season-contests", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                customer_id: customerId,
+                contest_type: "City Match Play",
+                chapter,
+                season,
+            }),
+        });
+
+        // 2. Add to pool (with FK customer_id)
+        await fetch(`/api/cmp/pools/${poolId}/members`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customer_name: customerName, customer_id: customerId }),
+        });
+
+        // Invalidate customer cache so newly enrolled player shows in future loads
+        _allCustomers = null;
+
+        cmpLoad();
     }
 
     // ═══════════ ENROLLMENT ═══════════

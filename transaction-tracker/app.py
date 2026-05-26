@@ -487,6 +487,18 @@ def check_inbox():
         except Exception:
             logger.exception("Auto-sync events failed (non-fatal)")
 
+        # Auto-sync: link season contest payments to enrollments
+        try:
+            from email_parser.database import sync_season_contests_from_items
+            sc_result = sync_season_contests_from_items()
+            if sc_result.get("enrolled") or sc_result.get("linked"):
+                logger.info(
+                    "Auto-synced season contests: %d new enrollments, %d payments linked",
+                    sc_result.get("enrolled", 0), sc_result.get("linked", 0),
+                )
+        except Exception:
+            logger.exception("Auto-sync season contests failed (non-fatal)")
+
     _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(new_emails)} new emails ({len(emails)} total scanned)"
     logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
 
@@ -7675,6 +7687,38 @@ def api_season_contests():
     season = request.args.get("season")
     enrollments = get_season_contest_enrollments(contest_type, chapter, season)
     return jsonify(enrollments)
+
+
+@app.route("/api/season-contests", methods=["POST"])
+@require_role("manager")
+def api_enroll_season_contest():
+    """Manually enroll a customer in a season contest by customer_id.
+
+    Body: { customer_id, contest_type, chapter, season }
+    Looks up the canonical customer_name from the customers table so the
+    enrollment is always tied to a real customer record (FK enforced in app layer).
+    """
+    from email_parser.database import enroll_season_contest, _connect
+    data = request.get_json(silent=True) or {}
+    customer_id = data.get("customer_id")
+    contest_type = (data.get("contest_type") or "City Match Play").strip()
+    chapter = (data.get("chapter") or "").strip()
+    season = (data.get("season") or "").strip()
+    if not customer_id:
+        return jsonify({"error": "customer_id required"}), 400
+    # Resolve canonical name — refuse to enroll if customer doesn't exist
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT TRIM(COALESCE(NULLIF(company_name,''),
+                   NULLIF(TRIM(first_name || ' ' || last_name), ''))) AS customer_name
+               FROM customers WHERE customer_id = ?""",
+            (int(customer_id),),
+        ).fetchone()
+    if not row or not row["customer_name"]:
+        return jsonify({"error": "Customer not found"}), 404
+    customer_name = row["customer_name"]
+    enrollment = enroll_season_contest(customer_name, contest_type, chapter, season)
+    return jsonify(enrollment), 201
 
 
 @app.route("/api/season-contests/sync", methods=["POST"])
