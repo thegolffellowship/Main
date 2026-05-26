@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — Contests</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TGF Tracker">
+    <style>
+        /* ── Top-level tabs ── */
+        .top-tabs {
+            display: flex; gap: 0; margin-bottom: 0;
+            border-bottom: 2px solid var(--border); padding: 0 2rem;
+            background: var(--surface);
+        }
+        .top-tab {
+            padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem;
+            font-weight: 700; color: var(--text-muted); border-bottom: 3px solid transparent;
+            margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+            background: none; border-top: none; border-left: none; border-right: none;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .top-tab:hover { color: var(--text); }
+        .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .section-hidden { display: none !important; }
+
+        /* ── Sub-tabs (Points Race) ── */
+        .sub-tabs {
+            display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem;
+        }
+        .sub-tab {
+            padding: 0.5rem 1.25rem; cursor: pointer; font-size: 0.85rem;
+            font-weight: 600; color: var(--text-muted); border-bottom: 2px solid transparent;
+            margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+            background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .sub-tab:hover { color: var(--text); }
+        .sub-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        /* ── Controls bar ── */
+        .cmp-controls {
+            display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;
+            padding: 0.85rem 2rem; background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
+        .cmp-controls label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
+        .cmp-controls select, .cmp-controls input[type="text"] {
+            padding: 0.35rem 0.6rem; border: 1px solid var(--border);
+            border-radius: 4px; font-size: 0.85rem; background: #fff;
+        }
+
+        /* ── Page body ── */
+        .cmp-body { padding: 1.25rem 2rem; max-width: 1100px; }
+
+        /* ── Pool card ── */
+        .pool-card {
+            border: 1px solid var(--border); border-radius: 8px;
+            margin-bottom: 1.5rem; background: var(--surface); overflow: hidden;
+        }
+        .pool-card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.65rem 1rem; background: var(--primary); color: #fff;
+        }
+        .pool-card-header h3 { font-size: 0.95rem; font-weight: 700; margin: 0; }
+        .pool-card-body { display: grid; grid-template-columns: 220px 1fr; }
+
+        /* ── Members panel ── */
+        .pool-members {
+            border-right: 1px solid var(--border); padding: 0.75rem;
+        }
+        .pool-members h4, .pool-matches h4, .standings-section h4 {
+            font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+            color: var(--text-muted); margin-bottom: 0.5rem; letter-spacing: 0.04em;
+        }
+        .member-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.22rem 0; font-size: 0.82rem;
+        }
+        .member-remove-btn {
+            background: none; border: none; color: #dc2626; cursor: pointer;
+            font-size: 0.72rem; padding: 0.05rem 0.3rem; line-height: 1;
+        }
+        .add-member-row { display: flex; gap: 0.35rem; margin-top: 0.5rem; }
+        .add-member-row select { flex: 1; font-size: 0.78rem; padding: 0.22rem 0.3rem; border: 1px solid var(--border); border-radius: 3px; }
+
+        /* ── Match grid ── */
+        .pool-matches { padding: 0.75rem; }
+        .match-row {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.28rem 0; border-bottom: 1px solid var(--border); font-size: 0.82rem;
+        }
+        .match-row:last-child { border-bottom: none; }
+        .match-player { flex: 1; }
+        .match-player.right { text-align: right; }
+        .match-vs { color: var(--text-muted); font-size: 0.7rem; font-weight: 700; flex-shrink: 0; }
+        .match-score-input {
+            width: 50px; padding: 0.18rem 0.3rem; border: 1px solid var(--border);
+            border-radius: 3px; font-size: 0.82rem; text-align: center;
+        }
+        .match-save-btn {
+            padding: 0.15rem 0.5rem; font-size: 0.7rem; border-radius: 3px;
+            background: var(--primary); color: #fff; border: none; cursor: pointer;
+            white-space: nowrap; flex-shrink: 0;
+        }
+        .match-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* ── Standings ── */
+        .standings-section {
+            padding: 0.75rem; border-top: 1px solid var(--border);
+            background: #f9fafb;
+        }
+        .standings-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        .standings-table th {
+            text-align: center; font-size: 0.68rem; font-weight: 600;
+            color: var(--text-muted); text-transform: uppercase; padding: 0.2rem 0.5rem;
+        }
+        .standings-table th:first-child { text-align: left; }
+        .standings-table td { text-align: center; padding: 0.22rem 0.5rem; }
+        .standings-table td:first-child { text-align: left; font-weight: 600; }
+        .standings-table tbody tr:nth-child(-n+2) { background: #ecfdf5; }
+        .advances-badge {
+            font-size: 0.62rem; font-weight: 700; background: #dcfce7;
+            color: #166534; padding: 0.08rem 0.35rem; border-radius: 9px; margin-left: 0.3rem;
+        }
+
+        /* ── Bracket ── */
+        .bracket-section {
+            margin-top: 1.5rem; padding: 1.25rem 1.5rem;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+        }
+        .bracket-section h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.85rem; }
+        .bracket-controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+        .bracket-tree { display: flex; gap: 0; align-items: flex-start; overflow-x: auto; padding-bottom: 0.5rem; }
+        .bracket-round { display: flex; flex-direction: column; gap: 1.25rem; min-width: 190px; }
+        .bracket-round-label {
+            font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+            color: var(--text-muted); text-align: center; letter-spacing: 0.04em;
+            margin-bottom: 0.25rem;
+        }
+        .bracket-match {
+            border: 1px solid var(--border); border-radius: 6px;
+            background: #fff; overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .bracket-slot {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.32rem 0.65rem; font-size: 0.8rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .bracket-slot:last-of-type { border-bottom: none; }
+        .bracket-slot.winner { background: #ecfdf5; font-weight: 700; }
+        .bracket-slot-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bracket-slot-score { font-weight: 700; color: var(--primary); min-width: 26px; text-align: right; font-size: 0.78rem; }
+        .bracket-score-input {
+            width: 44px; padding: 0.15rem 0.28rem; border: 1px solid var(--border);
+            border-radius: 3px; font-size: 0.76rem; text-align: center;
+        }
+        .bracket-match-footer {
+            display: flex; gap: 0.5rem; padding: 0.3rem 0.5rem;
+            border-top: 1px solid var(--border); background: #f9fafb;
+            align-items: center;
+        }
+        .bracket-winner-sel {
+            font-size: 0.7rem; padding: 0.12rem 0.3rem;
+            border: 1px solid var(--border); border-radius: 3px; flex: 1;
+        }
+        .bracket-connector {
+            width: 28px; flex-shrink: 0; align-self: stretch;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .bracket-connector::after {
+            content: '→'; color: var(--text-muted); font-size: 1rem;
+        }
+
+        /* ── Enrollment ── */
+        .enrollment-section { padding: 1.25rem 2rem; }
+        .enrollment-controls {
+            display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem;
+        }
+        .enrollment-controls select, .enrollment-controls input {
+            padding: 0.35rem 0.6rem; border: 1px solid var(--border);
+            border-radius: 4px; font-size: 0.85rem;
+        }
+        .enrollment-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .enrollment-table th {
+            text-align: left; font-size: 0.73rem; font-weight: 600;
+            color: var(--text-muted); text-transform: uppercase;
+            padding: 0.4rem 0.75rem; border-bottom: 2px solid var(--border);
+        }
+        .enrollment-table td { padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border); }
+        .enrollment-table tbody tr:hover { background: var(--row-hover); }
+
+        /* ── Points Race placeholder ── */
+        .pr-section { padding: 1.5rem 2rem; }
+        .stableford-ref {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+            padding: 1rem 1.25rem; margin-top: 1rem; display: grid;
+            grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 680px;
+        }
+        .stableford-ref h4 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .stableford-ref table { font-size: 0.82rem; width: 100%; border-collapse: collapse; }
+        .stableford-ref td { padding: 0.18rem 0; }
+        .stableford-ref td:last-child { text-align: right; font-weight: 600; color: var(--primary); }
+
+        /* ── Empty state ── */
+        .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); }
+        .empty-state h3 { font-size: 1rem; margin-bottom: 0.4rem; }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .cmp-body { padding: 0.75rem 1rem; }
+            .pool-card-body { grid-template-columns: 1fr; }
+            .pool-members { border-right: none; border-bottom: 1px solid var(--border); }
+            .cmp-controls { padding: 0.65rem 1rem; }
+            .enrollment-section { padding: 0.75rem 1rem; }
+            .pr-section { padding: 0.75rem 1rem; }
+            .stableford-ref { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Season Contests</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <a href="/accounting" class="admin-nav" style="display:none;">Admin</a>
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/contests" class="active">Contests</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/tgf">Payouts</a>
+        </nav>
+
+        <!-- Top-level tabs -->
+        <div class="top-tabs">
+            <button class="top-tab active" data-top="match-play">Match Play</button>
+            <button class="top-tab" data-top="points-race">Points Race</button>
+            <button class="top-tab" data-top="enrollment">Enrollment</button>
+        </div>
+
+        <!-- ═══════════ MATCH PLAY ═══════════ -->
+        <div id="section-match-play">
+            <div class="cmp-controls">
+                <label>Chapter</label>
+                <select id="cmp-chapter">
+                    <option value="Austin">Austin</option>
+                    <option value="San Antonio">San Antonio</option>
+                </select>
+                <label>Season</label>
+                <input type="text" id="cmp-season" value="2026" style="width:62px;">
+                <button class="btn btn-primary" id="cmp-load-btn">Load</button>
+                <button class="btn manager-only" id="cmp-add-pool-btn" style="display:none;">+ Add Pool</button>
+            </div>
+            <div class="cmp-body">
+                <div id="cmp-pools-container">
+                    <div class="empty-state">
+                        <h3>Select a chapter and season, then click Load</h3>
+                    </div>
+                </div>
+                <div id="cmp-bracket-section" style="display:none;">
+                    <div class="bracket-section">
+                        <h3>Knockout Bracket</h3>
+                        <div class="bracket-controls">
+                            <button class="btn manager-only" id="cmp-seed-bracket-btn" style="display:none;">
+                                &#8635; Seed from Pool Standings
+                            </button>
+                        </div>
+                        <div id="cmp-bracket-container">
+                            <p style="color:var(--text-muted);font-size:0.85rem;">
+                                Once pool play is complete, click "Seed from Pool Standings" to auto-populate bracket slots.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════ POINTS RACE ═══════════ -->
+        <div id="section-points-race" class="section-hidden">
+            <div class="pr-section">
+                <div class="sub-tabs">
+                    <button class="sub-tab active" data-pr="net">NET Points Race</button>
+                    <button class="sub-tab" data-pr="gross">GROSS Points Race</button>
+                </div>
+                <div class="empty-state">
+                    <h3>Points Race Standings — Coming Soon</h3>
+                    <p style="max-width:520px;margin:0 auto;">
+                        Score entry and leaderboards for the NET Points Race (Fellowship Cup, per chapter + combined)
+                        and GROSS Points Race (Players Cup, all chapters) will be available here.
+                    </p>
+                </div>
+                <div class="stableford-ref">
+                    <div>
+                        <h4>NET Stableford Table (per 9 holes)</h4>
+                        <table>
+                            <tr><td>Triple Bogey</td><td>−1</td></tr>
+                            <tr><td>Double Bogey</td><td>−1</td></tr>
+                            <tr><td>Bogey</td><td>0</td></tr>
+                            <tr><td>Par</td><td>+1</td></tr>
+                            <tr><td>Birdie</td><td>+2</td></tr>
+                            <tr><td>Eagle</td><td>+3</td></tr>
+                            <tr><td>Double Eagle</td><td>+4</td></tr>
+                            <tr><td>Hole-in-One</td><td>+8</td></tr>
+                        </table>
+                    </div>
+                    <div>
+                        <h4>GROSS Stableford Table (per 9 holes)</h4>
+                        <table>
+                            <tr><td>Triple Bogey</td><td>−1</td></tr>
+                            <tr><td>Double Bogey</td><td>0</td></tr>
+                            <tr><td>Bogey</td><td>+1</td></tr>
+                            <tr><td>Par</td><td>+2</td></tr>
+                            <tr><td>Birdie</td><td>+4</td></tr>
+                            <tr><td>Eagle</td><td>+8</td></tr>
+                            <tr><td>Double Eagle</td><td>+16</td></tr>
+                            <tr><td>Hole-in-One</td><td>+8</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════ ENROLLMENT ═══════════ -->
+        <div id="section-enrollment" class="section-hidden">
+            <div class="enrollment-section">
+                <div class="enrollment-controls">
+                    <select id="enr-contest-type">
+                        <option value="">All Contests</option>
+                        <option value="City Match Play">City Match Play</option>
+                        <option value="NET Points Race">NET Points Race</option>
+                        <option value="GROSS Points Race">GROSS Points Race</option>
+                    </select>
+                    <select id="enr-chapter">
+                        <option value="">All Chapters</option>
+                        <option value="Austin">Austin</option>
+                        <option value="San Antonio">San Antonio</option>
+                    </select>
+                    <input type="text" id="enr-season" placeholder="Season (e.g. 2026)" style="width:150px;">
+                    <button class="btn btn-primary" id="enr-load-btn">Load</button>
+                    <button class="btn manager-only" id="enr-sync-btn" style="display:none;">&#8635; Sync from Purchases</button>
+                </div>
+                <div id="enr-table-container">
+                    <div class="empty-state"><h3>Select filters and click Load</h3></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>TGF Transaction Tracker &mdash; Powered by Claude AI</p>
+    </footer>
+
+    <!-- Login Modal -->
+    <div id="login-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal login-modal">
+            <h2>Dashboard Login</h2>
+            <p class="modal-subtitle">Enter your PIN to access the dashboard.</p>
+            <input type="password" id="login-pin" class="modal-input" placeholder="Enter PIN" maxlength="20" autocomplete="off" aria-required="true" aria-label="PIN code">
+            <div id="login-error" class="modal-error" style="display:none;"></div>
+            <button id="login-submit" class="btn btn-primary modal-btn">Log In</button>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+    // ═══════════ Contests Page ═══════════
+
+    const $ = id => document.getElementById(id);
+    const $$ = sel => document.querySelectorAll(sel);
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ── Top tabs ──
+    $$(".top-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+            $$(".top-tab").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            const top = btn.dataset.top;
+            ["match-play", "points-race", "enrollment"].forEach(k => {
+                $("section-" + k).classList.toggle("section-hidden", k !== top);
+            });
+        });
+    });
+
+    // ── Points Race sub-tabs ──
+    $$(".sub-tab[data-pr]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            $$(".sub-tab[data-pr]").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+        });
+    });
+
+    // ═══════════ AUTH ═══════════
+
+    let userRole = null;
+
+    function applyRole(role) {
+        userRole = role;
+        const isManager = role === "admin" || role === "manager";
+        document.querySelectorAll(".manager-only").forEach(el => {
+            el.style.display = isManager ? "" : "none";
+        });
+    }
+
+    // ═══════════ MATCH PLAY ═══════════
+
+    let cmpState = {
+        season: "", chapter: "", pools: [], enrollees: [], bracket: []
+    };
+
+    $("cmp-load-btn").addEventListener("click", cmpLoad);
+    $("cmp-add-pool-btn").addEventListener("click", cmpAddPool);
+    $("cmp-seed-bracket-btn").addEventListener("click", cmpSeedBracket);
+
+    async function cmpLoad() {
+        const chapter = $("cmp-chapter").value;
+        const season = ($("cmp-season").value || "").trim();
+        if (!season) { alert("Enter a season year (e.g. 2026)"); return; }
+        cmpState.chapter = chapter;
+        cmpState.season = season;
+
+        const [poolsRes, enrollRes] = await Promise.all([
+            fetch(`/api/cmp/pools?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`),
+            fetch(`/api/season-contests?contest_type=City+Match+Play&chapter=${encodeURIComponent(chapter)}&season=${encodeURIComponent(season)}`),
+        ]);
+        cmpState.pools = poolsRes.ok ? await poolsRes.json() : [];
+        const rawEnrollees = enrollRes.ok ? await enrollRes.json() : [];
+        cmpState.enrollees = rawEnrollees.map(e => e.customer_name).filter(Boolean);
+
+        cmpRender();
+
+        const bRes = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
+        cmpState.bracket = bRes.ok ? await bRes.json() : [];
+        cmpRenderBracket();
+    }
+
+    function cmpRender() {
+        const container = $("cmp-pools-container");
+        if (!cmpState.pools.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>No pools yet for ${escapeHtml(cmpState.chapter)} ${escapeHtml(cmpState.season)}</h3>
+                    <p>Click "+ Add Pool" to create the first pool.</p>
+                </div>`;
+            $("cmp-bracket-section").style.display = "none";
+            return;
+        }
+        container.innerHTML = cmpState.pools.map(pool => renderPoolCard(pool)).join("");
+        wirePools();
+        $("cmp-bracket-section").style.display = "";
+    }
+
+    function renderPoolCard(pool) {
+        const isManager = userRole === "admin" || userRole === "manager";
+        const memberRows = pool.members.map(m => `
+            <div class="member-row">
+                <span>${escapeHtml(m.customer_name)}</span>
+                ${isManager ? `<button class="member-remove-btn" data-pool="${pool.id}" data-name="${escapeHtml(m.customer_name)}" title="Remove">✕</button>` : ''}
+            </div>
+        `).join("");
+
+        // Players not yet in this pool
+        const inPool = new Set(pool.members.map(m => m.customer_name));
+        const available = cmpState.enrollees.filter(n => !inPool.has(n));
+        const addRow = (isManager && available.length > 0) ? `
+            <div class="add-member-row">
+                <select class="add-member-select" data-pool="${pool.id}">
+                    <option value="">Add player...</option>
+                    ${available.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("")}
+                </select>
+                <button class="btn add-member-btn" data-pool="${pool.id}" style="font-size:0.72rem;padding:0.2rem 0.5rem;">Add</button>
+            </div>
+        ` : "";
+
+        // All pairings in canonical (alphabetical) order
+        const names = pool.members.map(m => m.customer_name);
+        const pairs = [];
+        for (let i = 0; i < names.length; i++) {
+            for (let j = i + 1; j < names.length; j++) {
+                const [a, b] = [names[i], names[j]].sort();
+                pairs.push([a, b]);
+            }
+        }
+
+        const matchRows = names.length >= 2 ? pairs.map(([a, b]) => `
+            <div class="match-row" data-pool="${pool.id}" data-p1="${escapeHtml(a)}" data-p2="${escapeHtml(b)}">
+                <span class="match-player right">${escapeHtml(a)}</span>
+                <input type="number" class="match-score-input match-s1" step="0.5" placeholder="—"
+                    data-pool="${pool.id}" data-p1="${escapeHtml(a)}" data-p2="${escapeHtml(b)}">
+                <span class="match-vs">vs</span>
+                <input type="number" class="match-score-input match-s2" step="0.5" placeholder="—"
+                    data-pool="${pool.id}" data-p1="${escapeHtml(a)}" data-p2="${escapeHtml(b)}">
+                <span class="match-player">${escapeHtml(b)}</span>
+                ${isManager ? `<button class="match-save-btn" data-pool="${pool.id}" data-p1="${escapeHtml(a)}" data-p2="${escapeHtml(b)}">Save</button>` : ''}
+            </div>
+        `).join("") : `<p style="color:var(--text-muted);font-size:0.82rem;padding:0.25rem 0;">Add at least 2 players to enter scores.</p>`;
+
+        const deleteBtn = isManager
+            ? `<button class="pool-delete-btn btn" data-pool="${pool.id}" style="background:#dc2626;font-size:0.72rem;padding:0.18rem 0.5rem;margin-left:0.5rem;">Delete Pool</button>`
+            : '';
+
+        return `
+        <div class="pool-card" id="pool-card-${pool.id}">
+            <div class="pool-card-header">
+                <h3>${escapeHtml(pool.pool_name)}</h3>
+                ${deleteBtn}
+            </div>
+            <div class="pool-card-body">
+                <div class="pool-members">
+                    <h4>Members (${pool.members.length}/4)</h4>
+                    ${memberRows}
+                    ${addRow}
+                </div>
+                <div class="pool-matches">
+                    <h4>Match Scores (Stableford pts, 9-hole rounds)</h4>
+                    ${matchRows}
+                </div>
+            </div>
+            <div class="standings-section" id="standings-${pool.id}">
+                <h4>Pool Standings</h4>
+                <p style="color:var(--text-muted);font-size:0.8rem;">Loading...</p>
+            </div>
+        </div>`;
+    }
+
+    async function loadMatchScores(poolId) {
+        const res = await fetch(`/api/cmp/matches?pool_id=${poolId}`);
+        if (!res.ok) return;
+        const matches = await res.json();
+        for (const m of matches) {
+            if (m.player1_score == null && m.player2_score == null) continue;
+            const selector = `.match-row[data-pool="${poolId}"][data-p1="${CSS.escape(m.player1_name)}"][data-p2="${CSS.escape(m.player2_name)}"]`;
+            const row = document.querySelector(selector);
+            if (!row) continue;
+            const s1 = row.querySelector(".match-s1");
+            const s2 = row.querySelector(".match-s2");
+            if (s1 && m.player1_score != null) s1.value = m.player1_score;
+            if (s2 && m.player2_score != null) s2.value = m.player2_score;
+        }
+    }
+
+    async function loadPoolStandings(poolId) {
+        const { season, chapter } = cmpState;
+        if (!season || !chapter) return;
+        const res = await fetch(`/api/cmp/standings?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
+        if (!res.ok) return;
+        const standings = await res.json();
+        const poolRows = standings.filter(r => r.pool_id === poolId);
+        const el = $("standings-" + poolId);
+        if (!el) return;
+        if (!poolRows.length) {
+            el.innerHTML = '<h4>Pool Standings</h4><p style="color:var(--text-muted);font-size:0.8rem;">No scores recorded yet.</p>';
+            return;
+        }
+        const rows = poolRows.map(r => `
+            <tr>
+                <td>${escapeHtml(r.player_name)}${r.advances ? '<span class="advances-badge">Advances</span>' : ''}</td>
+                <td>${r.wins}</td><td>${r.losses}</td><td>${r.draws}</td>
+                <td>${r.stableford_pts}</td>
+            </tr>
+        `).join("");
+        el.innerHTML = `
+            <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top 2 advance to bracket</span></h4>
+            <table class="standings-table">
+                <thead><tr><th style="text-align:left;">Player</th><th>W</th><th>L</th><th>D</th><th>Pts</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    }
+
+    function wirePools() {
+        // Delete pool
+        document.querySelectorAll(".pool-delete-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const pid = Number(btn.dataset.pool);
+                if (!confirm("Delete this pool and all its match data?")) return;
+                await fetch(`/api/cmp/pools/${pid}`, { method: "DELETE" });
+                cmpLoad();
+            });
+        });
+
+        // Remove member
+        document.querySelectorAll(".member-remove-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const pid = Number(btn.dataset.pool);
+                const name = btn.dataset.name;
+                await fetch(`/api/cmp/pools/${pid}/members/${encodeURIComponent(name)}`, { method: "DELETE" });
+                cmpLoad();
+            });
+        });
+
+        // Add member
+        document.querySelectorAll(".add-member-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const pid = Number(btn.dataset.pool);
+                const sel = document.querySelector(`.add-member-select[data-pool="${pid}"]`);
+                const name = sel ? sel.value : "";
+                if (!name) return;
+                await fetch(`/api/cmp/pools/${pid}/members`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ customer_name: name }),
+                });
+                cmpLoad();
+            });
+        });
+
+        // Save match score
+        document.querySelectorAll(".match-save-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const pid = Number(btn.dataset.pool);
+                const p1 = btn.dataset.p1;
+                const p2 = btn.dataset.p2;
+                const row = btn.closest(".match-row");
+                const s1El = row.querySelector(".match-s1");
+                const s2El = row.querySelector(".match-s2");
+                const s1 = s1El && s1El.value !== "" ? parseFloat(s1El.value) : null;
+                const s2 = s2El && s2El.value !== "" ? parseFloat(s2El.value) : null;
+                btn.textContent = "Saving…"; btn.disabled = true;
+                await fetch("/api/cmp/matches", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        pool_id: pid, player1_name: p1, player2_name: p2,
+                        player1_score: s1, player2_score: s2,
+                    }),
+                });
+                btn.textContent = "Saved ✓";
+                setTimeout(() => { btn.textContent = "Save"; btn.disabled = false; }, 1800);
+                loadPoolStandings(pid);
+            });
+        });
+
+        // Load existing scores and standings for each pool
+        cmpState.pools.forEach(pool => {
+            loadMatchScores(pool.id);
+            loadPoolStandings(pool.id);
+        });
+    }
+
+    async function cmpAddPool() {
+        const { season, chapter } = cmpState;
+        if (!season) { alert("Load a season first (click Load)"); return; }
+        const nextLetter = String.fromCharCode(65 + cmpState.pools.length);
+        const name = prompt("Pool name:", `Pool ${nextLetter}`);
+        if (!name || !name.trim()) return;
+        await fetch("/api/cmp/pools", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ season, chapter, pool_name: name.trim() }),
+        });
+        cmpLoad();
+    }
+
+    // ── Bracket ──
+
+    function buildBracketRounds(advancerCount) {
+        const rounds = [];
+        let n = advancerCount;
+        while (n >= 2) {
+            if (n >= 8)      rounds.push({ key: "qf", label: "Quarterfinals", matchCount: n / 2 });
+            else if (n >= 4) rounds.push({ key: "sf", label: "Semifinals",    matchCount: n / 2 });
+            else             rounds.push({ key: "final", label: "Final",       matchCount: 1 });
+            n = Math.floor(n / 2);
+        }
+        // Deduplicate keys in case advancerCount is odd or forces repeats
+        const seen = new Set();
+        return rounds.filter(r => { if (seen.has(r.key)) return false; seen.add(r.key); return true; });
+    }
+
+    function cmpRenderBracket() {
+        const container = $("cmp-bracket-container");
+        const bracket = cmpState.bracket || [];
+        const advancerCount = cmpState.pools.length * 2;
+
+        if (!cmpState.pools.length) {
+            container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Create pools first.</p>';
+            return;
+        }
+
+        const rounds = buildBracketRounds(advancerCount);
+        const isManager = userRole === "admin" || userRole === "manager";
+
+        // Build slot map: "round:slot" → bracket row
+        const slotMap = {};
+        bracket.forEach(b => { slotMap[`${b.round}:${b.slot}`] = b; });
+
+        const html = rounds.map((round, ri) => {
+            const matchHtml = Array.from({ length: round.matchCount }, (_, mi) => {
+                const s1 = slotMap[`${round.key}:${mi * 2}`] || {};
+                const s2 = slotMap[`${round.key}:${mi * 2 + 1}`] || {};
+                const winner = s1.winner_name || s2.winner_name || null;
+                const slot1Win = winner && winner === s1.player_name;
+                const slot2Win = winner && winner === s2.player_name;
+                const scoreDisp1 = s1.score != null ? s1.score : '';
+                const scoreDisp2 = s2.score != null ? s2.score : '';
+
+                return `
+                <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
+                    <div class="bracket-slot${slot1Win ? ' winner' : ''}">
+                        <span class="bracket-slot-name">${escapeHtml(s1.player_name || '—')}</span>
+                        ${isManager
+                            ? `<input type="number" class="bracket-score-input"
+                                step="0.5" placeholder="—"
+                                data-round="${round.key}" data-slot="${mi * 2}"
+                                data-player="${escapeHtml(s1.player_name || '')}"
+                                data-opp="${escapeHtml(s2.player_name || '')}"
+                                value="${scoreDisp1}">`
+                            : `<span class="bracket-slot-score">${scoreDisp1}</span>`}
+                    </div>
+                    <div class="bracket-slot${slot2Win ? ' winner' : ''}">
+                        <span class="bracket-slot-name">${escapeHtml(s2.player_name || '—')}</span>
+                        ${isManager
+                            ? `<input type="number" class="bracket-score-input"
+                                step="0.5" placeholder="—"
+                                data-round="${round.key}" data-slot="${mi * 2 + 1}"
+                                data-player="${escapeHtml(s2.player_name || '')}"
+                                data-opp="${escapeHtml(s1.player_name || '')}"
+                                value="${scoreDisp2}">`
+                            : `<span class="bracket-slot-score">${scoreDisp2}</span>`}
+                    </div>
+                    ${isManager ? `
+                    <div class="bracket-match-footer">
+                        <button class="match-save-btn bracket-save-btn"
+                            data-round="${round.key}" data-match="${mi}"
+                            style="flex-shrink:0;">Save</button>
+                        <select class="bracket-winner-sel"
+                            data-round="${round.key}" data-match="${mi}">
+                            <option value="">No winner yet</option>
+                            ${s1.player_name ? `<option value="${escapeHtml(s1.player_name)}" ${winner === s1.player_name ? 'selected' : ''}>${escapeHtml(s1.player_name)}</option>` : ''}
+                            ${s2.player_name ? `<option value="${escapeHtml(s2.player_name)}" ${winner === s2.player_name ? 'selected' : ''}>${escapeHtml(s2.player_name)}</option>` : ''}
+                        </select>
+                    </div>` : ''}
+                </div>`;
+            }).join("");
+
+            const connector = ri < rounds.length - 1
+                ? '<div class="bracket-connector"></div>'
+                : '';
+
+            return `<div class="bracket-round">
+                <div class="bracket-round-label">${escapeHtml(round.label)}</div>
+                ${matchHtml}
+            </div>${connector}`;
+        }).join("");
+
+        container.innerHTML = `<div class="bracket-tree">${html || '<p style="color:var(--text-muted);">No bracket data yet.</p>'}</div>`;
+
+        // Wire save buttons
+        if (isManager) {
+            container.querySelectorAll(".bracket-save-btn").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    const round = btn.dataset.round;
+                    const mi = Number(btn.dataset.match);
+                    const { season, chapter } = cmpState;
+
+                    const i1 = container.querySelector(`.bracket-score-input[data-round="${round}"][data-slot="${mi * 2}"]`);
+                    const i2 = container.querySelector(`.bracket-score-input[data-round="${round}"][data-slot="${mi * 2 + 1}"]`);
+                    const winSel = container.querySelector(`.bracket-winner-sel[data-round="${round}"][data-match="${mi}"]`);
+
+                    const s1 = i1 && i1.value !== "" ? parseFloat(i1.value) : null;
+                    const s2 = i2 && i2.value !== "" ? parseFloat(i2.value) : null;
+                    const winner = winSel ? winSel.value || null : null;
+
+                    btn.textContent = "Saving…"; btn.disabled = true;
+
+                    const saves = [];
+                    if (i1) saves.push(fetch("/api/cmp/bracket", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            season, chapter, round, slot: mi * 2,
+                            player_name: i1.dataset.player || null,
+                            score: s1, opponent_name: i1.dataset.opp || null,
+                            opponent_score: s2, winner_name: winner,
+                        }),
+                    }));
+                    if (i2) saves.push(fetch("/api/cmp/bracket", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            season, chapter, round, slot: mi * 2 + 1,
+                            player_name: i2.dataset.player || null,
+                            score: s2, opponent_name: i2.dataset.opp || null,
+                            opponent_score: s1, winner_name: winner,
+                        }),
+                    }));
+
+                    await Promise.all(saves);
+                    btn.textContent = "Saved ✓";
+                    setTimeout(() => { btn.textContent = "Save"; btn.disabled = false; }, 1800);
+
+                    // Refresh
+                    const bRes = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
+                    cmpState.bracket = bRes.ok ? await bRes.json() : [];
+                    cmpRenderBracket();
+                });
+            });
+        }
+    }
+
+    async function cmpSeedBracket() {
+        const { season, chapter } = cmpState;
+        const res = await fetch(`/api/cmp/standings?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
+        if (!res.ok) return;
+        const standings = await res.json();
+
+        // Group advancers by pool, collect top 2 per pool
+        const poolMap = {};
+        standings.forEach(r => {
+            if (!poolMap[r.pool_name]) poolMap[r.pool_name] = [];
+            poolMap[r.pool_name].push(r);
+        });
+        const poolGroups = Object.values(poolMap).filter(g => g.length >= 2);
+
+        if (!poolGroups.length) {
+            alert("No pool standings yet. Enter scores first.");
+            return;
+        }
+
+        // Cross-pool seeding for 2 pools: P1-rank1 vs P2-rank2, P2-rank1 vs P1-rank2
+        // For other pool counts: sequential seeding
+        let seeded = [];
+        if (poolGroups.length === 2) {
+            seeded = [
+                poolGroups[0][0].player_name,
+                poolGroups[1][1] ? poolGroups[1][1].player_name : null,
+                poolGroups[1][0].player_name,
+                poolGroups[0][1] ? poolGroups[0][1].player_name : null,
+            ].filter(Boolean);
+        } else {
+            poolGroups.forEach(g => {
+                seeded.push(g[0].player_name);
+                if (g[1]) seeded.push(g[1].player_name);
+            });
+        }
+
+        if (seeded.length < 2) {
+            alert("Not enough pool results to seed bracket.");
+            return;
+        }
+
+        const rounds = buildBracketRounds(seeded.length);
+        const firstRound = rounds[0];
+        if (!firstRound) return;
+
+        // Clear any existing bracket slots for this round
+        const saves = seeded.map((name, i) => fetch("/api/cmp/bracket", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                season, chapter,
+                round: firstRound.key,
+                slot: i,
+                player_name: name,
+                score: null, opponent_name: null,
+                opponent_score: null, winner_name: null,
+            }),
+        }));
+        await Promise.all(saves);
+
+        const bRes = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
+        cmpState.bracket = bRes.ok ? await bRes.json() : [];
+        cmpRenderBracket();
+    }
+
+    // ═══════════ ENROLLMENT ═══════════
+
+    $("enr-load-btn").addEventListener("click", enrLoad);
+    $("enr-sync-btn").addEventListener("click", async () => {
+        const btn = $("enr-sync-btn");
+        btn.textContent = "Syncing…"; btn.disabled = true;
+        const res = await fetch("/api/season-contests/sync", { method: "POST" });
+        const data = res.ok ? await res.json() : {};
+        btn.textContent = "↻ Sync from Purchases"; btn.disabled = false;
+        alert(`Sync complete — ${data.enrolled ?? 0} new enrollment${data.enrolled === 1 ? '' : 's'} found.`);
+        enrLoad();
+    });
+
+    async function enrLoad() {
+        const contestType = $("enr-contest-type").value;
+        const chapter = $("enr-chapter").value;
+        const season = ($("enr-season").value || "").trim();
+
+        let url = "/api/season-contests?";
+        if (contestType) url += `contest_type=${encodeURIComponent(contestType)}&`;
+        if (chapter)     url += `chapter=${encodeURIComponent(chapter)}&`;
+        if (season)      url += `season=${encodeURIComponent(season)}&`;
+
+        const res = await fetch(url);
+        const data = res.ok ? await res.json() : [];
+        const container = $("enr-table-container");
+
+        if (!data.length) {
+            container.innerHTML = '<div class="empty-state"><h3>No enrollments found for these filters.</h3></div>';
+            return;
+        }
+
+        const rows = data.map(e => `
+            <tr>
+                <td><a href="/customers?name=${encodeURIComponent(e.customer_name || '')}" class="cell-link">${escapeHtml(e.customer_name)}</a></td>
+                <td>${escapeHtml(e.chapter || '—')}</td>
+                <td>${escapeHtml(e.contest_type)}</td>
+                <td>${escapeHtml(e.season || '—')}</td>
+                <td style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml((e.enrolled_at || '').slice(0, 10))}</td>
+            </tr>
+        `).join("");
+
+        container.innerHTML = `
+            <table class="enrollment-table">
+                <thead><tr>
+                    <th>Customer</th><th>Chapter</th><th>Contest</th><th>Season</th><th>Enrolled</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            <p style="margin-top:0.75rem;font-size:0.8rem;color:var(--text-muted);">
+                ${data.length} enrollment${data.length === 1 ? '' : 's'}
+            </p>`;
+    }
+
+    // ═══════════ INIT ═══════════
+
+    async function onAuthReady() {
+        const role = typeof currentRole !== "undefined" ? currentRole : null;
+        applyRole(role);
+    }
+
+    initAuth();
+    </script>
+</body>
+</html>

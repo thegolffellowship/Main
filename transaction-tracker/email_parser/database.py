@@ -2654,6 +2654,74 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_season_contests_type ON season_contests(contest_type)"
         )
 
+        # ── City Match Play tables ────────────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cmp_pools (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                season      TEXT NOT NULL,
+                chapter     TEXT NOT NULL,
+                pool_name   TEXT NOT NULL,
+                created_at  TEXT DEFAULT (datetime('now')),
+                UNIQUE(season, chapter, pool_name)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cmp_pool_members (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                pool_id       INTEGER NOT NULL REFERENCES cmp_pools(id),
+                customer_name TEXT NOT NULL,
+                customer_id   INTEGER,
+                UNIQUE(pool_id, customer_name)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cmp_matches (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                pool_id        INTEGER NOT NULL REFERENCES cmp_pools(id),
+                player1_name   TEXT NOT NULL,
+                player2_name   TEXT NOT NULL,
+                player1_score  REAL,
+                player2_score  REAL,
+                match_date     TEXT,
+                stage          TEXT NOT NULL DEFAULT 'pool',
+                notes          TEXT,
+                played_at      TEXT,
+                UNIQUE(pool_id, player1_name, player2_name)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cmp_bracket (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                season         TEXT NOT NULL,
+                chapter        TEXT NOT NULL,
+                round          TEXT NOT NULL,
+                slot           INTEGER NOT NULL,
+                player_name    TEXT,
+                score          REAL,
+                opponent_name  TEXT,
+                opponent_score REAL,
+                winner_name    TEXT,
+                UNIQUE(season, chapter, round, slot)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cmp_pools_season_chapter ON cmp_pools(season, chapter)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cmp_pool_members_pool ON cmp_pool_members(pool_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cmp_matches_pool ON cmp_matches(pool_id)"
+        )
+
         # ── Customer identity tables ──────────────────────────────────
         # Core customer record.  Mirrors the TGF Platform MVP users
         # schema so that merging the two systems later is a clean lookup.
@@ -13367,6 +13435,224 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         conn.commit()
     logger.info("Season contest sync: %d new enrollments", enrolled)
     return {"enrolled": enrolled}
+
+
+# ---------------------------------------------------------------------------
+# City Match Play — pools, members, matches, bracket
+# ---------------------------------------------------------------------------
+
+def cmp_get_pools(season: str, chapter: str, db_path=None) -> list[dict]:
+    with _connect(db_path) as conn:
+        pools = conn.execute(
+            "SELECT * FROM cmp_pools WHERE season = ? AND chapter = ? ORDER BY pool_name",
+            (season, chapter),
+        ).fetchall()
+        result = []
+        for p in pools:
+            pool = dict(p)
+            members = conn.execute(
+                "SELECT * FROM cmp_pool_members WHERE pool_id = ? ORDER BY customer_name",
+                (p["id"],),
+            ).fetchall()
+            pool["members"] = [dict(m) for m in members]
+            result.append(pool)
+        return result
+
+
+def cmp_create_pool(season: str, chapter: str, pool_name: str, db_path=None) -> dict:
+    with _connect(db_path) as conn:
+        try:
+            conn.execute(
+                "INSERT INTO cmp_pools (season, chapter, pool_name) VALUES (?, ?, ?)",
+                (season, chapter, pool_name),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            pass
+        row = conn.execute(
+            "SELECT * FROM cmp_pools WHERE season = ? AND chapter = ? AND pool_name = ?",
+            (season, chapter, pool_name),
+        ).fetchone()
+        return dict(row) if row else {}
+
+
+def cmp_delete_pool(pool_id: int, db_path=None) -> None:
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM cmp_matches WHERE pool_id = ?", (pool_id,))
+        conn.execute("DELETE FROM cmp_pool_members WHERE pool_id = ?", (pool_id,))
+        conn.execute("DELETE FROM cmp_pools WHERE id = ?", (pool_id,))
+        conn.commit()
+
+
+def cmp_add_member(pool_id: int, customer_name: str, customer_id: int | None = None, db_path=None) -> dict:
+    with _connect(db_path) as conn:
+        try:
+            conn.execute(
+                "INSERT INTO cmp_pool_members (pool_id, customer_name, customer_id) VALUES (?, ?, ?)",
+                (pool_id, customer_name, customer_id),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            pass
+        row = conn.execute(
+            "SELECT * FROM cmp_pool_members WHERE pool_id = ? AND customer_name = ?",
+            (pool_id, customer_name),
+        ).fetchone()
+        return dict(row) if row else {}
+
+
+def cmp_remove_member(pool_id: int, customer_name: str, db_path=None) -> None:
+    with _connect(db_path) as conn:
+        conn.execute(
+            "DELETE FROM cmp_pool_members WHERE pool_id = ? AND customer_name = ?",
+            (pool_id, customer_name),
+        )
+        conn.execute(
+            """DELETE FROM cmp_matches
+               WHERE pool_id = ? AND (player1_name = ? OR player2_name = ?)""",
+            (pool_id, customer_name, customer_name),
+        )
+        conn.commit()
+
+
+def cmp_get_matches(pool_id: int, db_path=None) -> list[dict]:
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM cmp_matches WHERE pool_id = ? ORDER BY id",
+            (pool_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def cmp_save_match(pool_id: int, player1: str, player2: str,
+                   p1_score: float | None, p2_score: float | None,
+                   match_date: str | None = None, notes: str | None = None,
+                   db_path=None) -> dict:
+    """Upsert a pool match result. Canonical key is (pool_id, sorted player names)."""
+    # Always store names in alphabetical order so UNIQUE constraint is stable
+    if player1 > player2:
+        player1, player2 = player2, player1
+        p1_score, p2_score = p2_score, p1_score
+    played_at = None if (p1_score is None and p2_score is None) else "datetime('now')"
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO cmp_matches
+               (pool_id, player1_name, player2_name, player1_score, player2_score, match_date, notes, played_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(pool_id, player1_name, player2_name)
+               DO UPDATE SET player1_score = excluded.player1_score,
+                             player2_score = excluded.player2_score,
+                             match_date    = excluded.match_date,
+                             notes         = excluded.notes,
+                             played_at     = CASE WHEN excluded.player1_score IS NULL AND excluded.player2_score IS NULL
+                                                  THEN NULL ELSE datetime('now') END""",
+            (pool_id, player1, player2, p1_score, p2_score, match_date, notes),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM cmp_matches WHERE pool_id = ? AND player1_name = ? AND player2_name = ?",
+            (pool_id, player1, player2),
+        ).fetchone()
+        return dict(row) if row else {}
+
+
+def cmp_get_standings(season: str, chapter: str, db_path=None) -> list[dict]:
+    """Return pool standings for a chapter/season. Each entry is a player row with
+    pool_name, wins, losses, draws, stableford_pts, and rank within the pool."""
+    with _connect(db_path) as conn:
+        pools = conn.execute(
+            "SELECT id, pool_name FROM cmp_pools WHERE season = ? AND chapter = ? ORDER BY pool_name",
+            (season, chapter),
+        ).fetchall()
+        standings = []
+        for pool in pools:
+            pid = pool["id"]
+            members = conn.execute(
+                "SELECT customer_name FROM cmp_pool_members WHERE pool_id = ?", (pid,)
+            ).fetchall()
+            matches = conn.execute(
+                "SELECT * FROM cmp_matches WHERE pool_id = ? AND player1_score IS NOT NULL",
+                (pid,),
+            ).fetchall()
+
+            stats = {m["customer_name"]: {"wins": 0, "losses": 0, "draws": 0, "pts": 0.0}
+                     for m in members}
+            for match in matches:
+                p1, p2 = match["player1_name"], match["player2_name"]
+                s1, s2 = match["player1_score"], match["player2_score"]
+                if p1 not in stats:
+                    stats[p1] = {"wins": 0, "losses": 0, "draws": 0, "pts": 0.0}
+                if p2 not in stats:
+                    stats[p2] = {"wins": 0, "losses": 0, "draws": 0, "pts": 0.0}
+                stats[p1]["pts"] += s1 or 0
+                stats[p2]["pts"] += s2 or 0
+                if s1 is not None and s2 is not None:
+                    if s1 > s2:
+                        stats[p1]["wins"] += 1
+                        stats[p2]["losses"] += 1
+                    elif s2 > s1:
+                        stats[p2]["wins"] += 1
+                        stats[p1]["losses"] += 1
+                    else:
+                        stats[p1]["draws"] += 1
+                        stats[p2]["draws"] += 1
+
+            pool_rows = sorted(
+                stats.items(),
+                key=lambda x: (-x[1]["wins"], -x[1]["pts"]),
+            )
+            for rank, (name, s) in enumerate(pool_rows, 1):
+                standings.append({
+                    "pool_id": pid,
+                    "pool_name": pool["pool_name"],
+                    "player_name": name,
+                    "rank": rank,
+                    "wins": s["wins"],
+                    "losses": s["losses"],
+                    "draws": s["draws"],
+                    "stableford_pts": round(s["pts"], 1),
+                    "advances": rank <= 2,
+                })
+        return standings
+
+
+def cmp_get_bracket(season: str, chapter: str, db_path=None) -> list[dict]:
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT * FROM cmp_bracket
+               WHERE season = ? AND chapter = ?
+               ORDER BY round, slot""",
+            (season, chapter),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def cmp_save_bracket_slot(season: str, chapter: str, round_: str, slot: int,
+                           player_name: str | None = None,
+                           score: float | None = None,
+                           opponent_name: str | None = None,
+                           opponent_score: float | None = None,
+                           winner_name: str | None = None,
+                           db_path=None) -> dict:
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO cmp_bracket
+               (season, chapter, round, slot, player_name, score, opponent_name, opponent_score, winner_name)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(season, chapter, round, slot)
+               DO UPDATE SET player_name    = excluded.player_name,
+                             score          = excluded.score,
+                             opponent_name  = excluded.opponent_name,
+                             opponent_score = excluded.opponent_score,
+                             winner_name    = excluded.winner_name""",
+            (season, chapter, round_, slot, player_name, score, opponent_name, opponent_score, winner_name),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM cmp_bracket WHERE season = ? AND chapter = ? AND round = ? AND slot = ?",
+            (season, chapter, round_, slot),
+        ).fetchone()
+        return dict(row) if row else {}
 
 
 # ---------------------------------------------------------------------------

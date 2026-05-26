@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.14.16";
+window.TGF_VERSION = "2.15.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.0",
+    date: "2026-05-25",
+    title: "Add CONTESTS tab: City Match Play pools, standings & bracket",
+    changes: [
+      "New CONTESTS nav tab (after Events, before Customers) on every page. The tab hosts three sub-sections: Match Play, Points Race, and Enrollment.",
+      "City Match Play (Match Play tab): Admin can create named pools per chapter/season, assign City Match Play enrollees to pools of 4, and enter Stableford scores for each round-robin match. Pool standings (W/L/D and total Stableford pts) update live; top 2 in each pool are highlighted as advancers.",
+      "Knockout bracket: 'Seed from Pool Standings' auto-populates bracket slots using cross-pool seeding (Pool A winner vs Pool B runner-up, etc.). Admin enters scores and selects the winner for each bracket match through Semifinals and Final.",
+      "Points Race tab: Shows the NET and GROSS Stableford scoring tables for reference; full standings and score entry coming in the next phase.",
+      "Enrollment tab: Filterable list of all season contest enrollments (contest type, chapter, season). 'Sync from Purchases' button rescans membership items and enrolls new participants.",
+      "New DB tables: cmp_pools, cmp_pool_members, cmp_matches, cmp_bracket — created at startup via init_db().",
+      "New API routes: GET/POST /api/cmp/pools, DELETE /api/cmp/pools/<id>, POST/DELETE /api/cmp/pools/<id>/members, GET/POST /api/cmp/matches, GET /api/cmp/standings, GET/POST /api/cmp/bracket.",
+    ],
+  },
   {
     version: "2.14.16",
     date: "2026-05-19",
