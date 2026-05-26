@@ -638,7 +638,7 @@
         cmpState.enrollees = rawFiltered
             .map(e => {
                 const canonicalName = (e.customer_id && cmpState.customerIdToName[e.customer_id]) || e.customer_name;
-                return { customer_name: canonicalName, customer_id: e.customer_id || null };
+                return { customer_name: canonicalName, customer_id: e.customer_id || null, enrollment_id: e.id || null };
             })
             .filter(e => {
                 if (e.customer_id && seenIds.has(e.customer_id)) return false;
@@ -705,10 +705,15 @@
                     assignWidget = '<span style="font-size:0.72rem;color:var(--text-muted);">Create a pool first</span>';
                 }
             }
+            const removeBtn = isManager && e.enrollment_id
+                ? `<button class="unassigned-remove-btn" data-enrollment-id="${e.enrollment_id}"
+                       style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;padding:0 0.25rem;line-height:1;" title="Remove enrollment">×</button>`
+                : '';
             return `
             <div class="unassigned-player-row">
                 <span class="unassigned-player-name">${escapeHtml(e.customer_name)}${hcpLabel(e.customer_name, e.customer_id)}</span>
                 ${assignWidget}
+                ${removeBtn}
             </div>`;
         }).join('');
 
@@ -739,6 +744,19 @@
                     body: JSON.stringify({ customer_name: customerName, customer_id: customerId }),
                 });
                 cmpLoad();
+            });
+        });
+
+        document.querySelectorAll(".unassigned-remove-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const id = btn.dataset.enrollmentId;
+                if (!confirm("Remove this player's season contest enrollment?")) return;
+                const res = await fetch(`/api/season-contests/${id}`, { method: "DELETE" });
+                if (res.ok) {
+                    cmpLoad();
+                } else {
+                    alert("Failed to remove enrollment.");
+                }
             });
         });
     }
@@ -1489,6 +1507,7 @@
             return;
         }
 
+        const isManager = userRole === "admin" || userRole === "manager";
         const rows = data.map(e => `
             <tr>
                 <td><a href="/customers?name=${encodeURIComponent(e.customer_name || '')}" class="cell-link">${escapeHtml(e.customer_name)}</a></td>
@@ -1496,19 +1515,36 @@
                 <td>${escapeHtml(e.contest_type)}</td>
                 <td>${escapeHtml(e.season || '—')}</td>
                 <td style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml((e.enrolled_at || '').slice(0, 10))}</td>
+                ${isManager ? `<td><button class="enr-delete-btn" data-id="${e.id}" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.85rem;padding:0 0.25rem;" title="Remove enrollment">×</button></td>` : '<td></td>'}
             </tr>
         `).join("");
 
         container.innerHTML = `
             <table class="enrollment-table">
                 <thead><tr>
-                    <th>Customer</th><th>Chapter</th><th>Contest</th><th>Season</th><th>Enrolled</th>
+                    <th>Customer</th><th>Chapter</th><th>Contest</th><th>Season</th><th>Enrolled</th><th></th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
             <p style="margin-top:0.75rem;font-size:0.8rem;color:var(--text-muted);">
                 ${data.length} enrollment${data.length === 1 ? '' : 's'}
             </p>`;
+
+        // Wire delete buttons
+        container.querySelectorAll(".enr-delete-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const id = btn.dataset.id;
+                if (!confirm("Remove this enrollment?")) return;
+                const res = await fetch(`/api/season-contests/${id}`, { method: "DELETE" });
+                if (res.ok) {
+                    btn.closest("tr").remove();
+                    // Reload so cmpState.enrollees also refreshes
+                    cmpLoad();
+                } else {
+                    alert("Failed to remove enrollment.");
+                }
+            });
+        });
     }
 
     // ═══════════ INIT ═══════════

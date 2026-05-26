@@ -1,5 +1,28 @@
-window.TGF_VERSION = "2.15.15";
+window.TGF_VERSION = "2.15.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.17",
+    date: "2026-05-26",
+    title: "Season Contests: reconciliation cleanup + manual delete button",
+    changes: [
+      "Sync now runs a reconciliation pass: any enrollment where the customer has no valid backing season contest purchase (checked by customer_id) is automatically removed. This is what cleans up Eduardo Melchor and others who were enrolled via Hill Country Matches before the item-type guard existed.",
+      "Admin/manager can now manually delete individual enrollments via a × button in both the Enrollment table and the Not-Yet-in-a-Pool panel, for edge cases the auto-cleanup can't handle.",
+      "Added manually_enrolled flag to season_contests: when an admin manually enrolls a player (cash payment, admin override) the flag is set to 1, protecting the row from auto-cleanup. Only auto-sync-sourced rows with no valid purchase are removed.",
+      "DELETE /api/season-contests/<id> endpoint added.",
+      "CLAUDE.md Guiding Principle #6 updated: customer_id is the explicit lookup standard for every query, dedup, cleanup, and cross-table join — never compare customer name strings.",
+    ],
+  },
+  {
+    version: "2.15.16",
+    date: "2026-05-26",
+    title: "Season Contests: customer_id-based dedup and chapter correction",
+    changes: [
+      "Enrollment cleanup now works by customer_id, not by customer_name string. 'Stuart Kirksey' and 'Stu Kirksey' share a customer_id, so the cleanup correctly identifies them as the same person and collapses to one canonical-name row.",
+      "Chapter correction now resolves via customer_id → customers.chapter instead of customer_name string lookup. This fixes cases where the enrollment name is an alias (not the canonical name) and the name-based chapter lookup returned blank.",
+      "Sync now calls _backfill_customer_id_on_season_contests before cleanup so alias names get their customer_id resolved (Stuart → Stu Kirksey's customer_id) before the dedup pass runs.",
+      "Added explicit dedup pass: after name/chapter correction, any remaining (customer_id, contest_type, season) group with > 1 row is collapsed to the canonical-name row.",
+    ],
+  },
   {
     version: "2.15.15",
     date: "2026-05-26",

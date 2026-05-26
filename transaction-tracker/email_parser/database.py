@@ -4252,6 +4252,17 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.OperationalError:
                 pass  # column already exists
 
+        # ── manually_enrolled flag on season_contests ──────────────
+        # Distinguishes intentional manual enrollments (cash payment, admin override)
+        # from auto-synced rows so the reconciliation cleanup can safely remove
+        # orphaned auto-sync rows without touching admin-confirmed enrollments.
+        try:
+            conn.execute(
+                "ALTER TABLE season_contests ADD COLUMN manually_enrolled INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
         # ── Bridge tgf_events → events (main event registry) ────────
         try:
             conn.execute(
@@ -13308,17 +13319,22 @@ def build_handicap_card_html(card_data: dict) -> str:
 def enroll_season_contest(customer_name: str, contest_type: str,
                           chapter: str = "", season: str = "",
                           source_item_id: int | None = None,
+                          manually_enrolled: bool = False,
                           db_path: str | Path | None = None) -> dict:
     """Enroll a customer in a season contest (NET Points Race, GROSS Points Race, City Match Play).
 
     Returns the enrollment dict. Idempotent — re-enrolling is a no-op.
+    Set manually_enrolled=True for admin overrides (cash payments, etc.) so the
+    reconciliation cleanup does not auto-remove the row.
     """
     with _connect(db_path) as conn:
         try:
             conn.execute(
-                """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (customer_name, contest_type, chapter or "", season or "", source_item_id),
+                """INSERT INTO season_contests
+                   (customer_name, contest_type, chapter, season, source_item_id, manually_enrolled)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (customer_name, contest_type, chapter or "", season or "",
+                 source_item_id, 1 if manually_enrolled else 0),
             )
             conn.commit()
             logger.info("Enrolled %s in %s (%s/%s)", customer_name, contest_type, chapter, season)
@@ -13513,35 +13529,106 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                )"""
         )
 
-        # Correct any existing enrollment rows whose chapter doesn't match the customer's
-        # canonical chapter (covers both blank chapters and wrong chapters like "San Antonio"
-        # parsed from a shipping address).
-        all_sc = conn.execute(
-            "SELECT id, customer_name, contest_type, chapter, season FROM season_contests"
-        ).fetchall()
-        for sc in all_sc:
+        # Reconcile: remove auto-synced enrollments that have no valid backing purchase.
+        # Uses customer_id as the identity key (Guiding Principle #6).
+        # Only removes rows where:
+        #   - manually_enrolled = 0 (admin-confirmed enrollments are protected)
+        #   - customer_id is known (we can positively identify the customer)
+        #   - There is no MEMBERSHIP or SEASON CONTESTS item for this customer
+        #     that carries the matching contest flag
+        conn.execute(
+            """DELETE FROM season_contests
+               WHERE manually_enrolled = 0
+                 AND customer_id IS NOT NULL
+                 AND NOT EXISTS (
+                     SELECT 1 FROM items i
+                     WHERE i.customer_id = season_contests.customer_id
+                       AND i.transaction_status IN ('active', NULL)
+                       AND (UPPER(i.item_name) = 'TGF MEMBERSHIP'
+                            OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
+                       AND (
+                           (season_contests.contest_type = 'NET Points Race'
+                                AND i.net_points_race = 'YES')
+                           OR (season_contests.contest_type = 'GROSS Points Race'
+                                AND i.gross_points_race = 'YES')
+                           OR (season_contests.contest_type = 'City Match Play'
+                                AND i.city_match_play = 'YES')
+                       )
+                 )"""
+        )
+
+        # Backfill customer_id on any rows that lack it so the cleanup below can
+        # work by customer_id rather than by name string.
+        _backfill_customer_id_on_season_contests(conn)
+
+        # Build a customer_id → {chapter, canonical_name} map so the cleanup
+        # works for alias names (e.g. "Stuart Kirksey" → customer_id 123 → "Austin").
+        cust_by_id: dict[int, dict] = {}
+        for r in conn.execute(
+            "SELECT customer_id, customer_name, chapter FROM customers WHERE customer_id IS NOT NULL"
+        ).fetchall():
+            cust_by_id[r["customer_id"]] = {
+                "name":    r["customer_name"],
+                "chapter": r["chapter"] or "",
+            }
+
+        # Step 1 — Correct chapters and normalise names on rows that have a customer_id.
+        for sc in conn.execute(
+            "SELECT id, customer_id, customer_name, contest_type, chapter, season FROM season_contests"
+        ).fetchall():
             sc = dict(sc)
-            correct = cust_chapter.get((sc["customer_name"] or "").lower(), "")
-            if not correct or sc["chapter"] == correct:
-                continue
-            # This row has the wrong chapter.  Check if a correct-chapter row already exists.
-            dup = conn.execute(
-                """SELECT id FROM season_contests
-                   WHERE customer_name = ? AND contest_type = ? AND chapter = ? AND season = ?""",
-                (sc["customer_name"], sc["contest_type"], correct, sc["season"]),
-            ).fetchone()
-            if dup:
-                # Correct row exists — delete the bad one.
-                conn.execute("DELETE FROM season_contests WHERE id = ?", (sc["id"],))
+            cid = sc.get("customer_id")
+            if not cid or cid not in cust_by_id:
+                # Fall back to name-based chapter lookup for unlinked rows.
+                correct = cust_chapter.get((sc["customer_name"] or "").lower(), "")
+                canon  = sc["customer_name"]
             else:
-                # No correct row yet — update in place.
-                try:
-                    conn.execute(
-                        "UPDATE season_contests SET chapter = ? WHERE id = ?",
-                        (correct, sc["id"]),
-                    )
-                except sqlite3.IntegrityError:
-                    conn.execute("DELETE FROM season_contests WHERE id = ?", (sc["id"],))
+                correct = cust_by_id[cid]["chapter"]
+                canon   = cust_by_id[cid]["name"]
+
+            chapter_ok = not correct or sc["chapter"] == correct
+            name_ok    = sc["customer_name"] == canon
+
+            if chapter_ok and name_ok:
+                continue
+
+            # Try to UPDATE the row to correct chapter + canonical name.
+            try:
+                conn.execute(
+                    "UPDATE season_contests SET chapter = ?, customer_name = ? WHERE id = ?",
+                    (correct if correct else sc["chapter"], canon, sc["id"]),
+                )
+            except sqlite3.IntegrityError:
+                # A row with the canonical (name, contest_type, chapter, season) already
+                # exists — this is a duplicate; delete it.
+                conn.execute("DELETE FROM season_contests WHERE id = ?", (sc["id"],))
+
+        # Step 2 — Deduplicate by (customer_id, contest_type, season): same person enrolled
+        # under two names (e.g. Stu + Stuart) now has the same customer_id on both rows after
+        # step 1 corrected the name, but may have been a UNIQUE-conflict-delete on one already.
+        # Run an explicit dedup pass to catch any remaining duplicates.
+        for grp in conn.execute(
+            """SELECT customer_id, contest_type, season
+               FROM season_contests
+               WHERE customer_id IS NOT NULL
+               GROUP BY customer_id, contest_type, season
+               HAVING COUNT(*) > 1"""
+        ).fetchall():
+            grp = dict(grp)
+            rows = conn.execute(
+                """SELECT id, customer_name, chapter FROM season_contests
+                   WHERE customer_id = ? AND contest_type = ? AND season = ?
+                   ORDER BY enrolled_at DESC""",
+                (grp["customer_id"], grp["contest_type"], grp["season"]),
+            ).fetchall()
+            canon = cust_by_id.get(grp["customer_id"], {}).get("name")
+            keep_id = next(
+                (r["id"] for r in rows if r["customer_name"] == canon),
+                rows[0]["id"],
+            )
+            for r in rows:
+                if r["id"] != keep_id:
+                    conn.execute("DELETE FROM season_contests WHERE id = ?", (r["id"],))
 
         conn.commit()
     logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)
