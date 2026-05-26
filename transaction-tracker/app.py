@@ -7823,12 +7823,19 @@ def api_cmp_save_match():
         p2_stab = float(p2_stab)
     winner = (data.get("winner_name") or "").strip() or None
     margin = (data.get("margin") or "").strip() or None
+    event_id = data.get("event_id")
+    if event_id is not None:
+        try:
+            event_id = int(event_id)
+        except (TypeError, ValueError):
+            event_id = None
     from email_parser.database import cmp_save_match
     match = cmp_save_match(
         pool_id, player1, player2,
         winner_name=winner, margin=margin,
         p1_stableford=p1_stab, p2_stableford=p2_stab,
         match_date=data.get("match_date"), notes=data.get("notes"),
+        event_id=event_id,
     )
     return jsonify(match)
 
