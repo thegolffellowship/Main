@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.15.18";
+window.TGF_VERSION = "2.15.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.19",
+    date: "2026-05-26",
+    changes: [
+      "Fix: customers table query used customer_name column (doesn't exist); now uses first_name || last_name",
+    ],
+  },
   {
     version: "2.15.18",
     date: "2026-05-26",

@@ -13428,7 +13428,9 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         # contest purchase and actively wrong when the player's home chapter differs.
         cust_chapter = {}
         for r in conn.execute(
-            "SELECT customer_name, chapter FROM customers WHERE chapter IS NOT NULL AND chapter != ''"
+            """SELECT TRIM(first_name) || ' ' || TRIM(last_name) AS customer_name, chapter
+               FROM customers
+               WHERE chapter IS NOT NULL AND chapter != ''"""
         ).fetchall():
             cust_chapter[r["customer_name"].lower()] = r["chapter"]
 
@@ -13591,7 +13593,11 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         # works for alias names (e.g. "Stuart Kirksey" → customer_id 123 → "Austin").
         cust_by_id: dict[int, dict] = {}
         for r in conn.execute(
-            "SELECT customer_id, customer_name, chapter FROM customers WHERE customer_id IS NOT NULL"
+            """SELECT customer_id,
+                      TRIM(first_name) || ' ' || TRIM(last_name) AS customer_name,
+                      chapter
+               FROM customers
+               WHERE customer_id IS NOT NULL"""
         ).fetchall():
             cust_by_id[r["customer_id"]] = {
                 "name":    r["customer_name"],
