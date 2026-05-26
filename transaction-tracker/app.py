@@ -487,6 +487,18 @@ def check_inbox():
         except Exception:
             logger.exception("Auto-sync events failed (non-fatal)")
 
+        # Auto-sync: link season contest payments to enrollments
+        try:
+            from email_parser.database import sync_season_contests_from_items
+            sc_result = sync_season_contests_from_items()
+            if sc_result.get("enrolled") or sc_result.get("linked"):
+                logger.info(
+                    "Auto-synced season contests: %d new enrollments, %d payments linked",
+                    sc_result.get("enrolled", 0), sc_result.get("linked", 0),
+                )
+        except Exception:
+            logger.exception("Auto-sync season contests failed (non-fatal)")
+
     _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(new_emails)} new emails ({len(emails)} total scanned)"
     logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
 

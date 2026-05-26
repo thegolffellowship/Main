@@ -13364,9 +13364,45 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
     net_points_race, gross_points_race, city_match_play fields.
 
     Also handles standalone SEASON CONTESTS items.
-    Returns summary of enrollments made.
+
+    Two outcomes per row:
+    - New enrollment  → INSERT with source_item_id set  (enrolled += 1)
+    - Existing manual enrollment without a payment yet → UPDATE source_item_id
+      to link the now-arrived transaction             (linked += 1)
+    Existing enrollments that already have a source_item_id are left alone.
+
+    Returns {"enrolled": N, "linked": N}.
     """
     enrolled = 0
+    linked = 0
+
+    def _upsert(conn, customer, contest_type, chapter, season, item_id):
+        nonlocal enrolled, linked
+        result = conn.execute(
+            """INSERT INTO season_contests
+               (customer_name, contest_type, chapter, season, source_item_id)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(customer_name, contest_type, chapter, season)
+               DO UPDATE SET source_item_id = excluded.source_item_id
+                   WHERE season_contests.source_item_id IS NULL""",
+            (customer, contest_type, chapter, season, item_id),
+        )
+        # rowcount=1 on INSERT, rowcount=1 on UPDATE, rowcount=0 when conflict row
+        # already had a source_item_id (nothing changed).
+        # Distinguish new row from updated row via lastrowid vs changes.
+        # Simplest heuristic: check whether the row's source_item_id now matches.
+        row = conn.execute(
+            """SELECT source_item_id FROM season_contests
+               WHERE customer_name = ? AND contest_type = ? AND chapter = ? AND season = ?""",
+            (customer, contest_type, chapter, season),
+        ).fetchone()
+        if row and row["source_item_id"] == item_id:
+            # Could be a fresh INSERT or a just-linked UPDATE — either is a win
+            if result.lastrowid and result.lastrowid > 0:
+                enrolled += 1
+            else:
+                linked += 1
+
     with _connect(db_path) as conn:
         rows = conn.execute(
             """SELECT id, customer, chapter, net_points_race, gross_points_race, city_match_play,
@@ -13381,43 +13417,16 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             row = dict(row)
             customer = row.get("customer") or ""
             chapter = row.get("chapter") or ""
-            # Derive season from order_date (e.g. "2026" from "2026-03-10")
             order_date = row.get("order_date") or ""
             season = order_date[:4] if len(order_date) >= 4 else ""
             item_id = row["id"]
 
             if (row.get("net_points_race") or "").upper() == "YES":
-                try:
-                    conn.execute(
-                        """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
-                           VALUES (?, ?, ?, ?, ?)""",
-                        (customer, "NET Points Race", chapter, season, item_id),
-                    )
-                    enrolled += 1
-                except sqlite3.IntegrityError:
-                    pass
-
+                _upsert(conn, customer, "NET Points Race", chapter, season, item_id)
             if (row.get("gross_points_race") or "").upper() == "YES":
-                try:
-                    conn.execute(
-                        """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
-                           VALUES (?, ?, ?, ?, ?)""",
-                        (customer, "GROSS Points Race", chapter, season, item_id),
-                    )
-                    enrolled += 1
-                except sqlite3.IntegrityError:
-                    pass
-
+                _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id)
             if (row.get("city_match_play") or "").upper() == "YES":
-                try:
-                    conn.execute(
-                        """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
-                           VALUES (?, ?, ?, ?, ?)""",
-                        (customer, "City Match Play", chapter, season, item_id),
-                    )
-                    enrolled += 1
-                except sqlite3.IntegrityError:
-                    pass
+                _upsert(conn, customer, "City Match Play", chapter, season, item_id)
 
         # Handle standalone "SEASON CONTESTS" items with bundle info in notes
         bundle_rows = conn.execute(
@@ -13435,33 +13444,16 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             item_name = (row.get("item_name") or "").upper()
             item_id = row["id"]
 
-            # "Points NET Bundle" or similar → enroll in both NET Points Race and City Match Play
             if "NET" in item_name or "NET" in (row.get("notes") or "").upper():
                 for ct in ["NET Points Race", "City Match Play"]:
-                    try:
-                        conn.execute(
-                            """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
-                               VALUES (?, ?, ?, ?, ?)""",
-                            (customer, ct, chapter, season, item_id),
-                        )
-                        enrolled += 1
-                    except sqlite3.IntegrityError:
-                        pass
+                    _upsert(conn, customer, ct, chapter, season, item_id)
             if "GROSS" in item_name or "GROSS" in (row.get("notes") or "").upper():
                 for ct in ["GROSS Points Race", "City Match Play"]:
-                    try:
-                        conn.execute(
-                            """INSERT INTO season_contests (customer_name, contest_type, chapter, season, source_item_id)
-                               VALUES (?, ?, ?, ?, ?)""",
-                            (customer, ct, chapter, season, item_id),
-                        )
-                        enrolled += 1
-                    except sqlite3.IntegrityError:
-                        pass
+                    _upsert(conn, customer, ct, chapter, season, item_id)
 
         conn.commit()
-    logger.info("Season contest sync: %d new enrollments", enrolled)
-    return {"enrolled": enrolled}
+    logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)
+    return {"enrolled": enrolled, "linked": linked}
 
 
 # ---------------------------------------------------------------------------

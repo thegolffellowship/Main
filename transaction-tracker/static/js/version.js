@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.15.2";
+window.TGF_VERSION = "2.15.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.3",
+    date: "2026-05-26",
+    title: "Auto-sync season contest payments from inbox; ON CONFLICT backfill",
+    changes: [
+      "Season contest payments are now auto-synced during every inbox check (same loop that auto-syncs events). When a payment for a NET/GROSS Points Race or City Match Play arrives, it is enrolled automatically — no manual Sync button needed.",
+      "Manual enrollments created before the payment arrives (e.g. adding a player who hasn't paid yet) now get their source_item_id back-filled automatically when the payment does arrive, thanks to ON CONFLICT DO UPDATE WHERE source_item_id IS NULL logic in the upsert helper.",
+      "sync_season_contests_from_items() now returns {enrolled: N, linked: N} so the auto-sync logger can distinguish brand-new enrollments from payment back-fills.",
+    ],
+  },
   {
     version: "2.15.2",
     date: "2026-05-26",
