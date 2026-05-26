@@ -602,10 +602,8 @@
 
         cmpState.pools = poolsRes.ok ? await poolsRes.json() : [];
         const rawEnrollees = enrollRes.ok ? await enrollRes.json() : [];
-        const seenNames = new Set();
-        cmpState.enrollees = rawEnrollees
-            .filter(e => e.customer_name && (!e.chapter || e.chapter === chapter) && !seenNames.has(e.customer_name) && seenNames.add(e.customer_name))
-            .map(e => ({ customer_name: e.customer_name, customer_id: e.customer_id || null }));
+        // Pass 1: chapter filter only (dedup happens after customerIdToName is built)
+        const rawFiltered = rawEnrollees.filter(e => e.customer_name && (!e.chapter || e.chapter === chapter));
         cmpState.handicapMap = hcpRes.ok ? await hcpRes.json() : {};
         const rawEvents = eventsRes.ok ? await eventsRes.json() : [];
         // Keep only events that have a date (sorted newest first, already from API)
@@ -632,6 +630,22 @@
         (_allCustomers || []).forEach(c => {
             if (c.customer_id) cmpState.customerIdToName[c.customer_id] = c.customer_name;
         });
+
+        // Pass 2: dedup by customer_id (same person enrolled under two names), then by canonical name
+        const seenIds = new Set();
+        const seenNames = new Set();
+        cmpState.enrollees = rawFiltered
+            .map(e => {
+                const canonicalName = (e.customer_id && cmpState.customerIdToName[e.customer_id]) || e.customer_name;
+                return { customer_name: canonicalName, customer_id: e.customer_id || null };
+            })
+            .filter(e => {
+                if (e.customer_id && seenIds.has(e.customer_id)) return false;
+                if (seenNames.has(e.customer_name.toLowerCase())) return false;
+                if (e.customer_id) seenIds.add(e.customer_id);
+                seenNames.add(e.customer_name.toLowerCase());
+                return true;
+            });
 
         cmpRender();
 
