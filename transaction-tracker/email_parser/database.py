@@ -4293,6 +4293,10 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_rsvp_email_overrides(conn)
         _backfill_customer_id_on_action_items(conn)
         try:
+            _backfill_customer_emails_from_customers_table(conn)
+        except Exception:
+            logger.exception("Non-fatal: _backfill_customer_emails_from_customers_table failed")
+        try:
             _promote_lone_customer_emails_to_primary(conn)
         except Exception:
             logger.exception("Non-fatal: _promote_lone_customer_emails_to_primary failed")
@@ -5395,6 +5399,29 @@ def _backfill_customer_id_on_action_items(conn: sqlite3.Connection) -> int:
     if updated:
         logger.info("Backfilled customer_id for %d action_items rows", updated)
     return updated
+
+
+def _backfill_customer_emails_from_customers_table(conn: sqlite3.Connection) -> int:
+    """Copy customers.email → customer_emails for any customer whose email is not
+    already present in customer_emails.  This ensures resolve_player_email can find
+    emails that were entered directly on the customer record (e.g. via the UI edit
+    form) without going through the GoDaddy order import path.
+    """
+    affected = conn.execute(
+        """INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary)
+           SELECT c.customer_id, TRIM(c.email), 1
+           FROM customers c
+           WHERE c.email IS NOT NULL AND TRIM(c.email) != ''
+             AND NOT EXISTS (
+                 SELECT 1 FROM customer_emails ce
+                 WHERE ce.customer_id = c.customer_id
+                   AND LOWER(TRIM(ce.email)) = LOWER(TRIM(c.email))
+             )"""
+    ).rowcount
+    if affected:
+        conn.commit()
+        logger.info("_backfill_customer_emails_from_customers_table: inserted %d rows into customer_emails", affected)
+    return affected
 
 
 def _promote_lone_customer_emails_to_primary(conn: sqlite3.Connection) -> int:
@@ -17388,7 +17415,25 @@ def resolve_player_email(item, conn=None, db_path=None) -> str:
                 except Exception:
                     pass
                 return row["email"].strip().lower()
-        # 3. Historical snapshot from the item (last resort — may be a typo/old value)
+            # 3. Email stored directly on the customer record (entered via UI edit form)
+            row = conn.execute(
+                "SELECT email FROM customers WHERE customer_id = ? AND email IS NOT NULL AND TRIM(email) != '' LIMIT 1",
+                (cid,),
+            ).fetchone()
+            if row and row["email"]:
+                # Backfill into customer_emails so future lookups hit the faster path
+                try:
+                    conn.execute(
+                        """INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary)
+                           VALUES (?, ?, 1)""",
+                        (cid, row["email"].strip()),
+                    )
+                    if owns:
+                        conn.commit()
+                except Exception:
+                    pass
+                return row["email"].strip().lower()
+        # 4. Historical snapshot from the item (last resort — may be a typo/old value)
         if isinstance(item, dict):
             return (item.get("customer_email") or "").strip()
         return ""
