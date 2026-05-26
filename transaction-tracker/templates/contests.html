@@ -43,16 +43,28 @@
         .sub-tab:hover { color: var(--text); }
         .sub-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
-        /* ── Controls bar ── */
-        .cmp-controls {
-            display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;
-            padding: 0.85rem 2rem; background: var(--surface);
+        /* ── Chapter toggle bar ── */
+        .cmp-chapter-bar {
+            display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+            padding: 0 2rem; background: #f8fafc;
             border-bottom: 1px solid var(--border);
         }
-        .cmp-controls label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
-        .cmp-controls select, .cmp-controls input[type="text"] {
-            padding: 0.35rem 0.6rem; border: 1px solid var(--border);
-            border-radius: 4px; font-size: 0.85rem; background: #fff;
+        .cmp-chapter-tab {
+            padding: 0.55rem 1.4rem; cursor: pointer; font-size: 0.88rem;
+            font-weight: 700; color: var(--text-muted); border-bottom: 3px solid transparent;
+            margin-bottom: -1px; transition: color 0.15s, border-color 0.15s;
+            background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .cmp-chapter-tab:hover { color: var(--text); }
+        .cmp-chapter-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .cmp-season-row {
+            margin-left: auto; display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.4rem 0;
+        }
+        .cmp-season-row label { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+        .cmp-season-row input {
+            width: 60px; padding: 0.25rem 0.4rem; border: 1px solid var(--border);
+            border-radius: 4px; font-size: 0.82rem; background: #fff;
         }
 
         /* ── Page body ── */
@@ -68,7 +80,7 @@
             padding: 0.65rem 1rem; background: var(--primary); color: #fff;
         }
         .pool-card-header h3 { font-size: 0.95rem; font-weight: 700; margin: 0; }
-        .pool-card-body { display: grid; grid-template-columns: 200px 1fr; }
+        .pool-card-body { display: grid; grid-template-columns: 220px 1fr; }
 
         /* ── Members panel ── */
         .pool-members {
@@ -77,6 +89,10 @@
         .pool-members h4, .pool-matches h4, .standings-section h4 {
             font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
             color: var(--text-muted); margin-bottom: 0.5rem; letter-spacing: 0.04em;
+        }
+        .hcp-badge {
+            font-size: 0.68rem; color: var(--text-muted); font-weight: 500;
+            margin-left: 0.3rem;
         }
         .member-row {
             display: flex; justify-content: space-between; align-items: center;
@@ -299,16 +315,14 @@
 
         <!-- ═══════════ MATCH PLAY ═══════════ -->
         <div id="section-match-play">
-            <div class="cmp-controls">
-                <label>Chapter</label>
-                <select id="cmp-chapter">
-                    <option value="Austin">Austin</option>
-                    <option value="San Antonio">San Antonio</option>
-                </select>
-                <label>Season</label>
-                <input type="text" id="cmp-season" value="2026" style="width:62px;">
-                <button class="btn btn-primary" id="cmp-load-btn">Load</button>
-                <button class="btn manager-only" id="cmp-add-pool-btn" style="display:none;">+ Add Pool</button>
+            <div class="cmp-chapter-bar">
+                <button class="cmp-chapter-tab active" data-chapter="Austin">Austin</button>
+                <button class="cmp-chapter-tab" data-chapter="San Antonio">San Antonio</button>
+                <div class="cmp-season-row">
+                    <label for="cmp-season">Season</label>
+                    <input type="text" id="cmp-season" value="2026">
+                    <button class="btn manager-only" id="cmp-add-pool-btn" style="display:none;">+ Add Pool</button>
+                </div>
             </div>
             <div class="cmp-body">
                 <div id="cmp-pools-container">
@@ -469,27 +483,52 @@
     // ═══════════ MATCH PLAY ═══════════
 
     let cmpState = {
-        season: "", chapter: "", pools: [], enrollees: [], bracket: []
+        season: "2026", chapter: "Austin", pools: [], enrollees: [], bracket: [],
+        handicapMap: {}   // lowercase name → { index_9, index_18 }
     };
 
-    $("cmp-load-btn").addEventListener("click", cmpLoad);
+    // ── Chapter tabs ──
+    $$(".cmp-chapter-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+            $$(".cmp-chapter-tab").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            cmpState.chapter = btn.dataset.chapter;
+            cmpLoad();
+        });
+    });
+
+    // ── Season input — auto-reload on change ──
+    $("cmp-season").addEventListener("change", () => { cmpLoad(); });
+
     $("cmp-add-pool-btn").addEventListener("click", cmpAddPool);
     $("cmp-seed-bracket-btn").addEventListener("click", cmpSeedBracket);
 
+    function hcpLabel(name) {
+        const entry = cmpState.handicapMap[(name || "").toLowerCase()];
+        if (!entry || entry.index_18 == null) return "";
+        const val = entry.index_18;
+        return `<span class="hcp-badge">(${val >= 0 ? val : '+' + Math.abs(val)})</span>`;
+    }
+
     async function cmpLoad() {
-        const chapter = $("cmp-chapter").value;
         const season = ($("cmp-season").value || "").trim();
-        if (!season) { alert("Enter a season year (e.g. 2026)"); return; }
-        cmpState.chapter = chapter;
+        if (!season) return;
+        const chapter = cmpState.chapter;
         cmpState.season = season;
 
-        const [poolsRes, enrollRes] = await Promise.all([
+        // Fetch pools, enrollees (all CMP for season, any chapter), and handicap map in parallel
+        const [poolsRes, enrollRes, hcpRes] = await Promise.all([
             fetch(`/api/cmp/pools?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`),
-            fetch(`/api/season-contests?contest_type=City+Match+Play&chapter=${encodeURIComponent(chapter)}&season=${encodeURIComponent(season)}`),
+            // No chapter filter — include anyone enrolled for City Match Play this season
+            // regardless of which chapter's item they bought through, so manually-added
+            // or chapter-less enrollees still appear in the pool dropdown.
+            fetch(`/api/season-contests?contest_type=City+Match+Play&season=${encodeURIComponent(season)}`),
+            fetch(`/api/handicaps/index-map`),
         ]);
         cmpState.pools = poolsRes.ok ? await poolsRes.json() : [];
         const rawEnrollees = enrollRes.ok ? await enrollRes.json() : [];
-        cmpState.enrollees = rawEnrollees.map(e => e.customer_name).filter(Boolean);
+        cmpState.enrollees = [...new Set(rawEnrollees.map(e => e.customer_name).filter(Boolean))];
+        cmpState.handicapMap = hcpRes.ok ? await hcpRes.json() : {};
 
         cmpRender();
 
@@ -518,7 +557,7 @@
         const isManager = userRole === "admin" || userRole === "manager";
         const memberRows = pool.members.map(m => `
             <div class="member-row">
-                <span>${escapeHtml(m.customer_name)}</span>
+                <span>${escapeHtml(m.customer_name)}${hcpLabel(m.customer_name)}</span>
                 ${isManager ? `<button class="member-remove-btn" data-pool="${pool.id}" data-name="${escapeHtml(m.customer_name)}" title="Remove">✕</button>` : ''}
             </div>
         `).join("");
@@ -531,7 +570,11 @@
             <div class="add-member-row" style="margin-top:0.5rem;">
                 <select class="add-member-select" data-pool="${pool.id}">
                     <option value="">Select player...</option>
-                    ${available.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("")}
+                    ${available.map(n => {
+                        const hcpEntry = cmpState.handicapMap[(n || "").toLowerCase()];
+                        const hcpSuffix = hcpEntry ? ` (${hcpEntry.index_18 >= 0 ? hcpEntry.index_18 : '+' + Math.abs(hcpEntry.index_18)})` : "";
+                        return `<option value="${escapeHtml(n)}">${escapeHtml(n)}${hcpSuffix}</option>`;
+                    }).join("")}
                     <option value="__manual__">Type name manually...</option>
                 </select>
                 <button class="btn add-member-btn" data-pool="${pool.id}" style="font-size:0.72rem;padding:0.2rem 0.5rem;">Add</button>
@@ -569,9 +612,9 @@
             return `
             <div class="match-entry" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}">
                 <span class="match-played-dot unplayed match-dot" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="Not yet played"></span>
-                <span class="match-player-name">${ea}</span>
+                <span class="match-player-name">${ea}${hcpLabel(a)}</span>
                 <span class="match-vs-label">vs</span>
-                <span class="match-player-name">${eb}</span>
+                <span class="match-player-name">${eb}${hcpLabel(b)}</span>
                 ${isManager ? `
                 <select class="match-winner-sel" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}">
                     <option value="">No result</option>
@@ -1112,6 +1155,8 @@
     async function onAuthReady() {
         const role = typeof currentRole !== "undefined" ? currentRole : null;
         applyRole(role);
+        // Auto-load Austin on page open
+        cmpLoad();
     }
 
     initAuth();

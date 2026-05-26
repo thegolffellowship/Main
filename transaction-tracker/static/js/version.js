@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.15.0";
+window.TGF_VERSION = "2.15.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.1",
+    date: "2026-05-26",
+    title: "Match Play: chapter tabs auto-load, handicaps, enrollment fix",
+    changes: [
+      "Replaced the Chapter dropdown + Load button with Austin / San Antonio toggle tabs that auto-load the correct pools as soon as you click them. Season input also triggers an immediate reload on change. Austin auto-loads on page open.",
+      "Handicap index (18-hole) now appears next to every player name in pool member lists, match entry rows, and the Add Player dropdown — pulled from the live handicap index map.",
+      "Fixed: players who enrolled in City Match Play without a chapter code (e.g. manually added or order chapter field was blank) no longer disappear from the Add Player dropdown. The enrollee fetch now returns all City Match Play enrollees for the season regardless of chapter.",
+    ],
+  },
   {
     version: "2.15.0",
     date: "2026-05-26",
