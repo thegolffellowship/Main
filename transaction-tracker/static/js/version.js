@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.15.19";
+window.TGF_VERSION = "2.15.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.20",
+    date: "2026-05-26",
+    changes: [
+      "Knockout Bracket: added Clear Bracket button (DELETE /api/cmp/bracket) to reset all bracket slots for a season/chapter",
+      "Knockout Bracket: added event dropdown to each match footer so the TGF event where the match was played can be recorded alongside the score",
+    ],
+  },
   {
     version: "2.15.19",
     date: "2026-05-26",
