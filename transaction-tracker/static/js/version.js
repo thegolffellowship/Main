@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.15.11";
+window.TGF_VERSION = "2.15.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.12",
+    date: "2026-05-26",
+    title: "Season Contests: fix independent-contest sync logic, add customer_id FKs to CMP tables",
+    changes: [
+      "Reverted incorrect 'full bundle = all three' assumption in SEASON CONTESTS sync. Each contest (NET Points Race, GROSS Points Race, City Match Play) is now enrolled only when its own explicit keyword appears in the item options — 'NET' for NET race, 'GROSS' for GROSS race, 'MATCH PLAY' for City Match Play. They are completely independent purchases.",
+      "Removed the incorrect side-effect where detecting 'NET' also auto-enrolled the player in City Match Play. The '(City & Fellowship Cup)' phrase in 'Points NET Bundle' describes the NET race scope, not a separate contest enrollment.",
+      "Added customer_id FK columns to cmp_matches (player1_id, player2_id, winner_id) and cmp_bracket (player_id, opponent_id, winner_id) via idempotent ALTER TABLE migrations. Every customer reference now has a path back to the single customers table FK — name columns remain as display labels only.",
+    ],
+  },
   {
     version: "2.15.11",
     date: "2026-05-26",

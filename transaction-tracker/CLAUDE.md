@@ -21,6 +21,11 @@ These are durable design principles that apply to **every** feature in this app 
 3. **Portable to TGF Platform.** Anything we build here should be implementable on the Platform backend with minimal rework. Avoid baking SQLite-specific quirks or Flask-specific shapes into the domain model. When the same concept exists in both products (e.g. side games matrix), cross-reference the Platform docs and keep the data model aligned.
 4. **Past events are frozen.** Anything that affects how an event was scored, paid, or invoiced must snapshot the rules in effect at the time. Editing a template later must never silently change historical events.
 5. **Admin-edits, manager-runs, customer-views.** Three layers of access. Admins configure (templates, rules, rates, permissions). Managers operate (run events, see auto-computed numbers). Customers view (their own data, public schedules). Build pages with the layer in mind.
+6. **Every customer reference must be anchored to `customers.customer_id`.** No table may track a customer by name alone. Any table row that refers to a customer — enrollment, pool membership, match result, score, prize, RSVP, bracket slot, or anything else — **must** include a `customer_id` column that is a FK to `customers(customer_id)`. A `customer_name` column may exist alongside it as a display label and parse-time snapshot, but `customer_id` is the authoritative identity link. Consequences:
+   - When designing a new table, add `customer_id INTEGER REFERENCES customers(customer_id)` from the start. Do not defer it.
+   - Write paths must resolve and store `customer_id` at insert time. If resolution fails at write time (e.g. new customer not yet in table), add the table to the boot-time backfill registry (`_backfill_customer_id_on_<table>`) so it gets linked on next deploy.
+   - Name-only lookups (handicap maps, dedup keys, display labels) may use `customer_name` internally, but must be resolved through `customer_id` before being persisted or surfaced in UI.
+   - This rule exists because name-only references are the root cause of every "double entry" and "who is this person?" bug we have encountered. Violating it guarantees we repeat those bugs on every new feature.
 
 ## Duplicate Detective
 
