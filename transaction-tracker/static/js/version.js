@@ -2,16 +2,16 @@ window.TGF_VERSION = "2.15.0";
 window.TGF_CHANGELOG = [
   {
     version: "2.15.0",
-    date: "2026-05-25",
+    date: "2026-05-26",
     title: "Add CONTESTS tab: City Match Play pools, standings & bracket",
     changes: [
       "New CONTESTS nav tab (after Events, before Customers) on every page. The tab hosts three sub-sections: Match Play, Points Race, and Enrollment.",
-      "City Match Play (Match Play tab): Admin can create named pools per chapter/season, assign City Match Play enrollees to pools of 4, and enter Stableford scores for each round-robin match. Pool standings (W/L/D and total Stableford pts) update live; top 2 in each pool are highlighted as advancers.",
-      "Knockout bracket: 'Seed from Pool Standings' auto-populates bracket slots using cross-pool seeding (Pool A winner vs Pool B runner-up, etc.). Admin enters scores and selects the winner for each bracket match through Semifinals and Final.",
-      "Points Race tab: Shows the NET and GROSS Stableford scoring tables for reference; full standings and score entry coming in the next phase.",
-      "Enrollment tab: Filterable list of all season contest enrollments (contest type, chapter, season). 'Sync from Purchases' button rescans membership items and enrolls new participants.",
-      "New DB tables: cmp_pools, cmp_pool_members, cmp_matches, cmp_bracket — created at startup via init_db().",
-      "New API routes: GET/POST /api/cmp/pools, DELETE /api/cmp/pools/<id>, POST/DELETE /api/cmp/pools/<id>/members, GET/POST /api/cmp/matches, GET /api/cmp/standings, GET/POST /api/cmp/bracket.",
+      "City Match Play (Match Play tab): Admin creates named pools per chapter/season, assigns players to pools of 4, and records two independent results per match: (1) the traditional match play result — winner and margin (e.g. 1 Up, 5&4, Putt Off, Halved) — and (2) each player's Stableford points for the round, which are tracked separately because the match loser can outscore the winner.",
+      "Pool standings: W/L/D is determined by the match play winner; Stableford points accumulate independently and serve as the tiebreaker for advancement and as seeding for the knockout bracket. Top 2 from each pool advance and are highlighted.",
+      "Knockout bracket: 'Seed from Pool Standings' auto-populates bracket slots using cross-pool seeding ranked by total Stableford points (Pool A #1 vs Pool B #2, Pool B #1 vs Pool A #2). Admin enters Stableford points, selects winner, and enters margin for each bracket match through Semifinals and Final.",
+      "Points Race tab: Shows the NET and GROSS Modified Stableford scoring tables for reference. NET race: Triple Bogey=-1, Double Bogey=-1, Bogey=0, Par=+1, Birdie=+2, Eagle=+3, Dbl Eagle=+4, HIO=+8. GROSS race: TB=-1, DB=0, Bogey=+1, Par=+2, Birdie=+4, Eagle=+8, Dbl Eagle=+16, HIO=+8. Full standings and score entry in the next phase.",
+      "Enrollment tab: Filterable list of all season contest enrollments (contest type, chapter, season). 'Sync from Purchases' rescans membership items and enrolls new participants.",
+      "DB schema: cmp_matches now stores winner_name + margin (match play result) and player1_stableford + player2_stableford (independent points) separately. cmp_bracket stores player_stableford + margin. Idempotent column migrations run at startup for existing deployments.",
     ],
   },
   {

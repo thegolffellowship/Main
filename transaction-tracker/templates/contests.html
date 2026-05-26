@@ -56,7 +56,7 @@
         }
 
         /* ── Page body ── */
-        .cmp-body { padding: 1.25rem 2rem; max-width: 1100px; }
+        .cmp-body { padding: 1.25rem 2rem; max-width: 1200px; }
 
         /* ── Pool card ── */
         .pool-card {
@@ -68,7 +68,7 @@
             padding: 0.65rem 1rem; background: var(--primary); color: #fff;
         }
         .pool-card-header h3 { font-size: 0.95rem; font-weight: 700; margin: 0; }
-        .pool-card-body { display: grid; grid-template-columns: 220px 1fr; }
+        .pool-card-body { display: grid; grid-template-columns: 200px 1fr; }
 
         /* ── Members panel ── */
         .pool-members {
@@ -89,26 +89,62 @@
         .add-member-row { display: flex; gap: 0.35rem; margin-top: 0.5rem; }
         .add-member-row select { flex: 1; font-size: 0.78rem; padding: 0.22rem 0.3rem; border: 1px solid var(--border); border-radius: 3px; }
 
-        /* ── Match grid ── */
-        .pool-matches { padding: 0.75rem; }
-        .match-row {
-            display: flex; align-items: center; gap: 0.5rem;
-            padding: 0.28rem 0; border-bottom: 1px solid var(--border); font-size: 0.82rem;
+        /* ── Match entry ── */
+        .pool-matches { padding: 0.75rem; overflow-x: auto; }
+        .match-entry {
+            display: grid;
+            grid-template-columns: 1fr auto auto auto auto auto auto auto auto;
+            gap: 0.35rem;
+            align-items: center;
+            padding: 0.4rem 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.8rem;
+            min-width: 620px;
         }
-        .match-row:last-child { border-bottom: none; }
-        .match-player { flex: 1; }
-        .match-player.right { text-align: right; }
-        .match-vs { color: var(--text-muted); font-size: 0.7rem; font-weight: 700; flex-shrink: 0; }
-        .match-score-input {
-            width: 50px; padding: 0.18rem 0.3rem; border: 1px solid var(--border);
-            border-radius: 3px; font-size: 0.82rem; text-align: center;
+        .match-entry:last-child { border-bottom: none; }
+        .match-player-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .match-vs-label {
+            color: var(--text-muted); font-size: 0.68rem; font-weight: 700;
+            text-align: center; flex-shrink: 0;
+        }
+        .match-winner-sel {
+            font-size: 0.75rem; padding: 0.18rem 0.25rem;
+            border: 1px solid var(--border); border-radius: 3px;
+            background: #fff; max-width: 130px;
+        }
+        .match-margin-input {
+            width: 80px; padding: 0.18rem 0.28rem; border: 1px solid var(--border);
+            border-radius: 3px; font-size: 0.75rem;
+        }
+        .match-stab-input {
+            width: 48px; padding: 0.18rem 0.28rem; border: 1px solid var(--border);
+            border-radius: 3px; font-size: 0.75rem; text-align: center;
+        }
+        .match-col-label {
+            font-size: 0.62rem; color: var(--text-muted); text-align: center;
+            font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
         }
         .match-save-btn {
-            padding: 0.15rem 0.5rem; font-size: 0.7rem; border-radius: 3px;
+            padding: 0.18rem 0.5rem; font-size: 0.7rem; border-radius: 3px;
             background: var(--primary); color: #fff; border: none; cursor: pointer;
             white-space: nowrap; flex-shrink: 0;
         }
         .match-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .match-played-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #22c55e; display: inline-block; margin-right: 2px;
+            flex-shrink: 0;
+        }
+        .match-played-dot.unplayed { background: #d1d5db; }
+        .match-header-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto auto auto auto auto auto auto;
+            gap: 0.35rem;
+            padding: 0.2rem 0 0.35rem;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 0.1rem;
+            min-width: 620px;
+        }
 
         /* ── Standings ── */
         .standings-section {
@@ -137,7 +173,7 @@
         .bracket-section h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.85rem; }
         .bracket-controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
         .bracket-tree { display: flex; gap: 0; align-items: flex-start; overflow-x: auto; padding-bottom: 0.5rem; }
-        .bracket-round { display: flex; flex-direction: column; gap: 1.25rem; min-width: 190px; }
+        .bracket-round { display: flex; flex-direction: column; gap: 1.25rem; min-width: 220px; }
         .bracket-round-label {
             font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
             color: var(--text-muted); text-align: center; letter-spacing: 0.04em;
@@ -157,18 +193,22 @@
         .bracket-slot.winner { background: #ecfdf5; font-weight: 700; }
         .bracket-slot-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .bracket-slot-score { font-weight: 700; color: var(--primary); min-width: 26px; text-align: right; font-size: 0.78rem; }
-        .bracket-score-input {
+        .bracket-stab-input {
             width: 44px; padding: 0.15rem 0.28rem; border: 1px solid var(--border);
             border-radius: 3px; font-size: 0.76rem; text-align: center;
         }
         .bracket-match-footer {
-            display: flex; gap: 0.5rem; padding: 0.3rem 0.5rem;
+            display: flex; gap: 0.4rem; padding: 0.3rem 0.5rem;
             border-top: 1px solid var(--border); background: #f9fafb;
-            align-items: center;
+            align-items: center; flex-wrap: wrap;
         }
         .bracket-winner-sel {
             font-size: 0.7rem; padding: 0.12rem 0.3rem;
-            border: 1px solid var(--border); border-radius: 3px; flex: 1;
+            border: 1px solid var(--border); border-radius: 3px; flex: 1; min-width: 90px;
+        }
+        .bracket-margin-input {
+            width: 72px; padding: 0.12rem 0.25rem; border: 1px solid var(--border);
+            border-radius: 3px; font-size: 0.68rem;
         }
         .bracket-connector {
             width: 28px; flex-shrink: 0; align-self: stretch;
@@ -253,7 +293,7 @@
         <!-- Top-level tabs -->
         <div class="top-tabs">
             <button class="top-tab active" data-top="match-play">Match Play</button>
-            <button class="top-tab" data-top="points-race">Points Race</button>
+            <button class="top-tab" data-top="points-race">Points Races</button>
             <button class="top-tab" data-top="enrollment">Enrollment</button>
         </div>
 
@@ -486,11 +526,13 @@
         // Players not yet in this pool
         const inPool = new Set(pool.members.map(m => m.customer_name));
         const available = cmpState.enrollees.filter(n => !inPool.has(n));
-        const addRow = (isManager && available.length > 0) ? `
-            <div class="add-member-row">
+        // Also allow typing in a name not yet in enrollment
+        const addRow = isManager ? `
+            <div class="add-member-row" style="margin-top:0.5rem;">
                 <select class="add-member-select" data-pool="${pool.id}">
-                    <option value="">Add player...</option>
+                    <option value="">Select player...</option>
                     ${available.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("")}
+                    <option value="__manual__">Type name manually...</option>
                 </select>
                 <button class="btn add-member-btn" data-pool="${pool.id}" style="font-size:0.72rem;padding:0.2rem 0.5rem;">Add</button>
             </div>
@@ -506,18 +548,49 @@
             }
         }
 
-        const matchRows = names.length >= 2 ? pairs.map(([a, b]) => `
-            <div class="match-row" data-pool="${pool.id}" data-p1="${escapeHtml(a)}" data-p2="${escapeHtml(b)}">
-                <span class="match-player right">${escapeHtml(a)}</span>
-                <input type="number" class="match-score-input match-s1" step="0.5" placeholder="—"
-                    data-pool="${pool.id}" data-p1="${escapeHtml(a)}" data-p2="${escapeHtml(b)}">
-                <span class="match-vs">vs</span>
-                <input type="number" class="match-score-input match-s2" step="0.5" placeholder="—"
-                    data-pool="${pool.id}" data-p1="${escapeHtml(a)}" data-p2="${escapeHtml(b)}">
-                <span class="match-player">${escapeHtml(b)}</span>
-                ${isManager ? `<button class="match-save-btn" data-pool="${pool.id}" data-p1="${escapeHtml(a)}" data-p2="${escapeHtml(b)}">Save</button>` : ''}
+        // Column header
+        const colHeader = names.length >= 2 && isManager ? `
+            <div class="match-header-row">
+                <span></span><!-- status dot -->
+                <span class="match-col-label" style="text-align:left;">Player 1</span>
+                <span class="match-col-label">vs</span>
+                <span class="match-col-label" style="text-align:left;">Player 2</span>
+                <span class="match-col-label">Winner</span>
+                <span class="match-col-label">Margin</span>
+                <span class="match-col-label">Pts&nbsp;P1</span>
+                <span class="match-col-label">Pts&nbsp;P2</span>
+                <span></span><!-- save btn -->
             </div>
-        `).join("") : `<p style="color:var(--text-muted);font-size:0.82rem;padding:0.25rem 0;">Add at least 2 players to enter scores.</p>`;
+        ` : '';
+
+        const matchRows = names.length >= 2 ? pairs.map(([a, b]) => {
+            const pid = pool.id;
+            const ea = escapeHtml(a), eb = escapeHtml(b);
+            return `
+            <div class="match-entry" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}">
+                <span class="match-played-dot unplayed match-dot" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="Not yet played"></span>
+                <span class="match-player-name">${ea}</span>
+                <span class="match-vs-label">vs</span>
+                <span class="match-player-name">${eb}</span>
+                ${isManager ? `
+                <select class="match-winner-sel" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}">
+                    <option value="">No result</option>
+                    <option value="${ea}">${ea} wins</option>
+                    <option value="${eb}">${eb} wins</option>
+                    <option value="halved">Halved</option>
+                </select>
+                <input type="text" class="match-margin-input" placeholder="e.g. 2&amp;1" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="Margin (e.g. 1 Up, 5&4, Putt Off)">
+                <input type="number" class="match-stab-input match-s1" step="0.5" placeholder="—" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="${ea} Stableford pts">
+                <input type="number" class="match-stab-input match-s2" step="0.5" placeholder="—" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="${eb} Stableford pts">
+                <button class="match-save-btn" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}">Save</button>
+                ` : `
+                <span class="match-winner-display" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="font-size:0.75rem;color:var(--text-muted);">—</span>
+                <span style="width:80px;"></span>
+                <span class="match-stab-display1" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="width:48px;text-align:center;">—</span>
+                <span class="match-stab-display2" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="width:48px;text-align:center;">—</span>
+                `}
+            </div>`;
+        }).join("") : `<p style="color:var(--text-muted);font-size:0.82rem;padding:0.25rem 0;">Add at least 2 players to enter scores.</p>`;
 
         const deleteBtn = isManager
             ? `<button class="pool-delete-btn btn" data-pool="${pool.id}" style="background:#dc2626;font-size:0.72rem;padding:0.18rem 0.5rem;margin-left:0.5rem;">Delete Pool</button>`
@@ -536,7 +609,8 @@
                     ${addRow}
                 </div>
                 <div class="pool-matches">
-                    <h4>Match Scores (Stableford pts, 9-hole rounds)</h4>
+                    <h4>Matches — Match Play Result &amp; Stableford Points</h4>
+                    ${colHeader}
                     ${matchRows}
                 </div>
             </div>
@@ -552,14 +626,46 @@
         if (!res.ok) return;
         const matches = await res.json();
         for (const m of matches) {
-            if (m.player1_score == null && m.player2_score == null) continue;
-            const selector = `.match-row[data-pool="${poolId}"][data-p1="${CSS.escape(m.player1_name)}"][data-p2="${CSS.escape(m.player2_name)}"]`;
-            const row = document.querySelector(selector);
-            if (!row) continue;
-            const s1 = row.querySelector(".match-s1");
-            const s2 = row.querySelector(".match-s2");
-            if (s1 && m.player1_score != null) s1.value = m.player1_score;
-            if (s2 && m.player2_score != null) s2.value = m.player2_score;
+            const played = m.played_at != null;
+            const p1 = m.player1_name, p2 = m.player2_name;
+            const dotSel = `.match-dot[data-pool="${poolId}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`;
+            const dot = document.querySelector(dotSel);
+            if (dot) {
+                dot.classList.toggle("unplayed", !played);
+                dot.title = played ? "Played" : "Not yet played";
+            }
+
+            if (!played) continue;
+
+            // Winner selector
+            const winSel = document.querySelector(`.match-winner-sel[data-pool="${poolId}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`);
+            if (winSel) {
+                const margin = (m.margin || "").trim().toLowerCase();
+                const halved = margin === "halved" || margin === "all square" || margin === "as";
+                if (halved) winSel.value = "halved";
+                else if (m.winner_name) winSel.value = m.winner_name;
+            }
+
+            // Margin input
+            const marginEl = document.querySelector(`.match-margin-input[data-pool="${poolId}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`);
+            if (marginEl && m.margin) marginEl.value = m.margin;
+
+            // Stableford inputs
+            const row = document.querySelector(`.match-entry[data-pool="${poolId}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`);
+            if (row) {
+                const s1 = row.querySelector(".match-s1");
+                const s2 = row.querySelector(".match-s2");
+                if (s1 && m.player1_stableford != null) s1.value = m.player1_stableford;
+                if (s2 && m.player2_stableford != null) s2.value = m.player2_stableford;
+
+                // Read-only display
+                const wd = row.querySelector(".match-winner-display");
+                if (wd) wd.textContent = m.winner_name ? `${m.winner_name}${m.margin ? ' (' + m.margin + ')' : ''}` : (m.margin || '—');
+                const sd1 = row.querySelector(".match-stab-display1");
+                if (sd1) sd1.textContent = m.player1_stableford != null ? m.player1_stableford : '—';
+                const sd2 = row.querySelector(".match-stab-display2");
+                if (sd2) sd2.textContent = m.player2_stableford != null ? m.player2_stableford : '—';
+            }
         }
     }
 
@@ -573,7 +679,7 @@
         const el = $("standings-" + poolId);
         if (!el) return;
         if (!poolRows.length) {
-            el.innerHTML = '<h4>Pool Standings</h4><p style="color:var(--text-muted);font-size:0.8rem;">No scores recorded yet.</p>';
+            el.innerHTML = '<h4>Pool Standings</h4><p style="color:var(--text-muted);font-size:0.8rem;">No results recorded yet.</p>';
             return;
         }
         const rows = poolRows.map(r => `
@@ -584,9 +690,9 @@
             </tr>
         `).join("");
         el.innerHTML = `
-            <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top 2 advance to bracket</span></h4>
+            <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top 2 advance · tiebreaker: Stableford pts</span></h4>
             <table class="standings-table">
-                <thead><tr><th style="text-align:left;">Player</th><th>W</th><th>L</th><th>D</th><th>Pts</th></tr></thead>
+                <thead><tr><th style="text-align:left;">Player</th><th>W</th><th>L</th><th>D</th><th title="Total Stableford points accumulated">Pts</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
     }
@@ -617,7 +723,11 @@
             btn.addEventListener("click", async () => {
                 const pid = Number(btn.dataset.pool);
                 const sel = document.querySelector(`.add-member-select[data-pool="${pid}"]`);
-                const name = sel ? sel.value : "";
+                let name = sel ? sel.value : "";
+                if (name === "__manual__") {
+                    name = (prompt("Enter player name:") || "").trim();
+                    if (!name) return;
+                }
                 if (!name) return;
                 await fetch(`/api/cmp/pools/${pid}/members`, {
                     method: "POST",
@@ -628,27 +738,60 @@
             });
         });
 
-        // Save match score
+        // Save match result
         document.querySelectorAll(".match-save-btn").forEach(btn => {
             btn.addEventListener("click", async () => {
                 const pid = Number(btn.dataset.pool);
                 const p1 = btn.dataset.p1;
                 const p2 = btn.dataset.p2;
-                const row = btn.closest(".match-row");
+                const row = btn.closest(".match-entry");
+
+                const winSel = row.querySelector(".match-winner-sel");
+                const marginEl = row.querySelector(".match-margin-input");
                 const s1El = row.querySelector(".match-s1");
                 const s2El = row.querySelector(".match-s2");
+
+                let winnerVal = winSel ? winSel.value : "";
+                const marginVal = marginEl ? marginEl.value.trim() : "";
                 const s1 = s1El && s1El.value !== "" ? parseFloat(s1El.value) : null;
                 const s2 = s2El && s2El.value !== "" ? parseFloat(s2El.value) : null;
+
+                // Resolve winner_name and margin
+                let winner_name = null;
+                let margin = marginVal || null;
+                if (winnerVal === "halved") {
+                    winner_name = null;
+                    margin = margin || "Halved";
+                } else if (winnerVal) {
+                    winner_name = winnerVal;
+                }
+
+                // Require at least a winner or stableford score before saving
+                if (!winner_name && winnerVal !== "halved" && s1 === null && s2 === null) {
+                    alert("Enter a match result (winner or halved) and/or Stableford points before saving.");
+                    return;
+                }
+
                 btn.textContent = "Saving…"; btn.disabled = true;
-                await fetch("/api/cmp/matches", {
+                const res = await fetch("/api/cmp/matches", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         pool_id: pid, player1_name: p1, player2_name: p2,
-                        player1_score: s1, player2_score: s2,
+                        winner_name, margin,
+                        player1_stableford: s1, player2_stableford: s2,
                     }),
                 });
+                if (!res.ok) {
+                    btn.textContent = "Error"; btn.disabled = false;
+                    return;
+                }
                 btn.textContent = "Saved ✓";
+
+                // Update dot
+                const dot = document.querySelector(`.match-dot[data-pool="${pid}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`);
+                if (dot) { dot.classList.remove("unplayed"); dot.title = "Played"; }
+
                 setTimeout(() => { btn.textContent = "Save"; btn.disabled = false; }, 1800);
                 loadPoolStandings(pid);
             });
@@ -681,12 +824,11 @@
         const rounds = [];
         let n = advancerCount;
         while (n >= 2) {
-            if (n >= 8)      rounds.push({ key: "qf", label: "Quarterfinals", matchCount: n / 2 });
-            else if (n >= 4) rounds.push({ key: "sf", label: "Semifinals",    matchCount: n / 2 });
+            if (n >= 8)      rounds.push({ key: "qf", label: "Quarterfinals", matchCount: Math.floor(n / 2) });
+            else if (n >= 4) rounds.push({ key: "sf", label: "Semifinals",    matchCount: Math.floor(n / 2) });
             else             rounds.push({ key: "final", label: "Final",       matchCount: 1 });
             n = Math.floor(n / 2);
         }
-        // Deduplicate keys in case advancerCount is odd or forces repeats
         const seen = new Set();
         return rounds.filter(r => { if (seen.has(r.key)) return false; seen.add(r.key); return true; });
     }
@@ -715,32 +857,33 @@
                 const winner = s1.winner_name || s2.winner_name || null;
                 const slot1Win = winner && winner === s1.player_name;
                 const slot2Win = winner && winner === s2.player_name;
-                const scoreDisp1 = s1.score != null ? s1.score : '';
-                const scoreDisp2 = s2.score != null ? s2.score : '';
+                const stab1 = s1.player_stableford != null ? s1.player_stableford : '';
+                const stab2 = s2.player_stableford != null ? s2.player_stableford : '';
+                const margin = s1.margin || s2.margin || '';
 
                 return `
                 <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
                     <div class="bracket-slot${slot1Win ? ' winner' : ''}">
                         <span class="bracket-slot-name">${escapeHtml(s1.player_name || '—')}</span>
                         ${isManager
-                            ? `<input type="number" class="bracket-score-input"
-                                step="0.5" placeholder="—"
+                            ? `<input type="number" class="bracket-stab-input"
+                                step="0.5" placeholder="Pts"
                                 data-round="${round.key}" data-slot="${mi * 2}"
                                 data-player="${escapeHtml(s1.player_name || '')}"
                                 data-opp="${escapeHtml(s2.player_name || '')}"
-                                value="${scoreDisp1}">`
-                            : `<span class="bracket-slot-score">${scoreDisp1}</span>`}
+                                value="${stab1}" title="Stableford points">`
+                            : `<span class="bracket-slot-score">${stab1 !== '' ? stab1 + ' pts' : ''}</span>`}
                     </div>
                     <div class="bracket-slot${slot2Win ? ' winner' : ''}">
                         <span class="bracket-slot-name">${escapeHtml(s2.player_name || '—')}</span>
                         ${isManager
-                            ? `<input type="number" class="bracket-score-input"
-                                step="0.5" placeholder="—"
+                            ? `<input type="number" class="bracket-stab-input"
+                                step="0.5" placeholder="Pts"
                                 data-round="${round.key}" data-slot="${mi * 2 + 1}"
                                 data-player="${escapeHtml(s2.player_name || '')}"
                                 data-opp="${escapeHtml(s1.player_name || '')}"
-                                value="${scoreDisp2}">`
-                            : `<span class="bracket-slot-score">${scoreDisp2}</span>`}
+                                value="${stab2}" title="Stableford points">`
+                            : `<span class="bracket-slot-score">${stab2 !== '' ? stab2 + ' pts' : ''}</span>`}
                     </div>
                     ${isManager ? `
                     <div class="bracket-match-footer">
@@ -750,10 +893,17 @@
                         <select class="bracket-winner-sel"
                             data-round="${round.key}" data-match="${mi}">
                             <option value="">No winner yet</option>
-                            ${s1.player_name ? `<option value="${escapeHtml(s1.player_name)}" ${winner === s1.player_name ? 'selected' : ''}>${escapeHtml(s1.player_name)}</option>` : ''}
-                            ${s2.player_name ? `<option value="${escapeHtml(s2.player_name)}" ${winner === s2.player_name ? 'selected' : ''}>${escapeHtml(s2.player_name)}</option>` : ''}
+                            <option value="halved">Halved</option>
+                            ${s1.player_name ? `<option value="${escapeHtml(s1.player_name)}" ${winner === s1.player_name ? 'selected' : ''}>${escapeHtml(s1.player_name)} wins</option>` : ''}
+                            ${s2.player_name ? `<option value="${escapeHtml(s2.player_name)}" ${winner === s2.player_name ? 'selected' : ''}>${escapeHtml(s2.player_name)} wins</option>` : ''}
                         </select>
-                    </div>` : ''}
+                        <input type="text" class="bracket-margin-input"
+                            placeholder="Margin (e.g. 1 Up)"
+                            data-round="${round.key}" data-match="${mi}"
+                            value="${escapeHtml(margin)}" title="Match margin">
+                    </div>` : (winner ? `<div style="padding:0.25rem 0.65rem;font-size:0.72rem;font-weight:700;color:#166534;">
+                        ${escapeHtml(winner)} ${margin ? '(' + escapeHtml(margin) + ')' : ''}
+                    </div>` : '')}
                 </div>`;
             }).join("");
 
@@ -777,13 +927,23 @@
                     const mi = Number(btn.dataset.match);
                     const { season, chapter } = cmpState;
 
-                    const i1 = container.querySelector(`.bracket-score-input[data-round="${round}"][data-slot="${mi * 2}"]`);
-                    const i2 = container.querySelector(`.bracket-score-input[data-round="${round}"][data-slot="${mi * 2 + 1}"]`);
+                    const i1 = container.querySelector(`.bracket-stab-input[data-round="${round}"][data-slot="${mi * 2}"]`);
+                    const i2 = container.querySelector(`.bracket-stab-input[data-round="${round}"][data-slot="${mi * 2 + 1}"]`);
                     const winSel = container.querySelector(`.bracket-winner-sel[data-round="${round}"][data-match="${mi}"]`);
+                    const marginEl = container.querySelector(`.bracket-margin-input[data-round="${round}"][data-match="${mi}"]`);
 
-                    const s1 = i1 && i1.value !== "" ? parseFloat(i1.value) : null;
-                    const s2 = i2 && i2.value !== "" ? parseFloat(i2.value) : null;
-                    const winner = winSel ? winSel.value || null : null;
+                    const stab1 = i1 && i1.value !== "" ? parseFloat(i1.value) : null;
+                    const stab2 = i2 && i2.value !== "" ? parseFloat(i2.value) : null;
+                    const winnerVal = winSel ? winSel.value : "";
+                    const marginVal = (marginEl ? marginEl.value.trim() : "") || null;
+
+                    let winner_name = null;
+                    let margin = marginVal;
+                    if (winnerVal === "halved") {
+                        margin = margin || "Halved";
+                    } else if (winnerVal) {
+                        winner_name = winnerVal;
+                    }
 
                     btn.textContent = "Saving…"; btn.disabled = true;
 
@@ -794,8 +954,10 @@
                         body: JSON.stringify({
                             season, chapter, round, slot: mi * 2,
                             player_name: i1.dataset.player || null,
-                            score: s1, opponent_name: i1.dataset.opp || null,
-                            opponent_score: s2, winner_name: winner,
+                            player_stableford: stab1,
+                            opponent_name: i1.dataset.opp || null,
+                            opponent_stableford: stab2,
+                            winner_name, margin,
                         }),
                     }));
                     if (i2) saves.push(fetch("/api/cmp/bracket", {
@@ -804,8 +966,10 @@
                         body: JSON.stringify({
                             season, chapter, round, slot: mi * 2 + 1,
                             player_name: i2.dataset.player || null,
-                            score: s2, opponent_name: i2.dataset.opp || null,
-                            opponent_score: s1, winner_name: winner,
+                            player_stableford: stab2,
+                            opponent_name: i2.dataset.opp || null,
+                            opponent_stableford: stab1,
+                            winner_name, margin,
                         }),
                     }));
 
@@ -813,7 +977,6 @@
                     btn.textContent = "Saved ✓";
                     setTimeout(() => { btn.textContent = "Save"; btn.disabled = false; }, 1800);
 
-                    // Refresh
                     const bRes = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
                     cmpState.bracket = bRes.ok ? await bRes.json() : [];
                     cmpRenderBracket();
@@ -828,21 +991,22 @@
         if (!res.ok) return;
         const standings = await res.json();
 
-        // Group advancers by pool, collect top 2 per pool
+        // Group advancers by pool, collect top 2 per pool sorted by stableford pts (bracket seeding)
         const poolMap = {};
         standings.forEach(r => {
             if (!poolMap[r.pool_name]) poolMap[r.pool_name] = [];
             poolMap[r.pool_name].push(r);
         });
+        // Sort each pool by stableford_pts desc for bracket seeding
+        Object.values(poolMap).forEach(g => g.sort((a, b) => b.stableford_pts - a.stableford_pts));
         const poolGroups = Object.values(poolMap).filter(g => g.length >= 2);
 
         if (!poolGroups.length) {
-            alert("No pool standings yet. Enter scores first.");
+            alert("No pool results yet. Enter match results first.");
             return;
         }
 
-        // Cross-pool seeding for 2 pools: P1-rank1 vs P2-rank2, P2-rank1 vs P1-rank2
-        // For other pool counts: sequential seeding
+        // Cross-pool seeding for 2 pools: Pool A #1 vs Pool B #2, Pool B #1 vs Pool A #2
         let seeded = [];
         if (poolGroups.length === 2) {
             seeded = [
@@ -867,7 +1031,6 @@
         const firstRound = rounds[0];
         if (!firstRound) return;
 
-        // Clear any existing bracket slots for this round
         const saves = seeded.map((name, i) => fetch("/api/cmp/bracket", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -876,8 +1039,11 @@
                 round: firstRound.key,
                 slot: i,
                 player_name: name,
-                score: null, opponent_name: null,
-                opponent_score: null, winner_name: null,
+                player_stableford: null,
+                opponent_name: null,
+                opponent_stableford: null,
+                winner_name: null,
+                margin: null,
             }),
         }));
         await Promise.all(saves);

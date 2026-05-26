@@ -2681,20 +2681,36 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS cmp_matches (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                pool_id        INTEGER NOT NULL REFERENCES cmp_pools(id),
-                player1_name   TEXT NOT NULL,
-                player2_name   TEXT NOT NULL,
-                player1_score  REAL,
-                player2_score  REAL,
-                match_date     TEXT,
-                stage          TEXT NOT NULL DEFAULT 'pool',
-                notes          TEXT,
-                played_at      TEXT,
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                pool_id            INTEGER NOT NULL REFERENCES cmp_pools(id),
+                player1_name       TEXT NOT NULL,
+                player2_name       TEXT NOT NULL,
+                -- Match Play result (traditional: winner + margin)
+                winner_name        TEXT,
+                margin             TEXT,
+                -- Stableford points scored independently (loser may outscore winner)
+                player1_stableford REAL,
+                player2_stableford REAL,
+                match_date         TEXT,
+                stage              TEXT NOT NULL DEFAULT 'pool',
+                notes              TEXT,
+                played_at          TEXT,
                 UNIQUE(pool_id, player1_name, player2_name)
             )
             """
         )
+        # Idempotent migrations for installs that have the old cmp_matches schema
+        for _col, _def in [
+            ("winner_name",        "TEXT"),
+            ("margin",             "TEXT"),
+            ("player1_stableford", "REAL"),
+            ("player2_stableford", "REAL"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE cmp_matches ADD COLUMN {_col} {_def}")
+            except sqlite3.OperationalError:
+                pass
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS cmp_bracket (
@@ -2704,14 +2720,25 @@ def init_db(db_path: str | Path | None = None) -> None:
                 round          TEXT NOT NULL,
                 slot           INTEGER NOT NULL,
                 player_name    TEXT,
-                score          REAL,
+                player_stableford REAL,
                 opponent_name  TEXT,
-                opponent_score REAL,
+                opponent_stableford REAL,
                 winner_name    TEXT,
+                margin         TEXT,
                 UNIQUE(season, chapter, round, slot)
             )
             """
         )
+        # Idempotent migrations for installs that have the old cmp_bracket schema
+        for _col, _def in [
+            ("player_stableford",   "REAL"),
+            ("opponent_stableford", "REAL"),
+            ("margin",              "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE cmp_bracket ADD COLUMN {_col} {_def}")
+            except sqlite3.OperationalError:
+                pass
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cmp_pools_season_chapter ON cmp_pools(season, chapter)"
         )
@@ -13525,28 +13552,47 @@ def cmp_get_matches(pool_id: int, db_path=None) -> list[dict]:
 
 
 def cmp_save_match(pool_id: int, player1: str, player2: str,
-                   p1_score: float | None, p2_score: float | None,
+                   winner_name: str | None = None,
+                   margin: str | None = None,
+                   p1_stableford: float | None = None,
+                   p2_stableford: float | None = None,
                    match_date: str | None = None, notes: str | None = None,
                    db_path=None) -> dict:
-    """Upsert a pool match result. Canonical key is (pool_id, sorted player names)."""
+    """Upsert a pool match result. Canonical key is (pool_id, sorted player names).
+
+    winner_name  — who won the match play match (traditional result)
+    margin       — margin of victory e.g. "1 Up", "5&4", "Putt Off", "Halved"
+    p1_stableford / p2_stableford — Stableford points scored independently;
+                   loser may outscore winner. Stored per player1_name / player2_name
+                   (alphabetical canonical order).
+    """
     # Always store names in alphabetical order so UNIQUE constraint is stable
     if player1 > player2:
         player1, player2 = player2, player1
-        p1_score, p2_score = p2_score, p1_score
-    played_at = None if (p1_score is None and p2_score is None) else "datetime('now')"
+        p1_stableford, p2_stableford = p2_stableford, p1_stableford
+        # winner_name stays as-is — it's a name reference, not positional
+    played_at_expr = (
+        "datetime('now')"
+        if (winner_name is not None or p1_stableford is not None or p2_stableford is not None)
+        else "NULL"
+    )
     with _connect(db_path) as conn:
         conn.execute(
-            """INSERT INTO cmp_matches
-               (pool_id, player1_name, player2_name, player1_score, player2_score, match_date, notes, played_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            f"""INSERT INTO cmp_matches
+               (pool_id, player1_name, player2_name,
+                winner_name, margin, player1_stableford, player2_stableford,
+                match_date, notes, played_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, {played_at_expr})
                ON CONFLICT(pool_id, player1_name, player2_name)
-               DO UPDATE SET player1_score = excluded.player1_score,
-                             player2_score = excluded.player2_score,
-                             match_date    = excluded.match_date,
-                             notes         = excluded.notes,
-                             played_at     = CASE WHEN excluded.player1_score IS NULL AND excluded.player2_score IS NULL
-                                                  THEN NULL ELSE datetime('now') END""",
-            (pool_id, player1, player2, p1_score, p2_score, match_date, notes),
+               DO UPDATE SET winner_name        = excluded.winner_name,
+                             margin             = excluded.margin,
+                             player1_stableford = excluded.player1_stableford,
+                             player2_stableford = excluded.player2_stableford,
+                             match_date         = excluded.match_date,
+                             notes              = excluded.notes,
+                             played_at          = {played_at_expr}""",
+            (pool_id, player1, player2, winner_name, margin,
+             p1_stableford, p2_stableford, match_date, notes),
         )
         conn.commit()
         row = conn.execute(
@@ -13557,8 +13603,13 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
 
 
 def cmp_get_standings(season: str, chapter: str, db_path=None) -> list[dict]:
-    """Return pool standings for a chapter/season. Each entry is a player row with
-    pool_name, wins, losses, draws, stableford_pts, and rank within the pool."""
+    """Return pool standings for a chapter/season.
+
+    W/L/D is determined by match play winner_name (traditional match play result).
+    Stableford points are accumulated independently — a match loser can outscore the winner.
+    Advancement (top 2) = W/L/D record; tiebreaker = total Stableford points.
+    Bracket seeding = total Stableford points across all pool matches.
+    """
     with _connect(db_path) as conn:
         pools = conn.execute(
             "SELECT id, pool_name FROM cmp_pools WHERE season = ? AND chapter = ? ORDER BY pool_name",
@@ -13571,35 +13622,46 @@ def cmp_get_standings(season: str, chapter: str, db_path=None) -> list[dict]:
                 "SELECT customer_name FROM cmp_pool_members WHERE pool_id = ?", (pid,)
             ).fetchall()
             matches = conn.execute(
-                "SELECT * FROM cmp_matches WHERE pool_id = ? AND player1_score IS NOT NULL",
+                "SELECT * FROM cmp_matches WHERE pool_id = ? AND played_at IS NOT NULL",
                 (pid,),
             ).fetchall()
 
             stats = {m["customer_name"]: {"wins": 0, "losses": 0, "draws": 0, "pts": 0.0}
                      for m in members}
+
             for match in matches:
                 p1, p2 = match["player1_name"], match["player2_name"]
-                s1, s2 = match["player1_score"], match["player2_score"]
-                if p1 not in stats:
-                    stats[p1] = {"wins": 0, "losses": 0, "draws": 0, "pts": 0.0}
-                if p2 not in stats:
-                    stats[p2] = {"wins": 0, "losses": 0, "draws": 0, "pts": 0.0}
+                winner = match["winner_name"]
+                margin = match["margin"] or ""
+                s1 = match["player1_stableford"]
+                s2 = match["player2_stableford"]
+
+                for name in (p1, p2):
+                    if name not in stats:
+                        stats[name] = {"wins": 0, "losses": 0, "draws": 0, "pts": 0.0}
+
+                # Accumulate Stableford points independently
                 stats[p1]["pts"] += s1 or 0
                 stats[p2]["pts"] += s2 or 0
-                if s1 is not None and s2 is not None:
-                    if s1 > s2:
-                        stats[p1]["wins"] += 1
-                        stats[p2]["losses"] += 1
-                    elif s2 > s1:
-                        stats[p2]["wins"] += 1
-                        stats[p1]["losses"] += 1
+
+                # W/L/D from match play result
+                halved = margin.strip().lower() in ("halved", "all square", "as")
+                if halved or winner is None:
+                    if winner is None and s1 is None and s2 is None:
+                        pass  # not yet played
                     else:
                         stats[p1]["draws"] += 1
                         stats[p2]["draws"] += 1
+                elif winner == p1:
+                    stats[p1]["wins"] += 1
+                    stats[p2]["losses"] += 1
+                elif winner == p2:
+                    stats[p2]["wins"] += 1
+                    stats[p1]["losses"] += 1
 
             pool_rows = sorted(
                 stats.items(),
-                key=lambda x: (-x[1]["wins"], -x[1]["pts"]),
+                key=lambda x: (-x[1]["wins"], -(x[1]["wins"] - x[1]["losses"]), -x[1]["pts"]),
             )
             for rank, (name, s) in enumerate(pool_rows, 1):
                 standings.append({
@@ -13629,23 +13691,31 @@ def cmp_get_bracket(season: str, chapter: str, db_path=None) -> list[dict]:
 
 def cmp_save_bracket_slot(season: str, chapter: str, round_: str, slot: int,
                            player_name: str | None = None,
-                           score: float | None = None,
+                           player_stableford: float | None = None,
                            opponent_name: str | None = None,
-                           opponent_score: float | None = None,
+                           opponent_stableford: float | None = None,
                            winner_name: str | None = None,
+                           margin: str | None = None,
                            db_path=None) -> dict:
     with _connect(db_path) as conn:
         conn.execute(
             """INSERT INTO cmp_bracket
-               (season, chapter, round, slot, player_name, score, opponent_name, opponent_score, winner_name)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               (season, chapter, round, slot,
+                player_name, player_stableford,
+                opponent_name, opponent_stableford,
+                winner_name, margin)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(season, chapter, round, slot)
-               DO UPDATE SET player_name    = excluded.player_name,
-                             score          = excluded.score,
-                             opponent_name  = excluded.opponent_name,
-                             opponent_score = excluded.opponent_score,
-                             winner_name    = excluded.winner_name""",
-            (season, chapter, round_, slot, player_name, score, opponent_name, opponent_score, winner_name),
+               DO UPDATE SET player_name         = excluded.player_name,
+                             player_stableford   = excluded.player_stableford,
+                             opponent_name       = excluded.opponent_name,
+                             opponent_stableford = excluded.opponent_stableford,
+                             winner_name         = excluded.winner_name,
+                             margin              = excluded.margin""",
+            (season, chapter, round_, slot,
+             player_name, player_stableford,
+             opponent_name, opponent_stableford,
+             winner_name, margin),
         )
         conn.commit()
         row = conn.execute(
