@@ -7833,6 +7833,20 @@ def api_cmp_save_match():
     return jsonify(match)
 
 
+@app.route("/api/cmp/matches", methods=["DELETE"])
+@require_role("manager")
+def api_cmp_clear_match():
+    data = request.get_json(silent=True) or {}
+    pool_id = data.get("pool_id")
+    player1 = (data.get("player1_name") or "").strip()
+    player2 = (data.get("player2_name") or "").strip()
+    if not pool_id or not player1 or not player2:
+        return jsonify({"error": "pool_id, player1_name, player2_name required"}), 400
+    from email_parser.database import cmp_clear_match
+    cmp_clear_match(pool_id, player1, player2)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/cmp/matches")
 @require_role("view-only")
 def api_cmp_get_matches():

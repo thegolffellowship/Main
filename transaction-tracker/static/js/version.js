@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.15.6";
+window.TGF_VERSION = "2.15.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.7",
+    date: "2026-05-26",
+    title: "Match Play: Clear button to reset a match result",
+    changes: [
+      "Each match row now has a small '✕' Clear button (next to Save) that removes the match result — winner, margin, and Stableford points are all wiped. The match dot reverts to gray (unplayed) and pool standings recalculate immediately. A confirmation prompt prevents accidental clears.",
+      "New API: DELETE /api/cmp/matches with pool_id + player names in the JSON body. New DB function: cmp_clear_match() deletes the row using the canonical sorted player name pair.",
+    ],
+  },
   {
     version: "2.15.6",
     date: "2026-05-26",

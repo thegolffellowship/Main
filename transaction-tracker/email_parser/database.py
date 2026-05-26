@@ -13543,6 +13543,16 @@ def cmp_get_matches(pool_id: int, db_path=None) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def cmp_clear_match(pool_id: int, player1: str, player2: str, db_path=None) -> None:
+    p1, p2 = sorted([player1, player2])
+    with _connect(db_path) as conn:
+        conn.execute(
+            "DELETE FROM cmp_matches WHERE pool_id = ? AND player1_name = ? AND player2_name = ?",
+            (pool_id, p1, p2),
+        )
+        conn.commit()
+
+
 def cmp_save_match(pool_id: int, player1: str, player2: str,
                    winner_name: str | None = None,
                    margin: str | None = None,

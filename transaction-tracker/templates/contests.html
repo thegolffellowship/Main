@@ -117,7 +117,7 @@
         .pool-matches { padding: 0.75rem; overflow-x: auto; }
         .match-entry {
             display: grid;
-            grid-template-columns: 1fr auto auto auto auto auto auto auto auto;
+            grid-template-columns: 1fr auto auto auto auto auto auto auto auto auto;
             gap: 0.35rem;
             align-items: center;
             padding: 0.4rem 0;
@@ -154,6 +154,12 @@
             white-space: nowrap; flex-shrink: 0;
         }
         .match-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .match-clear-btn {
+            padding: 0.18rem 0.4rem; font-size: 0.65rem; border-radius: 3px;
+            background: none; color: #9ca3af; border: 1px solid #d1d5db; cursor: pointer;
+            white-space: nowrap; flex-shrink: 0;
+        }
+        .match-clear-btn:hover { color: #dc2626; border-color: #dc2626; }
         .match-played-dot {
             width: 7px; height: 7px; border-radius: 50%;
             background: #22c55e; display: inline-block; margin-right: 2px;
@@ -162,7 +168,7 @@
         .match-played-dot.unplayed { background: #d1d5db; }
         .match-header-row {
             display: grid;
-            grid-template-columns: 1fr auto auto auto auto auto auto auto auto;
+            grid-template-columns: 1fr auto auto auto auto auto auto auto auto auto;
             gap: 0.35rem;
             padding: 0.2rem 0 0.35rem;
             border-bottom: 2px solid var(--border);
@@ -754,6 +760,7 @@
                 <span class="match-col-label">Pts&nbsp;P1</span>
                 <span class="match-col-label">Pts&nbsp;P2</span>
                 <span></span><!-- save btn -->
+                <span></span><!-- clear btn -->
             </div>
         ` : '';
 
@@ -777,11 +784,13 @@
                 <input type="number" class="match-stab-input match-s1" step="0.5" placeholder="—" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="${ea} Stableford pts">
                 <input type="number" class="match-stab-input match-s2" step="0.5" placeholder="—" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="${eb} Stableford pts">
                 <button class="match-save-btn" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}">Save</button>
+                <button class="match-clear-btn" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="Clear result">✕</button>
                 ` : `
                 <span class="match-winner-display" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="font-size:0.75rem;color:var(--text-muted);">—</span>
                 <span style="width:80px;"></span>
                 <span class="match-stab-display1" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="width:48px;text-align:center;">—</span>
                 <span class="match-stab-display2" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="width:48px;text-align:center;">—</span>
+                <span></span>
                 `}
             </div>`;
         }).join("") : `<p style="color:var(--text-muted);font-size:0.82rem;padding:0.25rem 0;">Add at least 2 players to enter scores.</p>`;
@@ -916,6 +925,38 @@
         document.querySelectorAll(".open-player-search-btn").forEach(btn => {
             btn.addEventListener("click", () => {
                 openPlayerSearchModal(Number(btn.dataset.pool));
+            });
+        });
+
+        // Clear match result
+        document.querySelectorAll(".match-clear-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                if (!confirm("Clear all results for this match?")) return;
+                const pid = Number(btn.dataset.pool);
+                const p1 = btn.dataset.p1;
+                const p2 = btn.dataset.p2;
+                btn.disabled = true;
+                await fetch("/api/cmp/matches", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pool_id: pid, player1_name: p1, player2_name: p2 }),
+                });
+                // Reset the row inputs
+                const row = btn.closest(".match-entry");
+                if (row) {
+                    const winSel = row.querySelector(".match-winner-sel");
+                    const marginEl = row.querySelector(".match-margin-input");
+                    const s1 = row.querySelector(".match-s1");
+                    const s2 = row.querySelector(".match-s2");
+                    if (winSel) winSel.value = "";
+                    if (marginEl) marginEl.value = "";
+                    if (s1) s1.value = "";
+                    if (s2) s2.value = "";
+                }
+                const dot = document.querySelector(`.match-dot[data-pool="${pid}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`);
+                if (dot) { dot.classList.add("unplayed"); dot.title = "Not yet played"; }
+                btn.disabled = false;
+                loadPoolStandings(pid);
             });
         });
 
