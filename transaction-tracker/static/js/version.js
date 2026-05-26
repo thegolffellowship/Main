@@ -3,10 +3,10 @@ window.TGF_CHANGELOG = [
   {
     version: "2.15.4",
     date: "2026-05-26",
-    title: "Match Play: unassigned enrollees roster with one-click pool assignment",
+    title: "Match Play: unassigned enrollees roster with pool assignment dropdown",
     changes: [
-      "Added an 'Enrolled — Not Yet in a Pool' panel at the top of each chapter's Match Play view. It lists every player who has signed up for City Match Play but hasn't been assigned to a pool yet, with their handicap index. Each player has a direct '+ Pool A / + Pool B' button so managers can assign them without opening any modal.",
-      "The panel disappears automatically once all enrolled players are placed into pools. It also appears when no pools exist yet (with a 'Create a pool first' note), giving a clear view of who is waiting to be assigned.",
+      "Added an 'Enrolled — Not Yet in a Pool' amber panel at the top of each chapter's Match Play view. It lists every player who signed up for City Match Play but hasn't been placed in a pool yet, with their handicap index. Each player row has a pool dropdown (scales to any number of pools) and an Assign button — no modal needed.",
+      "The panel disappears automatically once all enrolled players are placed. Shows a 'Create a pool first' hint when no pools exist yet.",
       "Enrollee data now stores customer_id alongside the name so pool assignments carry the FK reference.",
     ],
   },

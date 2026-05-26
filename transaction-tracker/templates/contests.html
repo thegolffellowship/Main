@@ -294,10 +294,14 @@
         }
         .unassigned-player-row:last-child { border-bottom: none; }
         .unassigned-player-name { font-weight: 600; }
-        .unassigned-pool-btns { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+        .unassigned-assign-row { display: flex; gap: 0.35rem; align-items: center; }
+        .unassigned-pool-sel {
+            font-size: 0.75rem; padding: 0.18rem 0.3rem;
+            border: 1px solid var(--border); border-radius: 3px; background: #fff;
+        }
         .assign-to-pool-btn {
             padding: 0.18rem 0.55rem; font-size: 0.72rem; border-radius: 3px;
-            background: var(--primary); color: #fff; border: none; cursor: pointer;
+            background: var(--primary); color: #fff; border: none; cursor: pointer; white-space: nowrap;
         }
         .assign-to-pool-btn:hover { opacity: 0.85; }
         .assign-to-pool-btn:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -618,25 +622,35 @@
         if (!unassigned.length) return '';
 
         const isManager = userRole === "admin" || userRole === "manager";
+        const poolOptions = cmpState.pools.map(p =>
+            `<option value="${p.id}">${escapeHtml(p.pool_name)}</option>`
+        ).join('');
+
         const rows = unassigned.map(e => {
-            let poolBtns = '';
+            let assignWidget = '';
             if (isManager) {
                 if (cmpState.pools.length) {
-                    poolBtns = cmpState.pools.map(p => `
-                        <button class="assign-to-pool-btn"
-                            data-pool="${p.id}"
-                            data-customer-id="${e.customer_id || ''}"
-                            data-customer-name="${escapeHtml(e.customer_name)}">
-                            + ${escapeHtml(p.pool_name)}
-                        </button>`).join('');
+                    assignWidget = `
+                        <div class="unassigned-assign-row">
+                            <select class="unassigned-pool-sel"
+                                data-customer-id="${e.customer_id || ''}"
+                                data-customer-name="${escapeHtml(e.customer_name)}">
+                                ${poolOptions}
+                            </select>
+                            <button class="assign-to-pool-btn"
+                                data-customer-id="${e.customer_id || ''}"
+                                data-customer-name="${escapeHtml(e.customer_name)}">
+                                Assign
+                            </button>
+                        </div>`;
                 } else {
-                    poolBtns = '<span style="font-size:0.72rem;color:var(--text-muted);">Create a pool first</span>';
+                    assignWidget = '<span style="font-size:0.72rem;color:var(--text-muted);">Create a pool first</span>';
                 }
             }
             return `
             <div class="unassigned-player-row">
                 <span class="unassigned-player-name">${escapeHtml(e.customer_name)}${hcpLabel(e.customer_name)}</span>
-                <div class="unassigned-pool-btns">${poolBtns}</div>
+                ${assignWidget}
             </div>`;
         }).join('');
 
@@ -653,7 +667,11 @@
     function wireUnassigned() {
         document.querySelectorAll(".assign-to-pool-btn").forEach(btn => {
             btn.addEventListener("click", async () => {
-                const pid = Number(btn.dataset.pool);
+                // Pool id comes from the sibling <select> in the same row
+                const row = btn.closest(".unassigned-assign-row");
+                const sel = row ? row.querySelector(".unassigned-pool-sel") : null;
+                const pid = sel ? Number(sel.value) : null;
+                if (!pid) return;
                 const customerId = btn.dataset.customerId ? Number(btn.dataset.customerId) : null;
                 const customerName = btn.dataset.customerName;
                 btn.textContent = "Adding…"; btn.disabled = true;
