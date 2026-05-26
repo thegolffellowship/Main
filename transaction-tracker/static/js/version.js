@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.15.9";
+window.TGF_VERSION = "2.15.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.10",
+    date: "2026-05-26",
+    title: "Match Play: fix duplicate player in Not Yet in a Pool panel",
+    changes: [
+      "When the same person is enrolled under two different names (e.g. 'Stu Kirksey' and 'Stuart Kirksey'), they now appear only once in the unassigned panel. Deduplication is now done by customer_id (not just by name string) after the canonical-name map is built, so both enrollment rows collapse to the same canonical name.",
+    ],
+  },
   {
     version: "2.15.9",
     date: "2026-05-26",
