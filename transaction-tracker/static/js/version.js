@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.15.4";
+window.TGF_VERSION = "2.15.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.5",
+    date: "2026-05-26",
+    title: "Match Play: unassigned panel scoped to active chapter",
+    changes: [
+      "The 'Enrolled — Not Yet in a Pool' panel now only shows players whose enrollment chapter matches the currently selected chapter tab (Austin or San Antonio). Players whose chapter was not recorded at enrollment time still appear in both chapter views so they can still be assigned.",
+    ],
+  },
   {
     version: "2.15.4",
     date: "2026-05-26",

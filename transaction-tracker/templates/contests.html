@@ -586,7 +586,7 @@
         const rawEnrollees = enrollRes.ok ? await enrollRes.json() : [];
         const seenNames = new Set();
         cmpState.enrollees = rawEnrollees
-            .filter(e => e.customer_name && !seenNames.has(e.customer_name) && seenNames.add(e.customer_name))
+            .filter(e => e.customer_name && (!e.chapter || e.chapter === chapter) && !seenNames.has(e.customer_name) && seenNames.add(e.customer_name))
             .map(e => ({ customer_name: e.customer_name, customer_id: e.customer_id || null }));
         cmpState.handicapMap = hcpRes.ok ? await hcpRes.json() : {};
 
