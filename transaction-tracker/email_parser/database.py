@@ -4292,6 +4292,7 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_message_log(conn)
         _backfill_customer_id_on_rsvp_email_overrides(conn)
         _backfill_customer_id_on_action_items(conn)
+        _promote_lone_customer_emails_to_primary(conn)
         try:
             _backfill_events_id_on_tgf_events(conn)
         except Exception:
@@ -5391,6 +5392,29 @@ def _backfill_customer_id_on_action_items(conn: sqlite3.Connection) -> int:
     if updated:
         logger.info("Backfilled customer_id for %d action_items rows", updated)
     return updated
+
+
+def _promote_lone_customer_emails_to_primary(conn: sqlite3.Connection) -> int:
+    """For customers who have emails in customer_emails but none marked is_primary=1,
+    promote the oldest row to primary.  Prevents resolve_player_email from always
+    falling through to the historical items.customer_email snapshot (which may be
+    a typo or stale address) for customers whose email was backfilled without the
+    is_primary flag being set.
+    """
+    affected = conn.execute(
+        """UPDATE customer_emails SET is_primary = 1
+           WHERE id IN (
+               SELECT MIN(id)
+               FROM customer_emails
+               WHERE email IS NOT NULL AND TRIM(email) != ''
+               GROUP BY customer_id
+               HAVING SUM(is_primary) = 0
+           )"""
+    ).rowcount
+    if affected:
+        conn.commit()
+        logger.info("_promote_lone_customer_emails_to_primary: promoted %d rows to is_primary=1", affected)
+    return affected
 
 
 def _backfill_events_id_on_tgf_events(conn: sqlite3.Connection) -> int:
@@ -17330,17 +17354,38 @@ def _resolve_lookup_customer_id(conn, item_or_id, name_hint: str = "") -> int | 
 
 
 def resolve_player_email(item, conn=None, db_path=None) -> str:
-    """customer_emails.is_primary first; items.customer_email as fallback."""
+    """customer_emails.is_primary first; any email on file second; items.customer_email last."""
     conn, owns = _resolve_db(conn, db_path)
     try:
         cid = _resolve_lookup_customer_id(conn, item)
         if cid:
+            # 1. Primary email (designated send-to address)
             row = conn.execute(
                 "SELECT email FROM customer_emails WHERE customer_id = ? AND is_primary = 1 LIMIT 1",
                 (cid,),
             ).fetchone()
             if row and row["email"]:
                 return row["email"].strip().lower()
+            # 2. Any email on file for this customer (handles is_primary=0 rows from backfills)
+            row = conn.execute(
+                """SELECT email FROM customer_emails
+                   WHERE customer_id = ? AND email IS NOT NULL AND TRIM(email) != ''
+                   ORDER BY id ASC LIMIT 1""",
+                (cid,),
+            ).fetchone()
+            if row and row["email"]:
+                # Opportunistically promote to primary so future lookups hit immediately
+                try:
+                    conn.execute(
+                        "UPDATE customer_emails SET is_primary = 1 WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
+                        (cid, row["email"].strip()),
+                    )
+                    if owns:
+                        conn.commit()
+                except Exception:
+                    pass
+                return row["email"].strip().lower()
+        # 3. Historical snapshot from the item (last resort — may be a typo/old value)
         if isinstance(item, dict):
             return (item.get("customer_email") or "").strip()
         return ""

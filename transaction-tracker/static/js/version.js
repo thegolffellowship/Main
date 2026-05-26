@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.15.21";
+window.TGF_VERSION = "2.15.22";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.22",
+    date: "2026-05-26",
+    changes: [
+      "Fix: balance-due (and all send paths) now resolve email for customers whose address was stored with is_primary=0 — previously fell through to the stale items.customer_email snapshot (e.g. typo address) even when a correct email was on file",
+      "Boot migration: auto-promote lone non-primary emails to is_primary=1 across the whole customer_emails table so the fix is proactive",
+    ],
+  },
   {
     version: "2.15.21",
     date: "2026-05-26",
