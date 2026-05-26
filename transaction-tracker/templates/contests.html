@@ -148,6 +148,11 @@
             font-size: 0.62rem; color: var(--text-muted); text-align: center;
             font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
         }
+        .match-event-sel {
+            font-size: 0.72rem; padding: 0.18rem 0.25rem;
+            border: 1px solid var(--border); border-radius: 3px;
+            background: #fff; max-width: 160px; min-width: 100px;
+        }
         .match-save-btn {
             padding: 0.18rem 0.5rem; font-size: 0.7rem; border-radius: 3px;
             background: var(--primary); color: #fff; border: none; cursor: pointer;
@@ -548,7 +553,8 @@
     let cmpState = {
         season: "2026", chapter: "Austin", pools: [], enrollees: [], bracket: [],
         handicapMap: {},        // lowercase name → { index_9, index_18 }
-        customerIdToName: {}    // customer_id → canonical customer_name (for hcp fallback)
+        customerIdToName: {},   // customer_id → canonical customer_name (for hcp fallback)
+        events: []              // [{id, item_name, event_date, chapter}, …] sorted newest first
     };
 
     // ── Chapter tabs ──
@@ -584,14 +590,15 @@
         const chapter = cmpState.chapter;
         cmpState.season = season;
 
-        // Fetch pools, enrollees, handicap map, and (if not cached) customers in parallel
+        // Fetch pools, enrollees, handicap map, events, and (if not cached) customers in parallel
         const fetches = [
             fetch(`/api/cmp/pools?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`),
             fetch(`/api/season-contests?contest_type=City+Match+Play&season=${encodeURIComponent(season)}`),
             fetch(`/api/handicaps/index-map`),
+            fetch("/api/events"),
         ];
         if (!_allCustomers) fetches.push(fetch("/api/customers"));
-        const [poolsRes, enrollRes, hcpRes, custRes] = await Promise.all(fetches);
+        const [poolsRes, enrollRes, hcpRes, eventsRes, custRes] = await Promise.all(fetches);
 
         cmpState.pools = poolsRes.ok ? await poolsRes.json() : [];
         const rawEnrollees = enrollRes.ok ? await enrollRes.json() : [];
@@ -600,6 +607,9 @@
             .filter(e => e.customer_name && (!e.chapter || e.chapter === chapter) && !seenNames.has(e.customer_name) && seenNames.add(e.customer_name))
             .map(e => ({ customer_name: e.customer_name, customer_id: e.customer_id || null }));
         cmpState.handicapMap = hcpRes.ok ? await hcpRes.json() : {};
+        const rawEvents = eventsRes.ok ? await eventsRes.json() : [];
+        // Keep only events that have a date (sorted newest first, already from API)
+        cmpState.events = rawEvents.filter(e => e.event_date);
 
         // Build/update customer_id → canonical name map for handicap fallback resolution
         if (custRes) {
@@ -759,6 +769,7 @@
                 <span class="match-col-label">Margin</span>
                 <span class="match-col-label">Pts&nbsp;P1</span>
                 <span class="match-col-label">Pts&nbsp;P2</span>
+                <span class="match-col-label">Event</span>
                 <span></span><!-- save btn -->
                 <span></span><!-- clear btn -->
             </div>
@@ -783,6 +794,14 @@
                 <input type="text" class="match-margin-input" placeholder="e.g. 2&amp;1" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="Margin (e.g. 1 Up, 5&4, Putt Off)">
                 <input type="number" class="match-stab-input match-s1" step="0.5" placeholder="—" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="${ea} Stableford pts">
                 <input type="number" class="match-stab-input match-s2" step="0.5" placeholder="—" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="${eb} Stableford pts">
+                <select class="match-event-sel" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="Event where this match was played">
+                    <option value="">— No event —</option>
+                    ${cmpState.events.map(ev => {
+                        const d = (ev.event_date || '').slice(5).replace('-', '/'); // MM/DD
+                        const label = d ? `${d} ${ev.item_name}` : ev.item_name;
+                        return `<option value="${ev.id}">${escapeHtml(label)}</option>`;
+                    }).join('')}
+                </select>
                 <button class="match-save-btn" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}">Save</button>
                 <button class="match-clear-btn" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" title="Clear result">✕</button>
                 ` : `
@@ -790,6 +809,7 @@
                 <span style="width:80px;"></span>
                 <span class="match-stab-display1" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="width:48px;text-align:center;">—</span>
                 <span class="match-stab-display2" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="width:48px;text-align:center;">—</span>
+                <span class="match-event-display" data-pool="${pid}" data-p1="${ea}" data-p2="${eb}" style="font-size:0.72rem;color:var(--text-muted);min-width:80px;">—</span>
                 <span></span>
                 `}
             </div>`;
@@ -853,13 +873,17 @@
             const marginEl = document.querySelector(`.match-margin-input[data-pool="${poolId}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`);
             if (marginEl && m.margin) marginEl.value = m.margin;
 
-            // Stableford inputs
+            // Stableford inputs + event selector
             const row = document.querySelector(`.match-entry[data-pool="${poolId}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`);
             if (row) {
                 const s1 = row.querySelector(".match-s1");
                 const s2 = row.querySelector(".match-s2");
                 if (s1 && m.player1_stableford != null) s1.value = m.player1_stableford;
                 if (s2 && m.player2_stableford != null) s2.value = m.player2_stableford;
+
+                // Event selector (manager view)
+                const evSel = row.querySelector(".match-event-sel");
+                if (evSel && m.event_id) evSel.value = m.event_id;
 
                 // Read-only display
                 const wd = row.querySelector(".match-winner-display");
@@ -868,6 +892,15 @@
                 if (sd1) sd1.textContent = m.player1_stableford != null ? m.player1_stableford : '—';
                 const sd2 = row.querySelector(".match-stab-display2");
                 if (sd2) sd2.textContent = m.player2_stableford != null ? m.player2_stableford : '—';
+                const ed = row.querySelector(".match-event-display");
+                if (ed) {
+                    if (m.event_name) {
+                        const d = (m.event_date_val || '').slice(5).replace('-', '/');
+                        ed.textContent = d ? `${d} ${m.event_name}` : m.event_name;
+                    } else {
+                        ed.textContent = '—';
+                    }
+                }
             }
         }
     }
@@ -948,10 +981,12 @@
                     const marginEl = row.querySelector(".match-margin-input");
                     const s1 = row.querySelector(".match-s1");
                     const s2 = row.querySelector(".match-s2");
+                    const evSel = row.querySelector(".match-event-sel");
                     if (winSel) winSel.value = "";
                     if (marginEl) marginEl.value = "";
                     if (s1) s1.value = "";
                     if (s2) s2.value = "";
+                    if (evSel) evSel.value = "";
                 }
                 const dot = document.querySelector(`.match-dot[data-pool="${pid}"][data-p1="${CSS.escape(p1)}"][data-p2="${CSS.escape(p2)}"]`);
                 if (dot) { dot.classList.add("unplayed"); dot.title = "Not yet played"; }
@@ -972,11 +1007,13 @@
                 const marginEl = row.querySelector(".match-margin-input");
                 const s1El = row.querySelector(".match-s1");
                 const s2El = row.querySelector(".match-s2");
+                const evSelEl = row.querySelector(".match-event-sel");
 
                 let winnerVal = winSel ? winSel.value : "";
                 const marginVal = marginEl ? marginEl.value.trim() : "";
                 const s1 = s1El && s1El.value !== "" ? parseFloat(s1El.value) : null;
                 const s2 = s2El && s2El.value !== "" ? parseFloat(s2El.value) : null;
+                const event_id = evSelEl && evSelEl.value ? Number(evSelEl.value) : null;
 
                 // Resolve winner_name and margin
                 let winner_name = null;
@@ -1002,6 +1039,7 @@
                         pool_id: pid, player1_name: p1, player2_name: p2,
                         winner_name, margin,
                         player1_stableford: s1, player2_stableford: s2,
+                        event_id,
                     }),
                 });
                 if (!res.ok) {

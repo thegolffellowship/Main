@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.15.7";
+window.TGF_VERSION = "2.15.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.8",
+    date: "2026-05-26",
+    title: "Match Play: event selector on each match row",
+    changes: [
+      "Each match row now has an Event dropdown populated from the live events list (sorted newest first, showing MM/DD + event name). Selecting an event and saving links the match to that TGF event via a FK on cmp_matches.event_id.",
+      "DB: idempotent migration adds event_id column (REFERENCES events(id) ON DELETE SET NULL) to cmp_matches on existing deployments. cmp_get_matches() and cmp_save_match() updated to join/store event data.",
+      "The selected event persists when the page reloads — loadMatchScores() restores the event selector and shows a read-only MM/DD + name label for view-only users. Clearing a match also resets the event selector.",
+    ],
+  },
   {
     version: "2.15.7",
     date: "2026-05-26",

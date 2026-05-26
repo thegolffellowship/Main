@@ -2705,6 +2705,7 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("margin",             "TEXT"),
             ("player1_stableford", "REAL"),
             ("player2_stableford", "REAL"),
+            ("event_id",           "INTEGER REFERENCES events(id) ON DELETE SET NULL"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE cmp_matches ADD COLUMN {_col} {_def}")
@@ -13537,7 +13538,10 @@ def cmp_remove_member(pool_id: int, customer_name: str, db_path=None) -> None:
 def cmp_get_matches(pool_id: int, db_path=None) -> list[dict]:
     with _connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT * FROM cmp_matches WHERE pool_id = ? ORDER BY id",
+            """SELECT m.*, e.item_name AS event_name, e.event_date AS event_date_val
+               FROM cmp_matches m
+               LEFT JOIN events e ON e.id = m.event_id
+               WHERE m.pool_id = ? ORDER BY m.id""",
             (pool_id,),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -13559,6 +13563,7 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
                    p1_stableford: float | None = None,
                    p2_stableford: float | None = None,
                    match_date: str | None = None, notes: str | None = None,
+                   event_id: int | None = None,
                    db_path=None) -> dict:
     """Upsert a pool match result. Canonical key is (pool_id, sorted player names).
 
@@ -13567,6 +13572,7 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
     p1_stableford / p2_stableford — Stableford points scored independently;
                    loser may outscore winner. Stored per player1_name / player2_name
                    (alphabetical canonical order).
+    event_id     — FK to events.id; links the match to a TGF event.
     """
     # Always store names in alphabetical order so UNIQUE constraint is stable
     if player1 > player2:
@@ -13583,8 +13589,8 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
             f"""INSERT INTO cmp_matches
                (pool_id, player1_name, player2_name,
                 winner_name, margin, player1_stableford, player2_stableford,
-                match_date, notes, played_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, {played_at_expr})
+                match_date, notes, event_id, played_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, {played_at_expr})
                ON CONFLICT(pool_id, player1_name, player2_name)
                DO UPDATE SET winner_name        = excluded.winner_name,
                              margin             = excluded.margin,
@@ -13592,13 +13598,17 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
                              player2_stableford = excluded.player2_stableford,
                              match_date         = excluded.match_date,
                              notes              = excluded.notes,
+                             event_id           = excluded.event_id,
                              played_at          = {played_at_expr}""",
             (pool_id, player1, player2, winner_name, margin,
-             p1_stableford, p2_stableford, match_date, notes),
+             p1_stableford, p2_stableford, match_date, notes, event_id),
         )
         conn.commit()
         row = conn.execute(
-            "SELECT * FROM cmp_matches WHERE pool_id = ? AND player1_name = ? AND player2_name = ?",
+            """SELECT m.*, e.item_name AS event_name, e.event_date AS event_date_val
+               FROM cmp_matches m
+               LEFT JOIN events e ON e.id = m.event_id
+               WHERE m.pool_id = ? AND m.player1_name = ? AND m.player2_name = ?""",
             (pool_id, player1, player2),
         ).fetchone()
         return dict(row) if row else {}
