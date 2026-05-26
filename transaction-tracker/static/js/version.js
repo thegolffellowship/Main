@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.15.1";
+window.TGF_VERSION = "2.15.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.2",
+    date: "2026-05-26",
+    title: "Match Play: customer-search modal enforces FK for Add Player",
+    changes: [
+      "Replaced the free-text 'Add Player' dropdown (which allowed typing any arbitrary name) with a customer-search modal that only shows real customers from the customers table. Typing filters by name; each result shows chapter, status, and handicap index. Selecting a player auto-enrolls them in City Match Play for the season (idempotent) then adds them to the pool — both with the customer_id FK.",
+      "New API: POST /api/season-contests manually enrolls a customer by customer_id, looking up their canonical name from the customers table so enrollments always point to a real record.",
+    ],
+  },
   {
     version: "2.15.1",
     date: "2026-05-26",
