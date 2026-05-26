@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.15.8";
+window.TGF_VERSION = "2.15.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.9",
+    date: "2026-05-26",
+    title: "Match Play: compact single-line match rows",
+    changes: [
+      "Fixed the grid column count (was 10, needed 11) that caused the Clear button to wrap onto its own second line for every match. All 11 columns — dot, player 1, vs, player 2, winner, margin, pts P1, pts P2, event, save, clear — now render on a single row.",
+      "Tightened sizing throughout: reduced gap, padding, font size, and input widths (winner selector 105px, margin 62px, stab inputs 40px, event selector 130px). Winner options now show first name + 'W' (e.g. 'Kelly W') for brevity; event options show MM/DD + 14-char truncated name with full name on hover.",
+    ],
+  },
   {
     version: "2.15.8",
     date: "2026-05-26",
