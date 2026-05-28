@@ -77,6 +77,19 @@ cards remain inline buttons.
 - Detection is conservative: standalone GUEST registrations (guest signed up themselves)
   are NOT flagged
 
+## Add Player
+- Modes: **comp** (manager comp, `$0.00`), **rsvp** (RSVP-only placeholder),
+  **paid_separately** (Venmo/Zelle/Cash). Endpoint: `POST /api/events/add-player` (manager+).
+- The server does **not** dedupe — it always inserts a new item. Duplicate prevention is
+  **client-side only**, in `handleAddPlayerSubmit` (`events.html`).
+- **Duplicate guard mirrors the active roster, not all history.** It blocks a (re-)add only
+  when a matching-name registrant is *currently active* on the roster — i.e. it ignores
+  inactive statuses (`credited`, `refunded`, `transferred`, `wd`) and child-payment rows
+  (`parent_item_id`). A player who deleted themselves, was refunded/withdrawn/credited, or
+  was transferred out is **not** treated as "already registered," so the manager can add
+  them back. This matches the `activePlayers` filter that renders the player table — if you
+  can't see them in the roster, the guard won't claim they're registered.
+
 ## Add Payment
 - Creates a child payment row linked to parent registration via `parent_item_id`
 - Child rows excluded from player counts, shown as indented "+PAY" sub-rows

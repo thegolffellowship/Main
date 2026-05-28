@@ -7909,9 +7909,18 @@
         }
         if (!addPlayerEventName) return;
 
-        // Prevent duplicate player entry
+        // Prevent duplicate player entry — but only block on players who are CURRENTLY
+        // active on the roster. A player whose registration was credited/refunded/withdrawn/
+        // transferred out, or whose only remaining row is a child payment, is not actively
+        // registered and must be allowed back in. (Mirrors the active-roster filter used to
+        // render the player table, so "already registered" matches what the manager can see.)
+        const ADD_PLAYER_INACTIVE_STATUSES = ["credited", "refunded", "transferred", "wd"];
         const existingRegs = getRegistrants(addPlayerEventName);
-        const isDuplicate = existingRegs.some(r => (r.customer || "").toLowerCase() === name.toLowerCase());
+        const isDuplicate = existingRegs.some(r =>
+            (r.customer || "").toLowerCase() === name.toLowerCase()
+            && !ADD_PLAYER_INACTIVE_STATUSES.includes(r.transaction_status || "active")
+            && !r.parent_item_id
+        );
         if (isDuplicate) {
             alert(`${name} is already registered for this event.`);
             return;
