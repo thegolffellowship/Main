@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.15.25";
+window.TGF_VERSION = "2.15.26";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.26",
+    date: "2026-05-28",
+    changes: [
+      "Fix: Add Player no longer falsely reports \"<name> is already registered for this event\" for someone who isn't on the roster. The duplicate guard was matching against ALL historical registrations (including credited/refunded/withdrawn/transferred rows and child-payment rows), so a player who deleted themselves — or was refunded/withdrawn/credited/transferred out — could not be added back even though they no longer appeared in the player list. The guard now mirrors the active-roster filter: it only blocks when a matching-name registrant is currently active (excludes inactive statuses and child payments).",
+    ],
+  },
   {
     version: "2.15.25",
     date: "2026-05-26",
