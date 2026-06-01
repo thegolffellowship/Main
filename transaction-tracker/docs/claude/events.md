@@ -373,8 +373,8 @@ All three rendering paths on the Customers page (inline expand, detail panel, mo
 
 When a player WDs late (only part of their payment is creditable) or carries a standalone
 `credited` row (excess credit, overpayment credit, full registration credit), the admin
-can record a real-world Venmo / Zelle / Check / GoDaddy / PayPal refund and clear the
-balance.
+can record a real-world Venmo / Zelle / Cash App / Check / GoDaddy / PayPal refund and
+clear the balance.
 
 **Refund button placement:**
 - Event detail (events.html) — Refund button next to Reverse on every WD row that carries
@@ -382,8 +382,8 @@ balance.
 - Customers page (customers.html) — Refund button on every `credited` or WD-credit row
   across all three render paths (card view, table view, detail tab).
 
-**Modal fields:** method (Venmo / Zelle / Check / GoDaddy / **PayPal**), back-datable
-refund date, optional note.
+**Modal fields:** method (Venmo / Zelle / **Cash App** / Check / GoDaddy / PayPal),
+back-datable refund date, optional note.
 
 **Backend behavior** — `payout_credit(conn, item_id, method, date, note)` in database.py:
 - For `transaction_status='credited'`: amount comes from `item_price`, row flips to
