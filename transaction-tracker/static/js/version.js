@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.15.26";
+window.TGF_VERSION = "2.15.27";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.27",
+    date: "2026-06-01",
+    changes: [
+      "Customers: added \"Cash App\" as a refund-method option in both the Refund Credit modal and the Apply-Credit custom-refund picker. The backend already accepted Cash App for the /refund and /payout-credit endpoints — the dropdowns just hadn't exposed it, so Cash App refunds had to be recorded under another method. Both pickers now match the backend allowlist.",
+    ],
+  },
   {
     version: "2.15.26",
     date: "2026-05-28",
