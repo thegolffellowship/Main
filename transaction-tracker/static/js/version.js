@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.15.27";
+window.TGF_VERSION = "2.15.28";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.28",
+    date: "2026-06-23",
+    changes: [
+      "Fix: handicap CSV export (and Golf Genius sync) sometimes shipped a stale handicap index for a player whose UI clearly showed the current one — caused by two handicap_rounds player_name variants linking to the same customer email (e.g. a legacy un-normalized name alongside the current First Last form). The export deduped by email but kept whichever variant happened to be alphabetically first, so a stale record could win. The export now groups candidates by email and picks the one with the most recent round date (tiebreak: most active rounds, then total rounds) so the exported index always matches the freshest data shown in the UI. /api/handicaps/export-preview now returns a duplicate_emails block under _debug listing every collision and which player_name was chosen vs dropped, so the underlying duplicates can be cleaned up at the source.",
+    ],
+  },
   {
     version: "2.15.27",
     date: "2026-06-01",
