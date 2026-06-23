@@ -12877,17 +12877,21 @@ def get_handicap_export_data(chapter: str | None = None,
     rows = []
     no_email = []
     no_index = []
-    seen_emails: set[str] = set()
 
+    # First pass: collect every eligible (pname, p) candidate keyed by email.
+    # Multiple handicap_rounds player_name variants can link to the same customer
+    # (e.g. legacy un-normalized names alongside the current "First Last" form).
+    # Iterating player_map directly and skipping by first-seen email would let
+    # the alphabetically-first variant win — which is often a stale record with
+    # an old index. Group, then pick the freshest per email.
+    candidates_by_email: dict[str, list[tuple[str, dict]]] = {}
     for pname, p in player_map.items():
         info = link_map.get(pname)
         if info is None:
-            # No linked customer with email
             if p["handicap_index"] is not None:
                 no_email.append(pname)
             continue
 
-        # Chapter filter — include player if they have ANY transaction in the chapter
         if chapter and has_chapter_data:
             if chapter.lower() not in info["all_chapters"]:
                 continue
@@ -12897,16 +12901,50 @@ def get_handicap_export_data(chapter: str | None = None,
             continue
 
         email = info["email"]
-        if not email or email in seen_emails:
-            if not email and p["handicap_index"] is not None:
+        if not email:
+            if p["handicap_index"] is not None:
                 no_email.append(pname)
             continue
 
-        # Test mode: only include this one player
         if test_player_email and email != test_player_email.strip().lower():
             continue
 
-        seen_emails.add(email)
+        candidates_by_email.setdefault(email, []).append((pname, p))
+
+    # Pick the freshest record per email. Tiebreakers: more active rounds,
+    # then more total rounds, then the player_name (deterministic).
+    def _freshness_key(item: tuple[str, dict]) -> tuple:
+        pname, p = item
+        return (
+            p.get("latest_round_date") or "",
+            p.get("active_rounds") or 0,
+            p.get("total_rounds") or 0,
+            pname,
+        )
+
+    duplicate_emails: list[dict] = []
+    for email, group in candidates_by_email.items():
+        if len(group) > 1:
+            ordered = sorted(group, key=_freshness_key, reverse=True)
+            duplicate_emails.append({
+                "email": email,
+                "chosen": ordered[0][0],
+                "chosen_index_9": ordered[0][1].get("handicap_index"),
+                "chosen_latest": ordered[0][1].get("latest_round_date"),
+                "dropped": [
+                    {"player_name": pn,
+                     "handicap_index_9": pp.get("handicap_index"),
+                     "latest_round_date": pp.get("latest_round_date"),
+                     "active_rounds": pp.get("active_rounds")}
+                    for pn, pp in ordered[1:]
+                ],
+            })
+            chosen = ordered[0]
+        else:
+            chosen = group[0]
+
+        pname, p = chosen
+        info = link_map[pname]
 
         # GG stores 18-hole indexes; our index is 9-hole → multiply by 2
         idx_9 = p["handicap_index"]
@@ -12936,6 +12974,7 @@ def get_handicap_export_data(chapter: str | None = None,
             "total_linked": len(link_map),
             "has_chapter_data": has_chapter_data,
             "chapter_filter": chapter,
+            "duplicate_emails": duplicate_emails,
             "link_sample": [
                 {"player": k, "email": v["email"][:3] + "..." if v["email"] else None,
                  "chapter": v["chapter"]}

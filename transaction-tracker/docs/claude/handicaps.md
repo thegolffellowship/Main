@@ -113,6 +113,29 @@ joined via `handicap_player_links`. Stale `items.handicap` values on old order r
 looked authoritative but didn't update when the player's real handicap changed, so any
 code path that read them silently drifted.
 
+## Export dedup logic (CSV / Golf Genius sync)
+
+`get_handicap_export_data` (in `email_parser/database.py`) returns one row per
+**customer email**, not per `handicap_rounds` `player_name`. Multiple player_name
+variants can link to the same customer (e.g. a legacy un-normalized name alongside the
+current `First Last` form produced by `_normalize_player_name`), so the export groups
+candidates by email and picks the one with the most recent round date (tiebreak: most
+active rounds, then most total rounds, then player_name for determinism). This
+guarantees the exported / GG-synced index always matches the freshest data the UI shows
+for that customer — even when stale duplicate player records still exist in
+`handicap_rounds`.
+
+The earlier implementation iterated players in alphabetical order and skipped any whose
+email was already `seen`, so a stale variant alphabetizing earlier than the current one
+could win the export (e.g. Daniel Lehan exported as 4.4 / 9-hole 2.2 while the UI
+correctly showed 17.2 / 8.6N).
+
+When duplicates are collapsed, the `_debug.duplicate_emails` block in
+`/api/handicaps/export-preview` lists every collision with which player_name was
+chosen, which were dropped, and their indexes — useful for tracking down the source
+duplicates and merging or deleting the stale ones via
+`/api/handicaps/players/<player_name>` DELETE.
+
 ## Import dedup logic
 
 When a handicap file contains a `round_id` column, the duplicate check matches on
