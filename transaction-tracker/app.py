@@ -7767,15 +7767,34 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
              WHERE ce.is_primary = 1
              GROUP BY ce.customer_id
         ),
-        last_event AS (
+        last_event_per_customer AS (
+            -- One row per (customer, played_date) so we can join the actual
+            -- item_name of the most recent play back in without breaking the
+            -- GROUP BY. We compute MAX(played_date) then pick any row matching
+            -- it (ties broken by items.id DESC = most recently inserted).
             SELECT i.customer_id,
-                   MAX(COALESCE(e.event_date, i.order_date)) AS last_event_date,
-                   COUNT(*)                                  AS plays_lifetime
+                   COALESCE(e.event_date, i.order_date) AS played_date,
+                   i.item_name,
+                   i.id AS item_id
               FROM items i
               LEFT JOIN events e ON e.item_name = i.item_name
              WHERE {ev}
                AND COALESCE(e.event_date, i.order_date) <= DATE(?)
-             GROUP BY i.customer_id
+        ),
+        last_event AS (
+            SELECT lpc.customer_id,
+                   MAX(lpc.played_date) AS last_event_date,
+                   COUNT(*)             AS plays_lifetime,
+                   -- Pull the item_name (and id, for href) from the row that
+                   -- actually has the MAX(played_date). Tie-break: the row
+                   -- with the highest items.id, i.e. the most recently
+                   -- inserted, so multi-event days resolve deterministically.
+                   (SELECT lpc2.item_name FROM last_event_per_customer lpc2
+                     WHERE lpc2.customer_id = lpc.customer_id
+                     ORDER BY lpc2.played_date DESC, lpc2.item_id DESC
+                     LIMIT 1) AS last_event_name
+              FROM last_event_per_customer lpc
+             GROUP BY lpc.customer_id
         ),
         plays_12 AS (
             SELECT i.customer_id, COUNT(*) AS n
@@ -7803,6 +7822,7 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
             COALESCE(ls.status_name, c.current_player_status) AS status_raw,
             pe.email AS email,
             le.last_event_date,
+            le.last_event_name,
             COALESCE(le.plays_lifetime, 0) AS plays_lifetime,
             COALESCE(p12.n, 0)             AS plays_12mo,
             COALESCE(pp12.n, 0)            AS plays_prior_12mo

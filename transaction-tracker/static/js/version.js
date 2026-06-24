@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.2";
+window.TGF_VERSION = "2.16.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.3",
+    date: "2026-06-24",
+    changes: [
+      "Participation: the Last Played cell now shows the event name on a second line as a link to the Events tab (deep-links via /events?item=<name>, which auto-expands the event detail panel on arrival). The date stays the primary read; the event name is muted and smaller so the column is still scannable. /api/participation/players returns last_event_name alongside last_event_date — picked from the items row that owns MAX(played_date) for that customer, tiebroken by items.id DESC so multi-event days resolve to the most recently inserted registration deterministically.",
+    ],
+  },
   {
     version: "2.16.2",
     date: "2026-06-24",
