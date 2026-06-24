@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.16.4";
+window.TGF_VERSION = "2.16.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.5",
+    date: "2026-06-24",
+    changes: [
+      "Fix: Participation was dropping most registrations for yesterday's s9.15 The Quarry (36 players) and a9.15 Teravista (20 players) — only the handful whose items.item_name matched events.item_name byte-for-byte were showing the new event as Last Played. The JOIN is now TRIM(...) COLLATE NOCASE on both sides so a parsed-from-email name like 's9.15 THE QUARRY' resolves against a manager-entered 's9.15 The Quarry' (and trailing-space variants stop silently dropping rows). The cell also now renders the canonical events.item_name so every row's event label reads consistently regardless of how it was originally parsed.",
+      "Fix: clicking a past event from Participation flipped the Events page to Past correctly but the specific event still didn't expand. The auto-expand block was calling renderEvents() recursively and ALSO calling toggleEventDetail after — so the recursive pass expanded the row and the outer pass immediately collapsed it. The outer call is now removed; the recursive pass falls through to the expand on its own.",
+    ],
+  },
   {
     version: "2.16.4",
     date: "2026-06-24",

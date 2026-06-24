@@ -16,7 +16,9 @@ The single source-of-truth for this filter is `_participation_event_filter_sql(a
 
 ### "When" they played = event date, not purchase date
 
-The "played date" is `events.event_date`, period. The query uses **INNER JOIN events ON items.item_name = events.item_name** with `events.event_date IS NOT NULL` and `events.event_date <= today`.
+The "played date" is `events.event_date`, period. The query uses **INNER JOIN events ON TRIM(items.item_name) = TRIM(events.item_name) COLLATE NOCASE** with `events.event_date IS NOT NULL` and `events.event_date <= today`.
+
+The TRIM + COLLATE NOCASE is load-bearing: the AI parser builds `items.item_name` from order-email text while managers set `events.item_name` by hand on the Events tab, and the two have repeatedly drifted on case (`s9.15 THE QUARRY` vs `s9.15 The Quarry`) and trailing whitespace. Byte-for-byte equality silently dropped most registrations for affected events. The display name in the Last Played / Next Event cells comes from `events.item_name` so the label is canonical regardless of how the items row was parsed.
 
 - An item with no matching events row is silently dropped from play counts. The earlier design fell back to `items.order_date`, but that let purchase timing masquerade as play timing — a player who pre-bought May's event in February would have shown as a Feb play. Worse, when the fallback fired, future-dated registrations weren't filtered out (their order_date was in the past), so upcoming events leaked into "Last Played".
 - The price of strictness: legacy items without an events row don't count. The fix is to backfill those into the `events` table, not to silently use purchase dates.
