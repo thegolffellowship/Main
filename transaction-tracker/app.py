@@ -7770,12 +7770,16 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
             -- Every items row that joins to an events row with a known,
             -- non-future event_date. This is the strict definition of
             -- "played" — items without a matching events row are dropped.
+            -- JOIN is TRIM + COLLATE NOCASE so casing/whitespace differences
+            -- between AI-parsed items.item_name and manager-entered
+            -- events.item_name don't silently drop registrations.
             SELECT i.customer_id,
                    e.event_date AS played_date,
-                   i.item_name,
+                   e.item_name  AS item_name,   -- canonical name from events
                    i.id         AS item_id
               FROM items i
-              JOIN events e ON e.item_name = i.item_name
+              JOIN events e
+                ON TRIM(e.item_name) = TRIM(i.item_name) COLLATE NOCASE
              WHERE {ev}
                AND e.event_date IS NOT NULL
                AND e.event_date <= DATE(?)
@@ -7784,10 +7788,11 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
             -- Every registration whose event_date is strictly in the future.
             SELECT i.customer_id,
                    e.event_date AS upcoming_date,
-                   i.item_name,
+                   e.item_name  AS item_name,
                    i.id         AS item_id
               FROM items i
-              JOIN events e ON e.item_name = i.item_name
+              JOIN events e
+                ON TRIM(e.item_name) = TRIM(i.item_name) COLLATE NOCASE
              WHERE {ev}
                AND e.event_date IS NOT NULL
                AND e.event_date > DATE(?)

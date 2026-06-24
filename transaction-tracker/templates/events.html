@@ -2485,9 +2485,9 @@
                     eventTimeFilter = desiredFilter;
                     document.querySelectorAll("[data-ev-filter]").forEach(b =>
                         b.classList.toggle("active", b.dataset.evFilter === desiredFilter));
-                    renderEvents();         // re-render in the right bucket
-                    toggleEventDetail(fullMatch.id);
-                    return;
+                    renderEvents();  // recursive: re-renders + falls through to the
+                                     // toggleEventDetail call below on the second pass
+                    return;          // hard-return so the outer pass doesn't double-toggle
                 }
                 toggleEventDetail(fullMatch.id);
             }
