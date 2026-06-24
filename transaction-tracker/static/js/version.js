@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.0";
+window.TGF_VERSION = "2.16.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.1",
+    date: "2026-06-24",
+    changes: [
+      "Participation: player names in the table are now links to the Customers page (open the same player's full profile via /customers?name=...). Same pattern Handicaps and Transactions use, so the click target is consistent across pages. Click handling on the rest of the row is unchanged — clicking the name navigates; clicking anywhere else still toggles the selection checkbox.",
+    ],
+  },
   {
     version: "2.16.0",
     date: "2026-06-24",
