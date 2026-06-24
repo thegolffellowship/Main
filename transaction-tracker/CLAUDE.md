@@ -9,6 +9,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/events.md` (events/RSVPs/pricing/cancellation/TGF payouts)
 - `docs/claude/customers.md` (customer identity, **membership renewal system**)
 - `docs/claude/handicaps.md` (handicap rules)
+- `docs/claude/participation.md` (participation analysis + re-engagement emails)
 - `docs/claude/coo.md` (COO dashboard + AI chat)
 - `docs/claude/customer-merge-repair.md` (playbook for fixing absorbed customer profiles)
 
@@ -266,6 +267,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `templates/events.html` — Events management + Tee Time Advisor + Financial tab (hybrid server/client rendering)
 - `templates/customers.html` — Customer directory + roster import + 5-tab detail (Transactions, Scores, Winnings, Points, Info)
 - `templates/handicaps.html` — Handicap management page
+- `templates/participation.html` — Participation analysis (last-played, frequency, trend) + re-engagement email composer; see `docs/claude/participation.md`
 - `templates/matrix.html` — Side games prize matrix
 - `templates/audit.html` — Email audit/QA (admin) + per-order re-extract
 - `templates/rsvps.html` — RSVP log

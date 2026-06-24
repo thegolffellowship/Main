@@ -7674,6 +7674,380 @@ def api_handicap_send_bulk_email():
 
 
 # ---------------------------------------------------------------------------
+# Routes — Participation Analysis
+# ---------------------------------------------------------------------------
+# Identifies players by last-event date, 12-month frequency, and trend vs the
+# prior 12 months. Powers the /participation page used to spot dormant players
+# and send re-engagement emails. "Event" = a non-membership, non-season-contest
+# items row with transaction_status active or rsvp_only and parent_item_id NULL
+# (skips child payment rows). Audience: every customer whose canonical status
+# is not 'former' (MEMBER / MEMBER+ / GUEST / 1st TIMER), plus customers with
+# no status row at all.
+
+# Default re-engagement email template. Edited per-send in the composer.
+PARTICIPATION_DEFAULT_SUBJECT = "We miss you on the tee, {first_name}"
+PARTICIPATION_DEFAULT_BODY_HTML = """<p>Hi {first_name},</p>
+
+<p>It's been about <strong>{days_since} days</strong> since your last
+TGF round{last_event_phrase}, and we wanted to check in.</p>
+
+<p>The {chapter} chapter has events booked over the next several weeks
+and we'd love to get you back out there. Tee times, side games, and
+the usual good company — same as you remember.</p>
+
+<p>Take a look at what's on the schedule and grab a spot:</p>
+
+<p style="margin:1.25rem 0;">
+  <a href="https://thegolffellowship.com/events"
+     style="display:inline-block;background:#16a34a;color:#fff;padding:0.7rem 1.4rem;border-radius:6px;text-decoration:none;font-weight:600;">
+    See upcoming events
+  </a>
+</p>
+
+<p>If something's keeping you off the course — schedule, handicap,
+travel, anything — just reply to this email and let us know. We're
+happy to help.</p>
+
+<p>See you soon,<br>
+The Golf Fellowship</p>"""
+
+
+def _participation_event_filter_sql(alias: str = "i") -> str:
+    """SQL fragment selecting event-participation items only.
+
+    Excludes membership renewals, season contest enrollments, and child
+    payment rows. Both paid (active) and RSVP-only rows count as
+    "played" for the purposes of last-event / frequency.
+    """
+    return f"""
+        {alias}.customer_id IS NOT NULL
+        AND COALESCE({alias}.transaction_status, 'active') IN ('active', 'rsvp_only')
+        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%MEMBERSHIP%'
+        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%SEASON CONTEST%'
+        AND {alias}.parent_item_id IS NULL
+    """
+
+
+def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
+    """Return one row per active customer with last-event + frequency stats."""
+    today = today_central_str()
+    ev = _participation_event_filter_sql("i")
+
+    # Canonical status = latest customer_statuses row (joined to statuses.status_name),
+    # falling back to current_player_status. Excludes 'former' / 'expired_member' /
+    # 'inactive' (those are FORMER in the UI). 'active_member', 'member_plus',
+    # 'active_guest', 'first_timer', or a non-former customer_statuses row passes.
+    rows = conn.execute(
+        f"""
+        WITH latest_status AS (
+            SELECT cs.customer_id, s.status_name
+              FROM customer_statuses cs
+              JOIN statuses s ON s.status_id = cs.status_id
+              JOIN (
+                  SELECT customer_id, MAX(id) AS max_id
+                    FROM customer_statuses
+                   GROUP BY customer_id
+              ) latest ON latest.customer_id = cs.customer_id
+                      AND latest.max_id = cs.id
+        ),
+        primary_email AS (
+            SELECT ce.customer_id, MIN(ce.email) AS email
+              FROM customer_emails ce
+             WHERE ce.is_primary = 1
+             GROUP BY ce.customer_id
+        ),
+        last_event AS (
+            SELECT i.customer_id,
+                   MAX(i.order_date) AS last_event_date,
+                   COUNT(*)          AS plays_lifetime
+              FROM items i
+             WHERE {ev}
+             GROUP BY i.customer_id
+        ),
+        plays_12 AS (
+            SELECT i.customer_id, COUNT(*) AS n
+              FROM items i
+             WHERE {ev}
+               AND i.order_date >= DATE(?, '-12 months')
+             GROUP BY i.customer_id
+        ),
+        plays_prior_12 AS (
+            SELECT i.customer_id, COUNT(*) AS n
+              FROM items i
+             WHERE {ev}
+               AND i.order_date >= DATE(?, '-24 months')
+               AND i.order_date <  DATE(?, '-12 months')
+             GROUP BY i.customer_id
+        )
+        SELECT
+            c.customer_id,
+            TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS name,
+            c.first_name, c.last_name,
+            c.chapter,
+            COALESCE(ls.status_name, c.current_player_status) AS status_raw,
+            pe.email AS email,
+            le.last_event_date,
+            COALESCE(le.plays_lifetime, 0) AS plays_lifetime,
+            COALESCE(p12.n, 0)             AS plays_12mo,
+            COALESCE(pp12.n, 0)            AS plays_prior_12mo
+          FROM customers c
+          LEFT JOIN latest_status   ls   ON ls.customer_id   = c.customer_id
+          LEFT JOIN primary_email   pe   ON pe.customer_id   = c.customer_id
+          LEFT JOIN last_event      le   ON le.customer_id   = c.customer_id
+          LEFT JOIN plays_12        p12  ON p12.customer_id  = c.customer_id
+          LEFT JOIN plays_prior_12  pp12 ON pp12.customer_id = c.customer_id
+         WHERE COALESCE(c.account_status, 'active') = 'active'
+           AND COALESCE(ls.status_name, c.current_player_status, '') NOT IN
+               ('former', 'expired_member', 'inactive')
+         ORDER BY le.last_event_date IS NULL, le.last_event_date DESC, c.last_name COLLATE NOCASE
+        """,
+        (today, today, today),
+    ).fetchall()
+
+    # Map current_player_status / status_name → user-facing label.
+    label_map = {
+        "member":         "MEMBER",
+        "member_plus":    "MEMBER+",
+        "guest":          "GUEST",
+        "1st_timer":      "1st TIMER",
+        "active_member":  "MEMBER",
+        "active_guest":   "GUEST",
+        "first_timer":    "1st TIMER",
+    }
+
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["status"] = label_map.get((d.get("status_raw") or "").lower(),
+                                    (d.get("status_raw") or "").upper() or "—")
+        # days_since: integer days from today (Central) to last_event_date.
+        last = d.get("last_event_date")
+        if last:
+            try:
+                ld = datetime.strptime(last[:10], "%Y-%m-%d").date()
+                td = datetime.strptime(today, "%Y-%m-%d").date()
+                d["days_since"] = max(0, (td - ld).days)
+            except Exception:
+                d["days_since"] = None
+        else:
+            d["days_since"] = None
+
+        # trend: simple delta of plays_12mo vs plays_prior_12mo. Values are
+        # 'up', 'flat', 'down', or 'new' (no prior-period plays at all).
+        p12 = d["plays_12mo"]
+        pp12 = d["plays_prior_12mo"]
+        if pp12 == 0 and p12 > 0:
+            d["trend"] = "new"
+        elif p12 > pp12:
+            d["trend"] = "up"
+        elif p12 < pp12:
+            d["trend"] = "down"
+        else:
+            d["trend"] = "flat"
+        d["trend_delta"] = p12 - pp12
+
+        out.append(d)
+    return out
+
+
+def _render_participation_email(row: dict, subject_tpl: str, body_tpl: str) -> dict:
+    """Render the merge variables into the subject + body for one player."""
+    first = (row.get("first_name") or "").strip() or "there"
+    last_event = (row.get("last_event_date") or "")[:10]
+    days_since = row.get("days_since")
+    chapter = (row.get("chapter") or "").strip() or "TGF"
+    plays_12 = row.get("plays_12mo") or 0
+
+    last_event_phrase = ""
+    if last_event:
+        last_event_phrase = f" (on {last_event})"
+
+    vars_ = {
+        "first_name": first,
+        "last_name": (row.get("last_name") or "").strip(),
+        "days_since": days_since if days_since is not None else "—",
+        "last_event": last_event or "—",
+        "last_event_phrase": last_event_phrase,
+        "chapter": chapter,
+        "plays_12mo": plays_12,
+    }
+    try:
+        subject = subject_tpl.format(**vars_)
+    except (KeyError, IndexError):
+        subject = subject_tpl
+    try:
+        body = body_tpl.format(**vars_)
+    except (KeyError, IndexError):
+        body = body_tpl
+
+    # Wrap the body in the same minimal HTML shell the membership emails use.
+    html = (
+        "<!doctype html><html><body style=\"font-family:-apple-system,"
+        "BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;max-width:600px;"
+        "margin:0 auto;padding:1.5rem;\">"
+        + body +
+        "<hr style=\"border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;\">"
+        "<p style=\"font-size:0.78rem;color:#6b7280;\">"
+        "The Golf Fellowship &middot; "
+        "<a href=\"https://thegolffellowship.com\" style=\"color:#2563eb;\">"
+        "thegolffellowship.com</a></p>"
+        "</body></html>"
+    )
+    return {"subject": subject, "html": html}
+
+
+@app.route("/participation")
+def page_participation():
+    return render_template("participation.html")
+
+
+@app.route("/api/participation/players")
+@require_role("manager")
+def api_participation_players():
+    """Return per-customer participation summary for the /participation page."""
+    conn = get_connection()
+    try:
+        rows = _get_participation_rows(conn)
+    finally:
+        conn.close()
+    return jsonify({
+        "as_of": today_central_str(),
+        "default_subject": PARTICIPATION_DEFAULT_SUBJECT,
+        "default_body_html": PARTICIPATION_DEFAULT_BODY_HTML,
+        "rows": rows,
+    })
+
+
+@app.route("/api/participation/preview-email", methods=["POST"])
+@require_role("manager")
+def api_participation_preview_email():
+    """Render the re-engagement email for ONE customer (merge-vars filled)."""
+    data = request.get_json(silent=True) or {}
+    customer_id = data.get("customer_id")
+    subject_tpl = data.get("subject") or PARTICIPATION_DEFAULT_SUBJECT
+    body_tpl = data.get("body_html") or PARTICIPATION_DEFAULT_BODY_HTML
+    if not customer_id:
+        return jsonify({"error": "customer_id required"}), 400
+
+    conn = get_connection()
+    try:
+        rows = _get_participation_rows(conn)
+    finally:
+        conn.close()
+    row = next((r for r in rows if r["customer_id"] == customer_id), None)
+    if not row:
+        return jsonify({"error": "customer not found or not in audience"}), 404
+
+    rendered = _render_participation_email(row, subject_tpl, body_tpl)
+    return jsonify({
+        "customer_id": customer_id,
+        "name": row.get("name"),
+        "email": row.get("email") or "",
+        "has_email": bool(row.get("email")),
+        "days_since": row.get("days_since"),
+        "last_event_date": row.get("last_event_date"),
+        "subject": rendered["subject"],
+        "html": rendered["html"],
+    })
+
+
+@app.route("/api/participation/send-email", methods=["POST"])
+@require_role("manager")
+def api_participation_send_email():
+    """Send the re-engagement email to one or more customers."""
+    data = request.get_json(silent=True) or {}
+    ids = data.get("customer_ids") or []
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"error": "customer_ids (non-empty list) required"}), 400
+    subject_tpl = data.get("subject") or PARTICIPATION_DEFAULT_SUBJECT
+    body_tpl = data.get("body_html") or PARTICIPATION_DEFAULT_BODY_HTML
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+    if not all([tenant_id, client_id, client_secret, from_address]):
+        return jsonify({"error": "Email credentials not configured on server"}), 500
+
+    conn = get_connection()
+    try:
+        rows = _get_participation_rows(conn)
+    finally:
+        conn.close()
+    by_id = {r["customer_id"]: r for r in rows}
+
+    results = []
+    sent = 0
+    skipped = 0
+    failed = 0
+    for cid in ids:
+        row = by_id.get(cid)
+        if not row:
+            results.append({"customer_id": cid, "status": "skipped",
+                            "reason": "customer not in audience"})
+            skipped += 1
+            continue
+        email = (row.get("email") or "").strip()
+        if not email:
+            results.append({"customer_id": cid, "name": row.get("name"),
+                            "status": "skipped", "reason": "no primary email"})
+            skipped += 1
+            continue
+        rendered = _render_participation_email(row, subject_tpl, body_tpl)
+        try:
+            ok = send_mail_graph(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret,
+                from_address=from_address,
+                to_address=email,
+                subject=rendered["subject"],
+                html_body=rendered["html"],
+            )
+        except Exception as exc:
+            logger.exception("participation send failed for %s", cid)
+            results.append({"customer_id": cid, "name": row.get("name"),
+                            "email": email, "status": "error", "reason": str(exc)})
+            failed += 1
+            continue
+
+        status = "sent" if ok else "failed"
+        try:
+            log_message({
+                "event_name": "participation-reengagement",
+                "channel": "email",
+                "recipient_name": row.get("name") or "",
+                "recipient_address": email,
+                "subject": rendered["subject"],
+                "body_preview": (f"Re-engagement; last event "
+                                 f"{row.get('last_event_date') or 'never'} "
+                                 f"({row.get('days_since')} days)"),
+                "status": status,
+                "sent_by": session.get("role", "unknown"),
+            })
+        except Exception:
+            logger.warning("Failed to log participation email", exc_info=True)
+
+        if ok:
+            sent += 1
+            results.append({"customer_id": cid, "name": row.get("name"),
+                            "email": email, "status": "sent"})
+        else:
+            failed += 1
+            results.append({"customer_id": cid, "name": row.get("name"),
+                            "email": email, "status": "failed",
+                            "reason": "send_mail_graph returned false"})
+
+    return jsonify({
+        "requested": len(ids),
+        "sent": sent,
+        "skipped": skipped,
+        "failed": failed,
+        "results": results,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Routes — Season Contests
 # ---------------------------------------------------------------------------
 

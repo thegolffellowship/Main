@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF — Participation</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TGF Tracker">
+    <style>
+        .part-toolbar {
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+            margin-bottom: 12px;
+        }
+        .part-toolbar input, .part-toolbar select {
+            padding: 6px 10px; font-size: 0.9rem; border: 1px solid #cbd5e1;
+            border-radius: 6px; background: #fff;
+        }
+        .part-toolbar input[type="search"] { min-width: 220px; }
+        .part-toolbar .spacer { flex: 1; }
+
+        .part-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .part-table th {
+            background: #f1f5f9; padding: 8px 10px; text-align: left;
+            font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0;
+            position: sticky; top: 0; cursor: pointer; user-select: none;
+        }
+        .part-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; }
+        .part-table tbody tr:hover { background: #f8fafc; }
+        .part-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .part-table .center { text-align: center; }
+        .part-table tr.selected { background: #eff6ff; }
+        .part-table tr.no-email td.cust-email { color: #9ca3af; font-style: italic; }
+
+        .badge-dormant {
+            display: inline-block; padding: 2px 8px; border-radius: 99px;
+            font-size: 0.74em; font-weight: 600;
+        }
+        .badge-dormant.fresh { background: #dcfce7; color: #166534; }
+        .badge-dormant.warm  { background: #fef3c7; color: #92400e; }
+        .badge-dormant.cold  { background: #fee2e2; color: #991b1b; }
+        .badge-dormant.never { background: #e5e7eb; color: #374151; }
+
+        .trend-arrow { font-weight: 700; }
+        .trend-up    { color: #16a34a; }
+        .trend-down  { color: #dc2626; }
+        .trend-flat  { color: #6b7280; }
+        .trend-new   { color: #2563eb; }
+
+        .status-pill {
+            display: inline-block; padding: 2px 7px; border-radius: 99px;
+            font-size: 0.72em; font-weight: 600;
+        }
+        .status-MEMBER       { background: #dcfce7; color: #166534; }
+        .status-MEMBERPLUS   { background: #c7d2fe; color: #3730a3; }
+        .status-GUEST        { background: #fef3c7; color: #92400e; }
+        .status-1stTIMER     { background: #fce7f3; color: #9f1239; }
+
+        .selection-bar {
+            position: sticky; bottom: 0; background: #fff; border-top: 2px solid #1e40af;
+            padding: 10px 14px; display: none; align-items: center; gap: 12px;
+            box-shadow: 0 -4px 8px rgba(0,0,0,0.06); z-index: 50;
+        }
+        .selection-bar.visible { display: flex; }
+        .selection-bar .count { font-weight: 600; color: #1e40af; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+            z-index: 100; align-items: flex-start; justify-content: center;
+            padding: 40px 20px; overflow-y: auto;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: #fff; border-radius: 10px; max-width: 920px; width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2); overflow: hidden;
+        }
+        .modal-header {
+            background: #1e40af; color: #fff; padding: 14px 18px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-header h2 { margin: 0; font-size: 1.1rem; }
+        .modal-close {
+            background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 6px; padding: 4px 10px; cursor: pointer;
+        }
+        .modal-body { padding: 18px; }
+        .modal-body label {
+            display: block; font-size: 0.82rem; color: #475569; font-weight: 600;
+            margin-top: 12px; margin-bottom: 4px;
+        }
+        .modal-body input[type="text"],
+        .modal-body textarea {
+            width: 100%; box-sizing: border-box; padding: 8px 10px;
+            border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem;
+            font-family: inherit;
+        }
+        .modal-body textarea { min-height: 240px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.84rem; }
+        .merge-help {
+            background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+            padding: 8px 12px; font-size: 0.78rem; color: #475569; margin-top: 6px;
+        }
+        .merge-help code { background: #fff; padding: 1px 5px; border-radius: 3px; color: #1e293b; }
+
+        .preview-pane {
+            border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px;
+            margin-top: 8px; background: #f8fafc; min-height: 200px;
+        }
+        .preview-header { font-size: 0.82rem; color: #475569; margin-bottom: 6px; }
+        .preview-nav { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+        .preview-nav button { padding: 4px 12px; border: 1px solid #cbd5e1; background: #fff;
+                              border-radius: 6px; cursor: pointer; }
+        .preview-nav button:hover { background: #eff6ff; }
+
+        .modal-footer {
+            padding: 12px 18px; background: #f8fafc; border-top: 1px solid #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-footer .send-summary { color: #475569; font-size: 0.85rem; }
+        .send-result {
+            margin-top: 10px; padding: 10px 12px; border-radius: 6px; font-size: 0.85rem;
+            display: none;
+        }
+        .send-result.ok    { background: #dcfce7; color: #166534; display: block; }
+        .send-result.error { background: #fee2e2; color: #991b1b; display: block; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Participation — last-played, frequency, and re-engagement</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+        </div>
+    </header>
+
+    <main>
+        <nav class="tab-nav">
+            <a href="/accounting" class="admin-nav" style="display:none;">Admin</a>
+            <a href="/">Transactions</a>
+            <a href="/events">Events</a>
+            <a href="/contests">Contests</a>
+            <a href="/customers">Customers</a>
+            <a href="/rsvps">RSVP Log</a>
+            <a href="/handicaps">Handicaps</a>
+            <a href="/participation" class="active">Participation</a>
+            <a href="/tgf">Payouts</a>
+        </nav>
+
+        <section class="stats-row" id="stats-row">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-tracked">—</div>
+                <div class="stat-label">Active Customers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-dormant">—</div>
+                <div class="stat-label">Dormant (above threshold)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-avg-days">—</div>
+                <div class="stat-label">Avg Days Since Last Played</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-never">—</div>
+                <div class="stat-label">Never Played</div>
+            </div>
+        </section>
+
+        <div class="part-toolbar">
+            <input id="part-search" type="search" placeholder="Search by name or email…">
+            <select id="part-chapter">
+                <option value="">All Chapters</option>
+            </select>
+            <select id="part-status">
+                <option value="">All Statuses</option>
+                <option value="MEMBER">MEMBER</option>
+                <option value="MEMBER+">MEMBER+</option>
+                <option value="GUEST">GUEST</option>
+                <option value="1st TIMER">1st TIMER</option>
+            </select>
+            <select id="part-threshold" title="Dormancy threshold">
+                <option value="0">No threshold</option>
+                <option value="30">≥ 30 days</option>
+                <option value="60">≥ 60 days</option>
+                <option value="90" selected>≥ 90 days</option>
+                <option value="180">≥ 180 days</option>
+                <option value="365">≥ 365 days</option>
+            </select>
+            <label style="font-size:0.85rem;color:#475569;display:flex;gap:6px;align-items:center;">
+                <input type="checkbox" id="part-only-email" checked> Has email only
+            </label>
+            <div class="spacer"></div>
+            <span style="color:#6b7280;font-size:0.85rem;" id="row-count">—</span>
+        </div>
+
+        <table class="part-table" id="part-table">
+            <thead>
+                <tr>
+                    <th style="width:32px;"><input type="checkbox" id="check-all" title="Select all visible"></th>
+                    <th data-sort="name">Player</th>
+                    <th data-sort="chapter">Chapter</th>
+                    <th data-sort="status">Status</th>
+                    <th data-sort="last_event_date">Last Played</th>
+                    <th class="num" data-sort="days_since">Days</th>
+                    <th class="num" data-sort="plays_12mo">12mo</th>
+                    <th class="num" data-sort="plays_prior_12mo">Prior 12</th>
+                    <th class="center" data-sort="trend">Trend</th>
+                    <th>Email</th>
+                </tr>
+            </thead>
+            <tbody id="part-tbody">
+                <tr><td colspan="10" style="text-align:center;padding:32px;color:#94a3b8;">Loading…</td></tr>
+            </tbody>
+        </table>
+
+        <div class="selection-bar" id="selection-bar">
+            <span class="count" id="selection-count">0 selected</span>
+            <span style="color:#6b7280;font-size:0.85rem;" id="selection-email-note"></span>
+            <div class="spacer"></div>
+            <button class="btn btn-secondary" id="btn-clear-sel">Clear</button>
+            <button class="btn btn-primary" id="btn-compose">Send Re-engagement Email…</button>
+        </div>
+
+        <!-- Compose Modal -->
+        <div class="modal-overlay" id="modal-compose">
+            <div class="modal-box">
+                <div class="modal-header">
+                    <h2>Re-engagement Email</h2>
+                    <button class="modal-close" id="modal-close">Close</button>
+                </div>
+                <div class="modal-body">
+                    <div style="display:flex;gap:18px;flex-wrap:wrap;">
+                        <div style="flex:1;min-width:340px;">
+                            <label>Subject (supports merge vars)</label>
+                            <input type="text" id="email-subject">
+                            <label>Body HTML</label>
+                            <textarea id="email-body"></textarea>
+                            <div class="merge-help">
+                                Merge variables: <code>{first_name}</code>
+                                <code>{last_name}</code>
+                                <code>{days_since}</code>
+                                <code>{last_event}</code>
+                                <code>{chapter}</code>
+                                <code>{plays_12mo}</code>
+                                <code>{last_event_phrase}</code>
+                            </div>
+                        </div>
+                        <div style="flex:1;min-width:340px;">
+                            <label>Preview for selected recipient</label>
+                            <div class="preview-pane">
+                                <div class="preview-header" id="preview-meta">—</div>
+                                <hr style="border:none;border-top:1px solid #e2e8f0;margin:6px 0 10px;">
+                                <div id="preview-html" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:12px;min-height:200px;"></div>
+                                <div class="preview-nav">
+                                    <button id="prev-recipient">‹ Prev</button>
+                                    <span id="preview-pos" style="color:#6b7280;font-size:0.85rem;">—</span>
+                                    <button id="next-recipient">Next ›</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="send-result" id="send-result"></div>
+                </div>
+                <div class="modal-footer">
+                    <span class="send-summary" id="send-summary">—</span>
+                    <div>
+                        <button class="btn btn-secondary" id="btn-cancel">Cancel</button>
+                        <button class="btn btn-primary" id="btn-send-all">Send to All</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    (function() {
+        let allRows = [];
+        let viewRows = [];
+        let selected = new Set();           // customer_ids
+        let sortKey = 'days_since';
+        let sortDir = 'desc';
+        let previewIndex = 0;
+        let lastDefaults = { subject: '', body: '' };
+
+        const $ = (id) => document.getElementById(id);
+        const escapeHtml = (s) => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+        function badgeForDays(d) {
+            if (d == null) return '<span class="badge-dormant never">never</span>';
+            if (d < 60)    return `<span class="badge-dormant fresh">${d}d</span>`;
+            if (d < 180)   return `<span class="badge-dormant warm">${d}d</span>`;
+            return `<span class="badge-dormant cold">${d}d</span>`;
+        }
+
+        function trendCell(t, delta) {
+            if (t === 'up')    return `<span class="trend-arrow trend-up">▲ ${delta > 0 ? '+' + delta : delta}</span>`;
+            if (t === 'down')  return `<span class="trend-arrow trend-down">▼ ${delta}</span>`;
+            if (t === 'new')   return `<span class="trend-arrow trend-new">new</span>`;
+            return `<span class="trend-arrow trend-flat">—</span>`;
+        }
+
+        function statusClass(s) {
+            if (!s) return '';
+            return 'status-' + s.replace(/[+\s]/g, '').toUpperCase().replace('1ST', '1st');
+        }
+
+        async function load() {
+            try {
+                const r = await fetch('/api/participation/players');
+                if (!r.ok) {
+                    const err = await r.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${r.status}`);
+                }
+                const data = await r.json();
+                allRows = data.rows || [];
+                lastDefaults.subject = data.default_subject || '';
+                lastDefaults.body    = data.default_body_html || '';
+                populateChapters();
+                render();
+            } catch (e) {
+                $('part-tbody').innerHTML =
+                  `<tr><td colspan="10" style="text-align:center;padding:32px;color:#ef4444;">Failed to load: ${escapeHtml(e.message)}</td></tr>`;
+            }
+        }
+
+        function populateChapters() {
+            const seen = new Set();
+            allRows.forEach(r => { if (r.chapter) seen.add(r.chapter); });
+            const sel = $('part-chapter');
+            const cur = sel.value;
+            sel.innerHTML = '<option value="">All Chapters</option>' +
+                [...seen].sort().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            sel.value = cur;
+        }
+
+        function applyFilters() {
+            const q = ($('part-search').value || '').trim().toLowerCase();
+            const chapter = $('part-chapter').value;
+            const status = $('part-status').value;
+            const thr = parseInt($('part-threshold').value, 10) || 0;
+            const onlyEmail = $('part-only-email').checked;
+
+            viewRows = allRows.filter(r => {
+                if (chapter && r.chapter !== chapter) return false;
+                if (status && r.status !== status) return false;
+                if (onlyEmail && !(r.email || '').trim()) return false;
+                if (thr > 0) {
+                    if (r.days_since == null) {
+                        // "Never played" counts as dormant when a threshold is set.
+                    } else if (r.days_since < thr) {
+                        return false;
+                    }
+                }
+                if (q) {
+                    const hay = `${r.name || ''} ${r.email || ''}`.toLowerCase();
+                    if (!hay.includes(q)) return false;
+                }
+                return true;
+            });
+
+            viewRows.sort((a, b) => {
+                let av = a[sortKey], bv = b[sortKey];
+                if (sortKey === 'days_since' || sortKey === 'plays_12mo' || sortKey === 'plays_prior_12mo') {
+                    av = av == null ? -Infinity : av;
+                    bv = bv == null ? -Infinity : bv;
+                    // For days_since we want "never played" (null) to land near the top
+                    // when sorting desc — boost nulls to +Infinity in that case.
+                    if (sortKey === 'days_since') {
+                        av = a.days_since == null ? Infinity : a.days_since;
+                        bv = b.days_since == null ? Infinity : b.days_since;
+                    }
+                    return sortDir === 'asc' ? av - bv : bv - av;
+                }
+                av = (av || '').toString().toLowerCase();
+                bv = (bv || '').toString().toLowerCase();
+                if (av < bv) return sortDir === 'asc' ? -1 : 1;
+                if (av > bv) return sortDir === 'asc' ?  1 : -1;
+                return 0;
+            });
+        }
+
+        function renderStats() {
+            const thr = parseInt($('part-threshold').value, 10) || 0;
+            const total = allRows.length;
+            const dormant = allRows.filter(r =>
+                thr > 0 && (r.days_since == null || r.days_since >= thr)).length;
+            const never = allRows.filter(r => r.days_since == null).length;
+            const played = allRows.filter(r => r.days_since != null);
+            const avg = played.length
+                ? Math.round(played.reduce((s, r) => s + r.days_since, 0) / played.length)
+                : '—';
+            $('stat-tracked').textContent = total.toLocaleString();
+            $('stat-dormant').textContent = thr > 0 ? dormant.toLocaleString() : '—';
+            $('stat-avg-days').textContent = avg === '—' ? '—' : avg + 'd';
+            $('stat-never').textContent = never.toLocaleString();
+        }
+
+        function render() {
+            applyFilters();
+            renderStats();
+
+            const tbody = $('part-tbody');
+            if (!viewRows.length) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:#94a3b8;">No players match your filters.</td></tr>';
+                $('row-count').textContent = '0 of ' + allRows.length;
+                updateSelectionBar();
+                return;
+            }
+
+            tbody.innerHTML = viewRows.map(r => {
+                const cls = (selected.has(r.customer_id) ? ' selected' : '') +
+                            ((r.email || '').trim() ? '' : ' no-email');
+                const days = r.days_since == null ? '—' : r.days_since;
+                return `<tr class="${cls}" data-id="${r.customer_id}">
+                    <td class="center"><input type="checkbox" class="row-check" ${selected.has(r.customer_id) ? 'checked' : ''}></td>
+                    <td>${escapeHtml(r.name || '—')}</td>
+                    <td>${escapeHtml(r.chapter || '—')}</td>
+                    <td><span class="status-pill ${statusClass(r.status)}">${escapeHtml(r.status || '—')}</span></td>
+                    <td>${escapeHtml(r.last_event_date || '—')}</td>
+                    <td class="num">${days}</td>
+                    <td class="num">${r.plays_12mo || 0}</td>
+                    <td class="num">${r.plays_prior_12mo || 0}</td>
+                    <td class="center">${trendCell(r.trend, r.trend_delta || 0)}</td>
+                    <td class="cust-email">${escapeHtml(r.email || '— no email —')}</td>
+                </tr>`;
+            }).join('');
+            $('row-count').textContent = `${viewRows.length} of ${allRows.length}`;
+            updateSelectionBar();
+        }
+
+        function updateSelectionBar() {
+            const n = selected.size;
+            const bar = $('selection-bar');
+            if (n === 0) {
+                bar.classList.remove('visible');
+                return;
+            }
+            bar.classList.add('visible');
+            $('selection-count').textContent = `${n} selected`;
+            // Count how many of the selected don't have an email
+            const noEmail = [...selected]
+                .map(id => allRows.find(r => r.customer_id === id))
+                .filter(r => r && !(r.email || '').trim()).length;
+            $('selection-email-note').textContent = noEmail
+                ? `${noEmail} have no email and will be skipped.` : '';
+        }
+
+        // ── Table interactions ─────────────────────────────────────
+        $('part-tbody').addEventListener('click', (e) => {
+            const tr = e.target.closest('tr');
+            if (!tr) return;
+            const id = parseInt(tr.dataset.id, 10);
+            if (!id) return;
+            if (e.target.classList.contains('row-check')) {
+                if (e.target.checked) selected.add(id);
+                else selected.delete(id);
+                tr.classList.toggle('selected', e.target.checked);
+                updateSelectionBar();
+                return;
+            }
+            // Clicking elsewhere on the row toggles selection too
+            const cb = tr.querySelector('.row-check');
+            if (cb) {
+                cb.checked = !cb.checked;
+                if (cb.checked) selected.add(id); else selected.delete(id);
+                tr.classList.toggle('selected', cb.checked);
+                updateSelectionBar();
+            }
+        });
+
+        $('check-all').addEventListener('change', (e) => {
+            const on = e.target.checked;
+            viewRows.forEach(r => {
+                if (!(r.email || '').trim()) return; // skip no-email rows
+                if (on) selected.add(r.customer_id);
+                else selected.delete(r.customer_id);
+            });
+            render();
+        });
+
+        $('btn-clear-sel').addEventListener('click', () => {
+            selected.clear();
+            render();
+        });
+
+        document.querySelectorAll('th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const k = th.dataset.sort;
+                if (sortKey === k) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+                else { sortKey = k; sortDir = (k === 'name' || k === 'chapter' || k === 'status') ? 'asc' : 'desc'; }
+                render();
+            });
+        });
+
+        ['part-search', 'part-chapter', 'part-status', 'part-threshold', 'part-only-email']
+            .forEach(id => $(id).addEventListener('input', render));
+
+        // ── Compose modal ──────────────────────────────────────────
+        function openCompose() {
+            if (!selected.size) return;
+            $('email-subject').value = lastDefaults.subject;
+            $('email-body').value    = lastDefaults.body;
+            previewIndex = 0;
+            $('send-result').className = 'send-result';
+            $('send-result').textContent = '';
+            $('send-summary').textContent = '';
+            $('modal-compose').classList.add('open');
+            refreshPreview();
+        }
+        function closeCompose() { $('modal-compose').classList.remove('open'); }
+
+        $('btn-compose').addEventListener('click', openCompose);
+        $('modal-close').addEventListener('click', closeCompose);
+        $('btn-cancel').addEventListener('click', closeCompose);
+
+        function selectedRows() {
+            return [...selected]
+                .map(id => allRows.find(r => r.customer_id === id))
+                .filter(r => r && (r.email || '').trim());
+        }
+
+        async function refreshPreview() {
+            const rows = selectedRows();
+            if (!rows.length) {
+                $('preview-meta').textContent = 'No recipients with email.';
+                $('preview-html').innerHTML = '';
+                $('preview-pos').textContent = '';
+                return;
+            }
+            if (previewIndex >= rows.length) previewIndex = 0;
+            if (previewIndex < 0) previewIndex = rows.length - 1;
+            const row = rows[previewIndex];
+            $('preview-pos').textContent = `${previewIndex + 1} of ${rows.length}`;
+            try {
+                const r = await fetch('/api/participation/preview-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customer_id: row.customer_id,
+                        subject:   $('email-subject').value,
+                        body_html: $('email-body').value,
+                    }),
+                });
+                if (!r.ok) throw new Error('preview failed');
+                const data = await r.json();
+                $('preview-meta').innerHTML =
+                    `<strong>${escapeHtml(data.name)}</strong> &lt;${escapeHtml(data.email)}&gt;` +
+                    ` &middot; last played ${escapeHtml(data.last_event_date || '—')}` +
+                    ` (${data.days_since == null ? 'never' : data.days_since + ' days'})<br>` +
+                    `<strong>Subject:</strong> ${escapeHtml(data.subject)}`;
+                $('preview-html').innerHTML = data.html;
+            } catch (e) {
+                $('preview-meta').textContent = 'Preview failed: ' + e.message;
+                $('preview-html').innerHTML = '';
+            }
+        }
+
+        $('prev-recipient').addEventListener('click', () => { previewIndex--; refreshPreview(); });
+        $('next-recipient').addEventListener('click', () => { previewIndex++; refreshPreview(); });
+
+        let _previewTimer = null;
+        ['email-subject', 'email-body'].forEach(id => {
+            $(id).addEventListener('input', () => {
+                clearTimeout(_previewTimer);
+                _previewTimer = setTimeout(refreshPreview, 400);
+            });
+        });
+
+        $('btn-send-all').addEventListener('click', async () => {
+            const rows = selectedRows();
+            if (!rows.length) return;
+            if (!confirm(`Send re-engagement email to ${rows.length} player(s)? This cannot be undone.`)) return;
+            $('btn-send-all').disabled = true;
+            $('btn-send-all').textContent = 'Sending…';
+            try {
+                const r = await fetch('/api/participation/send-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customer_ids: rows.map(r => r.customer_id),
+                        subject:   $('email-subject').value,
+                        body_html: $('email-body').value,
+                    }),
+                });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+                const failures = (data.results || []).filter(x => x.status === 'failed' || x.status === 'error');
+                const skipped  = (data.results || []).filter(x => x.status === 'skipped');
+                const isOk = failures.length === 0;
+                const lines = [];
+                lines.push(`<strong>${data.sent}</strong> sent`);
+                if (skipped.length) lines.push(`${skipped.length} skipped`);
+                if (failures.length) lines.push(`<strong>${failures.length} failed</strong>`);
+                let detail = '';
+                if (failures.length) {
+                    detail = '<br>Failed: ' +
+                        failures.map(f => `${escapeHtml(f.name || f.customer_id)} (${escapeHtml(f.reason || '')})`).join(', ');
+                }
+                $('send-result').className = 'send-result ' + (isOk ? 'ok' : 'error');
+                $('send-result').innerHTML = lines.join(' · ') + detail;
+                if (isOk) {
+                    // Clear selection on full success
+                    selected.clear();
+                    render();
+                }
+            } catch (e) {
+                $('send-result').className = 'send-result error';
+                $('send-result').textContent = 'Send failed: ' + e.message;
+            } finally {
+                $('btn-send-all').disabled = false;
+                $('btn-send-all').textContent = 'Send to All';
+            }
+        });
+
+        // ── Auth visibility (read by auth.js) ──────────────────────
+        window.onAuthReady = function() { /* page works for any role; no extra toggles */ };
+
+        load();
+    })();
+    </script>
+</body>
+</html>
