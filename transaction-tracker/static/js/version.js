@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.15.30";
+window.TGF_VERSION = "2.16.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.0",
+    date: "2026-06-24",
+    changes: [
+      "New: Participation page (top nav, between Handicaps and Payouts) for identifying lapsed players and re-engaging them. Each active customer (MEMBER / MEMBER+ / GUEST / 1st TIMER — excludes FORMER and archived) appears with their last-event date, days since, plays in the last 12 months, plays in the prior 12 months, and a Trend arrow (up / down / flat / new). 'Event' means a non-membership, non-season-contest items row with transaction_status active or rsvp_only and parent_item_id NULL, so membership renewals don't paper over an actual dormancy. Filter by chapter, status, dormancy threshold (30 / 60 / 90 / 180 / 365 days — default 90), and 'has email only' so the audience matches who can actually be emailed. Multi-select rows (or Select-all-visible) → Send Re-engagement Email composer with an editable subject + HTML body (TGF-voice default I drafted) and merge variables {first_name}, {last_name}, {days_since}, {last_event}, {chapter}, {plays_12mo}, {last_event_phrase}. A live preview shows the merged message for each recipient (Prev / Next to scrub through the selection); Send to All pushes through the same Microsoft Graph hook as the handicap cards and returns a per-recipient sent / skipped / failed log. Skipped rows (no primary email) are surfaced before sending so the count you confirm matches what actually goes out.",
+    ],
+  },
   {
     version: "2.15.30",
     date: "2026-06-24",
