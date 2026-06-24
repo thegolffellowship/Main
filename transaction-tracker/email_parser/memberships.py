@@ -558,6 +558,20 @@ def record_renewal_for_item(
         "SELECT * FROM customer_memberships WHERE id = ?", (new_id,)
     ).fetchone())
 
+    # Flip the customer's MEMBER badge immediately. Without this the renewal
+    # column updates (we just wrote the term) but current_player_status stays
+    # at expired_member and the most-recent customer_statuses row stays at
+    # 'former', so the UI keeps rendering FORMER until the next daily sync
+    # or app boot. sync_player_status_with_terms is idempotent and writes a
+    # fresh 'member' history row, which deriveStatus() reads first.
+    try:
+        sync_player_status_with_terms(conn)
+    except Exception:
+        logger.warning(
+            "record_renewal_for_item: status sync failed for term %s",
+            new_id, exc_info=True,
+        )
+
     # Send confirmation if there was a prior term with reminders.
     if had_reminders and send_email:
         try:

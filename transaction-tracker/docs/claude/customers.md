@@ -367,6 +367,17 @@ customer (idempotent) and tags it `source='renewal'`. The actual
 inside the parser path — this keeps `save_items` synchronous and means the
 confirmation reaches the member within ~24 hours of the order parsing.
 
+Immediately after inserting the term, `record_renewal_for_item` calls
+`sync_player_status_with_terms(conn)` so the customer's MEMBER badge flips
+on the spot. Without that call the renewal date column would update (the
+new term row exists) but `current_player_status` would stay at
+`expired_member` and the most-recent `customer_statuses` row would stay at
+`'former'` — so the Customers list would keep rendering FORMER until the
+next daily job or app boot ran the sync. `deriveStatus()` in
+`templates/customers.html` reads the latest `customer_statuses.status_name`
+first, which is why writing a fresh `'member'` history row (which the sync
+does) is required, not just bumping `current_player_status`.
+
 ## Notice schedule
 
 `daily_membership_job(send_email)` runs at **09:00 US/Central** (configurable
