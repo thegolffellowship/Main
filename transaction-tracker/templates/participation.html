@@ -219,6 +219,7 @@
                     <th data-sort="status">Status</th>
                     <th data-sort="last_event_date">Last Played</th>
                     <th class="num" data-sort="days_since">Days</th>
+                    <th data-sort="next_event_date">Next Event</th>
                     <th class="num" data-sort="plays_12mo">12mo</th>
                     <th class="num" data-sort="plays_prior_12mo">Prior 12</th>
                     <th class="center" data-sort="trend">Trend</th>
@@ -226,7 +227,7 @@
                 </tr>
             </thead>
             <tbody id="part-tbody">
-                <tr><td colspan="10" style="text-align:center;padding:32px;color:#94a3b8;">Loading…</td></tr>
+                <tr><td colspan="11" style="text-align:center;padding:32px;color:#94a3b8;">Loading…</td></tr>
             </tbody>
         </table>
 
@@ -340,7 +341,7 @@
                 render();
             } catch (e) {
                 $('part-tbody').innerHTML =
-                  `<tr><td colspan="10" style="text-align:center;padding:32px;color:#ef4444;">Failed to load: ${escapeHtml(e.message)}</td></tr>`;
+                  `<tr><td colspan="11" style="text-align:center;padding:32px;color:#ef4444;">Failed to load: ${escapeHtml(e.message)}</td></tr>`;
             }
         }
 
@@ -392,6 +393,17 @@
                     }
                     return sortDir === 'asc' ? av - bv : bv - av;
                 }
+                // Date columns: null sorts to the END regardless of direction
+                // (players with no last/next event shouldn't take the top spot
+                // when scanning for "who's playing soonest" or "who played most recently").
+                if (sortKey === 'last_event_date' || sortKey === 'next_event_date') {
+                    if (av == null && bv == null) return 0;
+                    if (av == null) return 1;
+                    if (bv == null) return -1;
+                    if (av < bv) return sortDir === 'asc' ? -1 : 1;
+                    if (av > bv) return sortDir === 'asc' ?  1 : -1;
+                    return 0;
+                }
                 av = (av || '').toString().toLowerCase();
                 bv = (bv || '').toString().toLowerCase();
                 if (av < bv) return sortDir === 'asc' ? -1 : 1;
@@ -422,7 +434,7 @@
 
             const tbody = $('part-tbody');
             if (!viewRows.length) {
-                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:#94a3b8;">No players match your filters.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:#94a3b8;">No players match your filters.</td></tr>';
                 $('row-count').textContent = '0 of ' + allRows.length;
                 updateSelectionBar();
                 return;
@@ -435,19 +447,16 @@
                 const nameCell = r.name
                     ? `<a class="player-link" href="/customers?name=${encodeURIComponent(r.name)}" title="Open ${escapeHtml(r.name)} in Customers">${escapeHtml(r.name)}</a>`
                     : '—';
-                let lastPlayedCell;
-                if (r.last_event_date) {
-                    const dateLine = escapeHtml(r.last_event_date);
-                    if (r.last_event_name) {
-                        const href = `/events?item=${encodeURIComponent(r.last_event_name)}`;
-                        const ev = escapeHtml(r.last_event_name);
-                        lastPlayedCell = `${dateLine}<br><a class="event-link" href="${href}" title="Open ${ev} in Events">${ev}</a>`;
-                    } else {
-                        lastPlayedCell = dateLine;
-                    }
-                } else {
-                    lastPlayedCell = '—';
-                }
+                const eventCellHtml = (date, name) => {
+                    if (!date) return '—';
+                    const dateLine = escapeHtml(date);
+                    if (!name) return dateLine;
+                    const href = `/events?item=${encodeURIComponent(name)}`;
+                    const ev = escapeHtml(name);
+                    return `${dateLine}<br><a class="event-link" href="${href}" title="Open ${ev} in Events">${ev}</a>`;
+                };
+                const lastPlayedCell = eventCellHtml(r.last_event_date, r.last_event_name);
+                const nextEventCell  = eventCellHtml(r.next_event_date, r.next_event_name);
                 return `<tr class="${cls}" data-id="${r.customer_id}">
                     <td class="center"><input type="checkbox" class="row-check" ${selected.has(r.customer_id) ? 'checked' : ''}></td>
                     <td>${nameCell}</td>
@@ -455,6 +464,7 @@
                     <td><span class="status-pill ${statusClass(r.status)}">${escapeHtml(r.status || '—')}</span></td>
                     <td>${lastPlayedCell}</td>
                     <td class="num">${days}</td>
+                    <td>${nextEventCell}</td>
                     <td class="num">${r.plays_12mo || 0}</td>
                     <td class="num">${r.plays_prior_12mo || 0}</td>
                     <td class="center">${trendCell(r.trend, r.trend_delta || 0)}</td>
@@ -526,7 +536,16 @@
             th.addEventListener('click', () => {
                 const k = th.dataset.sort;
                 if (sortKey === k) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-                else { sortKey = k; sortDir = (k === 'name' || k === 'chapter' || k === 'status') ? 'asc' : 'desc'; }
+                else {
+                    sortKey = k;
+                    // Defaults: text columns asc; next_event_date asc (soonest first);
+                    // everything else desc (worst dormancy / highest counts on top).
+                    if (k === 'name' || k === 'chapter' || k === 'status' || k === 'next_event_date') {
+                        sortDir = 'asc';
+                    } else {
+                        sortDir = 'desc';
+                    }
+                }
                 render();
             });
         });

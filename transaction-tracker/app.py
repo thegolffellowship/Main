@@ -7731,23 +7731,22 @@ def _participation_event_filter_sql(alias: str = "i") -> str:
 def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
     """Return one row per active customer with last-event + frequency stats.
 
-    "Played" means the *event date*, not the purchase date — joined from the
-    events table via items.item_name. When no matching events row exists
-    (legacy/unmigrated event), order_date is used as a fallback so the player
-    isn't silently dropped. Future-dated events (registered but not yet played)
-    are excluded from both last_event_date and the 12-month rolling counts.
+    "Played" requires an actual event date — items.item_name must join to a
+    row in the events table that has a non-null event_date <= today. Items
+    with no matching events row are silently dropped from the play counts
+    (rather than falling back to order_date, which makes purchase timing
+    masquerade as play timing). The price of that strictness is some legacy
+    items don't count; the alternative was showing purchase dates as if
+    they were play dates and letting future registrations look like recent
+    plays — which they aren't.
+
+    next_event is the soonest upcoming registration (events.event_date >
+    today) per customer, surfaced as its own column so a player who's
+    re-engaged after a long dormancy is visibly distinct from one who hasn't.
     """
     today = today_central_str()
     ev = _participation_event_filter_sql("i")
 
-    # Canonical status = latest customer_statuses row (joined to statuses.status_name),
-    # falling back to current_player_status. Excludes 'former' / 'expired_member' /
-    # 'inactive' (those are FORMER in the UI). 'active_member', 'member_plus',
-    # 'active_guest', 'first_timer', or a non-former customer_statuses row passes.
-    #
-    # Note on `played_date`: COALESCE(events.event_date, items.order_date). The
-    # LEFT JOIN keeps items that have no matching events row (legacy data /
-    # one-off items), and order_date is the best fallback signal we have.
     rows = conn.execute(
         f"""
         WITH latest_status AS (
@@ -7767,52 +7766,68 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
              WHERE ce.is_primary = 1
              GROUP BY ce.customer_id
         ),
-        last_event_per_customer AS (
-            -- One row per (customer, played_date) so we can join the actual
-            -- item_name of the most recent play back in without breaking the
-            -- GROUP BY. We compute MAX(played_date) then pick any row matching
-            -- it (ties broken by items.id DESC = most recently inserted).
+        played_items AS (
+            -- Every items row that joins to an events row with a known,
+            -- non-future event_date. This is the strict definition of
+            -- "played" — items without a matching events row are dropped.
             SELECT i.customer_id,
-                   COALESCE(e.event_date, i.order_date) AS played_date,
+                   e.event_date AS played_date,
                    i.item_name,
-                   i.id AS item_id
+                   i.id         AS item_id
               FROM items i
-              LEFT JOIN events e ON e.item_name = i.item_name
+              JOIN events e ON e.item_name = i.item_name
              WHERE {ev}
-               AND COALESCE(e.event_date, i.order_date) <= DATE(?)
+               AND e.event_date IS NOT NULL
+               AND e.event_date <= DATE(?)
+        ),
+        upcoming_items AS (
+            -- Every registration whose event_date is strictly in the future.
+            SELECT i.customer_id,
+                   e.event_date AS upcoming_date,
+                   i.item_name,
+                   i.id         AS item_id
+              FROM items i
+              JOIN events e ON e.item_name = i.item_name
+             WHERE {ev}
+               AND e.event_date IS NOT NULL
+               AND e.event_date > DATE(?)
         ),
         last_event AS (
-            SELECT lpc.customer_id,
-                   MAX(lpc.played_date) AS last_event_date,
-                   COUNT(*)             AS plays_lifetime,
-                   -- Pull the item_name (and id, for href) from the row that
-                   -- actually has the MAX(played_date). Tie-break: the row
-                   -- with the highest items.id, i.e. the most recently
-                   -- inserted, so multi-event days resolve deterministically.
-                   (SELECT lpc2.item_name FROM last_event_per_customer lpc2
-                     WHERE lpc2.customer_id = lpc.customer_id
-                     ORDER BY lpc2.played_date DESC, lpc2.item_id DESC
+            SELECT pi.customer_id,
+                   MAX(pi.played_date) AS last_event_date,
+                   COUNT(*)            AS plays_lifetime,
+                   -- Pick the item_name from the row that owns MAX(played_date);
+                   -- tie-break by items.id DESC so multi-event days resolve
+                   -- to the most recently inserted registration.
+                   (SELECT pi2.item_name FROM played_items pi2
+                     WHERE pi2.customer_id = pi.customer_id
+                     ORDER BY pi2.played_date DESC, pi2.item_id DESC
                      LIMIT 1) AS last_event_name
-              FROM last_event_per_customer lpc
-             GROUP BY lpc.customer_id
+              FROM played_items pi
+             GROUP BY pi.customer_id
+        ),
+        next_event AS (
+            SELECT ui.customer_id,
+                   MIN(ui.upcoming_date) AS next_event_date,
+                   (SELECT ui2.item_name FROM upcoming_items ui2
+                     WHERE ui2.customer_id = ui.customer_id
+                     ORDER BY ui2.upcoming_date ASC, ui2.item_id ASC
+                     LIMIT 1) AS next_event_name
+              FROM upcoming_items ui
+             GROUP BY ui.customer_id
         ),
         plays_12 AS (
-            SELECT i.customer_id, COUNT(*) AS n
-              FROM items i
-              LEFT JOIN events e ON e.item_name = i.item_name
-             WHERE {ev}
-               AND COALESCE(e.event_date, i.order_date) >= DATE(?, '-12 months')
-               AND COALESCE(e.event_date, i.order_date) <= DATE(?)
-             GROUP BY i.customer_id
+            SELECT pi.customer_id, COUNT(*) AS n
+              FROM played_items pi
+             WHERE pi.played_date >= DATE(?, '-12 months')
+             GROUP BY pi.customer_id
         ),
         plays_prior_12 AS (
-            SELECT i.customer_id, COUNT(*) AS n
-              FROM items i
-              LEFT JOIN events e ON e.item_name = i.item_name
-             WHERE {ev}
-               AND COALESCE(e.event_date, i.order_date) >= DATE(?, '-24 months')
-               AND COALESCE(e.event_date, i.order_date) <  DATE(?, '-12 months')
-             GROUP BY i.customer_id
+            SELECT pi.customer_id, COUNT(*) AS n
+              FROM played_items pi
+             WHERE pi.played_date >= DATE(?, '-24 months')
+               AND pi.played_date <  DATE(?, '-12 months')
+             GROUP BY pi.customer_id
         )
         SELECT
             c.customer_id,
@@ -7823,6 +7838,8 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
             pe.email AS email,
             le.last_event_date,
             le.last_event_name,
+            ne.next_event_date,
+            ne.next_event_name,
             COALESCE(le.plays_lifetime, 0) AS plays_lifetime,
             COALESCE(p12.n, 0)             AS plays_12mo,
             COALESCE(pp12.n, 0)            AS plays_prior_12mo
@@ -7830,6 +7847,7 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
           LEFT JOIN latest_status   ls   ON ls.customer_id   = c.customer_id
           LEFT JOIN primary_email   pe   ON pe.customer_id   = c.customer_id
           LEFT JOIN last_event      le   ON le.customer_id   = c.customer_id
+          LEFT JOIN next_event      ne   ON ne.customer_id   = c.customer_id
           LEFT JOIN plays_12        p12  ON p12.customer_id  = c.customer_id
           LEFT JOIN plays_prior_12  pp12 ON pp12.customer_id = c.customer_id
          WHERE COALESCE(c.account_status, 'active') = 'active'

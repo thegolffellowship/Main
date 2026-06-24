@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.16.3";
+window.TGF_VERSION = "2.16.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.4",
+    date: "2026-06-24",
+    changes: [
+      "Participation: Last Played now strictly uses events.event_date (INNER JOIN events on item_name, event_date IS NOT NULL, event_date <= today). The previous COALESCE-to-order_date fallback let purchase dates masquerade as play dates AND let future-dated registrations leak through (their order_date was already in the past). The price of strictness: legacy items with no matching events row don't count — the fix is to backfill those into events, not to silently fake the date.",
+      "Participation: new Next Event column shows each customer's soonest upcoming registration — MIN(events.event_date) where event_date > today, with the matching item_name. Same date+name+link cell as Last Played; default sort on the column header is ascending (soonest first); nulls always go to the end. Makes re-engaged players visibly distinct from dormant ones in one glance.",
+      "Events: /events?item=<name> deep-links now resolve past events too. Previously the auto-expand searched the currently-filtered view (defaults to Upcoming), so a Last-Played link from Participation hit the Events tab but found nothing to expand. The handler now searches the full allEvents list and flips eventTimeFilter to 'past' or 'upcoming' before calling toggleEventDetail so the row exists in the rendered DOM.",
+    ],
+  },
   {
     version: "2.16.3",
     date: "2026-06-24",

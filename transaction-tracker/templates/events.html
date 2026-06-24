@@ -2468,13 +2468,28 @@
         // Render mobile view
         renderEventsMobile(filtered);
 
-        // Check if URL has ?item= to auto-expand
+        // Check if URL has ?item= to auto-expand. Search the FULL events list
+        // (not just the currently-filtered view) so a past-event deep-link
+        // from /participation still resolves — and flip the time filter to
+        // 'past' first if the matched event isn't in the current bucket, so
+        // toggleEventDetail can find its row in the rendered DOM.
         const params = new URLSearchParams(window.location.search);
         const itemParam = params.get("item");
         if (itemParam && expandedEventId === null) {
-            const match = filtered.find(e => e.item_name === itemParam);
-            if (match) {
-                toggleEventDetail(match.id);
+            const fullMatch = allEvents.find(e => e.item_name === itemParam);
+            if (fullMatch) {
+                const today = new Date().toISOString().split("T")[0];
+                const isPast = !fullMatch.event_date || fullMatch.event_date < today;
+                const desiredFilter = isPast ? "past" : "upcoming";
+                if (eventTimeFilter !== desiredFilter && eventTimeFilter !== "all") {
+                    eventTimeFilter = desiredFilter;
+                    document.querySelectorAll("[data-ev-filter]").forEach(b =>
+                        b.classList.toggle("active", b.dataset.evFilter === desiredFilter));
+                    renderEvents();         // re-render in the right bucket
+                    toggleEventDetail(fullMatch.id);
+                    return;
+                }
+                toggleEventDetail(fullMatch.id);
             }
         }
     }

@@ -16,14 +16,17 @@ The single source-of-truth for this filter is `_participation_event_filter_sql(a
 
 ### "When" they played = event date, not purchase date
 
-The "played date" for a row is `COALESCE(events.event_date, items.order_date)`:
+The "played date" is `events.event_date`, period. The query uses **INNER JOIN events ON items.item_name = events.item_name** with `events.event_date IS NOT NULL` and `events.event_date <= today`.
 
-- Join `items LEFT JOIN events ON items.item_name = events.item_name` (item_name is the canonical link key — events.item_name is UNIQUE).
-- When a matching events row exists, use its `event_date` — this is the actual day the round was played.
-- When no events row matches (legacy / one-off items), fall back to `items.order_date` so the player isn't silently dropped from the report.
-- **Future-dated events are excluded** from both `last_event_date` and the 12-month rolling counts (`COALESCE(...) <= today`). A player who registered for next month's event has not yet played; their registration shouldn't suppress an otherwise-real dormancy signal.
+- An item with no matching events row is silently dropped from play counts. The earlier design fell back to `items.order_date`, but that let purchase timing masquerade as play timing — a player who pre-bought May's event in February would have shown as a Feb play. Worse, when the fallback fired, future-dated registrations weren't filtered out (their order_date was in the past), so upcoming events leaked into "Last Played".
+- The price of strictness: legacy items without an events row don't count. The fix is to backfill those into the `events` table, not to silently use purchase dates.
+- Future-dated registrations now flow into the **`next_event`** CTE instead (see below).
 
-Using `order_date` instead would be misleading whenever there's a long gap between buying a ticket and actually playing it — e.g. a player who pre-bought May's event in February would look like a Feb play, masking three months of real dormancy.
+## "Next Event" column
+
+A separate column shows each customer's **soonest upcoming registration** — `MIN(events.event_date)` where `event_date > today`, with the matching `item_name` so the same date+name+link cell renders as Last Played. A player who's re-engaged after a long dormancy is visibly distinct in the table from one who hasn't: their Days-Since may be large but their Next Event populated.
+
+Default sort on the Next Event header is ascending (soonest first); nulls (no upcoming registration) always sort to the end regardless of direction.
 
 ## Audience
 
