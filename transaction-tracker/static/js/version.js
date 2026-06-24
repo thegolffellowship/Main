@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.1";
+window.TGF_VERSION = "2.16.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.2",
+    date: "2026-06-24",
+    changes: [
+      "Participation: Last Played + the 12-month / prior 12-month frequency counts now use the actual event date (when the round was played), not the purchase date (when the registration was bought). Joins items to the events table via items.item_name = events.item_name and uses COALESCE(events.event_date, items.order_date) so legacy items with no matching events row still appear with their order_date as a fallback. Future-dated events are now excluded — a player who pre-registered for next month's event no longer looks like a recent play, so an otherwise-real dormancy signal isn't masked. Previously, a player who bought a May event in February would show February as Last Played; now they show May (and only after May actually happens).",
+    ],
+  },
   {
     version: "2.16.1",
     date: "2026-06-24",

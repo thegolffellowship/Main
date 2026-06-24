@@ -14,6 +14,17 @@ A row in `items` qualifies as an event participation when ALL of these hold:
 
 The single source-of-truth for this filter is `_participation_event_filter_sql(alias)` in `app.py`. Reuse it if you add another participation-style endpoint so the definition can't drift.
 
+### "When" they played = event date, not purchase date
+
+The "played date" for a row is `COALESCE(events.event_date, items.order_date)`:
+
+- Join `items LEFT JOIN events ON items.item_name = events.item_name` (item_name is the canonical link key — events.item_name is UNIQUE).
+- When a matching events row exists, use its `event_date` — this is the actual day the round was played.
+- When no events row matches (legacy / one-off items), fall back to `items.order_date` so the player isn't silently dropped from the report.
+- **Future-dated events are excluded** from both `last_event_date` and the 12-month rolling counts (`COALESCE(...) <= today`). A player who registered for next month's event has not yet played; their registration shouldn't suppress an otherwise-real dormancy signal.
+
+Using `order_date` instead would be misleading whenever there's a long gap between buying a ticket and actually playing it — e.g. a player who pre-bought May's event in February would look like a Feb play, masking three months of real dormancy.
+
 ## Audience
 
 Every customer where:
@@ -26,7 +37,7 @@ Surface labels are mapped in `_get_participation_rows`'s `label_map`:
 
 ## Frequency + trend math
 
-- `plays_12mo` = participations with `order_date >= DATE(today_central, '-12 months')`.
+- `plays_12mo` = participations whose **played date** (event_date when available, order_date otherwise) is in `[today_central − 12 months, today_central]`.
 - `plays_prior_12mo` = participations in `[today − 24 months, today − 12 months)` (excludes the most recent 12, so this is a true prior-period comparison, not running-total).
 - `trend` is `'up' | 'down' | 'flat' | 'new'`. `'new'` is reserved for `plays_prior_12mo == 0 AND plays_12mo > 0` so the UI can highlight first-year players differently from a year-over-year increase.
 - `trend_delta` = `plays_12mo - plays_prior_12mo` (signed integer).
