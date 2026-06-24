@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.15.28";
+window.TGF_VERSION = "2.15.29";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.29",
+    date: "2026-06-24",
+    changes: [
+      "Fix: when a customer paid for a TGF MEMBERSHIP renewal their Renewal date flipped to the new expiration (green) but their status badge stayed FORMER until the next daily scheduler run or app boot. record_renewal_for_item was opening the new term row in customer_memberships but never invoking sync_player_status_with_terms, so current_player_status stayed at expired_member and the most recent customer_statuses row stayed at 'former' — and deriveStatus() in the Customers list reads that history row first. record_renewal_for_item now calls sync_player_status_with_terms immediately after inserting the term, which both flips current_player_status to active_member and writes a fresh 'member' history row so the MEMBER badge appears the moment the order is parsed.",
+    ],
+  },
   {
     version: "2.15.28",
     date: "2026-06-23",
