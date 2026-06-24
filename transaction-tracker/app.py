@@ -7729,7 +7729,14 @@ def _participation_event_filter_sql(alias: str = "i") -> str:
 
 
 def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
-    """Return one row per active customer with last-event + frequency stats."""
+    """Return one row per active customer with last-event + frequency stats.
+
+    "Played" means the *event date*, not the purchase date — joined from the
+    events table via items.item_name. When no matching events row exists
+    (legacy/unmigrated event), order_date is used as a fallback so the player
+    isn't silently dropped. Future-dated events (registered but not yet played)
+    are excluded from both last_event_date and the 12-month rolling counts.
+    """
     today = today_central_str()
     ev = _participation_event_filter_sql("i")
 
@@ -7737,6 +7744,10 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
     # falling back to current_player_status. Excludes 'former' / 'expired_member' /
     # 'inactive' (those are FORMER in the UI). 'active_member', 'member_plus',
     # 'active_guest', 'first_timer', or a non-former customer_statuses row passes.
+    #
+    # Note on `played_date`: COALESCE(events.event_date, items.order_date). The
+    # LEFT JOIN keeps items that have no matching events row (legacy data /
+    # one-off items), and order_date is the best fallback signal we have.
     rows = conn.execute(
         f"""
         WITH latest_status AS (
@@ -7758,25 +7769,30 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
         ),
         last_event AS (
             SELECT i.customer_id,
-                   MAX(i.order_date) AS last_event_date,
-                   COUNT(*)          AS plays_lifetime
+                   MAX(COALESCE(e.event_date, i.order_date)) AS last_event_date,
+                   COUNT(*)                                  AS plays_lifetime
               FROM items i
+              LEFT JOIN events e ON e.item_name = i.item_name
              WHERE {ev}
+               AND COALESCE(e.event_date, i.order_date) <= DATE(?)
              GROUP BY i.customer_id
         ),
         plays_12 AS (
             SELECT i.customer_id, COUNT(*) AS n
               FROM items i
+              LEFT JOIN events e ON e.item_name = i.item_name
              WHERE {ev}
-               AND i.order_date >= DATE(?, '-12 months')
+               AND COALESCE(e.event_date, i.order_date) >= DATE(?, '-12 months')
+               AND COALESCE(e.event_date, i.order_date) <= DATE(?)
              GROUP BY i.customer_id
         ),
         plays_prior_12 AS (
             SELECT i.customer_id, COUNT(*) AS n
               FROM items i
+              LEFT JOIN events e ON e.item_name = i.item_name
              WHERE {ev}
-               AND i.order_date >= DATE(?, '-24 months')
-               AND i.order_date <  DATE(?, '-12 months')
+               AND COALESCE(e.event_date, i.order_date) >= DATE(?, '-24 months')
+               AND COALESCE(e.event_date, i.order_date) <  DATE(?, '-12 months')
              GROUP BY i.customer_id
         )
         SELECT
@@ -7801,7 +7817,7 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
                ('former', 'expired_member', 'inactive')
          ORDER BY le.last_event_date IS NULL, le.last_event_date DESC, c.last_name COLLATE NOCASE
         """,
-        (today, today, today),
+        (today, today, today, today, today),
     ).fetchall()
 
     # Map current_player_status / status_name → user-facing label.
