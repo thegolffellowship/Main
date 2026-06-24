@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.15.29";
+window.TGF_VERSION = "2.15.30";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.15.30",
+    date: "2026-06-24",
+    changes: [
+      "Fix: multi-item orders bought for several players were attributed to the wrong person in the Transactions list. A 3-spot Kissing Tree order paid by Doug Hamilton with partners Casey Purvis and Chris Best displayed as \"Chris Best — 3 items — $657.00\" because the order-group summary used group[0].customer — i.e. whichever row sorted alphabetically first. The parser's _expand_quantity_rows reliably marks the buyer: only the buyer's row keeps customer_email and the extras get a 'Purchased by <buyer>' note. dashboard.js now uses a pickBuyerRow() helper that prefers the row with customer_email set and without a Purchased-by note, then falls back to the first non-extra row — applied to both desktop and mobile order-group renderers so the order header correctly reads the buyer's name (and order date/time) in every multi-player transaction.",
+    ],
+  },
   {
     version: "2.15.29",
     date: "2026-06-24",

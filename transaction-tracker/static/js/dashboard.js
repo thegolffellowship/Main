@@ -440,7 +440,7 @@ function couponTag(row) {
 }
 
 function formatOrderDateTime(row) {
-    const date = row.order_date || "\u2014";
+    const date = row.order_date || "—";
     if (!row.order_time) return date;
     // Convert HH:MM:SS or HH:MM to 12-hour format
     const parts = row.order_time.split(":");
@@ -450,6 +450,24 @@ function formatOrderDateTime(row) {
     if (h === 0) h = 12;
     else if (h > 12) h -= 12;
     return `${date} ${h}:${m} ${ampm}`;
+}
+
+// Identify the buyer (purchaser) row inside a multi-item order group.
+// Per the parser's _expand_quantity_rows semantics, only the buyer's row
+// retains a populated customer_email; extra rows get email cleared AND a
+// "Purchased by <buyer>" note. We prefer email-set rows, then rows without
+// a Purchased-by note, then fall back to first. This stops the order
+// header attributing a multi-player order to whichever playing partner
+// happens to sort first alphabetically (e.g. a 3-player Hamilton order
+// showing up as "Chris Best" because Best comes before Hamilton).
+function pickBuyerRow(group) {
+    if (!group || !group.length) return null;
+    const isExtra = (r) => /^Purchased by /i.test(r.notes || "");
+    return (
+        group.find(r => (r.customer_email || "").trim() && !isExtra(r)) ||
+        group.find(r => !isExtra(r)) ||
+        group[0]
+    );
 }
 
 function cellForChildPayment(key, row) {
@@ -690,8 +708,9 @@ function renderMobileCards(items) {
             seen.add(oid);
             const group = orderGroups.get(oid).filter(r => !childIds.has(r.id));
             const total = group.reduce((s, r) => s + parsePrice(r.item_price), 0);
-            const customer = group[0].customer || "Unknown";
-            const date = formatOrderDateTime(group[0]);
+            const buyerRow = pickBuyerRow(group);
+            const customer = (buyerRow && buyerRow.customer) || "Unknown";
+            const date = formatOrderDateTime(buyerRow || group[0]);
             const names = group.map(r => r.item_name || "\u2014").join(", ");
             const truncNames = names.length > 50 ? names.slice(0, 47) + "..." : names;
 
@@ -799,8 +818,9 @@ function renderTable(items) {
             const total = group.reduce((s, r) => s + parsePrice(r.item_price), 0);
             const names = group.map(r => r.item_name || "\u2014").join(", ");
             const truncNames = names.length > 60 ? names.slice(0, 57) + "..." : names;
-            const customer = group[0].customer || "Unknown";
-            const date = formatOrderDateTime(group[0]);
+            const buyerRow = pickBuyerRow(group);
+            const customer = (buyerRow && buyerRow.customer) || "Unknown";
+            const date = formatOrderDateTime(buyerRow || group[0]);
 
             // Summary row
             html += `<tr class="order-summary" data-order-id="${escapeHtml(oid)}">
