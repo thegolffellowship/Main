@@ -40,6 +40,11 @@
             color: #1e40af; text-decoration: none; font-weight: 600;
         }
         .part-table a.player-link:hover { text-decoration: underline; }
+        .part-table a.event-link {
+            display: inline-block; font-size: 0.78em; color: #475569;
+            text-decoration: none; margin-top: 1px;
+        }
+        .part-table a.event-link:hover { color: #1e40af; text-decoration: underline; }
 
         .badge-dormant {
             display: inline-block; padding: 2px 8px; border-radius: 99px;
@@ -430,12 +435,25 @@
                 const nameCell = r.name
                     ? `<a class="player-link" href="/customers?name=${encodeURIComponent(r.name)}" title="Open ${escapeHtml(r.name)} in Customers">${escapeHtml(r.name)}</a>`
                     : '—';
+                let lastPlayedCell;
+                if (r.last_event_date) {
+                    const dateLine = escapeHtml(r.last_event_date);
+                    if (r.last_event_name) {
+                        const href = `/events?item=${encodeURIComponent(r.last_event_name)}`;
+                        const ev = escapeHtml(r.last_event_name);
+                        lastPlayedCell = `${dateLine}<br><a class="event-link" href="${href}" title="Open ${ev} in Events">${ev}</a>`;
+                    } else {
+                        lastPlayedCell = dateLine;
+                    }
+                } else {
+                    lastPlayedCell = '—';
+                }
                 return `<tr class="${cls}" data-id="${r.customer_id}">
                     <td class="center"><input type="checkbox" class="row-check" ${selected.has(r.customer_id) ? 'checked' : ''}></td>
                     <td>${nameCell}</td>
                     <td>${escapeHtml(r.chapter || '—')}</td>
                     <td><span class="status-pill ${statusClass(r.status)}">${escapeHtml(r.status || '—')}</span></td>
-                    <td>${escapeHtml(r.last_event_date || '—')}</td>
+                    <td>${lastPlayedCell}</td>
                     <td class="num">${days}</td>
                     <td class="num">${r.plays_12mo || 0}</td>
                     <td class="num">${r.plays_prior_12mo || 0}</td>
