@@ -234,6 +234,14 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 ### Order grouping
 - Multi-item orders (same `order_id`) display as collapsible groups
 - Summary row shows item count and total; expands to show individual items
+- The summary's customer name comes from `pickBuyerRow(group)` in `dashboard.js`
+  — NOT `group[0].customer`. Per the parser's `_expand_quantity_rows`, only
+  the buyer's row keeps `customer_email`; extras have it cleared and get a
+  `"Purchased by <buyer>"` note. `pickBuyerRow` picks the row with
+  `customer_email` set and no Purchased-by note, then falls back to first
+  non-extra, then first row. Using `group[0]` directly would attribute the
+  whole order to whichever playing partner happened to sort first
+  alphabetically (e.g. a 3-spot Hamilton order shown as "Chris Best").
 
 ## Sticky Navigation
 
