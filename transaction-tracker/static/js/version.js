@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.5";
+window.TGF_VERSION = "2.16.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.6",
+    date: "2026-07-01",
+    changes: [
+      "Fix: the Withdraw Player modal's Credit Components (Included Games, Net Games, Gross Games) were computed from the live GAMES prize matrix — a share of the current pot divided by however many net/gross players happen to be registered right now. That matrix tracks payouts to game winners, not what the withdrawing player actually paid at registration, so the numbers drifted from the real charge (e.g. Included Games showed $12 instead of the event's configured $14, Net/Gross Games showed $40 instead of the flat $30 per-game add-on) and kept shifting as other players were added or withdrawn from the same event. Included Games now reads the event's configured Inc. Games amount (holes-aware for 9/18 Combo events), and Net/Gross Games now use the same flat per-game add-on (getPerGameAddon) as the pricing calculator and Apply Credit modal — so all three components match what was actually charged and sum back to the player's price.",
+    ],
+  },
   {
     version: "2.16.5",
     date: "2026-06-24",
