@@ -7344,48 +7344,47 @@
 
     function calculateWdComponents(item, eventName) {
         const ev = allEvents.find(e => e.item_name === eventName);
-        const holes = extractHolesType(eventName, ev && ev.format);
+        if (!ev) return null;
+        const format = ev.format || "";
+        const holes = extractHolesType(eventName, format);
         if (!holes) return null;
-        const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
-        if (!matrix) return null;
+        const isCombo = format.toLowerCase().includes("combo") || format.toLowerCase().includes("9/18");
 
-        // Use per-event pricing if set, otherwise fall back to standard defaults
-        const tgfEventMarkup = (ev && ev.tgf_markup != null) ? ev.tgf_markup : (holes === 9 ? 8 : 15);
-        const tgfGamesMarkup = (ev && ev.side_game_fee != null) ? ev.side_game_fee : (holes === 9 ? 3 : 4);
+        // Use per-event pricing if set (holes-aware for 9/18 Combo events), otherwise
+        // fall back to the same PRICING_DEFAULTS used by the pricing preview/calculator.
+        let courseFee, tgfEventMarkup, includedGames;
+        if (isCombo && holes === 18) {
+            courseFee = ev.course_cost_18 != null ? ev.course_cost_18 : ev.course_cost;
+            tgfEventMarkup = ev.tgf_markup_18 != null ? ev.tgf_markup_18 : PRICING_DEFAULTS["9/18 Combo"].tgf_markup_18;
+            includedGames = ev.side_game_fee_18 != null ? ev.side_game_fee_18 : PRICING_DEFAULTS["9/18 Combo"].side_game_fee_18;
+        } else if (isCombo || holes === 9) {
+            courseFee = ev.course_cost_9 != null ? ev.course_cost_9 : ev.course_cost;
+            tgfEventMarkup = ev.tgf_markup_9 != null ? ev.tgf_markup_9 : PRICING_DEFAULTS["9/18 Combo"].tgf_markup_9;
+            includedGames = ev.side_game_fee_9 != null ? ev.side_game_fee_9 : PRICING_DEFAULTS["9/18 Combo"].side_game_fee_9;
+        } else {
+            const defaults = PRICING_DEFAULTS[format] || PRICING_DEFAULTS["18 Holes"];
+            courseFee = ev.course_cost;
+            tgfEventMarkup = ev.tgf_markup != null ? ev.tgf_markup : defaults.tgf_markup;
+            includedGames = ev.side_game_fee != null ? ev.side_game_fee : defaults.side_game_fee;
+        }
 
-        // Get current stats for the event (before WD)
-        const registrants = getRegistrants(eventName);
-        const stats = computeGameStats(registrants, eventName);
-        const totalPC = stats.players;
-        const netPC = stats.net;
-        const grossPC = stats.gross;
-
-        const gEvent = matrix[String(totalPC)];
-        const gNet = matrix[String(netPC)];
-        const gGross = matrix[String(grossPC)];
-
-        // Exclude hole-in-one from included games calculation
-        const wdHio = (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") ? Number(gEvent.holeInOne) || 0 : 0;
-        const includedGames = (gEvent && totalPC > 0)
-            ? Math.round((gEvent.eventTotalPot - wdHio) / totalPC * 100) / 100 : 0;
-
+        // Net/Gross games are a flat per-game add-on charged at registration (same
+        // amount used by the pricing calculator/apply-credit modal), NOT a share of
+        // the live GAMES prize matrix — that matrix tracks payouts to winners, not
+        // what the player paid to register.
+        const addon = getPerGameAddon(format, ev.per_game_addon);
         const gameType = classifyGameType(item.side_games);
         let netGames = 0, grossGames = 0;
-
-        if ((gameType === "NET" || gameType === "BOTH") && gNet && netPC > 0) {
-            netGames = Math.round(gNet.netTotalPot / netPC * 100) / 100 + tgfGamesMarkup;
-        }
-        if ((gameType === "GROSS" || gameType === "BOTH") && gGross && grossPC > 0) {
-            grossGames = Math.round(gGross.grossTotalPot / grossPC * 100) / 100 + tgfGamesMarkup;
-        }
+        if (gameType === "NET" || gameType === "BOTH") netGames = addon;
+        if (gameType === "GROSS" || gameType === "BOTH") grossGames = addon;
 
         const itemPrice = parseFloat((item.item_price || "0").replace(/[^0-9.]/g, ""));
-        // Use per-event course_cost if set, otherwise reverse-calculate from item price
-        const courseFee = (ev && ev.course_cost != null)
-            ? ev.course_cost
-            : Math.max(0, Math.round(
+        // Reverse-calculate course fee from item price only if the event has no configured cost
+        if (courseFee == null) {
+            courseFee = Math.max(0, Math.round(
                 (itemPrice - includedGames - netGames - grossGames - tgfEventMarkup) * 100
             ) / 100);
+        }
 
         const components = [];
         components.push({ key: "course_fee", label: "Course Fee", amount: courseFee });

@@ -545,6 +545,21 @@ Cards display the **event charge** (whole dollars, before tx fee).
 | Course Cost | `course_cost` / `course_cost_9` / `course_cost_18` | From calculator |
 | Course Cost Breakdown | `course_cost_breakdown` / `_9` / `_18` | JSON of 5 line items |
 
+## Withdraw Player modal — Credit Components (v2.16.6+)
+
+`calculateWdComponents(item, eventName)` in `events.html` breaks a withdrawing player's
+price into checkbox line items (Course Fee, Included Games, TGF Markup, Net Games, Gross
+Games) so the admin can pick which parts to credit back. It reads the **same frozen
+per-event pricing fields** as the calculator above (`course_cost*`, `tgf_markup*`,
+`side_game_fee*`, `per_game_addon`, holes-aware for 9/18 Combo) and reuses
+`getPerGameAddon(format, override)` for the Net/Gross Games line items — it does **not**
+read the Side Games Matrix (`GAMES_MATRIX_9`/`_18`, see below). That matrix tracks prize
+*payouts to game winners*, sized by however many net/gross players are registered right
+now; it has no relationship to what the withdrawing player was actually *charged* at
+registration, and recomputing off it drifts every time another player registers or
+withdraws from the same event. If a future change needs the credit total to reconcile
+against `item_price`, adjust the pricing fields/`getPerGameAddon`, not the games matrix.
+
 # Side Games Matrix
 
 ## Persistence
