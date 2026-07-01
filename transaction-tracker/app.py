@@ -3546,11 +3546,19 @@ def api_customers_canonical():
 def api_update_customer():
     """Update personal info fields across all items for a customer.
 
-    Body: { customer_name: str, fields: {customer_email, customer_phone, chapter, ...} }
-    Updates every item row matching this customer name.
+    Body: { customer_name: str, customer_id?: int,
+            fields: {customer_email, customer_phone, chapter, ...} }
+    Updates every item row matching this customer name. customer_id, when
+    given, is used directly for the customers-table syncs (status, venmo,
+    chapter, etc.) instead of re-deriving it by name — see
+    update_customer_info() for why that re-derivation can miss.
     """
     data = request.get_json(force=True)
     customer_name = (data.get("customer_name") or "").strip()
+    try:
+        customer_id = int(data.get("customer_id")) if data.get("customer_id") else None
+    except (TypeError, ValueError):
+        customer_id = None
     fields = data.get("fields") or {}
     if not customer_name:
         return jsonify({"error": "customer_name is required"}), 400
@@ -3568,7 +3576,7 @@ def api_update_customer():
         return jsonify({"error": "No valid fields to update"}), 400
 
     try:
-        updated = update_customer_info(customer_name, safe)
+        updated = update_customer_info(customer_name, safe, customer_id=customer_id)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"status": "ok", "items_updated": updated})
@@ -3768,23 +3776,43 @@ def _public_page(title: str, body_html: str) -> str:
 @app.route("/api/customers/sync-roles", methods=["POST"])
 @require_role("admin")
 def api_sync_customer_roles():
-    """Replace all roles for a customer."""
+    """Replace all roles for a customer.
+
+    Body: { customer_name: str, customer_id?: int, roles: [...] }
+    customer_id, when given, is used directly instead of re-deriving it via
+    an exact first+last name match against the customers table — that match
+    misses for customers whose name doesn't split cleanly into two tokens
+    (middle names, suffixes) or who aren't in the customers table under that
+    exact spelling, silently 404ing a save the frontend already believed had
+    succeeded.
+    """
     from email_parser.database import _connect
     data = request.get_json(force=True)
     customer_name = (data.get("customer_name") or "").strip()
+    try:
+        customer_id = int(data.get("customer_id")) if data.get("customer_id") else None
+    except (TypeError, ValueError):
+        customer_id = None
     roles = data.get("roles", [])
     if not customer_name:
         return jsonify({"error": "customer_name required"}), 400
     valid_roles = {"golfer", "manager", "admin", "owner", "course_contact", "sponsor", "vendor"}
     roles = [r for r in roles if r in valid_roles]
     with _connect() as conn:
-        row = conn.execute(
-            "SELECT customer_id FROM customers WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)",
-            (customer_name,)
-        ).fetchone()
-        if not row:
-            return jsonify({"error": "Customer not found"}), 404
-        cid = row["customer_id"]
+        cid = None
+        if customer_id:
+            row = conn.execute(
+                "SELECT customer_id FROM customers WHERE customer_id = ?", (customer_id,)
+            ).fetchone()
+            cid = row["customer_id"] if row else None
+        if not cid:
+            row = conn.execute(
+                "SELECT customer_id FROM customers WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)",
+                (customer_name,)
+            ).fetchone()
+            if not row:
+                return jsonify({"error": "Customer not found"}), 404
+            cid = row["customer_id"]
         conn.execute("DELETE FROM customer_roles WHERE customer_id = ?", (cid,))
         for r in roles:
             conn.execute("INSERT OR IGNORE INTO customer_roles (customer_id, role_type) VALUES (?,?)", (cid, r))

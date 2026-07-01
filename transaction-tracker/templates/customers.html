@@ -989,7 +989,7 @@
                 </div>
             </div>` : ''}
             <div class="mc-actions" style="margin-top:0.5rem;">
-                <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.78rem; padding:0.35rem 0.8rem;">Save</button>
+                <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" data-customer-id="${customer.customer_id || ''}" style="font-size:0.78rem; padding:0.35rem 0.8rem;">Save</button>
             </div>
         </div>`;
     }
@@ -1188,6 +1188,7 @@
                     saveBtn.addEventListener("click", async (e) => {
                         e.stopPropagation();
                         const customerName = saveBtn.dataset.customerName;
+                        const customerId = saveBtn.dataset.customerId ? parseInt(saveBtn.dataset.customerId) : null;
                         const fields = {};
                         expandedCard.querySelectorAll(".cust-edit-input").forEach(inp => {
                             fields[inp.dataset.field] = inp.value.trim();
@@ -1198,7 +1199,7 @@
                             const resp = await fetch("/api/customers/update", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ customer_name: customerName, fields }),
+                                body: JSON.stringify({ customer_name: customerName, customer_id: customerId, fields }),
                             });
                             if (!resp.ok) {
                                 const data = await resp.json().catch(() => ({}));
@@ -1206,16 +1207,25 @@
                             }
                             // Sync roles separately
                             const roleCheckboxes = expandedCard.querySelectorAll(".cust-role-checkbox");
+                            let rolesFailed = null;
                             if (roleCheckboxes.length > 0) {
                                 const roles = Array.from(roleCheckboxes).filter(cb => cb.checked).map(cb => cb.dataset.role);
-                                await fetch("/api/customers/sync-roles", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ customer_name: customerName, roles }),
-                                });
-                                // Patch roles into local customer object so deriveStatus gets fresh data
-                                const _c = allCustomers.find(c => c.name === customerName);
-                                if (_c) _c.roles = roles;
+                                try {
+                                    const rolesResp = await fetch("/api/customers/sync-roles", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ customer_name: customerName, customer_id: customerId, roles }),
+                                    });
+                                    if (!rolesResp.ok) {
+                                        const rd = await rolesResp.json().catch(() => ({}));
+                                        throw new Error(rd.error || `Server returned ${rolesResp.status}`);
+                                    }
+                                    // Patch roles into local customer object so deriveStatus gets fresh data
+                                    const _c = allCustomers.find(c => c.name === customerName);
+                                    if (_c) _c.roles = roles;
+                                } catch (rolesErr) {
+                                    rolesFailed = rolesErr.message;
+                                }
                             }
                             saveBtn.textContent = "Saved!";
                             saveBtn.style.background = "#16a34a";
@@ -1229,6 +1239,7 @@
                                     saveBtn.style.background = "";
                                     saveBtn.disabled = false;
                                 }
+                                if (rolesFailed) alert("Info saved, but roles failed to save: " + rolesFailed);
                             }, 800);
                         } catch (err) {
                             alert("Failed to save: " + err.message);
@@ -1540,7 +1551,7 @@
         </div>`;
 
         html += `<div style="margin-top:0.6rem; display:flex; gap:0.4rem;">
-            <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Save</button>
+            <button type="button" class="btn btn-primary cust-save-info" data-customer-name="${escapeHtml(customer.name)}" data-customer-id="${customer.customer_id || ''}" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Save</button>
             <button type="button" class="btn btn-secondary cust-cancel-edit" style="font-size:0.75rem; padding:0.3rem 0.7rem;">Cancel</button>
         </div></div>`;
 
@@ -2401,6 +2412,7 @@
             saveBtn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const customerName = saveBtn.dataset.customerName;
+                const customerId = saveBtn.dataset.customerId ? parseInt(saveBtn.dataset.customerId) : null;
                 const fields = {};
                 container.querySelectorAll(".cust-edit-input").forEach(inp => {
                     fields[inp.dataset.field] = inp.value.trim();
@@ -2411,7 +2423,7 @@
                     const resp = await fetch("/api/customers/update", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ customer_name: customerName, fields }),
+                        body: JSON.stringify({ customer_name: customerName, customer_id: customerId, fields }),
                     });
                     if (!resp.ok) {
                         const data = await resp.json().catch(() => ({}));
@@ -2419,16 +2431,25 @@
                     }
                     // Sync roles separately
                     const roleCheckboxes = container.querySelectorAll(".cust-role-checkbox");
+                    let rolesFailed = null;
                     if (roleCheckboxes.length > 0) {
                         const roles = Array.from(roleCheckboxes).filter(cb => cb.checked).map(cb => cb.dataset.role);
-                        await fetch("/api/customers/sync-roles", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ customer_name: customerName, roles }),
-                        });
-                        // Patch roles into local customer object so deriveStatus gets fresh data
-                        const _c = allCustomers.find(c => c.name === customerName);
-                        if (_c) _c.roles = roles;
+                        try {
+                            const rolesResp = await fetch("/api/customers/sync-roles", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ customer_name: customerName, customer_id: customerId, roles }),
+                            });
+                            if (!rolesResp.ok) {
+                                const rd = await rolesResp.json().catch(() => ({}));
+                                throw new Error(rd.error || `Server returned ${rolesResp.status}`);
+                            }
+                            // Patch roles into local customer object so deriveStatus gets fresh data
+                            const _c = allCustomers.find(c => c.name === customerName);
+                            if (_c) _c.roles = roles;
+                        } catch (rolesErr) {
+                            rolesFailed = rolesErr.message;
+                        }
                     }
                     saveBtn.textContent = "Saved!";
                     saveBtn.style.background = "#16a34a";
@@ -2442,6 +2463,7 @@
                             saveBtn.style.background = "";
                             saveBtn.disabled = false;
                         }
+                        if (rolesFailed) alert("Info saved, but roles failed to save: " + rolesFailed);
                     }, 800);
                 } catch (err) {
                     alert("Failed to save: " + err.message);
@@ -3927,6 +3949,22 @@
             });
         });
 
+        // True while a customer's Info tab is mid-edit — init() rebuilds allCustomers
+        // and re-renders every panel from scratch, which always starts back in
+        // read-only view, so refreshing underneath an open edit silently discards
+        // whatever the admin was typing.
+        function hasOpenCustomerEdit() {
+            const editPanels = document.querySelectorAll(".cust-info-edit");
+            for (const panel of editPanels) {
+                if (panel.offsetParent !== null) return true;
+            }
+            const active = document.activeElement;
+            if (active && active.matches && active.matches(
+                ".cust-edit-input, .cust-role-checkbox, .cust-alias-value-input"
+            )) return true;
+            return false;
+        }
+
         // Auto-refresh every 30s to keep multiple users in sync
         setInterval(async () => {
             try {
@@ -3934,7 +3972,7 @@
                 const loginOverlay = document.getElementById("login-overlay");
                 const creditOpen = creditOverlay && creditOverlay.style.display === "flex";
                 const loginOpen = loginOverlay && loginOverlay.style.display === "flex";
-                if (!creditOpen && !loginOpen) {
+                if (!creditOpen && !loginOpen && !hasOpenCustomerEdit()) {
                     await init();
                 }
             } catch (err) {

@@ -210,9 +210,26 @@ many queries still use it), but the history table is authoritative.
 used by the scheduler; it skips inserting a duplicate row when the customer is
 already at that status.
 
-**Save flow (Info tab edits):**
-1. `POST /api/customers/<id>/status` — `{status_name, notes?}` inserts a `customer_statuses` row.
-2. `POST /api/customers/sync-roles` — `{customer_id, roles[]}` replaces all roles atomically (independent of status).
+**Save flow (Info tab edits, v2.16.7+):** the Info tab's Save button (shared by
+all three render paths) does NOT call `/api/customers/<id>/status` directly —
+it sends the Member Status dropdown value as `fields.current_player_status`
+through the generic customer-update endpoint, alongside every other edited
+field, then syncs roles separately:
+1. `POST /api/customers/update` — `{customer_name, customer_id, fields}`.
+   `update_customer_info()` pops `current_player_status` out of `fields` and
+   routes it through `set_customer_status()` (inserting a `customer_statuses`
+   row), same end effect as the dedicated status endpoint below.
+2. `POST /api/customers/sync-roles` — `{customer_name, customer_id, roles[]}`
+   replaces all roles atomically (independent of status).
+
+Both calls now send `customer_id` (read from `data-customer-id` on the Save
+button, already resolved client-side onto the `customer` object) so the
+backend uses it directly instead of re-deriving it from `customer_name` via
+an exact-name match against `items`/`customers` — that re-derivation could
+silently miss (no items row linked yet, or a name that doesn't split cleanly
+into first+last) and drop the status/venmo write with no error, while the
+frontend's optimistic local patch made it look like it had saved until the
+next refresh reasserted the old value.
 
 **API:**
 - `GET  /api/customer-roles` — returns roles per customer + `_by_name` map, plus
@@ -222,7 +239,8 @@ already at that status.
   page reads canonical status authoritatively.
 - `GET  /api/customers/<id>/status-history` — returns full history rows for
   display in the Info tab.
-- `POST /api/customers/<id>/status` — append a new status row.
+- `POST /api/customers/<id>/status` — append a new status row directly by id.
+  Exists and works correctly, but the Info tab UI doesn't call it (see above).
 - `POST /api/customers/sync-roles` — replaces full role set.
 
 ## Status Derivation (`deriveStatus`)
@@ -519,6 +537,22 @@ Wired from both render paths (inline expand + detail panel) via
 `loadCustomerMemberships(container)` + `wireMembershipUI(container)` (the
 latter is idempotent via a `_membershipWired` flag). The Add modal pre-fills
 `expires_at` from the chosen `started_at` based on the policy.
+
+**Requires `customer.customer_id`.** The whole card — including the
+"No membership terms on file" message and `+ Add term` button — is omitted
+entirely (`if (customer.customer_id) { ... }` in `renderCustInfoPanel()` /
+`renderCustExpandedContent()`) when the frontend hasn't resolved a
+`customer_id` for that row. Before v2.16.7, customers whose only footprint
+was `create_customer()` (the `+ Add Customer` modal), `import_roster()`, or
+`create_customer_from_rsvp()` never got a `customer_id` at all — those insert
+paths wrote an `items` placeholder row but never created the backing
+`customers` row, and `_backfill_customer_ids()`'s boot-time repair explicitly
+excluded those merchant types from fixing it. All three paths now call
+`_resolve_or_create_customer()` at insert time, and the backfill exclusion
+was removed, so this should no longer happen for new or existing profiles —
+if the card is still missing for a given customer, check whether their
+`items` rows truly have no resolvable identity (e.g. a single-word name that
+`_resolve_or_create_customer` intentionally skips).
 
 ## Customers list — Renewal column
 

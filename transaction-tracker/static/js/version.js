@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.16.6";
+window.TGF_VERSION = "2.16.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.7",
+    date: "2026-07-01",
+    changes: [
+      "Fix: customers added via the \"+ Add Customer\" modal or Roster Upload (and unmatched RSVPs auto-added as new customers) never got a canonical customers-table row — create_customer()/import_roster()/create_customer_from_rsvp() only wrote the items placeholder row and left customer_id NULL forever, since the boot-time _backfill_customer_ids() repair explicitly excluded those merchant types. Every customer_id-gated feature broke silently for anyone whose only footprint was one of these paths: the Membership Terms card (and its \"+ Add term\" button) didn't render at all, and Member Status / Roles edits on the Info tab appeared to save (\"Saved!\", badge updated locally) but were actually dropped server-side with no error, reverting on the next refresh. All three creation paths now call _resolve_or_create_customer() to create the customers row up front, and the backfill exclusion is removed so existing affected profiles (e.g. a customer added via Roster Import who's never made a real purchase) self-heal on next deploy.",
+      "Fix: the Customer Info-tab Save button re-derived customer_id server-side via a fragile items/customers name match instead of using the customer_id the frontend already had resolved on the card — so a status or role change could silently no-op (200 OK, but no customer_statuses row written) whenever that name match missed, with the illusion of success from an optimistic local UI patch until the next refresh reasserted the old value. /api/customers/update and /api/customers/sync-roles now accept an explicit customer_id and use it directly; sync-roles failures (previously an unchecked, silently-dropped fetch) now surface an alert instead of failing invisibly.",
+      "Fix: editing a customer's Info tab could silently revert to read-only and discard unsaved changes mid-edit — the 30-second auto-refresh (added to keep multiple managers in sync) rebuilt and re-rendered every customer card unconditionally, and every render path always starts the Info tab back in read-only view. The refresh now skips itself while any Info-tab edit panel is open or an edit field is focused, same as it already did for the Credit and Login modals.",
+    ],
+  },
   {
     version: "2.16.6",
     date: "2026-07-01",
