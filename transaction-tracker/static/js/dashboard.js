@@ -56,7 +56,7 @@ const NON_EVENT_KEYWORDS = [
 
 // Placeholder merchants that are not real transactions (roster imports, manual entries, etc.)
 const PLACEHOLDER_MERCHANTS = [
-    "Roster Import", "Customer Entry", "RSVP Import", "RSVP Email Link",
+    "Roster Import", "Customer Entry", "RSVP Import", "RSVP Email Link", "Handicap Import",
 ];
 
 // Classify an item as "membership", "upcoming", or "past" event

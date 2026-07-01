@@ -92,6 +92,23 @@ field that differs:
 - Creates name alias for old name
 - Deletes orphaned source `customers` row
 
+**`source_customer_id` / `target_customer_id` (v2.16.8+):** `merge_customers()`
+and `POST /api/customers/merge` accept these optional ids; the Customers page
+Merge modal always sends both (it already has them resolved on the source and
+target cards). When given, they're used directly instead of re-deriving via
+an exact `first_name || ' ' || last_name` match against `customers` — that
+match misses for a suffix, middle name, or a name not in the table under that
+exact spelling. Before this fix, a miss on the *target* side still renamed
+`items.customer` to the target's display name but skipped the
+customer_id/customer_emails/tgf_payouts reassignment entirely, producing a
+**split identity**: transactions displaying under the target's name while
+`customer_id` silently still pointed at the old source record. `merge_customers()`
+now resolves both sides and raises `ValueError` (→ 400) before any write if
+the target can't be resolved at all, instead of silently completing a partial
+merge. Falls back to name-based resolution when an id isn't supplied, for
+backward compatibility with other callers (e.g. the boot-time repair
+functions below, which always pass explicit ids).
+
 ## Automatic Merge Repair (Boot-Time)
 
 When a customer's profile is accidentally absorbed into another customer's record
@@ -320,7 +337,7 @@ year — defined as an item whose `order_date` starts with the year, whose
 not in `PLACEHOLDER_MERCHANTS`:
 
 ```
-Roster Import / Customer Entry / RSVP Import / RSVP Email Link
+Roster Import / Customer Entry / RSVP Import / RSVP Email Link / Handicap Import
 ```
 
 Roster Import items also do not appear in the customer-detail Transactions tab.

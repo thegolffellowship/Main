@@ -357,7 +357,7 @@
     // Items with these merchants are admin/import placeholders, not real
     // customer purchases — skip them in activity filters and transaction lists.
     const PLACEHOLDER_MERCHANTS = new Set([
-        "Roster Import", "Customer Entry", "RSVP Import", "RSVP Email Link",
+        "Roster Import", "Customer Entry", "RSVP Import", "RSVP Email Link", "Handicap Import",
     ]);
 
     // Column definitions for Customers table
@@ -3113,11 +3113,17 @@
         const target = document.getElementById("cust-merge-target").value;
         if (!target) { alert("Please select a target customer."); return; }
         if (!confirm(`Merge "${mergeSourceName}" into "${target}"? All of ${mergeSourceName}'s transactions will move to ${target}.`)) return;
+        const sourceCust = allCustomers.find(c => c.name === mergeSourceName);
+        const targetCust = allCustomers.find(c => c.name === target);
         try {
             const res = await fetch("/api/customers/merge", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ source: mergeSourceName, target: target }),
+                body: JSON.stringify({
+                    source: mergeSourceName, target: target,
+                    source_customer_id: sourceCust ? sourceCust.customer_id : null,
+                    target_customer_id: targetCust ? targetCust.customer_id : null,
+                }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Merge failed");

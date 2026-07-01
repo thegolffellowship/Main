@@ -941,6 +941,84 @@ def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _repair_lourigan_attribution(conn: sqlite3.Connection) -> None:
+    """Merge a duplicate Joseph Lourigan customer record into his canonical one.
+
+    Order R436033588 (a guest-slot purchase for "Jack Semler") had a blank
+    customer_email, so the create-customer path's name matching missed his
+    existing record and it landed on a fresh customer_id=406 instead of his
+    canonical customer_id=83 (TGF Membership + 3 other registrations, real
+    email/phone on file). Confirmed via live-data audit — customer_id 406
+    has exactly the one stray order and nothing else.
+
+    Delegates to merge_customers(), which already handles moving
+    customer_emails/tgf_payouts/acct_transactions and deleting the orphaned
+    source row. Fully idempotent: skips entirely once customer_id 406 no
+    longer exists (already merged).
+    """
+    _NAME = "Joseph Lourigan"
+    _SOURCE_CID = 406
+    _TARGET_CID = 83
+
+    exists = conn.execute(
+        "SELECT 1 FROM customers WHERE customer_id = ?", (_SOURCE_CID,)
+    ).fetchone()
+    if not exists:
+        return
+
+    try:
+        merge_customers(
+            _NAME, _NAME, db_path=None,
+            source_customer_id=_SOURCE_CID, target_customer_id=_TARGET_CID,
+        )
+        logger.info(
+            "Lourigan repair: merged customer_id %d -> %d",
+            _SOURCE_CID, _TARGET_CID,
+        )
+    except ValueError as e:
+        logger.warning("Lourigan repair failed: %s", e)
+
+
+def _repair_watson_attribution(conn: sqlite3.Connection) -> None:
+    """Merge a duplicate Tim Watson customer record into his canonical one.
+
+    A "Customer Entry" row created with no email (2026-03-16) started a
+    stray customer_id=94. A later credit transfer that moved money out of
+    his real s9.11 registration (customer_id=433) landed the resulting
+    item on customer_id=94 instead — the transfer's name-based resolution
+    matched the wrong existing record. Confirmed via live-data audit:
+    customer_id 433 has his 2 real purchases with full contact info;
+    customer_id 94 has only the Customer Entry row plus the two
+    credit-transfer/balance-due items that should have followed his real
+    registration.
+
+    Delegates to merge_customers() (see _repair_lourigan_attribution() for
+    why). Fully idempotent: skips entirely once customer_id 94 no longer
+    exists (already merged).
+    """
+    _NAME = "Tim Watson"
+    _SOURCE_CID = 94
+    _TARGET_CID = 433
+
+    exists = conn.execute(
+        "SELECT 1 FROM customers WHERE customer_id = ?", (_SOURCE_CID,)
+    ).fetchone()
+    if not exists:
+        return
+
+    try:
+        merge_customers(
+            _NAME, _NAME, db_path=None,
+            source_customer_id=_SOURCE_CID, target_customer_id=_TARGET_CID,
+        )
+        logger.info(
+            "Watson repair: merged customer_id %d -> %d",
+            _SOURCE_CID, _TARGET_CID,
+        )
+    except ValueError as e:
+        logger.warning("Watson repair failed: %s", e)
+
+
 def _migrate_create_dedup_aliases(conn: sqlite3.Connection) -> None:
     """Create customer_aliases entries for the dedup-migration name mappings.
 
@@ -1502,7 +1580,7 @@ def _migrate_seed_customer_roles(conn: sqlite3.Connection) -> None:
                WHERE customer_id IS NOT NULL
                  AND COALESCE(transaction_status, 'active') IN ('active', 'credited', 'transferred', 'wd', 'refunded')
                  AND item_name != 'TGF MEMBERSHIP'
-                 AND merchant NOT IN ('Roster Import', 'Customer Entry', 'RSVP Import', 'RSVP Email Link')
+                 AND merchant NOT IN ('Roster Import', 'Customer Entry', 'RSVP Import', 'RSVP Email Link', 'Handicap Import')
              )"""
     ).rowcount
 
@@ -2995,6 +3073,18 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Massey attribution repair failed: %s", e)
 
+        # Always-run repair: merge Joseph Lourigan's duplicate customer_id 406 into 83
+        try:
+            _repair_lourigan_attribution(conn)
+        except Exception as e:
+            logger.warning("Lourigan attribution repair failed: %s", e)
+
+        # Always-run repair: merge Tim Watson's duplicate customer_id 94 into 433
+        try:
+            _repair_watson_attribution(conn)
+        except Exception as e:
+            logger.warning("Watson attribution repair failed: %s", e)
+
         # One-time drain: CHAPTER_DRIFT is no longer raised (items.chapter is the
         # event/course location, not the member's home chapter, so it drifts on
         # every cross-chapter registration). Resolve any historical open ones so
@@ -4165,7 +4255,8 @@ def init_db(db_path: str | Path | None = None) -> None:
                      AND matched_item_id IN (
                          SELECT id FROM items
                          WHERE merchant IN ('Customer Entry', 'RSVP Import',
-                                            'RSVP Email Link', 'Roster Import')
+                                            'RSVP Email Link', 'Roster Import',
+                                            'Handicap Import')
                      )"""
             ).rowcount
 
@@ -5005,14 +5096,19 @@ def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
     doesn't already exist.  Emits ``UNLINKED_PARTNER`` parse warnings
     for any names that can't be resolved.
 
-    Covers 'Customer Entry' (+ Add Customer modal) and 'Roster Import' /
-    'RSVP Import' rows too — those insert paths now resolve/create
-    customer_id at insert time (see create_customer(), import_roster(),
-    create_customer_from_rsvp()), but this backfill is what heals any
-    rows that predate that fix. 'RSVP Email Link' is still excluded:
-    it only links an RSVP to an *existing* customer's items row, so a
-    NULL customer_id there means the target itself hasn't resolved yet
-    and will get picked up under its own name on a later pass.
+    Covers 'Customer Entry' (+ Add Customer modal), 'Roster Import' /
+    'RSVP Import' rows, and 'RSVP Email Link' rows — all four insert paths
+    now resolve/create customer_id at insert time (see create_customer(),
+    import_roster(), create_customer_from_rsvp(), link_rsvp_to_customer()),
+    but this backfill is what heals any rows that predate those fixes.
+    'RSVP Email Link' used to be excluded on the assumption that a NULL
+    customer_id there meant the target hadn't resolved yet and would get
+    picked up under its own name on a later pass — live-data audit proved
+    that assumption false (the target is typically *already* resolved by
+    the time this merchant fires; it's the row's own link that's missing),
+    so no merchant is excluded from this backfill anymore. Name-based
+    resolution here is safe for it specifically because the row's
+    `customer` string always matches an already-established person.
 
     Returns the number of item rows updated.
     """
@@ -5025,7 +5121,6 @@ def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
            FROM items
            WHERE customer_id IS NULL
              AND (customer IS NOT NULL AND customer != '')
-             AND merchant NOT IN ('RSVP Email Link')
            GROUP BY customer"""
     ).fetchall()
 
@@ -6011,7 +6106,7 @@ def get_item_stats(db_path: str | Path | None = None) -> dict:
     with _connect(db_path) as conn:
 
         _exclude = """WHERE merchant NOT IN ('Roster Import', 'Customer Entry',
-                                              'RSVP Import', 'RSVP Email Link')"""
+                                              'RSVP Import', 'RSVP Email Link', 'Handicap Import')"""
         row = conn.execute(
             f"""
             SELECT
@@ -6116,7 +6211,7 @@ def get_data_snapshot(limit: int = 50, db_path: str | Path | None = None) -> dic
     """
     with _connect(db_path) as conn:
         _exclude = """WHERE merchant NOT IN ('Roster Import', 'Customer Entry',
-                                              'RSVP Import', 'RSVP Email Link')"""
+                                              'RSVP Import', 'RSVP Email Link', 'Handicap Import')"""
 
         # Stats
         row = conn.execute(
@@ -6813,7 +6908,7 @@ def get_orphaned_items(db_path: str | Path | None = None) -> list[dict]:
                  AND ea.id IS NULL
                  AND COALESCE(i.transaction_status, 'active') IN ('active', 'rsvp_only')
                  AND i.merchant NOT IN ('Roster Import', 'Customer Entry',
-                                        'RSVP Import', 'RSVP Email Link')
+                                        'RSVP Import', 'RSVP Email Link', 'Handicap Import')
                GROUP BY i.item_name
                ORDER BY i.item_name"""
         ).fetchall()
@@ -6980,7 +7075,7 @@ def scan_price_games_mismatches(db_path: str | Path | None = None) -> dict:
                AND item_price IS NOT NULL
                AND total_amount IS NOT NULL
                AND merchant NOT IN ('Manual Entry', 'RSVP Only', 'Roster Import',
-                                     'Customer Entry', 'RSVP Import', 'RSVP Email Link')
+                                     'Customer Entry', 'RSVP Import', 'RSVP Email Link', 'Handicap Import')
                AND email_uid NOT LIKE 'manual-%'
                AND email_uid NOT LIKE 'transfer-%'
                ORDER BY id"""
@@ -7662,7 +7757,7 @@ def link_rsvp_to_customer(
     with _connect(db_path) as conn:
         # Find target customer's item
         target = conn.execute(
-            """SELECT id, customer_email FROM items
+            """SELECT id, customer_email, customer_id FROM items
                WHERE customer = ? COLLATE NOCASE
                ORDER BY order_date DESC LIMIT 1""",
             (target_customer_name,),
@@ -7691,6 +7786,12 @@ def link_rsvp_to_customer(
             new_values["order_date"] = today
             new_values["email_uid"] = f"rsvp_link_{rsvp_email}_{today}"
             new_values["item_index"] = 0
+            # Copy from the target we already resolved above — this row
+            # exists purely to make has_player_card match the RSVP email,
+            # so it must carry the same customer_id or it's an orphaned
+            # bookkeeping row forever (Membership Terms, roles, and status
+            # edits all require customer_id).
+            new_values["customer_id"] = target["customer_id"]
 
             cols = ", ".join(ITEM_COLUMNS)
             placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
@@ -8257,12 +8358,26 @@ def add_custom_field(field_name: str, db_path: str | Path | None = None) -> bool
 
 
 def merge_customers(source_name: str, target_name: str,
-                    db_path: str | Path | None = None) -> dict:
+                    db_path: str | Path | None = None,
+                    source_customer_id: int | None = None,
+                    target_customer_id: int | None = None) -> dict:
     """
     Merge one customer into another by updating all items rows.
 
     Rewrites items.customer from source_name to target_name.
     Preserves target's email/phone; fills in from source if target lacks them.
+
+    ``source_customer_id`` / ``target_customer_id``, when the caller already
+    knows them (the Customers page has both resolved on screen), are used
+    directly instead of re-deriving via an exact first_name+last_name match
+    against ``customers`` — that match misses for names with a suffix,
+    middle name, or that aren't in the table under that exact spelling.
+    Previously a miss on the *target* side left the items rename applied
+    (source_name -> target_name) but skipped the customer_id/customer_emails/
+    tgf_payouts reassignment entirely, producing a split identity: items
+    displaying under the target's name while customer_id silently still
+    pointed at the old source record. This now raises ValueError instead,
+    before any write happens, so the caller sees a real error.
 
     Returns summary with count of items updated.
     """
@@ -8288,6 +8403,35 @@ def merge_customers(source_name: str, target_name: str,
         best_phone = (target_row["customer_phone"] if target_row else "") or \
                      (source_row["customer_phone"] if source_row else "") or ""
 
+        # ---- Resolve customers table records (customer_id) FIRST, before any
+        # write, so an unresolvable target aborts cleanly instead of leaving
+        # a partially-applied rename. ----
+        def _resolve_cust(cid, name):
+            if cid:
+                row = conn.execute(
+                    "SELECT customer_id FROM customers WHERE customer_id = ?", (cid,)
+                ).fetchone()
+                if not row:
+                    raise ValueError(f"customer_id {cid} does not exist")
+                return row
+            return conn.execute(
+                """SELECT customer_id FROM customers
+                   WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)
+                   LIMIT 1""",
+                (name.strip(),),
+            ).fetchone()
+
+        target_cust = _resolve_cust(target_customer_id, target_name)
+        source_cust = _resolve_cust(source_customer_id, source_name)
+
+        if not target_cust:
+            raise ValueError(
+                f"Could not resolve a customers-table record for target '{target_name}' "
+                "(no customer_id given, and no exact first+last name match). "
+                "Pass target_customer_id explicitly, or fix the target's name in the "
+                "customers table first."
+            )
+
         # Update all source items to the target customer name (case-insensitive match)
         cursor = conn.execute(
             "UPDATE items SET customer = ? WHERE customer = ? COLLATE NOCASE",
@@ -8295,22 +8439,7 @@ def merge_customers(source_name: str, target_name: str,
         )
         items_updated = cursor.rowcount
 
-        # ---- Merge customers table records (customer_id) ----
-        # Find target and source customer_ids
-        target_cust = conn.execute(
-            """SELECT customer_id FROM customers
-               WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)
-               LIMIT 1""",
-            (target_name.strip(),),
-        ).fetchone()
-        source_cust = conn.execute(
-            """SELECT customer_id FROM customers
-               WHERE LOWER(first_name || ' ' || last_name) = LOWER(?)
-               LIMIT 1""",
-            (source_name.strip(),),
-        ).fetchone()
-
-        if target_cust and source_cust and target_cust["customer_id"] != source_cust["customer_id"]:
+        if source_cust and target_cust["customer_id"] != source_cust["customer_id"]:
             target_cid = target_cust["customer_id"]
             source_cid = source_cust["customer_id"]
 
@@ -8352,7 +8481,7 @@ def merge_customers(source_name: str, target_name: str,
             conn.execute("DELETE FROM customers WHERE customer_id = ?", (source_cid,))
             logger.info("Merged customer_id %d → %d (emails moved, source deleted)",
                         source_cid, target_cid)
-        elif target_cust and not source_cust:
+        elif not source_cust:
             # Source has no customers row — just reassign any items with source name
             conn.execute(
                 "UPDATE items SET customer_id = ? WHERE customer = ? AND customer_id IS NULL",
@@ -8393,22 +8522,26 @@ def merge_customers(source_name: str, target_name: str,
             )
 
         # Merge aliases: move source's aliases to target, add source name as alias
+        # (skipped when source/target share a display name — e.g. a fragmented
+        # duplicate created under the identical name — since a name is never
+        # its own alias).
         conn.execute(
             "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
             (target_name, source_name),
         )
-        # Add the source's name as an alias of the target (for future matching)
-        existing_alias = conn.execute(
-            """SELECT id FROM customer_aliases
-               WHERE customer_name = ? COLLATE NOCASE AND alias_type = 'name'
-                 AND LOWER(alias_value) = ?""",
-            (target_name, source_name.lower()),
-        ).fetchone()
-        if not existing_alias:
-            conn.execute(
-                "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
-                (target_name, source_name),
-            )
+        if source_name.strip().lower() != target_name.strip().lower():
+            # Add the source's name as an alias of the target (for future matching)
+            existing_alias = conn.execute(
+                """SELECT id FROM customer_aliases
+                   WHERE customer_name = ? COLLATE NOCASE AND alias_type = 'name'
+                     AND LOWER(alias_value) = ?""",
+                (target_name, source_name.lower()),
+            ).fetchone()
+            if not existing_alias:
+                conn.execute(
+                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
+                    (target_name, source_name),
+                )
         # If source had a different email, add it as alias email
         source_email = (source_row["customer_email"] if source_row else "") or ""
         target_email = (target_row["customer_email"] if target_row else "") or ""
@@ -9084,7 +9217,7 @@ def get_cancellation_players(event_id: int, db_path: str | Path | None = None) -
     """Return players split into 'paid' (need action) and 'silent' (auto-remove) groups."""
     SILENT_MERCHANTS = (
         "Manual Entry", "RSVP Only", "Roster Import",
-        "Customer Entry", "RSVP Import", "RSVP Email Link",
+        "Customer Entry", "RSVP Import", "RSVP Email Link", "Handicap Import",
     )
     SILENT_STATUSES = ("rsvp_only", "gg_rsvp")
     with _connect(db_path) as conn:
@@ -10245,12 +10378,19 @@ def create_rsvp_only_item(
         ).fetchone()
         chapter = event_row["chapter"] if event_row else ""
 
+        # Promoting a GG RSVP has no transaction to trigger the normal
+        # _resolve_or_create_customer() call, so resolve/create the canonical
+        # customers row now — otherwise customer_id stays NULL forever
+        # (Membership Terms, roles, and status edits all require it), and
+        # apply_credit_to_rsvp() runs against this row immediately after.
+        cid = _resolve_or_create_customer(conn, player_name, player_email or None)
+
         conn.execute(
             """INSERT INTO items
                (email_uid, merchant, customer, customer_email, item_name,
-                item_price, transaction_status, order_date, chapter)
-               VALUES (?, 'Golf Genius RSVP', ?, ?, ?, '', 'rsvp_only', date('now'), ?)""",
-            (uid, player_name, player_email or "", event_name, chapter or ""),
+                item_price, transaction_status, order_date, chapter, customer_id)
+               VALUES (?, 'Golf Genius RSVP', ?, ?, ?, '', 'rsvp_only', date('now'), ?, ?)""",
+            (uid, player_name, player_email or "", event_name, chapter or "", cid),
         )
         conn.commit()
         return conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
@@ -10533,10 +10673,10 @@ def _post_overpayment_credit(
         """INSERT INTO items
            (email_uid, merchant, customer, customer_email, item_name,
             item_price, transaction_status, credit_note,
-            order_date, chapter)
+            order_date, chapter, customer_id)
            VALUES (?, 'Manual Entry', ?, ?, ?,
             ?, 'credited', ?,
-            date('now'), ?)""",
+            date('now'), ?, ?)""",
         (
             uid,
             rsvp_item.get("customer"), rsvp_item.get("customer_email"),
@@ -10544,6 +10684,10 @@ def _post_overpayment_credit(
             f"${overpayment:.2f}",
             f"Overpayment credit — ${overpayment:.2f} from prior Venmo payment",
             rsvp_item.get("chapter") or "",
+            # Copy from the registration this surplus came from — already
+            # resolved (create_rsvp_only_item / a real order), no new lookup
+            # needed.
+            rsvp_item.get("customer_id"),
         ),
     )
     return cur.lastrowid
@@ -10762,10 +10906,10 @@ def apply_credit_to_rsvp(
                 """INSERT INTO items
                    (email_uid, merchant, customer, customer_email, item_name,
                     item_price, transaction_status, credit_note,
-                    order_date, chapter)
+                    order_date, chapter, customer_id)
                    VALUES (?, 'Manual Entry', ?, ?, ?,
                     ?, 'credited', ?,
-                    date('now'), ?)""",
+                    date('now'), ?, ?)""",
                 (
                     uid,
                     rsvp_item.get("customer"), rsvp_item.get("customer_email"),
@@ -10773,6 +10917,9 @@ def apply_credit_to_rsvp(
                     f"${excess:.2f}",
                     f"Excess credit from transfer — ${excess:.2f} remaining",
                     rsvp_item.get("chapter") or "",
+                    # Copy from the registration being credited — already
+                    # resolved, no new lookup needed.
+                    rsvp_item.get("customer_id"),
                 ),
             )
 
@@ -19511,7 +19658,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                                    AND i.holes = '18'
                               THEN i.id END) as playing_18,
                           COALESCE(SUM(CASE
-                              WHEN i.transaction_status = 'active' AND i.merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                              WHEN i.transaction_status = 'active' AND i.merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link','Handicap Import')
                               THEN CAST(REPLACE(REPLACE(i.item_price, '$', ''), ',', '') AS REAL) ELSE 0 END), 0) as revenue
                    FROM events e
                    LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
@@ -19608,7 +19755,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                                    AND i.holes = '18'
                               THEN i.id END) as played_18,
                           COALESCE(SUM(CASE
-                              WHEN i.transaction_status = 'active' AND i.merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                              WHEN i.transaction_status = 'active' AND i.merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link','Handicap Import')
                               THEN CAST(REPLACE(REPLACE(i.item_price, '$', ''), ',', '') AS REAL) ELSE 0 END), 0) as revenue
                    FROM events e
                    LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
@@ -19750,7 +19897,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 """SELECT customer, COUNT(*) as events,
                           SUM(CAST(REPLACE(REPLACE(item_price, '$', ''), ',', '') AS REAL)) as spent
                    FROM items
-                   WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                   WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link','Handicap Import')
                      AND transaction_status = 'active'
                      AND order_date >= date('now', '-6 months')
                    GROUP BY customer ORDER BY events DESC LIMIT 5"""
@@ -19774,7 +19921,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                           MIN(order_date) as earliest,
                           MAX(order_date) as latest
                    FROM items
-                   WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')"""
+                   WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link','Handicap Import')"""
             ).fetchone()
             txn.append(f"Total: {stats['total']} items across {stats['orders']} orders ({stats['earliest']} to {stats['latest']})")
 
@@ -19783,7 +19930,7 @@ def build_coo_full_context(db_path: str | Path | None = None) -> str:
                 """SELECT COUNT(*) as c,
                           SUM(CAST(REPLACE(REPLACE(item_price, '$', ''), ',', '') AS REAL)) as total
                    FROM items
-                   WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link')
+                   WHERE merchant NOT IN ('Roster Import','Customer Entry','RSVP Import','RSVP Email Link','Handicap Import')
                      AND order_date >= date('now', '-7 days')"""
             ).fetchone()
             txn.append(f"Last 7 days: {recent_txn['c']} new items, ${recent_txn['total'] or 0:,.0f}")

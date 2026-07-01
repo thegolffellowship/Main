@@ -4124,7 +4124,13 @@ def api_preview_roster():
 @app.route("/api/customers/merge", methods=["POST"])
 @require_role("admin")
 def api_merge_customers():
-    """Merge one customer into another."""
+    """Merge one customer into another.
+
+    Body: { source, target, source_customer_id?, target_customer_id? }
+    The customer_ids, when given, are used directly instead of re-deriving
+    them by name — see merge_customers() for why that re-derivation could
+    previously produce a silently-incomplete "split identity" merge.
+    """
     data = request.get_json(force=True)
     source = (data.get("source") or "").strip()
     target = (data.get("target") or "").strip()
@@ -4132,7 +4138,19 @@ def api_merge_customers():
         return jsonify({"error": "source and target customer names required"}), 400
     if source == target:
         return jsonify({"error": "source and target cannot be the same"}), 400
-    result = merge_customers(source, target)
+    try:
+        source_customer_id = int(data.get("source_customer_id")) if data.get("source_customer_id") else None
+        target_customer_id = int(data.get("target_customer_id")) if data.get("target_customer_id") else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "source_customer_id/target_customer_id must be integers"}), 400
+    try:
+        result = merge_customers(
+            source, target,
+            source_customer_id=source_customer_id,
+            target_customer_id=target_customer_id,
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify(result)
 
 
@@ -5237,6 +5255,7 @@ def api_apply_credit_item_to_event(credit_item_id):
     player_email = item.get("customer_email") or ""
     uid = f"manual-credit-{credit_item_id}"
 
+    from email_parser.database import _resolve_or_create_customer
     with _connect() as conn:
         existing = conn.execute("SELECT id FROM items WHERE email_uid = ?", (uid,)).fetchone()
         if existing:
@@ -5246,11 +5265,17 @@ def api_apply_credit_item_to_event(credit_item_id):
                 "SELECT chapter FROM events WHERE item_name = ? COLLATE NOCASE", (event_name,)
             ).fetchone()
             chapter = (ev_row["chapter"] if ev_row else "") or ""
+            # This synthetic rsvp_only row has no transaction to trigger the
+            # normal _resolve_or_create_customer() call, so resolve/create the
+            # canonical customers row now — otherwise customer_id stays NULL
+            # forever (Membership Terms, roles, and status edits all require
+            # it), and apply_credit_to_rsvp() runs against this row immediately.
+            cid = _resolve_or_create_customer(conn, player_name, player_email or None)
             conn.execute(
                 """INSERT INTO items (email_uid, merchant, customer, customer_email, item_name,
-                   item_price, transaction_status, order_date, chapter)
-                   VALUES (?, 'Golf Genius RSVP', ?, ?, ?, '', 'rsvp_only', date('now'), ?)""",
-                (uid, player_name, player_email, event_name, chapter),
+                   item_price, transaction_status, order_date, chapter, customer_id)
+                   VALUES (?, 'Golf Genius RSVP', ?, ?, ?, '', 'rsvp_only', date('now'), ?, ?)""",
+                (uid, player_name, player_email, event_name, chapter, cid),
             )
             conn.commit()
             new_item_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
@@ -5657,11 +5682,13 @@ def api_partial_refund_item(item_id):
             conn.execute("UPDATE items SET side_games = ? WHERE id = ?",
                          (computed_new_sg, item_id))
 
-        # Create -PAY child row with parent snapshot
+        # Create -PAY child row with parent snapshot (customer_id copied from
+        # parent, same as transfer_item() — already resolved, no new lookup)
         cur = conn.execute(
             """INSERT INTO items (email_uid, merchant, customer, item_name, item_price,
-               side_games, notes, parent_item_id, parent_snapshot, transaction_status, order_date)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)""",
+               side_games, notes, parent_item_id, parent_snapshot, transaction_status, order_date,
+               customer_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)""",
             (uid, f"Refund ({method})" if method else "Partial Refund",
              parent["customer"], parent["item_name"],
              f"-${total:.2f}",
@@ -5669,7 +5696,8 @@ def api_partial_refund_item(item_id):
              refund_desc + (f" — {note}" if note else ""),
              item_id,
              json.dumps(parent_snap) if parent_snap else None,
-             today_central_str()),
+             today_central_str(),
+             parent.get("customer_id")),
         )
         new_child_id = cur.lastrowid
 
@@ -7289,14 +7317,24 @@ def api_create_customers_for_unlinked():
             last_name = parts[1] if len(parts) > 1 else ""
             today = today_central_str()
 
+            from email_parser.database import _resolve_or_create_customer
             conn3 = get_connection()
             try:
+                # This bulk tool has no transaction to trigger the normal
+                # _resolve_or_create_customer() call, so resolve/create the
+                # canonical customers row now — otherwise customer_id stays
+                # NULL forever (Membership Terms, roles, and status edits
+                # all require it).
+                cid = _resolve_or_create_customer(
+                    conn3, player_name, None,
+                    first_name=first_name, last_name=last_name or None,
+                )
                 conn3.execute(
                     """INSERT INTO items (email_uid, item_index, merchant, customer, first_name,
-                       last_name, order_date, item_name, archived)
-                       VALUES (?, 0, 'Handicap Import', ?, ?, ?, ?, 'Handicap Import', 1)""",
+                       last_name, order_date, item_name, archived, customer_id)
+                       VALUES (?, 0, 'Handicap Import', ?, ?, ?, ?, 'Handicap Import', 1, ?)""",
                     (f"handicap_import_{player_name}_{today}", player_name,
-                     first_name, last_name, today)
+                     first_name, last_name, today, cid)
                 )
                 # Now link them
                 conn3.execute(
