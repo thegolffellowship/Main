@@ -5005,6 +5005,15 @@ def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
     doesn't already exist.  Emits ``UNLINKED_PARTNER`` parse warnings
     for any names that can't be resolved.
 
+    Covers 'Customer Entry' (+ Add Customer modal) and 'Roster Import' /
+    'RSVP Import' rows too — those insert paths now resolve/create
+    customer_id at insert time (see create_customer(), import_roster(),
+    create_customer_from_rsvp()), but this backfill is what heals any
+    rows that predate that fix. 'RSVP Email Link' is still excluded:
+    it only links an RSVP to an *existing* customer's items row, so a
+    NULL customer_id there means the target itself hasn't resolved yet
+    and will get picked up under its own name on a later pass.
+
     Returns the number of item rows updated.
     """
     # Pull one representative row per distinct customer name so we have
@@ -5016,7 +5025,7 @@ def _backfill_customer_ids(conn: sqlite3.Connection) -> int:
            FROM items
            WHERE customer_id IS NULL
              AND (customer IS NOT NULL AND customer != '')
-             AND merchant NOT IN ('Customer Entry', 'Roster Import', 'RSVP Import', 'RSVP Email Link')
+             AND merchant NOT IN ('RSVP Email Link')
            GROUP BY customer"""
     ).fetchall()
 
@@ -7115,11 +7124,19 @@ def resolve_reconciled_price_warnings(conn: sqlite3.Connection) -> dict:
 
 
 def update_customer_info(customer_name: str, fields: dict,
-                        db_path: str | Path | None = None) -> int:
+                        db_path: str | Path | None = None,
+                        customer_id: int | None = None) -> int:
     """Update personal info fields across all items for a customer.
 
     Only updates columns in the provided dict. Returns count of rows updated.
     Validates email/phone. Syncs display name from first/last if changed.
+
+    ``customer_id``, when the caller already knows it (the frontend has it on
+    every rendered customer card), is used directly instead of re-deriving it
+    from ``customer_name`` — the name-based lookup below can miss (no items
+    row has a linked customer_id yet, or the customers-table name match is
+    imperfect), which used to silently drop the current_player_status /
+    venmo_username writes with no error surfaced.
     """
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
@@ -7189,14 +7206,27 @@ def update_customer_info(customer_name: str, fields: dict,
                     (safe["customer"], customer_name),
                 )
 
-        # Resolve customer_id for all canonical-table syncs below
-        cid_row = conn.execute(
-            """SELECT customer_id FROM items
-               WHERE customer = ? COLLATE NOCASE AND customer_id IS NOT NULL
-               LIMIT 1""",
-            (customer_name,),
-        ).fetchone()
-        cid = cid_row["customer_id"] if cid_row else None
+        # Resolve customer_id for all canonical-table syncs below. Prefer the
+        # caller-supplied id (already resolved client-side) over re-deriving
+        # it by name, which can miss for customers whose items rows aren't
+        # linked yet even though a customers row exists.
+        cid = customer_id or None
+        if cid:
+            # Trust but verify — a stale/bogus id from the client shouldn't
+            # silently write to the wrong customer.
+            row_check = conn.execute(
+                "SELECT customer_id FROM customers WHERE customer_id = ?", (cid,)
+            ).fetchone()
+            if not row_check:
+                cid = None
+        if not cid:
+            cid_row = conn.execute(
+                """SELECT customer_id FROM items
+                   WHERE customer = ? COLLATE NOCASE AND customer_id IS NOT NULL
+                   LIMIT 1""",
+                (customer_name,),
+            ).fetchone()
+            cid = cid_row["customer_id"] if cid_row else None
         if not cid:
             # Fall back to name match in customers table directly
             parts = customer_name.strip().split()
@@ -7266,15 +7296,10 @@ def update_customer_info(customer_name: str, fields: dict,
                 )
 
         # Update venmo_username on the customers table (customer-level field)
-        if venmo_username is not None:
+        if venmo_username is not None and cid:
             conn.execute(
-                """UPDATE customers SET venmo_username = ?
-                   WHERE customer_id = (
-                       SELECT customer_id FROM items
-                       WHERE customer = ? COLLATE NOCASE AND customer_id IS NOT NULL
-                       LIMIT 1
-                   )""",
-                (venmo_username or None, customer_name),
+                "UPDATE customers SET venmo_username = ? WHERE customer_id = ?",
+                (venmo_username or None, cid),
             )
             rowcount = max(rowcount, 1)
 
@@ -7488,8 +7513,16 @@ def create_customer(name: str, email: str = "", phone: str = "",
         new_values["chapter"] = chapter or None
         new_values["merchant"] = "Customer Entry"
         new_values["item_name"] = "Customer Entry"
-        # Link to customers record if one already exists (e.g. vendor created via vendor modal)
-        new_values["customer_id"] = _lookup_customer_id(conn, name, email or None)
+        # Link to an existing customers record (e.g. vendor created via vendor modal),
+        # or create one now — a manually-added customer has no transaction to trigger
+        # save_items()'s normal _resolve_or_create_customer() call, so without this the
+        # row would be stuck with customer_id=NULL forever (Membership Terms, roles, and
+        # status edits all require a customer_id).
+        new_values["customer_id"] = _resolve_or_create_customer(
+            conn, name, email or None,
+            phone=phone or None, chapter=chapter or None,
+            first_name=first_name or None, last_name=last_name or None,
+        )
         new_values["order_date"] = today
         new_values["email_uid"] = f"customer_entry_{name}_{today}"
         new_values["item_index"] = 0
@@ -7577,6 +7610,14 @@ def create_customer_from_rsvp(
             new_values["order_date"] = today
             new_values["email_uid"] = f"rsvp_import_{email or name}_{today}"
             new_values["item_index"] = 0
+            # No transaction triggers _resolve_or_create_customer() for an RSVP-only
+            # entry, so resolve/create the canonical customers row now — otherwise
+            # customer_id stays NULL forever (Membership Terms, roles, and status
+            # edits all require it).
+            new_values["customer_id"] = _resolve_or_create_customer(
+                conn, name, email or None,
+                first_name=new_values["first_name"], last_name=new_values["last_name"],
+            )
 
             cols = ", ".join(ITEM_COLUMNS)
             placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
@@ -7933,6 +7974,16 @@ def import_roster(rows: list[dict], db_path: str | Path | None = None) -> dict:
                 new_values["item_index"] = 0
                 for k, v in safe.items():
                     new_values[k] = v
+                # A roster row has no transaction to trigger the normal
+                # _resolve_or_create_customer() call, so resolve/create the
+                # canonical customers row now — otherwise customer_id stays
+                # NULL forever (Membership Terms, roles, and status edits all
+                # require it).
+                new_values["customer_id"] = _resolve_or_create_customer(
+                    conn, name, email or None,
+                    phone=safe.get("customer_phone"), chapter=safe.get("chapter"),
+                    first_name=new_values["first_name"], last_name=new_values["last_name"],
+                )
 
                 cols = ", ".join(ITEM_COLUMNS)
                 placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
