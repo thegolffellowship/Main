@@ -1096,6 +1096,200 @@ def _repair_stich_attribution(conn: sqlite3.Connection,
                     _ALIAS, _NAME, _CANONICAL_CID)
 
 
+def _repair_franz_attribution(conn: sqlite3.Connection,
+                              db_path: str | Path | None = None) -> None:
+    """Merge the duplicate Kyle Franz profile (316, one status row only)
+    into his canonical record (315 — email, 12 transactions, membership).
+    User-confirmed single person 2026-07-02. Idempotent."""
+    if not conn.execute(
+        "SELECT 1 FROM customers WHERE customer_id = 316"
+    ).fetchone():
+        return
+    conn.commit()
+    try:
+        merge_customers("Kyle Franz", "Kyle Franz", db_path=db_path,
+                        source_customer_id=316, target_customer_id=315)
+        logger.info("Franz repair: merged duplicate customer_id 316 -> 315")
+    except ValueError as e:
+        logger.warning("Franz repair failed: %s", e)
+
+
+def _repair_massey_fragments(conn: sqlite3.Connection,
+                             db_path: str | Path | None = None) -> None:
+    """Merge the Will/William Massey fragment profiles into canonical 311.
+
+    The duplicate-name census found three transaction-less fragments:
+    407 ('Will Massey' — role/status/1 ledger row), 408 ('William Massey' —
+    role), 409 ('William Massey' — membership term + status). User-confirmed
+    2026-07-02 they are all the same person as 311 (wncmassey@outlook.com).
+    merge_customers adds the 'William Massey' name alias automatically when
+    the source name differs. Idempotent — skips already-merged ids."""
+    if not conn.execute(
+        "SELECT 1 FROM customers WHERE customer_id = 311"
+    ).fetchone():
+        logger.warning("Massey fragments repair: canonical 311 not found — skipping")
+        return
+    conn.commit()
+    for src_cid, src_name in ((407, "Will Massey"),
+                              (408, "William Massey"),
+                              (409, "William Massey")):
+        if not conn.execute(
+            "SELECT 1 FROM customers WHERE customer_id = ?", (src_cid,)
+        ).fetchone():
+            continue
+        try:
+            merge_customers(src_name, "Will Massey", db_path=db_path,
+                            source_customer_id=src_cid, target_customer_id=311)
+            logger.info("Massey fragments repair: merged customer_id %d -> 311", src_cid)
+        except ValueError as e:
+            logger.warning("Massey fragments repair failed for cid %d: %s", src_cid, e)
+
+
+def _arias_son_marked(text: str | None) -> bool:
+    t = (text or "").strip().lower()
+    return t.endswith(" iii") or ", iii" in t or "3rd" in t or "v3rdgen" in t
+
+
+def _arias_dad_marked(text: str | None) -> bool:
+    t = (text or "").strip().lower()
+    return t.endswith(" jr") or t.endswith(" jr.") or ", jr" in t or "vicdr" in t
+
+
+def _repair_arias_identities(conn: sqlite3.Connection) -> None:
+    """Untangle the Victor Arias father/son profiles — WITHOUT merging them.
+
+    User-confirmed 2026-07-02: TWO people. cid 17 = Victor Arias, Jr.
+    (father, vicdr.dirt@yahoo.com) and cid 308 = Victor Arias, III (son,
+    v3rdgen.dirt@gmail.com). Dad makes all the payments. Fragments 414 and
+    434 hold their strays (ledger rows, aliases, a handicap link/round).
+
+    Live data carries the distinction in name TEXT ('Victor Arias III' /
+    'Victor Arias JR' / bare), so rows are routed deterministically by
+    marker: III/3rd/v3rdgen → son; Jr/vicdr → dad; unmarked fragment rows →
+    dad (he makes the payments); unmarked rows already on 17/308 stay put.
+    Also gives dad's transactions the 'Victor Arias Jr' display (the son's
+    already display 'Victor Arias III'), and registers suffix-name aliases
+    for both so 'Victor Arias Jr'/'Victor Arias III' lookups resolve — the
+    bare name 'Victor Arias' stays deliberately unaliased: it is genuinely
+    ambiguous and the lookup guard must keep refusing to guess it.
+    Idempotent.
+    """
+    _DAD, _SON = 17, 308
+    _FRAGS = (414, 434)
+    for cid, who in ((_DAD, "father"), (_SON, "son")):
+        if not conn.execute(
+            "SELECT 1 FROM customers WHERE customer_id = ?", (cid,)
+        ).fetchone():
+            logger.warning("Arias repair: %s profile cid %d not found — skipping", who, cid)
+            return
+
+    # 1. Route name-bearing rows among the four Victor cids by marker.
+    _NAME_TABLES = (
+        ("acct_transactions", ("customer",)),
+        ("godaddy_order_splits", ("customer",)),
+        ("handicap_player_links", ("player_name", "customer_name")),
+        ("handicap_rounds", ("player_name",)),
+        ("message_log", ("recipient_name",)),
+        ("parse_warnings", ("customer",)),
+        ("rsvps", ("player_name",)),
+        ("customer_aliases", ("customer_name", "alias_value")),
+    )
+    all_cids = (_DAD, _SON) + _FRAGS
+    for table, name_cols in _NAME_TABLES:
+        try:
+            ph = ",".join("?" * len(all_cids))
+            rows = conn.execute(
+                f"SELECT rowid AS rid, customer_id, {', '.join(name_cols)} "
+                f"FROM {table} WHERE customer_id IN ({ph})",
+                all_cids,
+            ).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        for r in rows:
+            texts = [r[c] for c in name_cols]
+            cid = r["customer_id"]
+            if any(_arias_son_marked(t) for t in texts):
+                want = _SON
+            elif any(_arias_dad_marked(t) for t in texts):
+                want = _DAD
+            elif cid in _FRAGS:
+                want = _DAD  # unmarked stray on a fragment → dad pays
+            else:
+                continue  # unmarked row already on a real profile — stay
+            if want != cid:
+                conn.execute(
+                    f"UPDATE {table} SET customer_id = ? WHERE rowid = ?",
+                    (want, r["rid"]),
+                )
+                logger.info(
+                    "Arias repair: %s row (%s) %r → cid %d",
+                    table, cid, next((t for t in texts if t), ""), want,
+                )
+
+    # 2. Remaining fragment rows (no name column — statuses etc.) → dad,
+    #    then retire the fragment profiles.
+    for frag in _FRAGS:
+        if not conn.execute(
+            "SELECT 1 FROM customers WHERE customer_id = ?", (frag,)
+        ).fetchone():
+            continue
+        moved = _repoint_customer_fks(conn, frag, _DAD)
+        for e in conn.execute(
+            "SELECT email FROM customer_emails WHERE customer_id = ?", (frag,)
+        ).fetchall():
+            conn.execute(
+                "INSERT OR IGNORE INTO customer_emails (customer_id, email) VALUES (?, ?)",
+                (_DAD, e["email"]),
+            )
+        conn.execute("DELETE FROM customer_emails WHERE customer_id = ?", (frag,))
+        conn.execute("DELETE FROM customers WHERE customer_id = ?", (frag,))
+        logger.info("Arias repair: retired fragment cid %d (leftovers → dad: %s)",
+                    frag, moved or "none")
+
+    # 3. Display names: dad's rows show 'Victor Arias Jr' (son's already show
+    #    'Victor Arias III'; enforced too for symmetry). customers.first/last
+    #    stay 'Victor Arias' for both — there is no customers.suffix column,
+    #    and the bare name SHOULD stay ambiguous to the lookup guard.
+    for cid, display, sfx in ((_DAD, "Victor Arias Jr", "Jr"),
+                              (_SON, "Victor Arias III", "III")):
+        n = conn.execute(
+            """UPDATE items SET customer = ?, suffix = ?
+               WHERE customer_id = ? AND (customer != ? OR COALESCE(suffix,'') != ?)""",
+            (display, sfx, cid, display, sfx),
+        ).rowcount
+        if n:
+            logger.info("Arias repair: %d item(s) on cid %d renamed to %r", n, cid, display)
+        conn.execute(
+            "UPDATE customer_aliases SET customer_name = ? WHERE customer_id = ? AND customer_name != ?",
+            (display, cid, display),
+        )
+        conn.execute(
+            "UPDATE handicap_player_links SET customer_name = ? WHERE customer_id = ? AND customer_name != ?",
+            (display, cid, display),
+        )
+
+    # 4. Suffix-name aliases so 'Victor Arias Jr' / 'Victor Arias III'
+    #    lookups resolve by id (first+last split fails on suffixed names).
+    for alias_value, display, cid in (
+        ("Victor Arias Jr", "Victor Arias Jr", _DAD),
+        ("Victor Arias, Jr.", "Victor Arias Jr", _DAD),
+        ("Victor Arias III", "Victor Arias III", _SON),
+        ("Victor Arias, III", "Victor Arias III", _SON),
+    ):
+        if not conn.execute(
+            """SELECT id FROM customer_aliases
+               WHERE alias_type = 'name' AND LOWER(alias_value) = LOWER(?)""",
+            (alias_value,),
+        ).fetchone():
+            conn.execute(
+                """INSERT INTO customer_aliases (customer_name, alias_value, alias_type, customer_id)
+                   VALUES (?, ?, 'name', ?)""",
+                (display, alias_value, cid),
+            )
+            logger.info("Arias repair: added name alias %r → cid %d", alias_value, cid)
+    conn.commit()
+
+
 def _migrate_create_dedup_aliases(conn: sqlite3.Connection) -> None:
     """Create customer_aliases entries for the dedup-migration name mappings.
 
@@ -3243,6 +3437,25 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Stich attribution repair failed: %s", e)
 
+        # Always-run repair: merge duplicate Kyle Franz profile 316 into 315
+        try:
+            _repair_franz_attribution(conn, db_path)
+        except Exception as e:
+            logger.warning("Franz attribution repair failed: %s", e)
+
+        # Always-run repair: merge Will/William Massey fragments 407/408/409 into 311
+        try:
+            _repair_massey_fragments(conn, db_path)
+        except Exception as e:
+            logger.warning("Massey fragments repair failed: %s", e)
+
+        # Always-run repair: untangle Victor Arias Jr (17) / III (308) — two
+        # people; route fragments 414/434 by name marker, never merge them
+        try:
+            _repair_arias_identities(conn)
+        except Exception as e:
+            logger.warning("Arias identities repair failed: %s", e)
+
         # One-time drain: CHAPTER_DRIFT is no longer raised (items.chapter is the
         # event/course location, not the member's home chapter, so it drifts on
         # every cross-chapter registration). Resolve any historical open ones so
@@ -5236,6 +5449,12 @@ def _repair_merged_customer_fk_orphans(conn: sqlite3.Connection) -> None:
             pass
 
 
+# Same-named profile sets confirmed to be DIFFERENT people — never merge,
+# and don't warn about them at every boot. Victor Arias Jr (17) and
+# Victor Arias III (308) are father & son (user-confirmed 2026-07-02).
+_KNOWN_DISTINCT_SAME_NAME: tuple[frozenset, ...] = (frozenset({17, 308}),)
+
+
 def _log_duplicate_name_customers(conn: sqlite3.Connection) -> None:
     """Log same-first+last customer pairs and what each profile holds.
 
@@ -5254,6 +5473,14 @@ def _log_duplicate_name_customers(conn: sqlite3.Connection) -> None:
            GROUP BY 1, 2 HAVING n > 1"""
     ).fetchall()
     for d in dupes:
+        cid_set = frozenset(int(c) for c in d["cids"].split(","))
+        if cid_set in _KNOWN_DISTINCT_SAME_NAME:
+            logger.info(
+                "Duplicate-name census: %s %s → cids %s are known-distinct "
+                "people (confirmed) — OK", d["f"].title(), d["l"].title(),
+                sorted(cid_set),
+            )
+            continue
         parts = []
         for cid_str in d["cids"].split(","):
             cid = int(cid_str)
@@ -9027,8 +9254,9 @@ def merge_customers(source_name: str, target_name: str,
             ).fetchone()
             if not existing_alias:
                 conn.execute(
-                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
-                    (target_name, source_name),
+                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value, customer_id) "
+                    "VALUES (?, 'name', ?, ?)",
+                    (target_name, source_name, target_cust["customer_id"]),
                 )
         # If source had a different email, add it as alias email
         source_email = (source_row["customer_email"] if source_row else "") or ""

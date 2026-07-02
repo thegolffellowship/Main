@@ -143,6 +143,20 @@ block the others.
 - `_repair_watson_attribution()` — duplicate Tim Watson cid 94 → 433 (v2.16.8)
 - `_repair_stich_attribution()` — any duplicate exact-name Dan Stich row → 298,
   plus 'Daniel Stich' name alias (v2.16.18; user-confirmed single person)
+- `_repair_franz_attribution()` — duplicate Kyle Franz cid 316 → 315 (v2.16.20)
+- `_repair_massey_fragments()` — Will/William Massey fragments 407/408/409 → 311,
+  plus 'William Massey' name alias (v2.16.20)
+- `_repair_arias_identities()` — Victor Arias Jr (cid 17) and Victor Arias III
+  (cid 308) are **two different people** (father & son; dad pays). NEVER merge
+  them. The repair routes fragment/misrouted rows between them by name marker
+  (III/3rd/v3rdgen → son; Jr/vicdr → dad; unmarked fragment rows → dad),
+  retired fragments 414/434, renamed dad's transactions to 'Victor Arias Jr',
+  and added suffix-name aliases for both. The bare name 'Victor Arias' is
+  intentionally NOT aliased — it is genuinely ambiguous and the lookup guard
+  must keep refusing it. The pair is registered in
+  `_KNOWN_DISTINCT_SAME_NAME` so the duplicate-name census reports them as
+  known-distinct instead of warning every boot; add future confirmed
+  same-name-different-people pairs there.
 
 **How to add a new repair:** See `docs/claude/customer-merge-repair.md` for the full
 playbook — diagnosis steps, function skeleton, and 7 critical gotchas (wrong column
