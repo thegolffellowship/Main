@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.16.22";
+window.TGF_VERSION = "2.16.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.23",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the Venmo CSV importer stored the payment MEMO as the customer name on incoming payments ('Skins', 'Putting Contest', 'Luke+Youngs+...+Balance+Due') — the importer never used the CSV's From field, so those ledger rows could never link to a customer. Incoming payments now take the payer from the From field; the 'NAME - reason' note pattern still wins so payments made on someone else's behalf keep crediting the named player.",
+      "Repair: a boot-time pass re-links the existing memo-named Venmo ledger rows (54 found in the live audit). The real payer was recoverable from the row's own description ('<payer>: <memo>'): each row is linked to the payer's profile and its customer field rewritten to the payer's canonical name, with the memo preserved in the description. Payers with no profile or an ambiguous name are left as-is and logged for review rather than guessed.",
+      "Fix: name display columns that stored title-cased roman numerals (Golf Genius import wrote 'Victor Iii Arias') are normalized to proper suffix casing ('Victor III Arias') across handicap links/rounds, RSVPs, season standings, match play pools, aliases, and the ledger. Only unambiguous numeral tokens are touched (II/III/IV/VII/VIII/IX — never 'Vi' or 'V', which collide with real names).",
+    ],
+  },
   {
     version: "2.16.22",
     date: "2026-07-02",
