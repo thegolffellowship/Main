@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.16.25";
+window.TGF_VERSION = "2.16.26";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.26",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the Golf Genius handicap sync resolved each player's email from their most recent transaction row (matched by display name) instead of their customer profile — Golf Genius matches league members BY EMAIL, so a player whose latest transaction carried a blank (guest purchase), a buyer's email, or an old typo could be silently dropped from the sync or synced under an address GG doesn't recognize, leaving their GG handicap stale. Resolution is now canonical-first via the link's customer_id: the profile's designated Golf Genius email (the is_golf_genius flag existed in the schema for exactly this but was never read by the export), then the primary email, then any profile email — with the old transaction-snapshot method kept only as a fallback for unlinked legacy rows, so no currently-syncing player can lose their email.",
+      "Diagnostics: a boot-time log-only pass lists every player whose Golf Genius sync email CHANGES under the new resolution (and anyone newly included), so the deploy log shows exactly who is affected before the nightly 02:00 sync uploads them — if a listed player's new canonical address isn't what Golf Genius knows them by, fix the profile (or set their GG-specific email flag) before the sync runs.",
+    ],
+  },
   {
     version: "2.16.25",
     date: "2026-07-02",

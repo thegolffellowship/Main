@@ -4800,6 +4800,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_roman_numeral_name_case failed")
 
+        # Log-only: which players' Golf Genius sync email changes under
+        # canonical-first resolution — review in the deploy log BEFORE the
+        # nightly 02:00 sync uploads them.
+        try:
+            _log_gg_export_email_changes(conn)
+        except Exception:
+            logger.exception("Non-fatal: _log_gg_export_email_changes failed")
+
         # Log-only census of same-named customer profiles (which one holds
         # what) so ambiguous-name cases can be resolved from the deploy log.
         try:
@@ -5680,6 +5688,61 @@ def _repair_roman_numeral_name_case(conn: sqlite3.Connection) -> None:
                     )
     if fixed:
         conn.commit()
+
+
+def _log_gg_export_email_changes(conn: sqlite3.Connection) -> None:
+    """Log players whose Golf Genius sync email differs under canonical-first
+    resolution (v2.16.26) vs the legacy latest-transaction-snapshot method.
+
+    Golf Genius matches league members BY EMAIL, so a changed address only
+    updates the right member if GG knows them under it. This runs at every
+    boot (log-only, quiet when nothing differs) so the deploy log lists the
+    affected players before the nightly 02:00 sync uploads them. Losing an
+    email is impossible — the legacy resolution remains the fallback — so
+    the diff can only show changed addresses and newly-included players.
+    """
+    rows = conn.execute(
+        """SELECT l.player_name, l.customer_name,
+                  (SELECT LOWER(TRIM(ce.email)) FROM customer_emails ce
+                    WHERE ce.customer_id = l.customer_id
+                      AND ce.email IS NOT NULL AND TRIM(ce.email) != ''
+                    ORDER BY ce.is_golf_genius DESC, ce.is_primary DESC,
+                             ce.email_id ASC LIMIT 1) AS canonical,
+                  COALESCE(
+                    (SELECT LOWER(TRIM(i1.customer_email)) FROM items i1
+                      WHERE LOWER(i1.customer) = LOWER(l.customer_name)
+                        AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
+                      ORDER BY i1.id DESC LIMIT 1),
+                    (SELECT LOWER(TRIM(ca.alias_value)) FROM customer_aliases ca
+                      WHERE LOWER(ca.customer_name) = LOWER(l.customer_name)
+                        AND ca.alias_type = 'email' LIMIT 1),
+                    '') AS legacy
+           FROM handicap_player_links l
+           WHERE l.customer_name IS NOT NULL"""
+    ).fetchall()
+    changed = gained = 0
+    for r in rows:
+        canon = (r["canonical"] or "").strip()
+        legacy = (r["legacy"] or "").strip()
+        if canon and legacy and canon != legacy:
+            changed += 1
+            logger.warning(
+                "GG sync email change: %s (%s) will sync as %r (was %r) — "
+                "confirm Golf Genius knows them by the new address",
+                r["player_name"], r["customer_name"], canon, legacy,
+            )
+        elif canon and not legacy:
+            gained += 1
+            logger.info(
+                "GG sync: %s (%s) NEWLY included via canonical email %r "
+                "(legacy resolution found none)",
+                r["player_name"], r["customer_name"], canon,
+            )
+    if changed or gained:
+        logger.info(
+            "GG sync email diff: %d player(s) change address, %d newly included",
+            changed, gained,
+        )
 
 
 def _log_duplicate_name_customers(conn: sqlite3.Connection) -> None:
@@ -13961,6 +14024,19 @@ def get_handicap_export_data(chapter: str | None = None,
         links = conn.execute(
             """SELECT l.player_name, l.customer_name,
                       COALESCE(
+                        -- Canonical first (v2.16.26): the customer profile's
+                        -- designated Golf Genius email, then primary email,
+                        -- then any profile email — via the link's customer_id.
+                        -- Golf Genius matches league members BY EMAIL, and the
+                        -- legacy latest-transaction snapshot below could be a
+                        -- guest-purchase blank, a buyer's context, or an old
+                        -- typo; it remains only as fallback for unlinked rows.
+                        (SELECT LOWER(TRIM(ce.email)) FROM customer_emails ce
+                         WHERE ce.customer_id = l.customer_id
+                           AND ce.email IS NOT NULL AND TRIM(ce.email) != ''
+                         ORDER BY ce.is_golf_genius DESC, ce.is_primary DESC,
+                                  ce.email_id ASC
+                         LIMIT 1),
                         (SELECT LOWER(TRIM(i1.customer_email)) FROM items i1
                          WHERE LOWER(i1.customer) = LOWER(l.customer_name)
                            AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''

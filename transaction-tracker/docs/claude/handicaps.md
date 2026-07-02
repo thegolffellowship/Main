@@ -83,6 +83,22 @@ Two visual separator rows appear in the expanded rounds table:
 - `/api/handicaps/players` auto-runs `relink_all_unlinked_players()` on each request
 - Customers page also matches by `player_name` as fallback (not just `customer_name`)
 
+## Golf Genius sync email — canonical-first (v2.16.26)
+
+`get_handicap_export_data` (feeds the nightly 02:00 GG sync and the manual
+Sync button) resolves each linked player's email canonical-first via
+`handicap_player_links.customer_id`:
+`customer_emails.is_golf_genius = 1` (the per-customer designated GG email —
+the flag existed since the schema was created but the export never read it)
+→ `is_primary = 1` → any profile email → legacy latest `items.customer_email`
+snapshot by name → email alias by name. Golf Genius matches league members BY
+EMAIL, so the legacy snapshot-first order could sync a player under a
+guest-purchase blank or an old typo and silently never update their real GG
+member. Emails can only be gained or corrected by this change, never lost
+(legacy paths remain as fallback). `_log_gg_export_email_changes()` runs at
+every boot (log-only) and lists players whose sync address changed or who are
+newly included, so the deploy log shows the effect before the next 02:00 sync.
+
 ## Handicap email — canonical email priority
 
 `build_handicap_card_data` looks up the customer_id via the most recent items row that
