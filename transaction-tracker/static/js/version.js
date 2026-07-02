@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.23";
+window.TGF_VERSION = "2.16.24";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.24",
+    date: "2026-07-02",
+    changes: [
+      "Polish: Venmo ledger rows whose payer has no customer profile (37 rows / 17 payers after the v2.16.23 repair) now display the PAYER's name instead of the payment memo — the ledger reads correctly, and the moment a profile is created for one of these payers the boot backfill links their rows automatically with no further action. The per-row 'unresolved' log noise also stops repeating every boot (each row logs once, when its display is first rewritten; the summary count line remains).",
+    ],
+  },
   {
     version: "2.16.23",
     date: "2026-07-02",

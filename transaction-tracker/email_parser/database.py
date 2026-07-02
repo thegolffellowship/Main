@@ -5498,7 +5498,7 @@ def _repair_venmo_memo_ledger_customers(conn: sqlite3.Connection) -> None:
              AND customer IS NOT NULL AND customer != ''
              AND description LIKE '%:%'"""
     ).fetchall()
-    fixed = unresolved = 0
+    fixed = unresolved = renamed = 0
     for r in rows:
         payer = " ".join((r["description"] or "").split(":", 1)[0].split())
         if len(payer) < 3 or " " not in payer:
@@ -5506,11 +5506,23 @@ def _repair_venmo_memo_ledger_customers(conn: sqlite3.Connection) -> None:
             continue  # single-token / emoji payer — not name-resolvable
         cid = _lookup_customer_id(conn, payer, None)
         if cid is None:
+            # No profile for this payer (or the name is ambiguous). Still set
+            # the display to the payer so the ledger reads correctly and the
+            # boot backfill auto-links the row the moment a profile for this
+            # payer is created. Log per-row only on the first rewrite so the
+            # remaining unresolved set doesn't spam every boot.
+            if (r["customer"] or "").strip().lower() != payer.lower():
+                conn.execute(
+                    "UPDATE acct_transactions SET customer = ? WHERE id = ?",
+                    (payer, r["id"]),
+                )
+                renamed += 1
+                logger.info(
+                    "Venmo memo-ledger repair: payer %r has no profile — row %s "
+                    "display set to payer (memo %r stays in description)",
+                    payer, r["id"], (r["customer"] or "")[:40],
+                )
             unresolved += 1
-            logger.info(
-                "Venmo memo-ledger repair: payer %r unresolved (row %s, memo %r)",
-                payer, r["id"], (r["customer"] or "")[:40],
-            )
             continue
         canon = conn.execute(
             """SELECT TRIM(COALESCE(NULLIF(company_name, ''),
@@ -5528,12 +5540,13 @@ def _repair_venmo_memo_ledger_customers(conn: sqlite3.Connection) -> None:
             "Venmo memo-ledger repair: row %s memo %r → %s (cid %d)",
             r["id"], (r["customer"] or "")[:40], display, cid,
         )
-    if fixed:
+    if fixed or renamed:
         conn.commit()
     if fixed or unresolved:
         logger.info(
-            "Venmo memo-ledger repair: %d row(s) linked to their payer, %d left unresolved",
-            fixed, unresolved,
+            "Venmo memo-ledger repair: %d row(s) linked to their payer, "
+            "%d unresolved (no profile; %d of them renamed to payer this run)",
+            fixed, unresolved, renamed,
         )
 
 
