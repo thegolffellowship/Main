@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.17.6";
+window.TGF_VERSION = "2.17.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.7",
+    date: "2026-07-02",
+    changes: [
+      "Data (admin-provided): Steve Novosad's profile is filled in — phone (210) 557-2621, primary email snovosad78@gmail.com, his Golf Genius sending address planelite1959@gmail.com as a secondary email so his RSVPs link, a 'Stephen Novosad' name alias, and his initial membership term 5/2/2025–5/2/2026. His 7 unlinked decline RSVPs now attach to his profile.",
+      "Data (admin-provided): Matt Rose's profile is filled in — phone (210) 287-2502, email matt.rose3@yahoo.com, Venmo @Matt-Rose-58, and his 2025 membership term (Venmo $75 on 3/18/2025). His decline RSVP links. Joe Garza gets joe@jjoconstruction.com and his Canyon Springs RSVP.",
+      "Repair: the 'Joe Brandon' profile is deleted — placeholder notes for a guest Brandon who never played, not a person (same pinned-and-guarded fragment delete as Victor Brandon).",
+      "Audit: the five confirmed Facebook-ad-lead RSVP senders (Robin Hulsey, Linda, Martin Parker, Christopher Graham, 'Gbob') are registered as known non-customers — their Golf Genius decline RSVPs stay unlinked by design and the identity audit now segregates them into their own count instead of flagging them as problems.",
+    ],
+  },
   {
     version: "2.17.6",
     date: "2026-07-02",

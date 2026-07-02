@@ -4874,7 +4874,8 @@ def init_db(db_path: str | Path | None = None) -> None:
 
         # Identity-audit findings (admin-confirmed 2026-07-02): the Massey
         # shadow alias on Colby's profile, the Reggie/Reginald Johnson split,
-        # and the Victor Brandon name-mash fragment.
+        # the Brandon name-mash fragments, and admin-provided contact +
+        # membership details for pre-tracker members.
         try:
             _repair_massey_shadow_alias(conn)
         except Exception:
@@ -4884,9 +4885,13 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_reggie_johnson_profiles failed")
         try:
-            _repair_victor_brandon_fragment(conn)
+            _repair_fragment_profiles(conn)
         except Exception:
-            logger.exception("Non-fatal: _repair_victor_brandon_fragment failed")
+            logger.exception("Non-fatal: _repair_fragment_profiles failed")
+        try:
+            _repair_confirmed_profile_details(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_confirmed_profile_details failed")
 
         # Fix the mis-parsed standalone SEASON CONTESTS order R747210347
         # (buyer is Stu Kirksey): blank-customer case AND the nameless-shell-
@@ -5670,6 +5675,20 @@ _VENMO_KNOWN_NON_CUSTOMERS: frozenset = frozenset(n.lower() for n in (
     "Ben Gardeen",
     "Steven Milam",
     "Alex Estrada",
+))
+
+
+# RSVP sender emails confirmed (2026-07-02) to NOT be TGF customers:
+# Facebook ad leads who receive Golf Genius invites and decline, but have
+# never played. Their decline RSVPs stay unlinked BY DESIGN — creating
+# profiles for them is explicitly unwanted. The identity audit segregates
+# these instead of flagging them.
+_RSVP_KNOWN_NON_CUSTOMERS: frozenset = frozenset(e.lower() for e in (
+    "hulseyrobin@yahoo.com",   # Robin Hulsey — FB ad lead (Austin), never played
+    "tbabygolf@aol.com",       # Linda (Sackett, believed) — FB ad lead, never played
+    "mparker003@yahoo.com",    # Martin Parker — FB ad lead (Austin), never played
+    "hmcmgraham@gmail.com",    # Christopher Graham — FB ad lead, never played
+    "210runner@outlook.com",   # "Gbob" — name never provided, never played
 ))
 
 
@@ -15270,79 +15289,193 @@ def _repair_reggie_johnson_profiles(conn: sqlite3.Connection,
         logger.warning("Reggie Johnson repair failed: %s", e)
 
 
-def _repair_victor_brandon_fragment(conn: sqlite3.Connection) -> None:
-    """Delete the 'Victor Brandon' fragment profile (cid 410).
+# Confirmed NOT-a-person profiles (admin-confirmed 2026-07-02), pinned to
+# (cid, exact name) so a future real customer can never be touched:
+# - 410 'Victor Brandon': name-mash from a Victor Arias Jr. order where he
+#   paid for his son AND a guest named Brandon.
+# - 415 'Joe Brandon': placeholder notes for a guest 'Brandon' who is
+#   believed to have never actually played.
+_FRAGMENT_PROFILES: tuple[tuple[int, str, str], ...] = (
+    (410, "victor brandon", "name-mash of Victor Arias Jr. + guest Brandon"),
+    (415, "joe brandon", "placeholder for a guest 'Brandon' who never played"),
+)
 
-    Not a real person: a name-mash created from a Victor Arias Jr.
-    transaction where he paid for his son AND a guest named Brandon
-    (admin-confirmed 2026-07-02). The transaction itself was re-attributed
-    by the Arias repairs; this empty fragment (no purchases, no email)
-    kept an active_member status it never earned. Pinned to cid 410 +
-    exact name so it can never touch a future real customer; refuses to
-    delete if the profile holds ANY substantive rows. Idempotent.
+
+def _repair_fragment_profiles(conn: sqlite3.Connection) -> None:
+    """Delete confirmed fragment profiles (see _FRAGMENT_PROFILES).
+
+    For each: re-points its order-split rows to their own item's owner
+    (splits get name-backfilled onto fragments — 3 blocked the 410 delete
+    live on 2026-07-02), then refuses to delete if the profile still holds
+    ANY substantive rows; status/membership/role/alias rows are cleaned
+    when the delete does run. Idempotent.
     """
-    row = conn.execute(
-        """SELECT customer_id FROM customers
-           WHERE customer_id = 410
-             AND LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')))
-                 = 'victor brandon'"""
-    ).fetchone()
-    if not row:
-        return
-    cid = row["customer_id"]
-    # The Arias-order split rows were name-backfilled onto this fragment
-    # (seen live 2026-07-02: 3 godaddy_order_splits rows blocked the delete).
-    # Re-point each split to its own item's owner before the emptiness check.
-    n = conn.execute(
-        """UPDATE godaddy_order_splits
-           SET customer_id = (SELECT i.customer_id FROM items i
-                              WHERE i.id = godaddy_order_splits.item_id)
-           WHERE customer_id = ?
-             AND item_id IS NOT NULL
-             AND (SELECT i.customer_id FROM items i
-                  WHERE i.id = godaddy_order_splits.item_id) IS NOT NULL""",
-        (cid,),
-    ).rowcount
-    if n:
-        logger.info(
-            "Victor Brandon fragment repair: re-pointed %d order-split row(s) "
-            "to their item's owner", n,
-        )
-    cleanable = {"customer_roles", "customer_memberships", "customer_statuses",
-                 "customer_aliases"}
-    blockers = []
-    for table, col in _CUSTOMER_FK_COLUMNS:
-        if table in cleanable:
+    for frag_cid, expected_name, why in _FRAGMENT_PROFILES:
+        row = conn.execute(
+            """SELECT customer_id FROM customers
+               WHERE customer_id = ?
+                 AND LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')))
+                     = ?""",
+            (frag_cid, expected_name),
+        ).fetchone()
+        if not row:
             continue
-        try:
-            n = conn.execute(
-                f"SELECT COUNT(*) AS c FROM {table} WHERE {col} = ?", (cid,)
-            ).fetchone()["c"]
-        except sqlite3.OperationalError:
-            continue
+        cid = row["customer_id"]
+        n = conn.execute(
+            """UPDATE godaddy_order_splits
+               SET customer_id = (SELECT i.customer_id FROM items i
+                                  WHERE i.id = godaddy_order_splits.item_id)
+               WHERE customer_id = ?
+                 AND item_id IS NOT NULL
+                 AND (SELECT i.customer_id FROM items i
+                      WHERE i.id = godaddy_order_splits.item_id) IS NOT NULL""",
+            (cid,),
+        ).rowcount
         if n:
-            blockers.append(f"{table}.{col}={n}")
-    n_emails = conn.execute(
-        "SELECT COUNT(*) AS c FROM customer_emails WHERE customer_id = ?", (cid,)
-    ).fetchone()["c"]
-    if n_emails:
-        blockers.append(f"customer_emails={n_emails}")
-    if blockers:
-        logger.warning(
-            "Victor Brandon fragment repair: cid %d holds data (%s) — NOT deleting",
-            cid, ", ".join(blockers),
+            logger.info(
+                "Fragment repair (%s): re-pointed %d order-split row(s) "
+                "to their item's owner", expected_name, n,
+            )
+        cleanable = {"customer_roles", "customer_memberships",
+                     "customer_statuses", "customer_aliases"}
+        blockers = []
+        for table, col in _CUSTOMER_FK_COLUMNS:
+            if table in cleanable:
+                continue
+            try:
+                cnt = conn.execute(
+                    f"SELECT COUNT(*) AS c FROM {table} WHERE {col} = ?", (cid,)
+                ).fetchone()["c"]
+            except sqlite3.OperationalError:
+                continue
+            if cnt:
+                blockers.append(f"{table}.{col}={cnt}")
+        n_emails = conn.execute(
+            "SELECT COUNT(*) AS c FROM customer_emails WHERE customer_id = ?",
+            (cid,),
+        ).fetchone()["c"]
+        if n_emails:
+            blockers.append(f"customer_emails={n_emails}")
+        if blockers:
+            logger.warning(
+                "Fragment repair (%s): cid %d holds data (%s) — NOT deleting",
+                expected_name, cid, ", ".join(blockers),
+            )
+            continue
+        for t in cleanable:
+            conn.execute(f"DELETE FROM {t} WHERE customer_id = ?", (cid,))
+        conn.execute(
+            "UPDATE customer_statuses SET set_by = NULL WHERE set_by = ?", (cid,)
         )
-        return
-    for t in cleanable:
-        conn.execute(f"DELETE FROM {t} WHERE customer_id = ?", (cid,))
-    conn.execute(
-        "UPDATE customer_statuses SET set_by = NULL WHERE set_by = ?", (cid,)
-    )
-    conn.execute("DELETE FROM customers WHERE customer_id = ?", (cid,))
-    logger.info(
-        "Victor Brandon fragment repair: deleted empty fragment profile cid %d "
-        "(name-mash of Victor Arias Jr. + guest Brandon)", cid,
-    )
+        conn.execute("DELETE FROM customers WHERE customer_id = ?", (cid,))
+        logger.info(
+            "Fragment repair: deleted empty fragment profile cid %d (%s)",
+            cid, why,
+        )
+
+
+# Admin-provided contact/membership details (2026-07-02) for confirmed
+# profiles that predate the tracker. Shape per entry:
+# (cid, expected name, phone, venmo, primary_email, extra_emails,
+#  name_aliases, membership_terms[(start, end, price, note)])
+_CONFIRMED_PROFILE_DETAILS = (
+    (66, "steve novosad", "(210) 557-2621", None, "snovosad78@gmail.com",
+     ("planelite1959@gmail.com",), ("Stephen Novosad",),
+     (("2025-05-02", "2026-05-02", None,
+       "Initial membership term — admin-provided 2026-07-02"),)),
+    (67, "matt rose", "(210) 287-2502", "@Matt-Rose-58", "matt.rose3@yahoo.com",
+     (), (),
+     (("2025-03-18", "2026-03-18", 75.0,
+       "Venmo $75 on 2025-03-18 — admin-provided 2026-07-02"),)),
+    (418, "joe garza", None, None, "joe@jjoconstruction.com", (), (), ()),
+)
+
+
+def _repair_confirmed_profile_details(conn: sqlite3.Connection) -> None:
+    """Fill admin-provided contact + membership details on known profiles.
+
+    Steve Novosad and Matt Rose are former San Antonio members whose history
+    predates the tracker (started 2026); Joe Garza played once as a guest.
+    Their profiles existed with no contact info, which also left their
+    Golf Genius decline RSVPs unlinked. Fills phone/venmo only when blank,
+    adds emails (primary only when none exists), captures email aliases,
+    inserts membership terms (UNIQUE(customer_id, started_at) makes it
+    one-shot), and links any unlinked RSVP sent from one of the profile's
+    emails. Pinned to (cid, exact name). Idempotent.
+    """
+    for (cid, expected_name, phone, venmo, primary,
+         extras, name_aliases, terms) in _CONFIRMED_PROFILE_DETAILS:
+        row = conn.execute(
+            "SELECT customer_id, first_name, last_name, phone, venmo_username "
+            "FROM customers WHERE customer_id = ?", (cid,),
+        ).fetchone()
+        if not row:
+            continue
+        actual = (f"{(row['first_name'] or '').strip()} "
+                  f"{(row['last_name'] or '').strip()}").strip()
+        if actual.lower() != expected_name:
+            logger.warning(
+                "Profile-details repair: cid %d is %r, expected %r — skipping",
+                cid, actual, expected_name,
+            )
+            continue
+        changed = 0
+        if phone and not (row["phone"] or "").strip():
+            conn.execute("UPDATE customers SET phone = ? WHERE customer_id = ?",
+                         (phone, cid))
+            changed += 1
+        if venmo and not (row["venmo_username"] or "").strip():
+            conn.execute(
+                "UPDATE customers SET venmo_username = ? WHERE customer_id = ?",
+                (venmo, cid))
+            changed += 1
+        has_primary = conn.execute(
+            "SELECT 1 FROM customer_emails WHERE customer_id = ? AND is_primary = 1",
+            (cid,),
+        ).fetchone()
+        for email, is_prim in ([(primary, 0 if has_primary else 1)] if primary else []) \
+                + [(e, 0) for e in extras]:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, label) "
+                "VALUES (?, ?, ?, 'admin')", (cid, email, is_prim))
+            changed += cur.rowcount
+            conn.execute(
+                "INSERT OR IGNORE INTO customer_aliases "
+                "(customer_name, alias_type, alias_value, customer_id) "
+                "VALUES (?, 'email', ?, ?)", (actual, email, cid))
+        for a in name_aliases:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO customer_aliases "
+                "(customer_name, alias_type, alias_value, customer_id) "
+                "VALUES (?, 'name', ?, ?)", (actual, a, cid))
+            changed += cur.rowcount
+        for start, end, price, note in terms:
+            try:
+                cur = conn.execute(
+                    """INSERT OR IGNORE INTO customer_memberships
+                       (customer_id, started_at, expires_at, source, price_paid, notes)
+                       VALUES (?, ?, ?, 'manual', ?, ?)""",
+                    (cid, start, end, price, note))
+                changed += cur.rowcount
+            except sqlite3.OperationalError:
+                pass  # memberships table not created yet on this DB
+        for email in ([primary] if primary else []) + list(extras):
+            n = conn.execute(
+                "UPDATE rsvps SET customer_id = ? "
+                "WHERE customer_id IS NULL AND LOWER(TRIM(COALESCE(player_email,''))) = ?",
+                (cid, email.lower()),
+            ).rowcount
+            if n:
+                logger.info(
+                    "Profile-details repair: linked %d RSVP(s) from %s to %s (cid %d)",
+                    n, email, actual, cid,
+                )
+                changed += n
+        if changed:
+            logger.info(
+                "Profile-details repair: %s (cid %d) — %d field(s)/row(s) filled",
+                actual, cid, changed,
+            )
 
 
 def _repair_kirksey_profiles(conn: sqlite3.Connection,

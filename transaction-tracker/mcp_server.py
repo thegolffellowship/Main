@@ -512,14 +512,30 @@ def get_customer_data_audit() -> str:
         report["unlinked_rows"] = {k: v for k, v in unlinked.items() if v}
 
         # 6b. The unlinked RSVP rows themselves — names/emails/events so the
-        #     admin can identify who each belongs to.
-        report["unlinked_rsvp_rows"] = _section(
+        #     admin can identify who each belongs to. Known FB-ad-lead
+        #     senders (never played, no profile wanted) are segregated into
+        #     their own count instead of being flagged.
+        from email_parser.database import _RSVP_KNOWN_NON_CUSTOMERS
+        all_unlinked = conn.execute(
             """SELECT id, player_name, player_email, gg_event_name, event_date,
                       response, matched_event
                FROM rsvps WHERE customer_id IS NULL
-               ORDER BY event_date DESC, player_name""",
-            cap=50,
-        )
+               ORDER BY event_date DESC, player_name"""
+        ).fetchall()
+        actionable, known_leads = [], []
+        for r in all_unlinked:
+            d = dict(r)
+            if (d.get("player_email") or "").strip().lower() in _RSVP_KNOWN_NON_CUSTOMERS:
+                known_leads.append(d)
+            else:
+                actionable.append(d)
+        report["unlinked_rsvp_rows"] = {"count": len(actionable),
+                                        "rows": actionable[:50]}
+        report["known_lead_rsvps"] = {
+            "count": len(known_leads),
+            "senders": sorted({(d.get("player_email") or "").lower()
+                               for d in known_leads}),
+        }
 
         # 7. Name aliases that equal ANOTHER customer's canonical name —
         #    orders under that name resolve to the alias owner, not the
