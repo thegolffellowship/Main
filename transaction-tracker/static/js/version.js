@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.16.32";
+window.TGF_VERSION = "2.17.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.0",
+    date: "2026-07-02",
+    changes: [
+      "Feature: clicking ✗ on an enrollment (Enrollment tab, or the City Match Play 'Not Yet in a Pool' list) now opens a removal modal instead of a bare confirm — pick a reason (Refunded / Duplicate entry / Entered by mistake / Other), and for refunds record the amount and method (Venmo, Cash, Check, GoDaddy refund, Other) plus an optional note.",
+      "Feature: every removal is permanently recorded in a new removals log, shown as a 'Removals & Refunds' table at the bottom of the Enrollment tab (follows the same contest/chapter/season filters). The enrollment row is deleted as before — and the source purchase's contest flag is still cleared so the sync doesn't re-enroll — but there is now always a record of who was removed, when, why, and what was refunded.",
+      "Seeded: Neil Cheshire and Joseph Lourigan's 2026 City Match Play Venmo refunds (removed before this log existed) are recorded retroactively at boot so the list is complete from day one. Refund amounts weren't captured at the time — they show blank until provided.",
+    ],
+  },
   {
     version: "2.16.32",
     date: "2026-07-02",

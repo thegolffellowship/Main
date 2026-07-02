@@ -8,7 +8,7 @@
 `roles`, `statuses`, `customer_statuses`,
 `handicap_rounds`, `handicap_player_links`, `handicap_settings`,
 `message_templates`, `message_log`, `feedback`, `parse_warnings`,
-`season_contests`, `app_settings`, `action_items`,
+`season_contests`, `season_contest_removals`, `app_settings`, `action_items`,
 `acct_allocations`, `acct_transactions`, `godaddy_order_splits`, `bank_statement_rows`,
 `period_closings`, `bank_accounts`, `bank_deposits`, `reconciliation_matches`,
 `expense_transactions`, `acct_keyword_rules`,
@@ -28,6 +28,7 @@ Key tables not documented elsewhere in CLAUDE sub-docs:
 - `customer_statuses` — append-only history table. One row per status change per customer. Current status = most recent row by `set_at DESC`. Columns: `customer_id` (FK to `customers`, ON DELETE CASCADE), `status_id` (FK to `statuses`), `set_at` (timestamp), `set_by` (FK to customers — who made the change), `notes` (free text). Indexed on `(customer_id, set_at DESC)`. The denormalized `customers.current_player_status` column is kept in sync as a snapshot for legacy reads, but `customer_statuses` is canonical. `email_parser/memberships.py` writes FORMER rows on lapse and MEMBER rows on renewal; the `set_customer_status` helper enforces idempotency (skips inserting a duplicate row when the customer is already at that status).
 - `app_settings` — persistent key-value store (matrix data, feature flags)
 - `season_contests` — contest enrollment tracking (NET/GROSS points race, city match play)
+- `season_contest_removals` — permanent audit trail of removed enrollments (snapshot of the enrollment + removed_at, reason, refund_amount, refund_method, note). Written by `remove_season_contest_enrollment()`; listed at the bottom of the Contests page Enrollment tab. See `docs/claude/customers.md → Season contest removals recordation`.
 - `parse_warnings` — flagged items with potential parsing errors (open/dismissed/resolved)
 - `acct_allocations` — per-player event cost breakdown (course, prizes, fees, operating margin, payment_method, acct_transaction_id). Covers GoDaddy orders AND non-GoDaddy items (Venmo, cash, credit transfers) via synthetic order_ids.
 - `acct_transactions` — single source of truth flat ledger. Every financial event writes entry_type/category/amount/account/status. Flat entries link to items via item_id. Status transitions: active → reconciled (matched to bank), reversed, or **merged** (soft-deleted by Duplicate Detective; `merged_into_id` FK points at the surviving row).
@@ -62,7 +63,8 @@ column:
 - `acct_transactions.customer_id` — FK linking ledger entries to `customers` (backfilled via 5-step cascade)
 - `handicap_player_links.customer_id` — FK linking Golf Genius player rows to `customers`
 - `rsvps.customer_id` — FK backfilled at startup
-- `season_contests.customer_id` — FK backfilled at startup
+- `season_contests.customer_id` — FK stamped from the source item at insert (v2.16.32); backfill remains for legacy rows
+- `season_contest_removals.customer_id` — FK snapshotted from the enrollment at removal time
 - `handicap_rounds.customer_id` — FK backfilled at startup
 - `godaddy_order_splits.customer_id` — FK backfilled at startup
 - `parse_warnings.customer_id` — FK (Phase 2); backfilled by `_backfill_customer_id_on_parse_warnings` (by customer name) so the COO action-items banner can deep-link from a parse warning to the linked player

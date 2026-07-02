@@ -511,6 +511,22 @@ split Kirksey profiles into the one holding his items (other spelling
 becomes an alias) — registered before the boot contest sync so his City
 Match Play enrollment lands on the surviving profile.
 
+## Season contest removals recordation (v2.17.0)
+
+`season_contest_removals` — permanent audit trail for enrollment removals
+(customer_name + customer_id snapshot, contest/chapter/season,
+source_item_id, enrolled_at, removed_at in US/Central, reason,
+refund_amount, refund_method, note). `remove_season_contest_enrollment()`
+does snapshot → clear source-item contest flag → delete enrollment in one
+transaction; `DELETE /api/season-contests/<id>` accepts an optional JSON
+body `{reason, refund_amount, refund_method, note}` from the removal modal
+on the Contests page (both the Enrollment tab ✗ and the CMP unassigned-list
+✗ route through it). `GET /api/season-contests/removals` (manager) feeds
+the "Removals & Refunds" table at the bottom of the Enrollment tab.
+`_seed_initial_contest_removals()` (boot, idempotent) retro-records the two
+pre-feature Venmo refunds (Cheshire/Lourigan CMP 2026) and backfills
+customer_id on seed rows written before the profile was resolvable.
+
 **Column/history reconciler (v2.16.13):** `_sync_status_history_with_column()`
 runs at every boot after all the column writers. `_migrate_autocorrect_player_status`
 updates only `current_player_status` (never `customer_statuses`), so a

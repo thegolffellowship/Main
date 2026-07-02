@@ -8318,45 +8318,50 @@ def api_customer_season_contests(customer_name):
     return jsonify(enrollments)
 
 
+@app.route("/api/season-contests/removals")
+@require_role("manager")
+def api_season_contest_removals():
+    """List removal records (the Enrollment tab's recordation list)."""
+    from email_parser.database import get_season_contest_removals
+    removals = get_season_contest_removals(
+        request.args.get("contest_type"),
+        request.args.get("chapter"),
+        request.args.get("season"),
+    )
+    return jsonify(removals)
+
+
 @app.route("/api/season-contests/<int:enrollment_id>", methods=["DELETE"])
 @require_role("manager")
 def api_delete_season_contest(enrollment_id):
-    """Delete a season contest enrollment by id.
+    """Remove a season contest enrollment and record the removal.
 
-    Also clears the matching contest flag on the enrollment's source
-    purchase item. Without that, the delete didn't stick: the backing item
-    still carried the flag (e.g. city_match_play='YES'), so the next
-    contest sync silently re-enrolled the player — an admin removing a
-    refunded enrollment saw it resurrect. Clearing the flag makes the
-    removal permanent while leaving the purchase row itself untouched.
+    Optional JSON body from the refund modal:
+      { reason, refund_amount, refund_method, note }
+
+    remove_season_contest_enrollment() snapshots the enrollment into
+    season_contest_removals (permanent recordation shown at the bottom of
+    the Enrollment tab), clears the matching contest flag on the source
+    purchase item (without which the next sync silently re-enrolled the
+    player), and deletes the enrollment — all in one transaction.
     """
-    from email_parser.database import _connect
-    _FLAG_COLS = {
-        "NET Points Race": "net_points_race",
-        "GROSS Points Race": "gross_points_race",
-        "City Match Play": "city_match_play",
-    }
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT contest_type, source_item_id, customer_name FROM season_contests WHERE id = ?",
-            (enrollment_id,),
-        ).fetchone()
-        if not row:
-            return jsonify({"error": "Not found"}), 404
-        flag_col = _FLAG_COLS.get(row["contest_type"])
-        if flag_col and row["source_item_id"]:
-            conn.execute(
-                f"UPDATE items SET {flag_col} = NULL WHERE id = ?",
-                (row["source_item_id"],),
-            )
-            logger.info(
-                "Season contest unenroll: cleared %s on item %s (%s, %s)",
-                flag_col, row["source_item_id"], row["customer_name"],
-                row["contest_type"],
-            )
-        conn.execute("DELETE FROM season_contests WHERE id = ?", (enrollment_id,))
-        conn.commit()
-    return jsonify({"ok": True})
+    from email_parser.database import remove_season_contest_enrollment
+    data = request.get_json(silent=True) or {}
+    refund_amount = data.get("refund_amount")
+    try:
+        refund_amount = float(refund_amount) if refund_amount not in (None, "") else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "refund_amount must be a number"}), 400
+    removal = remove_season_contest_enrollment(
+        enrollment_id,
+        reason=data.get("reason"),
+        refund_amount=refund_amount,
+        refund_method=data.get("refund_method"),
+        note=data.get("note"),
+    )
+    if removal is None:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"ok": True, "removal": removal})
 
 
 # ---------------------------------------------------------------------------
