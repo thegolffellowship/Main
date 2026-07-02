@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.18.1";
+window.TGF_VERSION = "2.19.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.19.0",
+    date: "2026-07-02",
+    changes: [
+      "Points Race — Buy-in Status panel on the Contests page Enrollment tab (the first live Golf Genius data integration): loads the public season_points_v2 standings widget from the GG portal server-side (SAN ANTONIO Net 2026 and THE PLAYERS CUP 2026, registry: _GG_POINTS_RACES) and color-codes every ranked player by season-contest buy-in — green = bought in, red = has a tracker profile but no buy-in, amber = GG name didn't match any profile. GG's 'LAST, First' names (including suffixes like 'ARIAS, Victor Jr') resolve to customer_id via _lookup_customer_id with aliases, per the identity-key principle. Also lists players who bought in but aren't in the GG standings yet. Endpoint /api/season-contests/points-race, cached 10 minutes.",
+    ],
+  },
   {
     version: "2.18.1",
     date: "2026-07-02",

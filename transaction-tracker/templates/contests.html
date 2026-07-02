@@ -475,6 +475,20 @@
                     <div class="empty-state"><h3>Select filters and click Load</h3></div>
                 </div>
                 <div id="enr-removals-container" style="margin-top:1.5rem;"></div>
+
+                <!-- Points Race — buy-in status (live from Golf Genius) -->
+                <div id="enr-points-race" style="margin-top:1.75rem;">
+                    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                        <h3 style="margin:0;">Points Race — Buy-in Status</h3>
+                        <select id="pr-race-select">
+                            <option value="san_antonio_net">SAN ANTONIO Net 2026</option>
+                            <option value="players_cup_gross">THE PLAYERS CUP 2026</option>
+                        </select>
+                        <button class="btn btn-primary" id="pr-load-btn">Load from Golf Genius</button>
+                    </div>
+                    <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
+                    <div id="pr-table-container"></div>
+                </div>
             </div>
         </div>
     </main>
@@ -1767,6 +1781,79 @@
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
+    }
+
+    // ═══════════ POINTS RACE — BUY-IN STATUS (live from Golf Genius) ═══════════
+
+    $("pr-load-btn").addEventListener("click", prLoad);
+    $("pr-race-select").addEventListener("change", () => {
+        if ($("pr-table-container").innerHTML) prLoad();
+    });
+
+    async function prLoad() {
+        const race = $("pr-race-select").value;
+        const cont = $("pr-table-container");
+        cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">Fetching standings from Golf Genius…</div>';
+        $("pr-summary").textContent = "";
+        try {
+            const res = await fetch(`/api/season-contests/points-race?race=${encodeURIComponent(race)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            renderPointsRace(data);
+        } catch (e) {
+            cont.innerHTML = `<div style="padding:1rem;color:#b91c1c;">${escapeHtml(e.message)}</div>`;
+        }
+    }
+
+    function renderPointsRace(d) {
+        const fetched = d.fetched_at ? new Date(d.fetched_at).toLocaleTimeString() : "";
+        $("pr-summary").textContent =
+            `${d.label}: ${d.n_enrolled} of ${d.n_players} ranked players are bought into ${d.contest_type}`
+            + (d.n_unresolved ? ` · ${d.n_unresolved} name(s) not matched to a tracker profile` : "")
+            + (fetched ? ` · fetched ${fetched}` : "");
+
+        const rows = d.standings.map(r => {
+            const bg = r.enrolled ? "background:#f0fdf4;"
+                     : (r.customer_id ? "background:#fef2f2;" : "background:#fffbeb;");
+            const badge = r.enrolled
+                ? '<span style="color:#15803d;font-weight:700;">&#10003; IN</span>'
+                : (r.customer_id
+                    ? '<span style="color:#b91c1c;font-weight:600;">&#10007; Not in</span>'
+                    : '<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">? Unmatched</span>');
+            const nameCell = r.customer_id
+                ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
+                : escapeHtml(r.player_name);
+            return `<tr style="${bg}">
+                <td>${escapeHtml(r.rank)}</td>
+                <td>${nameCell}</td>
+                <td style="text-align:right;">${r.total_points ?? ""}</td>
+                <td style="text-align:right;">${r.points_behind ?? ""}</td>
+                <td style="text-align:right;">${r.tournaments ?? ""}</td>
+                <td style="text-align:right;">${r.wins ?? ""}</td>
+                <td>${badge}</td>
+            </tr>`;
+        }).join("");
+
+        let extra = "";
+        if (d.enrolled_not_ranked && d.enrolled_not_ranked.length) {
+            extra = `<div style="margin-top:0.75rem;font-size:0.85rem;">
+                <strong>Bought in but not in the GG standings:</strong>
+                ${d.enrolled_not_ranked.map(m => escapeHtml(m.customer_name)).join(", ")}
+            </div>`;
+        }
+
+        $("pr-table-container").innerHTML = `
+            <table class="enrollment-table">
+                <thead><tr>
+                    <th>Rank</th><th>Player</th>
+                    <th style="text-align:right;">Points</th>
+                    <th style="text-align:right;">Behind</th>
+                    <th style="text-align:right;">Rounds</th>
+                    <th style="text-align:right;">Wins</th>
+                    <th>Buy-in</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>${extra}`;
     }
 
     // ═══════════ INIT ═══════════

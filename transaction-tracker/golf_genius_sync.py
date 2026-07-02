@@ -691,3 +691,78 @@ def parse_page_structure(html: str, base_url: str) -> dict:
         "tables": p.tables,
         "text": "\n".join(p.text_parts),
     }
+
+
+def fetch_season_points_race(page_id: str, league_id: str = "514047",
+                             host: str = "tgf-sa.golfgenius.com") -> list:
+    """Fetch and normalize a season_points_v2 widget (points race standings).
+
+    The portal's curated race pages (e.g. SAN ANTONIO Net 2026) embed this
+    widget in an iframe keyed by page_id. Returns one dict per player:
+    rank, prev_rank, player_name, affiliation, tournaments, wins,
+    total_points, points_behind.
+    """
+    url = (f"https://{host}/leagues/{league_id}/widgets/season_points_v2"
+           f"?page_id={page_id}&shared=false")
+    page = fetch_public_page(url)
+    if page["status_code"] != 200:
+        raise RuntimeError(f"Golf Genius widget returned HTTP {page['status_code']}")
+    parsed = parse_page_structure(page["html"], page["final_url"])
+
+    def _num(s):
+        s = str(s).strip()
+        try:
+            return int(s)
+        except ValueError:
+            try:
+                return float(s)
+            except ValueError:
+                return None
+
+    for table in parsed["tables"]:
+        header = [c.lower() for c in table[0]] if table else []
+        if not any("total points" in h for h in header):
+            continue
+        idx = {}
+        for i, h in enumerate(header):
+            if "current rank" in h or h == "pos.":
+                idx["rank"] = i
+            elif "previous rank" in h:
+                idx["prev_rank"] = i
+            elif "player" in h:
+                idx["player"] = i
+            elif "affiliation" in h:
+                idx["affiliation"] = i
+            elif "tournaments" in h:
+                idx["tournaments"] = i
+            elif "wins" in h:
+                idx["wins"] = i
+            elif "total points" in h:
+                idx["points"] = i
+            elif "behind" in h:
+                idx["behind"] = i
+        if "player" not in idx:
+            continue
+
+        def cell(r, key):
+            i = idx.get(key)
+            return r[i].strip() if i is not None and i < len(r) else ""
+
+        rows = []
+        for r in table[1:]:
+            player = cell(r, "player")
+            if not player:
+                continue
+            rows.append({
+                "rank": cell(r, "rank"),
+                "prev_rank": cell(r, "prev_rank"),
+                "player_name": player,
+                "affiliation": cell(r, "affiliation"),
+                "tournaments": _num(cell(r, "tournaments")),
+                "wins": _num(cell(r, "wins")),
+                "total_points": _num(cell(r, "points")),
+                "points_behind": _num(cell(r, "behind")),
+            })
+        if rows:
+            return rows
+    raise RuntimeError("No points-race table found in widget HTML")
