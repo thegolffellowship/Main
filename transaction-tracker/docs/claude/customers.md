@@ -136,9 +136,13 @@ during a bad merge, the system auto-detects and repairs it on the next boot via
 from `init_db()` inside individual try/except blocks so one failing repair doesn't
 block the others.
 
-**Known repairs (both fully idempotent):**
+**Known repairs (all fully idempotent):**
 - `_repair_massey_attribution()` — William Massey absorbed into Colby Johnson
 - `_repair_chalfant_attribution()` — Tanner Chalfant absorbed into Bryan McCrary
+- `_repair_lourigan_attribution()` — duplicate Joseph Lourigan cid 406 → 83 (v2.16.8)
+- `_repair_watson_attribution()` — duplicate Tim Watson cid 94 → 433 (v2.16.8)
+- `_repair_stich_attribution()` — any duplicate exact-name Dan Stich row → 298,
+  plus 'Daniel Stich' name alias (v2.16.18; user-confirmed single person)
 
 **How to add a new repair:** See `docs/claude/customer-merge-repair.md` for the full
 playbook — diagnosis steps, function skeleton, and 7 critical gotchas (wrong column
