@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.17";
+window.TGF_VERSION = "2.16.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.18",
+    date: "2026-07-02",
+    changes: [
+      "Repair: merges the duplicate Dan Stich profile into his canonical record (customer_id 298 — all 22 transactions, email, phone) and registers 'Daniel Stich' as a name alias, per admin confirmation that he is one person. The duplicate held no transactions so it was invisible in the UI; it was blocking name-keyed housekeeping rows from linking (the identity lookup refuses to guess between same-named profiles). Runs at boot, moves every linked table via the v2.16.13 merge machinery, and is fully idempotent; the same boot's backfill then links the rows that were waiting.",
+    ],
+  },
   {
     version: "2.16.17",
     date: "2026-07-02",

@@ -1026,6 +1026,76 @@ def _repair_watson_attribution(conn: sqlite3.Connection) -> None:
         logger.warning("Watson repair failed: %s", e)
 
 
+def _repair_stich_attribution(conn: sqlite3.Connection,
+                              db_path: str | Path | None = None) -> None:
+    """Merge duplicate Dan Stich profiles into his canonical record and
+    register 'Daniel Stich' as a name alias.
+
+    The v2.16.14 ambiguity guard surfaced a second, transaction-less
+    'Dan Stich' customers row (import-created; invisible in the UI because
+    the Customers page groups by transactions). Canonical customer_id 298
+    holds all 22 transactions, dans05@msn.com, and his phone. Kerry
+    confirmed 2026-07-02 there is exactly one Dan Stich, also known as
+    'Daniel Stich'. Merges ANY other exact-name row into 298 via
+    merge_customers() (which re-points every customer FK), then ensures
+    the name alias exists so future 'Daniel Stich' imports resolve to him.
+    Fully idempotent.
+    """
+    _CANONICAL_CID = 298
+    _NAME = "Dan Stich"
+    _ALIAS = "Daniel Stich"
+
+    if not conn.execute(
+        "SELECT 1 FROM customers WHERE customer_id = ?", (_CANONICAL_CID,)
+    ).fetchone():
+        logger.warning(
+            "Stich repair: canonical customer_id %d not found — skipping",
+            _CANONICAL_CID,
+        )
+        return
+
+    dups = conn.execute(
+        """SELECT customer_id FROM customers
+           WHERE LOWER(TRIM(first_name)) = 'dan'
+             AND LOWER(TRIM(last_name)) = 'stich'
+             AND customer_id != ?""",
+        (_CANONICAL_CID,),
+    ).fetchall()
+    if dups:
+        # merge_customers opens its own connection on db_path — release any
+        # pending writes on this one first so it isn't blocked by our lock.
+        conn.commit()
+    for d in dups:
+        try:
+            merge_customers(
+                _NAME, _NAME, db_path=db_path,
+                source_customer_id=d["customer_id"],
+                target_customer_id=_CANONICAL_CID,
+            )
+            logger.info(
+                "Stich repair: merged duplicate customer_id %d -> %d",
+                d["customer_id"], _CANONICAL_CID,
+            )
+        except ValueError as e:
+            logger.warning("Stich repair failed for cid %d: %s", d["customer_id"], e)
+
+    # 'Daniel Stich' → canonical. customer_aliases has no unique constraint
+    # on (alias_value, alias_type), so check-then-insert for idempotency.
+    if not conn.execute(
+        """SELECT id FROM customer_aliases
+           WHERE alias_type = 'name' AND LOWER(alias_value) = LOWER(?)""",
+        (_ALIAS,),
+    ).fetchone():
+        conn.execute(
+            """INSERT INTO customer_aliases (customer_name, alias_value, alias_type, customer_id)
+               VALUES (?, ?, 'name', ?)""",
+            (_NAME, _ALIAS, _CANONICAL_CID),
+        )
+        conn.commit()
+        logger.info("Stich repair: added name alias %r -> %r (cid %d)",
+                    _ALIAS, _NAME, _CANONICAL_CID)
+
+
 def _migrate_create_dedup_aliases(conn: sqlite3.Connection) -> None:
     """Create customer_aliases entries for the dedup-migration name mappings.
 
@@ -3165,6 +3235,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_watson_attribution(conn)
         except Exception as e:
             logger.warning("Watson attribution repair failed: %s", e)
+
+        # Always-run repair: merge duplicate Dan Stich profiles into 298,
+        # register 'Daniel Stich' name alias
+        try:
+            _repair_stich_attribution(conn, db_path)
+        except Exception as e:
+            logger.warning("Stich attribution repair failed: %s", e)
 
         # One-time drain: CHAPTER_DRIFT is no longer raised (items.chapter is the
         # event/course location, not the member's home chapter, so it drifts on
