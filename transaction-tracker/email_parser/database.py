@@ -1144,6 +1144,44 @@ def _repair_massey_fragments(conn: sqlite3.Connection,
         except ValueError as e:
             logger.warning("Massey fragments repair failed for cid %d: %s", src_cid, e)
 
+    # Decontaminate: Colby Johnson's email is still on Massey's profile from
+    # their old bad merge (surfaced by the v2.16.26 GG email diff — it would
+    # have synced Massey's handicap under Colby's address, and it lets orders
+    # from Colby's address resolve to Massey). Move it to Colby's own profile
+    # when he resolves uniquely, delete it from 311 either way, and make
+    # Massey's real address his primary. Idempotent.
+    _COLBY_EMAIL = "colbygjohnson8@gmail.com"
+    _MASSEY_EMAIL = "wncmassey@outlook.com"
+    stray = conn.execute(
+        "SELECT email_id FROM customer_emails WHERE customer_id = 311 AND LOWER(email) = ?",
+        (_COLBY_EMAIL,),
+    ).fetchone()
+    if stray:
+        colby_cid = _lookup_customer_id(conn, "Colby Johnson", None)
+        if colby_cid:
+            conn.execute(
+                "INSERT OR IGNORE INTO customer_emails (customer_id, email, label) VALUES (?, ?, 'repaired')",
+                (colby_cid, _COLBY_EMAIL),
+            )
+        conn.execute("DELETE FROM customer_emails WHERE email_id = ?", (stray["email_id"],))
+        conn.execute(
+            "UPDATE customer_emails SET is_primary = 0 WHERE customer_id = 311",
+        )
+        conn.execute(
+            """INSERT OR IGNORE INTO customer_emails (customer_id, email, label)
+               VALUES (311, ?, 'repaired')""",
+            (_MASSEY_EMAIL,),
+        )
+        conn.execute(
+            "UPDATE customer_emails SET is_primary = 1 WHERE customer_id = 311 AND LOWER(email) = ?",
+            (_MASSEY_EMAIL,),
+        )
+        conn.commit()
+        logger.info(
+            "Massey repair: removed %s from cid 311 (moved to Colby cid %s); "
+            "%s set as Massey's primary", _COLBY_EMAIL, colby_cid, _MASSEY_EMAIL,
+        )
+
 
 def _arias_son_marked(text: str | None) -> bool:
     t = (text or "").strip().lower()
@@ -4800,6 +4838,21 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_roman_numeral_name_case failed")
 
+        # Re-date purchase-backed contest enrollments at boot — the contest
+        # sync only runs on new orders / manual trigger, too late for repair.
+        try:
+            _repair_season_contest_enrollment_dates(conn)
+            _purge_blank_season_contest_rows(conn)
+            conn.commit()
+        except Exception:
+            logger.exception("Non-fatal: season contest boot repairs failed")
+
+        # Pin admin-confirmed Golf Genius emails (see _GG_EMAIL_PINS)
+        try:
+            _repair_gg_email_pins(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_gg_email_pins failed")
+
         # Log-only: which players' Golf Genius sync email changes under
         # canonical-first resolution — review in the deploy log BEFORE the
         # nightly 02:00 sync uploads them.
@@ -5688,6 +5741,54 @@ def _repair_roman_numeral_name_case(conn: sqlite3.Connection) -> None:
                     )
     if fixed:
         conn.commit()
+
+
+# Players whose Golf Genius sync address is pinned via the is_golf_genius
+# flag because their canonical primary email is a different person's address
+# (guardian/household). Pinning preserves the address GG has always received
+# for them; changeable any time on the customer profile.
+_GG_EMAIL_PINS = (
+    ("Isabella Luna", "isabellamluna7@gmail.com"),  # primary is rlight@hughes.net (guardian)
+)
+
+
+def _repair_gg_email_pins(conn: sqlite3.Connection) -> None:
+    """Set is_golf_genius=1 on admin-confirmed sync addresses (idempotent).
+
+    Skips (with a warning) when the player's name doesn't resolve to exactly
+    one customer, so a wrong guess is impossible. Clears any other GG flag on
+    the same customer first — the partial UNIQUE(customer_id, is_golf_genius)
+    index allows one designated address per customer.
+    """
+    for name, email in _GG_EMAIL_PINS:
+        cid = _lookup_customer_id(conn, name, None)
+        if cid is None:
+            logger.warning("GG email pin: %r not uniquely resolvable — skipping", name)
+            continue
+        row = conn.execute(
+            "SELECT email_id, is_golf_genius FROM customer_emails "
+            "WHERE customer_id = ? AND LOWER(email) = LOWER(?)",
+            (cid, email),
+        ).fetchone()
+        if row and row["is_golf_genius"]:
+            continue  # already pinned
+        conn.execute(
+            "UPDATE customer_emails SET is_golf_genius = 0 WHERE customer_id = ?",
+            (cid,),
+        )
+        if row:
+            conn.execute(
+                "UPDATE customer_emails SET is_golf_genius = 1 WHERE email_id = ?",
+                (row["email_id"],),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO customer_emails (customer_id, email, is_primary, is_golf_genius, label)
+                   VALUES (?, ?, 0, 1, 'gg-pin')""",
+                (cid, email),
+            )
+        conn.commit()
+        logger.info("GG email pin: %s syncs to Golf Genius as %r (cid %d)", name, email, cid)
 
 
 def _log_gg_export_email_changes(conn: sqlite3.Connection) -> None:
@@ -14689,6 +14790,82 @@ def get_customer_season_contests(customer_name: str,
         return [dict(r) for r in rows]
 
 
+def _purge_blank_season_contest_rows(conn: sqlite3.Connection) -> None:
+    """Fix season_contests rows with an empty customer_name — the blank
+    CUSTOMER cell in the Enrollment log. Created before v2.16.28 when the
+    contest sync enrolled a source item that had no customer name. A row
+    whose customer_id is known is renamed from the profile; otherwise it is
+    deleted, and its source purchase is logged so the rightful player can be
+    identified (fix the source item's customer, then Sync re-enrolls them
+    with the correct purchase date). Idempotent; does not commit.
+    """
+    rows = conn.execute(
+        """SELECT sc.id, sc.contest_type, sc.season, sc.customer_id, sc.source_item_id,
+                  i.item_name AS src_item, i.order_id AS src_order, i.order_date AS src_date
+           FROM season_contests sc
+           LEFT JOIN items i ON i.id = sc.source_item_id
+           WHERE TRIM(COALESCE(sc.customer_name, '')) = ''"""
+    ).fetchall()
+    for r in rows:
+        if r["customer_id"]:
+            canon = conn.execute(
+                "SELECT TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS n "
+                "FROM customers WHERE customer_id = ?", (r["customer_id"],),
+            ).fetchone()
+            if canon and canon["n"]:
+                conn.execute(
+                    "UPDATE season_contests SET customer_name = ? WHERE id = ?",
+                    (canon["n"], r["id"]),
+                )
+                logger.info(
+                    "Season contest blank-row repair: row %s renamed to %r "
+                    "from profile %s", r["id"], canon["n"], r["customer_id"],
+                )
+                continue
+        conn.execute("DELETE FROM season_contests WHERE id = ?", (r["id"],))
+        logger.warning(
+            "Season contest blank-row repair: deleted nameless %s/%s enrollment "
+            "(source item %s: %r order %s dated %s) — fix that item's customer "
+            "and re-run Sync to re-enroll the right player",
+            r["contest_type"], r["season"], r["source_item_id"],
+            r["src_item"], r["src_order"], r["src_date"],
+        )
+
+
+def _repair_season_contest_enrollment_dates(conn: sqlite3.Connection) -> int:
+    """Re-date purchase-backed season contest enrollments to their source
+    purchase's order_date.
+
+    enrolled_at defaults to CURRENT_TIMESTAMP on insert, and the contest
+    sync's cleanup passes can delete + re-create rows (name/chapter
+    corrections, dedup) — which used to re-stamp the enrollment date to
+    "today" every time it happened (the Paul Reed July-2nd date on a
+    March-2nd membership purchase). Manual enrollments with no source item
+    keep their admin-entry timestamp. Idempotent; runs at boot AND at the
+    end of every contest sync. Does not commit.
+    """
+    redated = conn.execute(
+        """UPDATE season_contests
+           SET enrolled_at = (SELECT i.order_date FROM items i
+                              WHERE i.id = season_contests.source_item_id)
+           WHERE source_item_id IS NOT NULL
+             AND EXISTS (
+                 SELECT 1 FROM items i
+                 WHERE i.id = season_contests.source_item_id
+                   AND i.order_date IS NOT NULL AND TRIM(i.order_date) != ''
+                   AND DATE(i.order_date) IS NOT NULL
+                   AND (season_contests.enrolled_at IS NULL
+                        OR DATE(season_contests.enrolled_at) IS NOT DATE(i.order_date))
+             )"""
+    ).rowcount
+    if redated:
+        logger.info(
+            "Season contest enrollment dates: re-dated %d row(s) to their "
+            "source purchase date", redated,
+        )
+    return redated
+
+
 def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
     """Scan all items and enroll customers in season contests based on their
     net_points_race, gross_points_race, city_match_play fields.
@@ -14708,6 +14885,14 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 
     def _upsert(conn, customer, contest_type, chapter, season, item_id):
         nonlocal enrolled, linked
+        if not (customer or "").strip():
+            # A source item with a blank customer must not create a ghost
+            # enrollment row (an empty CUSTOMER cell in the Enrollment log).
+            logger.warning(
+                "Season contest sync: skipped %s enrollment from item %s — "
+                "item has no customer name", contest_type, item_id,
+            )
+            return
         result = conn.execute(
             """INSERT INTO season_contests
                (customer_name, contest_type, chapter, season, source_item_id)
@@ -14971,31 +15156,11 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 
         # Step 3 — enrolled_at must reflect WHEN THE MEMBER ENROLLED (their
         # source purchase's order_date), not when this sync happened to write
-        # the row. enrolled_at defaults to CURRENT_TIMESTAMP on insert, and
-        # the cleanup passes above can delete + re-create rows (name/chapter
-        # corrections, dedup), which used to re-stamp the enrollment date to
-        # "today" every time it happened. Re-derive from the source item for
-        # every purchase-backed row; manual enrollments with no source keep
-        # their admin-entry timestamp.
-        redated = conn.execute(
-            """UPDATE season_contests
-               SET enrolled_at = (SELECT i.order_date FROM items i
-                                  WHERE i.id = season_contests.source_item_id)
-               WHERE source_item_id IS NOT NULL
-                 AND EXISTS (
-                     SELECT 1 FROM items i
-                     WHERE i.id = season_contests.source_item_id
-                       AND i.order_date IS NOT NULL AND TRIM(i.order_date) != ''
-                       AND DATE(i.order_date) IS NOT NULL
-                       AND (season_contests.enrolled_at IS NULL
-                            OR DATE(season_contests.enrolled_at) IS NOT DATE(i.order_date))
-                 )"""
-        ).rowcount
-        if redated:
-            logger.info(
-                "Season contest sync: re-dated %d enrollment(s) to their "
-                "source purchase date", redated,
-            )
+        # the row. Shared with init_db so a deploy re-dates existing rows
+        # immediately — this sync only runs when new orders arrive or on the
+        # manual button, which is too late for a repair.
+        _repair_season_contest_enrollment_dates(conn)
+        _purge_blank_season_contest_rows(conn)
 
         conn.commit()
     logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)

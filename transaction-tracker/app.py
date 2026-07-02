@@ -8321,14 +8321,42 @@ def api_customer_season_contests(customer_name):
 @app.route("/api/season-contests/<int:enrollment_id>", methods=["DELETE"])
 @require_role("manager")
 def api_delete_season_contest(enrollment_id):
-    """Delete a season contest enrollment by id."""
+    """Delete a season contest enrollment by id.
+
+    Also clears the matching contest flag on the enrollment's source
+    purchase item. Without that, the delete didn't stick: the backing item
+    still carried the flag (e.g. city_match_play='YES'), so the next
+    contest sync silently re-enrolled the player — an admin removing a
+    refunded enrollment saw it resurrect. Clearing the flag makes the
+    removal permanent while leaving the purchase row itself untouched.
+    """
     from email_parser.database import _connect
+    _FLAG_COLS = {
+        "NET Points Race": "net_points_race",
+        "GROSS Points Race": "gross_points_race",
+        "City Match Play": "city_match_play",
+    }
     with _connect() as conn:
-        cur = conn.execute("DELETE FROM season_contests WHERE id = ?", (enrollment_id,))
+        row = conn.execute(
+            "SELECT contest_type, source_item_id, customer_name FROM season_contests WHERE id = ?",
+            (enrollment_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        flag_col = _FLAG_COLS.get(row["contest_type"])
+        if flag_col and row["source_item_id"]:
+            conn.execute(
+                f"UPDATE items SET {flag_col} = NULL WHERE id = ?",
+                (row["source_item_id"],),
+            )
+            logger.info(
+                "Season contest unenroll: cleared %s on item %s (%s, %s)",
+                flag_col, row["source_item_id"], row["customer_name"],
+                row["contest_type"],
+            )
+        conn.execute("DELETE FROM season_contests WHERE id = ?", (enrollment_id,))
         conn.commit()
-    if cur.rowcount:
-        return jsonify({"ok": True})
-    return jsonify({"error": "Not found"}), 404
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
