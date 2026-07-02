@@ -7366,15 +7366,20 @@
 
         // Use per-event pricing if set (holes-aware for 9/18 Combo events), otherwise
         // fall back to the same PRICING_DEFAULTS used by the pricing preview/calculator.
+        // The _9/_18 columns are only populated for 9/18 Combo events — standalone
+        // "9 Holes" events store their pricing in the BASE columns — so chain
+        // base-column before defaults (same as the Apply Credit modal's
+        // _updateCrdCalc), or a custom-priced standalone 9-hole event would
+        // silently show default amounts here and feed them into WD credits.
         let courseFee, tgfEventMarkup, includedGames;
         if (isCombo && holes === 18) {
             courseFee = ev.course_cost_18 != null ? ev.course_cost_18 : ev.course_cost;
-            tgfEventMarkup = ev.tgf_markup_18 != null ? ev.tgf_markup_18 : PRICING_DEFAULTS["9/18 Combo"].tgf_markup_18;
-            includedGames = ev.side_game_fee_18 != null ? ev.side_game_fee_18 : PRICING_DEFAULTS["9/18 Combo"].side_game_fee_18;
+            tgfEventMarkup = ev.tgf_markup_18 ?? ev.tgf_markup ?? PRICING_DEFAULTS["9/18 Combo"].tgf_markup_18;
+            includedGames = ev.side_game_fee_18 ?? ev.side_game_fee ?? PRICING_DEFAULTS["9/18 Combo"].side_game_fee_18;
         } else if (isCombo || holes === 9) {
             courseFee = ev.course_cost_9 != null ? ev.course_cost_9 : ev.course_cost;
-            tgfEventMarkup = ev.tgf_markup_9 != null ? ev.tgf_markup_9 : PRICING_DEFAULTS["9/18 Combo"].tgf_markup_9;
-            includedGames = ev.side_game_fee_9 != null ? ev.side_game_fee_9 : PRICING_DEFAULTS["9/18 Combo"].side_game_fee_9;
+            tgfEventMarkup = ev.tgf_markup_9 ?? ev.tgf_markup ?? PRICING_DEFAULTS["9 Holes"].tgf_markup;
+            includedGames = ev.side_game_fee_9 ?? ev.side_game_fee ?? PRICING_DEFAULTS["9 Holes"].side_game_fee;
         } else {
             const defaults = PRICING_DEFAULTS[format] || PRICING_DEFAULTS["18 Holes"];
             courseFee = ev.course_cost;

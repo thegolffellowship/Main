@@ -560,6 +560,15 @@ registration, and recomputing off it drifts every time another player registers 
 withdraws from the same event. If a future change needs the credit total to reconcile
 against `item_price`, adjust the pricing fields/`getPerGameAddon`, not the games matrix.
 
+**Column fallback order (v2.16.11+):** the `_9`/`_18` pricing columns are only
+populated for 9/18 Combo events — standalone "9 Holes" events store pricing in
+the BASE columns (`tgf_markup`/`side_game_fee`), and the combo save path
+actively nulls the base columns. So every holes-aware read must chain
+`_9/_18 column → base column → PRICING_DEFAULTS`, exactly like the Apply
+Credit modal's `_updateCrdCalc()`. The original v2.16.6 version skipped the
+base-column step for 9-hole events, so a custom-priced standalone 9-hole
+event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
+
 # Side Games Matrix
 
 ## Persistence

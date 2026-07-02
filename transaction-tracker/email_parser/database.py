@@ -7279,32 +7279,11 @@ def update_customer_info(customer_name: str, fields: dict,
     with _connect(db_path) as conn:
         rowcount = 0
 
-        # Update items table (for item-level fields)
-        if safe:
-            _validate_column_names(list(safe))
-            set_clause = ", ".join(f"{col} = ?" for col in safe)
-            values = list(safe.values()) + [customer_name]
-            cursor = conn.execute(
-                f"UPDATE items SET {set_clause} WHERE customer = ? COLLATE NOCASE",
-                values,
-            )
-            rowcount = cursor.rowcount
-            # Update alias references if display name changed
-            if "customer" in safe and safe["customer"] != customer_name:
-                conn.execute(
-                    "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
-                    (safe["customer"], customer_name),
-                )
-                # Also update handicap_player_links so handicap stays connected
-                conn.execute(
-                    "UPDATE handicap_player_links SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
-                    (safe["customer"], customer_name),
-                )
-
-        # Resolve customer_id for all canonical-table syncs below. Prefer the
-        # caller-supplied id (already resolved client-side) over re-deriving
-        # it by name, which can miss for customers whose items rows aren't
-        # linked yet even though a customers row exists.
+        # Resolve customer_id FIRST — it keys the items update below as well
+        # as the canonical-table syncs. Prefer the caller-supplied id (already
+        # resolved client-side) over re-deriving it by name, which can miss
+        # for customers whose items rows aren't linked yet even though a
+        # customers row exists.
         cid = customer_id or None
         if cid:
             # Trust but verify — a stale/bogus id from the client shouldn't
@@ -7333,6 +7312,45 @@ def update_customer_info(customer_name: str, fields: dict,
                     (parts[0], parts[-1]),
                 ).fetchone()
                 cid = cid_row["customer_id"] if cid_row else None
+
+        # Update items table (for item-level fields). Key on customer_id when
+        # resolved: an earlier save may have already renamed items.customer
+        # (the display-name sync below), so a follow-up save from a UI card
+        # still holding the pre-rename name would match ZERO rows by name and
+        # silently drop items-level fields (DOB, shirt size, address) while
+        # reporting success. The name-keyed sweep still runs for legacy rows
+        # with no customer_id, and is the sole path when no cid resolves.
+        if safe:
+            _validate_column_names(list(safe))
+            set_clause = ", ".join(f"{col} = ?" for col in safe)
+            if cid:
+                cursor = conn.execute(
+                    f"UPDATE items SET {set_clause} WHERE customer_id = ?",
+                    list(safe.values()) + [cid],
+                )
+                rowcount = cursor.rowcount
+                cursor = conn.execute(
+                    f"UPDATE items SET {set_clause} WHERE customer_id IS NULL AND customer = ? COLLATE NOCASE",
+                    list(safe.values()) + [customer_name],
+                )
+                rowcount += cursor.rowcount
+            else:
+                cursor = conn.execute(
+                    f"UPDATE items SET {set_clause} WHERE customer = ? COLLATE NOCASE",
+                    list(safe.values()) + [customer_name],
+                )
+                rowcount = cursor.rowcount
+            # Update alias references if display name changed
+            if "customer" in safe and safe["customer"] != customer_name:
+                conn.execute(
+                    "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+                    (safe["customer"], customer_name),
+                )
+                # Also update handicap_player_links so handicap stays connected
+                conn.execute(
+                    "UPDATE handicap_player_links SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+                    (safe["customer"], customer_name),
+                )
 
         if cid:
             # Sync email to customer_emails (source of truth for customer contact)

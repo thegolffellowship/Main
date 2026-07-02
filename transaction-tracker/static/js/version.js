@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.16.10";
+window.TGF_VERSION = "2.16.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.11",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the 2.16.6 Withdraw Player rewrite read only the combo pricing columns (tgf_markup_9/side_game_fee_9) for any 9-hole event — but standalone \"9 Holes\" events store their pricing in the base columns (tgf_markup/side_game_fee), which the edit modal only populates for the single-format layouts. A custom-priced standalone 9-hole event therefore showed default amounts ($8 markup / $7 games) in the Withdraw Player and Partial Refund component lists instead of its configured pricing, and those amounts feed directly into withdrawal credit money. The lookup now chains _9 column → base column → default, the same fallback the Apply Credit modal has always used. 18-hole and combo events were unaffected.",
+      "Fix: for a customer whose canonical name differed from their transaction-history name (the population the 2.16.9 name overlay targets), saving the Info tab twice could silently drop the second save's items-level fields (DOB, shirt size, address). The first save renames every transaction row to the canonical display name server-side, but the card's local grouping key kept the old name — so the second save posted a name that matched zero rows while still reporting \"Saved!\". Two-part fix: update_customer_info() now keys the items update by customer_id when it's resolved (with a name-keyed sweep only for legacy unlinked rows), so a stale display name can never target zero rows; and patchCustomerLocal() now mirrors the backend's display-name sync into the local customer object (cust.name, item.customer, expandedNames) and triggers a re-render when the name changed, so every data-customer-name attribute picks up the new key immediately.",
+    ],
+  },
   {
     version: "2.16.10",
     date: "2026-07-02",

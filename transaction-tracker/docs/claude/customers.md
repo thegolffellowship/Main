@@ -248,6 +248,19 @@ into first+last) and drop the status/venmo write with no error, while the
 frontend's optimistic local patch made it look like it had saved until the
 next refresh reasserted the old value.
 
+**Items update is keyed by `customer_id` too (v2.16.11+).**
+`update_customer_info()` resolves `cid` FIRST and runs the items UPDATE as
+`WHERE customer_id = ?` (plus a name-keyed sweep for legacy rows with NULL
+`customer_id`); the pure name-keyed UPDATE only remains as the no-cid
+fallback. Reason: saving name parts triggers the display-name sync
+(`safe["customer"] = "First Last Suffix"`), which renames every items row —
+a second save from a card still holding the pre-rename name used to match
+ZERO rows by name and silently drop items-level fields (DOB, shirt size,
+address) while reporting success. `patchCustomerLocal()` in customers.html
+mirrors the rename into the local objects (`cust.name`, `item.customer`,
+`expandedNames`) and returns `true` so the save handlers re-render — keep
+both halves in sync if either changes.
+
 **API:**
 - `GET  /api/customer-roles` — returns roles per customer + `_by_name` map, plus
   `status_name` and `status_display_name` from the latest `customer_statuses` row
