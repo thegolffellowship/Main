@@ -99,6 +99,13 @@ member. Emails can only be gained or corrected by this change, never lost
 every boot (log-only) and lists players whose sync address changed or who are
 newly included, so the deploy log shows the effect before the next 02:00 sync.
 
+**Admin exclusions (v2.17.14):** `_GG_SYNC_EXCLUDES` in `database.py` lists
+players the admin intentionally REMOVED from Golf Genius (inactive members
+kept fully active in the tracker — currently Matt/Matthew Lawyer). The
+export skips them (returned under `"excluded"`), so the nightly sync can
+never silently re-add them to GG. Matched case-insensitively against both
+the handicap player_name and the link's customer_name.
+
 ## Handicap email — canonical email priority
 
 `build_handicap_card_data` looks up the customer_id via the most recent items row that

@@ -6107,6 +6107,18 @@ _GG_EMAIL_PINS = (
 )
 
 
+# Players intentionally REMOVED from Golf Genius by the admin (2026-07-02):
+# inactive members deliberately taken off the GG rosters but kept active in
+# the tracker. The nightly handicap sync must NOT re-add them — without this
+# exclusion the canonical-first export would "newly include" them again.
+# Matched case-insensitively against both the handicap player_name and the
+# link's customer_name.
+_GG_SYNC_EXCLUDES: frozenset = frozenset(n.lower() for n in (
+    "Matt Lawyer",
+    "Matthew Lawyer",
+))
+
+
 def _repair_gg_email_pins(conn: sqlite3.Connection) -> None:
     """Set is_golf_genius=1 on admin-confirmed sync addresses (idempotent).
 
@@ -14635,6 +14647,7 @@ def get_handicap_export_data(chapter: str | None = None,
                 "last_name": (lnk["last_name"] or "").strip(),
                 "first_name": (lnk["first_name"] or "").strip(),
                 "suffix": (lnk["suffix"] or "").strip(),
+                "customer_name": cname_lower,
             }
 
     # Check if ANY linked player has chapter data; if not, skip chapter filtering
@@ -14643,6 +14656,7 @@ def get_handicap_export_data(chapter: str | None = None,
     rows = []
     no_email = []
     no_index = []
+    excluded = []
 
     # First pass: collect every eligible (pname, p) candidate keyed by email.
     # Multiple handicap_rounds player_name variants can link to the same customer
@@ -14653,6 +14667,12 @@ def get_handicap_export_data(chapter: str | None = None,
     candidates_by_email: dict[str, list[tuple[str, dict]]] = {}
     for pname, p in player_map.items():
         info = link_map.get(pname)
+        # Admin-removed from Golf Genius (see _GG_SYNC_EXCLUDES): never
+        # export — the nightly sync would silently re-add them to GG.
+        if pname.strip().lower() in _GG_SYNC_EXCLUDES or \
+                (info and info.get("customer_name") in _GG_SYNC_EXCLUDES):
+            excluded.append(pname)
+            continue
         if info is None:
             if p["handicap_index"] is not None:
                 no_email.append(pname)
@@ -14734,6 +14754,7 @@ def get_handicap_export_data(chapter: str | None = None,
         "rows": rows,
         "no_email": sorted(no_email),
         "no_index": sorted(no_index),
+        "excluded": sorted(excluded),  # admin-removed from GG, never exported
         "chapter": chapter or "All",
         "_debug": {
             "total_players": len(player_map),
@@ -15645,6 +15666,10 @@ _CONFIRMED_PROFILE_DETAILS = (
      "nic.skinner2@gmail.com", (), (),
      (("2025-04-27", "2026-04-27", None,
        "Venmo membership 4/27/25 — admin-provided 2026-07-02"),)),
+    # From the Golf Genius roster cross-check (admin-approved 2026-07-02):
+    # GG carried emails the tracker lacked for these two.
+    (416, "casey purvis", None, None, "purvis.casey@yahoo.com", (), (), ()),
+    (53, "matthew starnes", None, None, "matthewrstarnes@yahoo.com", (), (), ()),
 )
 
 
