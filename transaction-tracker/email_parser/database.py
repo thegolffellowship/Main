@@ -8887,6 +8887,10 @@ def get_all_customers(db_path=None) -> list[dict]:
                           ORDER BY set_at DESC LIMIT 1
                       )
                LEFT JOIN statuses s ON s.status_id = cs_latest.status_id
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM customer_roles r
+                   WHERE r.customer_id = c.customer_id AND r.role_type = 'vendor'
+               )
                ORDER BY c.last_name COLLATE NOCASE, c.first_name COLLATE NOCASE"""
         ).fetchall()
         return [dict(r) for r in rows]
@@ -15286,6 +15290,24 @@ def _repair_victor_brandon_fragment(conn: sqlite3.Connection) -> None:
     if not row:
         return
     cid = row["customer_id"]
+    # The Arias-order split rows were name-backfilled onto this fragment
+    # (seen live 2026-07-02: 3 godaddy_order_splits rows blocked the delete).
+    # Re-point each split to its own item's owner before the emptiness check.
+    n = conn.execute(
+        """UPDATE godaddy_order_splits
+           SET customer_id = (SELECT i.customer_id FROM items i
+                              WHERE i.id = godaddy_order_splits.item_id)
+           WHERE customer_id = ?
+             AND item_id IS NOT NULL
+             AND (SELECT i.customer_id FROM items i
+                  WHERE i.id = godaddy_order_splits.item_id) IS NOT NULL""",
+        (cid,),
+    ).rowcount
+    if n:
+        logger.info(
+            "Victor Brandon fragment repair: re-pointed %d order-split row(s) "
+            "to their item's owner", n,
+        )
     cleanable = {"customer_roles", "customer_memberships", "customer_statuses",
                  "customer_aliases"}
     blockers = []

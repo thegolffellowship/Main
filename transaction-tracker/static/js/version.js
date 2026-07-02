@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.5";
+window.TGF_VERSION = "2.17.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.6",
+    date: "2026-07-02",
+    changes: [
+      "Vendors: vendor-role profiles (Costco, Arcis Golf, HubSpot, etc.) no longer appear on the Customers page or anywhere else people-facing — they're expense payees, not golfers. Their home is now a Vendors panel on the Accounting page (next to Review Queue): the list with ledger-entry counts plus an Add Vendor button. They stay in the customer table under the hood so expense ledger links keep working.",
+      "Repair: the Victor Brandon fragment delete was correctly blocked last deploy because 3 order-split rows still pointed at it — those splits are now re-pointed to their own item's owner first, unblocking the delete. The guard that refused to delete while data was attached is exactly the behavior we want and it worked.",
+    ],
+  },
   {
     version: "2.17.5",
     date: "2026-07-02",
