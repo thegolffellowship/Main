@@ -4800,6 +4800,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_roman_numeral_name_case failed")
 
+        # Log-only: which players' Golf Genius sync email changes under
+        # canonical-first resolution — review in the deploy log BEFORE the
+        # nightly 02:00 sync uploads them.
+        try:
+            _log_gg_export_email_changes(conn)
+        except Exception:
+            logger.exception("Non-fatal: _log_gg_export_email_changes failed")
+
         # Log-only census of same-named customer profiles (which one holds
         # what) so ambiguous-name cases can be resolved from the deploy log.
         try:
@@ -5680,6 +5688,61 @@ def _repair_roman_numeral_name_case(conn: sqlite3.Connection) -> None:
                     )
     if fixed:
         conn.commit()
+
+
+def _log_gg_export_email_changes(conn: sqlite3.Connection) -> None:
+    """Log players whose Golf Genius sync email differs under canonical-first
+    resolution (v2.16.26) vs the legacy latest-transaction-snapshot method.
+
+    Golf Genius matches league members BY EMAIL, so a changed address only
+    updates the right member if GG knows them under it. This runs at every
+    boot (log-only, quiet when nothing differs) so the deploy log lists the
+    affected players before the nightly 02:00 sync uploads them. Losing an
+    email is impossible — the legacy resolution remains the fallback — so
+    the diff can only show changed addresses and newly-included players.
+    """
+    rows = conn.execute(
+        """SELECT l.player_name, l.customer_name,
+                  (SELECT LOWER(TRIM(ce.email)) FROM customer_emails ce
+                    WHERE ce.customer_id = l.customer_id
+                      AND ce.email IS NOT NULL AND TRIM(ce.email) != ''
+                    ORDER BY ce.is_golf_genius DESC, ce.is_primary DESC,
+                             ce.email_id ASC LIMIT 1) AS canonical,
+                  COALESCE(
+                    (SELECT LOWER(TRIM(i1.customer_email)) FROM items i1
+                      WHERE LOWER(i1.customer) = LOWER(l.customer_name)
+                        AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
+                      ORDER BY i1.id DESC LIMIT 1),
+                    (SELECT LOWER(TRIM(ca.alias_value)) FROM customer_aliases ca
+                      WHERE LOWER(ca.customer_name) = LOWER(l.customer_name)
+                        AND ca.alias_type = 'email' LIMIT 1),
+                    '') AS legacy
+           FROM handicap_player_links l
+           WHERE l.customer_name IS NOT NULL"""
+    ).fetchall()
+    changed = gained = 0
+    for r in rows:
+        canon = (r["canonical"] or "").strip()
+        legacy = (r["legacy"] or "").strip()
+        if canon and legacy and canon != legacy:
+            changed += 1
+            logger.warning(
+                "GG sync email change: %s (%s) will sync as %r (was %r) — "
+                "confirm Golf Genius knows them by the new address",
+                r["player_name"], r["customer_name"], canon, legacy,
+            )
+        elif canon and not legacy:
+            gained += 1
+            logger.info(
+                "GG sync: %s (%s) NEWLY included via canonical email %r "
+                "(legacy resolution found none)",
+                r["player_name"], r["customer_name"], canon,
+            )
+    if changed or gained:
+        logger.info(
+            "GG sync email diff: %d player(s) change address, %d newly included",
+            changed, gained,
+        )
 
 
 def _log_duplicate_name_customers(conn: sqlite3.Connection) -> None:
@@ -13961,6 +14024,19 @@ def get_handicap_export_data(chapter: str | None = None,
         links = conn.execute(
             """SELECT l.player_name, l.customer_name,
                       COALESCE(
+                        -- Canonical first (v2.16.26): the customer profile's
+                        -- designated Golf Genius email, then primary email,
+                        -- then any profile email — via the link's customer_id.
+                        -- Golf Genius matches league members BY EMAIL, and the
+                        -- legacy latest-transaction snapshot below could be a
+                        -- guest-purchase blank, a buyer's context, or an old
+                        -- typo; it remains only as fallback for unlinked rows.
+                        (SELECT LOWER(TRIM(ce.email)) FROM customer_emails ce
+                         WHERE ce.customer_id = l.customer_id
+                           AND ce.email IS NOT NULL AND TRIM(ce.email) != ''
+                         ORDER BY ce.is_golf_genius DESC, ce.is_primary DESC,
+                                  ce.email_id ASC
+                         LIMIT 1),
                         (SELECT LOWER(TRIM(i1.customer_email)) FROM items i1
                          WHERE LOWER(i1.customer) = LOWER(l.customer_name)
                            AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
@@ -14672,7 +14748,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             """SELECT id, customer, net_points_race, gross_points_race, city_match_play,
                       item_name, order_date
                FROM items
-               WHERE transaction_status IN ('active', NULL)
+               WHERE COALESCE(transaction_status, 'active') = 'active'
                  AND (UPPER(item_name) = 'TGF MEMBERSHIP' OR UPPER(item_name) LIKE '%SEASON CONTEST%')
                  AND (net_points_race = 'YES' OR gross_points_race = 'YES' OR city_match_play = 'YES'
                       OR UPPER(item_name) LIKE '%SEASON CONTEST%')"""
@@ -14699,7 +14775,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             """SELECT id, customer, item_name, notes, order_date
                FROM items
                WHERE UPPER(item_name) LIKE '%SEASON CONTEST%'
-                 AND transaction_status IN ('active', NULL)"""
+                 AND COALESCE(transaction_status, 'active') = 'active'"""
         ).fetchall()
         for row in bundle_rows:
             row = dict(row)
@@ -14781,7 +14857,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                  AND NOT EXISTS (
                      SELECT 1 FROM items i
                      WHERE i.customer_id = season_contests.customer_id
-                       AND i.transaction_status IN ('active', NULL)
+                       AND COALESCE(i.transaction_status, 'active') = 'active'
                        AND (UPPER(i.item_name) = 'TGF MEMBERSHIP'
                             OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
                        AND (
@@ -14806,7 +14882,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                  AND NOT EXISTS (
                      SELECT 1 FROM items i
                      WHERE LOWER(TRIM(i.customer)) = LOWER(TRIM(season_contests.customer_name))
-                       AND i.transaction_status IN ('active', NULL)
+                       AND COALESCE(i.transaction_status, 'active') = 'active'
                        AND (UPPER(i.item_name) = 'TGF MEMBERSHIP'
                             OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
                        AND (
@@ -14892,6 +14968,34 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             for r in rows:
                 if r["id"] != keep_id:
                     conn.execute("DELETE FROM season_contests WHERE id = ?", (r["id"],))
+
+        # Step 3 — enrolled_at must reflect WHEN THE MEMBER ENROLLED (their
+        # source purchase's order_date), not when this sync happened to write
+        # the row. enrolled_at defaults to CURRENT_TIMESTAMP on insert, and
+        # the cleanup passes above can delete + re-create rows (name/chapter
+        # corrections, dedup), which used to re-stamp the enrollment date to
+        # "today" every time it happened. Re-derive from the source item for
+        # every purchase-backed row; manual enrollments with no source keep
+        # their admin-entry timestamp.
+        redated = conn.execute(
+            """UPDATE season_contests
+               SET enrolled_at = (SELECT i.order_date FROM items i
+                                  WHERE i.id = season_contests.source_item_id)
+               WHERE source_item_id IS NOT NULL
+                 AND EXISTS (
+                     SELECT 1 FROM items i
+                     WHERE i.id = season_contests.source_item_id
+                       AND i.order_date IS NOT NULL AND TRIM(i.order_date) != ''
+                       AND DATE(i.order_date) IS NOT NULL
+                       AND (season_contests.enrolled_at IS NULL
+                            OR DATE(season_contests.enrolled_at) IS NOT DATE(i.order_date))
+                 )"""
+        ).rowcount
+        if redated:
+            logger.info(
+                "Season contest sync: re-dated %d enrollment(s) to their "
+                "source purchase date", redated,
+            )
 
         conn.commit()
     logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)
