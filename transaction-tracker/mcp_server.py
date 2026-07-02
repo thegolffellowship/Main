@@ -267,6 +267,125 @@ def search_transactions(query: str, limit: int = 50) -> str:
     return json.dumps([dict(r) for r in rows], indent=2)
 
 
+@mcp.tool()
+def get_season_contest_enrollments(
+    contest_type: str = "", chapter: str = "", season: str = ""
+) -> str:
+    """List season contest enrollments (NET Points Race, GROSS Points Race, City Match Play).
+
+    Args:
+        contest_type: Exact contest name: 'NET Points Race', 'GROSS Points Race', or 'City Match Play' (empty = all)
+        chapter: Exact chapter name, e.g. 'Austin' (empty = all)
+        season: Season year, e.g. '2026' (empty = all)
+    """
+    from email_parser.database import get_season_contest_enrollments as _enr
+    rows = _enr(contest_type or None, chapter or None, season or None)
+    return json.dumps(rows, indent=2)
+
+
+@mcp.tool()
+def get_season_contest_removals(
+    contest_type: str = "", chapter: str = "", season: str = ""
+) -> str:
+    """List season contest removal records — the permanent audit trail of
+    enrollments removed via the Enrollment tab (who, when, why, refund
+    amount/method, note).
+
+    Args:
+        contest_type: Exact contest name: 'NET Points Race', 'GROSS Points Race', or 'City Match Play' (empty = all)
+        chapter: Exact chapter name, e.g. 'Austin' (empty = all)
+        season: Season year, e.g. '2026' (empty = all)
+    """
+    from email_parser.database import get_season_contest_removals as _rem
+    rows = _rem(contest_type or None, chapter or None, season or None)
+    return json.dumps(rows, indent=2)
+
+
+@mcp.tool()
+def get_customer_profile(customer_name: str = "", customer_id: int = 0) -> str:
+    """Full identity snapshot for one customer: the canonical customers row,
+    emails, aliases, status history, membership terms, handicap link, contest
+    enrollments + removals, and a transaction summary. Use this to diagnose
+    identity problems (split profiles, nameless shells, wrong links) —
+    get_customer_details only returns items rows.
+
+    Args:
+        customer_name: Canonical or partial name (used when customer_id is 0)
+        customer_id: Exact customer_id (takes precedence over name)
+    """
+    conn = get_connection()
+    try:
+        if customer_id:
+            cust = conn.execute(
+                "SELECT * FROM customers WHERE customer_id = ?", (customer_id,)
+            ).fetchone()
+            if not cust:
+                return json.dumps({"error": f"No customer with id {customer_id}"})
+        else:
+            if not (customer_name or "").strip():
+                return json.dumps({"error": "Provide customer_name or customer_id"})
+            matches = conn.execute(
+                """SELECT * FROM customers
+                   WHERE LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) = LOWER(TRIM(?))
+                      OR TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) LIKE ?
+                   ORDER BY customer_id""",
+                (customer_name, f"%{customer_name.strip()}%"),
+            ).fetchall()
+            if not matches:
+                return json.dumps({"error": f"No customer matching '{customer_name}'"})
+            if len(matches) > 1:
+                return json.dumps({
+                    "error": f"{len(matches)} customers match '{customer_name}' — call again with customer_id",
+                    "candidates": [
+                        {"customer_id": m["customer_id"],
+                         "name": ((m["first_name"] or "") + " " + (m["last_name"] or "")).strip(),
+                         "chapter": m["chapter"]}
+                        for m in matches
+                    ],
+                }, indent=2)
+            cust = matches[0]
+
+        cid = cust["customer_id"]
+        canonical_name = ((cust["first_name"] or "") + " " + (cust["last_name"] or "")).strip()
+        profile = {"customer": dict(cust), "canonical_name": canonical_name}
+        if not canonical_name:
+            profile["warning"] = (
+                "NAMELESS SHELL PROFILE — blank first/last names. Rows linked "
+                "to this id display blank; likely needs naming or merging."
+            )
+
+        def _rows(sql, params=()):
+            try:
+                return [dict(r) for r in conn.execute(sql, params).fetchall()]
+            except Exception as e:  # table may not exist on old DBs
+                return [{"error": str(e)}]
+
+        profile["emails"] = _rows(
+            "SELECT * FROM customer_emails WHERE customer_id = ? ORDER BY is_primary DESC", (cid,))
+        profile["aliases"] = _rows(
+            "SELECT * FROM customer_aliases WHERE customer_id = ?", (cid,))
+        profile["status_history"] = _rows(
+            """SELECT s.status_name, cs.set_at, cs.notes
+               FROM customer_statuses cs JOIN statuses s ON s.status_id = cs.status_id
+               WHERE cs.customer_id = ? ORDER BY cs.set_at DESC LIMIT 5""", (cid,))
+        profile["memberships"] = _rows(
+            "SELECT * FROM customer_memberships WHERE customer_id = ? ORDER BY started_at DESC", (cid,))
+        profile["handicap_links"] = _rows(
+            "SELECT * FROM handicap_player_links WHERE customer_id = ?", (cid,))
+        profile["season_contests"] = _rows(
+            "SELECT * FROM season_contests WHERE customer_id = ? ORDER BY season DESC, contest_type", (cid,))
+        profile["season_contest_removals"] = _rows(
+            "SELECT * FROM season_contest_removals WHERE customer_id = ? ORDER BY removed_at DESC", (cid,))
+        summary = conn.execute(
+            """SELECT COUNT(*) AS n_items, MIN(order_date) AS first_order,
+                      MAX(order_date) AS last_order
+               FROM items WHERE customer_id = ?""", (cid,)).fetchone()
+        profile["items_summary"] = dict(summary)
+        return json.dumps(profile, indent=2)
+    finally:
+        conn.close()
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  WRITE TOOLS
 # ═══════════════════════════════════════════════════════════════════════
@@ -447,6 +566,16 @@ def sync_events() -> str:
 def run_autofix() -> str:
     """Run all data quality autofixes: normalize side games, customer names, course names, and item names."""
     result = autofix_all()
+    return json.dumps({"status": "ok", **result})
+
+
+@mcp.tool()
+def sync_season_contests() -> str:
+    """Scan purchases and sync season contest enrollments (same as the
+    Enrollment tab's 'Sync from Purchases' button). Idempotent — returns
+    {enrolled, linked}; enrolled should be 0 when nothing new was purchased."""
+    from email_parser.database import sync_season_contests_from_items
+    result = sync_season_contests_from_items()
     return json.dumps({"status": "ok", **result})
 
 

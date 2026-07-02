@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.1";
+window.TGF_VERSION = "2.17.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.2",
+    date: "2026-07-02",
+    changes: [
+      "MCP: four new tools for Claude's direct database access (31 → 35). get_season_contest_enrollments and get_season_contest_removals expose the Enrollment tab's data (enrollments + the removals/refunds recordation) with contest/chapter/season filters — until now enrollment state couldn't be verified over MCP at all. sync_season_contests triggers the same sync as the Enrollment tab's button and returns the {enrolled, linked} counts.",
+      "MCP: get_customer_profile returns a full identity snapshot for one customer — canonical profile row, emails, aliases, status history, membership terms, handicap links, contest enrollments/removals, and a transaction summary — looked up by customer_id or name (ambiguous names return the candidate list instead of guessing). It explicitly flags NAMELESS SHELL profiles (blank first/last names), the exact condition that silently broke Stu Kirksey's enrollment; get_customer_details only returns purchase rows, which is why that shell was invisible over MCP.",
+    ],
+  },
   {
     version: "2.17.1",
     date: "2026-07-02",
