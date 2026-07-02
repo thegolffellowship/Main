@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.16.19";
+window.TGF_VERSION = "2.16.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.20",
+    date: "2026-07-02",
+    changes: [
+      "Repair: merged the duplicate Kyle Franz profile (316, held only a status row) into his canonical record (315), per admin confirmation.",
+      "Repair: merged the three Will/William Massey fragment profiles (407, 408, 409 — between them a role, a status, a ledger row, and a membership term that was invisible on his real card) into canonical 311, and registered 'William Massey' as his name alias, per admin confirmation. Duplicate roles dedupe; distinct membership terms are both preserved.",
+      "Repair: untangled the two Victor Arias profiles WITHOUT merging them — admin confirmed they are father (Victor Arias, Jr., customer 17, vicdr.dirt@yahoo.com) and son (Victor Arias, III, customer 308, v3rdgen.dirt@gmail.com), with dad making all payments. Rows on the two stray fragments (414, 434) and any misrouted rows on the real profiles are routed by the name text they carry (III/3rd/v3rdgen → son; Jr/vicdr → dad; unmarked payment-side strays → dad), the fragments are retired, dad's transactions now display 'Victor Arias Jr' (son's already displayed 'Victor Arias III'), and suffix-name aliases were added for both. The bare name 'Victor Arias' is deliberately left ambiguous so the identity lookup keeps refusing to guess between them — the pair is registered as known-distinct so the duplicate-name census stops warning about it.",
+      "Improvement: the alias that merge_customers auto-creates for a renamed source profile now carries the target's customer_id, so it resolves by id instead of relying on the name-join fallback.",
+    ],
+  },
   {
     version: "2.16.19",
     date: "2026-07-02",
