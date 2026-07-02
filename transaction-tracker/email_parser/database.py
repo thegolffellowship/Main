@@ -4838,12 +4838,29 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_roman_numeral_name_case failed")
 
-        # Re-date purchase-backed contest enrollments at boot — the contest
-        # sync only runs on new orders / manual trigger, too late for repair.
+        # Fix the mis-parsed standalone SEASON CONTESTS order R747210347
+        # (blank customer — buyer is Stu Kirksey) before the boot sync below.
+        try:
+            _repair_kirksey_season_contest_item(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_kirksey_season_contest_item failed")
+
+        # Run the FULL contest sync at boot: purchases → enrollments must not
+        # depend on the next inbox batch or a manual button press. It also
+        # re-dates enrollments and purges blank rows internally.
+        try:
+            conn.commit()  # release our lock; the sync opens its own connection
+            sync_season_contests_from_items(db_path=db_path)
+        except Exception:
+            logger.exception("Non-fatal: boot season contest sync failed")
+
+        # Cheap safety net (the boot sync above already did both) + audit:
+        # every contest purchase must have its matching enrollment(s).
         try:
             _repair_season_contest_enrollment_dates(conn)
             _purge_blank_season_contest_rows(conn)
             conn.commit()
+            _log_unenrolled_contest_purchases(conn)
         except Exception:
             logger.exception("Non-fatal: season contest boot repairs failed")
 
@@ -14853,6 +14870,133 @@ def get_customer_season_contests(customer_name: str,
         return [dict(r) for r in rows]
 
 
+def _repair_kirksey_season_contest_item(conn: sqlite3.Connection) -> None:
+    """Assign order R747210347 to Stu Kirksey.
+
+    A standalone SEASON CONTESTS purchase (City Match Play, 2026-05-25)
+    parsed with a BLANK customer, so no enrollment was ever created and the
+    Enrollment log showed a nameless row (purged in v2.16.28). The order
+    email names the buyer: 'New order from: Stuart Kirksey'
+    (stuart.kirksey@gmail.com) — admin-confirmed. Sets the canonical
+    customer + id on the item and captures the order's email variant, so
+    the boot contest sync enrolls him dated 2026-05-25. Idempotent.
+    """
+    # NB: an early boot migration rewrites blank items.customer to
+    # '(Unknown)', so match that too — the row may be blank OR '(Unknown)'
+    # depending on which migration ran first.
+    row = conn.execute(
+        """SELECT id FROM items
+           WHERE order_id IN ('R747210347', '#R747210347')
+             AND (customer IS NULL OR TRIM(customer) = ''
+                  OR customer = '(Unknown)')"""
+    ).fetchone()
+    if not row:
+        return
+    cid = _lookup_customer_id(conn, "Stu Kirksey", "stuartkirksey@gmail.com")
+    if cid is None:
+        logger.warning(
+            "Kirksey contest repair: 'Stu Kirksey' not uniquely resolvable — skipping"
+        )
+        return
+    canon = conn.execute(
+        """SELECT TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS n
+           FROM customers WHERE customer_id = ?""",
+        (cid,),
+    ).fetchone()
+    display = (canon["n"] if canon and canon["n"] else "Stu Kirksey")
+    conn.execute(
+        """UPDATE items
+           SET customer = ?, customer_id = ?,
+               customer_email = COALESCE(NULLIF(TRIM(COALESCE(customer_email,'')), ''),
+                                         'stuart.kirksey@gmail.com')
+           WHERE id = ?""",
+        (display, cid, row["id"]),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO customer_emails (customer_id, email, label) "
+        "VALUES (?, 'stuart.kirksey@gmail.com', 'repaired')",
+        (cid,),
+    )
+    conn.commit()
+    logger.info(
+        "Kirksey contest repair: item %s (order R747210347) assigned to %s (cid %d)",
+        row["id"], display, cid,
+    )
+
+
+def _log_unenrolled_contest_purchases(conn: sqlite3.Connection) -> None:
+    """Audit: every contest purchase must have its matching enrollment(s).
+
+    Derives the expected contest set per active TGF MEMBERSHIP / SEASON
+    CONTESTS item (same flag + keyword rules as the sync) and warns for any
+    expected enrollment missing from season_contests — plus for SEASON
+    CONTESTS purchases with no recognizable contest selection at all (the
+    parser missed the flags; those enroll nobody silently). Log-only, runs
+    at every boot after the boot contest sync, so anything reported is a
+    genuine residual problem, not just a sync that hasn't run yet.
+    """
+    rows = conn.execute(
+        """SELECT id, customer, customer_id, item_name, notes, order_date, order_id,
+                  net_points_race, gross_points_race, city_match_play
+           FROM items
+           WHERE COALESCE(transaction_status, 'active') = 'active'
+             AND (UPPER(item_name) = 'TGF MEMBERSHIP'
+                  OR UPPER(item_name) LIKE '%SEASON CONTEST%')"""
+    ).fetchall()
+    missing = 0
+    for r in rows:
+        expected = set()
+        if (r["net_points_race"] or "").upper() == "YES":
+            expected.add("NET Points Race")
+        if (r["gross_points_race"] or "").upper() == "YES":
+            expected.add("GROSS Points Race")
+        if (r["city_match_play"] or "").upper() == "YES":
+            expected.add("City Match Play")
+        nm = (r["item_name"] or "").upper()
+        nt = (r["notes"] or "").upper()
+        if "SEASON CONTEST" in nm:
+            if "NET" in nm or "NET" in nt:
+                expected.add("NET Points Race")
+            if "GROSS" in nm or "GROSS" in nt:
+                expected.add("GROSS Points Race")
+            if "MATCH PLAY" in nm or "MATCH PLAY" in nt:
+                expected.add("City Match Play")
+            if not expected:
+                missing += 1
+                logger.warning(
+                    "Contest enrollment audit: item %s (order %s, %r, %s) is a "
+                    "SEASON CONTESTS purchase with NO recognizable contest "
+                    "selection — review the order and set the right flag(s)",
+                    r["id"], r["order_id"], r["customer"], r["order_date"],
+                )
+                continue
+        if not expected:
+            continue
+        season = (r["order_date"] or "")[:4]
+        for ct in sorted(expected):
+            exists = conn.execute(
+                """SELECT 1 FROM season_contests
+                   WHERE contest_type = ? AND season = ?
+                     AND (source_item_id = ?
+                          OR (customer_id IS NOT NULL AND customer_id = ?)
+                          OR LOWER(TRIM(customer_name)) = LOWER(TRIM(?)))
+                   LIMIT 1""",
+                (ct, season, r["id"], r["customer_id"] or -1, r["customer"] or ""),
+            ).fetchone()
+            if not exists:
+                missing += 1
+                logger.warning(
+                    "Contest enrollment audit: %s (cid %s) bought %s "
+                    "(item %s, order %s, %s) but has NO enrollment",
+                    r["customer"] or "(no name)", r["customer_id"], ct,
+                    r["id"], r["order_id"], r["order_date"],
+                )
+    if not missing:
+        logger.info(
+            "Contest enrollment audit: every contest purchase has matching enrollments"
+        )
+
+
 def _purge_blank_season_contest_rows(conn: sqlite3.Connection) -> None:
     """Fix season_contests rows with an empty customer_name — the blank
     CUSTOMER cell in the Enrollment log. Created before v2.16.28 when the
@@ -14867,7 +15011,7 @@ def _purge_blank_season_contest_rows(conn: sqlite3.Connection) -> None:
                   i.item_name AS src_item, i.order_id AS src_order, i.order_date AS src_date
            FROM season_contests sc
            LEFT JOIN items i ON i.id = sc.source_item_id
-           WHERE TRIM(COALESCE(sc.customer_name, '')) = ''"""
+           WHERE TRIM(COALESCE(sc.customer_name, '')) IN ('', '(Unknown)')"""
     ).fetchall()
     for r in rows:
         if r["customer_id"]:
@@ -14948,9 +15092,10 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 
     def _upsert(conn, customer, contest_type, chapter, season, item_id):
         nonlocal enrolled, linked
-        if not (customer or "").strip():
-            # A source item with a blank customer must not create a ghost
-            # enrollment row (an empty CUSTOMER cell in the Enrollment log).
+        if not (customer or "").strip() or customer.strip() == "(Unknown)":
+            # A source item with a blank/placeholder customer must not create
+            # a ghost enrollment row (an empty or '(Unknown)' CUSTOMER cell
+            # in the Enrollment log).
             logger.warning(
                 "Season contest sync: skipped %s enrollment from item %s — "
                 "item has no customer name", contest_type, item_id,

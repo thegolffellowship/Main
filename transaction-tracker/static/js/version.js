@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.16.30";
+window.TGF_VERSION = "2.16.31";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.31",
+    date: "2026-07-02",
+    changes: [
+      "Repair: order R747210347 (standalone SEASON CONTESTS purchase, City Match Play, 2026-05-25) parsed with a blank buyer — the order email names Stu Kirksey. The item is assigned to his profile, the order's stuart.kirksey@gmail.com captured as his, and he enrolls in City Match Play dated 5/25 automatically at boot.",
+      "Fix: the season contest sync now runs at every boot — previously it only ran when new orders arrived or the Sync button was clicked, so repairs and item corrections didn't produce enrollments until one of those happened. Purchases → enrollments is now automatic on every deploy.",
+      "Audit: a boot-time contest-enrollment audit (the requested 'any others like that?' check) verifies every active membership-with-contest-flags and SEASON CONTESTS purchase has its matching enrollment(s), and flags any SEASON CONTESTS purchase whose contest selection wasn't parsed at all (those silently enrolled nobody). Runs after the boot sync, so anything it reports is a genuine residual problem, with item/order identifiers for follow-up.",
+      "Hardening: '(Unknown)'-named items (an early migration renames blank customers to that placeholder) can no longer create enrollments, and any existing blank or '(Unknown)' enrollment rows are purged with their source purchase logged.",
+    ],
+  },
   {
     version: "2.16.30",
     date: "2026-07-02",
