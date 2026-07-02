@@ -582,7 +582,8 @@
     // ── Init ────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
         initAuth();
-        loadSettings().then(() => loadPlayers());
+        // Data load happens via onAuthReady() → kickInitialLoad() — the
+        // handicaps endpoints require an authenticated session.
 
         document.getElementById('hcp-search').addEventListener('input', renderTable);
         document.getElementById('sort-select').addEventListener('change', e => {
@@ -703,7 +704,18 @@
     });
 
     // ── Auth hooks (called by auth.js after role is known) ──────────
+    // The handicaps data endpoints require an authenticated session, so the
+    // initial load can only start once auth succeeds (initAuth() calls
+    // onAuthReady() immediately when already logged in, or after the modal).
+    let _bootLoadKicked = false;
+    function kickInitialLoad() {
+        if (_bootLoadKicked) return;
+        _bootLoadKicked = true;
+        loadSettings().then(() => loadPlayers());
+    }
+
     function onAuthReady() {
+        kickInitialLoad();
         if (currentRole === 'admin' || currentRole === 'manager') {
             document.getElementById('btn-import').style.display = '';
             document.getElementById('gg-sync-group').style.display = 'inline-flex';

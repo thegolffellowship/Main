@@ -41,6 +41,9 @@ def _login_if_needed():
 
 
 def _get(path, params=None):
+    # Read endpoints (/api/items, /api/stats, ...) require an authenticated
+    # session too, so log in before reads as well as writes.
+    _login_if_needed()
     resp = _session.get(f"{API_URL}{path}", params=params, timeout=30)
     resp.raise_for_status()
     return resp.json()

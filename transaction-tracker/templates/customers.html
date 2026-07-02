@@ -3666,6 +3666,13 @@
 
     let initialLoadDone = false;
 
+    // Called by auth.js once the session is authenticated (immediately on
+    // page load when already logged in, or right after the login modal).
+    // The data endpoints require auth, so this is the only load entry point.
+    function onAuthReady() {
+        if (!initialLoadDone) init();
+    }
+
     async function init() {
         try {
             const res = await fetch("/api/items");
@@ -3867,7 +3874,9 @@
         await initAuth();
         loadCustColumnPrefs();
         buildCustColumnToggle();
-        init();
+        // Data load happens via onAuthReady() — /api/items and friends now
+        // require an authenticated session, so initAuth() triggers init()
+        // when already logged in, and the login modal triggers it after login.
         // Credit/Transfer modal
         document.getElementById("cust-credit-submit").addEventListener("click", submitCustCredit);
         document.getElementById("cust-credit-cancel").addEventListener("click", closeCustCreditModal);

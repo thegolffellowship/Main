@@ -1497,6 +1497,7 @@ def index():
 # Routes — API
 # ---------------------------------------------------------------------------
 @app.route("/api/items")
+@require_role("view-only")
 def api_items():
     """Return all item rows as JSON."""
     items = get_all_items()
@@ -1504,6 +1505,7 @@ def api_items():
 
 
 @app.route("/api/stats")
+@require_role("view-only")
 def api_stats():
     """Return summary statistics."""
     stats = get_item_stats()
@@ -1511,6 +1513,7 @@ def api_stats():
 
 
 @app.route("/api/audit")
+@require_role("view-only")
 def api_audit():
     """Data-quality report: field fill-rates, missing-data flags, value distributions."""
     report = get_audit_report()
@@ -1545,6 +1548,7 @@ def api_migrate_customers():
 
 
 @app.route("/api/data-snapshot")
+@require_role("view-only")
 def api_data_snapshot():
     """Quick snapshot of recent items + stats for inspection."""
     limit = request.args.get("limit", 50, type=int)
@@ -6680,6 +6684,7 @@ def page_handicaps():
 
 
 @app.route("/api/handicaps/players")
+@require_role("view-only")
 def api_handicap_players():
     """Return all players with their current handicap index.
 
@@ -6695,6 +6700,7 @@ def api_handicap_players():
 
 
 @app.route("/api/handicaps/rounds")
+@require_role("view-only")
 def api_handicap_rounds():
     """Return rounds for a single player (?player=Name) or all rounds."""
     player_name = request.args.get("player")
@@ -6703,6 +6709,7 @@ def api_handicap_rounds():
 
 
 @app.route("/api/handicaps/for-customer")
+@require_role("view-only")
 def api_handicap_for_customer():
     """Return handicap data for a customer by looking up their linked player name.
 
@@ -6750,6 +6757,7 @@ def api_handicap_for_customer():
 
 
 @app.route("/api/handicaps/index-map")
+@require_role("view-only")
 def api_handicap_index_map():
     """Return a map of customer_name (lowercase) → handicap_index for all linked players.
 
@@ -6805,6 +6813,7 @@ def api_delete_handicap_player(player_name):
 
 
 @app.route("/api/handicaps/settings", methods=["GET"])
+@require_role("view-only")
 def api_get_handicap_settings():
     """Return current handicap calculation settings."""
     return jsonify(get_handicap_settings())

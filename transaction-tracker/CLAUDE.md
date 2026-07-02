@@ -82,7 +82,7 @@ These run on every session — no need to remind me.
 
 ## Inspection Endpoints
 
-When the user asks about transaction data, extraction quality, or anything about what's been parsed — query these live endpoints:
+When the user asks about transaction data, extraction quality, or anything about what's been parsed — prefer the MCP server tools (below), which carry their own auth. The HTTP endpoints **require an authenticated session as of v2.16.10** (they were previously unauthenticated, which exposed the full customer PII set — names, emails, phones, addresses, DOBs — to any anonymous caller; do not remove the `@require_role` decorators):
 
 | Endpoint | Purpose |
 |---|---|

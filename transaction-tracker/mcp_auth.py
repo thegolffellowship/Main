@@ -465,9 +465,27 @@ class MCPAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Skip auth if MCP_CLIENT_ID / MCP_CLIENT_SECRET not configured
+        # SECURITY: fail CLOSED if MCP_CLIENT_ID / MCP_CLIENT_SECRET are not
+        # configured. This used to skip auth entirely (fail open), which meant
+        # a deploy that forgot the env vars exposed every MCP write tool
+        # (update/delete transactions, delete events, ...) to anonymous
+        # callers. An unconfigured server now refuses MCP traffic instead.
         if not _client_id() or not _client_secret():
-            await self.app(scope, receive, send)
+            logger.error(
+                "MCP request rejected: MCP_CLIENT_ID/MCP_CLIENT_SECRET not "
+                "configured — set both env vars to enable the MCP endpoint"
+            )
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 1008})
+                return
+            response = JSONResponse(
+                {
+                    "error": "mcp_not_configured",
+                    "error_description": "MCP OAuth is not configured on this server.",
+                },
+                status_code=503,
+            )
+            await response(scope, receive, send)
             return
 
         # Extract bearer token from headers

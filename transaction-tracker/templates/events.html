@@ -1739,9 +1739,23 @@
     }
 
     // Called by auth.js after successful login or session restore
-    function onAuthReady() {
-        renderEvents();
+    // The data endpoints (/api/items, /api/handicaps/index-map, ...) require
+    // an authenticated session, so the initial load can only start once auth
+    // succeeds — initAuth() calls onAuthReady() immediately when already
+    // logged in, or right after the login modal otherwise.
+    let _bootLoadKicked = false;
+    async function kickInitialLoad() {
+        if (_bootLoadKicked) return;
+        _bootLoadKicked = true;
+        await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData(), fetchCoursesForDatalist(), fetchCustomerRolesMap()]);
+        fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
+        fetchParseWarnings();
         fetchOrphanedItems();
+    }
+
+    function onAuthReady() {
+        kickInitialLoad();
+        renderEvents();
         if (currentRole === "admin") {
             const mv = document.getElementById("btn-match-venmo");
             if (mv) mv.style.display = "";
@@ -9670,11 +9684,9 @@
             }
         });
 
-        // Fetch items, handicap data, TGF payout data, courses datalist, and customer roles map
-        await Promise.all([fetchItems(), fetchHandicapIndexMap(), fetchTgfPayoutData(), fetchCoursesForDatalist(), fetchCustomerRolesMap()]);
-        fetch("/api/events/sync", { method: "POST" }).then(() => fetchEvents()).catch(() => fetchEvents());
-        fetchParseWarnings();
-        fetchOrphanedItems();
+        // Initial data load happens via onAuthReady() → kickInitialLoad() —
+        // the data endpoints require auth, so nothing is fetched until the
+        // session is authenticated (no wasted 401s behind the login modal).
 
         // Auto-refresh every 30s to keep multiple users in sync
         setInterval(async () => {
