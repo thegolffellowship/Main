@@ -413,11 +413,12 @@
                     <button class="sub-tab active" data-pr="net">NET Points Race</button>
                     <button class="sub-tab" data-pr="gross">GROSS Points Race</button>
                 </div>
-                <div class="empty-state">
-                    <h3>Points Race Standings — Coming Soon</h3>
-                    <p style="max-width:520px;margin:0 auto;">
-                        Score entry and leaderboards for the NET Points Race (Fellowship Cup, per chapter + combined)
-                        and GROSS Points Race (Players Cup, all chapters) will be available here.
+                <div class="standings-section" style="padding:1rem 2rem;">
+                    <h4 id="pr-roster-title">Enrolled Players</h4>
+                    <div id="pr-roster"><p style="color:var(--text-muted);">Loading…</p></div>
+                    <p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.75rem;">
+                        Score entry and leaderboards (Fellowship Cup / Players Cup) coming soon —
+                        this roster comes from the Enrollment tab and updates with it.
                     </p>
                 </div>
                 <div class="stableford-ref">
@@ -533,16 +534,52 @@
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
             if (top === "enrollment") enrAutoLoad();
+            if (top === "points-race") loadPrRoster();
         });
     });
 
-    // ── Points Race sub-tabs ──
+    // ── Points Race sub-tabs + enrolled roster ──
     $$(".sub-tab[data-pr]").forEach(btn => {
         btn.addEventListener("click", () => {
             $$(".sub-tab[data-pr]").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
+            loadPrRoster();
         });
     });
+
+    async function loadPrRoster() {
+        const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+        const contest = kind === "net" ? "NET Points Race" : "GROSS Points Race";
+        const season = String(new Date().getFullYear());
+        const el = $("pr-roster");
+        $("pr-roster-title").textContent = `${contest} — Enrolled Players (${season})`;
+        el.innerHTML = '<p style="color:var(--text-muted);">Loading…</p>';
+        try {
+            const res = await fetch(`/api/season-contests?contest_type=${encodeURIComponent(contest)}&season=${encodeURIComponent(season)}`);
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            const rows = await res.json();
+            if (!rows.length) {
+                el.innerHTML = '<p style="color:var(--text-muted);">No players enrolled yet.</p>';
+                return;
+            }
+            rows.sort((a, b) => (a.chapter || "").localeCompare(b.chapter || "")
+                || (a.customer_name || "").localeCompare(b.customer_name || ""));
+            const body = rows.map(r => `
+                <tr>
+                    <td>${escapeHtml(r.customer_name || "")}</td>
+                    <td>${escapeHtml(r.chapter || "—")}</td>
+                    <td>${escapeHtml((r.enrolled_at || "").slice(0, 10))}</td>
+                </tr>`).join("");
+            el.innerHTML = `
+                <p style="color:var(--text-muted);font-size:0.8rem;margin:0 0 0.4rem;">${rows.length} player${rows.length === 1 ? "" : "s"} enrolled</p>
+                <table class="standings-table">
+                    <thead><tr><th>Player</th><th>Chapter</th><th>Enrolled</th></tr></thead>
+                    <tbody>${body}</tbody>
+                </table>`;
+        } catch (e) {
+            el.innerHTML = '<p style="color:#dc2626;">Failed to load enrollments.</p>';
+        }
+    }
 
     // ═══════════ AUTH ═══════════
 

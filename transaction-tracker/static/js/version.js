@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.28";
+window.TGF_VERSION = "2.16.29";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.29",
+    date: "2026-07-02",
+    changes: [
+      "Feature: the NET Points Race and GROSS Points Race tabs on the Contests page now show the enrolled-player roster for the current season (player, chapter, enrollment date, sorted by chapter then name, with a count) instead of only a Coming-Soon placeholder. The roster reads the same enrollment data as the Enrollment tab, so removals and syncs reflect immediately. Standings/leaderboards remain a future feature.",
+    ],
+  },
   {
     version: "2.16.28",
     date: "2026-07-02",
