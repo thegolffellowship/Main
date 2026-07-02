@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.16.13";
+window.TGF_VERSION = "2.16.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.14",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the Archive/Unarchive button on customer cards did nothing — the route accepted the field but update_customer_info()'s internal whitelist silently dropped it while still reporting success. 'archived' is now allowed through, and the button also sends customer_id so the update is keyed by identity instead of display name.",
+      "Fix: editing a transaction's customer name (admin inline edit) changed the display name but kept the OLD person's customer_id on the row, so credits, winnings, memberships, and Venmo balance-due matching still attributed the transaction to the previous customer. The endpoint now re-resolves customer_id whenever the name actually changes (an explicit customer_id in the payload, e.g. from Assign Member, still wins).",
+      "Fix: Assign Guest explicitly NULLed the item's customer_id, leaving the guest's registration invisible to every id-keyed feature until a boot backfill guessed at it. It now resolves (or creates) the guest's own customer record at assign time.",
+      "Fix: the quantity-expansion backfill (Audit tab) built partner rows as copies of the buyer's row, so each partner row carried the BUYER's customer_id — a named partner's registration was attributed to the buyer's identity. Named partners now get their own resolved customer record; unnamed 'Guest of' placeholders get no id rather than the wrong one.",
+      "Fix: customer identity lookup now refuses to guess when two different customers share the exact same first+last name — previously it silently picked one (LIMIT 1), which could attach orders, credits, and payments to the wrong same-named person. An email or alias can still disambiguate; otherwise a fresh profile is created and the boot-time shared-email auto-merge collapses it once an email ties them together.",
+      "Fix: alias lookups (both email- and name-aliases) resolved the customer by reconstructing 'first last' from the customers table instead of using the alias row's own customer_id column — misfiring for names with suffixes/middle names and ambiguous when two customers share a name. The alias's customer_id is now used directly, with the legacy name-join kept only as a fallback for unlinked alias rows.",
+      "Fix: correcting a customer's name on the Info tab now propagates to the season standings and match-play pool member lists (season_contests/cmp_pool_members display-name copies), which previously kept rendering the old name.",
+    ],
+  },
   {
     version: "2.16.13",
     date: "2026-07-02",

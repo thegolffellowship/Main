@@ -4623,9 +4623,12 @@ def _lookup_customer_id(conn: sqlite3.Connection,
 
     Tries (in order):
     1. Email match via customer_emails table.
-    2. Alias email match via customer_aliases table (type='email').
-    3. Exact first_name + last_name match in customers table.
-    4. Alias name match via customer_aliases table (type='name').
+    2. Alias email match via customer_aliases (ca.customer_id preferred,
+       legacy name-join fallback).
+    3. Exact first_name + last_name match in customers table — unless the
+       name is ambiguous (two customers share it), in which case this step
+       refuses to guess and falls through.
+    4. Alias name match via customer_aliases (same cid-first pattern as 2).
     Returns the customer_id or None if no match is found.
     """
     # 1. Email lookup via customer_emails
@@ -4659,35 +4662,60 @@ def _lookup_customer_id(conn: sqlite3.Connection,
                 pass
             return row["customer_id"]
 
-    # 2. Alias email lookup via customer_aliases → resolve customer_name → customers
+    # 2. Alias email lookup via customer_aliases. Prefer the alias row's own
+    # customer_id column (backfilled at boot) — the legacy join reconstructs
+    # "first last" from customers and misses suffixed/middle/company names,
+    # and can even land on a DIFFERENT customer with the same name.
     if customer_email:
         row = conn.execute(
-            """SELECT c.customer_id FROM customer_aliases ca
-               JOIN customers c
-                 ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+            """SELECT ca.customer_id FROM customer_aliases ca
+               JOIN customers c ON c.customer_id = ca.customer_id
                WHERE ca.alias_type = 'email'
+                 AND ca.customer_id IS NOT NULL
                  AND LOWER(ca.alias_value) = LOWER(?)
                LIMIT 1""",
             (customer_email.strip(),),
         ).fetchone()
+        if not row:
+            row = conn.execute(
+                """SELECT c.customer_id FROM customer_aliases ca
+                   JOIN customers c
+                     ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+                   WHERE ca.alias_type = 'email'
+                     AND LOWER(ca.alias_value) = LOWER(?)
+                   LIMIT 1""",
+                (customer_email.strip(),),
+            ).fetchone()
         if row:
             return row["customer_id"]
 
-    # 3. Name lookup — exact first + last
+    # 3. Name lookup — exact first + last. AMBIGUITY GUARD (v2.16.14): when
+    # two different customers share the exact first+last name, refusing to
+    # guess is safer than LIMIT 1 (which picked one arbitrarily and could
+    # attach orders/credits to the wrong person). Fall through — an alias
+    # or email step may still disambiguate; otherwise the caller creates a
+    # fresh profile, which the boot-time shared-email auto-merge collapses
+    # once an email ties them together.
     if customer_name:
         parts = customer_name.strip().split()
         if len(parts) >= 2:
             first = parts[0]
             last = parts[-1]
-            row = conn.execute(
+            rows = conn.execute(
                 """SELECT customer_id FROM customers
                    WHERE LOWER(first_name) = LOWER(?)
                      AND LOWER(last_name) = LOWER(?)
-                   LIMIT 1""",
+                   LIMIT 2""",
                 (first, last),
-            ).fetchone()
-            if row:
-                return row["customer_id"]
+            ).fetchall()
+            if len(rows) == 1:
+                return rows[0]["customer_id"]
+            if len(rows) > 1:
+                logger.info(
+                    "_lookup_customer_id: name %r matches multiple customers "
+                    "(%s, ...) — refusing to guess",
+                    customer_name.strip(), rows[0]["customer_id"],
+                )
 
     # 3a. Company name lookup — matches vendor/company records (single-word or multi-word)
     if customer_name:
@@ -4701,17 +4729,28 @@ def _lookup_customer_id(conn: sqlite3.Connection,
         if row:
             return row["customer_id"]
 
-    # 4. Alias name lookup — the incoming customer_name matches a known alias
+    # 4. Alias name lookup — the incoming customer_name matches a known alias.
+    # Same cid-first / legacy-name-join-fallback pattern as step 2.
     if customer_name:
         row = conn.execute(
-            """SELECT c.customer_id FROM customer_aliases ca
-               JOIN customers c
-                 ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+            """SELECT ca.customer_id FROM customer_aliases ca
+               JOIN customers c ON c.customer_id = ca.customer_id
                WHERE ca.alias_type = 'name'
+                 AND ca.customer_id IS NOT NULL
                  AND LOWER(ca.alias_value) = LOWER(?)
                LIMIT 1""",
             (customer_name.strip(),),
         ).fetchone()
+        if not row:
+            row = conn.execute(
+                """SELECT c.customer_id FROM customer_aliases ca
+                   JOIN customers c
+                     ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+                   WHERE ca.alias_type = 'name'
+                     AND LOWER(ca.alias_value) = LOWER(?)
+                   LIMIT 1""",
+                (customer_name.strip(),),
+            ).fetchone()
         if row:
             return row["customer_id"]
 
@@ -7423,11 +7462,14 @@ def update_customer_info(customer_name: str, fields: dict,
     imperfect), which used to silently drop the current_player_status /
     venmo_username writes with no error surfaced.
     """
+    # Keep in sync with the route whitelist in app.py api_update_customer —
+    # a field allowed there but missing here is silently dropped while the
+    # endpoint still reports success (the v2.16.13 Archive-button no-op).
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
                "address", "address2", "city", "state", "zip",
-               "venmo_username", "current_player_status"}
+               "archived", "venmo_username", "current_player_status"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return 0
@@ -7541,6 +7583,23 @@ def update_customer_info(customer_name: str, fields: dict,
                     "UPDATE handicap_player_links SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
                     (safe["customer"], customer_name),
                 )
+                # Propagate the rename to enrollment tables that render their
+                # own customer_name copy (season standings, match play pools) —
+                # cid-keyed when resolved, name-keyed sweep for unlinked rows.
+                for _tbl in ("season_contests", "cmp_pool_members"):
+                    try:
+                        if cid:
+                            conn.execute(
+                                f"UPDATE {_tbl} SET customer_name = ? WHERE customer_id = ?",
+                                (safe["customer"], cid),
+                            )
+                        conn.execute(
+                            f"UPDATE {_tbl} SET customer_name = ? "
+                            f"WHERE customer_id IS NULL AND customer_name = ? COLLATE NOCASE",
+                            (safe["customer"], customer_name),
+                        )
+                    except sqlite3.OperationalError:
+                        pass  # table not created yet on this DB
 
         if cid:
             # Sync email to customer_emails (source of truth for customer contact)

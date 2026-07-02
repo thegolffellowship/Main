@@ -1565,6 +1565,31 @@ def api_update_item(item_id):
     err = validate_json_fields(data)
     if err:
         return jsonify({"error": err}), 400
+
+    # Identity coherence: renaming the customer on an item must re-resolve
+    # customer_id — otherwise the row keeps the OLD person's id and every
+    # cid-keyed feature (credits, winnings, memberships, balance-due
+    # matching) still attributes the transaction to them. An explicit
+    # customer_id in the payload wins (assign-member sends one).
+    if (data.get("customer") or "").strip() and "customer_id" not in data:
+        from email_parser.database import _resolve_or_create_customer
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT customer FROM items WHERE id = ?", (item_id,)
+            ).fetchone()
+            if row and (row["customer"] or "").strip().lower() != data["customer"].strip().lower():
+                cid = _resolve_or_create_customer(
+                    conn,
+                    customer_name=data["customer"].strip(),
+                    customer_email=(data.get("customer_email") or "").strip() or None,
+                )
+                conn.commit()
+                if cid:
+                    data["customer_id"] = cid
+        finally:
+            conn.close()
+
     updated = update_item(item_id, data)
     if updated:
         return jsonify({"status": "ok"})
@@ -1599,13 +1624,22 @@ def api_assign_guest(item_id):
         from email_parser.parser import _normalize_customer_name
         normalized = _normalize_customer_name(guest_name)
 
+        # Resolve (or create) the guest's own customer record — leaving
+        # customer_id NULL made the guest's registration invisible to every
+        # cid-keyed feature and left a row the boot backfill had to guess at.
+        from email_parser.database import _resolve_or_create_customer
+        guest_cid = _resolve_or_create_customer(
+            conn, customer_name=normalized, customer_email=None,
+        )
+        conn.commit()
+
         changes = {
             "customer": normalized,
             "guest_name": normalized,
             "notes": f"Purchased by {buyer}",
             "customer_email": None,
             "customer_phone": None,
-            "customer_id": None,
+            "customer_id": guest_cid or None,
         }
         update_item(item_id, changes)
 
@@ -3368,6 +3402,7 @@ def api_expand_quantities():
     was added to the parser.
     """
     from email_parser.parser import _normalize_customer_name
+    from email_parser.database import _resolve_or_create_customer
 
     conn = get_connection()
     try:
@@ -3420,13 +3455,22 @@ def api_expand_quantities():
                 partner_row.pop("id", None)
                 partner_row.pop("created_at", None)
 
+                # partner_row started as a copy of the buyer's row, so it
+                # carries the BUYER's customer_id — the partner row must get
+                # the partner's own identity (or none for an unnamed guest),
+                # not inherit the buyer's.
                 if extra_i == 1 and partner_name:
                     partner_row["customer"] = _normalize_customer_name(partner_name)
                     partner_row["partner_request"] = None
                     partner_row["notes"] = f"Purchased by {buyer}"
+                    partner_row["customer_id"] = _resolve_or_create_customer(
+                        conn, customer_name=partner_row["customer"],
+                        customer_email=None,
+                    )
                 else:
                     partner_row["customer"] = f"Guest of {buyer}"
                     partner_row["notes"] = f"Purchased by {buyer}"
+                    partner_row["customer_id"] = None
 
                 # Insert the partner row
                 cols = [c for c in partner_row.keys() if c not in ("id", "created_at")]

@@ -445,6 +445,33 @@ next daily job or app boot ran the sync. `deriveStatus()` in
 first, which is why writing a fresh `'member'` history row (which the sync
 does) is required, not just bumping `current_player_status`.
 
+## Archive / Unarchive (v2.16.14)
+
+`items.archived` (no customers-table column) — the Customers page marks a
+customer archived when ANY of their item rows has `archived=1`, and the
+Archive button posts `fields: {archived: 0|1}` + `customer_id` to
+`/api/customers/update`, which flips it on all the customer's item rows.
+Until v2.16.14 `update_customer_info()`'s internal whitelist dropped the
+field (the route whitelist allowed it), so the button reported success and
+did nothing — keep the two whitelists in sync.
+
+## Rename propagation (v2.16.14)
+
+A display-name change in `update_customer_info()` propagates to:
+`items.customer`, `customer_aliases.customer_name`,
+`handicap_player_links.customer_name`, and (v2.16.14+) the
+`season_contests` / `cmp_pool_members` display-name copies (cid-keyed, with
+a name-keyed sweep for unlinked rows).
+
+## Identity lookup ambiguity guard (v2.16.14)
+
+`_lookup_customer_id()` step 3 (exact first+last name) refuses to guess when
+two customers share the name — it falls through to alias resolution and
+returns None if nothing disambiguates, so the caller creates a fresh profile
+instead of attaching money to an arbitrary same-named person. Alias steps
+resolve via `customer_aliases.customer_id` first (legacy name-join only as
+fallback for unlinked alias rows).
+
 **Column/history reconciler (v2.16.13):** `_sync_status_history_with_column()`
 runs at every boot after all the column writers. `_migrate_autocorrect_player_status`
 updates only `current_player_status` (never `customer_statuses`), so a
