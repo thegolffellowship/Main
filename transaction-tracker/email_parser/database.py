@@ -4892,6 +4892,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_confirmed_profile_details(conn)
         except Exception:
             logger.exception("Non-fatal: _repair_confirmed_profile_details failed")
+        # Must run AFTER the details repair: undoes the v2.17.7 mislink of
+        # Steve Barr's address onto Novosad's profile (HubSpot-confirmed).
+        try:
+            _repair_novosad_barr_separation(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_novosad_barr_separation failed")
 
         # Fix the mis-parsed standalone SEASON CONTESTS order R747210347
         # (buyer is Stu Kirksey): blank-customer case AND the nameless-shell-
@@ -5684,12 +5690,46 @@ _VENMO_KNOWN_NON_CUSTOMERS: frozenset = frozenset(n.lower() for n in (
 # profiles for them is explicitly unwanted. The identity audit segregates
 # these instead of flagging them.
 _RSVP_KNOWN_NON_CUSTOMERS: frozenset = frozenset(e.lower() for e in (
-    "hulseyrobin@yahoo.com",   # Robin Hulsey — FB ad lead (Austin), never played
-    "tbabygolf@aol.com",       # Linda (Sackett, believed) — FB ad lead, never played
-    "mparker003@yahoo.com",    # Martin Parker — FB ad lead (Austin), never played
-    "hmcmgraham@gmail.com",    # Christopher Graham — FB ad lead, never played
-    "210runner@outlook.com",   # "Gbob" — name never provided, never played
+    "hulseyrobin@yahoo.com",    # Robin Hulsey — FB ad lead (Austin), never played
+    "tbabygolf@aol.com",        # Linda Sackett — FB ad lead (SA), HubSpot-confirmed
+    "mparker003@yahoo.com",     # Martin Parker — FB ad lead (Austin), never played
+    "hmcmgraham@gmail.com",     # Christopher Graham — FB ad lead, HubSpot-confirmed
+    "210runner@outlook.com",    # "Gbob Runner" — placeholder name, never played
+    "planelite1959@gmail.com",  # Steve BARR — FB ad lead (HubSpot-confirmed),
+                                # NOT Steve Novosad despite the shared first name
 ))
+
+
+def _repair_novosad_barr_separation(conn: sqlite3.Connection) -> None:
+    """Detach planelite1959@gmail.com from Steve Novosad's profile.
+
+    The v2.17.7 seed briefly attached that address to Novosad (cid 66) as
+    his Golf Genius sending address and linked 7 decline RSVPs — but
+    HubSpot identifies the sender as Steve BARR, a separate Facebook ad
+    lead with his own contact record and phone. Removes the email + alias
+    from Novosad and unlinks the RSVPs (Barr is in
+    _RSVP_KNOWN_NON_CUSTOMERS, so they stay unlinked by design). Runs
+    AFTER _repair_confirmed_profile_details, whose registry no longer
+    carries the address. Idempotent.
+    """
+    n1 = conn.execute(
+        "DELETE FROM customer_emails WHERE customer_id = 66 "
+        "AND LOWER(email) = 'planelite1959@gmail.com'"
+    ).rowcount
+    n2 = conn.execute(
+        "DELETE FROM customer_aliases WHERE customer_id = 66 "
+        "AND alias_type = 'email' AND LOWER(alias_value) = 'planelite1959@gmail.com'"
+    ).rowcount
+    n3 = conn.execute(
+        "UPDATE rsvps SET customer_id = NULL WHERE customer_id = 66 "
+        "AND LOWER(TRIM(COALESCE(player_email,''))) = 'planelite1959@gmail.com'"
+    ).rowcount
+    if n1 or n2 or n3:
+        logger.info(
+            "Novosad/Barr separation: removed %d email(s), %d alias(es), "
+            "unlinked %d RSVP(s) — planelite1959@gmail.com is Steve Barr "
+            "(FB ad lead), not Novosad", n1, n2, n3,
+        )
 
 
 def _repair_venmo_payer_aliases(conn: sqlite3.Connection) -> None:
@@ -15379,8 +15419,11 @@ def _repair_fragment_profiles(conn: sqlite3.Connection) -> None:
 # (cid, expected name, phone, venmo, primary_email, extra_emails,
 #  name_aliases, membership_terms[(start, end, price, note)])
 _CONFIRMED_PROFILE_DETAILS = (
+    # NB: planelite1959@gmail.com is NOT Novosad — HubSpot identifies that
+    # sender as Steve BARR, a separate FB ad lead (see
+    # _RSVP_KNOWN_NON_CUSTOMERS and _repair_novosad_barr_separation).
     (66, "steve novosad", "(210) 557-2621", None, "snovosad78@gmail.com",
-     ("planelite1959@gmail.com",), ("Stephen Novosad",),
+     (), ("Stephen Novosad",),
      (("2025-05-02", "2026-05-02", None,
        "Initial membership term — admin-provided 2026-07-02"),)),
     (67, "matt rose", "(210) 287-2502", "@Matt-Rose-58", "matt.rose3@yahoo.com",

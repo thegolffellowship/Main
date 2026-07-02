@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.7";
+window.TGF_VERSION = "2.17.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.8",
+    date: "2026-07-02",
+    changes: [
+      "Correction (HubSpot-verified): the 'Steve' who declines Golf Genius invites from planelite1959@gmail.com is Steve BARR — a separate Facebook ad lead with his own HubSpot contact and phone — NOT Steve Novosad. v2.17.7 had attached that address to Novosad's profile and linked 7 decline RSVPs to him; a boot repair detaches the email/alias and unlinks the RSVPs, and Steve Barr joins the known-lead registry so his declines stay unlinked by design. Novosad's real details (snovosad78@gmail.com, phone, Stephen alias, 2025–26 term) are untouched.",
+      "HubSpot cross-check confirmed the other lead identities: Linda Sackett (SA), Martin Parker, Christopher Graham, and 'Gbob Runner' (placeholder name) — all PAID_SOCIAL leads who never played. Matt Rose's phone matches his HubSpot record exactly.",
+    ],
+  },
   {
     version: "2.17.7",
     date: "2026-07-02",
