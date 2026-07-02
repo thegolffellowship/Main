@@ -897,27 +897,35 @@ notes already had content, skipping if the exact text is already in notes), then
   than stale transaction copies. Only overlays the Info tab's individual display fields —
   does not touch `customer.name`, the grouping/lookup key used throughout the page.
 
-## Points Race — Buy-in Status (v2.19.0)
+## Points Race — Buy-in Status (v2.19.0, moved+persisted v2.19.1)
 
-Contests page → Enrollment tab panel that answers "who in the GG rankings
-is bought into the season contest?" — the first live Golf Genius data
-integration (see docs/claude/handicaps.md → public-portal probe for the
-fetch layer).
+Contests page → Points Race tab: the NET and GROSS sub-tabs auto-load their
+Golf Genius standings (no button) above the enrolled-players roster,
+color-coded by buy-in. First live GG data integration (see
+docs/claude/handicaps.md → public-portal probe for the fetch layer).
 
 - Registry `_GG_POINTS_RACES` (database.py): race key → portal page_id +
   league/host + tracker contest_type/chapter. Current: san_antonio_net
   (page 6028090 ↔ NET Points Race/San Antonio), players_cup_gross
-  (page 6050326 ↔ GROSS Points Race/San Antonio). Adding a race = one
-  registry entry + an <option> in contests.html.
+  (page 6050326 ↔ GROSS Points Race/San Antonio). Sub-tab → race key map
+  is PR_RACE_BY_TAB in contests.html.
 - `golf_genius_sync.fetch_season_points_race(page_id, ...)` fetches the
   public `season_points_v2` widget and normalizes rows (rank, player_name,
   affiliation, tournaments, wins, total_points, points_behind).
-- `get_points_race_with_enrollment(race_key)` resolves each GG name to a
-  customer_id (`_gg_name_candidates` turns 'LAST, First [suffix]' into
-  candidates; `_lookup_customer_id` handles aliases/ambiguity refusal) and
-  joins season_contests by customer_id (name-snapshot fallback). Returns
-  standings + enrolled_not_ranked (bought in but absent from GG).
-- Endpoint GET /api/season-contests/points-race?race=<key>[&season=][&force=1]
-  (manager role), 10-min in-process cache.
+- **Persistence**: `gg_points_standings` table (lazy-created by
+  `_ensure_gg_points_table`, customer_id FK registered in
+  `_CUSTOMER_FK_COLUMNS` so merges re-point it).
+  `refresh_points_race_standings(race_key)` fetches, resolves each GG
+  name to customer_id at write time (`_gg_name_candidates` +
+  `_lookup_customer_id`), and replaces the race's snapshot.
+- `get_points_race_standings(race_key, auto_refresh_hours=12,
+  force_refresh=False)` renders from the snapshot and joins buy-in LIVE
+  against season_contests (enrollment is never persisted — a buy-in
+  recorded after the fetch shows immediately). Auto-refreshes only when
+  empty/stale/forced; serves the stale snapshot with `gg_error` set when
+  GG is unreachable.
+- Endpoint GET /api/season-contests/points-race?race=<key>[&force=1]
+  (manager role).
 - UI colors: green = enrolled, red = profile but no buy-in, amber =
   unmatched GG name (fix by adding a name alias to the right customer).
+  Below the table: players bought in but absent from the GG standings.

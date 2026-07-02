@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.19.0";
+window.TGF_VERSION = "2.19.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.19.1",
+    date: "2026-07-02",
+    changes: [
+      "Points Race standings moved from the Enrollment tab to the Points Race tab itself (admin request): the NET and GROSS sub-tabs now show their GG standings automatically — no Load button — above the enrolled-players roster. Standings persist in a new gg_points_standings table (customer_id FK, registered in the merge re-point registry), so the tab renders instantly from the last snapshot and survives restarts; a refresh from Golf Genius happens only when the snapshot is empty or older than 12 hours, or via the ↻ Refresh button. Buy-in status is never stored — it joins live against season_contests at render time, so recording a buy-in shows green immediately without refetching GG. If GG is unreachable the last snapshot is served with a warning.",
+    ],
+  },
   {
     version: "2.19.0",
     date: "2026-07-02",

@@ -414,6 +414,14 @@
                     <button class="sub-tab" data-pr="gross">GROSS Points Race</button>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
+                    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                        <h4 id="pr-standings-title" style="margin:0;">Standings — Buy-in Status</h4>
+                        <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
+                    </div>
+                    <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
+                    <div id="pr-table-container"></div>
+                </div>
+                <div class="standings-section" style="padding:1rem 2rem;">
                     <h4 id="pr-roster-title">Enrolled Players</h4>
                     <div id="pr-roster"><p style="color:var(--text-muted);">Loading…</p></div>
                     <p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.75rem;">
@@ -475,20 +483,6 @@
                     <div class="empty-state"><h3>Select filters and click Load</h3></div>
                 </div>
                 <div id="enr-removals-container" style="margin-top:1.5rem;"></div>
-
-                <!-- Points Race — buy-in status (live from Golf Genius) -->
-                <div id="enr-points-race" style="margin-top:1.75rem;">
-                    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                        <h3 style="margin:0;">Points Race — Buy-in Status</h3>
-                        <select id="pr-race-select">
-                            <option value="san_antonio_net">SAN ANTONIO Net 2026</option>
-                            <option value="players_cup_gross">THE PLAYERS CUP 2026</option>
-                        </select>
-                        <button class="btn btn-primary" id="pr-load-btn">Load from Golf Genius</button>
-                    </div>
-                    <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
-                    <div id="pr-table-container"></div>
-                </div>
             </div>
         </div>
     </main>
@@ -587,7 +581,7 @@
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
             if (top === "enrollment") enrAutoLoad();
-            if (top === "points-race") loadPrRoster();
+            if (top === "points-race") { loadPrRoster(); prLoadStandings(); }
         });
     });
 
@@ -597,6 +591,7 @@
             $$(".sub-tab[data-pr]").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
             loadPrRoster();
+            prLoadStandings();
         });
     });
 
@@ -1783,20 +1778,22 @@
             </table>`;
     }
 
-    // ═══════════ POINTS RACE — BUY-IN STATUS (live from Golf Genius) ═══════════
+    // ═══════════ POINTS RACE STANDINGS — persisted GG snapshot + buy-in ═══════════
 
-    $("pr-load-btn").addEventListener("click", prLoad);
-    $("pr-race-select").addEventListener("change", () => {
-        if ($("pr-table-container").innerHTML) prLoad();
-    });
+    const PR_RACE_BY_TAB = { net: "san_antonio_net", gross: "players_cup_gross" };
 
-    async function prLoad() {
-        const race = $("pr-race-select").value;
+    $("pr-refresh-btn").addEventListener("click", () => prLoadStandings(true));
+
+    async function prLoadStandings(force = false) {
+        const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+        const race = PR_RACE_BY_TAB[kind];
         const cont = $("pr-table-container");
-        cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">Fetching standings from Golf Genius…</div>';
-        $("pr-summary").textContent = "";
+        if (!cont.innerHTML || force) {
+            cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">'
+                + (force ? 'Refreshing from Golf Genius…' : 'Loading standings…') + '</div>';
+        }
         try {
-            const res = await fetch(`/api/season-contests/points-race?race=${encodeURIComponent(race)}`);
+            const res = await fetch(`/api/season-contests/points-race?race=${encodeURIComponent(race)}${force ? "&force=1" : ""}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
             renderPointsRace(data);
@@ -1806,11 +1803,19 @@
     }
 
     function renderPointsRace(d) {
-        const fetched = d.fetched_at ? new Date(d.fetched_at).toLocaleTimeString() : "";
+        $("pr-standings-title").textContent = `${d.label} — Standings & Buy-in`;
+        let fetched = "";
+        if (d.fetched_at) {
+            const dt = new Date(String(d.fetched_at).replace(" ", "T") + "Z");
+            fetched = isNaN(dt) ? String(d.fetched_at) : dt.toLocaleString();
+        }
         $("pr-summary").textContent =
-            `${d.label}: ${d.n_enrolled} of ${d.n_players} ranked players are bought into ${d.contest_type}`
+            (d.n_players
+                ? `${d.n_enrolled} of ${d.n_players} ranked players are bought into ${d.contest_type}`
+                : `No standings yet for ${d.label}`)
             + (d.n_unresolved ? ` · ${d.n_unresolved} name(s) not matched to a tracker profile` : "")
-            + (fetched ? ` · fetched ${fetched}` : "");
+            + (fetched ? ` · from Golf Genius ${fetched}` : "")
+            + (d.gg_error ? ` · ⚠ refresh failed (showing last snapshot)` : "");
 
         const rows = d.standings.map(r => {
             const bg = r.enrolled ? "background:#f0fdf4;"
