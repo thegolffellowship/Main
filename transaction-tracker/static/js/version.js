@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.29";
+window.TGF_VERSION = "2.16.30";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.30",
+    date: "2026-07-02",
+    changes: [
+      "Repair: some handicap player links pointed at the WRONG customer profile — the historical auto-linker matched players by the email on their purchases, which for guest/family purchases is the BUYER's: Will Massey's handicap link pointed at Colby Johnson's profile (why the v2.16.28 deploy still warned his Golf Genius sync would use Colby's address — the contamination wasn't an email on Massey's profile, it was the link itself), and Isabella Luna's pointed at her guardian's profile. A boot repair now re-points any link whose own player/customer name resolves uniquely to a different profile than its customer_id, moving that player's handicap rounds along with it; ambiguous names are logged and left alone, and links whose name is a known alias of the linked customer are correctly recognized as fine. After this, Massey syncs to Golf Genius as wncmassey@outlook.com and Isabella as her pinned isabellamluna7@gmail.com.",
+    ],
+  },
   {
     version: "2.16.29",
     date: "2026-07-02",
