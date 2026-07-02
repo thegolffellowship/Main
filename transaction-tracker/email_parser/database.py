@@ -4872,6 +4872,22 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_roman_numeral_name_case failed")
 
+        # Identity-audit findings (admin-confirmed 2026-07-02): the Massey
+        # shadow alias on Colby's profile, the Reggie/Reginald Johnson split,
+        # and the Victor Brandon name-mash fragment.
+        try:
+            _repair_massey_shadow_alias(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_massey_shadow_alias failed")
+        try:
+            _repair_reggie_johnson_profiles(conn, db_path)
+        except Exception:
+            logger.exception("Non-fatal: _repair_reggie_johnson_profiles failed")
+        try:
+            _repair_victor_brandon_fragment(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_victor_brandon_fragment failed")
+
         # Fix the mis-parsed standalone SEASON CONTESTS order R747210347
         # (buyer is Stu Kirksey): blank-customer case AND the nameless-shell-
         # profile case (names the shell / re-points the item). Runs BEFORE the
@@ -15187,6 +15203,124 @@ def _seed_initial_contest_removals(conn: sqlite3.Connection) -> None:
             "Removal seed: recorded %s / %s / %s ($%.2f Venmo refund %s, cid=%s)",
             name, contest, season, amount, refund_date, cid,
         )
+
+
+def _repair_massey_shadow_alias(conn: sqlite3.Connection) -> None:
+    """Delete the 'Will Massey' name alias from Colby Johnson's profile.
+
+    The last shard of their old bad merge (which began with Colby paying
+    for Will's first event — admin-confirmed 2026-07-02): the alias mapped
+    Massey's NAME to Colby's profile, so any resolution path that reached
+    the alias step could attribute Massey's activity to Colby. His emails
+    and handicap link were decontaminated in v2.16.28/30; this removes the
+    alias the identity audit surfaced. Idempotent.
+    """
+    rows = conn.execute(
+        """SELECT ca.id FROM customer_aliases ca
+           JOIN customers c ON c.customer_id = ca.customer_id
+           WHERE ca.alias_type = 'name'
+             AND LOWER(TRIM(ca.alias_value)) = 'will massey'
+             AND LOWER(TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')))
+                 = 'colby johnson'"""
+    ).fetchall()
+    for r in rows:
+        conn.execute("DELETE FROM customer_aliases WHERE id = ?", (r["id"],))
+        logger.info(
+            "Massey shadow-alias repair: deleted 'Will Massey' name alias "
+            "from Colby Johnson's profile"
+        )
+
+
+def _repair_reggie_johnson_profiles(conn: sqlite3.Connection,
+                                    db_path: str | Path | None = None) -> None:
+    """Merge the 'Reggie Johnson' shell into 'Reginald Johnson'.
+
+    Same person (admin-confirmed 2026-07-02). The Reggie profile was an
+    empty shell — no purchases, no email — carrying a 'Reginald Johnson'
+    alias that shadowed the real profile's canonical name (surfaced by the
+    identity audit). merge_customers moves anything it does hold and adds
+    'Reggie Johnson' as an alias on the surviving profile. Idempotent.
+    """
+    def _one(name_lower: str):
+        rows = conn.execute(
+            """SELECT customer_id FROM customers
+               WHERE LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) = ?
+               LIMIT 2""",
+            (name_lower,),
+        ).fetchall()
+        return rows[0]["customer_id"] if len(rows) == 1 else None
+
+    src = _one("reggie johnson")
+    tgt = _one("reginald johnson")
+    if src is None or tgt is None or src == tgt:
+        return
+    conn.commit()  # merge_customers opens its own connection
+    try:
+        merge_customers("Reggie Johnson", "Reginald Johnson", db_path=db_path,
+                        source_customer_id=src, target_customer_id=tgt)
+        logger.info(
+            "Reggie Johnson repair: merged shell cid %d -> cid %d (same person)",
+            src, tgt,
+        )
+    except ValueError as e:
+        logger.warning("Reggie Johnson repair failed: %s", e)
+
+
+def _repair_victor_brandon_fragment(conn: sqlite3.Connection) -> None:
+    """Delete the 'Victor Brandon' fragment profile (cid 410).
+
+    Not a real person: a name-mash created from a Victor Arias Jr.
+    transaction where he paid for his son AND a guest named Brandon
+    (admin-confirmed 2026-07-02). The transaction itself was re-attributed
+    by the Arias repairs; this empty fragment (no purchases, no email)
+    kept an active_member status it never earned. Pinned to cid 410 +
+    exact name so it can never touch a future real customer; refuses to
+    delete if the profile holds ANY substantive rows. Idempotent.
+    """
+    row = conn.execute(
+        """SELECT customer_id FROM customers
+           WHERE customer_id = 410
+             AND LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')))
+                 = 'victor brandon'"""
+    ).fetchone()
+    if not row:
+        return
+    cid = row["customer_id"]
+    cleanable = {"customer_roles", "customer_memberships", "customer_statuses",
+                 "customer_aliases"}
+    blockers = []
+    for table, col in _CUSTOMER_FK_COLUMNS:
+        if table in cleanable:
+            continue
+        try:
+            n = conn.execute(
+                f"SELECT COUNT(*) AS c FROM {table} WHERE {col} = ?", (cid,)
+            ).fetchone()["c"]
+        except sqlite3.OperationalError:
+            continue
+        if n:
+            blockers.append(f"{table}.{col}={n}")
+    n_emails = conn.execute(
+        "SELECT COUNT(*) AS c FROM customer_emails WHERE customer_id = ?", (cid,)
+    ).fetchone()["c"]
+    if n_emails:
+        blockers.append(f"customer_emails={n_emails}")
+    if blockers:
+        logger.warning(
+            "Victor Brandon fragment repair: cid %d holds data (%s) — NOT deleting",
+            cid, ", ".join(blockers),
+        )
+        return
+    for t in cleanable:
+        conn.execute(f"DELETE FROM {t} WHERE customer_id = ?", (cid,))
+    conn.execute(
+        "UPDATE customer_statuses SET set_by = NULL WHERE set_by = ?", (cid,)
+    )
+    conn.execute("DELETE FROM customers WHERE customer_id = ?", (cid,))
+    logger.info(
+        "Victor Brandon fragment repair: deleted empty fragment profile cid %d "
+        "(name-mash of Victor Arias Jr. + guest Brandon)", cid,
+    )
 
 
 def _repair_kirksey_profiles(conn: sqlite3.Connection,

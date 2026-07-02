@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.17.4";
+window.TGF_VERSION = "2.17.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.5",
+    date: "2026-07-02",
+    changes: [
+      "Repair (identity audit findings, all admin-confirmed): the 'Will Massey' name alias is removed from Colby Johnson's profile — the last shard of their old bad merge (which began with Colby paying for Will's first event); any name-resolution path reaching that alias could have attributed Massey's activity to Colby.",
+      "Repair: 'Reggie Johnson' and 'Reginald Johnson' are one person — the empty Reggie shell (no purchases, no email) is merged into the real Reginald profile, with 'Reggie Johnson' kept as an alias so either spelling resolves correctly.",
+      "Repair: the 'Victor Brandon' profile is deleted — not a real person, but a name-mash fragment from a Victor Arias Jr. order where he paid for his son and a guest named Brandon. The repair is pinned to that exact profile id and refuses to run if the profile ever holds real data.",
+      "MCP: get_customer_data_audit now returns the actual unlinked RSVP rows (player name, email, event, date) instead of just a count, and the no-email customer list is uncapped and annotated with any email still recoverable from each customer's old order rows plus their assigned roles — groundwork for filling in the pre-tracker member emails.",
+    ],
+  },
   {
     version: "2.17.4",
     date: "2026-07-02",
