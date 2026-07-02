@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.18.0";
+window.TGF_VERSION = "2.18.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.18.1",
+    date: "2026-07-02",
+    changes: [
+      "New MCP tool probe_golf_genius (50 tools): fetches a PUBLIC Golf Genius portal page server-side (Railway has open egress to golfgenius.com; Claude's sandbox does not) and returns parsed structure — title, headings, links, tables, text, or raw HTML. Read-only, no login, hard-restricted to *.golfgenius.com URLs including redirect targets (anything else would make the tool an open proxy into the Railway network). This is the exploration path for importing GG results/standings into the tracker, starting from the admin's public SA portal page.",
+    ],
+  },
   {
     version: "2.18.0",
     date: "2026-07-02",

@@ -1324,6 +1324,68 @@ def get_venmo_transactions(
     return json.dumps([dict(r) for r in rows], indent=2)
 
 
+@mcp.tool()
+def probe_golf_genius(url: str, extract: str = "summary", max_chars: int = 60000) -> str:
+    """Fetch a PUBLIC Golf Genius portal page server-side and return its parsed
+    structure. Read-only, no login, restricted to *.golfgenius.com URLs. Built
+    to explore what league data (events, results, standings) is available for
+    import into the tracker — start from a public page URL and follow links.
+
+    Args:
+        url: Full https URL on golfgenius.com, e.g.
+            https://tgf-sa.golfgenius.com/pages/5783305
+        extract: 'summary' (title, headings, all links, first rows of each
+            table), 'links' (links only), 'tables' (all tables in full),
+            'text' (visible text), or 'raw' (raw HTML, truncated)
+        max_chars: Truncation cap for text/raw output (default 60000)
+    """
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    try:
+        page = fetch_public_page(url)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+    if page["status_code"] != 200:
+        return json.dumps({
+            "error": f"HTTP {page['status_code']}",
+            "final_url": page["final_url"],
+        })
+
+    if extract == "raw":
+        html = page["html"]
+        return json.dumps({
+            "final_url": page["final_url"],
+            "truncated": len(html) > max_chars,
+            "html": html[:max_chars],
+        })
+
+    parsed = parse_page_structure(page["html"], page["final_url"])
+    out: dict = {"final_url": page["final_url"], "title": parsed["title"]}
+
+    if extract == "links":
+        out["links"] = parsed["links"][:500]
+    elif extract == "tables":
+        out["n_tables"] = len(parsed["tables"])
+        out["tables"] = parsed["tables"][:25]
+    elif extract == "text":
+        text = parsed["text"]
+        out["truncated"] = len(text) > max_chars
+        out["text"] = text[:max_chars]
+    else:  # summary
+        out["headings"] = parsed["headings"][:60]
+        out["n_links"] = len(parsed["links"])
+        out["links"] = parsed["links"][:300]
+        out["n_tables"] = len(parsed["tables"])
+        out["table_previews"] = [
+            {"n_rows": len(t), "first_rows": t[:6]} for t in parsed["tables"][:15]
+        ]
+
+    result = json.dumps(out, indent=2)
+    if len(result) > max_chars * 2:
+        result = result[: max_chars * 2] + '\n... (truncated — narrow with extract/links or a deeper URL)'
+    return result
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  ENTRYPOINT
 # ═══════════════════════════════════════════════════════════════════════

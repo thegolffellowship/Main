@@ -191,3 +191,16 @@ When no `round_id` is present the fallback key is `(player_name, round_date, cou
 - `email_parser/database.py` — `_HANDICAP_DIFF_LOOKUP` (server-side table), `_match_customer_name()` (linking logic)
 - `templates/handicaps.html` — `DIFF_LOOKUP` (client-side JS table, must match)
 - Both tables must always be kept in sync.
+
+## Golf Genius public-portal probe (v2.18.1)
+
+MCP tool `probe_golf_genius(url, extract, max_chars)` fetches a public GG
+portal page from the Railway side (Claude's sandbox network policy blocks
+golfgenius.com; Railway has open egress) and returns parsed structure.
+`extract`: summary | links | tables | text | raw. Hard host allowlist —
+https + `*.golfgenius.com` only, re-validated after redirects — because an
+MCP-exposed fetcher without it is an open proxy into the Railway network.
+Helpers: `fetch_public_page()` / `parse_page_structure()` (stdlib
+HTMLParser, no bs4) in `golf_genius_sync.py`. Admin's public SA entry
+point: https://tgf-sa.golfgenius.com/pages/5783305. This is the
+exploration path toward importing GG results/standings into the tracker.
