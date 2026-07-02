@@ -15631,6 +15631,20 @@ _CONFIRMED_PROFILE_DETAILS = (
     # (admin-provided contact). cid None → resolved by unique exact name.
     (None, "chris best", "(864) 601-0467", None, "chris.best@ferguson.com",
      (), (), ()),
+    # Victor Arias Jr (dad, cid 17): the roster's shared 'VicYClau-Arias'
+    # Venmo is HIS (admin-confirmed 2026-07-02) — the roster backfill's
+    # ambiguity guard correctly refused to pick between father and son.
+    (17, "victor arias", None, "VicYClau-Arias", None, (), (), ()),
+    # Torey Tonche: former SA member, pre-tracker (admin-provided).
+    (73, "torey tonche", "(979) 236-8787", None, "tjtonche@gmail.com",
+     (), (),
+     (("2025-01-31", "2026-01-31", None,
+       "Membership 1/31/25 — admin-provided 2026-07-02"),)),
+    # Nic Skinner: former SA member, pre-tracker (admin-provided).
+    (93, "nic skinner", "(830) 515-7002", "Nicolas-Skinner-1",
+     "nic.skinner2@gmail.com", (), (),
+     (("2025-04-27", "2026-04-27", None,
+       "Venmo membership 4/27/25 — admin-provided 2026-07-02"),)),
 )
 
 
