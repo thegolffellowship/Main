@@ -5718,36 +5718,42 @@ _LEAD_EMAIL_SEPARATIONS: tuple[tuple[int, str, str], ...] = (
 
 
 def _repair_lead_email_separations(conn: sqlite3.Connection) -> None:
-    """Detach lead emails wrongly attached to member profiles.
+    """Quarantine lead emails from the whole identity system.
 
-    For each _LEAD_EMAIL_SEPARATIONS entry: removes the email + email alias
-    from the member's profile and unlinks any RSVPs that were attached to
-    the member via that address. The lead emails live in
+    A lead's email must not appear on ANY profile: removes it from
+    customer_emails and customer_aliases regardless of owner, unlinks any
+    RSVP attached through it, and clears the items.customer_email snapshot
+    that carries it. That last step is what kills the resurrection loop
+    seen live on 2026-07-02: separation deleted the alias, then
+    capture_email_aliases_from_items re-created it from the member's item
+    snapshot, the rsvps backfill re-linked the decline, and the next boot
+    separated it all again. The lead emails live in
     _RSVP_KNOWN_NON_CUSTOMERS, so their decline RSVPs stay unlinked by
-    design. Runs AFTER _repair_confirmed_profile_details (whose registry no
-    longer carries these addresses). Idempotent.
+    design. Runs AFTER _repair_confirmed_profile_details. Idempotent.
     """
     for cid, email, who in _LEAD_EMAIL_SEPARATIONS:
         e = email.lower()
         n1 = conn.execute(
-            "DELETE FROM customer_emails WHERE customer_id = ? AND LOWER(email) = ?",
-            (cid, e),
+            "DELETE FROM customer_emails WHERE LOWER(TRIM(email)) = ?", (e,)
         ).rowcount
         n2 = conn.execute(
-            "DELETE FROM customer_aliases WHERE customer_id = ? "
-            "AND alias_type = 'email' AND LOWER(alias_value) = ?",
-            (cid, e),
+            "DELETE FROM customer_aliases WHERE alias_type = 'email' "
+            "AND LOWER(TRIM(COALESCE(alias_value,''))) = ?", (e,)
         ).rowcount
         n3 = conn.execute(
-            "UPDATE rsvps SET customer_id = NULL WHERE customer_id = ? "
-            "AND LOWER(TRIM(COALESCE(player_email,''))) = ?",
-            (cid, e),
+            "UPDATE rsvps SET customer_id = NULL WHERE customer_id IS NOT NULL "
+            "AND LOWER(TRIM(COALESCE(player_email,''))) = ?", (e,)
         ).rowcount
-        if n1 or n2 or n3:
+        n4 = conn.execute(
+            "UPDATE items SET customer_email = NULL "
+            "WHERE LOWER(TRIM(COALESCE(customer_email,''))) = ?", (e,)
+        ).rowcount
+        if n1 or n2 or n3 or n4:
             logger.info(
                 "Lead-email separation: removed %d email(s), %d alias(es), "
-                "unlinked %d RSVP(s) from cid %d — %s is %s",
-                n1, n2, n3, cid, email, who,
+                "unlinked %d RSVP(s), cleared %d item snapshot(s) — %s is %s "
+                "(was attached near cid %d)",
+                n1, n2, n3, n4, email, who, cid,
             )
 
 
@@ -15373,6 +15379,11 @@ def _repair_reggie_johnson_profiles(conn: sqlite3.Connection,
 _FRAGMENT_PROFILES: tuple[tuple[int, str, str], ...] = (
     (410, "victor brandon", "name-mash of Victor Arias Jr. + guest Brandon"),
     (415, "joe brandon", "placeholder for a guest 'Brandon' who never played"),
+    # 444 'Casey Best': name-mash of Doug Hamilton's two guests, Casey
+    # Purvis (own profile, cid 416) and Chris Best (own profile) —
+    # admin-confirmed 2026-07-02. The guard blocks + logs if it holds
+    # anything that needs re-pointing first.
+    (444, "casey best", "name-mash of Doug Hamilton's guests Casey Purvis + Chris Best"),
 )
 
 
@@ -15470,6 +15481,10 @@ _CONFIRMED_PROFILE_DETAILS = (
     # NB: joe@jjoconstruction.com is NOT Joe Garza — HubSpot identifies that
     # sender as Joe OREL, an FB ad lead who never played (admin-confirmed;
     # no email was ever received from Garza). See _LEAD_EMAIL_SEPARATIONS.
+    # Chris Best: Doug Hamilton's guest, played once at s18.7 KISSING TREE
+    # (admin-provided contact). cid None → resolved by unique exact name.
+    (None, "chris best", "(864) 601-0467", None, "chris.best@ferguson.com",
+     (), (), ()),
 )
 
 
@@ -15487,6 +15502,22 @@ def _repair_confirmed_profile_details(conn: sqlite3.Connection) -> None:
     """
     for (cid, expected_name, phone, venmo, primary,
          extras, name_aliases, terms) in _CONFIRMED_PROFILE_DETAILS:
+        if cid is None:
+            # Resolved by unique exact name (used when the cid wasn't known
+            # at registry-authoring time). Refuses ambiguous names.
+            matches = conn.execute(
+                """SELECT customer_id FROM customers
+                   WHERE LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) = ?
+                   LIMIT 2""",
+                (expected_name,),
+            ).fetchall()
+            if len(matches) != 1:
+                logger.warning(
+                    "Profile-details repair: %r matches %d profiles — skipping",
+                    expected_name, len(matches),
+                )
+                continue
+            cid = matches[0]["customer_id"]
         row = conn.execute(
             "SELECT customer_id, first_name, last_name, phone, venmo_username "
             "FROM customers WHERE customer_id = ?", (cid,),
