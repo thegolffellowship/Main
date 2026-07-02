@@ -4780,6 +4780,19 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_merged_customer_fk_orphans failed")
 
+        # Re-link Venmo ledger rows whose customer field held the payment
+        # memo instead of the payer (runs after backfills/aliases settle).
+        try:
+            _repair_venmo_memo_ledger_customers(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_venmo_memo_ledger_customers failed")
+
+        # Fix 'Iii'-style title-cased roman numerals in name display columns
+        try:
+            _repair_roman_numeral_name_case(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_roman_numeral_name_case failed")
+
         # Log-only census of same-named customer profiles (which one holds
         # what) so ambiguous-name cases can be resolved from the deploy log.
         try:
@@ -5462,6 +5475,114 @@ def _repair_merged_customer_fk_orphans(conn: sqlite3.Connection) -> None:
 # and don't warn about them at every boot. Victor Arias Jr (17) and
 # Victor Arias III (308) are father & son (user-confirmed 2026-07-02).
 _KNOWN_DISTINCT_SAME_NAME: tuple[frozenset, ...] = (frozenset({17, 308}),)
+
+
+def _repair_venmo_memo_ledger_customers(conn: sqlite3.Connection) -> None:
+    """Fix Venmo ledger rows whose customer field holds the payment MEMO.
+
+    The Venmo CSV importer's customer fallback stored the note text
+    ('Skins', 'Putting Contest', 'Luke+Youngs+...+Balance+Due') as the
+    customer name for incoming payments — rows that can never link to a
+    customer_id. The real payer is recoverable: the description was built
+    as '<payer>: <memo>'. For unlinked venmo rows with that shape, resolve
+    the payer via _lookup_customer_id and set customer_id + rewrite
+    customer to the payer's canonical name (the memo stays intact in
+    description). Unresolvable payers (no profile, or ambiguous name) are
+    left alone and logged. Idempotent — repaired rows gain a cid and drop
+    out of the scan; the v2.16.23 importer fix stops new ones forming.
+    """
+    rows = conn.execute(
+        """SELECT id, customer, description FROM acct_transactions
+           WHERE customer_id IS NULL
+             AND source = 'venmo'
+             AND customer IS NOT NULL AND customer != ''
+             AND description LIKE '%:%'"""
+    ).fetchall()
+    fixed = unresolved = 0
+    for r in rows:
+        payer = " ".join((r["description"] or "").split(":", 1)[0].split())
+        if len(payer) < 3 or " " not in payer:
+            unresolved += 1
+            continue  # single-token / emoji payer — not name-resolvable
+        cid = _lookup_customer_id(conn, payer, None)
+        if cid is None:
+            unresolved += 1
+            logger.info(
+                "Venmo memo-ledger repair: payer %r unresolved (row %s, memo %r)",
+                payer, r["id"], (r["customer"] or "")[:40],
+            )
+            continue
+        canon = conn.execute(
+            """SELECT TRIM(COALESCE(NULLIF(company_name, ''),
+                       NULLIF(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')), ''))) AS n
+               FROM customers WHERE customer_id = ?""",
+            (cid,),
+        ).fetchone()
+        display = (canon["n"] if canon and canon["n"] else payer)
+        conn.execute(
+            "UPDATE acct_transactions SET customer_id = ?, customer = ? WHERE id = ?",
+            (cid, display, r["id"]),
+        )
+        fixed += 1
+        logger.info(
+            "Venmo memo-ledger repair: row %s memo %r → %s (cid %d)",
+            r["id"], (r["customer"] or "")[:40], display, cid,
+        )
+    if fixed:
+        conn.commit()
+    if fixed or unresolved:
+        logger.info(
+            "Venmo memo-ledger repair: %d row(s) linked to their payer, %d left unresolved",
+            fixed, unresolved,
+        )
+
+
+# Title-cased roman numerals that are unambiguous name suffixes ('Iii' is
+# never a real name token). 'Vi'/'V'/'X' are deliberately excluded — they
+# collide with real names/initials.
+_ROMAN_TITLECASE = re.compile(r"\b(Ii|Iii|Iv|Vii|Viii|Ix)\b")
+
+
+def _repair_roman_numeral_name_case(conn: sqlite3.Connection) -> None:
+    """Fix 'Iii'-style title-cased roman numerals in name display columns
+    (e.g. the Golf Genius import stored 'Victor Iii Arias'). items/customers
+    are already covered by _migrate_normalize_customer_name_case, whose
+    _proper_case_word upper-cases roman tokens — this handles the
+    name-bearing columns that migration doesn't touch. Idempotent.
+    """
+    TARGETS = (
+        ("handicap_player_links", ("player_name", "customer_name")),
+        ("handicap_rounds", ("player_name",)),
+        ("rsvps", ("player_name",)),
+        ("season_contests", ("customer_name",)),
+        ("cmp_pool_members", ("customer_name",)),
+        ("customer_aliases", ("customer_name", "alias_value")),
+        ("acct_transactions", ("customer",)),
+    )
+    fixed = 0
+    for table, cols in TARGETS:
+        for col in cols:
+            try:
+                rows = conn.execute(
+                    f"SELECT rowid AS rid, {col} AS v FROM {table} "
+                    f"WHERE {col} IS NOT NULL AND {col} != ''"
+                ).fetchall()
+            except sqlite3.OperationalError:
+                continue
+            for r in rows:
+                new = _ROMAN_TITLECASE.sub(lambda m: m.group(1).upper(), r["v"])
+                if new != r["v"]:
+                    conn.execute(
+                        f"UPDATE {table} SET {col} = ? WHERE rowid = ?",
+                        (new, r["rid"]),
+                    )
+                    fixed += 1
+                    logger.info(
+                        "Roman-numeral case repair: %s.%s %r → %r",
+                        table, col, r["v"], new,
+                    )
+    if fixed:
+        conn.commit()
 
 
 def _log_duplicate_name_customers(conn: sqlite3.Connection) -> None:
@@ -21848,18 +21969,28 @@ def import_venmo_statement(csv_text: str, account_label: str,
         except (ValueError, TypeError):
             return None
 
-    def _extract_customer(note: str, to_name: str, is_outgoing: bool) -> str:
-        """Extract customer name from Note or To field."""
-        # Try 'FIRSTNAME LASTNAME - reason' pattern in note
+    def _extract_customer(note: str, from_name: str, to_name: str,
+                          is_outgoing: bool) -> str:
+        """Extract customer name from the counterparty fields or Note.
+
+        The counterparty IS the customer — From for incoming payments, To
+        for outgoing. The note is a free-text memo ('Skins', 'Putting
+        contest', balance-due strings); the pre-v2.16.23 fallback stored
+        the memo as the customer name, producing ledger rows that could
+        never link to a customer_id. The 'NAME - reason' note pattern is
+        still honored first: payers use it to name the PLAYER when paying
+        on someone else's behalf.
+        """
         m = re.match(r"^(.+?)\s*-\s+", note)
         if m:
             raw_name = m.group(1).strip()
             # Normalize to Title Case (notes use ALL CAPS for last names)
             return raw_name.title()
-        # For outgoing, use the To field
         if is_outgoing and to_name:
             return to_name.title()
-        # Fallback: use full note as-is (title-cased)
+        if not is_outgoing and from_name:
+            return from_name.title()
+        # Last resort: the memo text (may not be a person at all)
         if note:
             return note.strip().title()
         return ""
@@ -21950,7 +22081,7 @@ def import_venmo_statement(csv_text: str, account_label: str,
             categorized[category] = categorized.get(category, 0) + 1
 
             # --- Extract customer name ---
-            customer = _extract_customer(note, to_name, not is_incoming)
+            customer = _extract_customer(note, from_name, to_name, not is_incoming)
 
             # --- Build description ---
             if is_incoming and from_name:
