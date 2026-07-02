@@ -896,3 +896,28 @@ notes already had content, skipping if the exact text is already in notes), then
   email, phone, and (v2.16.9+) first_name/last_name always reflect canonical values rather
   than stale transaction copies. Only overlays the Info tab's individual display fields —
   does not touch `customer.name`, the grouping/lookup key used throughout the page.
+
+## Points Race — Buy-in Status (v2.19.0)
+
+Contests page → Enrollment tab panel that answers "who in the GG rankings
+is bought into the season contest?" — the first live Golf Genius data
+integration (see docs/claude/handicaps.md → public-portal probe for the
+fetch layer).
+
+- Registry `_GG_POINTS_RACES` (database.py): race key → portal page_id +
+  league/host + tracker contest_type/chapter. Current: san_antonio_net
+  (page 6028090 ↔ NET Points Race/San Antonio), players_cup_gross
+  (page 6050326 ↔ GROSS Points Race/San Antonio). Adding a race = one
+  registry entry + an <option> in contests.html.
+- `golf_genius_sync.fetch_season_points_race(page_id, ...)` fetches the
+  public `season_points_v2` widget and normalizes rows (rank, player_name,
+  affiliation, tournaments, wins, total_points, points_behind).
+- `get_points_race_with_enrollment(race_key)` resolves each GG name to a
+  customer_id (`_gg_name_candidates` turns 'LAST, First [suffix]' into
+  candidates; `_lookup_customer_id` handles aliases/ambiguity refusal) and
+  joins season_contests by customer_id (name-snapshot fallback). Returns
+  standings + enrolled_not_ranked (bought in but absent from GG).
+- Endpoint GET /api/season-contests/points-race?race=<key>[&season=][&force=1]
+  (manager role), 10-min in-process cache.
+- UI colors: green = enrolled, red = profile but no buy-in, amber =
+  unmatched GG name (fix by adding a name alias to the right customer).

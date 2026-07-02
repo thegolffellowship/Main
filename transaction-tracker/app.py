@@ -8318,6 +8318,46 @@ def api_season_contest_removals():
     return jsonify(removals)
 
 
+_points_race_cache: dict = {}
+_POINTS_RACE_CACHE_TTL = 600  # GG portal data changes at most per-round
+
+
+@app.route("/api/season-contests/points-race")
+@require_role("manager")
+def api_season_contest_points_race():
+    """Live GG points-race standings joined with buy-in status.
+
+    Fetches the public season_points_v2 widget from the Golf Genius portal
+    and marks each ranked player enrolled/not-enrolled in the matching
+    season contest. Cached 10 minutes per (race, season); ?force=1 bypasses.
+    """
+    from email_parser.database import (
+        get_points_race_with_enrollment, _GG_POINTS_RACES)
+    race = request.args.get("race", "san_antonio_net")
+    season = request.args.get("season") or None
+    force = request.args.get("force") == "1"
+
+    now = time.time()
+    cached = _points_race_cache.get((race, season))
+    if cached and not force and now - cached[0] < _POINTS_RACE_CACHE_TTL:
+        return jsonify(cached[1])
+
+    try:
+        data = get_points_race_with_enrollment(race, season=season)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Points race fetch failed")
+        return jsonify({"error": f"Golf Genius fetch failed: {e}"}), 502
+
+    data["fetched_at"] = datetime.utcnow().isoformat() + "Z"
+    data["races"] = [
+        {"key": k, "label": v["label"]} for k, v in _GG_POINTS_RACES.items()
+    ]
+    _points_race_cache[(race, season)] = (now, data)
+    return jsonify(data)
+
+
 @app.route("/api/season-contests/<int:enrollment_id>", methods=["DELETE"])
 @require_role("manager")
 def api_delete_season_contest(enrollment_id):

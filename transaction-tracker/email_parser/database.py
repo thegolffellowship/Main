@@ -6119,6 +6119,135 @@ _GG_SYNC_EXCLUDES: frozenset = frozenset(n.lower() for n in (
 ))
 
 
+# Golf Genius public points-race widgets, keyed by race. Each maps a curated
+# portal page (which embeds leagues/<league_id>/widgets/season_points_v2
+# ?page_id=<page_id>) to the tracker contest it charges buy-ins for. The
+# Enrollment tab's "Points Race — Buy-in Status" panel joins these standings
+# against season_contests by customer_id to color-code who is bought in.
+_GG_POINTS_RACES: dict = {
+    "san_antonio_net": {
+        "label": "SAN ANTONIO Net 2026",
+        "host": "tgf-sa.golfgenius.com",
+        "league_id": "514047",
+        "page_id": "6028090",
+        "contest_type": "NET Points Race",
+        "chapter": "San Antonio",
+    },
+    "players_cup_gross": {
+        "label": "THE PLAYERS CUP 2026",
+        "host": "tgf-sa.golfgenius.com",
+        "league_id": "514047",
+        "page_id": "6050326",
+        "contest_type": "GROSS Points Race",
+        "chapter": "San Antonio",
+    },
+}
+
+
+def _gg_name_candidates(raw_name: str) -> list:
+    """Build customer-lookup candidates from a Golf Genius display name.
+
+    Portal names are usually 'LAST, First' (optionally with a suffix inside
+    the first part, e.g. 'ARIAS, Victor Jr'); guests sometimes appear as
+    plain 'First Last'. Returns ordered 'First Last' candidate strings.
+    """
+    name = " ".join((raw_name or "").split())
+    if not name:
+        return []
+    cands = []
+    if "," in name:
+        last, first = [p.strip() for p in name.split(",", 1)]
+        if first and last:
+            cands.append(f"{first} {last}")
+            parts = first.split()
+            if len(parts) > 1 and parts[-1].rstrip(".").lower() in (
+                    "jr", "sr", "ii", "iii", "iv", "v"):
+                cands.append(f"{' '.join(parts[:-1])} {last} {parts[-1]}")
+    else:
+        cands.append(name)
+    return cands
+
+
+def get_points_race_with_enrollment(race_key: str, season: str | None = None,
+                                    db_path: str | Path = DB_PATH) -> dict:
+    """Fetch a GG points race and mark each player's season-contest buy-in.
+
+    Standings come live from the public GG portal widget; enrollment truth
+    is the tracker's season_contests table, resolved to customer_id via
+    _lookup_customer_id (aliases included) per the identity-key principle.
+    """
+    race = _GG_POINTS_RACES.get(race_key)
+    if not race:
+        raise ValueError(
+            f"Unknown race {race_key!r} — known: {sorted(_GG_POINTS_RACES)}")
+
+    from golf_genius_sync import fetch_season_points_race
+    standings = fetch_season_points_race(
+        page_id=race["page_id"], league_id=race["league_id"], host=race["host"])
+
+    with _connect(db_path) as conn:
+        clauses = ["contest_type = ?"]
+        params: list = [race["contest_type"]]
+        if race.get("chapter"):
+            clauses.append("(chapter = ? OR chapter IS NULL OR chapter = '')")
+            params.append(race["chapter"])
+        if season:
+            clauses.append("season = ?")
+            params.append(season)
+        enr_rows = conn.execute(
+            f"""SELECT customer_id, customer_name FROM season_contests
+                WHERE {' AND '.join(clauses)}""",
+            params,
+        ).fetchall()
+        enrolled_ids = {r["customer_id"] for r in enr_rows if r["customer_id"]}
+        enrolled_names = {
+            (r["customer_name"] or "").strip().lower(): r["customer_id"]
+            for r in enr_rows
+        }
+
+        ranked_ids: set = set()
+        out_rows = []
+        for row in standings:
+            cands = _gg_name_candidates(row["player_name"])
+            cid = None
+            for cand in cands:
+                cid = _lookup_customer_id(conn, cand, None)
+                if cid:
+                    break
+            if not cid:
+                # Fall back to the enrollment row's own name snapshot
+                for cand in cands:
+                    if cand.lower() in enrolled_names:
+                        cid = enrolled_names[cand.lower()]
+                        break
+            if cid:
+                ranked_ids.add(cid)
+            out_rows.append({
+                **row,
+                "customer_id": cid,
+                "enrolled": bool(cid and (cid in enrolled_ids
+                                          or cid in enrolled_names.values())),
+            })
+
+        enrolled_not_ranked = [
+            {"customer_id": r["customer_id"], "customer_name": r["customer_name"]}
+            for r in enr_rows
+            if r["customer_id"] and r["customer_id"] not in ranked_ids
+        ]
+
+    return {
+        "race_key": race_key,
+        "label": race["label"],
+        "contest_type": race["contest_type"],
+        "chapter": race["chapter"],
+        "standings": out_rows,
+        "n_players": len(out_rows),
+        "n_enrolled": sum(1 for r in out_rows if r["enrolled"]),
+        "n_unresolved": sum(1 for r in out_rows if not r["customer_id"]),
+        "enrolled_not_ranked": enrolled_not_ranked,
+    }
+
+
 def _repair_gg_email_pins(conn: sqlite3.Connection) -> None:
     """Set is_golf_genius=1 on admin-confirmed sync addresses (idempotent).
 
