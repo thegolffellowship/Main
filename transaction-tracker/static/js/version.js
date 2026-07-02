@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.17.11";
+window.TGF_VERSION = "2.17.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.12",
+    date: "2026-07-02",
+    changes: [
+      "Merge (admin-confirmed): 'Kailey L' into Kailey Lopez — Ashley Padilla's guest twice (TPC Canyons 5/8, TPC Oaks 6/29), surname abbreviated on the second order. One guest profile now, with 'Kailey L' kept as an alias.",
+      "Merge (admin-confirmed): the empty 'Lee Vazques' shell (created 5/18, zero data) into the real Lee Vasquez — Austin member, 11 rounds since March, membership through 5/4/2027. The misspelling stays as an alias so anything arriving under it resolves to him. His 'Leonel Vasquez' Venmo payer alias also landed today, so his Venmo payments link to his profile.",
+      "The roster contact backfill is now one-shot: the extracted data file is removed from the repo after its single production run (234 profiles matched, 164 Venmo handles + 9 emails filled). The admin maintains the source spreadsheet externally and it isn't a master record, so a stale snapshot must not keep writing old handles onto future profiles. The mechanism remains — drop a fresh extract at data/member_roster_backfill.json and it applies once, blank-only.",
+    ],
+  },
   {
     version: "2.17.11",
     date: "2026-07-02",
