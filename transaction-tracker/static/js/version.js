@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.18";
+window.TGF_VERSION = "2.16.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.19",
+    date: "2026-07-02",
+    changes: [
+      "Repair: alias rows whose customer_id points at a customer deleted by an old merge are now re-pointed at boot to the unique living profile with the alias's exact customer name (the census-identified live case: nickname 'Bill' → 'Bill Barstow', left behind by the merge that deleted customer 362). When no unique name match exists the dead id is cleared instead, so resolution falls back to the name join rather than referencing a deleted profile. Idempotent; each repair is logged.",
+    ],
+  },
   {
     version: "2.16.18",
     date: "2026-07-02",

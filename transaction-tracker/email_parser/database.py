@@ -5160,6 +5160,45 @@ def _repair_merged_customer_fk_orphans(conn: sqlite3.Connection) -> None:
                 "Orphan FK repair: re-pointed %s from deleted customer_id %d → %d",
                 moved, src, tgt,
             )
+
+    # Orphaned alias rows: customer_id points at a deleted customer, but the
+    # alias's customer_name still names the person — re-point to the unique
+    # living profile with that exact name. If none or several match, NULL
+    # the id so the legacy name-join fallback governs instead of a dead
+    # reference. (Live case: 'Bill' → 'Bill Barstow' left behind by an old
+    # merge of cid 362, surfaced by the v2.16.16 census detail.)
+    try:
+        orphan_aliases = conn.execute(
+            """SELECT id, customer_name, alias_value, customer_id
+               FROM customer_aliases
+               WHERE customer_id IS NOT NULL
+                 AND customer_id NOT IN (SELECT customer_id FROM customers)"""
+        ).fetchall()
+        for oa in orphan_aliases:
+            parts = (oa["customer_name"] or "").strip().split()
+            new_cid = None
+            if len(parts) >= 2:
+                matches = conn.execute(
+                    """SELECT customer_id FROM customers
+                       WHERE LOWER(first_name) = LOWER(?)
+                         AND LOWER(last_name) = LOWER(?)
+                       LIMIT 2""",
+                    (parts[0], parts[-1]),
+                ).fetchall()
+                if len(matches) == 1:
+                    new_cid = matches[0]["customer_id"]
+            conn.execute(
+                "UPDATE customer_aliases SET customer_id = ? WHERE id = ?",
+                (new_cid, oa["id"]),
+            )
+            logger.info(
+                "Orphan alias repair: %r → %r re-pointed from dead cid %s to %s",
+                oa["alias_value"], oa["customer_name"], oa["customer_id"],
+                new_cid if new_cid is not None else "NULL (no unique name match)",
+            )
+    except sqlite3.OperationalError:
+        pass
+
     for table, col in _CUSTOMER_FK_COLUMNS:
         try:
             cnt = conn.execute(
