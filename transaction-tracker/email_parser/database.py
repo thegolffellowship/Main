@@ -4892,12 +4892,17 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_confirmed_profile_details(conn)
         except Exception:
             logger.exception("Non-fatal: _repair_confirmed_profile_details failed")
-        # Must run AFTER the details repair: undoes the v2.17.7 mislink of
-        # Steve Barr's address onto Novosad's profile (HubSpot-confirmed).
+        # Must run AFTER the details repair: undoes the v2.17.7 mislinks of
+        # lead emails onto member profiles (Barr/Novosad, Orel/Garza —
+        # HubSpot-confirmed), and normalizes Venmo handles to bare form.
         try:
-            _repair_novosad_barr_separation(conn)
+            _repair_lead_email_separations(conn)
         except Exception:
-            logger.exception("Non-fatal: _repair_novosad_barr_separation failed")
+            logger.exception("Non-fatal: _repair_lead_email_separations failed")
+        try:
+            _normalize_venmo_usernames(conn)
+        except Exception:
+            logger.exception("Non-fatal: _normalize_venmo_usernames failed")
 
         # Fix the mis-parsed standalone SEASON CONTESTS order R747210347
         # (buyer is Stu Kirksey): blank-customer case AND the nameless-shell-
@@ -5697,39 +5702,69 @@ _RSVP_KNOWN_NON_CUSTOMERS: frozenset = frozenset(e.lower() for e in (
     "210runner@outlook.com",    # "Gbob Runner" — placeholder name, never played
     "planelite1959@gmail.com",  # Steve BARR — FB ad lead (HubSpot-confirmed),
                                 # NOT Steve Novosad despite the shared first name
+    "joe@jjoconstruction.com",  # Joe OREL — FB ad lead (HubSpot-confirmed),
+                                # NOT Joe Garza despite the shared first name
 ))
 
 
-def _repair_novosad_barr_separation(conn: sqlite3.Connection) -> None:
-    """Detach planelite1959@gmail.com from Steve Novosad's profile.
+# Lead emails that were briefly attached to a MEMBER's profile because the
+# lead shares a first name with the member (v2.17.7 seeded them from the
+# admin's RSVP identification; HubSpot cross-check corrected both).
+# Shape: (member_cid, lead_email, lead_identity)
+_LEAD_EMAIL_SEPARATIONS: tuple[tuple[int, str, str], ...] = (
+    (66, "planelite1959@gmail.com", "Steve Barr (FB ad lead)"),
+    (418, "joe@jjoconstruction.com", "Joe Orel (FB ad lead)"),
+)
 
-    The v2.17.7 seed briefly attached that address to Novosad (cid 66) as
-    his Golf Genius sending address and linked 7 decline RSVPs — but
-    HubSpot identifies the sender as Steve BARR, a separate Facebook ad
-    lead with his own contact record and phone. Removes the email + alias
-    from Novosad and unlinks the RSVPs (Barr is in
-    _RSVP_KNOWN_NON_CUSTOMERS, so they stay unlinked by design). Runs
-    AFTER _repair_confirmed_profile_details, whose registry no longer
-    carries the address. Idempotent.
+
+def _repair_lead_email_separations(conn: sqlite3.Connection) -> None:
+    """Detach lead emails wrongly attached to member profiles.
+
+    For each _LEAD_EMAIL_SEPARATIONS entry: removes the email + email alias
+    from the member's profile and unlinks any RSVPs that were attached to
+    the member via that address. The lead emails live in
+    _RSVP_KNOWN_NON_CUSTOMERS, so their decline RSVPs stay unlinked by
+    design. Runs AFTER _repair_confirmed_profile_details (whose registry no
+    longer carries these addresses). Idempotent.
     """
-    n1 = conn.execute(
-        "DELETE FROM customer_emails WHERE customer_id = 66 "
-        "AND LOWER(email) = 'planelite1959@gmail.com'"
+    for cid, email, who in _LEAD_EMAIL_SEPARATIONS:
+        e = email.lower()
+        n1 = conn.execute(
+            "DELETE FROM customer_emails WHERE customer_id = ? AND LOWER(email) = ?",
+            (cid, e),
+        ).rowcount
+        n2 = conn.execute(
+            "DELETE FROM customer_aliases WHERE customer_id = ? "
+            "AND alias_type = 'email' AND LOWER(alias_value) = ?",
+            (cid, e),
+        ).rowcount
+        n3 = conn.execute(
+            "UPDATE rsvps SET customer_id = NULL WHERE customer_id = ? "
+            "AND LOWER(TRIM(COALESCE(player_email,''))) = ?",
+            (cid, e),
+        ).rowcount
+        if n1 or n2 or n3:
+            logger.info(
+                "Lead-email separation: removed %d email(s), %d alias(es), "
+                "unlinked %d RSVP(s) from cid %d — %s is %s",
+                n1, n2, n3, cid, email, who,
+            )
+
+
+def _normalize_venmo_usernames(conn: sqlite3.Connection) -> None:
+    """Store Venmo handles BARE (no leading @).
+
+    The Customer Info update path already lstrips '@' and every
+    payout/matching read strips it from both sides, but direct writes
+    (imports, seeds) could slip an @-prefixed value in — the UI then
+    rendered '@@handle'. Idempotent.
+    """
+    n = conn.execute(
+        "UPDATE customers SET venmo_username = LTRIM(venmo_username, '@') "
+        "WHERE venmo_username LIKE '@%'"
     ).rowcount
-    n2 = conn.execute(
-        "DELETE FROM customer_aliases WHERE customer_id = 66 "
-        "AND alias_type = 'email' AND LOWER(alias_value) = 'planelite1959@gmail.com'"
-    ).rowcount
-    n3 = conn.execute(
-        "UPDATE rsvps SET customer_id = NULL WHERE customer_id = 66 "
-        "AND LOWER(TRIM(COALESCE(player_email,''))) = 'planelite1959@gmail.com'"
-    ).rowcount
-    if n1 or n2 or n3:
-        logger.info(
-            "Novosad/Barr separation: removed %d email(s), %d alias(es), "
-            "unlinked %d RSVP(s) — planelite1959@gmail.com is Steve Barr "
-            "(FB ad lead), not Novosad", n1, n2, n3,
-        )
+    if n:
+        logger.info("Venmo handle normalization: stripped leading '@' from %d profile(s)", n)
 
 
 def _repair_venmo_payer_aliases(conn: sqlite3.Connection) -> None:
@@ -15426,11 +15461,15 @@ _CONFIRMED_PROFILE_DETAILS = (
      (), ("Stephen Novosad",),
      (("2025-05-02", "2026-05-02", None,
        "Initial membership term — admin-provided 2026-07-02"),)),
-    (67, "matt rose", "(210) 287-2502", "@Matt-Rose-58", "matt.rose3@yahoo.com",
+    # Venmo handles are stored BARE (no @) — the update path lstrips '@' and
+    # the payout/matching code strips it from both sides; the UI adds its own.
+    (67, "matt rose", "(210) 287-2502", "Matt-Rose-58", "matt.rose3@yahoo.com",
      (), (),
      (("2025-03-18", "2026-03-18", 75.0,
        "Venmo $75 on 2025-03-18 — admin-provided 2026-07-02"),)),
-    (418, "joe garza", None, None, "joe@jjoconstruction.com", (), (), ()),
+    # NB: joe@jjoconstruction.com is NOT Joe Garza — HubSpot identifies that
+    # sender as Joe OREL, an FB ad lead who never played (admin-confirmed;
+    # no email was ever received from Garza). See _LEAD_EMAIL_SEPARATIONS.
 )
 
 
