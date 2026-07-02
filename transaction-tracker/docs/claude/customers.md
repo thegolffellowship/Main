@@ -511,6 +511,20 @@ split Kirksey profiles into the one holding his items (other spelling
 becomes an alias) — registered before the boot contest sync so his City
 Match Play enrollment lands on the surviving profile.
 
+**Canonical name at insert (v2.17.1):** `_upsert` resolves the profile
+alias-aware at insert when the item carries no cid, then enrolls under the
+canonical profile name + chapter from `cust_by_id`. Inserting the item's
+name variant created a row the sync's own step-1 rename immediately
+collided into the existing canonical row and deleted — inflating "new
+enrollments" on every run (the residual "10 new" churn seen in the
+2026-07-02 deploy log after v2.16.32). Step 1 also never renames a row to
+a BLANK canonical name (nameless shell profile — renaming blanked the row
+and the blank-row purge deleted the enrollment; Stu Kirksey's purchase
+pointed at exactly such a shell). `_repair_kirksey_season_contest_item`
+phase 2 heals that shell: names it or re-points the item at the real
+profile; the sync warns whenever its cleanup removes duplicate rows so
+insert-then-delete churn can't hide in the counts.
+
 ## Season contest removals recordation (v2.17.0)
 
 `season_contest_removals` — permanent audit trail for enrollment removals

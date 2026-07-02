@@ -4865,20 +4865,22 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_roman_numeral_name_case failed")
 
-        # Merge the split Stu/Stuart Kirksey profiles (one person) — the
-        # split made the sync's reconciliation delete his enrollment on
-        # every run. Must precede the item repair + boot sync below.
-        try:
-            _repair_kirksey_profiles(conn, db_path)
-        except Exception:
-            logger.exception("Non-fatal: _repair_kirksey_profiles failed")
-
         # Fix the mis-parsed standalone SEASON CONTESTS order R747210347
-        # (blank customer — buyer is Stu Kirksey) before the boot sync below.
+        # (buyer is Stu Kirksey): blank-customer case AND the nameless-shell-
+        # profile case (names the shell / re-points the item). Runs BEFORE the
+        # profile merge below so a just-named shell is merged this same boot.
         try:
             _repair_kirksey_season_contest_item(conn)
         except Exception:
             logger.exception("Non-fatal: _repair_kirksey_season_contest_item failed")
+
+        # Merge the split Stu/Stuart Kirksey profiles (one person) — the
+        # split made the sync's reconciliation delete his enrollment on
+        # every run. Must precede the boot sync below.
+        try:
+            _repair_kirksey_profiles(conn, db_path)
+        except Exception:
+            logger.exception("Non-fatal: _repair_kirksey_profiles failed")
 
         # Run the FULL contest sync at boot: purchases → enrollments must not
         # depend on the next inbox batch or a manual button press. It also
@@ -15130,56 +15132,91 @@ def _repair_kirksey_profiles(conn: sqlite3.Connection,
 
 
 def _repair_kirksey_season_contest_item(conn: sqlite3.Connection) -> None:
-    """Assign order R747210347 to Stu Kirksey.
+    """Assign order R747210347 to Stu Kirksey — and to a NAMED profile.
 
     A standalone SEASON CONTESTS purchase (City Match Play, 2026-05-25)
     parsed with a BLANK customer, so no enrollment was ever created and the
     Enrollment log showed a nameless row (purged in v2.16.28). The order
     email names the buyer: 'New order from: Stuart Kirksey'
-    (stuart.kirksey@gmail.com) — admin-confirmed. Sets the canonical
-    customer + id on the item and captures the order's email variant, so
-    the boot contest sync enrolls him dated 2026-05-25. Idempotent.
+    (stuart.kirksey@gmail.com) — admin-confirmed.
+
+    Two failure shapes, both fixed here (idempotent):
+    - item has no customer name → assign name + customer_id;
+    - item has a name but its customer_id points at a NAMELESS shell
+      profile (or dangles) → re-point to the real Kirksey profile, or name
+      the shell if it's the only anchor. Without this, the sync's
+      canonical-name normalization blanked his enrollment and the blank-row
+      purge deleted it on every boot (seen live 2026-07-02).
     """
     # NB: an early boot migration rewrites blank items.customer to
     # '(Unknown)', so match that too — the row may be blank OR '(Unknown)'
-    # depending on which migration ran first.
+    # depending on which migration ran first. LEFT JOIN so a dangling
+    # customer_id (profile deleted) is visible as prof_exists NULL.
     row = conn.execute(
-        """SELECT id FROM items
-           WHERE order_id IN ('R747210347', '#R747210347')
-             AND (customer IS NULL OR TRIM(customer) = ''
-                  OR customer = '(Unknown)')"""
+        """SELECT i.id, i.customer, i.customer_id,
+                  c.customer_id AS prof_exists,
+                  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS prof_name
+           FROM items i
+           LEFT JOIN customers c ON c.customer_id = i.customer_id
+           WHERE i.order_id IN ('R747210347', '#R747210347')"""
     ).fetchone()
     if not row:
         return
+    item_named = bool((row["customer"] or "").strip()) and row["customer"] != "(Unknown)"
+    prof_name = (row["prof_name"] or "").strip()
+    if item_named and row["prof_exists"] is not None and prof_name:
+        return  # healthy: named item pointing at a real, NAMED profile
+
+    # The item is blank/'(Unknown)', OR it points at a NAMELESS shell
+    # profile / dangling id. The shell case is what the 2026-07-02 deploy
+    # exposed: the admin's manual edit gave the item a name but resolved it
+    # to a profile with blank first/last names, so the sync's canonical-name
+    # normalization blanked his enrollment and the blank-row purge deleted
+    # it — every boot.
     cid = _lookup_customer_id(conn, "Stu Kirksey", "stuartkirksey@gmail.com")
-    if cid is None:
+    if cid is not None and cid != row["customer_id"]:
+        target = cid  # a distinct resolvable profile — re-point the purchase
+    elif row["prof_exists"] is not None:
+        target = row["customer_id"]  # the attached profile is the only anchor
+    else:
         logger.warning(
-            "Kirksey contest repair: 'Stu Kirksey' not uniquely resolvable — skipping"
+            "Kirksey contest repair: no resolvable profile for order "
+            "R747210347 — skipping"
         )
         return
+    # Whatever profile we land on must carry his name, or the sync's
+    # canonical-name step has nothing usable.
+    conn.execute(
+        """UPDATE customers
+           SET first_name = COALESCE(NULLIF(TRIM(COALESCE(first_name, '')), ''), 'Stu'),
+               last_name  = COALESCE(NULLIF(TRIM(COALESCE(last_name,  '')), ''), 'Kirksey')
+           WHERE customer_id = ?
+             AND TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) = ''""",
+        (target,),
+    )
     canon = conn.execute(
         """SELECT TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS n
            FROM customers WHERE customer_id = ?""",
-        (cid,),
+        (target,),
     ).fetchone()
-    display = (canon["n"] if canon and canon["n"] else "Stu Kirksey")
+    display = (canon["n"] if canon and (canon["n"] or "").strip() else "Stu Kirksey")
     conn.execute(
         """UPDATE items
            SET customer = ?, customer_id = ?,
                customer_email = COALESCE(NULLIF(TRIM(COALESCE(customer_email,'')), ''),
                                          'stuart.kirksey@gmail.com')
            WHERE id = ?""",
-        (display, cid, row["id"]),
+        (display, target, row["id"]),
     )
     conn.execute(
         "INSERT OR IGNORE INTO customer_emails (customer_id, email, label) "
         "VALUES (?, 'stuart.kirksey@gmail.com', 'repaired')",
-        (cid,),
+        (target,),
     )
     conn.commit()
     logger.info(
         "Kirksey contest repair: item %s (order R747210347) assigned to %s (cid %d)",
-        row["id"], display, cid,
+        row["id"], display, target,
     )
 
 
@@ -15348,6 +15385,8 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
     """
     enrolled = 0
     linked = 0
+    deduped = 0
+    cust_by_id: dict[int, dict] = {}
 
     def _upsert(conn, customer, contest_type, chapter, season, item_id,
                 customer_id=None):
@@ -15361,6 +15400,24 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 "item has no customer name", contest_type, item_id,
             )
             return
+        # Resolve the profile at insert time when the item doesn't carry one
+        # (Guiding Principle #6) — alias-aware, refuses ambiguous names. The
+        # deferred name-guess backfill left these rows to churn below.
+        if customer_id is None:
+            customer_id = _lookup_customer_id(conn, customer, None)
+        # Enroll under the CANONICAL profile name/chapter when the profile is
+        # known. Inserting the item's name variant (e.g. items.customer 'Stu
+        # Kirksey' vs profile 'Stuart Kirksey') created a row that step 1's
+        # rename immediately collided into the existing canonical row and
+        # deleted — counted as a "new enrollment" on EVERY sync (the residual
+        # '10 new enrollments' churn after the v2.16.32 fix).
+        if customer_id and customer_id in cust_by_id:
+            info = cust_by_id[customer_id]
+            canon = (info["name"] or "").strip()
+            if canon:
+                customer = canon
+            if info["chapter"]:
+                chapter = info["chapter"]
         # customer_id comes straight from the source item (Guiding Principle
         # #6) — the name-based backfill used to guess, and with split
         # same-person profiles it could pick a DIFFERENT profile than the
@@ -15404,6 +15461,22 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
 
         def _canonical_chapter(customer_name):
             return cust_chapter.get((customer_name or "").lower(), "")
+
+        # customer_id → canonical {name, chapter}, used by _upsert (enroll
+        # under the canonical identity up front) and the step 1/2 cleanup
+        # below. NULL name parts COALESCE to '' so a shell profile yields ''
+        # (never None).
+        for r in conn.execute(
+            """SELECT customer_id,
+                      TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) AS customer_name,
+                      chapter
+               FROM customers
+               WHERE customer_id IS NOT NULL"""
+        ).fetchall():
+            cust_by_id[r["customer_id"]] = {
+                "name":    r["customer_name"],
+                "chapter": r["chapter"] or "",
+            }
 
         rows = conn.execute(
             """SELECT id, customer, customer_id, net_points_race, gross_points_race,
@@ -15609,20 +15682,8 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                  )"""
         )
 
-        # Build a customer_id → {chapter, canonical_name} map so the cleanup
-        # works for alias names (e.g. "Stuart Kirksey" → customer_id 123 → "Austin").
-        cust_by_id: dict[int, dict] = {}
-        for r in conn.execute(
-            """SELECT customer_id,
-                      TRIM(first_name) || ' ' || TRIM(last_name) AS customer_name,
-                      chapter
-               FROM customers
-               WHERE customer_id IS NOT NULL"""
-        ).fetchall():
-            cust_by_id[r["customer_id"]] = {
-                "name":    r["customer_name"],
-                "chapter": r["chapter"] or "",
-            }
+        # cust_by_id (customer_id → {name, chapter}) was built before the scan
+        # and customers aren't modified in between — reuse it here.
 
         # Step 1 — Correct chapters and normalise names on rows that have a customer_id.
         for sc in conn.execute(
@@ -15636,7 +15697,14 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 canon  = sc["customer_name"]
             else:
                 correct = cust_by_id[cid]["chapter"]
-                canon   = cust_by_id[cid]["name"]
+                canon   = (cust_by_id[cid]["name"] or "").strip()
+                if not canon:
+                    # NAMELESS shell profile (blank first/last names). Renaming
+                    # to '' blanks the row and the blank-row purge then deletes
+                    # the enrollment — exactly how Stu Kirksey's City Match
+                    # Play entry vanished on every boot (his purchase pointed
+                    # at a shell profile). Keep the item-sourced display name.
+                    canon = sc["customer_name"]
 
             chapter_ok = not correct or sc["chapter"] == correct
             name_ok    = sc["customer_name"] == canon
@@ -15654,6 +15722,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 # A row with the canonical (name, contest_type, chapter, season) already
                 # exists — this is a duplicate; delete it.
                 conn.execute("DELETE FROM season_contests WHERE id = ?", (sc["id"],))
+                deduped += 1
 
         # Step 2 — Deduplicate by (customer_id, contest_type, season): same person enrolled
         # under two names (e.g. Stu + Stuart) now has the same customer_id on both rows after
@@ -15681,6 +15750,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             for r in rows:
                 if r["id"] != keep_id:
                     conn.execute("DELETE FROM season_contests WHERE id = ?", (r["id"],))
+                    deduped += 1
 
         # Step 3 — enrolled_at must reflect WHEN THE MEMBER ENROLLED (their
         # source purchase's order_date), not when this sync happened to write
@@ -15691,6 +15761,13 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         _purge_blank_season_contest_rows(conn)
 
         conn.commit()
+    if deduped:
+        # A nonzero count here means insert-then-delete churn survived the
+        # canonical-name-at-insert fix — inflated "new enrollments" counts.
+        logger.warning(
+            "Season contest sync: %d duplicate row(s) removed by cleanup — "
+            "these inflated the 'new enrollments' count", deduped,
+        )
     logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)
     return {"enrolled": enrolled, "linked": linked}
 

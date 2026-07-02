@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.0";
+window.TGF_VERSION = "2.17.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.1",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the deploy log showed the sync still reporting '10 new enrollments' every run after v2.16.32 — a second churn loop. When a purchase's customer name is a variant of the profile's canonical name (e.g. 'Stu' vs 'Stuart', or an alias), the sync inserted a variant-named enrollment (counted as 'new'), then its own name-normalization step collided with the already-existing canonical row and deleted it — every single run. Enrollments are now created under the canonical profile name and chapter from the start (resolving the profile alias-aware at insert when the purchase doesn't carry one), so they land on the existing row as a link, not a phantom 'new enrollment'. A warning now fires if the cleanup ever removes duplicates again, so this class of churn can't hide in the counts.",
+      "Fix: Stu Kirksey STILL wasn't enrolled — his purchase pointed at a customer profile with BLANK first/last names (a nameless shell), so the sync's canonical-name step blanked his enrollment and the blank-row purge deleted it every boot (the deploy log's 'deleted nameless City Match Play/2026 enrollment' line). The name-normalization now never renames an enrollment to a blank name, and the boot repair names the shell profile (or re-points the purchase at his real profile), then merges any remaining Stu/Stuart split. His City Match Play enrollment (5/25) now sticks.",
+    ],
+  },
   {
     version: "2.17.0",
     date: "2026-07-02",
