@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.16.12";
+window.TGF_VERSION = "2.16.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.13",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the boot-time duplicate-customer auto-merge (shared-email detection) crashed mid-merge on every run — it inserted into a customer_aliases column that doesn't exist (alias_name; the real column is alias_value). The crash hit AFTER transactions were re-pointed and the duplicate's emails were stripped but BEFORE the duplicate row was deleted, so every auto-merged duplicate left behind a stripped 'ghost' profile. Column name fixed in both merge branches.",
+      "Fix: merging customers (the Merge button, the boot-time auto-merge, and the boot-time attribution repairs) moved only transactions, emails, and TGF payouts before deleting the source profile — membership terms, member status history, roles, RSVPs, accounting ledger rows, expense links, handicap links/rounds, season contest and match play enrollments, and 10 other linked tables kept pointing at the deleted customer_id, silently orphaning that data. All merge paths now route through a shared helper (_repoint_customer_fks) that re-points every customer-linked table (28 columns across 24 tables) before the source row is deleted.",
+      "Repair: a boot-time pass re-points rows orphaned by the two known pre-fix merges (Joseph Lourigan 406→83, Tim Watson 94→433) and logs a count-only census of any rows still referencing deleted customer_ids, so the deploy log shows whether any other historical merges left orphans (no guessing — unknowns are reported, not auto-moved).",
+      "Fix: the boot-time player-status autocorrect (membership purchase → MEMBER, played-more-than-once → GUEST) updated only the legacy customers.current_player_status column and never wrote the customer_statuses history table — but the Customers page derives badges from the LATEST HISTORY row, so an autocorrected status could keep rendering its stale pre-correction badge indefinitely. A new boot-time reconciler appends a matching history row wherever the newest history row disagrees with the column (the column is authoritative: every writer updates it, only some update history). Verified idempotent across repeated boots.",
+    ],
+  },
   {
     version: "2.16.12",
     date: "2026-07-02",

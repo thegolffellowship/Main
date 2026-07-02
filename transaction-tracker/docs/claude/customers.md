@@ -87,10 +87,29 @@ field that differs:
 
 ## Customer Merge (`merge_customers`)
 - Reassigns `items.customer` string (all transactions)
-- Reassigns `items.customer_id` from source to target
+- Re-points **every** customer FK column from source to target via
+  `_repoint_customer_fks()` (v2.16.13+) — items, memberships, statuses, roles,
+  RSVPs, acct/expense ledger rows, handicap links/rounds, contest enrollments,
+  cmp match/bracket player ids, payouts, aliases, action items, etc. The
+  full list lives in `_CUSTOMER_FK_COLUMNS` in `database.py`; **add every new
+  customer-FK column there** or future merges will orphan its rows. It uses
+  `UPDATE OR IGNORE`, and for junction tables with UNIQUE constraints
+  (`customer_roles`, `customer_memberships`) deletes source leftovers the
+  target already owns. Pre-v2.16.13 merges moved only
+  items/customer_emails/tgf_payouts — everything else was orphaned on the
+  deleted id; `_repair_merged_customer_fk_orphans()` (boot) re-points rows
+  from known deleted ids (406→83 Lourigan, 94→433 Watson) and logs a
+  count-only census of any other orphaned FK rows.
 - Moves `customer_emails` from source to target
 - Creates name alias for old name
 - Deletes orphaned source `customers` row
+
+The boot-time `_merge_duplicate_customers()` (hardcoded pairs + generic
+shared-email auto-merge) routes through the same `_repoint_customer_fks()`
+helper. Until v2.16.13 its generic branch crashed mid-merge on a wrong
+`customer_aliases` column name (`alias_name` — the real column is
+`alias_value`), after re-pointing items and stripping emails but before
+deleting the duplicate row — leaving stripped "ghost" customers rows behind.
 
 **`source_customer_id` / `target_customer_id` (v2.16.8+):** `merge_customers()`
 and `POST /api/customers/merge` accept these optional ids; the Customers page
@@ -425,6 +444,15 @@ next daily job or app boot ran the sync. `deriveStatus()` in
 `templates/customers.html` reads the latest `customer_statuses.status_name`
 first, which is why writing a fresh `'member'` history row (which the sync
 does) is required, not just bumping `current_player_status`.
+
+**Column/history reconciler (v2.16.13):** `_sync_status_history_with_column()`
+runs at every boot after all the column writers. `_migrate_autocorrect_player_status`
+updates only `current_player_status` (never `customer_statuses`), so a
+column-only correction left `deriveStatus()` rendering the stale history value.
+The reconciler appends a `customer_statuses` row (notes
+`'autosync: reconciled history with current_player_status'`) wherever the
+newest history row disagrees with the column — the column is authoritative
+because every writer updates it while only some update history. Idempotent.
 
 ## Notice schedule
 
