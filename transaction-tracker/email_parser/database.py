@@ -14748,7 +14748,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             """SELECT id, customer, net_points_race, gross_points_race, city_match_play,
                       item_name, order_date
                FROM items
-               WHERE transaction_status IN ('active', NULL)
+               WHERE COALESCE(transaction_status, 'active') = 'active'
                  AND (UPPER(item_name) = 'TGF MEMBERSHIP' OR UPPER(item_name) LIKE '%SEASON CONTEST%')
                  AND (net_points_race = 'YES' OR gross_points_race = 'YES' OR city_match_play = 'YES'
                       OR UPPER(item_name) LIKE '%SEASON CONTEST%')"""
@@ -14775,7 +14775,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             """SELECT id, customer, item_name, notes, order_date
                FROM items
                WHERE UPPER(item_name) LIKE '%SEASON CONTEST%'
-                 AND transaction_status IN ('active', NULL)"""
+                 AND COALESCE(transaction_status, 'active') = 'active'"""
         ).fetchall()
         for row in bundle_rows:
             row = dict(row)
@@ -14857,7 +14857,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                  AND NOT EXISTS (
                      SELECT 1 FROM items i
                      WHERE i.customer_id = season_contests.customer_id
-                       AND i.transaction_status IN ('active', NULL)
+                       AND COALESCE(i.transaction_status, 'active') = 'active'
                        AND (UPPER(i.item_name) = 'TGF MEMBERSHIP'
                             OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
                        AND (
@@ -14882,7 +14882,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                  AND NOT EXISTS (
                      SELECT 1 FROM items i
                      WHERE LOWER(TRIM(i.customer)) = LOWER(TRIM(season_contests.customer_name))
-                       AND i.transaction_status IN ('active', NULL)
+                       AND COALESCE(i.transaction_status, 'active') = 'active'
                        AND (UPPER(i.item_name) = 'TGF MEMBERSHIP'
                             OR UPPER(i.item_name) LIKE '%SEASON CONTEST%')
                        AND (
@@ -14968,6 +14968,34 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             for r in rows:
                 if r["id"] != keep_id:
                     conn.execute("DELETE FROM season_contests WHERE id = ?", (r["id"],))
+
+        # Step 3 — enrolled_at must reflect WHEN THE MEMBER ENROLLED (their
+        # source purchase's order_date), not when this sync happened to write
+        # the row. enrolled_at defaults to CURRENT_TIMESTAMP on insert, and
+        # the cleanup passes above can delete + re-create rows (name/chapter
+        # corrections, dedup), which used to re-stamp the enrollment date to
+        # "today" every time it happened. Re-derive from the source item for
+        # every purchase-backed row; manual enrollments with no source keep
+        # their admin-entry timestamp.
+        redated = conn.execute(
+            """UPDATE season_contests
+               SET enrolled_at = (SELECT i.order_date FROM items i
+                                  WHERE i.id = season_contests.source_item_id)
+               WHERE source_item_id IS NOT NULL
+                 AND EXISTS (
+                     SELECT 1 FROM items i
+                     WHERE i.id = season_contests.source_item_id
+                       AND i.order_date IS NOT NULL AND TRIM(i.order_date) != ''
+                       AND DATE(i.order_date) IS NOT NULL
+                       AND (season_contests.enrolled_at IS NULL
+                            OR DATE(season_contests.enrolled_at) IS NOT DATE(i.order_date))
+                 )"""
+        ).rowcount
+        if redated:
+            logger.info(
+                "Season contest sync: re-dated %d enrollment(s) to their "
+                "source purchase date", redated,
+            )
 
         conn.commit()
     logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)
