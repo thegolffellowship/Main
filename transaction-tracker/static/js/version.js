@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.16.11";
+window.TGF_VERSION = "2.16.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.12",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the Venmo balance-due auto-matcher resolved the payer by Venmo DISPLAY NAME first and only consulted the @handle when the name found nothing — but the display name is free text the payer controls, while the @handle maps to exactly one customer via customers.venmo_username. A payer whose account displays another customer's registered name (same-surname family members do this routinely) could clear the OTHER customer's balance due whenever the amounts fell within the ±$1 tolerance, marking the wrong person paid. The chain is now handle-first: when the @handle resolves to a known customer it is trusted exclusively (their balance_due items are looked up by customer_id, with a canonical-name fallback for legacy unlinked rows), and display-name/alias matching only runs when the expense has no handle or the handle isn't registered to any customer. A known payer with no open balance now lands in no_candidate for manual review instead of borrowing a same-named customer's balance.",
+      "Fix: the +PAY child item created on a Venmo match re-resolved its customer_id from the parent's name/email instead of inheriting the parent's customer_id directly — the payment settles that specific item's balance, so re-resolution could pin the child to a different same-named customer. It now inherits parent.customer_id, falling back to resolution only for legacy parents with no id.",
+    ],
+  },
   {
     version: "2.16.11",
     date: "2026-07-02",
