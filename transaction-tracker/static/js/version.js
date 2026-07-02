@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.15";
+window.TGF_VERSION = "2.18.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.18.0",
+    date: "2026-07-02",
+    changes: [
+      "Vendor auto-suggest in expense review (admin-requested): opening a pending expense with no linked vendor/customer now checks the merchant name against every profile. If an existing vendor (or customer — e.g. a Venmo payout recipient) matches, a one-click 'Link' suggestion appears; if nothing matches, a '＋ Create vendor & link' button offers to create the vendor from a cleaned-up merchant name (processor prefixes like 'SQ *' and trailing store numbers stripped, bank ALL-CAPS title-cased). Creation reuses the existing dedup-safe /api/accounting/vendors endpoint, so a repeat suggestion can never make a duplicate profile.",
+      "The nightly 02:00 Golf Genius sync job is no longer scheduled (admin decision): the screen-scraping upload never established a reliable connection, and handicaps flow to GG via the manual CSV export the admin uploads by hand. The on-demand sync endpoint and the CSV export are unchanged.",
+    ],
+  },
   {
     version: "2.17.15",
     date: "2026-07-02",

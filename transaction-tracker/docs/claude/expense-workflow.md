@@ -112,3 +112,26 @@ const hasMerchantFeeSplit = txn.splits.some(s => (s.amount || 0) < 0);
 const useDbSplits = txn.splits.length > 0 && (!isGoDaddy || hasMerchantFeeSplit);
 const splitsData = useDbSplits ? txn.splits.map(...) : _buildSmartSplit(txn);
 ```
+
+## Vendor Auto-Suggest (v2.18.0)
+
+Opening the unified expense review modal (`openExpenseReview` in
+`static/js/acct-transactions.js`) for a transaction with **no linked
+customer_id** runs `_suggestExpenseVendor(exp)`:
+
+1. `_matchProfileForMerchant(merchant)` scans `ACCT.customers` for a
+   name hit (exact or substring, ≥4 chars, against company/display and
+   "First Last" forms). Vendors win over customers; a customer hit still
+   suggests (covers Venmo payouts to members). Match → one-click **Link**
+   suggestion under the Vendor/Customer field (`#exp-vendor-suggest`).
+2. No match and `transaction_type === 'expense'` → **＋ Create vendor &
+   link** with a cleaned name from `_cleanVendorName()`: strips processor
+   prefixes (`SQ *`, `TST*`, `PAYPAL *`…) and trailing store/reference
+   numbers, title-cases bank ALL-CAPS, keeps mixed case as-is. The button
+   POSTs `/api/accounting/vendors` (dedup-safe: reuses an existing
+   company-name or first+last match instead of inserting) and selects the
+   vendor via `setExpCustomer`.
+
+Transfers never suggest (no counterparty); income only suggests links,
+never vendor creation. Suggestion is confirm-only — nothing is created or
+linked without a click. Dismiss hides it for that open of the modal.

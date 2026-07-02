@@ -1335,6 +1335,7 @@ async function openExpenseReview(expenseId) {
             const cust = ACCT.customers.find(c => c.customer_id === exp.customer_id);
             if (cust) setExpCustomer(cust.customer_id, _customerDisplayName(cust), cust.is_vendor);
         }
+        _suggestExpenseVendor(exp);
 
         // Notes
         $('#expense-notes').value = exp.notes || '';
@@ -1698,10 +1699,120 @@ function _renderExpCustomerDropdown(matches, showVendorSection) {
     });
 }
 
+// ── Vendor auto-suggest (expense review) ─────────────────
+// When a pending expense has no linked vendor/customer, suggest either
+// linking an existing profile whose name matches the merchant, or
+// creating a vendor from the merchant name in one click.
+
+function _escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[ch]));
+}
+
+function _cleanVendorName(merchant) {
+    let s = String(merchant || '').trim();
+    // Payment-processor prefixes bank feeds prepend: "SQ *", "TST* ", "PAYPAL *"
+    s = s.replace(/^(SQ|TST|PY|PYMT|PAYPAL|IN|SP|EB|CKE)\s*\*\s*/i, '');
+    // Trailing store/reference numbers: "#612", long digit runs
+    s = s.replace(/\s*#\s*\d+\s*$/, '').replace(/\s+\d{4,}\s*$/, '');
+    s = s.replace(/\s{2,}/g, ' ').trim();
+    if (!s) return '';
+    // Bank feeds are ALL CAPS — title-case those; keep human-entered mixed case as-is
+    if (s === s.toUpperCase() || s === s.toLowerCase()) {
+        s = s.toLowerCase().replace(/(^|[\s\-&/.'])[a-z]/g, m => m.toUpperCase());
+    }
+    return s;
+}
+
+function _matchProfileForMerchant(merchant) {
+    const m = String(merchant || '').trim().toLowerCase();
+    if (m.length < 3) return null;
+    const cleaned = _cleanVendorName(merchant).toLowerCase();
+    let best = null;
+    for (const c of ACCT.customers) {
+        const display = _customerDisplayName(c).toLowerCase();
+        const full = `${(c.first_name || '').trim()} ${(c.last_name || '').trim()}`.trim().toLowerCase();
+        const names = [display, full].filter(n => n.length >= 4);
+        const hit = names.some(n => n === m || n === cleaned || m.includes(n) || cleaned.includes(n));
+        if (!hit) continue;
+        if (c.is_vendor) return c;   // vendors win outright
+        if (!best) best = c;         // otherwise remember the first customer hit
+    }
+    return best;
+}
+
+function _hideExpVendorSuggest() {
+    const bar = $('#exp-vendor-suggest');
+    if (bar) bar.style.display = 'none';
+}
+
+function _suggestExpenseVendor(exp) {
+    const bar = $('#exp-vendor-suggest');
+    if (!bar) return;
+    const textEl = $('#exp-vendor-suggest-text');
+    const btn = $('#exp-vendor-suggest-btn');
+    bar.style.display = 'none';
+    btn.onclick = null;
+    btn.disabled = false;
+    if (exp.customer_id) return;                                   // already linked
+    if ((exp.transaction_type || 'expense') === 'transfer') return; // transfers have no counterparty
+    const merchant = (exp.merchant || '').trim();
+    if (!merchant) return;
+
+    const match = _matchProfileForMerchant(merchant);
+    if (match) {
+        const name = _customerDisplayName(match);
+        textEl.innerHTML = `Matches ${match.is_vendor ? 'vendor' : 'customer'} <strong>${match.is_vendor ? '🏷 ' : ''}${_escHtml(name)}</strong>`;
+        btn.textContent = 'Link';
+        btn.onclick = () => {
+            setExpCustomer(match.customer_id, name, !!match.is_vendor);
+            _hideExpVendorSuggest();
+        };
+        bar.style.display = 'flex';
+        return;
+    }
+
+    // No profile on file → one-click vendor creation (expenses only; income
+    // counterparties are customers, better served by the typeahead)
+    if ((exp.transaction_type || 'expense') !== 'expense') return;
+    const suggested = _cleanVendorName(merchant);
+    if (suggested.length < 3) return;
+    textEl.innerHTML = `No vendor on file for <strong>${_escHtml(suggested)}</strong>`;
+    btn.textContent = '＋ Create vendor & link';
+    btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+            const vendor = await fetch('/api/accounting/vendors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: suggested }),
+            }).then(async r => {
+                if (!r.ok) {
+                    const e = await r.json().catch(() => ({}));
+                    throw new Error(e.error || 'Failed to create vendor');
+                }
+                return r.json();
+            });
+            const idx = ACCT.customers.findIndex(c => c.customer_id === vendor.customer_id);
+            if (idx >= 0) ACCT.customers[idx] = vendor;
+            else ACCT.customers.push(vendor);
+            setExpCustomer(vendor.customer_id, vendor.display_name, true);
+            _hideExpVendorSuggest();
+        } catch (e) {
+            alert('Error creating vendor: ' + e.message);
+        } finally {
+            btn.disabled = false;
+        }
+    };
+    bar.style.display = 'flex';
+}
+
 function initExpCustomerTypeahead() {
     const input = $('#exp-customer-search');
     const dd = $('#exp-customer-dropdown');
     if (!input) return;
+    $('#exp-vendor-suggest-dismiss')?.addEventListener('click', _hideExpVendorSuggest);
     input.addEventListener('input', () => {
         const q = input.value.trim();
         if (!q) { _renderExpCustomerDropdown([], true); return; }
