@@ -687,7 +687,7 @@ def get_acct_transactions(
         rows = conn.execute(
             f"""SELECT id, date, description, entry_type, category, amount,
                        net_deposit, merchant_fee, source, source_ref,
-                       event_name, customer, order_id, status
+                       event_name, customer, customer_id, order_id, status
                 FROM acct_transactions{where}
                 ORDER BY date DESC, id DESC LIMIT ?""",
             params,

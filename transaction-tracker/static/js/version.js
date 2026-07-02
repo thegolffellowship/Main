@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.20";
+window.TGF_VERSION = "2.16.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.21",
+    date: "2026-07-02",
+    changes: [
+      "MCP: get_acct_transactions now includes customer_id in its output. The ledger view was identity-blind — you could see a row's customer NAME but not which customer profile it was actually linked to, which made identity verification (e.g. confirming the Victor Arias III ledger rows link to the son's profile, not the father's) impossible through the connector. customer_id is the one true identity key everywhere else in the app; the MCP ledger view now honors that.",
+    ],
+  },
   {
     version: "2.16.20",
     date: "2026-07-02",
