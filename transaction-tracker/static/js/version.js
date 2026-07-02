@@ -1,5 +1,23 @@
-window.TGF_VERSION = "2.16.31";
+window.TGF_VERSION = "2.17.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.0",
+    date: "2026-07-02",
+    changes: [
+      "Feature: clicking ✗ on an enrollment (Enrollment tab, or the City Match Play 'Not Yet in a Pool' list) now opens a removal modal instead of a bare confirm — pick a reason (Refunded / Duplicate entry / Entered by mistake / Other), and for refunds record the amount and method (Venmo, Cash, Check, GoDaddy refund, Other) plus an optional note.",
+      "Feature: every removal is permanently recorded in a new removals log, shown as a 'Removals & Refunds' table at the bottom of the Enrollment tab (follows the same contest/chapter/season filters). The enrollment row is deleted as before — and the source purchase's contest flag is still cleared so the sync doesn't re-enroll — but there is now always a record of who was removed, when, why, and what was refunded.",
+      "Seeded: Neil Cheshire and Joseph Lourigan's 2026 City Match Play Venmo refunds (removed before this log existed) are recorded retroactively at boot so the list is complete from day one. Refund amounts weren't captured at the time — they show blank until provided.",
+    ],
+  },
+  {
+    version: "2.16.32",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the season contest Sync no longer reports the same '9 new enrollments' on every run — the sync was creating enrollments and then its own cleanup was deleting them, endlessly. Root cause: new enrollments were saved without the purchase's customer_id, a name-based backfill then guessed which profile they belonged to, and when it guessed a DIFFERENT profile than the purchase's (split/duplicate profiles), the cleanup saw 'no backing purchase for this customer' and deleted the row — which the next sync re-created. Enrollments now inherit customer_id directly from their source purchase at creation (Guiding Principle #6), and the cleanup never deletes a row whose own source purchase is still active and carries the matching contest selection.",
+      "Repair: Stu Kirksey had TWO customer profiles (Stu/Stuart split) — the exact condition that made his City Match Play enrollment vanish on every sync. A boot repair merges them into the profile holding his purchases (the other spelling becomes an alias), after which his 5/25 SEASON CONTESTS purchase enrolls him and STAYS.",
+      "With the loop dead, Sync now correctly reports 0 new enrollments when nothing changed — a nonzero count on a re-run means genuinely new purchases.",
+    ],
+  },
   {
     version: "2.16.31",
     date: "2026-07-02",

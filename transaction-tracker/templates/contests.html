@@ -474,6 +474,7 @@
                 <div id="enr-table-container">
                     <div class="empty-state"><h3>Select filters and click Load</h3></div>
                 </div>
+                <div id="enr-removals-container" style="margin-top:1.5rem;"></div>
             </div>
         </div>
     </main>
@@ -493,6 +494,44 @@
             </div>
             <div style="display:flex; justify-content:flex-end; margin-top:0.75rem;">
                 <button id="cmp-player-modal-cancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enrollment Removal / Refund Modal -->
+    <div id="removal-modal" class="modal-overlay" style="display:none;">
+        <div class="modal" style="max-width:440px; width:92%;">
+            <h3 style="font-size:1rem; font-weight:700; margin-bottom:0.25rem;">Remove Enrollment</h3>
+            <p style="font-size:0.85rem; margin-bottom:0.75rem;">
+                <strong id="rem-modal-player"></strong>
+                <span id="rem-modal-detail" style="color:var(--text-muted);"></span>
+            </p>
+            <label style="display:block; font-size:0.78rem; color:var(--text-muted); margin-bottom:0.15rem;">Reason</label>
+            <select id="rem-reason" class="modal-input" style="margin-bottom:0.6rem;">
+                <option value="Refunded">Refunded</option>
+                <option value="Duplicate entry">Duplicate entry</option>
+                <option value="Entered by mistake">Entered by mistake</option>
+                <option value="Other">Other</option>
+            </select>
+            <div id="rem-refund-fields">
+                <label style="display:block; font-size:0.78rem; color:var(--text-muted); margin-bottom:0.15rem;">Refund amount (optional)</label>
+                <input type="number" id="rem-amount" class="modal-input" step="0.01" min="0"
+                    placeholder="e.g. 50.00" style="margin-bottom:0.6rem;">
+                <label style="display:block; font-size:0.78rem; color:var(--text-muted); margin-bottom:0.15rem;">Refund method</label>
+                <select id="rem-method" class="modal-input" style="margin-bottom:0.6rem;">
+                    <option value="Venmo">Venmo</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Check">Check</option>
+                    <option value="GoDaddy refund">GoDaddy refund</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <label style="display:block; font-size:0.78rem; color:var(--text-muted); margin-bottom:0.15rem;">Note (optional)</label>
+            <input type="text" id="rem-note" class="modal-input" placeholder="Anything worth remembering later"
+                maxlength="300" style="margin-bottom:0.9rem;">
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+                <button id="rem-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="rem-confirm-btn" class="btn btn-primary" style="background:#dc2626; border-color:#dc2626;">Remove &amp; Record</button>
             </div>
         </div>
     </div>
@@ -759,6 +798,7 @@
             }
             const removeBtn = isManager && e.enrollment_id
                 ? `<button class="unassigned-remove-btn" data-enrollment-id="${e.enrollment_id}"
+                       data-customer-name="${escapeHtml(e.customer_name)}"
                        style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;padding:0 0.25rem;line-height:1;" title="Remove enrollment">×</button>`
                 : '';
             return `
@@ -800,15 +840,15 @@
         });
 
         document.querySelectorAll(".unassigned-remove-btn").forEach(btn => {
-            btn.addEventListener("click", async () => {
-                const id = btn.dataset.enrollmentId;
-                if (!confirm("Remove this player's season contest enrollment?")) return;
-                const res = await fetch(`/api/season-contests/${id}`, { method: "DELETE" });
-                if (res.ok) {
-                    cmpLoad();
-                } else {
-                    alert("Failed to remove enrollment.");
-                }
+            btn.addEventListener("click", () => {
+                // Same refund/removal modal as the Enrollment tab so this
+                // path is recorded too.
+                openRemovalModal({
+                    id: btn.dataset.enrollmentId,
+                    name: btn.dataset.customerName || "",
+                    contest: "City Match Play",
+                    season: cmpState.season || "",
+                }, () => cmpLoad());
             });
         });
     }
@@ -1541,6 +1581,64 @@
         cmpLoad();
     }
 
+    // ═══════════ REMOVAL / REFUND MODAL ═══════════
+
+    let _removalCtx = null;
+
+    function openRemovalModal(meta, onDone) {
+        _removalCtx = { meta, onDone };
+        $("rem-modal-player").textContent = meta.name || "";
+        $("rem-modal-detail").textContent =
+            ` — ${meta.contest || ""}${meta.season ? " · " + meta.season : ""}`;
+        $("rem-reason").value = "Refunded";
+        $("rem-amount").value = "";
+        $("rem-method").value = "Venmo";
+        $("rem-note").value = "";
+        $("rem-refund-fields").style.display = "";
+        $("removal-modal").style.display = "flex";
+    }
+
+    function closeRemovalModal() {
+        $("removal-modal").style.display = "none";
+        _removalCtx = null;
+    }
+
+    $("rem-reason").addEventListener("change", () => {
+        // Refund details only make sense for refunds.
+        $("rem-refund-fields").style.display =
+            $("rem-reason").value === "Refunded" ? "" : "none";
+    });
+    $("rem-cancel-btn").addEventListener("click", closeRemovalModal);
+    $("removal-modal").addEventListener("click", e => {
+        if (e.target === $("removal-modal")) closeRemovalModal();
+    });
+
+    $("rem-confirm-btn").addEventListener("click", async () => {
+        if (!_removalCtx) return;
+        const { meta, onDone } = _removalCtx;
+        const isRefund = $("rem-reason").value === "Refunded";
+        const body = {
+            reason: $("rem-reason").value,
+            refund_amount: isRefund ? ($("rem-amount").value.trim() || null) : null,
+            refund_method: isRefund ? $("rem-method").value : null,
+            note: $("rem-note").value.trim() || null,
+        };
+        const btn = $("rem-confirm-btn");
+        btn.disabled = true; btn.textContent = "Removing…";
+        const res = await fetch(`/api/season-contests/${meta.id}`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        btn.disabled = false; btn.textContent = "Remove & Record";
+        closeRemovalModal();
+        if (res.ok) {
+            if (onDone) onDone();
+        } else {
+            alert("Failed to remove enrollment.");
+        }
+    });
+
     // ═══════════ ENROLLMENT ═══════════
 
     function enrAutoLoad() {
@@ -1589,7 +1687,7 @@
                 <td>${escapeHtml(e.contest_type)}</td>
                 <td>${escapeHtml(e.season || '—')}</td>
                 <td style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml((e.enrolled_at || '').slice(0, 10))}</td>
-                ${isManager ? `<td><button class="enr-delete-btn" data-id="${e.id}" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.85rem;padding:0 0.25rem;" title="Remove enrollment">×</button></td>` : '<td></td>'}
+                ${isManager ? `<td><button class="enr-delete-btn" data-id="${e.id}" data-name="${escapeHtml(e.customer_name || '')}" data-contest="${escapeHtml(e.contest_type || '')}" data-season="${escapeHtml(e.season || '')}" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.85rem;padding:0 0.25rem;" title="Remove enrollment">×</button></td>` : '<td></td>'}
             </tr>
         `).join("");
 
@@ -1604,21 +1702,71 @@
                 ${data.length} enrollment${data.length === 1 ? '' : 's'}
             </p>`;
 
-        // Wire delete buttons
+        // Wire delete buttons — open the refund/removal modal instead of a
+        // bare confirm() so every removal is recorded.
         container.querySelectorAll(".enr-delete-btn").forEach(btn => {
-            btn.addEventListener("click", async () => {
-                const id = btn.dataset.id;
-                if (!confirm("Remove this enrollment?")) return;
-                const res = await fetch(`/api/season-contests/${id}`, { method: "DELETE" });
-                if (res.ok) {
-                    btn.closest("tr").remove();
-                    // Reload so cmpState.enrollees also refreshes
-                    cmpLoad();
-                } else {
-                    alert("Failed to remove enrollment.");
-                }
+            btn.addEventListener("click", () => {
+                openRemovalModal({
+                    id: btn.dataset.id,
+                    name: btn.dataset.name,
+                    contest: btn.dataset.contest,
+                    season: btn.dataset.season,
+                }, () => {
+                    enrLoad();   // refreshes both tables (enrollments + removals)
+                    cmpLoad();   // so cmpState.enrollees also refreshes
+                });
             });
         });
+
+        enrLoadRemovals(contestType, chapter, season);
+    }
+
+    async function enrLoadRemovals(contestType, chapter, season) {
+        let url = "/api/season-contests/removals?";
+        if (contestType) url += `contest_type=${encodeURIComponent(contestType)}&`;
+        if (chapter)     url += `chapter=${encodeURIComponent(chapter)}&`;
+        if (season)      url += `season=${encodeURIComponent(season)}&`;
+
+        const res = await fetch(url);
+        const data = res.ok ? await res.json() : [];
+        const container = $("enr-removals-container");
+        if (!data.length) {
+            container.innerHTML = "";
+            return;
+        }
+
+        const fmtRefund = r => {
+            const amt = (r.refund_amount !== null && r.refund_amount !== undefined)
+                ? `$${Number(r.refund_amount).toFixed(2)}` : "";
+            const parts = [amt, r.refund_method || ""].filter(Boolean);
+            return parts.length ? parts.join(" via ") : "—";
+        };
+
+        const rows = data.map(r => `
+            <tr>
+                <td><a href="/customers?name=${encodeURIComponent(r.customer_name || '')}" class="cell-link">${escapeHtml(r.customer_name)}</a></td>
+                <td>${escapeHtml(r.chapter || '—')}</td>
+                <td>${escapeHtml(r.contest_type)}</td>
+                <td>${escapeHtml(r.season || '—')}</td>
+                <td style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml((r.removed_at || '').slice(0, 10))}</td>
+                <td>${escapeHtml(r.reason || '—')}</td>
+                <td>${escapeHtml(fmtRefund(r))}</td>
+                <td style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml(r.note || '')}</td>
+            </tr>
+        `).join("");
+
+        container.innerHTML = `
+            <h3 style="font-size:0.9rem; font-weight:700; margin-bottom:0.5rem;">
+                Removals &amp; Refunds
+                <span style="font-weight:400; color:var(--text-muted);">(${data.length})</span>
+            </h3>
+            <table class="enrollment-table">
+                <thead><tr>
+                    <th>Customer</th><th>Chapter</th><th>Contest</th><th>Season</th>
+                    <th>Removed</th><th>Reason</th><th>Refund</th><th>Note</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
     }
 
     // ═══════════ INIT ═══════════
