@@ -4885,6 +4885,10 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_reggie_johnson_profiles failed")
         try:
+            _repair_confirmed_profile_merges(conn, db_path)
+        except Exception:
+            logger.exception("Non-fatal: _repair_confirmed_profile_merges failed")
+        try:
             _repair_fragment_profiles(conn)
         except Exception:
             logger.exception("Non-fatal: _repair_fragment_profiles failed")
@@ -5764,18 +5768,22 @@ def _repair_lead_email_separations(conn: sqlite3.Connection) -> None:
 
 
 def _apply_roster_contact_backfill(conn: sqlite3.Connection) -> None:
-    """Backfill missing email/Venmo from the admin's 20-year player roster.
+    """ONE-SHOT backfill of missing email/Venmo from an extracted roster file.
 
-    data/member_roster_backfill.json holds 471 usable rows extracted from
-    the 25TGF_Members spreadsheet (Player Database sheet, admin-provided
-    2026-07-02). For each row: resolve the person via _lookup_customer_id
-    (email evidence first, then exact name incl. FIRST_ALT spellings,
-    ambiguity-guarded) and fill ONLY what's missing — venmo when blank,
-    email only when the profile has none AND the address isn't already on
-    any other profile (prevents cross-person contamination). Never creates
-    profiles: roster people who never appear in the tracker stay out.
-    Runs every boot so newly created profiles get enriched automatically.
-    Lead-registry emails are never applied.
+    Reads data/member_roster_backfill.json when present; without the file
+    this is a silent no-op. The 2026-07-02 run (471 rows extracted from the
+    25TGF_Members Player Database sheet) matched 234 existing profiles and
+    filled 164 Venmo handles + 9 emails, after which the file was REMOVED
+    from the repo: the admin maintains that spreadsheet externally and it
+    isn't a master source, so a stale snapshot must not keep enriching
+    future profiles. To re-run with fresh data, extract name/email/venmo
+    rows to that path again and deploy — it applies once, blank-only.
+
+    Per row: resolve via _lookup_customer_id (email evidence first, then
+    exact name incl. alternate first-name spellings, ambiguity-guarded);
+    fill venmo when blank; fill email only when the profile has none AND
+    the address isn't on any other profile. Never creates profiles;
+    lead-registry emails are never applied.
     """
     import json as _json
     path = Path(__file__).resolve().parent.parent / "data" / "member_roster_backfill.json"
@@ -15471,6 +15479,58 @@ _FRAGMENT_PROFILES: tuple[tuple[int, str, str], ...] = (
     # anything that needs re-pointing first.
     (444, "casey best", "name-mash of Doug Hamilton's guests Casey Purvis + Chris Best"),
 )
+
+
+# Same-person profile pairs confirmed by the admin (2026-07-02), pinned to
+# (cid, exact name) on BOTH sides so drift can never merge the wrong people:
+# - Kailey Lopez (413) / 'Kailey L' (447): Ashley Padilla's guest twice —
+#   TPC Canyons 5/8 and TPC Oaks 6/29, surname abbreviated on the second
+#   order ('Purchased by Ashley Padilla' on both items).
+# - Lee Vasquez (99) / 'Lee Vazques' (428): the Austin member vs an empty
+#   misspelled shell (0 items, no email, created 2026-05-18).
+_CONFIRMED_PROFILE_MERGES: tuple[tuple[int, str, int, str], ...] = (
+    (447, "kailey l", 413, "kailey lopez"),
+    (428, "lee vazques", 99, "lee vasquez"),
+)
+
+
+def _repair_confirmed_profile_merges(conn: sqlite3.Connection,
+                                     db_path: str | Path | None = None) -> None:
+    """Merge admin-confirmed same-person profile pairs.
+
+    merge_customers moves anything the source holds and keeps the source
+    spelling as a name alias on the survivor, so future occurrences of the
+    variant ('Kailey L', 'Lee Vazques') resolve correctly. Idempotent —
+    once the source cid is gone the pair is skipped.
+    """
+    def _named(cid, expected):
+        row = conn.execute(
+            """SELECT customer_id,
+                      TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS name
+               FROM customers WHERE customer_id = ?""",
+            (cid,),
+        ).fetchone()
+        if not row or (row["name"] or "").strip().lower() != expected:
+            return None
+        return row["name"]
+
+    for src_cid, src_name, tgt_cid, tgt_name in _CONFIRMED_PROFILE_MERGES:
+        src = _named(src_cid, src_name)
+        tgt = _named(tgt_cid, tgt_name)
+        if not src or not tgt:
+            continue
+        conn.commit()  # merge_customers opens its own connection
+        try:
+            merge_customers(src, tgt, db_path=db_path,
+                            source_customer_id=src_cid,
+                            target_customer_id=tgt_cid)
+            logger.info(
+                "Confirmed-merge repair: %s (cid %d) merged into %s (cid %d)",
+                src, src_cid, tgt, tgt_cid,
+            )
+        except ValueError as e:
+            logger.warning("Confirmed-merge repair failed for cid %d: %s",
+                           src_cid, e)
 
 
 def _repair_fragment_profiles(conn: sqlite3.Connection) -> None:
