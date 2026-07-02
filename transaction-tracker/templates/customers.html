@@ -662,8 +662,10 @@
     // Patch the local customer/items in-place after a successful info save, so we can
     // re-render from local state without re-fetching everything (which would collapse rows).
     function patchCustomerLocal(customerName, fields) {
+        // Returns true when the customer's display name changed (caller should
+        // re-render so every data-customer-name attribute picks up the new key).
         const cust = allCustomers.find(c => c.name === customerName);
-        if (!cust) return;
+        if (!cust) return false;
         const topLevelMap = {
             customer_email: "email",
             customer_phone: "phone",
@@ -674,11 +676,31 @@
             // Backend updates every items row for this customer, so mirror that locally.
             cust.items.forEach(item => { item[key] = val; });
         });
+        // Mirror the backend's display-name sync: update_customer_info() renames
+        // items.customer to "First Last Suffix" whenever name parts are saved.
+        // The local grouping key (cust.name / item.customer) must follow, or a
+        // second save from this still-rendered card would post the pre-rename
+        // name and target rows under a name that no longer exists.
+        let nameChanged = false;
+        if ("first_name" in fields || "last_name" in fields || "suffix" in fields) {
+            const newName = [fields.first_name, fields.last_name, fields.suffix]
+                .map(v => (v || "").trim()).filter(Boolean).join(" ");
+            if (newName && newName !== cust.name) {
+                if (expandedNames.has(cust.name)) {
+                    expandedNames.delete(cust.name);
+                    expandedNames.add(newName);
+                }
+                cust.items.forEach(item => { item.customer = newName; });
+                cust.name = newName;
+                nameChanged = true;
+            }
+        }
         // Re-derive the displayed status badge when player status changes
         if ("current_player_status" in fields) {
             cust.status_name = _PS_TO_STATUS_NAME[fields.current_player_status] || null;
             cust.status = deriveStatus(cust.items, cust.roles, cust.current_player_status, cust.membershipTerm, cust.status_name);
         }
+        return nameChanged;
     }
 
     // Build customer aggregate data from items
@@ -1230,8 +1252,8 @@
                             }
                             saveBtn.textContent = "Saved!";
                             saveBtn.style.background = "#16a34a";
-                            patchCustomerLocal(customerName, fields);
-                            const needsRerender = "current_player_status" in fields || roleCheckboxes.length > 0;
+                            const nameChanged = patchCustomerLocal(customerName, fields);
+                            const needsRerender = nameChanged || "current_player_status" in fields || roleCheckboxes.length > 0;
                             setTimeout(() => {
                                 if (needsRerender) {
                                     renderCustomers();
@@ -2463,8 +2485,8 @@
                     }
                     saveBtn.textContent = "Saved!";
                     saveBtn.style.background = "#16a34a";
-                    patchCustomerLocal(customerName, fields);
-                    const needsRerender = "current_player_status" in fields || roleCheckboxes.length > 0;
+                    const nameChanged = patchCustomerLocal(customerName, fields);
+                    const needsRerender = nameChanged || "current_player_status" in fields || roleCheckboxes.length > 0;
                     setTimeout(() => {
                         if (needsRerender) {
                             renderCustomers();
