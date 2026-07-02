@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.16.27";
+window.TGF_VERSION = "2.16.28";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.28",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the enrollment-date repair (v2.16.27) now also runs at boot — it only ran inside the contest sync, which fires when new orders arrive or the Sync button is clicked, so a deploy alone didn't re-date existing rows (Paul Reed's date only corrected after a manual Sync).",
+      "Fix: removing an enrollment on the Enrollment tab now STICKS — the red ✗ deleted the row but left the contest flag on the backing purchase, so the next sync silently re-enrolled the player. Deleting now also clears that item's contest flag (the purchase row itself is untouched), making it the right way to remove refunded contest entries.",
+      "Fix: a nameless enrollment row (blank CUSTOMER cell in the Enrollment log) is purged at boot and by every sync, with its source purchase logged so the rightful player can be identified — fix that purchase's customer and Sync re-enrolls them correctly. The sync also refuses to create enrollments from items with no customer name going forward.",
+      "Repair: Colby Johnson's email (colbygjohnson8@gmail.com) was still on Will Massey's profile from their old bad merge — surfaced by the v2.16.26 Golf Genius email diff, which would have synced Massey's handicap under Colby's address, and which let orders from Colby's address resolve to Massey. The email is moved to Colby's own profile and wncmassey@outlook.com set as Massey's primary.",
+      "Repair: Isabella Luna's Golf Genius sync address is pinned to isabellamluna7@gmail.com via the designated-GG-email flag — her profile's primary email is rlight@hughes.net (guardian/household), but Golf Genius has always received her own address from previous syncs; the pin preserves that exactly. Changeable any time on her profile.",
+    ],
+  },
   {
     version: "2.16.27",
     date: "2026-07-02",
