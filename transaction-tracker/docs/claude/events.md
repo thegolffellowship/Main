@@ -127,7 +127,7 @@ the following are available to **manager** (and admin):
 | Refund (WD-credit + standalone credited) | `POST /api/items/<id>/payout-credit` (legacy alias `payout-wd-credit`) | admin |
 | Match Venmo (header button) | `POST /api/accounting/auto-match-venmo-balance-due` | admin |
 
-### Match Venmo — resolution chain (v2.13.0)
+### Match Venmo — resolution chain (v2.16.12: handle-first)
 
 `auto_match_venmo_inbound_to_balance_due` in `email_parser/database.py` walks
 this chain to find the right `balance_due:` item for each unmatched Venmo IN
@@ -137,13 +137,20 @@ inconsistently between those two labels, and excluding `'income'` was silently
 dropping ~half the inbound stream.
 
 Per-expense lookup, in order:
-1. **Exact name** — `items.customer = expense.merchant` (case-insensitive).
-2. **Name alias** — `customer_aliases.alias_value = expense.merchant` with `alias_type='name'`, then look up the canonical customer name. Fixes the common case where a Venmo display name differs from the registered name (e.g. "James Youngs Jr" → "Pat Youngs").
-3. **Venmo handle** — `expense.other_party_handle` (extracted from the Venmo notification email's `venmo.com/u/<handle>` URL by `extract_venmo_other_party_handle`) compared against `customers.venmo_username` after stripping `@` and lowercasing. On hit, looks up balance_due items by `customer_id`. If no items match by `customer_id` (the row has a NULL `customer_id`), falls back to a canonical-name lookup.
+1. **Venmo handle (authoritative)** — `expense.other_party_handle` (extracted from the Venmo notification email's `venmo.com/u/<handle>` URL by `extract_venmo_other_party_handle`) compared against `customers.venmo_username` after stripping `@` and lowercasing. On hit, looks up balance_due items by `customer_id`; if none match (the item row has a NULL `customer_id`), falls back to a canonical-name lookup for that same customer. **When the handle resolves to a customer, it is trusted exclusively** — the display-name steps below are skipped even if the resolved customer has no open balance due (that lands in `no_candidate` for manual review). A known payer must never borrow a same-named customer's balance.
+2. **Exact name** — `items.customer = expense.merchant` (case-insensitive). Only runs when the expense has no handle or the handle isn't on any customer.
+3. **Name alias** — `customer_aliases.alias_value = expense.merchant` with `alias_type='name'`, then look up the canonical customer name. Fixes the common case where a Venmo display name differs from the registered name (e.g. "James Youngs Jr" → "Pat Youngs").
 
-Both the alias and handle paths require an exact match on the `balance_due:`
-amount within ±$1.00 to avoid false positives on similar amounts. Multiple
-matches → `ambiguous`, no matches → `no_candidate`.
+Before v2.16.12 the order was name → alias → handle, which let a payment
+misattribute: the Venmo display name is free text the payer controls, so a
+payer whose account displays a family member's registered name could clear
+that other customer's balance due whenever the amounts fell within tolerance.
+
+All paths require a match on the `balance_due:` amount within ±$1.00 to avoid
+false positives on similar amounts. Multiple matches → `ambiguous`, no matches
+→ `no_candidate`. The `+PAY` child created on a match inherits the parent
+item's `customer_id` directly (name/email re-resolution is only a fallback for
+NULL-cid parents).
 
 Diagnostic: `GET /api/admin/venmo-debug?payer=<name fragment>` returns the full
 state (expense_transactions, customer_aliases, customers.venmo_username,

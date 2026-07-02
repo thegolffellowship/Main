@@ -10996,7 +10996,11 @@ def auto_match_venmo_inbound_to_balance_due(
 
     For each approved Venmo IN expense_transaction (optionally limited to
     `expense_ids`), find the unique active credit-transfer item that:
-      - belongs to the same customer (case-insensitive name match)
+      - belongs to the paying customer, resolved handle-first (v2.16.12):
+        other_party_handle → customers.venmo_username is authoritative and,
+        when it resolves, is trusted exclusively; display-name matching
+        (exact, then customer_aliases) runs only when there is no handle or
+        the handle is unknown
       - has a credit_note starting with 'balance_due:'
       - has a balance amount within ±$1.00 of the expense amount
 
@@ -11044,85 +11048,101 @@ def auto_match_venmo_inbound_to_balance_due(
                     summary["no_candidate"] += 1
                     continue
 
-                # Find candidate active credit-transfer items for this customer.
-                # Try exact name first, then fall back to customer_aliases lookup
-                # so names like "Robert Callaway" match items stored as "Rob Callaway".
+                # Find candidate active credit-transfer items for this payer.
+                #
+                # ORDER MATTERS (v2.16.12): the Venmo @handle is the
+                # authoritative key — customers.venmo_username maps a handle to
+                # exactly ONE customer — while the display name is free text
+                # the payer controls, and it can collide with a different
+                # customer's registered name (same-surname family members do
+                # this routinely). The old order matched by display name FIRST
+                # and only consulted the handle when the name found nothing, so
+                # a son paying from an account displaying his father's name
+                # could clear the FATHER's balance due whenever the amounts
+                # fell within the ±$1 tolerance. Now: resolve the handle first;
+                # when it identifies a customer, trust it EXCLUSIVELY (a known
+                # payer with no open balance due must not borrow a same-named
+                # customer's balance — that lands in no_candidate for manual
+                # review instead). Display-name matching only runs when the
+                # expense has no handle or the handle isn't on any customer.
                 _BALANCE_DUE_SQL = """SELECT id, customer, item_name, credit_note, item_price
                            FROM items
                            WHERE merchant = 'Paid Separately (Credit Transfer)'
                              AND COALESCE(transaction_status, 'active') = 'active'
                              AND credit_note LIKE 'balance_due:%'
                              AND customer = ? COLLATE NOCASE"""
-                candidates = [
-                    dict(r) for r in conn.execute(_BALANCE_DUE_SQL, (payer_name,)).fetchall()
-                ]
-                if not candidates:
-                    # Try resolving payer_name through customer_aliases to canonical name
-                    # (e.g. Venmo email says "James Baker" but customer stored as "Adam Baker")
-                    alias_row = conn.execute(
-                        """SELECT customer_name AS canonical
-                           FROM customer_aliases
-                           WHERE alias_value = ? COLLATE NOCASE
-                             AND alias_type = 'name'
+                candidates: list[dict] = []
+                handle_resolved = False
+                raw_handle = (exp.get("other_party_handle") or "").lstrip("@").lower()
+                if raw_handle:
+                    handle_row = conn.execute(
+                        """SELECT c.customer_id,
+                                  TRIM(COALESCE(NULLIF(c.company_name,''),
+                                       NULLIF(TRIM(COALESCE(c.first_name,'') || ' '
+                                              || COALESCE(c.last_name,'')), ''))) AS canonical_name
+                           FROM customers c
+                           WHERE REPLACE(LOWER(COALESCE(c.venmo_username,'')), '@', '') = ?
                            LIMIT 1""",
-                        (payer_name,),
+                        (raw_handle,),
                     ).fetchone()
-                    if alias_row:
+                    if handle_row:
+                        handle_resolved = True
+                        logger.info(
+                            "venmo match: handle %s → customer_id %s (%s)",
+                            raw_handle, handle_row["customer_id"], handle_row["canonical_name"],
+                        )
+                        # customer_id first (reliable); canonical-name fallback
+                        # covers balance_due items with a NULL customer_id.
                         candidates = [
                             dict(r) for r in conn.execute(
-                                _BALANCE_DUE_SQL, (alias_row["canonical"],)
+                                """SELECT id, customer, item_name, credit_note, item_price
+                                   FROM items
+                                   WHERE merchant = 'Paid Separately (Credit Transfer)'
+                                     AND COALESCE(transaction_status, 'active') = 'active'
+                                     AND credit_note LIKE 'balance_due:%'
+                                     AND customer_id = ?""",
+                                (handle_row["customer_id"],),
                             ).fetchall()
                         ]
-                if not candidates:
-                    logger.info(
-                        "venmo no-candidate: exp %s payer='%s' handle=%r",
-                        exp.get("id"), payer_name, exp.get("other_party_handle"),
-                    )
-                if not candidates and exp.get("other_party_handle"):
-                    # Try matching the Venmo handle against customers.venmo_username
-                    # so profiles where the registered name differs from the account name
-                    # (e.g. "Pat Youngs" registered as "James Youngs Jr" on Venmo) still match.
-                    raw_handle = (exp["other_party_handle"] or "").lstrip("@").lower()
-                    if raw_handle:
-                        handle_row = conn.execute(
-                            """SELECT c.customer_id,
-                                      TRIM(COALESCE(NULLIF(c.company_name,''),
-                                           NULLIF(TRIM(COALESCE(c.first_name,'') || ' '
-                                                  || COALESCE(c.last_name,'')), ''))) AS canonical_name
-                               FROM customers c
-                               WHERE REPLACE(LOWER(COALESCE(c.venmo_username,'')), '@', '') = ?
-                               LIMIT 1""",
-                            (raw_handle,),
-                        ).fetchone()
-                        if handle_row:
-                            logger.info(
-                                "venmo match: handle %s → customer_id %s (%s)",
-                                raw_handle, handle_row["customer_id"], handle_row["canonical_name"],
-                            )
-                            # Try customer_id first (reliable); fall back to canonical name
-                            # in case the balance_due item has a NULL customer_id.
+                        if not candidates and handle_row["canonical_name"]:
                             candidates = [
                                 dict(r) for r in conn.execute(
-                                    """SELECT id, customer, item_name, credit_note, item_price
-                                       FROM items
-                                       WHERE merchant = 'Paid Separately (Credit Transfer)'
-                                         AND COALESCE(transaction_status, 'active') = 'active'
-                                         AND credit_note LIKE 'balance_due:%'
-                                         AND customer_id = ?""",
-                                    (handle_row["customer_id"],),
+                                    _BALANCE_DUE_SQL, (handle_row["canonical_name"],)
                                 ).fetchall()
                             ]
-                            if not candidates and handle_row["canonical_name"]:
-                                candidates = [
-                                    dict(r) for r in conn.execute(
-                                        _BALANCE_DUE_SQL, (handle_row["canonical_name"],)
-                                    ).fetchall()
-                                ]
-                        else:
-                            logger.info(
-                                "venmo match: handle '%s' (exp %s payer '%s') not found in customers.venmo_username",
-                                raw_handle, exp.get("id"), payer_name,
-                            )
+                    else:
+                        logger.info(
+                            "venmo match: handle '%s' (exp %s payer '%s') not found in "
+                            "customers.venmo_username — falling back to display-name match",
+                            raw_handle, exp.get("id"), payer_name,
+                        )
+                if not handle_resolved:
+                    # Display-name match: exact name first, then customer_aliases
+                    # so names like "Robert Callaway" match items stored as
+                    # "Rob Callaway".
+                    candidates = [
+                        dict(r) for r in conn.execute(_BALANCE_DUE_SQL, (payer_name,)).fetchall()
+                    ]
+                    if not candidates:
+                        alias_row = conn.execute(
+                            """SELECT customer_name AS canonical
+                               FROM customer_aliases
+                               WHERE alias_value = ? COLLATE NOCASE
+                                 AND alias_type = 'name'
+                               LIMIT 1""",
+                            (payer_name,),
+                        ).fetchone()
+                        if alias_row:
+                            candidates = [
+                                dict(r) for r in conn.execute(
+                                    _BALANCE_DUE_SQL, (alias_row["canonical"],)
+                                ).fetchall()
+                            ]
+                if not candidates:
+                    logger.info(
+                        "venmo no-candidate: exp %s payer='%s' handle=%r handle_resolved=%s",
+                        exp.get("id"), payer_name, exp.get("other_party_handle"), handle_resolved,
+                    )
                 # Filter by amount tolerance (±$1.00)
                 matched: list[dict] = []
                 for c in candidates:
@@ -11204,8 +11224,11 @@ def auto_match_venmo_inbound_to_balance_due(
                 new_values["parent_item_id"] = target_id
                 new_values["parent_snapshot"] = json.dumps(parent_snap) if parent_snap else None
 
-                # Resolve customer_id from customers table for FK linking
-                cust_id = _resolve_or_create_customer(
+                # The +PAY child inherits the parent's identity — the payment
+                # settles THAT item's balance, so re-resolving by name/email
+                # could pin the child to a different same-named customer.
+                # Only fall back to resolution when the parent has no cid.
+                cust_id = parent_full.get("customer_id") or _resolve_or_create_customer(
                     conn,
                     customer_name=customer_name,
                     customer_email=parent_full.get("customer_email") or "",
