@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.16.24";
+window.TGF_VERSION = "2.16.25";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.25",
+    date: "2026-07-02",
+    changes: [
+      "Repair: three Venmo payer names admin-identified as existing members now resolve via cid-linked name aliases — 'Leonel Vasquez' → Lee Vasquez (Austin), 'Christopher Lieck' → Wade Lieck (San Antonio), 'Dan Lehan' → Daniel Lehan (San Antonio). Their 7 unlinked ledger rows link to the right member profiles on the next boot, and any future payment or import under those name variants resolves automatically. Each alias is only created when the member resolves uniquely by name — a wrong guess is impossible.",
+      "The remaining Venmo payers admin-confirmed as NOT TGF customers (the Two Man Tour owner and participants, plus personal payments) are registered as known non-customers: their ledger rows keep the payer's name for readability but are never name-resolved, never counted as 'unresolved', and never nagged about in deploy logs again.",
+    ],
+  },
   {
     version: "2.16.24",
     date: "2026-07-02",
