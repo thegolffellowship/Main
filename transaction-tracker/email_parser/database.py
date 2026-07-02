@@ -15102,19 +15102,24 @@ def _seed_initial_contest_removals(conn: sqlite3.Connection) -> None:
     """Record the two pre-feature removals so the recordation list is complete.
 
     Neil Cheshire and Joseph Lourigan were refunded their 2026 City Match
-    Play entries via Venmo (admin-confirmed) and removed on the Enrollment
-    tab BEFORE the removals table existed — so no record was written. Seeds
-    one removal row each (amount unknown; admin can supply it later).
-    Idempotent: skips anyone who already has a removal row or is currently
-    enrolled (i.e. was re-enrolled on purpose since).
+    Play entries via Venmo (admin-confirmed, amounts/dates from Venmo
+    records) and removed on the Enrollment tab BEFORE the removals table
+    existed — so no record was written. removed_at carries the actual
+    Venmo refund date, not the day this seed ran. Idempotent: a row that
+    already carries a refund_amount is never touched again; a detail-less
+    row from the first seed pass (v2.17.0 shipped before the amounts were
+    known) gets the amount/date/note filled in once.
     """
     seeds = (
-        ("Neil Cheshire", "City Match Play", "2026"),
-        ("Joseph Lourigan", "City Match Play", "2026"),
+        ("Neil Cheshire", "City Match Play", "2026", 51.75, "2026-06-23",
+         "Refund included transaction fees — Match Play had closed but was "
+         "accidentally left open for purchase"),
+        ("Joseph Lourigan", "City Match Play", "2026", 50.0, "2026-05-26",
+         "Withdrew — wasn't able to play much; transaction fees not refunded"),
     )
-    for name, contest, season in seeds:
+    for name, contest, season, amount, refund_date, note in seeds:
         exists = conn.execute(
-            """SELECT id, customer_id FROM season_contest_removals
+            """SELECT id, customer_id, refund_amount FROM season_contest_removals
                WHERE LOWER(customer_name) = LOWER(?)
                  AND contest_type = ? AND season = ?""",
             (name, contest, season),
@@ -15137,6 +15142,19 @@ def _seed_initial_contest_removals(conn: sqlite3.Connection) -> None:
                         "Removal seed: linked existing record for %s to cid %d",
                         name, cid,
                     )
+            if exists["refund_amount"] is None:
+                # First seed pass ran before the amounts were known — fill in
+                # the Venmo details once.
+                conn.execute(
+                    """UPDATE season_contest_removals
+                       SET refund_amount = ?, removed_at = ?, note = ?
+                       WHERE id = ? AND refund_amount IS NULL""",
+                    (amount, f"{refund_date} 00:00:00", note, exists["id"]),
+                )
+                logger.info(
+                    "Removal seed: filled refund details for %s — $%.2f via Venmo on %s",
+                    name, amount, refund_date,
+                )
             continue
         enrolled = conn.execute(
             """SELECT 1 FROM season_contests
@@ -15160,15 +15178,14 @@ def _seed_initial_contest_removals(conn: sqlite3.Connection) -> None:
         conn.execute(
             """INSERT INTO season_contest_removals
                (customer_name, customer_id, contest_type, chapter, season,
-                removed_at, reason, refund_method, note)
-               VALUES (?, ?, ?, ?, ?, ?, 'Refunded', 'Venmo',
-                       'Recorded retroactively — removed before the removals log existed')""",
+                removed_at, reason, refund_amount, refund_method, note)
+               VALUES (?, ?, ?, ?, ?, ?, 'Refunded', ?, 'Venmo', ?)""",
             (name, cid, contest, chapter, season,
-             now_central().strftime("%Y-%m-%d %H:%M:%S")),
+             f"{refund_date} 00:00:00", amount, note),
         )
         logger.info(
-            "Removal seed: recorded %s / %s / %s (Venmo refund, cid=%s)",
-            name, contest, season, cid,
+            "Removal seed: recorded %s / %s / %s ($%.2f Venmo refund %s, cid=%s)",
+            name, contest, season, amount, refund_date, cid,
         )
 
 

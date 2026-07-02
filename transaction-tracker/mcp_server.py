@@ -386,6 +386,144 @@ def get_customer_profile(customer_name: str = "", customer_id: int = 0) -> str:
         conn.close()
 
 
+@mcp.tool()
+def get_customer_data_audit() -> str:
+    """Identity-health audit across ALL customers in one call — the checks
+    get_customer_profile runs for one person, swept over everyone:
+    nameless shell profiles, same-name profile groups (potential unmerged
+    splits), customers with no email / no primary email, emails shared by
+    multiple profiles, dangling customer_id references (rows pointing at
+    deleted profiles), and unlinked rows (NULL customer_id) per identity
+    table. Row lists are capped at 25 each; every section carries its full
+    count. An empty section means that check is clean.
+    """
+    from email_parser.database import _KNOWN_DISTINCT_SAME_NAME
+    conn = get_connection()
+    try:
+        report = {}
+
+        def _section(sql, params=(), cap=25):
+            rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+            return {"count": len(rows), "rows": rows[:cap]}
+
+        # 1. Nameless shell profiles (the Stu Kirksey failure shape)
+        report["nameless_profiles"] = _section(
+            """SELECT customer_id, phone, chapter, current_player_status,
+                      (SELECT COUNT(*) FROM items i WHERE i.customer_id = c.customer_id) AS n_items
+               FROM customers c
+               WHERE TRIM(COALESCE(first_name,'') || COALESCE(last_name,'')) = ''"""
+        )
+
+        # 2. Same-name profile groups — potential unmerged splits.
+        groups = conn.execute(
+            """SELECT LOWER(TRIM(first_name)) || ' ' || LOWER(TRIM(last_name)) AS k,
+                      GROUP_CONCAT(customer_id) AS cids, COUNT(*) AS n
+               FROM customers
+               WHERE TRIM(COALESCE(first_name,'')) != '' AND TRIM(COALESCE(last_name,'')) != ''
+               GROUP BY k HAVING n > 1"""
+        ).fetchall()
+        dupes = []
+        for g in groups:
+            cid_set = frozenset(int(x) for x in g["cids"].split(","))
+            entry = {"name": g["k"], "customer_ids": sorted(cid_set)}
+            if cid_set in _KNOWN_DISTINCT_SAME_NAME:
+                entry["note"] = "confirmed distinct people — OK"
+            dupes.append(entry)
+        report["same_name_profiles"] = {"count": len(dupes), "rows": dupes[:25]}
+
+        # 3. Customers with no email anywhere / no primary email
+        report["no_email"] = _section(
+            """SELECT c.customer_id,
+                      TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS name,
+                      c.chapter, c.current_player_status,
+                      (SELECT COUNT(*) FROM items i WHERE i.customer_id = c.customer_id) AS n_items
+               FROM customers c
+               WHERE NOT EXISTS (SELECT 1 FROM customer_emails e WHERE e.customer_id = c.customer_id)"""
+        )
+        report["no_primary_email"] = _section(
+            """SELECT c.customer_id,
+                      TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS name
+               FROM customers c
+               WHERE EXISTS (SELECT 1 FROM customer_emails e WHERE e.customer_id = c.customer_id)
+                 AND NOT EXISTS (SELECT 1 FROM customer_emails e
+                                 WHERE e.customer_id = c.customer_id AND e.is_primary = 1)"""
+        )
+
+        # 4. Emails attached to multiple profiles (cross-person contamination)
+        report["shared_emails"] = _section(
+            """SELECT email, GROUP_CONCAT(customer_id) AS customer_ids, COUNT(*) AS n
+               FROM customer_emails GROUP BY LOWER(TRIM(email)) HAVING n > 1"""
+        )
+
+        # 5. Dangling customer_id references (rows pointing at deleted profiles)
+        dangling = {}
+        for table, col in (
+            ("items", "customer_id"), ("customer_emails", "customer_id"),
+            ("customer_aliases", "customer_id"), ("season_contests", "customer_id"),
+            ("season_contest_removals", "customer_id"),
+            ("handicap_player_links", "customer_id"), ("handicap_rounds", "customer_id"),
+            ("rsvps", "customer_id"), ("customer_memberships", "customer_id"),
+            ("customer_statuses", "customer_id"), ("acct_transactions", "customer_id"),
+            ("tgf_payouts", "customer_id"), ("cmp_pool_members", "customer_id"),
+        ):
+            try:
+                n = conn.execute(
+                    f"SELECT COUNT(*) AS c FROM {table} WHERE {col} IS NOT NULL "
+                    f"AND {col} NOT IN (SELECT customer_id FROM customers)"
+                ).fetchone()["c"]
+                if n:
+                    dangling[table] = n
+            except Exception:
+                pass
+        report["dangling_customer_ids"] = dangling  # empty dict = clean
+
+        # 6. Unlinked rows (NULL customer_id) per identity table — active
+        #    items only; placeholder merchants excluded like the dashboard.
+        unlinked = {}
+        try:
+            unlinked["items_active"] = conn.execute(
+                """SELECT COUNT(*) AS c FROM items
+                   WHERE customer_id IS NULL
+                     AND COALESCE(transaction_status, 'active') = 'active'
+                     AND merchant NOT IN ('Roster Import', 'Customer Entry',
+                                          'RSVP Import', 'RSVP Email Link', 'Handicap Import')"""
+            ).fetchone()["c"]
+        except Exception:
+            pass
+        for table in ("season_contests", "handicap_player_links", "rsvps",
+                      "customer_aliases"):
+            try:
+                unlinked[table] = conn.execute(
+                    f"SELECT COUNT(*) AS c FROM {table} WHERE customer_id IS NULL"
+                ).fetchone()["c"]
+            except Exception:
+                pass
+        report["unlinked_rows"] = {k: v for k, v in unlinked.items() if v}
+
+        # 7. Name aliases that equal ANOTHER customer's canonical name —
+        #    orders under that name resolve to the alias owner, not the
+        #    person (fine when intentional, e.g. spouse payment accounts —
+        #    listed for review, not necessarily wrong).
+        report["aliases_shadowing_other_customers"] = _section(
+            """SELECT ca.alias_value, ca.customer_id AS alias_owner_cid,
+                      TRIM(COALESCE(o.first_name,'') || ' ' || COALESCE(o.last_name,'')) AS alias_owner,
+                      c2.customer_id AS shadowed_cid
+               FROM customer_aliases ca
+               JOIN customers o ON o.customer_id = ca.customer_id
+               JOIN customers c2
+                 ON LOWER(TRIM(COALESCE(c2.first_name,'') || ' ' || COALESCE(c2.last_name,''))) =
+                    LOWER(TRIM(ca.alias_value))
+                AND c2.customer_id != ca.customer_id
+               WHERE ca.alias_type = 'name'"""
+        )
+
+        report["total_customers"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM customers").fetchone()["c"]
+        return json.dumps(report, indent=2)
+    finally:
+        conn.close()
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  WRITE TOOLS
 # ═══════════════════════════════════════════════════════════════════════
