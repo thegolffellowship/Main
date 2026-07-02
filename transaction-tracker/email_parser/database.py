@@ -4780,6 +4780,13 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_merged_customer_fk_orphans failed")
 
+        # Admin-confirmed Venmo payer → member aliases (must precede the
+        # memo-ledger repair so those payers' rows link this same boot).
+        try:
+            _repair_venmo_payer_aliases(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_venmo_payer_aliases failed")
+
         # Re-link Venmo ledger rows whose customer field held the payment
         # memo instead of the payer (runs after backfills/aliases settle).
         try:
@@ -5477,6 +5484,71 @@ def _repair_merged_customer_fk_orphans(conn: sqlite3.Connection) -> None:
 _KNOWN_DISTINCT_SAME_NAME: tuple[frozenset, ...] = (frozenset({17, 308}),)
 
 
+# Venmo payers confirmed (2026-07-02) to NOT be TGF customers: Two Man Tour
+# participants/owner and personal payments. Their ledger rows keep the payer
+# display name but are never counted as "unresolved" or name-resolved —
+# creating profiles for them is explicitly unwanted.
+_VENMO_KNOWN_NON_CUSTOMERS: frozenset = frozenset(n.lower() for n in (
+    "Joe Warring",        # Two Man Tour owner (contract work, not TGF)
+    "Ann Jaber",          # personal payment
+    "Jinny Carder",
+    "Kenneth Ramsey",
+    "Kyle Leshon",
+    "Tyler Hansen",
+    "Kody Christianson",
+    "Matt Campbell",
+    "Lain K",
+    "Marshall Meyer",
+    "Brian Treat",
+    "Ben Gardeen",
+    "Steven Milam",
+    "Alex Estrada",
+))
+
+
+def _repair_venmo_payer_aliases(conn: sqlite3.Connection) -> None:
+    """Register admin-confirmed Venmo payer identities (2026-07-02).
+
+    These Venmo display names belong to existing members under different
+    first names. A cid-linked name alias makes the memo-ledger repair (and
+    all future name resolution) link their payments to the right profile:
+      - 'Leonel Vasquez'    → Lee Vasquez (Austin)
+      - 'Christopher Lieck' → Wade Lieck (San Antonio)
+      - 'Dan Lehan'         → Daniel Lehan (San Antonio)
+    Idempotent; warns and skips a pair when the member can't be uniquely
+    resolved by name (so a wrong guess is impossible).
+    """
+    PAIRS = (
+        ("Leonel Vasquez", "Lee Vasquez"),
+        ("Christopher Lieck", "Wade Lieck"),
+        ("Dan Lehan", "Daniel Lehan"),
+    )
+    for alias_value, canonical in PAIRS:
+        if conn.execute(
+            """SELECT id FROM customer_aliases
+               WHERE alias_type = 'name' AND LOWER(alias_value) = LOWER(?)""",
+            (alias_value,),
+        ).fetchone():
+            continue
+        cid = _lookup_customer_id(conn, canonical, None)
+        if cid is None:
+            logger.warning(
+                "Venmo payer alias: member %r not uniquely resolvable — "
+                "skipping alias %r", canonical, alias_value,
+            )
+            continue
+        conn.execute(
+            """INSERT INTO customer_aliases (customer_name, alias_value, alias_type, customer_id)
+               VALUES (?, ?, 'name', ?)""",
+            (canonical, alias_value, cid),
+        )
+        logger.info(
+            "Venmo payer alias: added %r → %r (cid %d)",
+            alias_value, canonical, cid,
+        )
+    conn.commit()
+
+
 def _repair_venmo_memo_ledger_customers(conn: sqlite3.Connection) -> None:
     """Fix Venmo ledger rows whose customer field holds the payment MEMO.
 
@@ -5498,12 +5570,23 @@ def _repair_venmo_memo_ledger_customers(conn: sqlite3.Connection) -> None:
              AND customer IS NOT NULL AND customer != ''
              AND description LIKE '%:%'"""
     ).fetchall()
-    fixed = unresolved = renamed = 0
+    fixed = unresolved = renamed = external = 0
     for r in rows:
         payer = " ".join((r["description"] or "").split(":", 1)[0].split())
         if len(payer) < 3 or " " not in payer:
             unresolved += 1
             continue  # single-token / emoji payer — not name-resolvable
+        if payer.lower() in _VENMO_KNOWN_NON_CUSTOMERS:
+            # Confirmed non-customer (Two Man Tour / personal) — keep the
+            # payer display for readability, never resolve, never nag.
+            if (r["customer"] or "").strip().lower() != payer.lower():
+                conn.execute(
+                    "UPDATE acct_transactions SET customer = ? WHERE id = ?",
+                    (payer, r["id"]),
+                )
+                renamed += 1
+            external += 1
+            continue
         cid = _lookup_customer_id(conn, payer, None)
         if cid is None:
             # No profile for this payer (or the name is ambiguous). Still set
@@ -5542,11 +5625,12 @@ def _repair_venmo_memo_ledger_customers(conn: sqlite3.Connection) -> None:
         )
     if fixed or renamed:
         conn.commit()
-    if fixed or unresolved:
+    if fixed or unresolved or external:
         logger.info(
             "Venmo memo-ledger repair: %d row(s) linked to their payer, "
-            "%d unresolved (no profile; %d of them renamed to payer this run)",
-            fixed, unresolved, renamed,
+            "%d unresolved (no profile), %d known non-customer (2MT/personal), "
+            "%d renamed to payer this run",
+            fixed, unresolved, external, renamed,
         )
 
 
