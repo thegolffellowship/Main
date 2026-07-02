@@ -5508,6 +5508,7 @@ _CUSTOMER_FK_COLUMNS: tuple[tuple[str, str], ...] = (
     ("action_items", "customer_id"),
     ("feedback", "customer_id"),
     ("contractor_payouts", "manager_customer_id"),
+    ("gg_points_standings", "customer_id"),
 )
 
 # Junction tables where UPDATE OR IGNORE can skip a source row because the
@@ -6168,13 +6169,37 @@ def _gg_name_candidates(raw_name: str) -> list:
     return cands
 
 
-def get_points_race_with_enrollment(race_key: str, season: str | None = None,
-                                    db_path: str | Path = DB_PATH) -> dict:
-    """Fetch a GG points race and mark each player's season-contest buy-in.
+def _ensure_gg_points_table(conn: sqlite3.Connection) -> None:
+    """Lazy-create the persisted GG standings snapshot (pairings pattern)."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS gg_points_standings (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_key      TEXT NOT NULL,
+            rank          TEXT,
+            prev_rank     TEXT,
+            player_name   TEXT NOT NULL,
+            customer_id   INTEGER REFERENCES customers(customer_id),
+            affiliation   TEXT,
+            tournaments   INTEGER,
+            wins          INTEGER,
+            total_points  REAL,
+            points_behind REAL,
+            fetched_at    TEXT DEFAULT (datetime('now'))
+        )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_gg_points_race "
+        "ON gg_points_standings(race_key)"
+    )
 
-    Standings come live from the public GG portal widget; enrollment truth
-    is the tracker's season_contests table, resolved to customer_id via
-    _lookup_customer_id (aliases included) per the identity-key principle.
+
+def refresh_points_race_standings(race_key: str,
+                                  db_path: str | Path = DB_PATH) -> int:
+    """Fetch a GG points race and replace its persisted snapshot.
+
+    Names resolve to customer_id at write time (identity-key principle);
+    enrollment status is NOT stored — it's joined live at read time so a
+    buy-in recorded after the fetch shows immediately. Returns row count.
     """
     race = _GG_POINTS_RACES.get(race_key)
     if not race:
@@ -6186,14 +6211,86 @@ def get_points_race_with_enrollment(race_key: str, season: str | None = None,
         page_id=race["page_id"], league_id=race["league_id"], host=race["host"])
 
     with _connect(db_path) as conn:
+        _ensure_gg_points_table(conn)
+        for row in standings:
+            cid = None
+            for cand in _gg_name_candidates(row["player_name"]):
+                cid = _lookup_customer_id(conn, cand, None)
+                if cid:
+                    break
+            row["customer_id"] = cid
+        conn.execute("DELETE FROM gg_points_standings WHERE race_key = ?",
+                     (race_key,))
+        conn.executemany(
+            """INSERT INTO gg_points_standings
+                   (race_key, rank, prev_rank, player_name, customer_id,
+                    affiliation, tournaments, wins, total_points, points_behind)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [(race_key, r["rank"], r["prev_rank"], r["player_name"],
+              r["customer_id"], r["affiliation"], r["tournaments"], r["wins"],
+              r["total_points"], r["points_behind"]) for r in standings],
+        )
+        conn.commit()
+    logger.info("GG points race %r: persisted %d standings rows",
+                race_key, len(standings))
+    return len(standings)
+
+
+def get_points_race_standings(race_key: str,
+                              auto_refresh_hours: float = 12,
+                              force_refresh: bool = False,
+                              db_path: str | Path = DB_PATH) -> dict:
+    """Persisted GG points race standings joined with live buy-in status.
+
+    Renders from the gg_points_standings snapshot (instant, survives
+    restarts). Refreshes from the GG portal only when the snapshot is
+    empty, older than auto_refresh_hours, or force_refresh is set — and
+    falls back to the stale snapshot (with gg_error set) if GG is down.
+    """
+    race = _GG_POINTS_RACES.get(race_key)
+    if not race:
+        raise ValueError(
+            f"Unknown race {race_key!r} — known: {sorted(_GG_POINTS_RACES)}")
+
+    gg_error = None
+    with _connect(db_path) as conn:
+        _ensure_gg_points_table(conn)
+        stat = conn.execute(
+            """SELECT COUNT(*) AS n, MAX(fetched_at) AS fetched_at
+               FROM gg_points_standings WHERE race_key = ?""",
+            (race_key,),
+        ).fetchone()
+        stale = (
+            stat["n"] == 0
+            or stat["fetched_at"] is None
+            or conn.execute(
+                "SELECT datetime(?) < datetime('now', ?)",
+                (stat["fetched_at"], f"-{auto_refresh_hours} hours"),
+            ).fetchone()[0] == 1
+        )
+
+    if force_refresh or stale:
+        try:
+            refresh_points_race_standings(race_key, db_path=db_path)
+        except Exception as exc:
+            gg_error = str(exc)
+            logger.warning("GG points race %r refresh failed (serving "
+                           "persisted snapshot): %s", race_key, exc)
+
+    with _connect(db_path) as conn:
+        _ensure_gg_points_table(conn)
+        rows = conn.execute(
+            """SELECT rank, prev_rank, player_name, customer_id, affiliation,
+                      tournaments, wins, total_points, points_behind, fetched_at
+               FROM gg_points_standings WHERE race_key = ? ORDER BY id""",
+            (race_key,),
+        ).fetchall()
+
         clauses = ["contest_type = ?"]
         params: list = [race["contest_type"]]
         if race.get("chapter"):
             clauses.append("(chapter = ? OR chapter IS NULL OR chapter = '')")
             params.append(race["chapter"])
-        if season:
-            clauses.append("season = ?")
-            params.append(season)
         enr_rows = conn.execute(
             f"""SELECT customer_id, customer_name FROM season_contests
                 WHERE {' AND '.join(clauses)}""",
@@ -6207,32 +6304,28 @@ def get_points_race_with_enrollment(race_key: str, season: str | None = None,
 
         ranked_ids: set = set()
         out_rows = []
-        for row in standings:
-            cands = _gg_name_candidates(row["player_name"])
-            cid = None
-            for cand in cands:
-                cid = _lookup_customer_id(conn, cand, None)
-                if cid:
-                    break
+        fetched_at = None
+        for r in rows:
+            r = dict(r)
+            fetched_at = r.pop("fetched_at") or fetched_at
+            cid = r["customer_id"]
             if not cid:
-                # Fall back to the enrollment row's own name snapshot
-                for cand in cands:
+                # Snapshot row didn't resolve at write time — the enrollment
+                # name snapshot may still identify them
+                for cand in _gg_name_candidates(r["player_name"]):
                     if cand.lower() in enrolled_names:
                         cid = enrolled_names[cand.lower()]
+                        r["customer_id"] = cid
                         break
             if cid:
                 ranked_ids.add(cid)
-            out_rows.append({
-                **row,
-                "customer_id": cid,
-                "enrolled": bool(cid and (cid in enrolled_ids
-                                          or cid in enrolled_names.values())),
-            })
+            r["enrolled"] = bool(cid and cid in enrolled_ids)
+            out_rows.append(r)
 
         enrolled_not_ranked = [
-            {"customer_id": r["customer_id"], "customer_name": r["customer_name"]}
-            for r in enr_rows
-            if r["customer_id"] and r["customer_id"] not in ranked_ids
+            {"customer_id": e["customer_id"], "customer_name": e["customer_name"]}
+            for e in enr_rows
+            if e["customer_id"] and e["customer_id"] not in ranked_ids
         ]
 
     return {
@@ -6245,6 +6338,8 @@ def get_points_race_with_enrollment(race_key: str, season: str | None = None,
         "n_enrolled": sum(1 for r in out_rows if r["enrolled"]),
         "n_unresolved": sum(1 for r in out_rows if not r["customer_id"]),
         "enrolled_not_ranked": enrolled_not_ranked,
+        "fetched_at": fetched_at,
+        "gg_error": gg_error,
     }
 
 
