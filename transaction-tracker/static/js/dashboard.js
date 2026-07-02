@@ -1301,7 +1301,19 @@ function attachHeaderSort() {
 // Authentication — provided by shared auth.js
 // onAuthReady is called after successful login to re-render with role context
 // ---------------------------------------------------------------------------
+// The data endpoints (/api/items, /api/stats) require an authenticated
+// session, so the initial load can only happen once auth has succeeded —
+// either at page load (already logged in) or after the login modal.
+let _bootLoadKicked = false;
+function kickInitialLoad() {
+    if (_bootLoadKicked) return;
+    _bootLoadKicked = true;
+    fetchItems();
+    fetchStats();
+}
+
 function onAuthReady() {
+    kickInitialLoad();
     applyFilters();
 }
 
@@ -1545,8 +1557,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         window._pendingTxnHighlight = _urlParams.get("txn");
     }
 
-    fetchItems();
-    fetchStats();
+    // Data load happens via onAuthReady()/kickInitialLoad() — the endpoints
+    // require auth, so an unauthenticated visitor gets the login modal with
+    // no wasted 401 fetches, and the load fires right after login instead.
+    if (currentRole) kickInitialLoad();
     checkConfig();
     startAutoRefresh();
 

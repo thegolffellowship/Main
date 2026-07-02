@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.16.9";
+window.TGF_VERSION = "2.16.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.10",
+    date: "2026-07-02",
+    changes: [
+      "Security: GET /api/items, /api/stats, /api/audit, and /api/data-snapshot had no authentication — any anonymous caller who knew the URL could download the complete customer database (names, emails, phones, addresses, DOBs, full order history). All four now require a logged-in session (@require_role('view-only')), matching the already-protected /api/customers. The five handicaps read endpoints (/players, /rounds, /for-customer, /index-map, /settings) were also unauthenticated — including one that performed a database write on an anonymous GET — and are now gated the same way. Pages that loaded data before login (Transactions, Customers, Events, Handicaps) now start their initial fetch from onAuthReady() instead, so an unauthenticated visitor sees the login modal with no failed requests behind it and data loads immediately after login (RSVPs and Contests already worked this way). The legacy mcp_server_remote.py helper now logs in before reads, not just writes.",
+      "Security: the MCP endpoint's auth middleware failed OPEN — if MCP_CLIENT_ID/MCP_CLIENT_SECRET were ever missing from the environment, every request skipped authentication entirely, leaving write tools (update/delete transactions, delete events) publicly callable at /mcp/mcp. It now fails CLOSED with a 503 and a loud log line until both env vars are configured. (Production has them set, so behavior there is unchanged; this closes the misconfigured-deploy hole.)",
+    ],
+  },
   {
     version: "2.16.9",
     date: "2026-07-02",
