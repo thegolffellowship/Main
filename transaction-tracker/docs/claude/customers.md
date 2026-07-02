@@ -688,9 +688,12 @@ Each rendering path has 5 tabs: **Transactions**, **Scores**, **Winnings**, **Po
 - **Info** — customer metadata (email, phone, chapter, GHIN, status)
 
 ## Customer winnings API
-- `GET /api/customers/winnings?customer_name=<name>` — returns payout history
-- `get_customer_winnings()` uses multi-step name matching:
-  exact → case-insensitive → alias → name reversal
+- `GET /api/customers/winnings?customer_name=<name>&customer_id=<id>` — returns payout history.
+  `customer_id` (v2.16.9+), when given, is used directly — the Customers page always sends
+  it since it's already resolved on the card. Without it, `get_customer_winnings()` falls
+  back to `_lookup_customer_id()`'s standard cascade (email → alias email → exact name →
+  alias name), which has no tiebreaker for two different customers sharing a first+last
+  name — passing `customer_id` is what avoids that collision.
 - Returns `{golfer_name, total_winnings, payouts: [{event_name, date, category, amount}]}`
 
 ## Customer detail Transactions tab — display columns
@@ -741,4 +744,6 @@ notes already had content, skipping if the exact text is already in notes), then
   returns `customer_id`, `first_name`, `last_name`, `customer_name` (display), `phone`,
   `primary_email`, `email_label`, and other customer fields
 - Customers page `init()` overlays this data after building the items-based map, ensuring
-  email and phone always reflect canonical values rather than stale transaction copies
+  email, phone, and (v2.16.9+) first_name/last_name always reflect canonical values rather
+  than stale transaction copies. Only overlays the Info tab's individual display fields —
+  does not touch `customer.name`, the grouping/lookup key used throughout the page.

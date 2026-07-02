@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.16.8";
+window.TGF_VERSION = "2.16.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.9",
+    date: "2026-07-02",
+    changes: [
+      "Fix: mobile customer cards read DOB and shirt size from only the first purchase row (items[0]) instead of scanning every item like the desktop Info tab does — since mobile has no separate edit/view mode (fields are always live), saving any change could silently blank a customer's DOB/shirt-size if it wasn't on their first order. Now matches desktop's scan-all-items lookup.",
+      "Fix: the Winnings tab could show one member another member's payout history if they shared a first+last name — get_customer_winnings() resolved the customer via an unqualified name match with no tiebreaker. GET /api/customers/winnings now accepts customer_id (the Customers page already has it resolved on every card) and uses it directly.",
+      "Fix: a corrected first/last name on the Info tab could fail to fully propagate and the old name would reappear as an apparent duplicate profile after a refresh — email/phone/chapter were already overlaid with the canonical customers-table value on every page load, but first_name/last_name never were. Added them to the same overlay.",
+      "Fix: several admin bulk-action buttons on the Handicaps page (Purge 18-hole Scores, Auto-link Players, Create Customers for Unlinked, Repair Links, and the inline \"add customer for player\" flow) read response fields without checking HTTP status first, so a server error rendered as \"Deleted undefined invalid round(s)\" instead of a real error message. All now check response.ok and surface the actual error.",
+      "Fix: creating a vendor only checked for an existing customer by company_name — a vendor whose display name happened to exactly match an existing personal customer's name (e.g. a sole-proprietor course pro billed under their own name) would get a second, disconnected customers row instead of reusing the real one. Now also checks first+last name.",
+      "Polish: the Winnings/Scores tabs' \"lookup failed\" and \"genuinely has zero records\" messages were easy to conflate at a glance; reworded the lookup-failure message to make clear it's a linking problem, not an empty-data state, and both tabs (plus Aliases) now check response.ok so a real server error surfaces distinctly instead of rendering as an empty list.",
+    ],
+  },
   {
     version: "2.16.8",
     date: "2026-07-01",
