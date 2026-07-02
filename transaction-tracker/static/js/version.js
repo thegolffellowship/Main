@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.3";
+window.TGF_VERSION = "2.17.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.4",
+    date: "2026-07-02",
+    changes: [
+      "Data: the two retroactive City Match Play refund records now carry their full Venmo details (admin-provided). Neil Cheshire: $51.75 on 2026-06-23, transaction fees included because Match Play had closed but was accidentally left open for purchase. Joseph Lourigan: $50.00 on 2026-05-26, withdrew due to limited availability, transaction fees not refunded. The Removed date on each record is the actual refund date. Applied idempotently at boot; records already carrying an amount are never touched.",
+      "MCP: new get_customer_data_audit tool — the identity checks get_customer_profile runs for one person, swept across ALL customers in a single call: nameless shell profiles, same-name profile groups (potential unmerged splits, with confirmed-distinct pairs annotated), customers missing emails or a primary email, emails shared across profiles, rows pointing at deleted customer ids, unlinked rows per identity table, and name aliases that shadow another customer's canonical name (flagged for review — intentional for spouse payment accounts). Empty sections mean clean.",
+    ],
+  },
   {
     version: "2.17.3",
     date: "2026-07-02",
