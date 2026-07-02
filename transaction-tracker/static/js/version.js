@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.8";
+window.TGF_VERSION = "2.17.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.9",
+    date: "2026-07-02",
+    changes: [
+      "Fix: Venmo handles are stored bare (no leading @) — the Customer Info save path already stripped it and the payout/matching code handles both forms, but a direct write had stored '@Matt-Rose-58' which rendered as '@@Matt-Rose-58'. A boot normalization strips leading @ from any stored handle, so the field stays clean for wiring direct Venmo payout/refund links later.",
+      "Correction (HubSpot-verified, admin-confirmed): joe@jjoconstruction.com belongs to Joe OREL — a Facebook ad lead who never played — not Joe Garza (no email was ever received from Garza). The email and its alias are detached from Garza's profile, his Canyon Springs decline RSVP is unlinked, and Joe Orel joins the known-lead registry. Same shape as the Steve Barr correction; both now run through one registry-driven separation repair.",
+    ],
+  },
   {
     version: "2.17.8",
     date: "2026-07-02",
