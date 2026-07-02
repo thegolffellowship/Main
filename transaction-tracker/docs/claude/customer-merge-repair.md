@@ -13,11 +13,22 @@ This playbook describes how to diagnose and write a boot-time repair function.
 ## Known cases
 
 | Absorbed player   | Absorbed into    | Repair function                    |
-|-------------------|------------------|------------------------------------|
+|-------------------|------------------|-------------------------------------|
 | Tanner Chalfant   | Bryan McCrary    | `_repair_chalfant_attribution()`   |
 | William Massey    | Colby Johnson    | `_repair_massey_attribution()`     |
+| Joseph Lourigan (customer_id 406) | Joseph Lourigan (customer_id 83) | `_repair_lourigan_attribution()` |
+| Tim Watson (customer_id 94) | Tim Watson (customer_id 433) | `_repair_watson_attribution()` |
 
-Both functions live in `email_parser/database.py` and are called from `init_db()`.
+All four functions live in `email_parser/database.py` and are called from `init_db()`.
+
+The Lourigan/Watson cases are a **different shape** than Chalfant/Massey: both
+customer_id records still existed (a "fragmented duplicate," not an absorbed/
+vanished profile), so their repair functions delegate to `merge_customers()`
+(passing `source_customer_id`/`target_customer_id` explicitly) instead of
+hand-rolling the customer_emails/tgf_payouts/items reassignment — no need to
+recreate a missing customer row. Use this simpler pattern whenever both sides
+of the duplicate already have a `customers` row; fall back to the full
+skeleton below only when one side's `customers` row is gone entirely.
 
 ---
 

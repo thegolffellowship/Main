@@ -87,7 +87,7 @@ def get_transactions(
     # Always exclude non-transaction placeholder rows
     clauses = [
         "merchant NOT IN ('Roster Import', 'Customer Entry', "
-        "'RSVP Import', 'RSVP Email Link')"
+        "'RSVP Import', 'RSVP Email Link', 'Handicap Import')"
     ]
     params = []
 

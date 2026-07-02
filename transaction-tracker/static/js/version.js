@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.16.7";
+window.TGF_VERSION = "2.16.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.8",
+    date: "2026-07-01",
+    changes: [
+      "Fix: six more places created a customer profile with no linked customer_id, the same defect fixed for +Add Customer/Roster Upload/RSVP-Import in 2.16.7 — the Handicap \"create customers for unlinked\" bulk tool, applying credit to a Golf Genius RSVP (two copies of the same insert), overpayment and excess-credit rows posted mid-credit-application, a partial-refund child row, and the secondary items row link_rsvp_to_customer() creates when linking an RSVP from a member's second email. All now resolve or copy a real customer_id at insert time instead of leaving it NULL forever. 'Handicap Import' rows were also missing from every placeholder-merchant exclusion list (dashboard.js, customers.html, mcp_server.py, and ~10 reporting queries in database.py), so they were silently counted as real transactions — added alongside the other administrative merchants everywhere that list appears. The RSVP Email Link exclusion is also dropped from the boot-time customer_id backfill: that merchant only ever fires once the target customer is already resolved, so the 'will get picked up under its own name later' assumption behind the original exclusion was actually never true — confirmed via a live-data audit that found exactly this pattern on a real profile.",
+      "Fix: merge_customers() could silently produce a split-identity record — if the target name in a Customers-page Merge didn't have an exact first+last match in the customers table (a suffix, a middle name, or simply no row under that spelling), the transactions still got renamed to the target's display name but the customer_id/customer_emails/tgf_payouts reassignment was skipped entirely, with no error surfaced (the UI showed \"Merged!\" either way). The function now accepts the customer_ids the Customers page already has resolved on screen and uses them directly, and raises a real error before any write happens if the target still can't be resolved. Live-data audit (see below) found two real customers already split this way from before this fix existed; boot-time repair functions (_repair_lourigan_attribution(), _repair_watson_attribution()) merge them automatically on next deploy, following the same pattern as the existing Chalfant/Massey repairs.",
+      "Ops: ran a live-data audit via the TGF Transaction Tracker MCP connector across all 1,630 items to size these bugs against real data (requested after a manual review of individual profiles). Found 1 item with a NULL customer_id (a second-email RSVP-link row for an existing member), 0 active merge-corrupted (\"split identity\") records, and 2 customers fragmented across two customer_id records each (Joseph Lourigan, Tim Watson) — both now covered by the new repair functions above.",
+    ],
+  },
   {
     version: "2.16.7",
     date: "2026-07-01",
