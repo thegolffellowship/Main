@@ -387,6 +387,45 @@ def get_customer_profile(customer_name: str = "", customer_id: int = 0) -> str:
 
 
 @mcp.tool()
+def list_customer_contacts(chapter: str = "", status: str = "") -> str:
+    """Bulk contact export for cross-referencing against external rosters
+    (Golf Genius, spreadsheets): one compact row per non-vendor customer
+    with customer_id, name, chapter, status, primary email, Venmo handle,
+    and phone.
+
+    Args:
+        chapter: Exact chapter filter, e.g. 'Austin' (empty = all)
+        status: current_player_status filter, e.g. 'active_member' (empty = all)
+    """
+    conn = get_connection()
+    try:
+        clauses = ["""NOT EXISTS (SELECT 1 FROM customer_roles r
+                      WHERE r.customer_id = c.customer_id AND r.role_type = 'vendor')"""]
+        params = []
+        if chapter:
+            clauses.append("c.chapter = ?")
+            params.append(chapter)
+        if status:
+            clauses.append("c.current_player_status = ?")
+            params.append(status)
+        rows = conn.execute(
+            f"""SELECT c.customer_id,
+                       TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS name,
+                       c.chapter, c.current_player_status AS status,
+                       ce.email AS primary_email, c.venmo_username AS venmo, c.phone
+                FROM customers c
+                LEFT JOIN customer_emails ce
+                       ON ce.customer_id = c.customer_id AND ce.is_primary = 1
+                WHERE {' AND '.join(clauses)}
+                ORDER BY c.last_name COLLATE NOCASE, c.first_name COLLATE NOCASE""",
+            params,
+        ).fetchall()
+        return json.dumps([dict(r) for r in rows], indent=1)
+    finally:
+        conn.close()
+
+
+@mcp.tool()
 def get_customer_data_audit() -> str:
     """Identity-health audit across ALL customers in one call — the checks
     get_customer_profile runs for one person, swept over everyone:

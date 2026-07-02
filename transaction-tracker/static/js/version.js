@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.12";
+window.TGF_VERSION = "2.17.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.13",
+    date: "2026-07-02",
+    changes: [
+      "Data (admin-provided): Victor Arias Jr. gets the VicYClau-Arias Venmo handle — the roster backfill's ambiguity guard had correctly refused to choose between father and son; admin confirmed it's Dad's. Torey Tonche (phone, tjtonche@gmail.com, membership term 1/31/25–1/31/26) and Nic Skinner (phone, nic.skinner2@gmail.com, Venmo Nicolas-Skinner-1, membership term 4/27/25–4/27/26) get their pre-tracker details.",
+      "MCP: new list_customer_contacts tool (37 tools) — one compact row per non-vendor customer with name, chapter, status, primary email, Venmo, and phone, filterable by chapter/status. Built for cross-referencing external rosters (Golf Genius exports, spreadsheets) against tracker data in a single call.",
+    ],
+  },
   {
     version: "2.17.12",
     date: "2026-07-02",
