@@ -104,7 +104,23 @@ players the admin intentionally REMOVED from Golf Genius (inactive members
 kept fully active in the tracker — currently Matt/Matthew Lawyer). The
 export skips them (returned under `"excluded"`), so the nightly sync can
 never silently re-add them to GG. Matched case-insensitively against both
-the handicap player_name and the link's customer_name.
+the handicap player_name and the link's customer_name. As of v2.17.15 the
+boot-time `_log_gg_export_email_changes` diff logger skips them too — it
+queries `handicap_player_links` directly rather than going through
+`get_handicap_export_data`, so before that fix it kept printing excluded
+players as "NEWLY included" even though the export correctly omitted them.
+
+**The 02:00 sync has never actually uploaded (as of 2026-07):**
+`golf_genius_sync.py` is a screen-scraping HTTP automation (logs into
+golfgenius.com with `GOLF_GENIUS_EMAIL`/`GOLF_GENIUS_PASSWORD` env vars and
+POSTs a roster CSV) — there is no official GG API and the admin reports a
+reliable connection was never established. Without those env vars the
+nightly job logs "GG sync skipped" and does nothing; the on-demand
+`POST /api/handicaps/sync-golf-genius` returns 400. Handicap data reaches
+Golf Genius manually: the admin downloads `/api/handicaps/export-csv`
+(same `get_handicap_export_data`, same exclusions) and uploads it in the
+GG UI. Keep the exclusion registry — it governs that manual CSV and any
+future working sync.
 
 ## Handicap email — canonical email priority
 

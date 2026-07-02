@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.14";
+window.TGF_VERSION = "2.17.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.15",
+    date: "2026-07-02",
+    changes: [
+      "Golf Genius boot-log diff now respects the admin exclusion registry: the 'Matt LAWYER NEWLY included' line kept printing after v2.17.14 because the log-only email-diff pass queries handicap_player_links directly and never consulted _GG_SYNC_EXCLUDES — only the actual export data (get_handicap_export_data) did. Excluded players are now skipped in the diff too, so the deploy log matches what the export would really contain.",
+      "Clarified in docs: the nightly 02:00 'GG sync' job has never uploaded anything — it needs GOLF_GENIUS_EMAIL/PASSWORD env vars (screen-scraping roster upload, no official API) and skips every night without them, which matches the admin's report that a reliable GG connection was never established. The export path still matters for the manual CSV download (/api/handicaps/export-csv) and any future on-demand sync, so the exclusion registry stays.",
+    ],
+  },
   {
     version: "2.17.14",
     date: "2026-07-02",
