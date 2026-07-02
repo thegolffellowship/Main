@@ -94,8 +94,8 @@ field that differs:
   full list lives in `_CUSTOMER_FK_COLUMNS` in `database.py`; **add every new
   customer-FK column there** or future merges will orphan its rows. It uses
   `UPDATE OR IGNORE`, and for junction tables with UNIQUE constraints
-  (`customer_roles`, `customer_memberships`) deletes source leftovers the
-  target already owns. Pre-v2.16.13 merges moved only
+  (`customer_roles`, `customer_memberships`, and `customer_aliases` as of
+  v2.17.3) deletes source leftovers the target already owns. Pre-v2.16.13 merges moved only
   items/customer_emails/tgf_payouts — everything else was orphaned on the
   deleted id; `_repair_merged_customer_fk_orphans()` (boot) re-points rows
   from known deleted ids (406→83 Lourigan, 94→433 Watson) and logs a
@@ -103,6 +103,18 @@ field that differs:
 - Moves `customer_emails` from source to target
 - Creates name alias for old name
 - Deletes orphaned source `customers` row
+
+**Alias uniqueness (v2.17.3):** `_dedup_customer_aliases()` (boot, right
+after the alias cid backfill) collapses duplicate `customer_aliases` rows —
+earliest row kept per `(customer_id, alias_type, alias_value)` case-insensitive,
+per `customer_name` for unlinked rows — deletes unlinked shadows of linked
+aliases, and creates two partial UNIQUE indexes
+(`idx_customer_aliases_cid_unique` / `_name_unique`) so duplicates can't
+re-accumulate. Every alias write path is duplicate-tolerant: all INSERTs are
+`INSERT OR IGNORE`, the cid backfill and orphan-alias repair use
+`UPDATE OR IGNORE` (a skipped row is deleted as a proven duplicate), and the
+name-rename propagations use `UPDATE OR IGNORE`. When adding a new alias
+write path, keep it `OR IGNORE` or it will raise on the unique index.
 
 The boot-time `_merge_duplicate_customers()` (hardcoded pairs + generic
 shared-email auto-merge) routes through the same `_repoint_customer_fks()`

@@ -1087,7 +1087,7 @@ def _repair_stich_attribution(conn: sqlite3.Connection,
         (_ALIAS,),
     ).fetchone():
         conn.execute(
-            """INSERT INTO customer_aliases (customer_name, alias_value, alias_type, customer_id)
+            """INSERT OR IGNORE INTO customer_aliases (customer_name, alias_value, alias_type, customer_id)
                VALUES (?, ?, 'name', ?)""",
             (_NAME, _ALIAS, _CANONICAL_CID),
         )
@@ -1329,7 +1329,7 @@ def _repair_arias_identities(conn: sqlite3.Connection) -> None:
             (alias_value,),
         ).fetchone():
             conn.execute(
-                """INSERT INTO customer_aliases (customer_name, alias_value, alias_type, customer_id)
+                """INSERT OR IGNORE INTO customer_aliases (customer_name, alias_value, alias_type, customer_id)
                    VALUES (?, ?, 'name', ?)""",
                 (display, alias_value, cid),
             )
@@ -1408,7 +1408,7 @@ def _migrate_create_dedup_aliases(conn: sqlite3.Connection) -> None:
 
         try:
             conn.execute(
-                """INSERT INTO customer_aliases (customer_name, alias_type, alias_value)
+                """INSERT OR IGNORE INTO customer_aliases (customer_name, alias_type, alias_value)
                    VALUES (?, 'name', ?)""",
                 (canonical_name, alias_name),
             )
@@ -4829,6 +4829,13 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_player_links(conn)
         _backfill_customer_id_on_rsvps(conn)
         _backfill_customer_id_on_aliases(conn)
+        # Collapse duplicate alias rows and create the unique indexes that
+        # keep them from re-accumulating (runs right after the alias backfill
+        # so just-linked rows dedup by customer_id, not name).
+        try:
+            _dedup_customer_aliases(conn)
+        except Exception:
+            logger.exception("Non-fatal: _dedup_customer_aliases failed")
         _backfill_customer_id_on_season_contests(conn)
         _backfill_customer_id_on_handicap_rounds(conn)
         _backfill_customer_id_on_gd_splits(conn)
@@ -5470,6 +5477,7 @@ _CUSTOMER_FK_COLUMNS: tuple[tuple[str, str], ...] = (
 _FK_LEFTOVER_DELETE_OK: set[tuple[str, str]] = {
     ("customer_roles", "customer_id"),        # UNIQUE(customer_id, role_type)
     ("customer_memberships", "customer_id"),  # UNIQUE(customer_id, started_at)
+    ("customer_aliases", "customer_id"),      # unique idx (customer_id, alias_type, alias_value)
 }
 
 
@@ -5562,10 +5570,20 @@ def _repair_merged_customer_fk_orphans(conn: sqlite3.Connection) -> None:
                 ).fetchall()
                 if len(matches) == 1:
                     new_cid = matches[0]["customer_id"]
-            conn.execute(
-                "UPDATE customer_aliases SET customer_id = ? WHERE id = ?",
+            cur = conn.execute(
+                "UPDATE OR IGNORE customer_aliases SET customer_id = ? WHERE id = ?",
                 (new_cid, oa["id"]),
             )
+            if not cur.rowcount:
+                # Re-point skipped by the unique alias index — the target
+                # already owns this exact alias, so the dead-cid row is a
+                # pure duplicate.
+                conn.execute("DELETE FROM customer_aliases WHERE id = ?", (oa["id"],))
+                logger.info(
+                    "Orphan alias repair: %r → %r deleted (cid %s dead; target %s already has it)",
+                    oa["alias_value"], oa["customer_name"], oa["customer_id"], new_cid,
+                )
+                continue
             logger.info(
                 "Orphan alias repair: %r → %r re-pointed from dead cid %s to %s",
                 oa["alias_value"], oa["customer_name"], oa["customer_id"],
@@ -5671,7 +5689,7 @@ def _repair_venmo_payer_aliases(conn: sqlite3.Connection) -> None:
             )
             continue
         conn.execute(
-            """INSERT INTO customer_aliases (customer_name, alias_value, alias_type, customer_id)
+            """INSERT OR IGNORE INTO customer_aliases (customer_name, alias_value, alias_type, customer_id)
                VALUES (?, ?, 'name', ?)""",
             (canonical, alias_value, cid),
         )
@@ -6488,6 +6506,9 @@ def _backfill_customer_id_on_aliases(conn: sqlite3.Connection) -> int:
     """Populate customer_id on customer_aliases rows that lack it.
 
     Resolves via name match in customers table (aliases are keyed by customer_name).
+    UPDATE OR IGNORE so the unique alias index can't blow up the backfill; a
+    skipped row means the customer already owns that exact alias, so the
+    unlinked shadow row is deleted rather than left to linger.
     """
     rows = conn.execute(
         "SELECT id, customer_name FROM customer_aliases WHERE customer_id IS NULL"
@@ -6499,14 +6520,77 @@ def _backfill_customer_id_on_aliases(conn: sqlite3.Connection) -> int:
         cid = _lookup_customer_id(conn, row["customer_name"], None)
         if cid is not None:
             cur = conn.execute(
-                "UPDATE customer_aliases SET customer_id = ? WHERE id = ? AND customer_id IS NULL",
+                "UPDATE OR IGNORE customer_aliases SET customer_id = ? "
+                "WHERE id = ? AND customer_id IS NULL",
                 (cid, row["id"]),
             )
-            updated += cur.rowcount
+            if cur.rowcount:
+                updated += cur.rowcount
+            else:
+                conn.execute(
+                    "DELETE FROM customer_aliases WHERE id = ? AND customer_id IS NULL",
+                    (row["id"],),
+                )
     conn.commit()
     if updated:
         logger.info("Backfilled customer_id for %d customer_aliases rows", updated)
     return updated
+
+
+def _dedup_customer_aliases(conn: sqlite3.Connection) -> int:
+    """Collapse duplicate customer_aliases rows and enforce uniqueness forever.
+
+    Repeated captures piled up identical alias rows (Stu Kirksey carried
+    seven 'Stuart Kirksey' name aliases). Keeps the earliest row per
+    (customer_id, alias_type, alias_value) — per (customer_name, ...) for
+    unlinked rows — deletes unlinked shadows of already-linked aliases, then
+    creates partial UNIQUE indexes so every future duplicate capture becomes
+    a no-op (all insert sites use INSERT OR IGNORE). Idempotent, runs at
+    every boot.
+    """
+    removed = conn.execute(
+        """DELETE FROM customer_aliases
+           WHERE id NOT IN (
+               SELECT MIN(id) FROM customer_aliases
+               GROUP BY COALESCE(customer_id, -1),
+                        CASE WHEN customer_id IS NULL
+                             THEN LOWER(TRIM(COALESCE(customer_name, '')))
+                             ELSE '' END,
+                        alias_type,
+                        LOWER(TRIM(COALESCE(alias_value, '')))
+           )"""
+    ).rowcount
+    # Unlinked rows that duplicate an already-linked alias with the same
+    # customer name are shadows (e.g. a backfill skipped by the unique
+    # index) — the linked row already provides the same mapping, stronger.
+    removed += conn.execute(
+        """DELETE FROM customer_aliases
+           WHERE customer_id IS NULL
+             AND EXISTS (
+                 SELECT 1 FROM customer_aliases ca2
+                 WHERE ca2.customer_id IS NOT NULL
+                   AND LOWER(TRIM(COALESCE(ca2.customer_name, ''))) =
+                       LOWER(TRIM(COALESCE(customer_aliases.customer_name, '')))
+                   AND ca2.alias_type = customer_aliases.alias_type
+                   AND LOWER(TRIM(COALESCE(ca2.alias_value, ''))) =
+                       LOWER(TRIM(COALESCE(customer_aliases.alias_value, '')))
+             )"""
+    ).rowcount
+    conn.execute(
+        """CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_aliases_cid_unique
+           ON customer_aliases(customer_id, alias_type, LOWER(TRIM(alias_value)))
+           WHERE customer_id IS NOT NULL"""
+    )
+    conn.execute(
+        """CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_aliases_name_unique
+           ON customer_aliases(LOWER(TRIM(COALESCE(customer_name, ''))), alias_type,
+                               LOWER(TRIM(alias_value)))
+           WHERE customer_id IS NULL"""
+    )
+    conn.commit()
+    if removed:
+        logger.info("Alias dedup: removed %d duplicate customer_aliases row(s)", removed)
+    return removed
 
 
 def _backfill_customer_id_on_season_contests(conn: sqlite3.Connection) -> int:
@@ -8547,7 +8631,7 @@ def update_customer_info(customer_name: str, fields: dict,
             # Update alias references if display name changed
             if "customer" in safe and safe["customer"] != customer_name:
                 conn.execute(
-                    "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+                    "UPDATE OR IGNORE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
                     (safe["customer"], customer_name),
                 )
                 # Also update handicap_player_links so handicap stays connected
@@ -9051,7 +9135,7 @@ def link_rsvp_to_customer(
             ).fetchone()
             if not existing_alias:
                 conn.execute(
-                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'email', ?)",
+                    "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'email', ?)",
                     (target_customer_name, rsvp_email),
                 )
                 logger.info("Added alias email <%s> for customer %s",
@@ -9073,7 +9157,7 @@ def link_rsvp_to_customer(
             ).fetchone()
             if not existing_name_alias:
                 conn.execute(
-                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
+                    "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
                     (target_customer_name, rsvp_player_name),
                 )
                 logger.info("Added alias name '%s' for customer %s",
@@ -9368,7 +9452,7 @@ def _save_customer_aliases(conn: sqlite3.Connection, customer_name: str,
         ).fetchone()
         if not existing:
             conn.execute(
-                "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
+                "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'name', ?)",
                 (customer_name, alias),
             )
 
@@ -9383,7 +9467,7 @@ def _save_customer_aliases(conn: sqlite3.Connection, customer_name: str,
         ).fetchone()
         if not existing:
             conn.execute(
-                "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'email', ?)",
+                "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'email', ?)",
                 (customer_name, alias),
             )
 
@@ -9419,7 +9503,7 @@ def add_customer_alias(customer_name: str, alias_type: str, alias_value: str,
         if existing:
             return {"id": existing["id"], "type": alias_type, "value": alias_value, "existed": True}
         cursor = conn.execute(
-            "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, ?, ?)",
+            "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, ?, ?)",
             (customer_name, alias_type, alias_value),
         )
         conn.commit()
@@ -9759,7 +9843,7 @@ def merge_customers(source_name: str, target_name: str,
         # duplicate created under the identical name — since a name is never
         # its own alias).
         conn.execute(
-            "UPDATE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
+            "UPDATE OR IGNORE customer_aliases SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
             (target_name, source_name),
         )
         if source_name.strip().lower() != target_name.strip().lower():
@@ -9772,7 +9856,7 @@ def merge_customers(source_name: str, target_name: str,
             ).fetchone()
             if not existing_alias:
                 conn.execute(
-                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value, customer_id) "
+                    "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_type, alias_value, customer_id) "
                     "VALUES (?, 'name', ?, ?)",
                     (target_name, source_name, target_cust["customer_id"]),
                 )
@@ -9788,7 +9872,7 @@ def merge_customers(source_name: str, target_name: str,
             ).fetchone()
             if not existing_alias:
                 conn.execute(
-                    "INSERT INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'email', ?)",
+                    "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_type, alias_value) VALUES (?, 'email', ?)",
                     (target_name, source_email),
                 )
 
@@ -19781,7 +19865,7 @@ def capture_email_aliases_from_items(db_path: str | Path | None = None) -> int:
         for r in rows:
             try:
                 conn.execute(
-                    """INSERT INTO customer_aliases
+                    """INSERT OR IGNORE INTO customer_aliases
                        (customer_name, alias_type, alias_value)
                        VALUES (?, 'email', ?)""",
                     (r["customer_name"], r["email"]),
@@ -19931,7 +20015,7 @@ def resolve_low_risk_email_drift_warnings(conn: sqlite3.Connection) -> dict:
             if not exists:
                 try:
                     conn.execute(
-                        "INSERT INTO customer_aliases "
+                        "INSERT OR IGNORE INTO customer_aliases "
                         "(customer_name, alias_type, alias_value) "
                         "VALUES (?, 'email', ?)",
                         (alias_name, drift_email.lower()),
