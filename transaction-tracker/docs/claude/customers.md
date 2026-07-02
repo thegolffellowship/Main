@@ -150,7 +150,11 @@ block the others.
   (cid 308) are **two different people** (father & son; dad pays). NEVER merge
   them. The repair routes fragment/misrouted rows between them by name marker
   (III/3rd/v3rdgen → son; Jr/vicdr → dad; unmarked fragment rows → dad),
-  retired fragments 414/434, renamed dad's transactions to 'Victor Arias Jr',
+  retired fragments 414/434 — and (v2.16.22) 426, a ledger-only profile
+  auto-created under the son's suffixed name with malformed first/last parts
+  ('Victor'/'III'), invisible to the duplicate-name census and found only via
+  the MCP ledger customer_id check; its rows default to the SON —
+  renamed dad's transactions to 'Victor Arias Jr',
   and added suffix-name aliases for both. The bare name 'Victor Arias' is
   intentionally NOT aliased — it is genuinely ambiguous and the lookup guard
   must keep refusing it. The pair is registered in

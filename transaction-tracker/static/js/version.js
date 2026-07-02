@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.21";
+window.TGF_VERSION = "2.16.22";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.22",
+    date: "2026-07-02",
+    changes: [
+      "Repair: the ledger customer_id verification (enabled by v2.16.21) revealed a FIFTH Victor Arias profile — customer 426, auto-created months ago when a ledger writer resolved 'Victor Arias III' before the son's real profile was findable by that name. Its name parts were stored malformed (last name 'III'), which is both why every census missed it AND a live risk: future 'Victor Arias III' name lookups match it ahead of the alias step, so new rows could keep landing there instead of on the son's real profile (308). The Arias repair now routes 426's five ledger rows (the son's registration, credit transfers, and Venmo excess-credit payout) to the son by the same name-marker rule, moves unmarked leftovers to the son (everything on that profile arrived via his name), and retires the profile. Verified on a simulated copy incl. repeat-boot stability.",
+    ],
+  },
   {
     version: "2.16.21",
     date: "2026-07-02",
