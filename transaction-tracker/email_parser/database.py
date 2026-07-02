@@ -4838,6 +4838,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_roman_numeral_name_case failed")
 
+        # Merge the split Stu/Stuart Kirksey profiles (one person) — the
+        # split made the sync's reconciliation delete his enrollment on
+        # every run. Must precede the item repair + boot sync below.
+        try:
+            _repair_kirksey_profiles(conn, db_path)
+        except Exception:
+            logger.exception("Non-fatal: _repair_kirksey_profiles failed")
+
         # Fix the mis-parsed standalone SEASON CONTESTS order R747210347
         # (blank customer — buyer is Stu Kirksey) before the boot sync below.
         try:
@@ -14870,6 +14878,49 @@ def get_customer_season_contests(customer_name: str,
         return [dict(r) for r in rows]
 
 
+def _repair_kirksey_profiles(conn: sqlite3.Connection,
+                             db_path: str | Path | None = None) -> None:
+    """Merge split Stu/Stuart Kirksey profiles into one.
+
+    Same person (the original boot MERGE_PAIRS entry says so, keyed by his
+    phone), but a second profile re-formed under the other spelling. The
+    split actively broke his contest enrollment: his SEASON CONTESTS item
+    carried one profile id while name-resolution put the enrollment's
+    customer_id on the other, so the sync's reconciliation deleted the
+    enrollment as "no backing purchase" on every run. Canonical = the
+    profile holding the most items (tie: lowest id); merge_customers moves
+    everything and adds the other spelling as an alias. Idempotent.
+    """
+    rows = conn.execute(
+        """SELECT c.customer_id,
+                  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS name,
+                  (SELECT COUNT(*) FROM items i WHERE i.customer_id = c.customer_id) AS n_items
+           FROM customers c
+           WHERE LOWER(TRIM(c.last_name)) = 'kirksey'
+             AND LOWER(TRIM(c.first_name)) IN ('stu', 'stuart')
+           ORDER BY n_items DESC, c.customer_id ASC"""
+    ).fetchall()
+    if len(rows) < 2:
+        return
+    target = rows[0]
+    conn.commit()  # merge_customers opens its own connection
+    for src in rows[1:]:
+        try:
+            merge_customers(src["name"], target["name"], db_path=db_path,
+                            source_customer_id=src["customer_id"],
+                            target_customer_id=target["customer_id"])
+            logger.info(
+                "Kirksey profile repair: merged cid %d (%s) -> cid %d (%s)",
+                src["customer_id"], src["name"],
+                target["customer_id"], target["name"],
+            )
+        except ValueError as e:
+            logger.warning(
+                "Kirksey profile repair failed for cid %d: %s",
+                src["customer_id"], e,
+            )
+
+
 def _repair_kirksey_season_contest_item(conn: sqlite3.Connection) -> None:
     """Assign order R747210347 to Stu Kirksey.
 
@@ -15090,7 +15141,8 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
     enrolled = 0
     linked = 0
 
-    def _upsert(conn, customer, contest_type, chapter, season, item_id):
+    def _upsert(conn, customer, contest_type, chapter, season, item_id,
+                customer_id=None):
         nonlocal enrolled, linked
         if not (customer or "").strip() or customer.strip() == "(Unknown)":
             # A source item with a blank/placeholder customer must not create
@@ -15101,14 +15153,22 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 "item has no customer name", contest_type, item_id,
             )
             return
+        # customer_id comes straight from the source item (Guiding Principle
+        # #6) — the name-based backfill used to guess, and with split
+        # same-person profiles it could pick a DIFFERENT profile than the
+        # item's, making the reconciliation below delete the enrollment as
+        # "no backing purchase" on every run (the endless "9 new
+        # enrollments" loop).
         result = conn.execute(
             """INSERT INTO season_contests
-               (customer_name, contest_type, chapter, season, source_item_id)
-               VALUES (?, ?, ?, ?, ?)
+               (customer_name, customer_id, contest_type, chapter, season, source_item_id)
+               VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT(customer_name, contest_type, chapter, season)
-               DO UPDATE SET source_item_id = excluded.source_item_id
+               DO UPDATE SET source_item_id = excluded.source_item_id,
+                             customer_id = COALESCE(excluded.customer_id,
+                                                    season_contests.customer_id)
                    WHERE season_contests.source_item_id IS NULL""",
-            (customer, contest_type, chapter, season, item_id),
+            (customer, customer_id, contest_type, chapter, season, item_id),
         )
         row = conn.execute(
             """SELECT source_item_id FROM season_contests
@@ -15138,8 +15198,8 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             return cust_chapter.get((customer_name or "").lower(), "")
 
         rows = conn.execute(
-            """SELECT id, customer, net_points_race, gross_points_race, city_match_play,
-                      item_name, order_date
+            """SELECT id, customer, customer_id, net_points_race, gross_points_race,
+                      city_match_play, item_name, order_date
                FROM items
                WHERE COALESCE(transaction_status, 'active') = 'active'
                  AND (UPPER(item_name) = 'TGF MEMBERSHIP' OR UPPER(item_name) LIKE '%SEASON CONTEST%')
@@ -15154,18 +15214,19 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             order_date = row.get("order_date") or ""
             season = order_date[:4] if len(order_date) >= 4 else ""
             item_id = row["id"]
+            cid = row.get("customer_id")
 
             if (row.get("net_points_race") or "").upper() == "YES":
-                _upsert(conn, customer, "NET Points Race", chapter, season, item_id)
+                _upsert(conn, customer, "NET Points Race", chapter, season, item_id, cid)
             if (row.get("gross_points_race") or "").upper() == "YES":
-                _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id)
+                _upsert(conn, customer, "GROSS Points Race", chapter, season, item_id, cid)
             if (row.get("city_match_play") or "").upper() == "YES":
-                _upsert(conn, customer, "City Match Play", chapter, season, item_id)
+                _upsert(conn, customer, "City Match Play", chapter, season, item_id, cid)
 
         # Handle standalone "SEASON CONTESTS" items (fallback for items where the parser
         # didn't populate the individual flag fields).
         bundle_rows = conn.execute(
-            """SELECT id, customer, item_name, notes, order_date
+            """SELECT id, customer, customer_id, item_name, notes, order_date
                FROM items
                WHERE UPPER(item_name) LIKE '%SEASON CONTEST%'
                  AND COALESCE(transaction_status, 'active') = 'active'"""
@@ -15179,6 +15240,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
             item_name = (row.get("item_name") or "").upper()
             notes_upper = (row.get("notes") or "").upper()
             item_id = row["id"]
+            cid = row.get("customer_id")
 
             # Each contest is independent.  "NET Bundle" does NOT imply City Match Play.
             has_net = "NET" in item_name or "NET" in notes_upper
@@ -15194,7 +15256,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 contests_to_enroll.add("City Match Play")
 
             for ct in contests_to_enroll:
-                _upsert(conn, customer, ct, chapter, season, item_id)
+                _upsert(conn, customer, ct, chapter, season, item_id, cid)
 
             # Stamp item flags so customer profile badges reflect the purchase.
             if contests_to_enroll:
@@ -15243,6 +15305,12 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         #   - customer_id is known (we can positively identify the customer)
         #   - There is no MEMBERSHIP or SEASON CONTESTS item for this customer
         #     that carries the matching contest flag
+        #   - AND the row's OWN source purchase isn't still active+flagged.
+        #     Without that last guard, an enrollment whose customer_id got
+        #     resolved to a different (split/duplicate) profile than its
+        #     source item's was deleted as "no backing purchase" on EVERY
+        #     sync, then re-created by the next scan — the endless
+        #     "9 new enrollments" loop.
         conn.execute(
             """DELETE FROM season_contests
                WHERE manually_enrolled = 0
@@ -15260,6 +15328,28 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                                 AND i.gross_points_race = 'YES')
                            OR (season_contests.contest_type = 'City Match Play'
                                 AND i.city_match_play = 'YES')
+                       )
+                 )
+                 AND NOT EXISTS (
+                     SELECT 1 FROM items si
+                     WHERE si.id = season_contests.source_item_id
+                       AND COALESCE(si.transaction_status, 'active') = 'active'
+                       AND (
+                           (season_contests.contest_type = 'NET Points Race'
+                                AND (si.net_points_race = 'YES'
+                                     OR (UPPER(si.item_name) LIKE '%SEASON CONTEST%'
+                                         AND (UPPER(si.item_name) LIKE '%NET%'
+                                              OR UPPER(COALESCE(si.notes, '')) LIKE '%NET%'))))
+                           OR (season_contests.contest_type = 'GROSS Points Race'
+                                AND (si.gross_points_race = 'YES'
+                                     OR (UPPER(si.item_name) LIKE '%SEASON CONTEST%'
+                                         AND (UPPER(si.item_name) LIKE '%GROSS%'
+                                              OR UPPER(COALESCE(si.notes, '')) LIKE '%GROSS%'))))
+                           OR (season_contests.contest_type = 'City Match Play'
+                                AND (si.city_match_play = 'YES'
+                                     OR (UPPER(si.item_name) LIKE '%SEASON CONTEST%'
+                                         AND (UPPER(si.item_name) LIKE '%MATCH PLAY%'
+                                              OR UPPER(COALESCE(si.notes, '')) LIKE '%MATCH PLAY%'))))
                        )
                  )"""
         )
@@ -15285,6 +15375,28 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                                 AND i.gross_points_race = 'YES')
                            OR (season_contests.contest_type = 'City Match Play'
                                 AND i.city_match_play = 'YES')
+                       )
+                 )
+                 AND NOT EXISTS (
+                     SELECT 1 FROM items si
+                     WHERE si.id = season_contests.source_item_id
+                       AND COALESCE(si.transaction_status, 'active') = 'active'
+                       AND (
+                           (season_contests.contest_type = 'NET Points Race'
+                                AND (si.net_points_race = 'YES'
+                                     OR (UPPER(si.item_name) LIKE '%SEASON CONTEST%'
+                                         AND (UPPER(si.item_name) LIKE '%NET%'
+                                              OR UPPER(COALESCE(si.notes, '')) LIKE '%NET%'))))
+                           OR (season_contests.contest_type = 'GROSS Points Race'
+                                AND (si.gross_points_race = 'YES'
+                                     OR (UPPER(si.item_name) LIKE '%SEASON CONTEST%'
+                                         AND (UPPER(si.item_name) LIKE '%GROSS%'
+                                              OR UPPER(COALESCE(si.notes, '')) LIKE '%GROSS%'))))
+                           OR (season_contests.contest_type = 'City Match Play'
+                                AND (si.city_match_play = 'YES'
+                                     OR (UPPER(si.item_name) LIKE '%SEASON CONTEST%'
+                                         AND (UPPER(si.item_name) LIKE '%MATCH PLAY%'
+                                              OR UPPER(COALESCE(si.notes, '')) LIKE '%MATCH PLAY%'))))
                        )
                  )"""
         )

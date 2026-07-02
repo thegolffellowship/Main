@@ -494,6 +494,23 @@ instead of attaching money to an arbitrary same-named person. Alias steps
 resolve via `customer_aliases.customer_id` first (legacy name-join only as
 fallback for unlinked alias rows).
 
+## Season contest sync — cid from source item (v2.16.32)
+
+`sync_season_contests_from_items()._upsert` stamps `customer_id` straight
+from the source items row at INSERT (DO UPDATE keeps an existing cid via
+COALESCE). Before this, new enrollments were inserted with cid NULL and
+`_backfill_customer_id_on_season_contests` name-guessed one mid-sync — with
+split same-person profiles (Stu/Stuart Kirksey) it could pick a DIFFERENT
+profile than the item's, so the cid-keyed reconciliation deleted the row as
+"no backing purchase" and the next scan re-created it (the endless
+"9 new enrollments" Sync loop). Both reconciliation DELETEs additionally
+carry a source-item guard: a row is never deleted while its own
+`source_item_id` item is active and carries the matching contest flag or
+SEASON-CONTEST keyword. `_repair_kirksey_profiles()` (boot) merges the
+split Kirksey profiles into the one holding his items (other spelling
+becomes an alias) — registered before the boot contest sync so his City
+Match Play enrollment lands on the surviving profile.
+
 **Column/history reconciler (v2.16.13):** `_sync_status_history_with_column()`
 runs at every boot after all the column writers. `_migrate_autocorrect_player_status`
 updates only `current_player_status` (never `customer_statuses`), so a

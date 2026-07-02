@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.16.31";
+window.TGF_VERSION = "2.16.32";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.32",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the season contest Sync no longer reports the same '9 new enrollments' on every run — the sync was creating enrollments and then its own cleanup was deleting them, endlessly. Root cause: new enrollments were saved without the purchase's customer_id, a name-based backfill then guessed which profile they belonged to, and when it guessed a DIFFERENT profile than the purchase's (split/duplicate profiles), the cleanup saw 'no backing purchase for this customer' and deleted the row — which the next sync re-created. Enrollments now inherit customer_id directly from their source purchase at creation (Guiding Principle #6), and the cleanup never deletes a row whose own source purchase is still active and carries the matching contest selection.",
+      "Repair: Stu Kirksey had TWO customer profiles (Stu/Stuart split) — the exact condition that made his City Match Play enrollment vanish on every sync. A boot repair merges them into the profile holding his purchases (the other spelling becomes an alias), after which his 5/25 SEASON CONTESTS purchase enrolls him and STAYS.",
+      "With the loop dead, Sync now correctly reports 0 new enrollments when nothing changed — a nonzero count on a re-run means genuinely new purchases.",
+    ],
+  },
   {
     version: "2.16.31",
     date: "2026-07-02",
