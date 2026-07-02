@@ -414,9 +414,10 @@
     }
 
     function escapeHtml(str) {
-        const div = document.createElement("div");
-        div.textContent = str || "";
-        return div.innerHTML;
+        // Must escape quotes too — callers interpolate into HTML attributes
+        // (data-customer-name="..."), where an unescaped " breaks out.
+        return String(str || "").replace(/[&<>"']/g, ch =>
+            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
     }
 
     function classifyGameType(sideGames) {
@@ -2041,7 +2042,7 @@
         const archiveLabel = customer.archived ? 'Unarchive' : 'Archive';
         const archiveBtnClass = customer.archived ? 'btn-primary' : 'btn-secondary';
         html += `<div style="margin-bottom:0.5rem;">
-            <button type="button" class="btn ${archiveBtnClass} cust-archive-toggle" data-customer-name="${escapeHtml(customer.name)}" data-archived="${customer.archived ? '1' : '0'}" style="font-size:0.72rem; padding:0.2rem 0.6rem;">${archiveLabel}</button>
+            <button type="button" class="btn ${archiveBtnClass} cust-archive-toggle" data-customer-name="${escapeHtml(customer.name)}" data-customer-id="${customer.customer_id || ''}" data-archived="${customer.archived ? '1' : '0'}" style="font-size:0.72rem; padding:0.2rem 0.6rem;">${archiveLabel}</button>
             ${customer.archived ? '<span style="font-size:0.72rem; color:#b45309; margin-left:0.3rem; font-weight:600;">ARCHIVED</span>' : ''}
         </div>`;
 
@@ -2399,6 +2400,7 @@
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const custName = btn.dataset.customerName;
+                const custId = btn.dataset.customerId ? parseInt(btn.dataset.customerId, 10) : null;
                 const isArchived = btn.dataset.archived === "1";
                 const newVal = isArchived ? 0 : 1;
                 btn.disabled = true;
@@ -2407,7 +2409,7 @@
                     const resp = await fetch("/api/customers/update", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ customer_name: custName, fields: { archived: newVal } }),
+                        body: JSON.stringify({ customer_name: custName, customer_id: custId, fields: { archived: newVal } }),
                     });
                     if (!resp.ok) throw new Error("Failed");
                     setTimeout(() => init(), 300);

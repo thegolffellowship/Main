@@ -1864,6 +1864,50 @@ def _migrate_create_status_tables(conn: sqlite3.Connection) -> int:
     return inserted
 
 
+def _sync_status_history_with_column(conn: sqlite3.Connection) -> int:
+    """Append a customer_statuses row wherever the newest history row
+    disagrees with customers.current_player_status.
+
+    Several boot reconcilers (_migrate_autocorrect_player_status,
+    memberships.sync_player_status_with_terms) update the legacy column
+    directly and never wrote the customer_statuses history table — so a
+    status badge sourced from history could show a value the column had
+    already moved past. The column is authoritative (every writer updates
+    it; only some update history), so reconcile history TO the column.
+    Idempotent: once appended, the newest history row matches and the
+    customer no-ops on the next boot.
+    """
+    sid_by_name = {
+        r["status_name"]: r["status_id"]
+        for r in conn.execute("SELECT status_id, status_name FROM statuses")
+    }
+    appended = 0
+    for row in conn.execute(
+        """SELECT c.customer_id, c.current_player_status,
+                  (SELECT cs.status_id FROM customer_statuses cs
+                    WHERE cs.customer_id = c.customer_id
+                    ORDER BY cs.set_at DESC, cs.id DESC LIMIT 1) AS latest_sid
+           FROM customers c
+           WHERE c.current_player_status IS NOT NULL"""
+    ).fetchall():
+        sname = _PS_TO_STATUS_NAME.get(row["current_player_status"])
+        sid = sid_by_name.get(sname or "")
+        if not sid or row["latest_sid"] == sid:
+            continue
+        conn.execute(
+            """INSERT INTO customer_statuses (customer_id, status_id, notes)
+               VALUES (?, ?, 'autosync: reconciled history with current_player_status')""",
+            (row["customer_id"], sid),
+        )
+        appended += 1
+    if appended:
+        logger.info(
+            "_sync_status_history_with_column: appended %d customer_statuses rows",
+            appended,
+        )
+    return appended
+
+
 def _migrate_canonicalize_chapters(conn: sqlite3.Connection) -> int:
     """Ensure the canonical chapters list includes Hill Country, then remap
     legacy items.chapter / events.chapter / customers.chapter values to the
@@ -3228,6 +3272,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("status tables migration failed: %s", e)
 
+        # Reconcile customer_statuses history with the (authoritative)
+        # current_player_status column — the autocorrect and membership-term
+        # reconcilers above update the column without appending history.
+        try:
+            _sync_status_history_with_column(conn)
+        except Exception as e:
+            logger.warning("status history sync failed: %s", e)
+
         # Re-round legacy handicap_rounds.differential values to tenths so
         # the card's "Avg of lowest N" reconciles with the displayed diffs.
         try:
@@ -4383,6 +4435,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_message_log(conn)
         _backfill_customer_id_on_rsvp_email_overrides(conn)
         _backfill_customer_id_on_action_items(conn)
+
+        # Re-point FK rows orphaned by pre-v2.16.13 merges (which deleted the
+        # source customers row without moving memberships/statuses/roles/...),
+        # then log a census of anything still referencing a deleted id.
+        try:
+            _repair_merged_customer_fk_orphans(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_merged_customer_fk_orphans failed")
         try:
             _promote_lone_customer_emails_to_primary(conn)
         except Exception:
@@ -4563,9 +4623,12 @@ def _lookup_customer_id(conn: sqlite3.Connection,
 
     Tries (in order):
     1. Email match via customer_emails table.
-    2. Alias email match via customer_aliases table (type='email').
-    3. Exact first_name + last_name match in customers table.
-    4. Alias name match via customer_aliases table (type='name').
+    2. Alias email match via customer_aliases (ca.customer_id preferred,
+       legacy name-join fallback).
+    3. Exact first_name + last_name match in customers table — unless the
+       name is ambiguous (two customers share it), in which case this step
+       refuses to guess and falls through.
+    4. Alias name match via customer_aliases (same cid-first pattern as 2).
     Returns the customer_id or None if no match is found.
     """
     # 1. Email lookup via customer_emails
@@ -4599,35 +4662,60 @@ def _lookup_customer_id(conn: sqlite3.Connection,
                 pass
             return row["customer_id"]
 
-    # 2. Alias email lookup via customer_aliases → resolve customer_name → customers
+    # 2. Alias email lookup via customer_aliases. Prefer the alias row's own
+    # customer_id column (backfilled at boot) — the legacy join reconstructs
+    # "first last" from customers and misses suffixed/middle/company names,
+    # and can even land on a DIFFERENT customer with the same name.
     if customer_email:
         row = conn.execute(
-            """SELECT c.customer_id FROM customer_aliases ca
-               JOIN customers c
-                 ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+            """SELECT ca.customer_id FROM customer_aliases ca
+               JOIN customers c ON c.customer_id = ca.customer_id
                WHERE ca.alias_type = 'email'
+                 AND ca.customer_id IS NOT NULL
                  AND LOWER(ca.alias_value) = LOWER(?)
                LIMIT 1""",
             (customer_email.strip(),),
         ).fetchone()
+        if not row:
+            row = conn.execute(
+                """SELECT c.customer_id FROM customer_aliases ca
+                   JOIN customers c
+                     ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+                   WHERE ca.alias_type = 'email'
+                     AND LOWER(ca.alias_value) = LOWER(?)
+                   LIMIT 1""",
+                (customer_email.strip(),),
+            ).fetchone()
         if row:
             return row["customer_id"]
 
-    # 3. Name lookup — exact first + last
+    # 3. Name lookup — exact first + last. AMBIGUITY GUARD (v2.16.14): when
+    # two different customers share the exact first+last name, refusing to
+    # guess is safer than LIMIT 1 (which picked one arbitrarily and could
+    # attach orders/credits to the wrong person). Fall through — an alias
+    # or email step may still disambiguate; otherwise the caller creates a
+    # fresh profile, which the boot-time shared-email auto-merge collapses
+    # once an email ties them together.
     if customer_name:
         parts = customer_name.strip().split()
         if len(parts) >= 2:
             first = parts[0]
             last = parts[-1]
-            row = conn.execute(
+            rows = conn.execute(
                 """SELECT customer_id FROM customers
                    WHERE LOWER(first_name) = LOWER(?)
                      AND LOWER(last_name) = LOWER(?)
-                   LIMIT 1""",
+                   LIMIT 2""",
                 (first, last),
-            ).fetchone()
-            if row:
-                return row["customer_id"]
+            ).fetchall()
+            if len(rows) == 1:
+                return rows[0]["customer_id"]
+            if len(rows) > 1:
+                logger.info(
+                    "_lookup_customer_id: name %r matches multiple customers "
+                    "(%s, ...) — refusing to guess",
+                    customer_name.strip(), rows[0]["customer_id"],
+                )
 
     # 3a. Company name lookup — matches vendor/company records (single-word or multi-word)
     if customer_name:
@@ -4641,17 +4729,28 @@ def _lookup_customer_id(conn: sqlite3.Connection,
         if row:
             return row["customer_id"]
 
-    # 4. Alias name lookup — the incoming customer_name matches a known alias
+    # 4. Alias name lookup — the incoming customer_name matches a known alias.
+    # Same cid-first / legacy-name-join-fallback pattern as step 2.
     if customer_name:
         row = conn.execute(
-            """SELECT c.customer_id FROM customer_aliases ca
-               JOIN customers c
-                 ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+            """SELECT ca.customer_id FROM customer_aliases ca
+               JOIN customers c ON c.customer_id = ca.customer_id
                WHERE ca.alias_type = 'name'
+                 AND ca.customer_id IS NOT NULL
                  AND LOWER(ca.alias_value) = LOWER(?)
                LIMIT 1""",
             (customer_name.strip(),),
         ).fetchone()
+        if not row:
+            row = conn.execute(
+                """SELECT c.customer_id FROM customer_aliases ca
+                   JOIN customers c
+                     ON LOWER(TRIM(c.first_name) || ' ' || TRIM(c.last_name)) = LOWER(TRIM(ca.customer_name))
+                   WHERE ca.alias_type = 'name'
+                     AND LOWER(ca.alias_value) = LOWER(?)
+                   LIMIT 1""",
+                (customer_name.strip(),),
+            ).fetchone()
         if row:
             return row["customer_id"]
 
@@ -4827,11 +4926,141 @@ def _resolve_or_create_customer(
         return None
 
 
+# Every (table, column) that references customers.customer_id, kept in sync
+# with the schema by hand. Used by _repoint_customer_fks() so a merge moves
+# the WHOLE profile — before v2.16.13, merges moved items/customer_emails/
+# tgf_payouts only and deleted the source customers row, orphaning
+# memberships, statuses, roles, RSVPs, ledger rows, handicap links, contest
+# enrollments, etc. on the dead id. customer_emails is intentionally absent:
+# its UNIQUE(customer_id, email) / is_primary semantics need the
+# insert-or-ignore treatment the merge callers already implement inline.
+_CUSTOMER_FK_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("items", "customer_id"),
+    ("customer_aliases", "customer_id"),
+    ("customer_memberships", "customer_id"),
+    ("customer_roles", "customer_id"),
+    ("customer_roles", "granted_by"),
+    ("customer_statuses", "customer_id"),
+    ("customer_statuses", "set_by"),
+    ("rsvps", "customer_id"),
+    ("acct_transactions", "customer_id"),
+    ("expense_transactions", "customer_id"),
+    ("season_contests", "customer_id"),
+    ("cmp_pool_members", "customer_id"),
+    ("cmp_matches", "player1_id"),
+    ("cmp_matches", "player2_id"),
+    ("cmp_matches", "winner_id"),
+    ("cmp_bracket", "player_id"),
+    ("cmp_bracket", "opponent_id"),
+    ("cmp_bracket", "winner_id"),
+    ("handicap_player_links", "customer_id"),
+    ("handicap_rounds", "customer_id"),
+    ("godaddy_order_splits", "customer_id"),
+    ("tgf_payouts", "customer_id"),
+    ("parse_warnings", "customer_id"),
+    ("message_log", "customer_id"),
+    ("rsvp_email_overrides", "customer_id"),
+    ("action_items", "customer_id"),
+    ("feedback", "customer_id"),
+    ("contractor_payouts", "manager_customer_id"),
+)
+
+# Junction tables where UPDATE OR IGNORE can skip a source row because the
+# target already owns the equivalent row (UNIQUE constraint hit) — e.g. both
+# sides hold the same role, or the same membership started_at. The skipped
+# source row duplicates content the target already has, so deleting it is
+# safe. Only identity-keyed columns belong here — never audit columns like
+# granted_by/set_by, where deleting the row would destroy unrelated data.
+_FK_LEFTOVER_DELETE_OK: set[tuple[str, str]] = {
+    ("customer_roles", "customer_id"),        # UNIQUE(customer_id, role_type)
+    ("customer_memberships", "customer_id"),  # UNIQUE(customer_id, started_at)
+}
+
+
+def _repoint_customer_fks(
+    conn: sqlite3.Connection, source_id: int, target_id: int
+) -> dict[str, int]:
+    """Re-point every customer FK column from source_id to target_id.
+
+    Called by every merge path before it deletes the source customers row.
+    UPDATE OR IGNORE skips rows that would violate a UNIQUE constraint; for
+    the junction tables in _FK_LEFTOVER_DELETE_OK the skipped leftovers are
+    deleted (the target already owns the equivalent row). Missing tables
+    (older DBs, lazily-created features) are skipped quietly.
+
+    Returns {"table.column": rows_moved} for logging. Does not commit.
+    """
+    moved: dict[str, int] = {}
+    for table, col in _CUSTOMER_FK_COLUMNS:
+        try:
+            n = conn.execute(
+                f"UPDATE OR IGNORE {table} SET {col} = ? WHERE {col} = ?",
+                (target_id, source_id),
+            ).rowcount
+            if (table, col) in _FK_LEFTOVER_DELETE_OK:
+                n += conn.execute(
+                    f"DELETE FROM {table} WHERE {col} = ?", (source_id,)
+                ).rowcount
+            if n:
+                moved[f"{table}.{col}"] = n
+        except sqlite3.OperationalError as exc:
+            logger.debug("FK re-point skipped %s.%s: %s", table, col, exc)
+    return moved
+
+
+def _repair_merged_customer_fk_orphans(conn: sqlite3.Connection) -> None:
+    """Re-point FK rows still referencing customer_ids deleted by old merges.
+
+    Before v2.16.13, merge paths moved only items/customer_emails/tgf_payouts
+    before deleting the source customers row — every other customer_id FK
+    table kept pointing at the deleted id (memberships, statuses, roles,
+    RSVPs, ledger rows, ...). Known merge pairs (deleted source → surviving
+    target) are re-pointed here. Anything else still orphaned is logged as a
+    count-only census so it surfaces in deploy logs without risking a wrong
+    guess about where it belongs. Idempotent.
+    """
+    KNOWN_MERGES = {
+        406: 83,   # Joseph Lourigan — _repair_lourigan_attribution (v2.16.8)
+        94: 433,   # Tim Watson — _repair_watson_attribution (v2.16.8)
+    }
+    for src, tgt in KNOWN_MERGES.items():
+        # Only when the merge actually ran: source gone, target present.
+        if conn.execute(
+            "SELECT 1 FROM customers WHERE customer_id = ?", (src,)
+        ).fetchone():
+            continue
+        if not conn.execute(
+            "SELECT 1 FROM customers WHERE customer_id = ?", (tgt,)
+        ).fetchone():
+            continue
+        moved = _repoint_customer_fks(conn, src, tgt)
+        if moved:
+            logger.info(
+                "Orphan FK repair: re-pointed %s from deleted customer_id %d → %d",
+                moved, src, tgt,
+            )
+    for table, col in _CUSTOMER_FK_COLUMNS:
+        try:
+            cnt = conn.execute(
+                f"SELECT COUNT(*) AS c FROM {table} "
+                f"WHERE {col} IS NOT NULL "
+                f"AND {col} NOT IN (SELECT customer_id FROM customers)"
+            ).fetchone()["c"]
+            if cnt:
+                logger.warning(
+                    "Orphan FK census: %s.%s has %d row(s) referencing "
+                    "deleted customer_ids", table, col, cnt,
+                )
+        except sqlite3.OperationalError:
+            pass
+
+
 def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
     """Merge known duplicate customer records (idempotent).
 
-    For each pair, reassigns all items from the duplicate to the canonical
-    record, then deletes the duplicate customer row and its emails/aliases.
+    For each pair, reassigns all customer-FK rows from the duplicate to the
+    canonical record via _repoint_customer_fks, then deletes the duplicate
+    customer row and its emails/aliases.
     """
     # Pairs: (lookup_column, lookup_value, canonical_name_preference, email_to_keep)
     # We find pairs by email or phone, keep the lower customer_id (older),
@@ -4905,11 +5134,9 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
                     "SELECT COUNT(*) as cnt FROM items WHERE customer_id = ?", (dup_id,)
                 ).fetchone()["cnt"]
 
-                # Reassign all items from duplicate to canonical
-                conn.execute(
-                    "UPDATE items SET customer_id = ? WHERE customer_id = ?",
-                    (canonical_id, dup_id),
-                )
+                # Reassign every customer FK (items, memberships, statuses,
+                # roles, RSVPs, ledger rows, ...) from duplicate to canonical
+                _repoint_customer_fks(conn, dup_id, canonical_id)
 
                 # Move any customer_emails not already on canonical
                 dup_emails = conn.execute(
@@ -4940,7 +5167,7 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
                             canon_full = f"{canon_row['first_name']} {canon_row['last_name']}"
                             # Add dup name as alias of canonical
                             conn.execute(
-                                "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_name, alias_type) "
+                                "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_value, alias_type) "
                                 "VALUES (?, ?, 'name')",
                                 (canon_full, dup_full),
                             )
@@ -5004,7 +5231,9 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
                     "SELECT COUNT(*) as cnt FROM items WHERE customer_id = ?", (dup_id,)
                 ).fetchone()["cnt"]
 
-                conn.execute("UPDATE items SET customer_id = ? WHERE customer_id = ?", (canonical_id, dup_id))
+                # Reassign every customer FK, not just items — deleting the
+                # dup row below must not orphan memberships/statuses/roles.
+                _repoint_customer_fks(conn, dup_id, canonical_id)
 
                 # Move emails
                 for de in conn.execute("SELECT email FROM customer_emails WHERE customer_id = ?", (dup_id,)).fetchall():
@@ -5021,7 +5250,7 @@ def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
                     dup_full = f"{dup_row['first_name']} {dup_row['last_name']}"
                     canon_full = f"{canon_row['first_name']} {canon_row['last_name']}"
                     conn.execute(
-                        "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_name, alias_type) VALUES (?, ?, 'name')",
+                        "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_value, alias_type) VALUES (?, ?, 'name')",
                         (canon_full, dup_full),
                     )
 
@@ -7233,11 +7462,14 @@ def update_customer_info(customer_name: str, fields: dict,
     imperfect), which used to silently drop the current_player_status /
     venmo_username writes with no error surfaced.
     """
+    # Keep in sync with the route whitelist in app.py api_update_customer —
+    # a field allowed there but missing here is silently dropped while the
+    # endpoint still reports success (the v2.16.13 Archive-button no-op).
     allowed = {"customer_email", "customer_phone", "chapter", "handicap",
                "date_of_birth", "shirt_size", "customer",
                "first_name", "last_name", "middle_name", "suffix",
                "address", "address2", "city", "state", "zip",
-               "venmo_username", "current_player_status"}
+               "archived", "venmo_username", "current_player_status"}
     safe = {k: v for k, v in fields.items() if k in allowed}
     if not safe:
         return 0
@@ -7351,6 +7583,23 @@ def update_customer_info(customer_name: str, fields: dict,
                     "UPDATE handicap_player_links SET customer_name = ? WHERE customer_name = ? COLLATE NOCASE",
                     (safe["customer"], customer_name),
                 )
+                # Propagate the rename to enrollment tables that render their
+                # own customer_name copy (season standings, match play pools) —
+                # cid-keyed when resolved, name-keyed sweep for unlinked rows.
+                for _tbl in ("season_contests", "cmp_pool_members"):
+                    try:
+                        if cid:
+                            conn.execute(
+                                f"UPDATE {_tbl} SET customer_name = ? WHERE customer_id = ?",
+                                (safe["customer"], cid),
+                            )
+                        conn.execute(
+                            f"UPDATE {_tbl} SET customer_name = ? "
+                            f"WHERE customer_id IS NULL AND customer_name = ? COLLATE NOCASE",
+                            (safe["customer"], customer_name),
+                        )
+                    except sqlite3.OperationalError:
+                        pass  # table not created yet on this DB
 
         if cid:
             # Sync email to customer_emails (source of truth for customer contact)
@@ -8461,17 +8710,11 @@ def merge_customers(source_name: str, target_name: str,
             target_cid = target_cust["customer_id"]
             source_cid = source_cust["customer_id"]
 
-            # Reassign all items from source customer_id to target
-            conn.execute(
-                "UPDATE items SET customer_id = ? WHERE customer_id = ?",
-                (target_cid, source_cid),
-            )
-
-            # Reassign tgf_payouts from source to target
-            conn.execute(
-                "UPDATE tgf_payouts SET customer_id = ? WHERE customer_id = ?",
-                (target_cid, source_cid),
-            )
+            # Re-point EVERY customer FK (items, memberships, statuses, roles,
+            # RSVPs, ledger rows, handicap links, contest enrollments, ...) —
+            # not just items/payouts — so the source-row delete below orphans
+            # nothing. Pre-v2.16.13 merges skipped most of these tables.
+            moved = _repoint_customer_fks(conn, source_cid, target_cid)
 
             # Reassign acct_transactions customer field
             conn.execute(
@@ -8497,8 +8740,8 @@ def merge_customers(source_name: str, target_name: str,
 
             # Delete the now-orphaned source customers row
             conn.execute("DELETE FROM customers WHERE customer_id = ?", (source_cid,))
-            logger.info("Merged customer_id %d → %d (emails moved, source deleted)",
-                        source_cid, target_cid)
+            logger.info("Merged customer_id %d → %d (FKs moved: %s; emails moved; source deleted)",
+                        source_cid, target_cid, moved or "none")
         elif not source_cust:
             # Source has no customers row — just reassign any items with source name
             conn.execute(

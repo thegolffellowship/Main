@@ -15,9 +15,9 @@
 
     // ---- Helpers ----
     function esc(str) {
-        const d = document.createElement("div");
-        d.textContent = str || "";
-        return d.innerHTML;
+        // Escapes quotes too — safe for HTML attribute interpolation.
+        return String(str || "").replace(/[&<>"']/g, ch =>
+            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
     }
 
     function currentPage() {

@@ -1,5 +1,37 @@
-window.TGF_VERSION = "2.16.12";
+window.TGF_VERSION = "2.16.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.15",
+    date: "2026-07-02",
+    changes: [
+      "Security: role levels are now actually enforced as a hierarchy (view-only < manager < admin). Previously only 'admin' was checked — any logged-in view-only session could call every manager endpoint (update customers, apply credits, send balance-due emails, import rosters). A view-only PIN is now read-only in practice, not just in name; manager and admin sessions are unaffected.",
+      "Security: the login rate limiter keyed attempts on the FIRST X-Forwarded-For entry, which the client controls — an attacker could bypass PIN brute-force protection by rotating a fake header (or deliberately lock out a victim's IP). It now keys on the last hop, which Railway's edge proxy appends and the client cannot forge.",
+      "Security: every HTML-escaping helper across the app (10 copies in 9 files) now escapes quote characters too. The old div.textContent trick escaped < > & but NOT quotes, and these helpers are routinely interpolated into HTML attributes (data-customer-name=\"...\") — a customer name containing a double-quote could break out of the attribute and inject markup (stored XSS via any imported roster/RSVP/order name). All copies now use one quote-safe implementation.",
+    ],
+  },
+  {
+    version: "2.16.14",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the Archive/Unarchive button on customer cards did nothing — the route accepted the field but update_customer_info()'s internal whitelist silently dropped it while still reporting success. 'archived' is now allowed through, and the button also sends customer_id so the update is keyed by identity instead of display name.",
+      "Fix: editing a transaction's customer name (admin inline edit) changed the display name but kept the OLD person's customer_id on the row, so credits, winnings, memberships, and Venmo balance-due matching still attributed the transaction to the previous customer. The endpoint now re-resolves customer_id whenever the name actually changes (an explicit customer_id in the payload, e.g. from Assign Member, still wins).",
+      "Fix: Assign Guest explicitly NULLed the item's customer_id, leaving the guest's registration invisible to every id-keyed feature until a boot backfill guessed at it. It now resolves (or creates) the guest's own customer record at assign time.",
+      "Fix: the quantity-expansion backfill (Audit tab) built partner rows as copies of the buyer's row, so each partner row carried the BUYER's customer_id — a named partner's registration was attributed to the buyer's identity. Named partners now get their own resolved customer record; unnamed 'Guest of' placeholders get no id rather than the wrong one.",
+      "Fix: customer identity lookup now refuses to guess when two different customers share the exact same first+last name — previously it silently picked one (LIMIT 1), which could attach orders, credits, and payments to the wrong same-named person. An email or alias can still disambiguate; otherwise a fresh profile is created and the boot-time shared-email auto-merge collapses it once an email ties them together.",
+      "Fix: alias lookups (both email- and name-aliases) resolved the customer by reconstructing 'first last' from the customers table instead of using the alias row's own customer_id column — misfiring for names with suffixes/middle names and ambiguous when two customers share a name. The alias's customer_id is now used directly, with the legacy name-join kept only as a fallback for unlinked alias rows.",
+      "Fix: correcting a customer's name on the Info tab now propagates to the season standings and match-play pool member lists (season_contests/cmp_pool_members display-name copies), which previously kept rendering the old name.",
+    ],
+  },
+  {
+    version: "2.16.13",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the boot-time duplicate-customer auto-merge (shared-email detection) crashed mid-merge on every run — it inserted into a customer_aliases column that doesn't exist (alias_name; the real column is alias_value). The crash hit AFTER transactions were re-pointed and the duplicate's emails were stripped but BEFORE the duplicate row was deleted, so every auto-merged duplicate left behind a stripped 'ghost' profile. Column name fixed in both merge branches.",
+      "Fix: merging customers (the Merge button, the boot-time auto-merge, and the boot-time attribution repairs) moved only transactions, emails, and TGF payouts before deleting the source profile — membership terms, member status history, roles, RSVPs, accounting ledger rows, expense links, handicap links/rounds, season contest and match play enrollments, and 10 other linked tables kept pointing at the deleted customer_id, silently orphaning that data. All merge paths now route through a shared helper (_repoint_customer_fks) that re-points every customer-linked table (28 columns across 24 tables) before the source row is deleted.",
+      "Repair: a boot-time pass re-points rows orphaned by the two known pre-fix merges (Joseph Lourigan 406→83, Tim Watson 94→433) and logs a count-only census of any rows still referencing deleted customer_ids, so the deploy log shows whether any other historical merges left orphans (no guessing — unknowns are reported, not auto-moved).",
+      "Fix: the boot-time player-status autocorrect (membership purchase → MEMBER, played-more-than-once → GUEST) updated only the legacy customers.current_player_status column and never wrote the customer_statuses history table — but the Customers page derives badges from the LATEST HISTORY row, so an autocorrected status could keep rendering its stale pre-correction badge indefinitely. A new boot-time reconciler appends a matching history row wherever the newest history row disagrees with the column (the column is authoritative: every writer updates it, only some update history). Verified idempotent across repeated boots.",
+    ],
+  },
   {
     version: "2.16.12",
     date: "2026-07-02",
