@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.16.15";
+window.TGF_VERSION = "2.16.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.16",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the member_plus schema migration has been failing on every production boot since it shipped — it rebuilt the customers table from a hardcoded 14-column definition, but the live table has grown to 17 columns via later migrations, so the data copy aborted (leaving a stale customers_new artifact that then blocked every retry with 'already exists'). Net effect: the status CHECK constraint never gained 'member_plus', so saving a MEMBER+ status failed in production. The migration now rebuilds from the live schema (current columns, indexes, and triggers preserved), clears the stale artifact, and was verified against a simulated production schema: data intact, MEMBER+ writable, autoincrement ids preserved, idempotent. Customer data was never at risk — the old failure happened before the original table was touched.",
+      "Diagnostics: the orphan-FK census (v2.16.13) now breaks its counts down by deleted customer_id — and for orphaned aliases prints the alias itself — so the deploy log identifies WHICH old merge left the rows instead of just how many. (The v2.16.13 deploy found exactly one: a customer_aliases row pointing at a deleted id; next boot will name it.)",
+      "Fix: the Chalfant boot repair logged 're-attributed 1 item(s)' on every boot because its known-order UPDATE matched the already-repaired row unconditionally — a no-op write reported as work. It now skips rows that are already fully correct, so the log only reports genuine repairs.",
+    ],
+  },
   {
     version: "2.16.15",
     date: "2026-07-02",
