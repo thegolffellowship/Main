@@ -431,14 +431,25 @@ def get_customer_data_audit() -> str:
             dupes.append(entry)
         report["same_name_profiles"] = {"count": len(dupes), "rows": dupes[:25]}
 
-        # 3. Customers with no email anywhere / no primary email
+        # 3. Customers with no email anywhere / no primary email.
+        #    Uncapped list, annotated with any email still recoverable from
+        #    their old order rows (candidates for promotion to the profile),
+        #    and with the vendor role where assigned.
         report["no_email"] = _section(
             """SELECT c.customer_id,
                       TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS name,
                       c.chapter, c.current_player_status,
-                      (SELECT COUNT(*) FROM items i WHERE i.customer_id = c.customer_id) AS n_items
+                      (SELECT COUNT(*) FROM items i WHERE i.customer_id = c.customer_id) AS n_items,
+                      (SELECT i.customer_email FROM items i
+                       WHERE i.customer_id = c.customer_id
+                         AND TRIM(COALESCE(i.customer_email, '')) != ''
+                       ORDER BY i.order_date DESC LIMIT 1) AS items_email_candidate,
+                      (SELECT GROUP_CONCAT(role_type) FROM customer_roles r
+                       WHERE r.customer_id = c.customer_id) AS roles
                FROM customers c
-               WHERE NOT EXISTS (SELECT 1 FROM customer_emails e WHERE e.customer_id = c.customer_id)"""
+               WHERE NOT EXISTS (SELECT 1 FROM customer_emails e WHERE e.customer_id = c.customer_id)
+               ORDER BY c.customer_id""",
+            cap=100,
         )
         report["no_primary_email"] = _section(
             """SELECT c.customer_id,
@@ -499,6 +510,16 @@ def get_customer_data_audit() -> str:
             except Exception:
                 pass
         report["unlinked_rows"] = {k: v for k, v in unlinked.items() if v}
+
+        # 6b. The unlinked RSVP rows themselves — names/emails/events so the
+        #     admin can identify who each belongs to.
+        report["unlinked_rsvp_rows"] = _section(
+            """SELECT id, player_name, player_email, gg_event_name, event_date,
+                      response, matched_event
+               FROM rsvps WHERE customer_id IS NULL
+               ORDER BY event_date DESC, player_name""",
+            cap=50,
+        )
 
         # 7. Name aliases that equal ANOTHER customer's canonical name —
         #    orders under that name resolve to the alias owner, not the
