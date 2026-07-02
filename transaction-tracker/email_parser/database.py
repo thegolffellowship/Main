@@ -676,13 +676,20 @@ def _repair_chalfant_attribution(conn: sqlite3.Connection) -> None:
     # 4. Fix corrupted items rows.  Four overlapping cases ensure full coverage
     #    regardless of which fields were overwritten by the drift guard or heal.
 
-    # (a) Known order R222413986 (confirmed from Audit Log raw email body)
+    # (a) Known order R222413986 (confirmed from Audit Log raw email body).
+    #     Skip rows that are already fully correct — without the guard this
+    #     matched (and "re-attributed") the same healthy row on every boot,
+    #     making the log claim work that never happened.
     fixed_a = conn.execute(
         """UPDATE items
            SET customer = 'Tanner Chalfant', customer_id = ?, customer_email = ?,
                customer_phone = CASE WHEN customer_phone = ? THEN ? ELSE customer_phone END
-           WHERE order_id IN ('R222413986', '#R222413986', 'R-222413986', '222413986')""",
-        (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE),
+           WHERE order_id IN ('R222413986', '#R222413986', 'R-222413986', '222413986')
+             AND (customer_id IS NOT ?
+                  OR customer != 'Tanner Chalfant'
+                  OR LOWER(COALESCE(customer_email, '')) != LOWER(?))""",
+        (_CHALFANT_CID, _CHALFANT_EMAIL, _MCCRARY_PHONE, _CHALFANT_PHONE,
+         _CHALFANT_CID, _CHALFANT_EMAIL),
     ).rowcount
 
     # (b) Items with Chalfant's email still under McCrary's customer_id
@@ -1594,42 +1601,72 @@ def _migrate_seed_customer_roles(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_add_member_plus_status(conn: sqlite3.Connection) -> None:
-    """Add 'member_plus' to the customers.current_player_status CHECK constraint."""
+    """Add 'member_plus' to the customers.current_player_status CHECK constraint.
+
+    Rebuilds the table from its LIVE schema (sqlite_master sql + PRAGMA
+    column list) instead of a hardcoded column set. The original version
+    hardcoded the 14 columns from the first CREATE TABLE, but production's
+    customers table has since gained columns via ALTER TABLE — the
+    INSERT..SELECT * failed with a column-count mismatch AFTER creating
+    customers_new, and the stale artifact then blocked every retry with
+    "customers_new already exists". Net effect: the CHECK constraint never
+    gained member_plus, so setting a customer to MEMBER+ failed in
+    production. Data was never at risk (the failure preceded the DROP).
+    Idempotent; cleans up the stale artifact either way.
+    """
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='customers'"
     ).fetchone()
     if not row or "member_plus" in (row["sql"] or ""):
+        # Already migrated — just clear any artifact a pre-fix failed run left
+        conn.execute("DROP TABLE IF EXISTS customers_new")
+        conn.commit()
         return
     logger.info("Migrating customers table: adding member_plus to CHECK constraint")
-    conn.executescript("""
-        PRAGMA foreign_keys = OFF;
-        CREATE TABLE customers_new (
-            customer_id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            platform_user_id     INTEGER,
-            first_name           VARCHAR(100) NOT NULL,
-            last_name            VARCHAR(100) NOT NULL,
-            phone                VARCHAR(30),
-            chapter              VARCHAR(50),
-            ghin_number          VARCHAR(20),
-            current_player_status VARCHAR(30)
-                CHECK (current_player_status IN (
-                    'active_member', 'member_plus', 'expired_member',
-                    'active_guest', 'inactive', 'first_timer'
-                )),
-            first_timer_ever     INTEGER,
-            acquisition_source   VARCHAR(50),
-            account_status       VARCHAR(20) NOT NULL DEFAULT 'active'
-                CHECK (account_status IN ('active', 'inactive', 'banned')),
-            venmo_username       VARCHAR(50),
-            created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT INTO customers_new SELECT * FROM customers;
-        DROP TABLE customers;
-        ALTER TABLE customers_new RENAME TO customers;
-        PRAGMA foreign_keys = ON;
-    """)
-    logger.info("customers table migrated: member_plus status added")
+
+    create_sql = row["sql"] or ""
+    if "'active_member'" not in create_sql:
+        logger.warning(
+            "member_plus migration: customers CHECK constraint not in the "
+            "expected shape — skipping rather than guessing"
+        )
+        return
+    new_sql = re.sub(
+        r"CREATE TABLE\s+(\"customers\"|customers)\b",
+        "CREATE TABLE customers_new",
+        create_sql.replace("'active_member'", "'active_member', 'member_plus'", 1),
+        count=1,
+    )
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(customers)")]
+    col_list = ", ".join(f'"{c}"' for c in cols)
+    # Indexes/triggers die with DROP TABLE — capture them for re-creation
+    aux_sql = [
+        r["sql"] for r in conn.execute(
+            """SELECT sql FROM sqlite_master
+               WHERE type IN ('index', 'trigger') AND tbl_name = 'customers'
+                 AND sql IS NOT NULL"""
+        ).fetchall()
+    ]
+
+    conn.commit()  # PRAGMA foreign_keys is a no-op inside a transaction
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("DROP TABLE IF EXISTS customers_new")
+        conn.execute(new_sql)
+        conn.execute(
+            f"INSERT INTO customers_new ({col_list}) SELECT {col_list} FROM customers"
+        )
+        conn.execute("DROP TABLE customers")
+        conn.execute("ALTER TABLE customers_new RENAME TO customers")
+        for sql in aux_sql:
+            conn.execute(sql)
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+    logger.info(
+        "customers table migrated: member_plus status added (%d columns, "
+        "%d indexes/triggers preserved)", len(cols), len(aux_sql),
+    )
 
 
 _ROMAN_RE = re.compile(r"^(i{1,3}|iv|v|vi{0,3}|ix|x)$")
@@ -5047,10 +5084,31 @@ def _repair_merged_customer_fk_orphans(conn: sqlite3.Connection) -> None:
                 f"AND {col} NOT IN (SELECT customer_id FROM customers)"
             ).fetchone()["c"]
             if cnt:
+                # Break down by dead id so the deploy log identifies WHICH
+                # old merge left the rows — count alone isn't actionable.
+                dead = conn.execute(
+                    f"SELECT {col} AS dead_id, COUNT(*) AS n FROM {table} "
+                    f"WHERE {col} IS NOT NULL "
+                    f"AND {col} NOT IN (SELECT customer_id FROM customers) "
+                    f"GROUP BY {col} ORDER BY n DESC LIMIT 10"
+                ).fetchall()
                 logger.warning(
                     "Orphan FK census: %s.%s has %d row(s) referencing "
-                    "deleted customer_ids", table, col, cnt,
+                    "deleted customer_ids: %s", table, col, cnt,
+                    ", ".join(f"cid {r['dead_id']} ×{r['n']}" for r in dead),
                 )
+                if table == "customer_aliases":
+                    for r in conn.execute(
+                        f"SELECT customer_name, alias_value, alias_type, {col} AS dead_id "
+                        f"FROM customer_aliases "
+                        f"WHERE {col} IS NOT NULL "
+                        f"AND {col} NOT IN (SELECT customer_id FROM customers) LIMIT 5"
+                    ).fetchall():
+                        logger.warning(
+                            "  orphaned alias: %r → %r (type=%s, dead cid %s)",
+                            r["alias_value"], r["customer_name"],
+                            r["alias_type"], r["dead_id"],
+                        )
         except sqlite3.OperationalError:
             pass
 
