@@ -6190,6 +6190,9 @@ def _log_gg_export_email_changes(conn: sqlite3.Connection) -> None:
     ).fetchall()
     changed = gained = 0
     for r in rows:
+        if (r["player_name"] or "").strip().lower() in _GG_SYNC_EXCLUDES or \
+                (r["customer_name"] or "").strip().lower() in _GG_SYNC_EXCLUDES:
+            continue  # admin-removed from GG; export skips them, so must this diff
         canon = (r["canonical"] or "").strip()
         legacy = (r["legacy"] or "").strip()
         if canon and legacy and canon != legacy:
