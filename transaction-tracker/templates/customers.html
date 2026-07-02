@@ -926,8 +926,8 @@
             { key: "customer_phone", label: "Phone", value: customer.phone || "" },
             { key: "chapter", label: "Chapter", value: customer.chapter || "" },
             { key: "venmo_username", label: "Venmo", value: customer.venmo_username || "" },
-            { key: "date_of_birth", label: "Date of Birth", value: (customer.items[0] || {}).date_of_birth || "" },
-            { key: "shirt_size", label: "Shirt Size", value: (customer.items[0] || {}).shirt_size || "" },
+            { key: "date_of_birth", label: "Date of Birth", value: customer.items.map(i => i.date_of_birth).find(Boolean) || "" },
+            { key: "shirt_size", label: "Shirt Size", value: customer.items.map(i => i.shirt_size).find(Boolean) || "" },
             { key: "address", label: "Address", value: customer.items.map(i => i.address).find(Boolean) || "" },
             { key: "address2", label: "Address 2", value: customer.items.map(i => i.address2).find(Boolean) || "" },
             { key: "city", label: "City", value: customer.items.map(i => i.city).find(Boolean) || "" },
@@ -963,7 +963,7 @@
             </div>
         </div>
         <div class="cust-tab-content cust-tab-winnings" style="display:none;">
-            <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}">
+            <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}" data-customer-id="${customer.customer_id || ''}">
                 <div class="cust-winnings-wrapper" style="font-size:0.82rem;">
                     <span style="color:var(--text-muted);">Loading winnings...</span>
                 </div>
@@ -1164,8 +1164,9 @@
                             if (target === "winnings") {
                                 const wrapper = mWinnings.querySelector(".cust-winnings-wrapper");
                                 if (wrapper && wrapper.textContent.includes("Loading")) {
-                                    const custName = mWinnings.querySelector(".cust-winnings-container")?.dataset?.customerName;
-                                    if (custName) loadCustomerWinnings(custName, wrapper);
+                                    const wContainer = mWinnings.querySelector(".cust-winnings-container");
+                                    const custName = wContainer?.dataset?.customerName;
+                                    if (custName) loadCustomerWinnings(custName, wrapper, wContainer?.dataset?.customerId);
                                 }
                             }
                         }
@@ -1945,6 +1946,7 @@
         try {
             const res = await fetch(`/api/customers/aliases?customer_name=${encodeURIComponent(customerName)}`);
             const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to load aliases");
             const aliases = data.aliases || [];
 
             // Render read-only view
@@ -2124,7 +2126,7 @@
 
         // Winnings tab content (loaded async)
         html += `<div class="cust-tab-content cust-tab-winnings" style="${_at !== 'winnings' ? 'display:none;' : ''}">
-            <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}">
+            <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}" data-customer-id="${customer.customer_id || ''}">
                 <div class="cust-winnings-wrapper" style="font-size:0.82rem;">
                     <span style="color:var(--text-muted);">Loading winnings...</span>
                 </div>
@@ -2148,6 +2150,10 @@
             const data = await res.json();
             if (data.error === "not linked") {
                 wrapper.innerHTML = '<span style="color:var(--text-muted);">No handicap player linked to this customer.</span>';
+                return;
+            }
+            if (!res.ok) {
+                wrapper.innerHTML = `<span style="color:#dc2626;">${escapeHtml(data.error || 'Failed to load scores.')}</span>`;
                 return;
             }
             if (!data.rounds || data.rounds.length === 0) {
@@ -2200,12 +2206,14 @@
         }
     }
 
-    async function loadCustomerWinnings(customerName, wrapper) {
+    async function loadCustomerWinnings(customerName, wrapper, customerId) {
         try {
-            const res = await fetch(`/api/customers/winnings?customer_name=${encodeURIComponent(customerName)}`);
+            const qs = new URLSearchParams({ customer_name: customerName });
+            if (customerId) qs.set("customer_id", customerId);
+            const res = await fetch(`/api/customers/winnings?${qs.toString()}`);
             const data = await res.json();
             if (!data.golfer_name) {
-                wrapper.innerHTML = '<span style="color:var(--text-muted);">No payout records found for this customer.</span>';
+                wrapper.innerHTML = '<span style="color:var(--text-muted);">Could not link this player to a payout record — not the same as having zero winnings.</span>';
                 return;
             }
             if (!data.payouts || data.payouts.length === 0) {
@@ -2327,8 +2335,9 @@
                     if (target === "winnings") {
                         const wrapper = winningsTab.querySelector(".cust-winnings-wrapper");
                         if (wrapper && wrapper.textContent.includes("Loading")) {
-                            const custName = winningsTab.querySelector(".cust-winnings-container")?.dataset?.customerName;
-                            if (custName) loadCustomerWinnings(custName, wrapper);
+                            const wContainer = winningsTab.querySelector(".cust-winnings-container");
+                            const custName = wContainer?.dataset?.customerName;
+                            if (custName) loadCustomerWinnings(custName, wrapper, wContainer?.dataset?.customerId);
                         }
                     }
                 }
@@ -2356,8 +2365,9 @@
             if (winningsTab) {
                 const wrapper = winningsTab.querySelector(".cust-winnings-wrapper");
                 if (wrapper && wrapper.textContent.includes("Loading")) {
-                    const custName = winningsTab.querySelector(".cust-winnings-container")?.dataset?.customerName;
-                    if (custName) loadCustomerWinnings(custName, wrapper);
+                    const wContainer = winningsTab.querySelector(".cust-winnings-container");
+                    const custName = wContainer?.dataset?.customerName;
+                    if (custName) loadCustomerWinnings(custName, wrapper, wContainer?.dataset?.customerId);
                 }
             }
         }
@@ -2664,7 +2674,7 @@
 
         // Winnings tab (loaded async)
         panelHtml += `<div class="cust-tab-content cust-tab-winnings" style="${_at2 !== 'winnings' ? 'display:none;' : ''}">
-            <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}">
+            <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}" data-customer-id="${customer.customer_id || ''}">
                 <div class="cust-winnings-wrapper" style="font-size:0.82rem;">
                     <span style="color:var(--text-muted);">Loading winnings...</span>
                 </div>
@@ -3709,9 +3719,18 @@
                     const canon = (c.customer_id && canonById[c.customer_id])
                         || canonByName[c.name.toLowerCase()];
                     if (!canon) return;
-                    // Canonical email and phone always win
+                    // Canonical email, phone, and name always win. first_name/last_name
+                    // display on the Info tab; update_customer_info() writes name
+                    // corrections to items keyed by exact customer-string match, so an
+                    // items row whose customer text differs even slightly (old typo,
+                    // pre-merge spelling) silently keeps the stale name forever unless
+                    // overlaid here — without this, a name fix can look like it reverted
+                    // (or like a duplicate profile) on the next refresh. Does not touch
+                    // c.name itself (the grouping/lookup key), only the display fields.
                     if (canon.primary_email) c.email = canon.primary_email;
                     if (canon.phone) c.phone = canon.phone;
+                    if (canon.first_name) c.first_name = canon.first_name;
+                    if (canon.last_name) c.last_name = canon.last_name;
                     // Ensure customer_id is populated
                     if (canon.customer_id && !c.customer_id) c.customer_id = canon.customer_id;
                 });

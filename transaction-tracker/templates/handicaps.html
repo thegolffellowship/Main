@@ -620,10 +620,15 @@
         document.getElementById('btn-settings').addEventListener('click', openSettingsModal);
         document.getElementById('btn-purge').addEventListener('click', async () => {
             if (!confirm('Delete ALL rounds with 18-hole course ratings (rating > 50)? This cannot be undone.')) return;
-            const r = await fetch('/api/handicaps/purge-invalid', { method: 'POST' });
-            const d = await r.json();
-            alert(`Deleted ${d.deleted} invalid round(s).`);
-            if (d.deleted > 0) loadPlayers();
+            try {
+                const r = await fetch('/api/handicaps/purge-invalid', { method: 'POST' });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || `Server returned ${r.status}`);
+                alert(`Deleted ${d.deleted} invalid round(s).`);
+                if (d.deleted > 0) loadPlayers();
+            } catch (e) {
+                alert('Purge failed: ' + e.message);
+            }
         });
 
         document.getElementById('btn-auto-link').addEventListener('click', async () => {
@@ -633,10 +638,11 @@
             try {
                 const r = await fetch('/api/handicaps/auto-link', { method: 'POST' });
                 const d = await r.json();
+                if (!r.ok) throw new Error(d.error || `Server returned ${r.status}`);
                 alert(`Auto-link complete:\n• Newly linked: ${d.linked}\n• Still unlinked: ${d.still_unlinked}\n• Total players: ${d.total}\n\nUnlinked players have no matching customer record (name mismatch). You can link them manually via the Customers page.`);
                 if (d.linked > 0) loadPlayers();
             } catch (e) {
-                alert('Auto-link failed: ' + e);
+                alert('Auto-link failed: ' + e.message);
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Auto-link Players';
@@ -651,10 +657,11 @@
             try {
                 const r = await fetch('/api/handicaps/create-customers-for-unlinked', { method: 'POST' });
                 const d = await r.json();
+                if (!r.ok) throw new Error(d.error || `Server returned ${r.status}`);
                 alert(`Done:\n• Created (archived): ${d.created}\n• Linked to existing: ${d.linked}\n• Total processed: ${d.total}`);
                 if (d.created > 0 || d.linked > 0) loadPlayers();
             } catch (e) {
-                alert('Failed: ' + e);
+                alert('Failed: ' + e.message);
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Create Customers for Unlinked';
@@ -669,6 +676,7 @@
             try {
                 const r = await fetch('/api/handicaps/repair-swapped-links', { method: 'POST' });
                 const d = await r.json();
+                if (!r.ok) throw new Error(d.error || `Server returned ${r.status}`);
                 if (d.repaired > 0) {
                     alert(`Repaired ${d.repaired} swapped link(s):\n${d.details.join('\n')}`);
                     loadPlayers();
@@ -676,7 +684,7 @@
                     alert('No swapped links found — all links look correct.');
                 }
             } catch (e) {
-                alert('Failed: ' + e);
+                alert('Failed: ' + e.message);
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Repair Links';
@@ -1613,25 +1621,33 @@
                 body: JSON.stringify({ name: playerName, first_name: firstName, last_name: lastName })
             });
             const d = await res.json();
-            if (d.error) throw new Error(d.error);
+            if (!res.ok || d.error) throw new Error(d.error || `Server returned ${res.status}`);
 
             // Now link the player to the newly created customer
-            await fetch('/api/handicaps/link-player', {
+            const linkRes = await fetch('/api/handicaps/link-player', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ player_name: playerName, customer_name: playerName })
             });
+            if (!linkRes.ok) {
+                const linkErr = await linkRes.json().catch(() => ({}));
+                throw new Error(linkErr.error || `Customer created but linking failed (${linkRes.status})`);
+            }
             _allCustomerNames = []; // reset cache
             loadPlayers();
         } catch (e) {
             if (e.message === 'Customer already exists') {
                 // Customer exists, just link
                 try {
-                    await fetch('/api/handicaps/link-player', {
+                    const linkRes = await fetch('/api/handicaps/link-player', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ player_name: playerName, customer_name: playerName })
                     });
+                    if (!linkRes.ok) {
+                        const linkErr = await linkRes.json().catch(() => ({}));
+                        throw new Error(linkErr.error || `Server returned ${linkRes.status}`);
+                    }
                     _allCustomerNames = [];
                     loadPlayers();
                 } catch (e2) {

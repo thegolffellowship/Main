@@ -23174,17 +23174,27 @@ def import_tgf_golfers(golfers: list[dict], db_path=None) -> dict:
     return {"added": added, "updated": updated}
 
 
-def get_customer_winnings(customer_name: str, db_path=None) -> dict:
+def get_customer_winnings(customer_name: str, db_path=None, customer_id: int | None = None) -> dict:
     """Look up payout/winnings history for a customer by customer_id.
 
-    Resolves the provided name to a customer via the standard lookup cascade,
-    then queries tgf_payouts by customer_id directly.
+    ``customer_id``, when the caller already has it (the Customers page has
+    it resolved on every card), is used directly instead of re-deriving it
+    from ``customer_name`` via the unqualified name-match step of the lookup
+    cascade — two different real customers sharing a first+last name would
+    otherwise both resolve to whichever one the cascade finds first, showing
+    one member the other's payout history under their own name.
 
     Returns {golfer_name, total_winnings, payouts: [{event_name, event_date, category, amount, description}]}.
     The field name 'golfer_name' is retained for backward-compatible API response shape.
     """
     with _connect(db_path) as conn:
-        customer_id = _lookup_customer_id(conn, customer_name, None)
+        if customer_id:
+            row = conn.execute(
+                "SELECT customer_id FROM customers WHERE customer_id = ?", (customer_id,)
+            ).fetchone()
+            customer_id = row["customer_id"] if row else None
+        if not customer_id:
+            customer_id = _lookup_customer_id(conn, customer_name, None)
         if customer_id is None:
             return {"golfer_name": None, "total_winnings": 0, "payouts": []}
 

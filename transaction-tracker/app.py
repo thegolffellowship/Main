@@ -4195,12 +4195,21 @@ def api_delete_alias(alias_id):
 @app.route("/api/customers/winnings")
 @require_role("view-only")
 def api_customer_winnings():
-    """Get payout/winnings history for a customer."""
+    """Get payout/winnings history for a customer.
+
+    Query: ?customer_name=...&customer_id=... — customer_id, when given, is
+    used directly instead of an unqualified name match (see
+    get_customer_winnings() for the same-name collision risk that avoids).
+    """
     from email_parser.database import get_customer_winnings
     name = request.args.get("customer_name", "").strip()
     if not name:
         return jsonify({"error": "customer_name required"}), 400
-    return jsonify(get_customer_winnings(name))
+    try:
+        customer_id = int(request.args.get("customer_id")) if request.args.get("customer_id") else None
+    except (TypeError, ValueError):
+        customer_id = None
+    return jsonify(get_customer_winnings(name, customer_id=customer_id))
 
 
 @app.route("/api/customers/from-rsvp", methods=["POST"])
@@ -8606,6 +8615,20 @@ def api_acct_create_vendor():
             "SELECT customer_id FROM customers WHERE LOWER(COALESCE(company_name,'')) = LOWER(?) LIMIT 1",
             (name,),
         ).fetchone()
+        if not existing:
+            # Also check personal first+last name — a vendor whose display
+            # name happens to exactly match an existing personal customer
+            # (e.g. a sole-proprietor course pro billed under their own
+            # name) would otherwise get a second, disconnected customers
+            # row instead of reusing the real one.
+            parts = name.split(None, 1)
+            if len(parts) == 2:
+                existing = conn.execute(
+                    """SELECT customer_id FROM customers
+                       WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)
+                       LIMIT 1""",
+                    (parts[0], parts[1]),
+                ).fetchone()
 
         if existing:
             cid = existing["customer_id"]
