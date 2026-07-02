@@ -552,3 +552,142 @@ def run_scheduled_sync(db_path=None) -> dict[str, Any]:
     update_handicap_settings({"last_gg_sync": json.dumps(results)}, db_path=db_path)
 
     return results
+
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Public-page probe (read-only, no login)
+#
+#  Powers the MCP `probe_golf_genius` tool: fetch a public GG portal page
+#  from the Railway side (which has open egress to golfgenius.com) and
+#  return a parsed structure. This is the exploration path for importing
+#  results/standings data into the tracker.
+# ─────────────────────────────────────────────────────────────────────────
+
+def _require_gg_host(url: str) -> None:
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Only https:// URLs are allowed")
+    host = (parsed.hostname or "").lower()
+    if host != "golfgenius.com" and not host.endswith(".golfgenius.com"):
+        raise ValueError("Only golfgenius.com URLs are allowed")
+
+
+def fetch_public_page(url: str, timeout: int = 20) -> dict:
+    """Fetch a public Golf Genius page without logging in.
+
+    The host allowlist is a hard requirement: this function is exposed
+    through an MCP tool, so without it the tool would be an open proxy
+    into the Railway network (SSRF). Redirect targets are re-validated.
+    """
+    _require_gg_host(url)
+    resp = requests.get(url, headers=_HEADERS, timeout=timeout, allow_redirects=True)
+    _require_gg_host(resp.url)
+    return {"status_code": resp.status_code, "final_url": resp.url, "html": resp.text}
+
+
+def parse_page_structure(html: str, base_url: str) -> dict:
+    """Extract title, headings, links, tables, and visible text from a page.
+
+    Stdlib-only (html.parser) — the app has no bs4/lxml dependency and a
+    tolerant rough parse is all the probe needs.
+    """
+    from html.parser import HTMLParser
+    from urllib.parse import urljoin
+
+    class _P(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.title = ""
+            self.headings: list = []
+            self.links: list = []
+            self.tables: list = []
+            self.text_parts: list = []
+            self._skip_depth = 0          # inside <script>/<style>
+            self._in_title = False
+            self._heading: list | None = None   # [tag, buf]
+            self._link: list | None = None      # [href, buf]
+            self._table_stack: list = []        # nested tables
+            self._cell: list | None = None
+
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            if tag in ("script", "style", "noscript"):
+                self._skip_depth += 1
+            elif tag == "title":
+                self._in_title = True
+            elif tag in ("h1", "h2", "h3", "h4"):
+                self._heading = [tag, []]
+            elif tag == "a" and a.get("href"):
+                self._link = [a["href"], []]
+            elif tag == "table":
+                self._table_stack.append([])
+            elif tag == "tr" and self._table_stack:
+                self._table_stack[-1].append([])
+            elif tag in ("td", "th") and self._table_stack:
+                if not self._table_stack[-1]:
+                    self._table_stack[-1].append([])
+                self._cell = []
+
+        def handle_endtag(self, tag):
+            if tag in ("script", "style", "noscript"):
+                self._skip_depth = max(0, self._skip_depth - 1)
+            elif tag == "title":
+                self._in_title = False
+            elif tag in ("h1", "h2", "h3", "h4") and self._heading:
+                text = " ".join("".join(self._heading[1]).split())
+                if text:
+                    self.headings.append({"tag": self._heading[0], "text": text})
+                self._heading = None
+            elif tag == "a" and self._link:
+                text = " ".join("".join(self._link[1]).split())
+                self.links.append({"text": text, "href": urljoin(base_url, self._link[0])})
+                self._link = None
+            elif tag in ("td", "th") and self._cell is not None:
+                if self._table_stack and self._table_stack[-1]:
+                    self._table_stack[-1][-1].append(
+                        " ".join("".join(self._cell).split()))
+                self._cell = None
+            elif tag == "table" and self._table_stack:
+                rows = [r for r in self._table_stack.pop() if r]
+                if rows:
+                    self.tables.append(rows)
+
+        def handle_data(self, data):
+            if self._skip_depth:
+                return
+            if self._in_title:
+                self.title += data
+            if self._heading is not None:
+                self._heading[1].append(data)
+            if self._link is not None:
+                self._link[1].append(data)
+            if self._cell is not None:
+                self._cell.append(data)
+            if data.strip():
+                self.text_parts.append(data.strip())
+
+    p = _P()
+    try:
+        p.feed(html)
+        p.close()
+    except Exception:
+        pass  # tolerate malformed HTML — return whatever was collected
+
+    # Dedup links preserving order
+    seen = set()
+    links = []
+    for lk in p.links:
+        key = (lk["text"], lk["href"])
+        if key in seen:
+            continue
+        seen.add(key)
+        links.append(lk)
+
+    return {
+        "title": " ".join(p.title.split()),
+        "headings": p.headings,
+        "links": links,
+        "tables": p.tables,
+        "text": "\n".join(p.text_parts),
+    }
