@@ -1107,3 +1107,61 @@ function initContractorsTab() {
         ?.addEventListener('change', renderContractors);
     loadContractors();
 }
+
+// ── Vendors panel ──────────────────────────────────────────────────────────
+// Expense payees: customers-table rows tagged with the vendor role, excluded
+// from the Customers page. This panel on the Accounting page is their home.
+
+async function loadVendors() {
+    const res = await fetch('/api/accounting/vendors');
+    const data = res.ok ? await res.json() : [];
+    const list = $('#vendors-list');
+    if (!data.length) {
+        list.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">No vendors yet.</p>';
+        return;
+    }
+    const rows = data.map(v => `
+        <tr>
+            <td>${escAttr(v.display_name)}</td>
+            <td style="color:var(--text-muted);">${escAttr(v.phone || '—')}</td>
+            <td style="text-align:right;">${v.n_ledger_rows}</td>
+        </tr>`).join('');
+    list.innerHTML = `
+        <table class="acct-table" style="width:100%;">
+            <thead><tr>
+                <th style="text-align:left;">Vendor</th>
+                <th style="text-align:left;">Phone</th>
+                <th style="text-align:right;">Ledger Entries</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+        <p style="margin-top:0.5rem; font-size:0.78rem; color:var(--text-muted);">
+            ${data.length} vendor${data.length === 1 ? '' : 's'}
+        </p>`;
+}
+
+function initVendorsPanel() {
+    $('#btn-vendors')?.addEventListener('click', async () => {
+        const panel = $('#vendors-panel');
+        if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+        await loadVendors();
+        panel.style.display = 'block';
+    });
+    $('#btn-close-vendors')?.addEventListener('click', () => {
+        $('#vendors-panel').style.display = 'none';
+    });
+    $('#btn-add-vendor')?.addEventListener('click', async () => {
+        const name = prompt('Vendor name:');
+        if (!name || !name.trim()) return;
+        const res = await fetch('/api/accounting/vendors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name.trim() }),
+        });
+        if (res.ok) {
+            await loadVendors();
+        } else {
+            alert('Failed to create vendor.');
+        }
+    });
+}

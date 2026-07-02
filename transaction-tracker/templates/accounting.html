@@ -149,6 +149,9 @@
                     <button class="btn btn-secondary btn-sm" id="btn-review-queue" title="Review uncategorized transactions">
                         Review Queue
                     </button>
+                    <button class="btn btn-secondary btn-sm" id="btn-vendors" title="Vendors (expense payees) — tagged out of the Customers page">
+                        Vendors
+                    </button>
                 </div>
             </div>
 
@@ -187,6 +190,23 @@
                     <button class="btn btn-secondary btn-sm" id="btn-close-review">Close</button>
                 </div>
                 <div id="review-queue-list"></div>
+            </div>
+
+            <!-- Vendors (hidden by default) — expense payees, tagged with the
+                 vendor role and excluded from the Customers page -->
+            <div class="acct-review-queue" id="vendors-panel" style="display:none;">
+                <div class="acct-review-header">
+                    <h3>Vendors</h3>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn btn-primary btn-sm" id="btn-add-vendor">+ Add Vendor</button>
+                        <button class="btn btn-secondary btn-sm" id="btn-close-vendors">Close</button>
+                    </div>
+                </div>
+                <p style="font-size:0.8rem; color:var(--text-muted); margin:0.25rem 0 0.75rem;">
+                    Payees for expense tracking. They live in the customer table for
+                    ledger linking but never appear on the Customers page or in member counts.
+                </p>
+                <div id="vendors-list"></div>
             </div>
 
             <!-- Pending Expenses (auto-parsed from bank alerts, Venmo, receipts) -->

@@ -244,6 +244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // AI Bookkeeper
     $('#btn-ai-categorize').addEventListener('click', runAiCategorize);
     $('#btn-review-queue').addEventListener('click', loadReviewQueue);
+    initVendorsPanel();
     $('#btn-close-review').addEventListener('click', () => {
         $('#review-queue').style.display = 'none';
         loadDashboard();

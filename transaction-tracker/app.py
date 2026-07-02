@@ -8702,6 +8702,39 @@ def api_acct_account_balances():
 
 # ── Transactions ──────────────────────────────────────────────────────────
 
+@app.route("/api/accounting/vendors")
+@require_role("admin")
+def api_acct_list_vendors():
+    """List vendor-role customers with their ledger activity.
+
+    Vendors live in the customers table (the expense ledger references
+    payees by customer_id) but are tagged with the 'vendor' role and
+    excluded from every people-facing surface — this list on the
+    Accounting page is their home.
+    """
+    from email_parser.database import _connect
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT c.customer_id, c.company_name, c.first_name, c.last_name,
+                      c.phone,
+                      (SELECT COUNT(*) FROM acct_transactions a
+                       WHERE a.customer_id = c.customer_id
+                         AND COALESCE(a.status, 'active') != 'merged') AS n_ledger_rows
+               FROM customers c
+               WHERE EXISTS (SELECT 1 FROM customer_roles r
+                             WHERE r.customer_id = c.customer_id
+                               AND r.role_type = 'vendor')
+               ORDER BY COALESCE(NULLIF(c.company_name, ''), c.last_name) COLLATE NOCASE"""
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["display_name"] = d.get("company_name") or \
+            f"{d.get('first_name', '')} {d.get('last_name', '')}".strip()
+        out.append(d)
+    return jsonify(out)
+
+
 @app.route("/api/accounting/vendors", methods=["POST"])
 @require_role("admin")
 def api_acct_create_vendor():
