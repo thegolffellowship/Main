@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.17.9";
+window.TGF_VERSION = "2.17.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.10",
+    date: "2026-07-02",
+    changes: [
+      "Fix: the lead-email separation was fighting a resurrection loop visible in the last deploy log — it removed Joe Orel's email from Garza's profile, then the historical-alias capture re-created it from the old order row's email snapshot, and the RSVP backfill re-linked the decline, every boot. The separation is now a full quarantine: a lead's email is removed from every profile, every alias, every RSVP link, AND the items.customer_email snapshots that fed the capture step. One pass, permanent.",
+      "Data (admin-provided): Chris Best — Doug Hamilton's guest, played s18.7 KISSING TREE — gets chris.best@ferguson.com and (864) 601-0467 on his profile.",
+      "Repair: the 'Casey Best' profile is queued for deletion — not a person, but a name-mash of Doug Hamilton's two guests, Casey Purvis and Chris Best, who each have their own profiles. Same pinned-and-guarded fragment delete as the Brandons: if anything still references it, the deploy log lists exactly what, instead of deleting.",
+    ],
+  },
   {
     version: "2.17.9",
     date: "2026-07-02",
