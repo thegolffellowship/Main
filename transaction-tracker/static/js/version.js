@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.16.16";
+window.TGF_VERSION = "2.16.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.17",
+    date: "2026-07-02",
+    changes: [
+      "Diagnostics: new boot-time duplicate-name census logs every pair of customer profiles sharing the same first+last name, with each profile's emails and per-table reference counts (transactions, memberships, handicap links, etc.). Needed because the v2.16.14 ambiguity guard intentionally leaves name-keyed rows unlinked when two same-named profiles exist — the census puts everything needed to pick the canonical profile in the deploy log, where duplicate profiles with zero transactions are otherwise invisible (the Customers page and MCP tools group by transactions). Log-only; changes nothing.",
+    ],
+  },
   {
     version: "2.16.16",
     date: "2026-07-02",

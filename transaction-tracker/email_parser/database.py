@@ -4480,6 +4480,13 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_merged_customer_fk_orphans(conn)
         except Exception:
             logger.exception("Non-fatal: _repair_merged_customer_fk_orphans failed")
+
+        # Log-only census of same-named customer profiles (which one holds
+        # what) so ambiguous-name cases can be resolved from the deploy log.
+        try:
+            _log_duplicate_name_customers(conn)
+        except Exception:
+            logger.exception("Non-fatal: _log_duplicate_name_customers failed")
         try:
             _promote_lone_customer_emails_to_primary(conn)
         except Exception:
@@ -5111,6 +5118,52 @@ def _repair_merged_customer_fk_orphans(conn: sqlite3.Connection) -> None:
                         )
         except sqlite3.OperationalError:
             pass
+
+
+def _log_duplicate_name_customers(conn: sqlite3.Connection) -> None:
+    """Log same-first+last customer pairs and what each profile holds.
+
+    The v2.16.14 ambiguity guard refuses to guess between same-named
+    profiles, so name-keyed backfills leave rows unlinked until a human
+    decides which profile is canonical. This census puts everything needed
+    for that decision in the deploy log: which customer_ids share a name,
+    each profile's emails, and per-table reference counts. Changes nothing.
+    """
+    dupes = conn.execute(
+        """SELECT LOWER(TRIM(first_name)) AS f, LOWER(TRIM(last_name)) AS l,
+                  GROUP_CONCAT(customer_id) AS cids, COUNT(*) AS n
+           FROM customers
+           WHERE COALESCE(TRIM(first_name), '') != ''
+             AND COALESCE(TRIM(last_name), '') != ''
+           GROUP BY 1, 2 HAVING n > 1"""
+    ).fetchall()
+    for d in dupes:
+        parts = []
+        for cid_str in d["cids"].split(","):
+            cid = int(cid_str)
+            refs = []
+            emails = [
+                r["email"] for r in conn.execute(
+                    "SELECT email FROM customer_emails WHERE customer_id = ?", (cid,)
+                )
+            ]
+            if emails:
+                refs.append("emails=" + "/".join(emails))
+            for table, col in _CUSTOMER_FK_COLUMNS:
+                try:
+                    cnt = conn.execute(
+                        f"SELECT COUNT(*) AS c FROM {table} WHERE {col} = ?", (cid,)
+                    ).fetchone()["c"]
+                except sqlite3.OperationalError:
+                    continue
+                if cnt:
+                    label = table if col == "customer_id" else f"{table}.{col}"
+                    refs.append(f"{label}={cnt}")
+            parts.append(f"cid {cid}: {', '.join(refs) or 'EMPTY (no references anywhere)'}")
+        logger.warning(
+            "Duplicate-name census: %s %s → %s",
+            d["f"].title(), d["l"].title(), " | ".join(parts),
+        )
 
 
 def _merge_duplicate_customers(conn: sqlite3.Connection) -> None:
