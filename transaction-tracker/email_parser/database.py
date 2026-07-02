@@ -1176,6 +1176,12 @@ def _repair_arias_identities(conn: sqlite3.Connection) -> None:
     """
     _DAD, _SON = 17, 308
     _FRAGS = (414, 434)
+    # cid 426 is a ledger-only profile auto-created under the son's suffixed
+    # name ('Victor Arias III' split into malformed first/last parts, which
+    # is why the duplicate-name census never saw it — found v2.16.21 when
+    # the MCP ledger view gained customer_id). Everything on it resolved
+    # via the son's name, so its unmarked leftovers default to the SON.
+    _SON_FRAGS = (426,)
     for cid, who in ((_DAD, "father"), (_SON, "son")):
         if not conn.execute(
             "SELECT 1 FROM customers WHERE customer_id = ?", (cid,)
@@ -1194,7 +1200,7 @@ def _repair_arias_identities(conn: sqlite3.Connection) -> None:
         ("rsvps", ("player_name",)),
         ("customer_aliases", ("customer_name", "alias_value")),
     )
-    all_cids = (_DAD, _SON) + _FRAGS
+    all_cids = (_DAD, _SON) + _FRAGS + _SON_FRAGS
     for table, name_cols in _NAME_TABLES:
         try:
             ph = ",".join("?" * len(all_cids))
@@ -1214,6 +1220,8 @@ def _repair_arias_identities(conn: sqlite3.Connection) -> None:
                 want = _DAD
             elif cid in _FRAGS:
                 want = _DAD  # unmarked stray on a fragment → dad pays
+            elif cid in _SON_FRAGS:
+                want = _SON  # everything on 426 resolved via the son's name
             else:
                 continue  # unmarked row already on a real profile — stay
             if want != cid:
@@ -1226,25 +1234,26 @@ def _repair_arias_identities(conn: sqlite3.Connection) -> None:
                     table, cid, next((t for t in texts if t), ""), want,
                 )
 
-    # 2. Remaining fragment rows (no name column — statuses etc.) → dad,
-    #    then retire the fragment profiles.
-    for frag in _FRAGS:
+    # 2. Remaining fragment rows (no name column — statuses etc.) go to the
+    #    fragment's owner, then retire the fragment profiles.
+    for frag in _FRAGS + _SON_FRAGS:
         if not conn.execute(
             "SELECT 1 FROM customers WHERE customer_id = ?", (frag,)
         ).fetchone():
             continue
-        moved = _repoint_customer_fks(conn, frag, _DAD)
+        target = _SON if frag in _SON_FRAGS else _DAD
+        moved = _repoint_customer_fks(conn, frag, target)
         for e in conn.execute(
             "SELECT email FROM customer_emails WHERE customer_id = ?", (frag,)
         ).fetchall():
             conn.execute(
                 "INSERT OR IGNORE INTO customer_emails (customer_id, email) VALUES (?, ?)",
-                (_DAD, e["email"]),
+                (target, e["email"]),
             )
         conn.execute("DELETE FROM customer_emails WHERE customer_id = ?", (frag,))
         conn.execute("DELETE FROM customers WHERE customer_id = ?", (frag,))
-        logger.info("Arias repair: retired fragment cid %d (leftovers → dad: %s)",
-                    frag, moved or "none")
+        logger.info("Arias repair: retired fragment cid %d (leftovers → cid %d: %s)",
+                    frag, target, moved or "none")
 
     # 3. Display names: dad's rows show 'Victor Arias Jr' (son's already show
     #    'Victor Arias III'; enforced too for symmetry). customers.first/last
