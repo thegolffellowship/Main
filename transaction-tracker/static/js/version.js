@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.13";
+window.TGF_VERSION = "2.17.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.14",
+    date: "2026-07-02",
+    changes: [
+      "Golf Genius sync: players the admin intentionally removed from GG are now excluded from the nightly handicap export (registry: Matt Lawyer). Without this, tonight's 02:00 sync would have silently re-added him — the boot log had him queued as 'NEWLY included'. He remains a fully active tracker member; this only stops the re-upload to Golf Genius. Reggie Johnson stays IN the export and joins GG on tonight's sync as intended.",
+      "Data (from the GG roster cross-check, admin-approved): Casey Purvis gets purvis.casey@yahoo.com and Matthew Starnes gets matthewrstarnes@yahoo.com — Golf Genius had emails the tracker lacked for both.",
+    ],
+  },
   {
     version: "2.17.13",
     date: "2026-07-02",
