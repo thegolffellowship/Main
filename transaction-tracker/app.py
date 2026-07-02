@@ -1281,26 +1281,13 @@ def start_scheduler():
     )
     logger.info("Membership renewal reminders scheduled daily at 09:00 %s", reminder_tz)
 
-    # Golf Genius handicap sync — daily at configurable hour (default 2 AM Central)
-    gg_sync_hour = int(os.getenv("GOLF_GENIUS_SYNC_HOUR", "2"))
-    gg_sync_tz = os.getenv("DAILY_REPORT_TZ", "US/Central")
-    if os.getenv("GOLF_GENIUS_EMAIL") and os.getenv("GOLF_GENIUS_PASSWORD"):
-        from golf_genius_sync import run_scheduled_sync
-        scheduler.add_job(
-            run_scheduled_sync,
-            "cron",
-            hour=gg_sync_hour,
-            minute=0,
-            timezone=gg_sync_tz,
-            id="gg_handicap_sync",
-            replace_existing=True,
-        )
-        logger.info(
-            "Golf Genius handicap sync scheduled daily at %02d:00 %s",
-            gg_sync_hour, gg_sync_tz,
-        )
-    else:
-        logger.info("Golf Genius sync not scheduled — GOLF_GENIUS_EMAIL/PASSWORD not set")
+    # Golf Genius nightly sync: intentionally NOT scheduled (admin decision,
+    # 2026-07). The screen-scraping upload never established a reliable
+    # connection to GG; handicaps flow via the manual CSV export
+    # (/api/handicaps/export-csv) which the admin uploads in the GG UI.
+    # The on-demand POST /api/handicaps/sync-golf-genius endpoint remains
+    # for explicit admin-triggered attempts.
+    logger.info("Golf Genius nightly sync disabled — handicaps are exported manually via CSV")
 
     # Weekly cleanup: prune old processed_emails records (>90 days)
     scheduler.add_job(

@@ -170,7 +170,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - **Dashboard** at `/` with search, filter, sort, CSV export
 - **COO AI** — Claude-powered business intelligence chat with 6 specialist agents
 - **TGF Payouts** — tournament payout tracking with screenshot import via Claude Vision
-- **Golf Genius sync** via direct HTTP requests in `golf_genius_sync.py` (rewritten from Playwright)
+- **Golf Genius sync** via direct HTTP requests in `golf_genius_sync.py` (rewritten from Playwright). The nightly 02:00 job is removed as of v2.18.0 (never established a reliable connection) — the live path is the manual CSV export (`/api/handicaps/export-csv`) the admin uploads in the GG UI; see `docs/claude/handicaps.md`
 - **MCP Server** in `mcp_server.py` — 37 tools for Claude direct DB access
 - **Pairings generator** with seed/lock, cart pairs, and round-robin history.
   Tables (`event_pairings`, `pairing_history`) are created lazily by
