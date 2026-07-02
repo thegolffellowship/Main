@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.17.2";
+window.TGF_VERSION = "2.17.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.3",
+    date: "2026-07-02",
+    changes: [
+      "Cleanup: duplicate alias rows are collapsed at boot — repeated captures had piled up identical entries (Stu Kirksey carried SEVEN copies of the 'Stuart Kirksey' name alias). The earliest row per customer + alias type + value (case-insensitive) is kept; unlinked shadow copies of already-linked aliases are removed too. The deploy log reports how many rows were removed.",
+      "Guard: unique indexes on customer_aliases now make every future duplicate capture a silent no-op — all alias write paths (captures, merges, backfills, repairs, renames) were converted to duplicate-tolerant statements so nothing breaks when they hit the guard. Merging two customers who both carry the same alias now correctly keeps the target's single copy instead of stranding the source's.",
+      "Intentional aliases are untouched: typo email variants (this is what routes Stu's frequently mistyped order emails to the right profile) and spouse-payment aliases like Kay Kirksey → Stu stay exactly as they are.",
+    ],
+  },
   {
     version: "2.17.2",
     date: "2026-07-02",
