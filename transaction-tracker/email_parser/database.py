@@ -4847,6 +4847,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: season contest boot repairs failed")
 
+        # Re-point handicap links whose customer_id contradicts their own
+        # customer_name (email-matched to the buyer/guardian, not the player).
+        # Must run BEFORE the GG email diff below so it reports the truth.
+        try:
+            _repair_player_link_identities(conn)
+        except Exception:
+            logger.exception("Non-fatal: _repair_player_link_identities failed")
+
         # Pin admin-confirmed Golf Genius emails (see _GG_EMAIL_PINS)
         try:
             _repair_gg_email_pins(conn)
@@ -5741,6 +5749,61 @@ def _repair_roman_numeral_name_case(conn: sqlite3.Connection) -> None:
                     )
     if fixed:
         conn.commit()
+
+
+def _repair_player_link_identities(conn: sqlite3.Connection) -> None:
+    """Re-point handicap_player_links rows whose customer_id contradicts
+    their own customer_name.
+
+    Links were historically auto-matched by EMAIL, which attaches a player
+    to whoever's email is on their purchases — for guest/family purchases
+    that's the BUYER (Will Massey's link pointed at Colby Johnson's profile;
+    Isabella Luna's at her guardian's). The v2.16.26 canonical-first GG
+    email resolution made link.customer_id authoritative, surfacing these.
+    The link's customer_name records who the link is FOR — when it resolves
+    uniquely to a different profile than customer_id, the link (and its
+    player's handicap_rounds) is re-pointed; ambiguous or unresolvable
+    names are logged and left alone. Idempotent.
+    """
+    rows = conn.execute(
+        """SELECT l.rowid AS rid, l.player_name, l.customer_name, l.customer_id,
+                  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS linked_name
+           FROM handicap_player_links l
+           JOIN customers c ON c.customer_id = l.customer_id
+           WHERE l.customer_id IS NOT NULL
+             AND l.customer_name IS NOT NULL AND TRIM(l.customer_name) != ''"""
+    ).fetchall()
+    for r in rows:
+        stored = " ".join((r["customer_name"] or "").split()).lower()
+        linked = " ".join((r["linked_name"] or "").split()).lower()
+        if not stored or stored == linked:
+            continue
+        want = _lookup_customer_id(conn, r["customer_name"], None)
+        if want is None:
+            logger.warning(
+                "Player link identity: %r (link for %r) points at cid %s (%r) "
+                "but the name doesn't resolve uniquely — leaving as-is",
+                r["player_name"], r["customer_name"], r["customer_id"], r["linked_name"],
+            )
+            continue
+        if want == r["customer_id"]:
+            continue  # name is an alias of the linked customer — correct
+        conn.execute(
+            "UPDATE handicap_player_links SET customer_id = ? WHERE rowid = ?",
+            (want, r["rid"]),
+        )
+        moved_rounds = conn.execute(
+            "UPDATE handicap_rounds SET customer_id = ? "
+            "WHERE customer_id = ? AND player_name = ?",
+            (want, r["customer_id"], r["player_name"]),
+        ).rowcount
+        logger.info(
+            "Player link identity: %r re-pointed cid %s (%r) → cid %s "
+            "(%d round(s) followed)",
+            r["customer_name"], r["customer_id"], r["linked_name"], want,
+            moved_rounds,
+        )
+    conn.commit()
 
 
 # Players whose Golf Genius sync address is pinned via the is_golf_genius
