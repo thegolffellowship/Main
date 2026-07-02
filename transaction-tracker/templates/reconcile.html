@@ -1232,7 +1232,11 @@
         if (errors) alert(`Recorded ${done} transfers. ${errors} failed.`);
     }
 
-    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    // Escapes quotes too — safe for HTML attribute interpolation.
+    function esc(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, ch =>
+            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
     </script>
 </body>
 </html>

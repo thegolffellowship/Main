@@ -146,9 +146,9 @@ function saveColumnPrefs() {
 // Helpers
 // ---------------------------------------------------------------------------
 function escapeHtml(str) {
-    const div = document.createElement("div");
-    div.textContent = str;
-    return div.innerHTML;
+    // Escapes quotes too — safe for HTML attribute interpolation.
+    return String(str == null ? "" : str).replace(/[&<>"']/g, ch =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
 
 function parsePrice(priceStr) {

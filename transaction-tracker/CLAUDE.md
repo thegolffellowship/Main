@@ -187,7 +187,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   with 7 metrics (total items, active items, open parse warnings, open action items,
   credited duplicates, membership mashups, items missing customer ID) plus delta arrows
   (↑/↓) vs the previous day's snapshot.
-- **Auth** — PIN-based with roles: `admin`, `manager`, `view-only`; `@require_role()` decorator
+- **Auth** — PIN-based with roles ranked `view-only` < `manager` < `admin`; `@require_role(minimum)` enforces the hierarchy (as of v2.16.15 — before that only `admin` was checked and view-only sessions passed manager endpoints). Login rate limiter keys on the LAST X-Forwarded-For hop (Railway-appended; the first entry is client-spoofable)
 - **`initAuth()`** must be called on every page for nav link visibility (DATABASE link, etc.)
 
 ## Audit Log

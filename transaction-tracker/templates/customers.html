@@ -414,9 +414,10 @@
     }
 
     function escapeHtml(str) {
-        const div = document.createElement("div");
-        div.textContent = str || "";
-        return div.innerHTML;
+        // Must escape quotes too — callers interpolate into HTML attributes
+        // (data-customer-name="..."), where an unescaped " breaks out.
+        return String(str || "").replace(/[&<>"']/g, ch =>
+            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
     }
 
     function classifyGameType(sideGames) {

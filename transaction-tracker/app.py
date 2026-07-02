@@ -336,8 +336,15 @@ _LOGIN_WINDOW_SECONDS = 15 * 60  # 15 minutes
 
 def _check_login_rate_limit() -> bool:
     """Return True if the request IP is within rate limits, False if exceeded."""
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
-    ip = ip.split(",")[0].strip()  # first IP in X-Forwarded-For chain
+    # Key on the LAST X-Forwarded-For hop: Railway's edge proxy APPENDS the
+    # real client IP, while everything left of it is client-supplied. Keying
+    # on the first entry let an attacker bypass the limiter by rotating a
+    # fake header (or poison an arbitrary IP's bucket to lock someone out).
+    fwd = request.headers.get("X-Forwarded-For", "")
+    if fwd:
+        ip = fwd.split(",")[-1].strip() or "unknown"
+    else:
+        ip = request.remote_addr or "unknown"
     now = time.time()
     cutoff = now - _LOGIN_WINDOW_SECONDS
     # Clean old entries
@@ -1137,16 +1144,27 @@ def validate_json_fields(data: dict, required: list[str] = None,
 # ---------------------------------------------------------------------------
 # Role-based access helpers
 # ---------------------------------------------------------------------------
+# Role hierarchy: each rank includes the capabilities of the ranks below it.
+_ROLE_RANK = {"view-only": 1, "manager": 2, "admin": 3}
+
+
 def require_role(role):
-    """Decorator that checks the session for a minimum role level."""
+    """Decorator that checks the session for a minimum role level.
+
+    Roles are ranked view-only < manager < admin; a route declaring
+    @require_role("manager") admits manager and admin sessions only.
+    Until v2.16.15 only "admin" was actually enforced — a view-only
+    session passed every manager-declared endpoint.
+    """
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
             user_role = session.get("role")
             if not user_role:
                 return jsonify({"error": "Not authenticated. Please log in."}), 401
-            if role == "admin" and user_role != "admin":
-                return jsonify({"error": "Admin access required."}), 403
+            if _ROLE_RANK.get(user_role, 0) < _ROLE_RANK.get(role, 0):
+                label = "Admin" if role == "admin" else "Manager"
+                return jsonify({"error": f"{label} access required."}), 403
             return f(*args, **kwargs)
         return decorated
     return decorator

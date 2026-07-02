@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.16.14";
+window.TGF_VERSION = "2.16.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.16.15",
+    date: "2026-07-02",
+    changes: [
+      "Security: role levels are now actually enforced as a hierarchy (view-only < manager < admin). Previously only 'admin' was checked — any logged-in view-only session could call every manager endpoint (update customers, apply credits, send balance-due emails, import rosters). A view-only PIN is now read-only in practice, not just in name; manager and admin sessions are unaffected.",
+      "Security: the login rate limiter keyed attempts on the FIRST X-Forwarded-For entry, which the client controls — an attacker could bypass PIN brute-force protection by rotating a fake header (or deliberately lock out a victim's IP). It now keys on the last hop, which Railway's edge proxy appends and the client cannot forge.",
+      "Security: every HTML-escaping helper across the app (10 copies in 9 files) now escapes quote characters too. The old div.textContent trick escaped < > & but NOT quotes, and these helpers are routinely interpolated into HTML attributes (data-customer-name=\"...\") — a customer name containing a double-quote could break out of the attribute and inject markup (stored XSS via any imported roster/RSVP/order name). All copies now use one quote-safe implementation.",
+    ],
+  },
   {
     version: "2.16.14",
     date: "2026-07-02",
