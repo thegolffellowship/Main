@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.17.10";
+window.TGF_VERSION = "2.17.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.17.11",
+    date: "2026-07-02",
+    changes: [
+      "MCP connection: access tokens now last 24 hours (was 1 hour — the cause of the constant re-authorization), and the OAuth server issues 30-day refresh tokens with a refresh_token grant so claude.ai can renew the connection silently. One more manual reconnect picks this up; after that it should stay connected for weeks at a time.",
+      "Data: contact backfill from the 25TGF_Members Player Database sheet (471 usable rows from 20 years of records). For every roster person who already has a tracker profile, missing Venmo handles and missing emails are filled in — resolved email-first then by exact name including alternate first-name spellings, with the ambiguity guard. Existing values are never overwritten, an email already on another profile is never cross-attached, and no new profiles are created (roster people who never appear in the tracker stay out). Runs at every boot, so future profiles get enriched from the roster automatically the moment they're created.",
+    ],
+  },
   {
     version: "2.17.10",
     date: "2026-07-02",

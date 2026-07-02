@@ -4903,6 +4903,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _normalize_venmo_usernames(conn)
         except Exception:
             logger.exception("Non-fatal: _normalize_venmo_usernames failed")
+        # Fill missing email/Venmo from the 20-year player roster (blank-only,
+        # never creates profiles). After the quarantine + normalization above.
+        try:
+            _apply_roster_contact_backfill(conn)
+        except Exception:
+            logger.exception("Non-fatal: _apply_roster_contact_backfill failed")
 
         # Fix the mis-parsed standalone SEASON CONTESTS order R747210347
         # (buyer is Stu Kirksey): blank-customer case AND the nameless-shell-
@@ -5755,6 +5761,86 @@ def _repair_lead_email_separations(conn: sqlite3.Connection) -> None:
                 "(was attached near cid %d)",
                 n1, n2, n3, n4, email, who, cid,
             )
+
+
+def _apply_roster_contact_backfill(conn: sqlite3.Connection) -> None:
+    """Backfill missing email/Venmo from the admin's 20-year player roster.
+
+    data/member_roster_backfill.json holds 471 usable rows extracted from
+    the 25TGF_Members spreadsheet (Player Database sheet, admin-provided
+    2026-07-02). For each row: resolve the person via _lookup_customer_id
+    (email evidence first, then exact name incl. FIRST_ALT spellings,
+    ambiguity-guarded) and fill ONLY what's missing — venmo when blank,
+    email only when the profile has none AND the address isn't already on
+    any other profile (prevents cross-person contamination). Never creates
+    profiles: roster people who never appear in the tracker stay out.
+    Runs every boot so newly created profiles get enriched automatically.
+    Lead-registry emails are never applied.
+    """
+    import json as _json
+    path = Path(__file__).resolve().parent.parent / "data" / "member_roster_backfill.json"
+    if not path.exists():
+        return
+    try:
+        rows = _json.loads(path.read_text())
+    except Exception:
+        logger.exception("Roster backfill: could not read %s", path)
+        return
+    matched = filled_email = filled_venmo = 0
+    for r in rows:
+        email = (r.get("email") or "").strip().lower() or None
+        if email and email in _RSVP_KNOWN_NON_CUSTOMERS:
+            email = None
+        venmo = (r.get("venmo") or "").lstrip("@").strip() or None
+        names = [f"{r['first']} {r['last']}"] + \
+                [f"{a} {r['last']}" for a in (r.get("alts") or [])]
+        cid = None
+        for nm in names:
+            cid = _lookup_customer_id(conn, nm, email)
+            if cid:
+                break
+        if not cid:
+            continue
+        matched += 1
+        if venmo:
+            cur = conn.execute(
+                "UPDATE customers SET venmo_username = ? WHERE customer_id = ? "
+                "AND (venmo_username IS NULL OR TRIM(venmo_username) = '')",
+                (venmo, cid),
+            )
+            if cur.rowcount:
+                filled_venmo += 1
+                logger.info("Roster backfill: venmo %r → %s (cid %d)",
+                            venmo, names[0], cid)
+        if email:
+            has_any = conn.execute(
+                "SELECT 1 FROM customer_emails WHERE customer_id = ?", (cid,)
+            ).fetchone()
+            taken = conn.execute(
+                "SELECT 1 FROM customer_emails WHERE LOWER(TRIM(email)) = ?",
+                (email,),
+            ).fetchone()
+            if not has_any and not taken:
+                conn.execute(
+                    "INSERT OR IGNORE INTO customer_emails "
+                    "(customer_id, email, is_primary, label) VALUES (?, ?, 1, 'roster-2025')",
+                    (cid, email),
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO customer_aliases "
+                    "(customer_name, alias_type, alias_value, customer_id) "
+                    "VALUES (?, 'email', ?, ?)",
+                    (names[0], email, cid),
+                )
+                filled_email += 1
+                logger.info("Roster backfill: email %s → %s (cid %d)",
+                            email, names[0], cid)
+    conn.commit()
+    logger.info(
+        "Roster contact backfill: %d/%d roster rows matched existing profiles — "
+        "%d email(s) filled, %d Venmo handle(s) filled",
+        matched, len(rows), filled_email, filled_venmo,
+    )
 
 
 def _normalize_venmo_usernames(conn: sqlite3.Connection) -> None:

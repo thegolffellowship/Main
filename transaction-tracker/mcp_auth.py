@@ -47,7 +47,8 @@ logger.info(
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-TOKEN_LIFETIME = 3600  # 1 hour
+TOKEN_LIFETIME = 86400          # 24 hours (was 1h — hourly re-auth pain)
+REFRESH_TOKEN_LIFETIME = 30 * 86400  # 30 days
 AUTH_CODE_LIFETIME = 120  # 2 minutes (generous for network round-trips)
 
 def _client_id():
@@ -119,9 +120,34 @@ def generate_token(client_id: str, lifetime: int = TOKEN_LIFETIME) -> str:
         "jti": secrets.token_hex(8),
     }, _signing_key())
 
+
+def generate_refresh_token(client_id: str,
+                           lifetime: int = REFRESH_TOKEN_LIFETIME) -> str:
+    """Create a signed refresh token (type-tagged so it can't be used as an
+    access token — verify_token rejects it)."""
+    return _sign_payload({
+        "type": "refresh",
+        "client_id": client_id,
+        "exp": int(time.time()) + lifetime,
+        "jti": secrets.token_hex(8),
+    }, _signing_key())
+
+
+def verify_refresh_token(token: str) -> dict | None:
+    """Verify a refresh token's signature, expiration, and type tag."""
+    payload = _verify_signed(token, _signing_key())
+    if not payload or payload.get("type") != "refresh":
+        return None
+    return payload
+
 def verify_token(token: str) -> dict | None:
-    """Verify a token's signature and expiration."""
-    return _verify_signed(token, _signing_key())
+    """Verify an access token's signature and expiration.
+
+    Refresh tokens (type='refresh') are NOT valid access tokens."""
+    payload = _verify_signed(token, _signing_key())
+    if payload and payload.get("type") == "refresh":
+        return None
+    return payload
 
 
 def _generate_auth_code(client_id: str, redirect_uri: str,
@@ -201,6 +227,7 @@ async def oauth_metadata(request: Request) -> JSONResponse:
         "grant_types_supported": [
             "authorization_code",
             "client_credentials",
+            "refresh_token",
         ],
         "response_types_supported": ["code"],
         "code_challenge_methods_supported": ["S256"],
@@ -291,7 +318,7 @@ async def oauth_register(request: Request) -> Response:
         "client_name": data.get("client_name", "MCP Client"),
         "redirect_uris": data.get("redirect_uris", []),
         "token_endpoint_auth_method": "none",
-        "grant_types": ["authorization_code"],
+        "grant_types": ["authorization_code", "refresh_token"],
         "response_types": ["code"],
         "scope": "mcp",
     }
@@ -366,6 +393,7 @@ async def oauth_token(request: Request) -> Response:
             "access_token": token,
             "token_type": "Bearer",
             "expires_in": TOKEN_LIFETIME,
+            "refresh_token": generate_refresh_token(client_id),
             "scope": "mcp",
         }, headers=_CORS_HEADERS)
 
@@ -439,6 +467,33 @@ async def oauth_token(request: Request) -> Response:
             "access_token": token,
             "token_type": "Bearer",
             "expires_in": TOKEN_LIFETIME,
+            "refresh_token": generate_refresh_token(code_data["client_id"]),
+            "scope": "mcp",
+        }, headers=_CORS_HEADERS)
+
+    # ── Refresh Token Grant ──
+    if grant_type == "refresh_token":
+        refresh = data.get("refresh_token", "")
+        payload = verify_refresh_token(refresh)
+        if not payload:
+            logger.warning("OAuth token: invalid or expired refresh token")
+            return JSONResponse(
+                {"error": "invalid_grant",
+                 "error_description": "Invalid or expired refresh token"},
+                status_code=400,
+                headers=_CORS_HEADERS,
+            )
+        if client_id and not secrets.compare_digest(payload["client_id"], client_id):
+            logger.warning("OAuth token: refresh client_id mismatch")
+            return JSONResponse({"error": "invalid_client"}, status_code=401,
+                                headers=_CORS_HEADERS)
+        logger.info("OAuth token: refresh_token grant succeeded for client=%s",
+                     payload["client_id"])
+        return JSONResponse({
+            "access_token": generate_token(payload["client_id"]),
+            "token_type": "Bearer",
+            "expires_in": TOKEN_LIFETIME,
+            "refresh_token": generate_refresh_token(payload["client_id"]),
             "scope": "mcp",
         }, headers=_CORS_HEADERS)
 
