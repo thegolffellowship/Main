@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.23.0";
+window.TGF_VERSION = "2.23.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.23.1",
+    date: "2026-07-04",
+    changes: [
+      "Scorecard imports now auto-verify every card against Golf Genius's own numbers immediately; any discrepancy files a COO action item (category 'scoring', deduped while open) naming the failing checks and the usual fix path — so parallel-run mismatches surface in the existing review queue instead of hiding in logs. Import results report verified_ok and discrepancies counts.",
+    ],
+  },
   {
     version: "2.23.0",
     date: "2026-07-04",

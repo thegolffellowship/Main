@@ -57,8 +57,10 @@ is in `_CUSTOMER_FK_COLUMNS`.
 
 `verify_scoring_round(id)`: hole sums vs GG gross; net = gross − playing
 handicap; GG's net-relative circle/square markings vs our course par +
-dots. Run after imports to prove tracker math matches GG before trusting
-derivations.
+dots. Runs AUTOMATICALLY on every import (v2.23.1); discrepancies file
+COO action items (category 'scoring', deduped while open) so mismatches
+hit the admin review queue. Import results carry verified_ok +
+discrepancies.
 
 ## Endpoints & MCP tools (55 total)
 
