@@ -6236,6 +6236,15 @@ def _gg_name_candidates(raw_name: str) -> list:
 
 _GG_EVENT_CODE_RE = re.compile(r"^([a-z]+\d+(?:\.\d+)?)\b", re.I)
 
+# Admin-provided labels for GG event codes with no tracker event
+# (2026-07-03). A tracker event with the same code would win — live data
+# over static — since these only fill gaps left by the events table.
+_GG_CODE_NAME_OVERRIDES: dict = {
+    "hcmr1": "hcmR1 Hill Country Matches - Valley",
+    "hcmr2": "hcmR2 Hill Country Matches - Hills",
+    "hcmr3": "hcmR3 Hill Country Matches - Creeks",
+}
+
 
 def substitute_gg_tournament_names(tables: list,
                                    db_path: str | Path = DB_PATH) -> list:
@@ -6253,6 +6262,8 @@ def substitute_gg_tournament_names(tables: list,
             m = _GG_EVENT_CODE_RE.match(name)
             if m:
                 code_map.setdefault(m.group(1).lower(), name)
+    for code, label in _GG_CODE_NAME_OVERRIDES.items():
+        code_map.setdefault(code, label)
 
     out = []
     for table in tables or []:
