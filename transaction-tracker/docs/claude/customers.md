@@ -897,6 +897,35 @@ notes already had content, skipping if the exact text is already in notes), then
   than stale transaction copies. Only overlays the Info tab's individual display fields —
   does not touch `customer.name`, the grouping/lookup key used throughout the page.
 
+## Points Reset projections (v2.22.0)
+
+Methodology admin-established 2026-07-03 from the 2025 workbook
+(25TGF_Points_Races.xlsx, 'Points Reset' tab). Projection only — the
+actual reset happens after the City Championships, to widen the field
+for the TGF Championship in August.
+
+- **Master ladder**: position p → `100 − 0.5×(p−1)`.
+- **Mapping**: race rank r → master position `ROUND(1 + coef×(r−1))`
+  (int(x+0.5), Excel ROUND parity). Ladder value at that position is the
+  reset. Equivalent to snapping `100 − 0.5×coef×(r−1)` to the closest
+  half point.
+- **Coefficient**: NET races (reset_mode='prorated', reset_group='net')
+  share the ladder; coef = anchor ÷ own eligible count, anchor = largest
+  chapter's count (2025: SA 88 anchor, Austin 88/56 = 1.571 — verified
+  cell-for-cell). THE PLAYERS CUP (reset_mode='straight') restacks its
+  combined cross-chapter list at coef 1, flights dismissed.
+- **Eligible** (`_points_race_eligible_count`): active members
+  (member statuses) with tournaments ≥ 1 this season, ANY point total;
+  unresolved names count when GG affiliation shows a TGF chapter.
+  Ineligible rows show '—' and don't count toward headcounts.
+- **Ties**: tied ranks share the rank number → same reset value; the
+  ladder skips like GG's T-ranks (T2/T2 → both 99.5, next at pos 4).
+- **THE FELLOWSHIP CUP tab**: `get_fellowship_cup_projection()` merges
+  both NET races' eligible rows, sorts by reset desc, competition-ranks
+  with T-prefixes. GET /api/season-contests/points-race/fellowship-cup
+  (?force=1 re-pulls both snapshots). The City NET competitions convert
+  to this race at the TGF Championship.
+
 ## Comp'd season-contest enrollments (v2.20.5)
 
 Owner/managers play the races as a running-them privilege — no purchase

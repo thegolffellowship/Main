@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.21.7";
+window.TGF_VERSION = "2.22.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.22.0",
+    date: "2026-07-03",
+    changes: [
+      "POINTS RESET projections are live (methodology admin-established from the 2025 workbook): one master ladder (position p = 100 − 0.5×(p−1)); each race rank maps to master position ROUND(1 + coef×(rank−1)). NET races share the ladder with coef = anchor ÷ own eligible count (anchor = largest chapter; e.g. 88/56 → 1.571, verified against the 2025 sheet's own values); THE PLAYERS CUP restacks its combined cross-chapter list straight down the ladder at coef 1, flights dismissed. Eligible = active members who have played ≥1 event this season, any point total; tied ranks share a value and the ladder skips accordingly. Values are PROJECTIONS — the actual reset happens after the City Championships. Summary line shows each race's coefficient and eligible counts.",
+      "New THE FELLOWSHIP CUP sub-tab: both City NET competitions merged into one projected reset standings list (the race that plays out at the TGF Championship) — TFC rank, player, chapter, NET rank, and POINTS RESET, with the same buy-in color coding. Mirrors the 2025 workbook's 'TFC Projected' tab. Refresh here re-pulls both NET races from Golf Genius.",
+    ],
+  },
   {
     version: "2.21.7",
     date: "2026-07-03",

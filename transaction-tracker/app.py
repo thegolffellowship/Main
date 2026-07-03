@@ -8341,6 +8341,19 @@ def api_season_contest_points_race():
     return jsonify(data)
 
 
+@app.route("/api/season-contests/points-race/fellowship-cup")
+@require_role("manager")
+def api_fellowship_cup_projection():
+    """Combined NET-race reset projection (THE FELLOWSHIP CUP tab)."""
+    from email_parser.database import get_fellowship_cup_projection
+    force = request.args.get("force") == "1"
+    try:
+        return jsonify(get_fellowship_cup_projection(force_refresh=force))
+    except Exception as e:
+        logger.exception("Fellowship Cup projection failed")
+        return jsonify({"error": f"Projection failed: {e}"}), 500
+
+
 _points_detail_cache: dict = {}
 _POINTS_DETAIL_CACHE_TTL = 600
 

@@ -6143,6 +6143,8 @@ _GG_POINTS_RACES: dict = {
         "chapter": "San Antonio",
         # NET races are chapter-scoped: only same-chapter buy-ins count
         "enroll_chapter": "San Antonio",
+        "reset_mode": "prorated",
+        "reset_group": "net",
     },
     "austin_net": {
         "label": "AUSTIN Net 2026",
@@ -6152,6 +6154,8 @@ _GG_POINTS_RACES: dict = {
         "contest_type": "NET Points Race",
         "chapter": "Austin",
         "enroll_chapter": "Austin",
+        "reset_mode": "prorated",
+        "reset_group": "net",
     },
     "players_cup_gross": {
         "label": "THE PLAYERS CUP 2026",
@@ -6174,6 +6178,9 @@ _GG_POINTS_RACES: dict = {
             ("3rd Flight", 12.0, 18.0),
             ("4th Flight", 18.0, None),
         ),
+        # The cup restacks its combined cross-chapter list straight down
+        # the ladder — no chapter proration, flights dismissed
+        "reset_mode": "straight",
     },
 }
 
@@ -6370,6 +6377,31 @@ def refresh_points_race_standings(race_key: str,
     return len(standings)
 
 
+def _points_race_eligible_count(conn: sqlite3.Connection, race_key: str) -> int:
+    """Reset-eligible headcount for a race's snapshot (admin methodology):
+    active members who have played at least one event this season,
+    regardless of point totals. Unresolved names count when GG's own
+    affiliation shows a current TGF chapter."""
+    rows = conn.execute(
+        """SELECT s.affiliation, s.tournaments, s.customer_id,
+                  c.current_player_status AS st
+           FROM gg_points_standings s
+           LEFT JOIN customers c ON c.customer_id = s.customer_id
+           WHERE s.race_key = ?""",
+        (race_key,),
+    ).fetchall()
+    n = 0
+    for r in rows:
+        if (r["tournaments"] or 0) < 1:
+            continue
+        if r["customer_id"]:
+            if r["st"] in _MEMBER_PLAYER_STATUSES:
+                n += 1
+        elif "tgf" in (r["affiliation"] or "").lower():
+            n += 1
+    return n
+
+
 def get_points_race_standings(race_key: str,
                               auto_refresh_hours: float = 12,
                               force_refresh: bool = False,
@@ -6505,6 +6537,54 @@ def get_points_race_standings(race_key: str,
                 hidden_nonmembers.append(r["player_name"])
         out_rows = visible_rows
 
+        # POINTS RESET projection (methodology per the 2025 workbook,
+        # admin-confirmed 2026-07-03): one master ladder, position p ->
+        # 100 - 0.5*(p-1); a race rank r maps to master position
+        # ROUND(1 + coef*(r-1)). NET races share the ladder with
+        # coef = anchor_count / this_count (anchor = largest chapter's
+        # eligible headcount); the Players Cup restacks its combined
+        # list at coef 1. Eligible: active members with >= 1 event played,
+        # any point total. Projection only — the actual reset happens
+        # after the City Championships.
+        reset_info = None
+        reset_mode = race.get("reset_mode")
+        if reset_mode:
+            if reset_mode == "prorated":
+                group = race.get("reset_group")
+                counts = {
+                    k: _points_race_eligible_count(conn, k)
+                    for k, v in _GG_POINTS_RACES.items()
+                    if v.get("reset_group") == group
+                }
+                anchor_n = max(counts.values()) if counts else 0
+                mine_n = counts.get(race_key, 0)
+                coef = (anchor_n / mine_n) if mine_n else None
+            else:
+                counts, anchor_n, mine_n, coef = None, None, None, 1.0
+            for r in out_rows:
+                r["points_reset"] = None
+                if not coef or (r.get("tournaments") or 0) < 1:
+                    continue
+                cid = r["customer_id"]
+                eligible = (status_by_cid.get(cid) in _MEMBER_PLAYER_STATUSES
+                            if cid else
+                            "tgf" in (r.get("affiliation") or "").lower())
+                if not eligible:
+                    continue
+                m = re.match(r"T?(\d+)", str(r.get("rank") or "").strip())
+                if not m:
+                    continue
+                # int(x + 0.5) == Excel ROUND for positive x (half up)
+                master = int(1 + coef * (int(m.group(1)) - 1) + 0.5)
+                r["points_reset"] = 100 - 0.5 * (master - 1)
+            reset_info = {
+                "mode": reset_mode,
+                "coefficient": round(coef, 4) if coef else None,
+                "eligible_count": mine_n,
+                "anchor_count": anchor_n,
+                "counts": counts,
+            }
+
         enrolled_not_ranked = [
             {"customer_id": e["customer_id"], "customer_name": e["customer_name"]}
             for e in enr_rows
@@ -6522,6 +6602,7 @@ def get_points_race_standings(race_key: str,
         "n_unresolved": sum(1 for r in out_rows if not r["customer_id"]),
         "enrolled_not_ranked": enrolled_not_ranked,
         "hidden_nonmembers": hidden_nonmembers,
+        "reset_info": reset_info,
         "fetched_at": fetched_at,
         "gg_error": gg_error,
         "flights": (
@@ -6529,6 +6610,72 @@ def get_points_race_standings(race_key: str,
              for lbl, lo, hi in race["flights"]]
             if race.get("flights") else None
         ),
+    }
+
+
+def get_fellowship_cup_projection(force_refresh: bool = False,
+                                  db_path: str | Path = DB_PATH) -> dict:
+    """THE FELLOWSHIP CUP — combined projected reset standings.
+
+    The City NET competitions convert to the Fellowship Cup race at the
+    TGF Championship: both chapters' eligible members enter one list,
+    ordered by their projected reset value from the shared master ladder
+    (see the reset block in get_points_race_standings). Mirrors the 2025
+    workbook's 'TFC Projected' tab.
+    """
+    races = [k for k, v in _GG_POINTS_RACES.items()
+             if v.get("reset_mode") == "prorated"]
+    combined: list = []
+    per_race: dict = {}
+    fetched: list = []
+    errors: list = []
+    for k in races:
+        d = get_points_race_standings(k, force_refresh=force_refresh,
+                                      db_path=db_path)
+        info = d.get("reset_info") or {}
+        per_race[k] = {
+            "label": d["label"],
+            "chapter": d["chapter"],
+            "eligible_count": info.get("eligible_count"),
+            "coefficient": info.get("coefficient"),
+        }
+        if d.get("fetched_at"):
+            fetched.append(d["fetched_at"])
+        if d.get("gg_error"):
+            errors.append(f'{d["label"]}: {d["gg_error"]}')
+        for r in d["standings"]:
+            if r.get("points_reset") is None:
+                continue  # not reset-eligible -> not in the cup projection
+            combined.append({
+                "player_name": r["player_name"],
+                "customer_id": r["customer_id"],
+                "chapter": d["chapter"],
+                "net_rank": r["rank"],
+                "handicap_index": r.get("handicap_index"),
+                "enrolled": r["enrolled"],
+                "points_reset": r["points_reset"],
+            })
+
+    combined.sort(key=lambda r: -r["points_reset"])
+    for i, r in enumerate(combined):
+        j = i
+        while j > 0 and combined[j - 1]["points_reset"] == r["points_reset"]:
+            j -= 1
+        r["_rank_num"] = j + 1
+    tally: dict = {}
+    for r in combined:
+        tally[r["_rank_num"]] = tally.get(r["_rank_num"], 0) + 1
+    for r in combined:
+        n = r.pop("_rank_num")
+        r["rank"] = f"T{n}" if tally[n] > 1 else str(n)
+
+    return {
+        "label": "THE FELLOWSHIP CUP",
+        "standings": combined,
+        "n_players": len(combined),
+        "per_race": per_race,
+        "fetched_at": max(fetched) if fetched else None,
+        "gg_error": "; ".join(errors) or None,
     }
 
 

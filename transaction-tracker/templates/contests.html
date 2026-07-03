@@ -412,6 +412,7 @@
                 <div class="sub-tabs">
                     <button class="sub-tab active" data-pr="net">San Antonio NET</button>
                     <button class="sub-tab" data-pr="austin">Austin NET</button>
+                    <button class="sub-tab" data-pr="tfc">THE FELLOWSHIP CUP</button>
                     <button class="sub-tab" data-pr="gross">THE PLAYERS CUP</button>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
@@ -1789,6 +1790,7 @@
 
     async function prLoadStandings(force = false) {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+        if (kind === "tfc") return prLoadFellowship(force);
         const race = PR_RACE_BY_TAB[kind];
         const cont = $("pr-table-container");
         if (!cont.innerHTML || force) {
@@ -1818,6 +1820,8 @@
                 : `No standings yet for ${d.label}`)
             + (d.n_unresolved ? ` · ${d.n_unresolved} name(s) not matched to a tracker profile` : "")
             + (d.hidden_nonmembers && d.hidden_nonmembers.length ? ` · ${d.hidden_nonmembers.length} non-member(s) hidden` : "")
+            + (d.reset_info && d.reset_info.mode === "prorated" && d.reset_info.coefficient
+                ? ` · reset coef ${d.reset_info.coefficient} (${d.reset_info.eligible_count} of ${d.reset_info.anchor_count} anchor)` : "")
             + (fetched ? ` · from Golf Genius ${fetched}` : "")
             + (d.gg_error ? ` · ⚠ refresh failed (showing last snapshot)` : "");
         $("pr-summary").title = (d.hidden_nonmembers && d.hidden_nonmembers.length)
@@ -1855,7 +1859,7 @@
                 <td style="${rankStyle}">${escapeHtml(r.rank)}</td>
                 <td>${nameCell}${hcp}${chevron}</td>
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
-                <td style="${resetStyle}"></td>
+                <td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
                 <td style="${rndStyle}">${r.tournaments ?? ""}</td>
                 <td style="${buyStyle}">${badge}</td>
             </tr>`;
@@ -1908,6 +1912,73 @@
                 prToggleDetail(tr, d.race_key);
             });
         });
+    }
+
+    function prFmtReset(v) {
+        if (v == null) return "—";
+        return v % 1 ? v.toFixed(1) : String(v);
+    }
+
+    async function prLoadFellowship(force = false) {
+        const cont = $("pr-table-container");
+        if (!cont.innerHTML || force) {
+            cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">'
+                + (force ? 'Refreshing both NET races from Golf Genius…' : 'Building Fellowship Cup projection…') + '</div>';
+        }
+        $("pr-summary").textContent = "";
+        try {
+            const res = await fetch(`/api/season-contests/points-race/fellowship-cup${force ? "?force=1" : ""}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            renderFellowshipCup(data);
+        } catch (e) {
+            cont.innerHTML = `<div style="padding:1rem;color:#b91c1c;">${escapeHtml(e.message)}</div>`;
+        }
+    }
+
+    function renderFellowshipCup(d) {
+        $("pr-standings-title").textContent = "THE FELLOWSHIP CUP — Projected Points Reset";
+        let fetched = "";
+        if (d.fetched_at) {
+            const dt = new Date(String(d.fetched_at).replace(" ", "T") + "Z");
+            fetched = isNaN(dt) ? String(d.fetched_at) : dt.toLocaleString();
+        }
+        const pr = Object.values(d.per_race || {});
+        $("pr-summary").textContent =
+            `${d.n_players} eligible players`
+            + pr.map(x => ` · ${x.chapter}: ${x.eligible_count} eligible (coef ${x.coefficient})`).join("")
+            + (fetched ? ` · from Golf Genius ${fetched}` : "")
+            + (d.gg_error ? ` · ⚠ ${d.gg_error}` : "");
+        $("pr-summary").title = "Projection only — the actual reset happens after the City Championships";
+
+        const resetTh = "width:110px;text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;";
+        const rows = d.standings.map(r => {
+            const bg = r.enrolled ? "background:#bbf7d0;"
+                     : (r.customer_id ? "background:#fef2f2;" : "background:#fffbeb;");
+            const hcp = r.handicap_index != null
+                ? ` <span style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
+            const nameCell = r.customer_id
+                ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
+                : escapeHtml(r.player_name);
+            return `<tr style="${bg}">
+                <td style="width:56px;">${escapeHtml(r.rank)}</td>
+                <td>${nameCell}${hcp}</td>
+                <td style="width:130px;">${escapeHtml(r.chapter || "")}</td>
+                <td style="width:90px;text-align:center;">${escapeHtml(String(r.net_rank))}</td>
+                <td style="${resetTh}">${prFmtReset(r.points_reset)}</td>
+            </tr>`;
+        }).join("");
+
+        $("pr-table-container").innerHTML = `
+            <table class="enrollment-table">
+                <thead><tr>
+                    <th style="width:56px;">Rank</th><th>Player</th>
+                    <th style="width:130px;">Chapter</th>
+                    <th style="width:90px;text-align:center;">NET Rank</th>
+                    <th style="${resetTh}">POINTS RESET</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
     }
 
     async function prToggleDetail(tr, raceKey) {
