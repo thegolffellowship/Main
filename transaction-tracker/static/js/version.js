@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.21.4";
+window.TGF_VERSION = "2.21.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.21.5",
+    date: "2026-07-03",
+    changes: [
+      "Hill Country Matches rounds labeled in the expanded detail (admin-provided): hcmR1 = Valley, hcmR2 = Hills, hcmR3 = Creeks — via a static override registry that only fills codes the events table doesn't cover (a future tracker event with the same code would win).",
+    ],
+  },
   {
     version: "2.21.4",
     date: "2026-07-03",
