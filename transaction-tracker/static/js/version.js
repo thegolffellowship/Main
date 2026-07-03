@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.23.2";
+window.TGF_VERSION = "2.23.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.23.3",
+    date: "2026-07-03",
+    changes: [
+      "Temporary MCP bridge: probe_golf_genius accepts scoring-* extract values (scoring-import:<code>, scoring-rounds:<event>, scoring-verify:<id>, scoring-card:<id>, scoring-courses) that dispatch to the v2.23 scoring layer. Client sessions freeze their tool inventory at session start, so sessions opened before v2.23.0 can't see the five new scoring tools — this reaches them through a tool every session already has. Remove once stale sessions age out.",
+    ],
+  },
   {
     version: "2.23.2",
     date: "2026-07-03",

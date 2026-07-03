@@ -68,6 +68,13 @@ discrepancies.
   GET /api/scoring/scorecard/<id>, GET /api/courses/tees (manager).
 - MCP: import_gg_scorecards, get_scoring_rounds, get_scorecard_detail,
   verify_scoring_round_tool, get_courses.
+- TEMPORARY bridge (v2.23.3): MCP client sessions freeze their tool
+  inventory at session start, so sessions opened before v2.23.0 never see
+  the five scoring tools. probe_golf_genius (present in every session)
+  dispatches extract values scoring-import:<event_code> (url = tournament
+  URL), scoring-rounds:<event>, scoring-verify:<round_id>,
+  scoring-card:<round_id>, scoring-courses to the same functions
+  (_scoring_dispatch in mcp_server.py). Remove once stale sessions age out.
 
 ## Phase 2 (queued)
 
