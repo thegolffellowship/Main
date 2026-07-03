@@ -16716,9 +16716,8 @@ def _repair_fragment_profiles(conn: sqlite3.Connection) -> None:
 # (cid, expected name, phone, venmo, primary_email, extra_emails,
 #  name_aliases, membership_terms[(start, end, price, note)])
 _CONFIRMED_PROFILE_DETAILS = (
-    # GG's Austin portal names him "GORETZKE, Jeff"; tracker canonical is
-    # Jeffrey — the alias makes points-race (and any name) resolution land.
-    (126, "jeffrey goretzke", None, None, None, (), ("Jeff Goretzke",), ()),
+    # (Goretzke pin retired 2026-07-03: admin renamed cid 126 to
+    # "Jeff Goretzke", so GG's "GORETZKE, Jeff" resolves directly.)
     # NB: planelite1959@gmail.com is NOT Novosad — HubSpot identifies that
     # sender as Steve BARR, a separate FB ad lead (see
     # _RSVP_KNOWN_NON_CUSTOMERS and _repair_novosad_barr_separation).
