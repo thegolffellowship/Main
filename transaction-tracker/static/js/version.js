@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.20.0";
+window.TGF_VERSION = "2.20.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.20.1",
+    date: "2026-07-03",
+    changes: [
+      "AUSTIN Net 2026 points race added (admin request): third sub-tab on the Points Race tab, pulling standings from the Austin league portal (tgf-austin.golfgenius.com, league 514705, page 6077320) with the same persisted snapshot, buy-in color coding, and expandable round detail. Buy-in check is scoped to Austin NET Points Race enrollments; the SA NET tab is now labeled 'SA NET Points Race' and its enrolled-players roster is scoped to San Antonio (previously the roster mixed both chapters). The GROSS/Players Cup roster stays all-chapters.",
+    ],
+  },
   {
     version: "2.20.0",
     date: "2026-07-03",

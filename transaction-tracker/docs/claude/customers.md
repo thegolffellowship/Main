@@ -932,7 +932,9 @@ docs/claude/handicaps.md → public-portal probe for the fetch layer).
 - **Enrollment scope (v2.20.0)**: each race declares `enroll_chapter` —
   NET races are chapter-scoped; THE PLAYERS CUP uses None (cross-chapter,
   admin-confirmed) so Austin GROSS buy-ins count. Scoping the cup to SA
-  showed Robert Straiton et al. wrongly red.
+  showed Robert Straiton et al. wrongly red. Races: san_antonio_net,
+  austin_net (v2.20.1 — tgf-austin.golfgenius.com league 514705 page
+  6077320), players_cup_gross. Sub-tabs: SA NET / AUSTIN NET / GROSS.
 - **Flights (v2.20.0, Players Cup only)**: `flights` in the registry —
   1st <6.0 / 2nd 6-11.9 / 3rd 12-17.9 / 4th 18+, assigned by
   `_assign_flight()` from the CURRENT 18-hole index (handicap_index_18 =

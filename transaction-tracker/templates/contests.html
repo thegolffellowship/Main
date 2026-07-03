@@ -410,7 +410,8 @@
         <div id="section-points-race" class="section-hidden">
             <div class="pr-section">
                 <div class="sub-tabs">
-                    <button class="sub-tab active" data-pr="net">NET Points Race</button>
+                    <button class="sub-tab active" data-pr="net">SA NET Points Race</button>
+                    <button class="sub-tab" data-pr="austin">AUSTIN NET Points Race</button>
                     <button class="sub-tab" data-pr="gross">GROSS Points Race</button>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
@@ -597,13 +598,15 @@
 
     async function loadPrRoster() {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
-        const contest = kind === "net" ? "NET Points Race" : "GROSS Points Race";
+        const contest = kind === "gross" ? "GROSS Points Race" : "NET Points Race";
+        // NET races are chapter-scoped; the Players Cup (gross) is all chapters
+        const chapter = kind === "net" ? "San Antonio" : (kind === "austin" ? "Austin" : "");
         const season = String(new Date().getFullYear());
         const el = $("pr-roster");
-        $("pr-roster-title").textContent = `${contest} — Enrolled Players (${season})`;
+        $("pr-roster-title").textContent = `${chapter ? chapter + " " : ""}${contest} — Enrolled Players (${season})`;
         el.innerHTML = '<p style="color:var(--text-muted);">Loading…</p>';
         try {
-            const res = await fetch(`/api/season-contests?contest_type=${encodeURIComponent(contest)}&season=${encodeURIComponent(season)}`);
+            const res = await fetch(`/api/season-contests?contest_type=${encodeURIComponent(contest)}&season=${encodeURIComponent(season)}${chapter ? `&chapter=${encodeURIComponent(chapter)}` : ""}`);
             if (!res.ok) throw new Error("HTTP " + res.status);
             const rows = await res.json();
             if (!rows.length) {
@@ -1780,7 +1783,7 @@
 
     // ═══════════ POINTS RACE STANDINGS — persisted GG snapshot + buy-in ═══════════
 
-    const PR_RACE_BY_TAB = { net: "san_antonio_net", gross: "players_cup_gross" };
+    const PR_RACE_BY_TAB = { net: "san_antonio_net", austin: "austin_net", gross: "players_cup_gross" };
 
     $("pr-refresh-btn").addEventListener("click", () => prLoadStandings(true));
 
