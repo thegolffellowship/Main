@@ -839,3 +839,210 @@ def fetch_points_race_member_detail(page_id: str, member_card_id: str,
         "headings": parsed["headings"],
         "tables": tables,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Scorecard extraction (Phase 1 of the scoring-records project)
+#
+#  GG's tournament pages expose per-player XHR partials:
+#    /tournaments2/details/<aggregate_id>  → hole-by-hole strokes, handicap
+#        dots (strokes received per hole), par-relative result classes,
+#        playing handicap, gross/net sums
+#    /tournaments2/nets/<net_id>?event_id= → tee block: course, tee, slope,
+#        rating, per-hole yardage/par/stroke index
+#  Everything parsed here is committed to tracker-owned tables — GG is an
+#  input, never the system of record.
+# ─────────────────────────────────────────────────────────────────────────
+
+def _unwrap_js_string(body: str) -> str | None:
+    """Extract the longest JS string literal from a script partial and
+    decode it (GG partials wrap their HTML payload in one big argument)."""
+    best = None
+    for m in re.finditer(r'"((?:\\.|[^"\\])*)"', body, re.S):
+        if best is None or len(m.group(1)) > len(best):
+            best = m.group(1)
+    if not best or len(best) < 50:
+        return None
+    s = best.replace("\\'", "'")
+    try:
+        import json as _json
+        return _json.loads('"' + s + '"')
+    except ValueError:
+        return (s.replace('\\"', '"').replace("\\n", "\n")
+                 .replace("\\t", "\t").replace("\\/", "/"))
+
+
+def parse_tournament_aggregates(html: str) -> list:
+    """Aggregate (player-row) ids from a v2tournaments page."""
+    return list(dict.fromkeys(re.findall(r"/tournaments2/details/(\d+)", html)))
+
+
+# Par-relative result classes GG stamps on hole cells
+_RESULT_CLASSES = ("double_circle", "simple_circle", "double_square",
+                   "simple_square")
+
+
+def parse_scorecard_details(fragment: str) -> dict:
+    """Parse a details partial: one or more net-line player rows.
+
+    Returns {"flight": str|None, "players": [
+        {"player_name", "playing_handicap", "net_id", "gg_event_id",
+         "gg_profile_id", "holes": {n: {"strokes", "dots", "result"}},
+         "sum_front", "sum_back", "gross", "net"}]}
+    """
+    flight = None
+    m = re.search(r"<td colspan='\d+'>\s*(Flight[^<]*)</td>", fragment)
+    if m:
+        flight = " ".join(m.group(1).split())
+    prof = re.search(r"/profiles/(\d+)", fragment)
+
+    players = []
+    # Split on net-line rows; each carries data-net-name
+    chunks = re.split(r"(<tr class='net-line'[^>]*>)", fragment)
+    for i in range(1, len(chunks), 2):
+        head, body = chunks[i], chunks[i + 1]
+        nm = re.search(r"data-net-name='([^']*)'", head)
+        name = nm.group(1) if nm else None
+        ph = None
+        link = re.search(
+            r"expand-tee-details[^>]*href=\"(/tournaments2/nets/(\d+)\?event_id=(\d+))\"[^>]*>([^<]*)",
+            body)
+        net_id = gg_event_id = None
+        if link:
+            net_id, gg_event_id = link.group(2), link.group(3)
+            phm = re.search(r"\((\d+(?:\.\d+)?)\)", link.group(4))
+            if phm:
+                ph = float(phm.group(1))
+        holes = {}
+        for hm in re.finditer(
+                r"<td class='([^']*\bhole(\d+)\b[^']*)'[^>]*>(.*?)</td>",
+                body, re.S):
+            classes, hole_no, cell = hm.group(1), int(hm.group(2)), hm.group(3)
+            sm = re.search(r"score_box'>\s*([0-9]+)\s*<", cell)
+            strokes = int(sm.group(1)) if sm else None
+            dots = cell.count("●")
+            result = next((c for c in _RESULT_CLASSES if c in classes), None)
+            holes[hole_no] = {"strokes": strokes, "dots": dots,
+                              "result": result}
+        def _num(cls):
+            m2 = re.search(r"<td class='%s'[^>]*>\s*([0-9.]+)" % cls, body)
+            return float(m2.group(1)) if m2 else None
+        players.append({
+            "player_name": name,
+            "playing_handicap": ph,
+            "net_id": net_id,
+            "gg_event_id": gg_event_id,
+            "gg_profile_id": prof.group(1) if prof else None,
+            "holes": holes,
+            "sum_front": _num("sum_front"),
+            "sum_back": _num("sum_back"),
+            "gross": _num("sum"),
+            "net": _num("net_sum"),
+        })
+    return {"flight": flight, "players": players}
+
+
+def parse_tee_block(fragment: str) -> dict | None:
+    """Parse a nets partial: course/tee/slope/rating + per-hole rows."""
+    hm = re.search(
+        r"tee_data[^>]*>\s*<td[^>]*>\s*([^<]*SLOPE[^<]*)</td>", fragment)
+    if not hm:
+        return None
+    header = " ".join(hm.group(1).split())
+    # "1 - Blue Tee / SLOPE®: 135 / Course Rating™: 36.6 / TPC San Antonio - Oaks"
+    parts = [p.strip() for p in header.split("/")]
+    tee_name = parts[0] if parts else header
+    slope = rating = None
+    course = parts[-1] if len(parts) >= 4 else None
+    sm = re.search(r"SLOPE[^:]*:\s*([0-9]+)", header)
+    if sm:
+        slope = int(sm.group(1))
+    rm = re.search(r"Rating[^:]*:\s*([0-9.]+)", header)
+    if rm:
+        rating = float(rm.group(1))
+
+    def row_vals(row_class):
+        rm2 = re.search(r"<tr class='%s[^']*'>(.*?)</tr>" % row_class,
+                        fragment, re.S)
+        if not rm2:
+            return []
+        cells = re.findall(r"<td[^>]*>\s*([^<]*?)\s*</td>", rm2.group(1))
+        vals = []
+        for c in cells[1:]:          # skip label cell
+            c = c.strip()
+            vals.append(int(c) if c.isdigit() else None)
+        return vals
+
+    def per_hole(vals):
+        # Cells run holes 1-9, Out, 10-18, In, Total — keep hole cells only
+        out = {}
+        hole = 1
+        for idx, v in enumerate(vals):
+            if idx in (9, 19, 20, 21):   # Out, In, Total, extra
+                continue
+            if hole > 18:
+                break
+            if v is not None:
+                out[hole] = v
+            hole += 1
+        return out
+
+    return {
+        "course": course,
+        "tee_name": tee_name,
+        "slope": slope,
+        "rating": rating,
+        "yardage": per_hole(row_vals("yardage_row")),
+        "par": per_hole(row_vals("par_row")),
+        "stroke_index": per_hole(row_vals("handicap_row")),
+    }
+
+
+def fetch_tournament_scorecards(tournament_url: str,
+                                pause: float = 0.15) -> dict:
+    """Walk a v2tournaments page: every player's scorecard + tee blocks.
+
+    Returns {"players": [merged detail dicts + "tee" key], "raw": [(url, body)]}
+    — raw responses are returned so the caller can archive them.
+    """
+    import time as _time
+    _require_gg_host(tournament_url)
+    from urllib.parse import urlparse
+    base = "https://" + urlparse(tournament_url).hostname
+
+    page = fetch_public_page(tournament_url)
+    if page["status_code"] != 200:
+        raise RuntimeError(f"GG returned HTTP {page['status_code']} for tournament page")
+    raw = [(tournament_url, page["html"])]
+    agg_ids = parse_tournament_aggregates(page["html"])
+
+    players = []
+    tee_cache: dict = {}
+    for agg in agg_ids:
+        url = f"{base}/tournaments2/details/{agg}"
+        resp = fetch_public_page(url, xhr=True)
+        raw.append((url, resp["html"]))
+        frag = _unwrap_js_string(resp["html"])
+        if not frag:
+            continue
+        parsed = parse_scorecard_details(frag)
+        for p in parsed["players"]:
+            p["flight"] = parsed["flight"]
+            p["gg_aggregate_id"] = agg
+            tee = None
+            if p.get("net_id"):
+                if p["net_id"] in tee_cache:
+                    tee = tee_cache[p["net_id"]]
+                else:
+                    nurl = (f"{base}/tournaments2/nets/{p['net_id']}"
+                            f"?event_id={p.get('gg_event_id') or ''}")
+                    nresp = fetch_public_page(nurl, xhr=True)
+                    raw.append((nurl, nresp["html"]))
+                    nfrag = _unwrap_js_string(nresp["html"])
+                    tee = parse_tee_block(nfrag) if nfrag else None
+                    tee_cache[p["net_id"]] = tee
+            p["tee"] = tee
+            players.append(p)
+        if pause:
+            _time.sleep(pause)
+    return {"players": players, "raw": raw}
