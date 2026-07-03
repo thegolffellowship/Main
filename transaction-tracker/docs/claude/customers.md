@@ -897,6 +897,18 @@ notes already had content, skipping if the exact text is already in notes), then
   than stale transaction copies. Only overlays the Info tab's individual display fields —
   does not touch `customer.name`, the grouping/lookup key used throughout the page.
 
+## Comp'd season-contest enrollments (v2.20.5)
+
+Owner/managers play the races as a running-them privilege — no purchase
+backs the enrollment. Registry `_COMPED_CONTEST_ENROLLMENTS` in
+database.py ((cid, name, contest_type, chapter, season), cid+name
+verified before insert) seeds `season_contests` rows with
+`manually_enrolled = 1` at boot via `_seed_comped_contest_enrollments`
+— the same flag that protects cash enrollments from the sync's
+purchase-reconcile cleanup. Current: Kerry Niester (18) in NET and
+GROSS Points Race, San Antonio 2026. Add a tuple to comp another
+manager.
+
 ## Points Race — Buy-in Status (v2.19.0, moved+persisted v2.19.1)
 
 Contests page → Points Race tab: the NET and GROSS sub-tabs auto-load their

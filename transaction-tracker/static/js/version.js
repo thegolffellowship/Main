@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.20.4";
+window.TGF_VERSION = "2.20.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.20.5",
+    date: "2026-07-03",
+    changes: [
+      "Comp'd season-contest enrollments (owner privilege, admin request): Kerry Niester is enrolled in both San Antonio races — NET Points Race and GROSS Points Race (THE PLAYERS CUP) — via a new boot-seed registry (_COMPED_CONTEST_ENROLLMENTS). These rows carry manually_enrolled=1, the same protection as cash enrollments, so the purchase-reconcile sync will never remove them; cid+name are pinned and the seed is idempotent. His existing City Match Play manual enrollment already followed this pattern.",
+    ],
+  },
   {
     version: "2.20.4",
     date: "2026-07-03",
