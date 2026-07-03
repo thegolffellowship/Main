@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.23.1";
+window.TGF_VERSION = "2.23.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.23.2",
+    date: "2026-07-03",
+    changes: [
+      "Retired the Jeff Goretzke profile-details pin: the admin renamed cid 126 to 'Jeff Goretzke', so GG's name resolves directly and the pin's cid+name guard was (correctly) skipping with a boot warning every deploy.",
+    ],
+  },
   {
     version: "2.23.1",
     date: "2026-07-04",
