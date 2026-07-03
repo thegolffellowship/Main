@@ -6922,6 +6922,7 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                          (url, zlib.compress(body.encode("utf-8"))))
 
         imported = replaced = unresolved = bridged = 0
+        verified_ids: list = []
         for p in data["players"]:
             if not p.get("player_name") or not p.get("holes"):
                 continue
@@ -6950,6 +6951,7 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                      p.get("playing_handicap"), p.get("gross"), p.get("net"),
                      p.get("flight"), srid))
                 replaced += 1
+                verified_ids.append(srid)
             else:
                 cur = conn.execute(
                     """INSERT INTO scoring_rounds
@@ -6965,6 +6967,7 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                      p.get("flight")))
                 srid = cur.lastrowid
                 imported += 1
+                verified_ids.append(srid)
             for hole, h in sorted(p["holes"].items()):
                 conn.execute(
                     """INSERT OR REPLACE INTO scoring_holes
@@ -6983,11 +6986,51 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 bridged += n
         conn.commit()
 
+    # Parallel-run verification (admin requirement): every imported card is
+    # checked against GG's own numbers immediately; discrepancies surface as
+    # COO action items (category 'scoring') with the failing checks in the
+    # summary, so nothing drifts silently. Fix path is usually re-import or
+    # course/tee data curation, described in the item.
+    n_ok = 0
+    discrepancies = []
+    with _connect(db_path) as conn:
+        for srid in verified_ids:
+            try:
+                v = verify_scoring_round(srid, db_path=db_path)
+            except Exception as exc:
+                v = {"all_ok": False, "player_name": "?",
+                     "checks": [{"check": "verify_crashed", "ok": False,
+                                 "detail": str(exc)}]}
+            if v.get("all_ok"):
+                n_ok += 1
+                continue
+            fails = "; ".join(f"{c['check']}: {c['detail']}"
+                              for c in v.get("checks", []) if not c.get("ok"))
+            subject = f"Scorecard discrepancy: {v.get('player_name')} (round {srid})"
+            discrepancies.append({"scoring_round_id": srid,
+                                  "player_name": v.get("player_name"),
+                                  "failed_checks": fails})
+            exists = conn.execute(
+                """SELECT 1 FROM action_items
+                   WHERE subject = ? AND status = 'open' LIMIT 1""",
+                (subject,)).fetchone()
+            if not exists:
+                conn.execute(
+                    """INSERT INTO action_items
+                           (subject, from_name, summary, urgency, category)
+                       VALUES (?, 'Scorecard verifier', ?, 'medium', 'scoring')""",
+                    (subject, f"Tracker vs Golf Genius mismatch — {fails}. "
+                              f"Usual fixes: re-import the tournament, or "
+                              f"correct the course/tee data."))
+        conn.commit()
+
     logger.info("Scorecard import: %d new, %d replaced, %d unresolved names, "
-                "%d handicap rounds bridged", imported, replaced, unresolved, bridged)
+                "%d handicap rounds bridged, %d verified OK, %d discrepancies",
+                imported, replaced, unresolved, bridged, n_ok, len(discrepancies))
     return {"imported": imported, "replaced": replaced,
             "unresolved_names": unresolved, "handicap_rounds_bridged": bridged,
-            "players_seen": len(data["players"]), "event_id": event_id}
+            "players_seen": len(data["players"]), "event_id": event_id,
+            "verified_ok": n_ok, "discrepancies": discrepancies}
 
 
 def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
