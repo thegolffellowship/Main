@@ -6537,6 +6537,23 @@ def get_points_race_standings(race_key: str,
                 hidden_nonmembers.append(r["player_name"])
         out_rows = visible_rows
 
+        # Re-rank over the visible list (admin rule): hidden non-members are
+        # tossed entirely — they must not hold positions or create phantom
+        # ties (a "T59" whose only tie partner was hidden shows plain 59).
+        # GG's original rank is kept as gg_rank for reference.
+        for i, r in enumerate(out_rows):
+            r["gg_rank"] = r["rank"]
+            if i and out_rows[i - 1]["total_points"] == r["total_points"]:
+                r["_rank_num"] = out_rows[i - 1]["_rank_num"]
+            else:
+                r["_rank_num"] = i + 1
+        rank_tally: dict = {}
+        for r in out_rows:
+            rank_tally[r["_rank_num"]] = rank_tally.get(r["_rank_num"], 0) + 1
+        for r in out_rows:
+            n = r.pop("_rank_num")
+            r["rank"] = f"T{n}" if rank_tally[n] > 1 else str(n)
+
         # POINTS RESET projection (methodology per the 2025 workbook,
         # admin-confirmed 2026-07-03): one master ladder, position p ->
         # 100 - 0.5*(p-1); a race rank r maps to master position
@@ -6561,21 +6578,25 @@ def get_points_race_standings(race_key: str,
                 coef = (anchor_n / mine_n) if mine_n else None
             else:
                 counts, anchor_n, mine_n, coef = None, None, None, 1.0
+            # Ladder positions count ELIGIBLE players only — a visible but
+            # ineligible row (e.g. an expired member kept visible by their
+            # buy-in) consumes no ladder spot
+            elig_rows = []
             for r in out_rows:
                 r["points_reset"] = None
                 if not coef or (r.get("tournaments") or 0) < 1:
                     continue
                 cid = r["customer_id"]
-                eligible = (status_by_cid.get(cid) in _MEMBER_PLAYER_STATUSES
-                            if cid else
-                            "tgf" in (r.get("affiliation") or "").lower())
-                if not eligible:
-                    continue
-                m = re.match(r"T?(\d+)", str(r.get("rank") or "").strip())
-                if not m:
-                    continue
+                if (status_by_cid.get(cid) in _MEMBER_PLAYER_STATUSES
+                        if cid else
+                        "tgf" in (r.get("affiliation") or "").lower()):
+                    elig_rows.append(r)
+            prev_pts, prev_rank = object(), 0
+            for i, r in enumerate(elig_rows):
+                pos = prev_rank if r["total_points"] == prev_pts else i + 1
+                prev_pts, prev_rank = r["total_points"], pos
                 # int(x + 0.5) == Excel ROUND for positive x (half up)
-                master = int(1 + coef * (int(m.group(1)) - 1) + 0.5)
+                master = int(1 + coef * (pos - 1) + 0.5)
                 r["points_reset"] = 100 - 0.5 * (master - 1)
             reset_info = {
                 "mode": reset_mode,
