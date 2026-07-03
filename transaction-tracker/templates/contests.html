@@ -1828,9 +1828,13 @@
             const nameCell = r.customer_id
                 ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
-            return `<tr style="${bg}">
+            const expandable = !!r.member_card_id;
+            const chevron = expandable
+                ? ' <span class="pr-chevron" style="color:var(--text-muted);font-size:0.7rem;" title="Round-by-round points">&#9656;</span>'
+                : '';
+            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${expandable ? ` data-card="${r.member_card_id}"` : ''}>
                 <td>${escapeHtml(r.rank)}</td>
-                <td>${nameCell}</td>
+                <td>${nameCell}${chevron}</td>
                 <td style="text-align:right;">${r.total_points ?? ""}</td>
                 <td style="text-align:right;">${r.points_behind ?? ""}</td>
                 <td style="text-align:right;">${r.tournaments ?? ""}</td>
@@ -1859,6 +1863,55 @@
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>${extra}`;
+
+        $("pr-table-container").querySelectorAll("tr[data-card]").forEach(tr => {
+            tr.addEventListener("click", ev => {
+                if (ev.target.closest("a")) return;   // profile links still navigate
+                prToggleDetail(tr, d.race_key);
+            });
+        });
+    }
+
+    async function prToggleDetail(tr, raceKey) {
+        const chev = tr.querySelector(".pr-chevron");
+        const next = tr.nextElementSibling;
+        if (next && next.classList.contains("pr-detail-row")) {
+            next.remove();
+            if (chev) chev.innerHTML = "&#9656;";
+            return;
+        }
+        const cont = $("pr-table-container");
+        cont.querySelectorAll("tr.pr-detail-row").forEach(x => x.remove());
+        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9656;");
+
+        const detail = document.createElement("tr");
+        detail.className = "pr-detail-row";
+        detail.innerHTML = '<td colspan="7" style="background:#f8fafc;padding:0.6rem 1rem;color:var(--text-muted);">Loading round-by-round points…</td>';
+        tr.after(detail);
+        if (chev) chev.innerHTML = "&#9662;";
+        try {
+            const res = await fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(raceKey)}&card=${encodeURIComponent(tr.dataset.card)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            detail.firstElementChild.innerHTML = prRenderDetailTables(data.tables);
+            detail.firstElementChild.style.color = "";
+        } catch (e) {
+            detail.firstElementChild.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e.message)}</span>`;
+        }
+    }
+
+    function prRenderDetailTables(tables) {
+        if (!tables || !tables.length) {
+            return '<span style="color:var(--text-muted);">No round-by-round detail available for this player.</span>';
+        }
+        return tables.map(t => {
+            const head = t[0] || [];
+            const body = t.slice(1).filter(r => r.some(c => (c || "").trim()));
+            return `<table class="enrollment-table" style="margin:0.35rem 0;font-size:0.82rem;">
+                <thead><tr>${head.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+                <tbody>${body.map(r => `<tr>${r.map(c => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("")}</tbody>
+            </table>`;
+        }).join("");
     }
 
     // ═══════════ INIT ═══════════

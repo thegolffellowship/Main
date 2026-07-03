@@ -573,15 +573,23 @@ def _require_gg_host(url: str) -> None:
         raise ValueError("Only golfgenius.com URLs are allowed")
 
 
-def fetch_public_page(url: str, timeout: int = 20) -> dict:
+def fetch_public_page(url: str, timeout: int = 20, xhr: bool = False) -> dict:
     """Fetch a public Golf Genius page without logging in.
 
     The host allowlist is a hard requirement: this function is exposed
     through an MCP tool, so without it the tool would be an open proxy
     into the Railway network (SSRF). Redirect targets are re-validated.
+
+    xhr=True mimics jQuery's dataType:"script" ajax — GG's widget detail
+    routes (e.g. season_points_v2/individual_info) return a JS partial
+    only for XHR requests and fall back to a full page otherwise.
     """
     _require_gg_host(url)
-    resp = requests.get(url, headers=_HEADERS, timeout=timeout, allow_redirects=True)
+    headers = dict(_HEADERS)
+    if xhr:
+        headers["Accept"] = "text/javascript, application/javascript, */*; q=0.01"
+        headers["X-Requested-With"] = "XMLHttpRequest"
+    resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
     _require_gg_host(resp.url)
     return {"status_code": resp.status_code, "final_url": resp.url, "html": resp.text}
 
@@ -748,6 +756,14 @@ def fetch_season_points_race(page_id: str, league_id: str = "514047",
             i = idx.get(key)
             return r[i].strip() if i is not None and i < len(r) else ""
 
+        # Player rows carry data-member-card-id on the expandable name link —
+        # the key GG's individual_info endpoint needs for per-round detail
+        card_ids = dict(re.findall(
+            r'data-member-card-id="(\d+)"[^>]*>\s*([^<]+?)\s*</a>',
+            page["html"],
+        ))
+        card_by_name = {name: cid for cid, name in card_ids.items()}
+
         rows = []
         for r in table[1:]:
             player = cell(r, "player")
@@ -762,7 +778,61 @@ def fetch_season_points_race(page_id: str, league_id: str = "514047",
                 "wins": _num(cell(r, "wins")),
                 "total_points": _num(cell(r, "points")),
                 "points_behind": _num(cell(r, "behind")),
+                "member_card_id": card_by_name.get(player),
             })
         if rows:
             return rows
     raise RuntimeError("No points-race table found in widget HTML")
+
+
+def fetch_points_race_member_detail(page_id: str, member_card_id: str,
+                                    league_id: str = "514047",
+                                    host: str = "tgf-sa.golfgenius.com",
+                                    effective_date: str | None = None) -> dict:
+    """Fetch one player's per-round points breakdown (the row expansion).
+
+    GG's widget loads this via XHR: GET season_points_v2/individual_info
+    with member_card_id (+ optional effective_date), answered as a JS
+    partial that injects an HTML fragment. We unwrap the fragment and
+    return its parsed tables; if GG ever answers with plain HTML we parse
+    that directly — refusing the result if it looks like the standings
+    page instead of a per-player breakdown.
+    """
+    if not str(member_card_id).isdigit():
+        raise ValueError("member_card_id must be numeric")
+    from datetime import date as _date
+    eff = effective_date or _date.today().isoformat()
+    url = (f"https://{host}/leagues/{league_id}/widgets/season_points_v2/"
+           f"individual_info?page_id={page_id}&shared=false"
+           f"&member_card_id={member_card_id}&effective_date={eff}")
+    page = fetch_public_page(url, xhr=True)
+    if page["status_code"] != 200:
+        raise RuntimeError(f"Golf Genius returned HTTP {page['status_code']}")
+    body = page["html"]
+
+    # JS-partial shape: $("#info_<id>").html("<escaped fragment>")
+    frag = None
+    m = re.search(r'\.html\(\s*"((?:\\.|[^"\\])*)"', body, re.S)
+    if m:
+        s = m.group(1).replace("\\'", "'")
+        try:
+            import json as _json
+            frag = _json.loads('"' + s + '"')
+        except ValueError:
+            frag = (s.replace('\\"', '"').replace("\\n", "\n")
+                     .replace("\\t", "\t").replace("\\/", "/"))
+    parsed = parse_page_structure(frag if frag else body, page["final_url"])
+
+    tables = parsed["tables"]
+    # Guard: a full standings page means the XHR shape wasn't honored
+    for t in tables:
+        header = " ".join(t[0]).lower() if t else ""
+        if "current rank" in header and "points behind" in header:
+            raise RuntimeError(
+                "Unexpected response (standings page, not player detail) — "
+                "GG may have changed the individual_info endpoint")
+    return {
+        "member_card_id": str(member_card_id),
+        "headings": parsed["headings"],
+        "tables": tables,
+    }

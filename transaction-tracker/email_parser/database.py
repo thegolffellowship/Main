@@ -6184,6 +6184,7 @@ def _ensure_gg_points_table(conn: sqlite3.Connection) -> None:
             wins          INTEGER,
             total_points  REAL,
             points_behind REAL,
+            member_card_id TEXT,
             fetched_at    TEXT DEFAULT (datetime('now'))
         )"""
     )
@@ -6191,6 +6192,11 @@ def _ensure_gg_points_table(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_gg_points_race "
         "ON gg_points_standings(race_key)"
     )
+    try:  # table may predate the member_card_id column (v2.19.1)
+        conn.execute(
+            "ALTER TABLE gg_points_standings ADD COLUMN member_card_id TEXT")
+    except sqlite3.OperationalError:
+        pass
 
 
 def refresh_points_race_standings(race_key: str,
@@ -6224,11 +6230,13 @@ def refresh_points_race_standings(race_key: str,
         conn.executemany(
             """INSERT INTO gg_points_standings
                    (race_key, rank, prev_rank, player_name, customer_id,
-                    affiliation, tournaments, wins, total_points, points_behind)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    affiliation, tournaments, wins, total_points,
+                    points_behind, member_card_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [(race_key, r["rank"], r["prev_rank"], r["player_name"],
               r["customer_id"], r["affiliation"], r["tournaments"], r["wins"],
-              r["total_points"], r["points_behind"]) for r in standings],
+              r["total_points"], r["points_behind"],
+              r.get("member_card_id")) for r in standings],
         )
         conn.commit()
     logger.info("GG points race %r: persisted %d standings rows",
@@ -6281,7 +6289,8 @@ def get_points_race_standings(race_key: str,
         _ensure_gg_points_table(conn)
         rows = conn.execute(
             """SELECT rank, prev_rank, player_name, customer_id, affiliation,
-                      tournaments, wins, total_points, points_behind, fetched_at
+                      tournaments, wins, total_points, points_behind,
+                      member_card_id, fetched_at
                FROM gg_points_standings WHERE race_key = ? ORDER BY id""",
             (race_key,),
         ).fetchall()

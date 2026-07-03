@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.19.1";
+window.TGF_VERSION = "2.19.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.19.2",
+    date: "2026-07-03",
+    changes: [
+      "Points Race rows are now expandable (admin request): click a player to unfold their round-by-round points detail, fetched live from Golf Genius the same way GG's own row expansion works (season_points_v2/individual_info XHR, discovered by reverse-engineering GG's widget bundle). Each snapshot row now stores the GG member_card_id (column added in place for existing tables); detail responses are cached 10 minutes per player. If GG answers with something other than a player breakdown the row shows a clear error instead of wrong data. Profile links in the name cell still navigate normally — clicking anywhere else on the row toggles the detail.",
+    ],
+  },
   {
     version: "2.19.1",
     date: "2026-07-02",
