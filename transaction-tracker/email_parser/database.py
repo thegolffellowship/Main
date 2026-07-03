@@ -6208,6 +6208,14 @@ def _gg_name_candidates(raw_name: str) -> list:
                 cands.append(f"{' '.join(parts[:-1])} {last} {parts[-1]}")
     else:
         cands.append(name)
+    # GG duplicate-name artifact: a digit appended to the given name
+    # ("REED, Paul1") when a same-named member registers. Try the
+    # digit-stripped form after the exact one.
+    for c in list(cands):
+        stripped = " ".join(w.rstrip("0123456789") for w in c.split())
+        stripped = " ".join(stripped.split())
+        if stripped and stripped != c and stripped not in cands:
+            cands.append(stripped)
     return cands
 
 

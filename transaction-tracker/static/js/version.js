@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.20.1";
+window.TGF_VERSION = "2.20.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.20.2",
+    date: "2026-07-03",
+    changes: [
+      "Fix: 'REED, Paul1' on the Austin Net race now resolves to Paul Reed and shows his buy-in — Golf Genius appends a digit to the given name when a duplicate name registers in a league, and the name matcher took it literally. Candidate generation now also tries the digit-stripped form (exact form first), fixing this whole artifact class. Works immediately on the existing snapshot via the read-time enrollment-name fallback — no GG refresh required.",
+    ],
+  },
   {
     version: "2.20.1",
     date: "2026-07-03",
