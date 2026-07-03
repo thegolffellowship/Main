@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.24.3";
+window.TGF_VERSION = "2.24.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.24.4",
+    date: "2026-07-03",
+    changes: [
+      "Import recipe corrected per admin: ALL Net and ALL Gross are the gold standard — both carry the FULL field. ALL Net has everyone's playing handicaps + stroke dots (Individual Net is a purchased game and only covers buyers); ALL Gross is the raw-score baseline our own calculations build on to reverse-engineer GG's derivations. New upgrade rule: a net-game card (has playing handicap) now REPLACES a stored raw-gross card for the same physical round (upgraded_with_handicap in the result), never the reverse — so importing ALL Net retrofits handicaps/dots/net onto rounds that arrived via ALL Gross.",
+      "Documented the mid-season membership rule: points earned as a non-member WITHIN the season-contest window (Spring/Summer Gross & Net races: Kickoff events through City Championships; Fall has its own window) activate in full on becoming a member. The live pipeline already honors it — snapshots keep every ranked row, and the member filter + eligibility recompute at read time, so a status flip instantly surfaces the player with their full total.",
+    ],
+  },
   {
     version: "2.24.3",
     date: "2026-07-03",

@@ -979,6 +979,18 @@ docs/claude/handicaps.md → public-portal probe for the fetch layer).
   that merely failed to resolve stays visible amber as an identity todo).
   Rows with a buy-in are NEVER hidden. Hidden names returned as
   `hidden_nonmembers` (summary tooltip lists them).
+- **Mid-season membership activates in-window points (admin rule)**: when
+  someone becomes a member, point totals they earned as a non-member
+  WITHIN that season-contest window count in full — for the
+  Spring/Summer Gross & Net points races the window is the Kickoff
+  events through the City Championships; Fall points has its own
+  separate window. The live pipeline already honors this without extra
+  code: GG never drops a non-member's points, our snapshot stores every
+  ranked row, and the member filter + eligibility counts recompute at
+  read time from current_player_status — so flipping to active_member
+  instantly surfaces the player with their full in-window total and
+  re-ranks/re-coefficients everything. Don't "fix" hidden non-members by
+  deleting their snapshot rows; hiding is a display state, not a purge.
 - **Enrollment scope (v2.20.0)**: each race declares `enroll_chapter` —
   NET races are chapter-scoped; THE PLAYERS CUP uses None (cross-chapter,
   admin-confirmed) so Austin GROSS buy-ins count. Scoping the cup to SA

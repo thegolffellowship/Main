@@ -7024,7 +7024,7 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
             conn.execute("INSERT INTO gg_raw_archive (url, body_gz) VALUES (?, ?)",
                          (url, zlib.compress(body.encode("utf-8"))))
 
-        imported = replaced = unresolved = skipped = bridged = 0
+        imported = replaced = upgraded = unresolved = skipped = bridged = 0
         verified_ids: list = []
         for p in data["players"]:
             if not p.get("player_name") or not p.get("holes"):
@@ -7035,21 +7035,30 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                    WHERE gg_aggregate_id = ? AND player_name = ?""",
                 (p.get("gg_aggregate_id"), p["player_name"])).fetchone()
             # One physical round appears under EVERY GG game for that day
-            # (Individual Net, ALL Gross, Skins, ...) with a different
-            # aggregate id. The first tournament to bring a player's card
-            # owns the row; later tournaments only FILL players still
-            # missing. Import the richest game first (Individual Net has
-            # playing handicap + strokes received), then a full-field one
-            # (ALL Gross) to catch players who weren't in it.
+            # (ALL Net, ALL Gross, Individual Net, Skins, ...) with a
+            # different aggregate id. The first tournament to bring a
+            # player's card owns the row; later tournaments only FILL
+            # players still missing — except a richer card UPGRADES a
+            # poorer one: a net-game card (carries playing handicap +
+            # strokes-received dots) replaces a stored raw-gross card for
+            # the same physical round, never the reverse. Recipe: ALL Net
+            # first (full field with handicaps), ALL Gross to fill anyone
+            # left (raw-score baseline).
+            is_upgrade = False
             if not existing:
                 dup = conn.execute(
-                    """SELECT id FROM scoring_rounds
+                    """SELECT id, playing_handicap FROM scoring_rounds
                        WHERE (round_date = ? OR (event_id IS NOT NULL AND event_id = ?))
                          AND (customer_id = ? OR LOWER(player_name) = LOWER(?))""",
                     (event_date, event_id, cid or -1, p["player_name"])).fetchone()
                 if dup:
-                    skipped += 1
-                    continue
+                    if (p.get("playing_handicap") is not None
+                            and dup["playing_handicap"] is None):
+                        existing = dup
+                        is_upgrade = True
+                    else:
+                        skipped += 1
+                        continue
             if not cid:
                 unresolved += 1
             course_id = tee_id = None
@@ -7062,14 +7071,18 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?", (srid,))
                 conn.execute(
                     """UPDATE scoring_rounds SET customer_id=?, event_id=?, gg_event_id=?,
-                           gg_profile_id=?, round_date=?, course_id=?, tee_id=?,
-                           holes_played=?, playing_handicap=?, gross=?, net=?, flight=?
+                           gg_aggregate_id=?, gg_profile_id=?, round_date=?, course_id=?,
+                           tee_id=?, holes_played=?, playing_handicap=?, gross=?, net=?,
+                           flight=?
                        WHERE id=?""",
-                    (cid, event_id, p.get("gg_event_id"), p.get("gg_profile_id"),
-                     event_date, course_id, tee_id, holes_played,
+                    (cid, event_id, p.get("gg_event_id"), p.get("gg_aggregate_id"),
+                     p.get("gg_profile_id"), event_date, course_id, tee_id, holes_played,
                      p.get("playing_handicap"), p.get("gross"), p.get("net"),
                      p.get("flight"), srid))
-                replaced += 1
+                if is_upgrade:
+                    upgraded += 1
+                else:
+                    replaced += 1
                 verified_ids.append(srid)
             else:
                 cur = conn.execute(
@@ -7143,13 +7156,14 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                               f"correct the course/tee data."))
         conn.commit()
 
-    logger.info("Scorecard import: %d new, %d replaced, %d skipped (round "
-                "already captured from another tournament), %d unresolved "
-                "names, %d handicap rounds bridged, %d verified OK, "
-                "%d discrepancies",
-                imported, replaced, skipped, unresolved, bridged, n_ok,
-                len(discrepancies))
+    logger.info("Scorecard import: %d new, %d replaced, %d upgraded with "
+                "handicap, %d skipped (round already captured from another "
+                "tournament), %d unresolved names, %d handicap rounds "
+                "bridged, %d verified OK, %d discrepancies",
+                imported, replaced, upgraded, skipped, unresolved, bridged,
+                n_ok, len(discrepancies))
     return {"imported": imported, "replaced": replaced,
+            "upgraded_with_handicap": upgraded,
             "skipped_other_tournament": skipped,
             "unresolved_names": unresolved, "handicap_rounds_bridged": bridged,
             "players_seen": len(data["players"]), "event_id": event_id,
