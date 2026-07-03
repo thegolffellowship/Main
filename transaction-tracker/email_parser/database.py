@@ -7100,13 +7100,30 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 srid = cur.lastrowid
                 imported += 1
                 verified_ids.append(srid)
+            # Plus-handicap players (ph stored negative) GIVE BACK a stroke
+            # on each of the |ph| easiest holes played (highest stroke
+            # index) — WHS allocation. GG renders no dot for these, so the
+            # fact is derived from the tee's stroke indexes; verification
+            # then re-checks it against GG's own net markings.
+            give_back: dict = {}
+            ph = p.get("playing_handicap")
+            if ph is not None and ph < 0 and tee_id:
+                played = {h for h, v in p["holes"].items()
+                          if v.get("strokes") is not None}
+                si = {r["hole_number"]: r["stroke_index"] for r in conn.execute(
+                    """SELECT hole_number, stroke_index FROM course_tee_holes
+                       WHERE tee_id = ? AND stroke_index IS NOT NULL""",
+                    (tee_id,)) if r["hole_number"] in played}
+                for hole in sorted(si, key=lambda h: -si[h])[:int(round(-ph))]:
+                    give_back[hole] = -1
             for hole, h in sorted(p["holes"].items()):
                 conn.execute(
                     """INSERT OR REPLACE INTO scoring_holes
                            (scoring_round_id, hole_number, strokes,
                             strokes_received, gg_result)
                        VALUES (?,?,?,?,?)""",
-                    (srid, hole, h.get("strokes"), h.get("dots") or 0,
+                    (srid, hole, h.get("strokes"),
+                     give_back.get(hole, h.get("dots") or 0),
                      h.get("result")))
             # Bridge the legacy derived layer (same physical round)
             if cid and event_date:
@@ -7133,12 +7150,16 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 v = {"all_ok": False, "player_name": "?",
                      "checks": [{"check": "verify_crashed", "ok": False,
                                  "detail": str(exc)}]}
+            subject = f"Scorecard discrepancy: {v.get('player_name')} (round {srid})"
             if v.get("all_ok"):
                 n_ok += 1
+                # A re-import that now verifies clean closes its own alarm
+                conn.execute(
+                    """UPDATE action_items SET status = 'completed'
+                       WHERE status = 'open' AND subject = ?""", (subject,))
                 continue
             fails = "; ".join(f"{c['check']}: {c['detail']}"
                               for c in v.get("checks", []) if not c.get("ok"))
-            subject = f"Scorecard discrepancy: {v.get('player_name')} (round {srid})"
             discrepancies.append({"scoring_round_id": srid,
                                   "player_name": v.get("player_name"),
                                   "failed_checks": fails})

@@ -79,6 +79,22 @@ linkage by code prefix → events.item_name (event_id + round_date).
 Idempotent on (gg_aggregate_id, player_name). `scoring_rounds.customer_id`
 is in `_CUSTOMER_FK_COLUMNS`.
 
+## Plus handicaps (v2.26.0)
+
+GG renders plus playing handicaps as "(+1)". Parsed to a NEGATIVE
+playing_handicap so arithmetic stays uniform (net = gross − ph; Texas
+Terry gross 36 → net 37 with ph −1). UI displays "+1" (prFmtHcp). The
+give-back stroke gets NO dot on GG's card, so the importer derives it:
+strokes_received = −1 on the |ph| easiest holes played (highest stroke
+index — WHS allocation), and verification re-checks the result against
+GG's own net markings. Derivations handle negatives naturally: net
+double bogey cap = par + 2 + strokes_received (par+1 on give-back
+holes). Found when the 3-week backfill flagged 6 cards, all scratch-or-
+better players. Round selection for backfills: the Event Results widget
+`?shared=false&round=<round_id>` (selector `select[name=round]`; note
+unreleased rounds are absent from the selector and cannot be imported
+until the admin releases results in GG).
+
 ## Verification (parallel-run with GG)
 
 `verify_scoring_round(id)`: hole sums vs GG gross; net = gross − playing

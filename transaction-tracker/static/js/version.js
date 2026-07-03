@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.25.0";
+window.TGF_VERSION = "2.26.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.26.0",
+    date: "2026-07-03",
+    changes: [
+      "Scorecard grid restructured per admin: SCORE row renamed GROSS SCORE (bold, most prominent) and a NET SCORE row added beneath it (gross minus strokes received per hole), with thick sectional borders above GROSS and below NET separating course facts on top from the points rows below. Stroke-index row header stays 'HCP'.",
+      "PLUS HANDICAPS: the 3-week backfill's parallel-run verification flagged 6 cards, all the same root cause — GG renders plus playing handicaps as '(+1)' which the parser didn't match (Texas Terry: gross 36, NET 37). The parser now reads '+N' (stored negative so net = gross − ph stays uniform, displayed as '+N'), and the importer allocates the give-back stroke on the |ph| easiest holes played (highest stroke index, WHS allocation) since GG renders no dot for them. Give-backs render as hollow ○ marks on the card. Re-importing the affected tournaments cleared all 6 discrepancies.",
+      "Scorecard discrepancy action items now close themselves: when a re-import verifies a previously-flagged round clean, its open COO action item is marked completed automatically.",
+      "3-week scorecard backfill imported and verified: s9.14 Hill Country (34), s9.15 The Quarry (35), s18.7 Kissing Tree (29, 18 holes — two 9-hole handicap differentials bridged per player), a9.14 Avery Ranch (18), a9.15 Teravista (20), joining s9.16 TPC Oaks (32) — 168 rounds total, zero unresolved names. a9.16 ShadowGlen is pending: its results haven't been released to the Austin portal in GG yet.",
+    ],
+  },
   {
     version: "2.25.0",
     date: "2026-07-03",
