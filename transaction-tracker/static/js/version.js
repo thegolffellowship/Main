@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.20.3";
+window.TGF_VERSION = "2.20.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.20.4",
+    date: "2026-07-03",
+    changes: [
+      "Points race sub-tab labels per admin: 'San Antonio NET' and 'Austin NET' (were 'SA NET Points Race' / 'AUSTIN NET Points Race').",
+    ],
+  },
   {
     version: "2.20.3",
     date: "2026-07-03",
