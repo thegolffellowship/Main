@@ -99,19 +99,27 @@ member. Emails can only be gained or corrected by this change, never lost
 every boot (log-only) and lists players whose sync address changed or who are
 newly included, so the deploy log shows the effect before the next 02:00 sync.
 
-**Link identity repair (`_repair_player_link_identities`, boot):** two
-passes, both idempotent, both re-point the link AND its player's
-handicap_rounds. Pass 1 (v2.16.x): links whose `customer_name` (who the
-link is FOR) resolves uniquely to a different profile than `customer_id`
-— the buyer-email misattribution class (Will Massey → Colby Johnson).
+**Link identity repair (`_repair_player_link_identities`, boot):** three
+passes, all idempotent, all re-point the link AND its player's
+handicap_rounds (moved rounds get `scoring_round_id = NULL` so the next
+scorecard import re-bridges them to the right card).
+Pass 1 (v2.16.x): links whose `customer_name` (who the link is FOR)
+resolves uniquely to a different profile than `customer_id` — the
+buyer-email misattribution class (Will Massey → Colby Johnson).
 Pass 2 (v2.24.2): links with NO customer_name are checked against the GG
 `player_name` itself, re-pointed only when that name is a customer's
 EXACT canonical name (alias-mediated or ambiguous matches left alone).
-Found when Kailey Lopez's nameless link pointed at Steve Kulawik — her
-rounds fed his handicap record and her scorecard import was skipped as
-his cross-tournament "duplicate". Moved rounds get
-`scoring_round_id = NULL` so the next scorecard import re-bridges them
-to the right card.
+Pass 3 (v2.24.3): the email auto-matcher sometimes fills BOTH fields
+with the buyer — Kailey Lopez's link recorded customer_name='Steve
+Kulawik' AND cid 44 because her guest spots were bought on his email, so
+pass 1 saw it as self-consistent. Re-points (and corrects
+customer_name) only when the GG player_name is EXACTLY one other
+customer's canonical name AND the linked customer separately holds a
+link under their own name — proof the row can't be their display-name
+variant. Nickname links (GG "Mike Murphy" → Michael Murphy) are never
+touched. Symptoms of this class: one player's rounds silently feed
+another's handicap record, and scorecard imports skip the victim as the
+other player's cross-tournament "duplicate".
 
 **Admin exclusions (v2.17.14):** `_GG_SYNC_EXCLUDES` in `database.py` lists
 players the admin intentionally REMOVED from Golf Genius (inactive members
