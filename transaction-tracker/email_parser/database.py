@@ -6136,6 +6136,15 @@ _GG_POINTS_RACES: dict = {
         # NET races are chapter-scoped: only same-chapter buy-ins count
         "enroll_chapter": "San Antonio",
     },
+    "austin_net": {
+        "label": "AUSTIN Net 2026",
+        "host": "tgf-austin.golfgenius.com",
+        "league_id": "514705",
+        "page_id": "6077320",
+        "contest_type": "NET Points Race",
+        "chapter": "Austin",
+        "enroll_chapter": "Austin",
+    },
     "players_cup_gross": {
         "label": "THE PLAYERS CUP 2026",
         "host": "tgf-sa.golfgenius.com",
