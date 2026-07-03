@@ -43,6 +43,24 @@ Tracker-owned scorecards extracted from Golf Genius. Design principles
   `parse_scorecard_details`, `parse_tee_block`,
   `fetch_tournament_scorecards`.
 
+## One round, many GG tournaments (IMPORTANT for imports)
+
+A single physical round shows up under EVERY GG game that day —
+Individual Net, ALL Gross, Skins, MVP, Match Play — each with a
+DIFFERENT tournaments2/details aggregate id. The importer therefore
+dedupes by identity + round: on a fresh aggregate id it first checks
+for an existing scoring_rounds row for the same (customer_id or
+player_name) and (round_date or event_id) and SKIPS if found
+(`skipped_other_tournament` in the result). Re-importing the same
+tournament still replaces (refresh path).
+
+Ordering rule: import the richest game FIRST — Individual Net carries
+playing handicap + strokes-received dots — then a full-field game
+(ALL Gross) to top up players who weren't in the net game (guests,
+non-buyers). The round-N tournament list lives at
+`/leagues/<league_id>/widgets/tournament_results?shared=false`
+(iframe inside the Event Results portal page).
+
 ## Import & identity
 
 `import_gg_scorecards(tournament_url, event_code)` (database.py): walks
@@ -75,6 +93,19 @@ discrepancies.
   URL), scoring-rounds:<event>, scoring-verify:<round_id>,
   scoring-card:<round_id>, scoring-courses to the same functions
   (_scoring_dispatch in mcp_server.py). Remove once stale sessions age out.
+
+## UI (v2.24.0)
+
+Contests → Points Races → expand a player: below the GG points
+breakdown, a SCORECARDS section lists that customer's imported rounds
+(`/api/scoring/rounds?customer_id=`); clicking a round lazy-loads
+`/api/scoring/scorecard/<id>` and renders the hole-by-hole card
+(PAR/YARDS/S.I. from course_tee_holes, scores with ● strokes-received
+dots and GG's net-relative circle/square markings, OUT/IN totals,
+stableford + adjusted-gross summary line). Rows carry data-cid so any
+resolved player expands even without a GG member card. Rendering fns:
+prRenderScoreRounds / prBindScorecardToggles / prRenderScorecard in
+templates/contests.html.
 
 ## Phase 2 (queued)
 

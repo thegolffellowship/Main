@@ -1850,14 +1850,14 @@
             const nameCell = r.customer_id
                 ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
-            const expandable = !!r.member_card_id;
+            const expandable = !!(r.member_card_id || r.customer_id);
             const chevron = expandable
-                ? ' <span class="pr-chevron" style="color:var(--text-muted);font-size:0.7rem;" title="Round-by-round points">&#9656;</span>'
+                ? ' <span class="pr-chevron" style="color:var(--text-muted);font-size:0.7rem;" title="Round-by-round points & imported scorecards">&#9656;</span>'
                 : '';
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
                 : '';
-            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${expandable ? ` data-card="${r.member_card_id}"` : ''}>
+            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}>
                 <td style="${rankStyle}">${escapeHtml(r.rank)}</td>
                 <td>${nameCell}${hcp}${chevron}</td>
                 ${showChapter ? `<td style="${chapStyle}">${escapeHtml(r.player_chapter || "")}</td>` : ""}
@@ -1910,7 +1910,7 @@
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
 
-        $("pr-table-container").querySelectorAll("tr[data-card]").forEach(tr => {
+        $("pr-table-container").querySelectorAll("tr[data-card], tr[data-cid]").forEach(tr => {
             tr.addEventListener("click", ev => {
                 if (ev.target.closest("a")) return;   // profile links still navigate
                 prToggleDetail(tr, d.race_key);
@@ -1999,18 +1999,164 @@
 
         const detail = document.createElement("tr");
         detail.className = "pr-detail-row";
-        detail.innerHTML = `<td colspan="${tr.children.length}" style="background:#f8fafc;padding:0.6rem 1rem;color:var(--text-muted);">Loading round-by-round points…</td>`;
+        detail.innerHTML = `<td colspan="${tr.children.length}" style="background:#f8fafc;padding:0.6rem 1rem;color:var(--text-muted);">Loading player detail…</td>`;
         tr.after(detail);
         if (chev) chev.innerHTML = "&#9662;";
+        const cell = detail.firstElementChild;
         try {
-            const res = await fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(raceKey)}&card=${encodeURIComponent(tr.dataset.card)}`);
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-            detail.firstElementChild.innerHTML = prRenderDetailTables(data.tables);
-            detail.firstElementChild.style.color = "";
+            // Points breakdown (GG) and imported scorecards (tracker DB)
+            // load in parallel; scorecards are additive and never fail the panel
+            const [ptsHtml, scHtml] = await Promise.all([
+                tr.dataset.card
+                    ? fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(raceKey)}&card=${encodeURIComponent(tr.dataset.card)}`)
+                        .then(async res => {
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                            return prRenderDetailTables(data.tables);
+                        })
+                    : Promise.resolve(""),
+                tr.dataset.cid
+                    ? fetch(`/api/scoring/rounds?customer_id=${encodeURIComponent(tr.dataset.cid)}&limit=40`)
+                        .then(async res => res.ok ? prRenderScoreRounds(await res.json()) : "")
+                        .catch(() => "")
+                    : Promise.resolve(""),
+            ]);
+            cell.innerHTML = (ptsHtml || "") + (scHtml || "")
+                || '<span style="color:var(--text-muted);">No detail available for this player yet.</span>';
+            cell.style.color = "";
+            prBindScorecardToggles(cell);
         } catch (e) {
-            detail.firstElementChild.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e.message)}</span>`;
+            cell.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e.message)}</span>`;
         }
+    }
+
+    // ── Imported scorecards inside the player drill-down ──
+    // /api/scoring/rounds rows → compact list; clicking a row lazy-loads
+    // /api/scoring/scorecard/<id> and renders the classic hole-by-hole grid.
+
+    function prRenderScoreRounds(rounds) {
+        if (!rounds || !rounds.length) return "";
+        const rows = rounds.map(r => {
+            const tee = (r.tee_name || "").replace(/^\d+\s*-\s*/, "");
+            const course = [r.course_name, tee].filter(Boolean).join(" — ");
+            const sr = [r.slope != null ? `slope ${r.slope}` : null,
+                        r.rating != null ? `rating ${r.rating}` : null].filter(Boolean).join(", ");
+            return `<tr class="pr-sc-row" data-srid="${r.id}" style="cursor:pointer;">
+                <td style="white-space:nowrap;">${escapeHtml(r.round_date || "")}</td>
+                <td><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(r.event_name || "")}</td>
+                <td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>
+                <td style="text-align:center;">${r.holes_played ?? ""}</td>
+                <td style="text-align:center;">${r.playing_handicap ?? ""}</td>
+                <td style="text-align:center;font-weight:700;">${r.gross ?? ""}</td>
+                <td style="text-align:center;">${r.net ?? ""}</td>
+            </tr>
+            <tr class="pr-sc-detail" data-for="${r.id}" style="display:none;"><td colspan="7" style="background:#fff;padding:0.5rem 0.75rem;"></td></tr>`;
+        }).join("");
+        return `<div style="margin-top:0.7rem;">
+            <div style="font-weight:700;font-size:0.8rem;letter-spacing:0.04em;color:#334155;margin-bottom:0.25rem;">
+                SCORECARDS <span style="font-weight:400;color:var(--text-muted);">— imported from Golf Genius; click a row for hole-by-hole</span>
+            </div>
+            <table class="enrollment-table" style="margin:0;font-size:0.82rem;">
+                <thead><tr>
+                    <th>Date</th><th>Event</th><th>Course / Tee</th>
+                    <th style="text-align:center;">Holes</th>
+                    <th style="text-align:center;">HCP</th>
+                    <th style="text-align:center;">Gross</th>
+                    <th style="text-align:center;">Net</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+    }
+
+    function prBindScorecardToggles(root) {
+        root.querySelectorAll("tr.pr-sc-row").forEach(row => {
+            row.addEventListener("click", async ev => {
+                ev.stopPropagation();
+                const det = root.querySelector(`tr.pr-sc-detail[data-for="${row.dataset.srid}"]`);
+                if (!det) return;
+                const chev = row.querySelector(".pr-sc-chev");
+                if (det.style.display !== "none") {
+                    det.style.display = "none";
+                    if (chev) chev.innerHTML = "&#9656;";
+                    return;
+                }
+                det.style.display = "";
+                if (chev) chev.innerHTML = "&#9662;";
+                if (!det.firstElementChild.innerHTML) {
+                    det.firstElementChild.innerHTML = '<span style="color:var(--text-muted);">Loading scorecard…</span>';
+                    try {
+                        const res = await fetch(`/api/scoring/scorecard/${row.dataset.srid}`);
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                        det.firstElementChild.innerHTML = prRenderScorecard(data);
+                    } catch (e) {
+                        det.firstElementChild.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e.message)}</span>`;
+                    }
+                }
+            });
+        });
+    }
+
+    function prRenderScorecard(card) {
+        const holes = card.holes || [];
+        if (!holes.some(h => h.strokes != null)) {
+            return '<span style="color:var(--text-muted);">No hole data on this card.</span>';
+        }
+        const blocks = [];
+        const front = holes.filter(h => h.hole_number <= 9);
+        const back = holes.filter(h => h.hole_number > 9);
+        if (front.some(h => h.strokes != null)) blocks.push(["OUT", front]);
+        if (back.some(h => h.strokes != null)) blocks.push(["IN", back]);
+
+        const td = "padding:2px 6px;text-align:center;border:1px solid #e2e8f0;min-width:2em;";
+        const lbl = `padding:2px 8px;border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
+        const scoreCell = h => {
+            if (h.strokes == null) return `<td style="${td}"></td>`;
+            // GG's markings are NET-relative: red circles = net under par,
+            // blue squares = net over par (double = by 2+)
+            let deco = "";
+            if (h.gg_result === "simple_circle") deco = "border:1.5px solid #dc2626;border-radius:50%;";
+            else if (h.gg_result === "double_circle") deco = "border:1.5px solid #dc2626;border-radius:50%;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #dc2626;";
+            else if (h.gg_result === "simple_square") deco = "border:1.5px solid #2563eb;";
+            else if (h.gg_result === "double_square") deco = "border:1.5px solid #2563eb;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #2563eb;";
+            const dots = h.strokes_received
+                ? `<span style="font-size:0.6em;vertical-align:super;color:#334155;">${"●".repeat(h.strokes_received)}</span>`
+                : "";
+            return `<td style="${td}"><span style="display:inline-block;min-width:1.4em;line-height:1.4em;${deco}">${h.strokes}</span>${dots}</td>`;
+        };
+        const sum = (hs, f) => hs.reduce((a, h) => a + (f(h) || 0), 0);
+
+        const tables = blocks.map(([label, hs]) => {
+            const holeRow = hs.map(h => `<td style="${td}font-weight:700;background:#111;color:#fff;">${h.hole_number}</td>`).join("");
+            const parRow = hs.map(h => `<td style="${td}">${h.par ?? ""}</td>`).join("");
+            const ydsRow = hs.map(h => `<td style="${td}">${h.yardage ?? ""}</td>`).join("");
+            const siRow = hs.map(h => `<td style="${td}color:var(--text-muted);">${h.stroke_index ?? ""}</td>`).join("");
+            const scRow = hs.map(scoreCell).join("");
+            const tot = `style="${td}font-weight:700;background:#f1f5f9;"`;
+            const totHead = `style="${td}font-weight:700;background:#111;color:#fff;"`;
+            return `<table style="border-collapse:collapse;font-size:0.8rem;margin:0.25rem 0;">
+                <tr><td style="${lbl}background:#111;color:#fff;">HOLE</td>${holeRow}<td ${totHead}>${label}</td></tr>
+                <tr><td style="${lbl}">PAR</td>${parRow}<td ${tot}>${sum(hs, h => h.par) || ""}</td></tr>
+                <tr><td style="${lbl}">YARDS</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td></tr>
+                <tr><td style="${lbl}">S.I.</td>${siRow}<td ${tot}></td></tr>
+                <tr><td style="${lbl}">SCORE</td>${scRow}<td ${tot}>${sum(hs, h => h.strokes) || ""}</td></tr>
+            </table>`;
+        }).join("");
+
+        const r = card.round || {}, dt = card.derived_totals || {};
+        const bits = [];
+        if (r.gross != null) bits.push(`Gross <strong>${r.gross}</strong>`);
+        if (r.net != null) bits.push(`Net <strong>${r.net}</strong>${r.playing_handicap != null ? ` (HCP ${r.playing_handicap})` : ""}`);
+        if (dt.stableford_net != null) bits.push(`Stableford ${dt.stableford_net} net / ${dt.stableford_gross} gross`);
+        if (dt.adjusted_gross != null) bits.push(`Adj. gross ${dt.adjusted_gross}`);
+        return `<div style="overflow-x:auto;">${tables}</div>
+            <div style="font-size:0.8rem;color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
+                ● = handicap strokes received &nbsp;·&nbsp;
+                <span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> net under par &nbsp;
+                <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> net over par (doubled ring/box = by 2+)
+            </div>`;
     }
 
     function prRenderDetailTables(tables) {
