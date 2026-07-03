@@ -6067,6 +6067,7 @@ def _repair_player_link_identities(conn: sqlite3.Connection) -> None:
     player's handicap_rounds) is re-pointed; ambiguous or unresolvable
     names are logged and left alone. Idempotent.
     """
+    _ensure_scoring_tables(conn)   # repairs reset handicap_rounds.scoring_round_id
     rows = conn.execute(
         """SELECT l.rowid AS rid, l.player_name, l.customer_name, l.customer_id,
                   TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS linked_name
@@ -6095,7 +6096,7 @@ def _repair_player_link_identities(conn: sqlite3.Connection) -> None:
             (want, r["rid"]),
         )
         moved_rounds = conn.execute(
-            "UPDATE handicap_rounds SET customer_id = ? "
+            "UPDATE handicap_rounds SET customer_id = ?, scoring_round_id = NULL "
             "WHERE customer_id = ? AND player_name = ?",
             (want, r["customer_id"], r["player_name"]),
         ).rowcount
@@ -6104,6 +6105,51 @@ def _repair_player_link_identities(conn: sqlite3.Connection) -> None:
             "(%d round(s) followed)",
             r["customer_name"], r["customer_id"], r["linked_name"], want,
             moved_rounds,
+        )
+
+    # Pass 2: links created with NO customer_name — nothing recorded about
+    # who the link is FOR, so the GG player_name itself is the only signal.
+    # When that name IS a customer's exact canonical name (not merely an
+    # alias — alias-mediated resolution is too weak to auto-repair) and the
+    # link points at a different profile, it's the same buyer-email
+    # misattribution class: Kailey Lopez's nameless link pointed at Steve
+    # Kulawik, silently feeding her rounds into his handicap record and
+    # blocking her scorecard import as a "duplicate" of his.
+    rows = conn.execute(
+        """SELECT l.rowid AS rid, l.player_name, l.customer_id,
+                  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS linked_name
+           FROM handicap_player_links l
+           JOIN customers c ON c.customer_id = l.customer_id
+           WHERE l.customer_id IS NOT NULL
+             AND (l.customer_name IS NULL OR TRIM(l.customer_name) = '')
+             AND l.player_name IS NOT NULL AND TRIM(l.player_name) != ''"""
+    ).fetchall()
+    for r in rows:
+        pname = " ".join((r["player_name"] or "").split())
+        linked = " ".join((r["linked_name"] or "").split()).lower()
+        if not pname or pname.lower() == linked:
+            continue
+        want = _lookup_customer_id(conn, pname, None)
+        if want is None or want == r["customer_id"]:
+            continue
+        target = conn.execute(
+            """SELECT TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS nm
+               FROM customers WHERE customer_id = ?""", (want,)).fetchone()
+        if not target or " ".join((target["nm"] or "").split()).lower() != pname.lower():
+            continue
+        conn.execute(
+            "UPDATE handicap_player_links SET customer_id = ? WHERE rowid = ?",
+            (want, r["rid"]),
+        )
+        moved_rounds = conn.execute(
+            "UPDATE handicap_rounds SET customer_id = ?, scoring_round_id = NULL "
+            "WHERE customer_id = ? AND player_name = ?",
+            (want, r["customer_id"], r["player_name"]),
+        ).rowcount
+        logger.info(
+            "Player link identity (nameless link): %r re-pointed cid %s (%r) "
+            "→ cid %s (%d round(s) followed; scorecard bridge reset)",
+            pname, r["customer_id"], r["linked_name"], want, moved_rounds,
         )
     conn.commit()
 
