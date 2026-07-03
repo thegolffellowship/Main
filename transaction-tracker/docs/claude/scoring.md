@@ -102,18 +102,23 @@ discrepancies.
   scoring-card:<round_id>, scoring-courses to the same functions
   (_scoring_dispatch in mcp_server.py). Remove once stale sessions age out.
 
-## UI (v2.24.0)
+## UI (v2.24.0, reworked v2.25.0)
 
-Contests → Points Races → expand a player: below the GG points
-breakdown, a SCORECARDS section lists that customer's imported rounds
-(`/api/scoring/rounds?customer_id=`); clicking a round lazy-loads
-`/api/scoring/scorecard/<id>` and renders the hole-by-hole card
-(PAR/YARDS/S.I. from course_tee_holes, scores with ● strokes-received
-dots and GG's net-relative circle/square markings, OUT/IN totals,
-stableford + adjusted-gross summary line). Rows carry data-cid so any
-resolved player expands even without a GG member card. Rendering fns:
-prRenderScoreRounds / prBindScorecardToggles / prRenderScorecard in
-templates/contests.html.
+Contests → Points Races → expand a player: points lines that have an
+imported scorecard are themselves clickable (chevron on the EVENT cell)
+and expand the hole-by-hole card in place — matched by event name with
+an event-code-prefix fallback, Front/Back suffixes stripped. Rounds NOT
+represented by a points line (guests without points detail) fall back
+to an OTHER SCORECARDS list below. Grid rows: PAR / YARDS / HCP
+(stroke index — relabeled per admin; 1 = hardest, decides where
+handicap dots land) / SCORE (● dots + GG's net-relative circle/square
+markings) / NET PTS / GROSS PTS (per-hole stableford through the admin
+formula settings; totals show 0/negative correctly), plus a stableford
++ adjusted-gross summary line. Data: `/api/scoring/rounds?customer_id=`
++ `/api/scoring/scorecard/<id>`; rows carry data-cid so any resolved
+player expands even without a GG member card. Rendering fns:
+prRenderDetailTables (matching) / prRenderScoreRounds /
+prBindScorecardToggles / prRenderScorecard in templates/contests.html.
 
 ## Phase 2 (queued)
 
