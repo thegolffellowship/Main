@@ -2006,22 +2006,29 @@
         try {
             // Points breakdown (GG) and imported scorecards (tracker DB)
             // load in parallel; scorecards are additive and never fail the panel
-            const [ptsHtml, scHtml] = await Promise.all([
+            const [ptsTables, rounds] = await Promise.all([
                 tr.dataset.card
                     ? fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(raceKey)}&card=${encodeURIComponent(tr.dataset.card)}`)
                         .then(async res => {
                             const data = await res.json();
                             if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                            return prRenderDetailTables(data.tables);
+                            return data.tables;
                         })
-                    : Promise.resolve(""),
+                    : Promise.resolve(null),
                 tr.dataset.cid
                     ? fetch(`/api/scoring/rounds?customer_id=${encodeURIComponent(tr.dataset.cid)}&limit=40`)
-                        .then(async res => res.ok ? prRenderScoreRounds(await res.json()) : "")
-                        .catch(() => "")
-                    : Promise.resolve(""),
+                        .then(async res => res.ok ? await res.json() : [])
+                        .catch(() => [])
+                    : Promise.resolve([]),
             ]);
-            cell.innerHTML = (ptsHtml || "") + (scHtml || "")
+            // Points lines with an imported scorecard become clickable in
+            // place; only rounds NOT represented in the points table (guests,
+            // no points detail) fall back to the separate SCORECARDS list.
+            const claimed = new Set();
+            let html = ptsTables ? prRenderDetailTables(ptsTables, rounds, claimed) : "";
+            const leftovers = (rounds || []).filter(r => !claimed.has(r.id));
+            html += prRenderScoreRounds(leftovers);
+            cell.innerHTML = html
                 || '<span style="color:var(--text-muted);">No detail available for this player yet.</span>';
             cell.style.color = "";
             prBindScorecardToggles(cell);
@@ -2041,7 +2048,7 @@
             const course = [r.course_name, tee].filter(Boolean).join(" — ");
             const sr = [r.slope != null ? `slope ${r.slope}` : null,
                         r.rating != null ? `rating ${r.rating}` : null].filter(Boolean).join(", ");
-            return `<tr class="pr-sc-row" data-srid="${r.id}" style="cursor:pointer;">
+            return `<tr data-srid="${r.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard">
                 <td style="white-space:nowrap;">${escapeHtml(r.round_date || "")}</td>
                 <td><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(r.event_name || "")}</td>
                 <td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>
@@ -2049,12 +2056,11 @@
                 <td style="text-align:center;">${r.playing_handicap ?? ""}</td>
                 <td style="text-align:center;font-weight:700;">${r.gross ?? ""}</td>
                 <td style="text-align:center;">${r.net ?? ""}</td>
-            </tr>
-            <tr class="pr-sc-detail" data-for="${r.id}" style="display:none;"><td colspan="7" style="background:#fff;padding:0.5rem 0.75rem;"></td></tr>`;
+            </tr>`;
         }).join("");
         return `<div style="margin-top:0.7rem;">
             <div style="font-weight:700;font-size:0.8rem;letter-spacing:0.04em;color:#334155;margin-bottom:0.25rem;">
-                SCORECARDS <span style="font-weight:400;color:var(--text-muted);">— imported from Golf Genius; click a row for hole-by-hole</span>
+                OTHER SCORECARDS <span style="font-weight:400;color:var(--text-muted);">— rounds without a points line above; click a row for hole-by-hole</span>
             </div>
             <table class="enrollment-table" style="margin:0;font-size:0.82rem;">
                 <thead><tr>
@@ -2070,29 +2076,30 @@
     }
 
     function prBindScorecardToggles(root) {
-        root.querySelectorAll("tr.pr-sc-row").forEach(row => {
+        // Any row carrying data-srid (a points line matched to an imported
+        // round, or a fallback-list row) expands its scorecard in place
+        root.querySelectorAll("tr[data-srid]").forEach(row => {
             row.addEventListener("click", async ev => {
                 ev.stopPropagation();
-                const det = root.querySelector(`tr.pr-sc-detail[data-for="${row.dataset.srid}"]`);
-                if (!det) return;
                 const chev = row.querySelector(".pr-sc-chev");
-                if (det.style.display !== "none") {
-                    det.style.display = "none";
+                const next = row.nextElementSibling;
+                if (next && next.classList.contains("pr-sc-detail")) {
+                    next.remove();
                     if (chev) chev.innerHTML = "&#9656;";
                     return;
                 }
-                det.style.display = "";
+                const det = document.createElement("tr");
+                det.className = "pr-sc-detail";
+                det.innerHTML = `<td colspan="${row.children.length}" style="background:#fff;padding:0.5rem 0.75rem;"><span style="color:var(--text-muted);">Loading scorecard…</span></td>`;
+                row.after(det);
                 if (chev) chev.innerHTML = "&#9662;";
-                if (!det.firstElementChild.innerHTML) {
-                    det.firstElementChild.innerHTML = '<span style="color:var(--text-muted);">Loading scorecard…</span>';
-                    try {
-                        const res = await fetch(`/api/scoring/scorecard/${row.dataset.srid}`);
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                        det.firstElementChild.innerHTML = prRenderScorecard(data);
-                    } catch (e) {
-                        det.firstElementChild.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e.message)}</span>`;
-                    }
+                try {
+                    const res = await fetch(`/api/scoring/scorecard/${row.dataset.srid}`);
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                    det.firstElementChild.innerHTML = prRenderScorecard(data);
+                } catch (e) {
+                    det.firstElementChild.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e.message)}</span>`;
                 }
             });
         });
@@ -2126,6 +2133,12 @@
             return `<td style="${td}"><span style="display:inline-block;min-width:1.4em;line-height:1.4em;${deco}">${h.strokes}</span>${dots}</td>`;
         };
         const sum = (hs, f) => hs.reduce((a, h) => a + (f(h) || 0), 0);
+        // Stableford totals can legitimately be 0 or negative — show them
+        const sumPts = (hs, f) => {
+            let any = false, t = 0;
+            hs.forEach(h => { const v = f(h); if (v != null) { any = true; t += v; } });
+            return any ? t : "";
+        };
 
         const tables = blocks.map(([label, hs]) => {
             const holeRow = hs.map(h => `<td style="${td}font-weight:700;background:#111;color:#fff;">${h.hole_number}</td>`).join("");
@@ -2133,14 +2146,18 @@
             const ydsRow = hs.map(h => `<td style="${td}">${h.yardage ?? ""}</td>`).join("");
             const siRow = hs.map(h => `<td style="${td}color:var(--text-muted);">${h.stroke_index ?? ""}</td>`).join("");
             const scRow = hs.map(scoreCell).join("");
+            const npRow = hs.map(h => `<td style="${td}">${h.stableford_net ?? ""}</td>`).join("");
+            const gpRow = hs.map(h => `<td style="${td}color:var(--text-muted);">${h.stableford_gross ?? ""}</td>`).join("");
             const tot = `style="${td}font-weight:700;background:#f1f5f9;"`;
             const totHead = `style="${td}font-weight:700;background:#111;color:#fff;"`;
             return `<table style="border-collapse:collapse;font-size:0.8rem;margin:0.25rem 0;">
                 <tr><td style="${lbl}background:#111;color:#fff;">HOLE</td>${holeRow}<td ${totHead}>${label}</td></tr>
                 <tr><td style="${lbl}">PAR</td>${parRow}<td ${tot}>${sum(hs, h => h.par) || ""}</td></tr>
                 <tr><td style="${lbl}">YARDS</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td></tr>
-                <tr><td style="${lbl}">S.I.</td>${siRow}<td ${tot}></td></tr>
+                <tr><td style="${lbl}" title="Hole handicap ranking (stroke index): 1 = hardest — decides which holes a player's handicap dots land on">HCP</td>${siRow}<td ${tot}></td></tr>
                 <tr><td style="${lbl}">SCORE</td>${scRow}<td ${tot}>${sum(hs, h => h.strokes) || ""}</td></tr>
+                <tr><td style="${lbl}" title="Net stableford points per hole (through the admin formula settings)">NET PTS</td>${npRow}<td ${tot}>${sumPts(hs, h => h.stableford_net)}</td></tr>
+                <tr><td style="${lbl}color:var(--text-muted);" title="Gross stableford points per hole">GROSS PTS</td>${gpRow}<td ${tot}>${sumPts(hs, h => h.stableford_gross)}</td></tr>
             </table>`;
         }).join("");
 
@@ -2159,10 +2176,23 @@
             </div>`;
     }
 
-    function prRenderDetailTables(tables) {
+    function prRenderDetailTables(tables, rounds, claimed) {
         if (!tables || !tables.length) {
             return '<span style="color:var(--text-muted);">No round-by-round detail available for this player.</span>';
         }
+        // Index the player's imported scorecards by event name (and by the
+        // event-code prefix as fallback) so points lines expand in place
+        const codeOf = s => {
+            const m = /^([a-z]+\d+(?:\.\d+)?)\b/i.exec((s || "").trim());
+            return m ? m[1].toLowerCase() : null;
+        };
+        const byEvent = {}, byCode = {};
+        (rounds || []).forEach(r => {
+            if (!r.event_name) return;
+            byEvent[r.event_name.trim().toLowerCase()] = r;
+            const c = codeOf(r.event_name);
+            if (c) byCode[c] = r;
+        });
         return tables.map(t => {
             const orig = t[0] || [];
             // Reshape GG's columns: drop Event, lead with Points
@@ -2180,6 +2210,7 @@
             }
             const remap = row => (order && row.length === orig.length) ? order.map(i => row[i]) : row;
             const head = remap(orig).map(h => (h || "").trim().toLowerCase() === "tournament" ? "EVENT" : h);
+            const evtCol = remap(orig).findIndex(h => (h || "").trim().toLowerCase() === "tournament");
             const width = head.length;
             const body = t.slice(1).filter(r => r.some(c => (c || "").trim())).map(remap);
             // Rows above GG's "not counted" divider are the counted scores
@@ -2200,8 +2231,17 @@
                     continue;
                 }
                 const bold = counted ? "font-weight:700;" : "color:var(--text-muted);";
-                parts.push(`<tr>${r.map((c, i) =>
-                    `<td style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(c)}</td>`).join("")}</tr>`);
+                // Points line with an imported scorecard → click to expand
+                // the hole-by-hole card right under this row
+                let match = null;
+                if (evtCol > -1 && (rounds || []).length) {
+                    const evtRaw = (r[evtCol] || "").replace(/\s+[—-]\s+(Front|Back)$/i, "").trim();
+                    match = byEvent[evtRaw.toLowerCase()]
+                        || (codeOf(evtRaw) ? byCode[codeOf(evtRaw)] : null);
+                }
+                if (match && claimed) claimed.add(match.id);
+                parts.push(`<tr${match ? ` data-srid="${match.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) =>
+                    `<td style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(c)}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`).join("")}</tr>`);
             }
             if (counted) parts.push(ccRow);
             return `<table class="enrollment-table" style="margin:0.35rem 0;font-size:0.82rem;">

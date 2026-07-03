@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.24.4";
+window.TGF_VERSION = "2.25.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.25.0",
+    date: "2026-07-03",
+    changes: [
+      "Scorecards now expand from the points lines themselves: in the Contests player drill-down, any round line with an imported scorecard gets a chevron and expands the hole-by-hole card right under it (matched by event name, with event-code fallback). The separate list below only remains — retitled OTHER SCORECARDS — for rounds with no points line above (e.g. guests without points detail).",
+      "The hole-by-hole grid gains NET PTS and GROSS PTS rows — per-hole stableford points computed through the admin formula settings, with block totals that correctly show 0 and negative sums. The stroke-index row is relabeled 'HCP' per admin (it's the hole handicap ranking, 1 = hardest — it decides where a player's handicap dots land; hover the label for the explanation).",
+    ],
+  },
   {
     version: "2.24.4",
     date: "2026-07-03",
