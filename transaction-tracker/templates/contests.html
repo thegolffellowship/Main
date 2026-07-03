@@ -412,7 +412,7 @@
                 <div class="sub-tabs">
                     <button class="sub-tab active" data-pr="net">SA NET Points Race</button>
                     <button class="sub-tab" data-pr="austin">AUSTIN NET Points Race</button>
-                    <button class="sub-tab" data-pr="gross">GROSS Points Race</button>
+                    <button class="sub-tab" data-pr="gross">THE PLAYERS CUP</button>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
@@ -1821,10 +1821,10 @@
             + (d.gg_error ? ` · ⚠ refresh failed (showing last snapshot)` : "");
 
         const hasFlights = !!(d.flights && d.flights.length);
-        const nCols = hasFlights ? 8 : 7;
+        const nCols = 6;
 
         const rowHtml = r => {
-            const bg = r.enrolled ? "background:#f0fdf4;"
+            const bg = r.enrolled ? "background:#bbf7d0;"
                      : (r.customer_id ? "background:#fef2f2;" : "background:#fffbeb;");
             const badge = r.enrolled
                 ? '<span style="color:#15803d;font-weight:700;">&#10003; IN</span>'
@@ -1838,17 +1838,13 @@
             const chevron = expandable
                 ? ' <span class="pr-chevron" style="color:var(--text-muted);font-size:0.7rem;" title="Round-by-round points">&#9656;</span>'
                 : '';
-            const hcpCell = hasFlights
-                ? `<td style="text-align:right;">${r.handicap_index != null ? r.handicap_index.toFixed(1) : "—"}</td>`
-                : '';
+            const hcpCell = `<td style="text-align:right;">${r.handicap_index != null ? r.handicap_index.toFixed(1) : "—"}</td>`;
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${expandable ? ` data-card="${r.member_card_id}"` : ''}>
                 <td>${escapeHtml(r.rank)}</td>
                 <td>${nameCell}${chevron}</td>
                 ${hcpCell}
                 <td style="text-align:right;">${r.total_points ?? ""}</td>
-                <td style="text-align:right;">${r.points_behind ?? ""}</td>
                 <td style="text-align:right;">${r.tournaments ?? ""}</td>
-                <td style="text-align:right;">${r.wins ?? ""}</td>
                 <td>${badge}</td>
             </tr>`;
         };
@@ -1886,11 +1882,9 @@
             <table class="enrollment-table">
                 <thead><tr>
                     <th>Rank</th><th>Player</th>
-                    ${hasFlights ? '<th style="text-align:right;" title="Current 18-hole handicap index">HCP</th>' : ''}
+                    <th style="text-align:right;" title="Current 18-hole handicap index">HCP</th>
                     <th style="text-align:right;">Points</th>
-                    <th style="text-align:right;">Behind</th>
                     <th style="text-align:right;">Rounds</th>
-                    <th style="text-align:right;">Wins</th>
                     <th>Buy-in</th>
                 </tr></thead>
                 <tbody>${bodyRows}</tbody>
