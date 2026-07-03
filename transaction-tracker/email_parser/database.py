@@ -6178,6 +6178,13 @@ _GG_POINTS_RACES: dict = {
 }
 
 
+# Points races show members only (admin rule, v2.21.0). Statuses per the
+# customers.current_player_status CHECK constraint; anything else (guest,
+# first_timer, expired, inactive) hides from the standings display — but a
+# row with a buy-in is NEVER hidden, whatever the status.
+_MEMBER_PLAYER_STATUSES: frozenset = frozenset({"active_member", "member_plus"})
+
+
 def _flight_range_text(lo, hi) -> str:
     if lo is None:
         return f"HCP < {hi:g}"
@@ -6411,6 +6418,32 @@ def get_points_race_standings(race_key: str,
                 r["flight"] = _assign_flight(hcp, flights)
             out_rows.append(r)
 
+        # Members only (admin rule): resolved rows hide unless the profile is
+        # a member status; unresolved rows hide unless GG's own affiliation
+        # says they're a current TGF chapter member. Buy-ins always show.
+        status_by_cid: dict = {}
+        cids = list({r["customer_id"] for r in out_rows if r["customer_id"]})
+        if cids:
+            qmarks = ",".join("?" * len(cids))
+            for sr in conn.execute(
+                    f"""SELECT customer_id, current_player_status
+                        FROM customers WHERE customer_id IN ({qmarks})""",
+                    cids).fetchall():
+                status_by_cid[sr["customer_id"]] = sr["current_player_status"]
+        hidden_nonmembers = []
+        visible_rows = []
+        for r in out_rows:
+            cid = r["customer_id"]
+            if cid:
+                is_member = status_by_cid.get(cid) in _MEMBER_PLAYER_STATUSES
+            else:
+                is_member = "tgf" in (r.get("affiliation") or "").lower()
+            if is_member or r["enrolled"]:
+                visible_rows.append(r)
+            else:
+                hidden_nonmembers.append(r["player_name"])
+        out_rows = visible_rows
+
         enrolled_not_ranked = [
             {"customer_id": e["customer_id"], "customer_name": e["customer_name"]}
             for e in enr_rows
@@ -6427,6 +6460,7 @@ def get_points_race_standings(race_key: str,
         "n_enrolled": sum(1 for r in out_rows if r["enrolled"]),
         "n_unresolved": sum(1 for r in out_rows if not r["customer_id"]),
         "enrolled_not_ranked": enrolled_not_ranked,
+        "hidden_nonmembers": hidden_nonmembers,
         "fetched_at": fetched_at,
         "gg_error": gg_error,
         "flights": (
@@ -15990,6 +16024,9 @@ def _repair_fragment_profiles(conn: sqlite3.Connection) -> None:
 # (cid, expected name, phone, venmo, primary_email, extra_emails,
 #  name_aliases, membership_terms[(start, end, price, note)])
 _CONFIRMED_PROFILE_DETAILS = (
+    # GG's Austin portal names him "GORETZKE, Jeff"; tracker canonical is
+    # Jeffrey — the alias makes points-race (and any name) resolution land.
+    (126, "jeffrey goretzke", None, None, None, (), ("Jeff Goretzke",), ()),
     # NB: planelite1959@gmail.com is NOT Novosad — HubSpot identifies that
     # sender as Steve BARR, a separate FB ad lead (see
     # _RSVP_KNOWN_NON_CUSTOMERS and _repair_novosad_barr_separation).

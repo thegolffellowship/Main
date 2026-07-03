@@ -943,6 +943,13 @@ docs/claude/handicaps.md → public-portal probe for the fetch layer).
 - UI colors: green = enrolled, red = profile but no buy-in, amber =
   unmatched GG name (fix by adding a name alias to the right customer).
   Below the table: players bought in but absent from the GG standings.
+- **Members only (v2.21.0)**: `_MEMBER_PLAYER_STATUSES` =
+  {active_member, member_plus}. Resolved rows with any other status hide;
+  unresolved rows hide unless GG's affiliation contains 'TGF' (so
+  'Former' and blank-affiliation guests drop, but a TGF-affiliated name
+  that merely failed to resolve stays visible amber as an identity todo).
+  Rows with a buy-in are NEVER hidden. Hidden names returned as
+  `hidden_nonmembers` (summary tooltip lists them).
 - **Enrollment scope (v2.20.0)**: each race declares `enroll_chapter` —
   NET races are chapter-scoped; THE PLAYERS CUP uses None (cross-chapter,
   admin-confirmed) so Austin GROSS buy-ins count. Scoping the cup to SA

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.20.5";
+window.TGF_VERSION = "2.21.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.21.0",
+    date: "2026-07-03",
+    changes: [
+      "Points races show members only (admin rule): rows hide when the resolved profile isn't an active member (guests, first-timers, expired, inactive), or — for names with no tracker profile — when Golf Genius's own affiliation column doesn't show a current TGF chapter. Anyone with a buy-in is NEVER hidden regardless of status. The summary line notes how many were hidden; hover it to see who.",
+      "POINTS column emphasized: bold with vertical rules on both sides. Current handicap moved from its own column into muted parentheses after each player's name.",
+      "Jeff Goretzke resolves now: the tracker knows him as Jeffrey (active Austin member through 5/10/2027) while GG's portal names him 'GORETZKE, Jeff' — he was the Austin race's unmatched amber row. A pinned 'Jeff Goretzke' name alias (profile-details registry) links them. Note: he has no Austin NET buy-in on record, so he shows red 'Not in' — flag if that's wrong.",
+    ],
+  },
   {
     version: "2.20.5",
     date: "2026-07-03",
