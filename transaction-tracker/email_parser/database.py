@@ -4959,6 +4959,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _seed_initial_contest_removals failed")
 
+        # Comp'd season-contest enrollments (owner/manager privilege, no
+        # backing purchase). manually_enrolled=1 protects them from the
+        # sync's purchase-reconcile cleanup.
+        try:
+            _seed_comped_contest_enrollments(conn)
+        except Exception:
+            logger.exception("Non-fatal: _seed_comped_contest_enrollments failed")
+
         # Re-point handicap links whose customer_id contradicts their own
         # customer_name (email-matched to the buyer/guardian, not the player).
         # Must run BEFORE the GG email diff below so it reports the truth.
@@ -15644,6 +15652,43 @@ def get_season_contest_removals(contest_type: str | None = None,
             params,
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# Comp'd season-contest enrollments (admin-confirmed, 2026-07-03): the
+# owner/managers play the races as a privilege of running them — no
+# purchase exists, so the sync's reconcile would never create (and, if
+# unprotected, would delete) these rows. cid + name pinned; INSERT OR
+# IGNORE against UNIQUE(customer_name, contest_type, chapter, season).
+_COMPED_CONTEST_ENROLLMENTS: tuple = (
+    (18, "Kerry Niester", "NET Points Race", "San Antonio", "2026"),
+    (18, "Kerry Niester", "GROSS Points Race", "San Antonio", "2026"),
+)
+
+
+def _seed_comped_contest_enrollments(conn: sqlite3.Connection) -> None:
+    """Idempotently enroll comp'd owner/manager entries (manually_enrolled=1)."""
+    for cid, name, contest, chapter, season in _COMPED_CONTEST_ENROLLMENTS:
+        row = conn.execute(
+            """SELECT 1 FROM customers
+               WHERE customer_id = ?
+                 AND LOWER(TRIM(first_name || ' ' || last_name)) = LOWER(?)""",
+            (cid, name),
+        ).fetchone()
+        if not row:
+            logger.warning(
+                "Comped enrollment: cid %s is not %r — skipping", cid, name)
+            continue
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO season_contests
+                   (customer_name, contest_type, chapter, season,
+                    customer_id, manually_enrolled)
+               VALUES (?, ?, ?, ?, ?, 1)""",
+            (name, contest, chapter, season, cid),
+        )
+        if cur.rowcount:
+            logger.info("Comped enrollment: %s -> %s (%s %s)",
+                        name, contest, chapter, season)
+    conn.commit()
 
 
 def _seed_initial_contest_removals(conn: sqlite3.Connection) -> None:
