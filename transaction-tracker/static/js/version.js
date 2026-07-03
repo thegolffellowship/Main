@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.22.0";
+window.TGF_VERSION = "2.22.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.22.1",
+    date: "2026-07-03",
+    changes: [
+      "Expanded player view: Tournament column renamed EVENT; the counted scores (best 10, above GG's 'not counted' divider) show bold EVENT names and point totals while thrown-out rows are muted; new CITY CHAMPIONSHIP Total line sits at the end of the counted block (blank until played) — each race's final total = best 10 point totals + City Championship total (bonus-points Stableford; net values +1).",
+      "Standings tables: light-red highlight removed from not-bought-in rows — green alone carries the contrast; the ✗ Not in badge stays. Amber stays for unmatched names (identity to-do, not a buy-in state).",
+    ],
+  },
   {
     version: "2.22.0",
     date: "2026-07-03",
