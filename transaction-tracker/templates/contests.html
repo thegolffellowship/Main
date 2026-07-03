@@ -1839,7 +1839,7 @@
 
         const rowHtml = r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
-                     : (r.customer_id ? "background:#fef2f2;" : "background:#fffbeb;");
+                     : (r.customer_id ? "" : "background:#fffbeb;");
             const badge = r.enrolled
                 ? '<span style="color:#15803d;font-weight:700;">&#10003; IN</span>'
                 : (r.customer_id
@@ -1954,7 +1954,7 @@
         const resetTh = "width:110px;text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;";
         const rows = d.standings.map(r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
-                     : (r.customer_id ? "background:#fef2f2;" : "background:#fffbeb;");
+                     : (r.customer_id ? "" : "background:#fffbeb;");
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
             const nameCell = r.customer_id
@@ -2029,15 +2029,34 @@
                 }
             }
             const remap = row => (order && row.length === orig.length) ? order.map(i => row[i]) : row;
-            const head = remap(orig);
+            const head = remap(orig).map(h => (h || "").trim().toLowerCase() === "tournament" ? "EVENT" : h);
             const width = head.length;
             const body = t.slice(1).filter(r => r.some(c => (c || "").trim())).map(remap);
-            const rowHtml = r => r.length === width
-                ? `<tr>${r.map(c => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`
-                : `<tr><td colspan="${width}" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(r.join(" "))}</td></tr>`;
+            // Rows above GG's "not counted" divider are the counted scores
+            // (best 10) — bold their Points + EVENT cells for contrast; the
+            // CITY CHAMPIONSHIP Total line joins them (blank until played):
+            // final = best 10 point totals + City Championship total.
+            let counted = true;
+            const ccRow = `<tr style="background:#eef2f7;">
+                <td style="font-weight:700;"></td>
+                <td style="font-weight:700;">CITY CHAMPIONSHIP Total</td>
+                ${Array(Math.max(0, width - 2)).fill("<td></td>").join("")}
+            </tr>`;
+            const parts = [];
+            for (const r of body) {
+                if (r.length !== width) {
+                    if (counted) { parts.push(ccRow); counted = false; }
+                    parts.push(`<tr><td colspan="${width}" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(r.join(" "))}</td></tr>`);
+                    continue;
+                }
+                const bold = counted ? "font-weight:700;" : "color:var(--text-muted);";
+                parts.push(`<tr>${r.map((c, i) =>
+                    `<td style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(c)}</td>`).join("")}</tr>`);
+            }
+            if (counted) parts.push(ccRow);
             return `<table class="enrollment-table" style="margin:0.35rem 0;font-size:0.82rem;">
                 <thead><tr>${head.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
-                <tbody>${body.map(rowHtml).join("")}</tbody>
+                <tbody>${parts.join("")}</tbody>
             </table>`;
         }).join("");
     }
