@@ -4975,6 +4975,14 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Non-fatal: _repair_player_link_identities failed")
 
+        # Zero-hole scorecards are tee-sheet artifacts (no-show/WD), not
+        # scoring records — the importer skips them as of v2.26.1; this
+        # removes any stored earlier and closes their discrepancy alarms.
+        try:
+            _cleanup_empty_scoring_rounds(conn)
+        except Exception:
+            logger.exception("Non-fatal: _cleanup_empty_scoring_rounds failed")
+
         # Pin admin-confirmed Golf Genius emails (see _GG_EMAIL_PINS)
         try:
             _repair_gg_email_pins(conn)
@@ -6997,6 +7005,30 @@ def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | Non
     return None
 
 
+def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:
+    """Delete zero-hole scoring rounds (tee-sheet no-show/WD artifacts the
+    importer stored before v2.26.1), reset their handicap bridges, and
+    close their discrepancy action items. Idempotent."""
+    _ensure_scoring_tables(conn)
+    rows = conn.execute(
+        """SELECT id, player_name FROM scoring_rounds
+           WHERE COALESCE(holes_played, 0) = 0""").fetchall()
+    for r in rows:
+        conn.execute(
+            "UPDATE handicap_rounds SET scoring_round_id = NULL WHERE scoring_round_id = ?",
+            (r["id"],))
+        conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?", (r["id"],))
+        conn.execute("DELETE FROM scoring_rounds WHERE id = ?", (r["id"],))
+        conn.execute(
+            """UPDATE action_items SET status = 'completed'
+               WHERE status = 'open'
+                 AND subject = ?""",
+            (f"Scorecard discrepancy: {r['player_name']} (round {r['id']})",))
+        logger.info("Removed empty scorecard: %r (round %s) — tee-sheet "
+                    "artifact, no holes played", r["player_name"], r["id"])
+    conn.commit()
+
+
 def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                          db_path: str | Path = DB_PATH) -> dict:
     """Import every player scorecard from a GG tournament page.
@@ -7025,9 +7057,16 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                          (url, zlib.compress(body.encode("utf-8"))))
 
         imported = replaced = upgraded = unresolved = skipped = bridged = 0
+        skipped_empty = 0
         verified_ids: list = []
         for p in data["players"]:
             if not p.get("player_name") or not p.get("holes"):
+                continue
+            # A card with no strokes on any hole is a tee-sheet artifact
+            # (no-show/WD left on the sheet — GG publishes it with sums of
+            # 0), not a scoring record. Don't store it.
+            if not any(h.get("strokes") is not None for h in p["holes"].values()):
+                skipped_empty += 1
                 continue
             cid = _resolve_scoring_player(conn, p["player_name"])
             existing = conn.execute(
@@ -7186,6 +7225,7 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
     return {"imported": imported, "replaced": replaced,
             "upgraded_with_handicap": upgraded,
             "skipped_other_tournament": skipped,
+            "skipped_empty_cards": skipped_empty,
             "unresolved_names": unresolved, "handicap_rounds_bridged": bridged,
             "players_seen": len(data["players"]), "event_id": event_id,
             "verified_ok": n_ok, "discrepancies": discrepancies}

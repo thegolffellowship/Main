@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.26.0";
+window.TGF_VERSION = "2.26.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.26.1",
+    date: "2026-07-03",
+    changes: [
+      "Full 2026 season sweep: 31 more rounds imported across both chapters (SA s9.1–s9.13 + five 18-hole Saturdays + La Cantera + Cedar Creek pre-season; Austin a9.1–a9.13 + Crystal Falls + Kickoff + Morris Williams) — 728 player-rounds, zero unresolved names, one verification flag. s9.12 Canyon Springs (6/2) is the only round not yet imported: GG still shows 'results are being reviewed' — one command re-imports it once released.",
+      "Zero-hole scorecards are tee-sheet artifacts, not scoring records: the sweep's single flag was Brian Parch's s9.8 card — on the tee sheet with a 10 handicap but never played, so GG published a blank card with sums of 0 and the net math check fired. The importer now skips cards with no strokes on any hole (skipped_empty_cards in the result), and a boot cleanup removes any stored earlier, resets their handicap bridges, and closes their discrepancy alarms.",
+    ],
+  },
   {
     version: "2.26.0",
     date: "2026-07-03",

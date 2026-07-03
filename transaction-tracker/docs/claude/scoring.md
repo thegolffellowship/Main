@@ -95,6 +95,15 @@ better players. Round selection for backfills: the Event Results widget
 unreleased rounds are absent from the selector and cannot be imported
 until the admin releases results in GG).
 
+## Empty cards (v2.26.1)
+
+A card with no strokes on any hole is a tee-sheet artifact (no-show/WD
+left on the sheet — GG publishes it with sums of 0 and it fails the net
+math check), not a scoring record. The importer skips them
+(`skipped_empty_cards`); `_cleanup_empty_scoring_rounds` (boot) deletes
+any stored earlier, resets their handicap bridges, and completes their
+discrepancy action items.
+
 ## Verification (parallel-run with GG)
 
 `verify_scoring_round(id)`: hole sums vs GG gross; net = gross − playing
