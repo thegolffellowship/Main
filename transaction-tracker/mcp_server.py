@@ -1324,6 +1324,43 @@ def get_venmo_transactions(
     return json.dumps([dict(r) for r in rows], indent=2)
 
 
+def _scoring_dispatch(url: str, extract: str):
+    """Bridge for MCP sessions whose cached tool inventory predates the
+    v2.23 scoring tools (client sessions freeze the tool list at session
+    start). Special extract values on probe_golf_genius reach the scoring
+    layer through a tool every session already has. Remove once stale
+    sessions have aged out.
+
+      scoring-import:<event_code>  import_gg_scorecards(url, event_code)
+      scoring-rounds:<event>       list imported rounds for an event
+      scoring-verify:<round_id>    verify one round vs GG's numbers
+      scoring-card:<round_id>      full scorecard with derivations
+      scoring-courses              course/tee database listing
+    """
+    if not extract.startswith("scoring-"):
+        return None
+    cmd, _, arg = extract.partition(":")
+    arg = arg.strip()
+    from email_parser import database as db
+    try:
+        if cmd == "scoring-import":
+            return json.dumps(
+                db.import_gg_scorecards(url, event_code=arg or None), indent=2)
+        if cmd == "scoring-rounds":
+            return json.dumps(
+                db.get_scoring_rounds_list(None, arg or None, None, 200), indent=2)
+        if cmd == "scoring-verify":
+            return json.dumps(db.verify_scoring_round(int(arg)), indent=2)
+        if cmd == "scoring-card":
+            card = db.get_scorecard(int(arg))
+            return json.dumps(card if card else {"error": "not found"}, indent=2)
+        if cmd == "scoring-courses":
+            return json.dumps(db.list_courses(), indent=2)
+        return json.dumps({"error": f"unknown scoring command: {cmd}"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 @mcp.tool()
 def probe_golf_genius(url: str, extract: str = "summary", max_chars: int = 60000,
                       xhr: bool = False) -> str:
@@ -1337,12 +1374,18 @@ def probe_golf_genius(url: str, extract: str = "summary", max_chars: int = 60000
             https://tgf-sa.golfgenius.com/pages/5783305
         extract: 'summary' (title, headings, all links, first rows of each
             table), 'links' (links only), 'tables' (all tables in full),
-            'text' (visible text), or 'raw' (raw HTML, truncated)
+            'text' (visible text), or 'raw' (raw HTML, truncated).
+            Sessions predating the scoring tools may also pass the
+            scoring-* bridge values (see _scoring_dispatch).
         max_chars: Truncation cap for text/raw output (default 60000)
         xhr: Send XMLHttpRequest headers (for GG widget detail routes that
             answer XHR with a JS partial instead of a full page)
     """
     from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    dispatched = _scoring_dispatch(url, extract)
+    if dispatched is not None:
+        return dispatched
 
     try:
         page = fetch_public_page(url, xhr=xhr)
