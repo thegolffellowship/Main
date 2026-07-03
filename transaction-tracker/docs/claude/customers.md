@@ -916,7 +916,9 @@ docs/claude/handicaps.md → public-portal probe for the fetch layer).
   `_ensure_gg_points_table`, customer_id FK registered in
   `_CUSTOMER_FK_COLUMNS` so merges re-point it).
   `refresh_points_race_standings(race_key)` fetches, resolves each GG
-  name to customer_id at write time (`_gg_name_candidates` +
+  name to customer_id at write time (`_gg_name_candidates` — handles
+  'LAST, First [suffix]' and strips GG's duplicate-name digit artifact,
+  e.g. 'REED, Paul1' -> 'Paul Reed' (v2.20.2) — +
   `_lookup_customer_id`), and replaces the race's snapshot.
 - `get_points_race_standings(race_key, auto_refresh_hours=12,
   force_refresh=False)` renders from the snapshot and joins buy-in LIVE
