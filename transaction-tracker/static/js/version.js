@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.22.4";
+window.TGF_VERSION = "2.23.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.23.0",
+    date: "2026-07-04",
+    changes: [
+      "Scoring records Phase 1: tracker-owned hole-by-hole scorecards extracted from Golf Genius. New scoring_rounds/scoring_holes tables store FACTS only (strokes, strokes received per hole via GG's handicap dots, tee, GG's gross/net) with customer_id resolved at import through handicap_player_links then the alias machinery; derived values — WHS net-double-bogey adjusted gross (per-player: par+2+strokes received), net/gross stableford, vs-par — compute at read time through admin-controllable formula settings so TGF can retune or toggle to USGA standards later. Verified against Adam Baker's live TPC card end-to-end, including the discovery that GG's circle/square markings are NET-relative.",
+      "Course database enriched, not duplicated: scorecard imports resolve GG course names through the existing courses/course_aliases registry (the same one the Events tab course selector already reads) and accrete course_tees (slope/rating/yardage) + course_tee_holes (par/yardage/stroke index) passively from every import.",
+      "Own-the-data insurance: every parsed GG response is archived gzipped in gg_raw_archive so anything can be re-parsed even if GG severs access. handicap_rounds gains a scoring_round_id bridge (a differential is DERIVED from a scoring round) — Phase 2 proves differential parity and retires the handicap export/import ritual.",
+      "5 new MCP tools (55 total): import_gg_scorecards, get_scoring_rounds, get_scorecard_detail, verify_scoring_round_tool, get_courses — plus POST /api/scoring/import, GET /api/scoring/rounds, /api/scoring/scorecard/<id>, /api/courses/tees.",
+    ],
+  },
   {
     version: "2.22.4",
     date: "2026-07-03",

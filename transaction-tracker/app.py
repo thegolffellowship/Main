@@ -8354,6 +8354,48 @@ def api_fellowship_cup_projection():
         return jsonify({"error": f"Projection failed: {e}"}), 500
 
 
+@app.route("/api/scoring/import", methods=["POST"])
+@require_role("admin")
+def api_import_scorecards():
+    """Import scorecards from a GG tournament page (body: tournament_url, event_code)."""
+    from email_parser.database import import_gg_scorecards
+    body = request.get_json(silent=True) or {}
+    url = (body.get("tournament_url") or "").strip()
+    if not url:
+        return jsonify({"error": "tournament_url required"}), 400
+    try:
+        return jsonify(import_gg_scorecards(url, event_code=(body.get("event_code") or "").strip() or None))
+    except Exception as e:
+        logger.exception("Scorecard import failed")
+        return jsonify({"error": f"Import failed: {e}"}), 502
+
+
+@app.route("/api/scoring/rounds")
+@require_role("manager")
+def api_scoring_rounds():
+    from email_parser.database import get_scoring_rounds_list
+    return jsonify(get_scoring_rounds_list(
+        request.args.get("player"), request.args.get("event"),
+        int(request.args.get("customer_id") or 0) or None,
+        int(request.args.get("limit") or 100)))
+
+
+@app.route("/api/scoring/scorecard/<int:scoring_round_id>")
+@require_role("manager")
+def api_scorecard(scoring_round_id):
+    from email_parser.database import get_scorecard
+    card = get_scorecard(scoring_round_id)
+    return (jsonify(card), 200) if card else (jsonify({"error": "not found"}), 404)
+
+
+@app.route("/api/courses/tees")
+@require_role("manager")
+def api_course_tees():
+    """Courses enriched with imported tee data (slope/rating/yardage/holes)."""
+    from email_parser.database import list_courses
+    return jsonify(list_courses())
+
+
 _points_detail_cache: dict = {}
 _POINTS_DETAIL_CACHE_TTL = 600
 

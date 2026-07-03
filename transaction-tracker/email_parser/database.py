@@ -5517,6 +5517,7 @@ _CUSTOMER_FK_COLUMNS: tuple[tuple[str, str], ...] = (
     ("feedback", "customer_id"),
     ("contractor_payouts", "manager_customer_id"),
     ("gg_points_standings", "customer_id"),
+    ("scoring_rounds", "customer_id"),
 )
 
 # Junction tables where UPDATE OR IGNORE can skip a source row because the
@@ -6708,6 +6709,415 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         "fetched_at": max(fetched) if fetched else None,
         "gg_error": "; ".join(errors) or None,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  SCORING RECORDS (Phase 1) — tracker-owned scorecards + course database
+#
+#  Design (admin-established 2026-07-04):
+#  - scoring_holes -> scoring_rounds is the FACT layer (what was shot,
+#    where, which tee, strokes received per hole). Everything else —
+#    adjusted gross (WHS net double bogey is PER-PLAYER: par + 2 + strokes
+#    received), stableford points (model-dependent), differentials — is
+#    DERIVED, computed on read through admin-controllable formula settings
+#    so TGF can customize or toggle to USGA standards later.
+#  - handicap_rounds is the legacy derived layer; scoring_round_id bridges
+#    it until differential parity is proven, then it collapses to a view.
+#  - courses/course_tees/course_tee_holes accrete passively from every
+#    scorecard import: own-the-data, GG is an input never the record.
+#  - gg_raw_archive keeps gzipped source responses so anything can be
+#    re-parsed even if GG severs access.
+# ═══════════════════════════════════════════════════════════════════════
+
+def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
+    # NB: courses / course_aliases / events.course_id already exist as the
+    # canonical course registry (Events tab datalist reads it) — the scoring
+    # layer ENRICHES that table with tees, never duplicates it.
+    conn.execute("""CREATE TABLE IF NOT EXISTS course_tees (
+        tee_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_id     INTEGER NOT NULL REFERENCES courses(course_id),
+        tee_name      TEXT,
+        slope         INTEGER,
+        rating        REAL,
+        yardage_total INTEGER,
+        created_at    TEXT DEFAULT (datetime('now')),
+        UNIQUE(course_id, tee_name, slope, rating))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS course_tee_holes (
+        tee_id       INTEGER NOT NULL REFERENCES course_tees(tee_id),
+        hole_number  INTEGER NOT NULL,
+        par          INTEGER,
+        yardage      INTEGER,
+        stroke_index INTEGER,
+        PRIMARY KEY (tee_id, hole_number))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS scoring_rounds (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id      INTEGER REFERENCES customers(customer_id),
+        player_name      TEXT NOT NULL,
+        event_id         INTEGER REFERENCES events(id),
+        gg_event_id      TEXT,
+        gg_round_id      TEXT,
+        gg_aggregate_id  TEXT,
+        gg_profile_id    TEXT,
+        round_date       TEXT,
+        course_id        INTEGER REFERENCES courses(course_id),
+        tee_id           INTEGER REFERENCES course_tees(tee_id),
+        holes_played     INTEGER,
+        playing_handicap REAL,
+        gross            REAL,
+        net              REAL,
+        flight           TEXT,
+        source           TEXT DEFAULT 'gg',
+        imported_at      TEXT DEFAULT (datetime('now')),
+        UNIQUE(gg_aggregate_id, player_name))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS scoring_holes (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        scoring_round_id INTEGER NOT NULL REFERENCES scoring_rounds(id),
+        hole_number      INTEGER NOT NULL,
+        strokes          INTEGER,
+        strokes_received INTEGER DEFAULT 0,
+        gg_result        TEXT,
+        UNIQUE(scoring_round_id, hole_number))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS gg_raw_archive (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        url        TEXT NOT NULL,
+        fetched_at TEXT DEFAULT (datetime('now')),
+        body_gz    BLOB)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scoring_rounds_cid ON scoring_rounds(customer_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scoring_rounds_event ON scoring_rounds(event_id)")
+    try:
+        conn.execute("ALTER TABLE handicap_rounds ADD COLUMN scoring_round_id "
+                     "INTEGER REFERENCES scoring_rounds(id)")
+    except sqlite3.OperationalError:
+        pass
+
+
+# Admin-controllable scoring formulas (defaults = current TGF models; the
+# stableford tables mirror the matrices on the Contests page). Stored
+# overrides live in handicap_settings under these keys as JSON.
+_SCORING_FORMULA_DEFAULTS: dict = {
+    # vs-par (net for net table) -> points, per 9 holes
+    "stableford_net_table": {"-4": 8, "-3": 4, "-2": 3, "-1": 2, "0": 1,
+                             "1": 0, "2": -1, "3": -1},
+    "stableford_gross_table": {"-4": 16, "-3": 8, "-2": 4, "-1": 4, "0": 2,
+                               "1": 1, "2": 0, "3": -1},
+    # 'whs_net_double_bogey' (par + 2 + strokes received, per WHS) | 'none'
+    "adjusted_gross_method": "whs_net_double_bogey",
+}
+
+
+def get_scoring_formulas(db_path: str | Path | None = None) -> dict:
+    cfg = dict(_SCORING_FORMULA_DEFAULTS)
+    try:
+        stored = get_handicap_settings(db_path)
+        for key in _SCORING_FORMULA_DEFAULTS:
+            if stored.get(key):
+                val = stored[key]
+                cfg[key] = json.loads(val) if isinstance(val, str) and val.strip().startswith("{") else val
+    except Exception:
+        pass
+    return cfg
+
+
+def compute_hole_derivations(par: int | None, strokes: int | None,
+                             strokes_received: int, formulas: dict) -> dict:
+    """Derived per-hole values — never stored, always computed through the
+    formula settings so the admin can retune without touching facts."""
+    out = {"vs_par": None, "net_vs_par": None, "adjusted_strokes": strokes,
+           "stableford_net": None, "stableford_gross": None}
+    if par is None or strokes is None:
+        return out
+    out["vs_par"] = strokes - par
+    net = strokes - (strokes_received or 0)
+    out["net_vs_par"] = net - par
+    if formulas.get("adjusted_gross_method") == "whs_net_double_bogey":
+        out["adjusted_strokes"] = min(strokes, par + 2 + (strokes_received or 0))
+    def _tbl(table, diff):
+        keys = sorted(int(k) for k in table)
+        d = max(keys[0], min(keys[-1], diff))
+        return table.get(str(d), 0)
+    out["stableford_net"] = _tbl(formulas["stableford_net_table"], out["net_vs_par"])
+    out["stableford_gross"] = _tbl(formulas["stableford_gross_table"], out["vs_par"])
+    return out
+
+
+def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
+    """Course DB accretes passively from tee blocks. Returns (course_id, tee_id)."""
+    course_name = (tee.get("course") or "").strip()
+    if not course_name:
+        return None, None
+    row = conn.execute("SELECT course_id FROM courses WHERE LOWER(name) = LOWER(?)",
+                       (course_name,)).fetchone()
+    if not row:
+        row = conn.execute(
+            """SELECT course_id FROM course_aliases
+               WHERE LOWER(alias_name) = LOWER(?)""", (course_name,)).fetchone()
+    if row:
+        course_id = row["course_id"]
+    else:
+        course_id = conn.execute("INSERT INTO courses (name) VALUES (?)",
+                                 (course_name,)).lastrowid
+    yd = tee.get("yardage") or {}
+    conn.execute(
+        """INSERT OR IGNORE INTO course_tees (course_id, tee_name, slope, rating, yardage_total)
+           VALUES (?, ?, ?, ?, ?)""",
+        (course_id, tee.get("tee_name"), tee.get("slope"), tee.get("rating"),
+         sum(v for v in yd.values() if v) or None))
+    tee_id = conn.execute(
+        """SELECT tee_id FROM course_tees WHERE course_id = ? AND tee_name IS ?
+           AND slope IS ? AND rating IS ?""",
+        (course_id, tee.get("tee_name"), tee.get("slope"), tee.get("rating")),
+    ).fetchone()["tee_id"]
+    par, si = tee.get("par") or {}, tee.get("stroke_index") or {}
+    for hole in sorted(set(list(yd) + list(par) + list(si))):
+        conn.execute(
+            """INSERT OR REPLACE INTO course_tee_holes
+                   (tee_id, hole_number, par, yardage, stroke_index)
+               VALUES (?, ?, ?, ?, ?)""",
+            (tee_id, hole, par.get(hole), yd.get(hole), si.get(hole)))
+    return course_id, tee_id
+
+
+def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | None:
+    """handicap_player_links first (curated GG-name map), then the alias
+    machinery — same identity spine as everything else."""
+    for cand in _gg_name_candidates(gg_name):
+        row = conn.execute(
+            """SELECT customer_id FROM handicap_player_links
+               WHERE customer_id IS NOT NULL AND LOWER(player_name) = LOWER(?)
+               LIMIT 1""", (cand,)).fetchone()
+        if row:
+            return row["customer_id"]
+    for cand in _gg_name_candidates(gg_name):
+        cid = _lookup_customer_id(conn, cand, None)
+        if cid:
+            return cid
+    return None
+
+
+def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
+                         db_path: str | Path = DB_PATH) -> dict:
+    """Import every player scorecard from a GG tournament page.
+
+    Idempotent: re-import replaces holes for existing (aggregate, player)
+    rows. Commits courses/tees, scoring rounds/holes, raw archives, cid
+    resolution, event linkage (by code), and handicap_rounds bridging.
+    """
+    import zlib
+    from golf_genius_sync import fetch_tournament_scorecards
+    data = fetch_tournament_scorecards(tournament_url)
+
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        event_id = event_date = None
+        if event_code:
+            ev = conn.execute(
+                """SELECT id, event_date, course FROM events
+                   WHERE item_name LIKE ? ORDER BY id LIMIT 1""",
+                (event_code.strip() + " %",)).fetchone()
+            if ev:
+                event_id, event_date = ev["id"], ev["event_date"]
+
+        for url, body in data["raw"]:
+            conn.execute("INSERT INTO gg_raw_archive (url, body_gz) VALUES (?, ?)",
+                         (url, zlib.compress(body.encode("utf-8"))))
+
+        imported = replaced = unresolved = bridged = 0
+        for p in data["players"]:
+            if not p.get("player_name") or not p.get("holes"):
+                continue
+            cid = _resolve_scoring_player(conn, p["player_name"])
+            if not cid:
+                unresolved += 1
+            course_id = tee_id = None
+            if p.get("tee"):
+                course_id, tee_id = _upsert_course_tee(conn, p["tee"])
+            holes_played = sum(1 for h in p["holes"].values()
+                               if h.get("strokes") is not None)
+            existing = conn.execute(
+                """SELECT id FROM scoring_rounds
+                   WHERE gg_aggregate_id = ? AND player_name = ?""",
+                (p.get("gg_aggregate_id"), p["player_name"])).fetchone()
+            if existing:
+                srid = existing["id"]
+                conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?", (srid,))
+                conn.execute(
+                    """UPDATE scoring_rounds SET customer_id=?, event_id=?, gg_event_id=?,
+                           gg_profile_id=?, round_date=?, course_id=?, tee_id=?,
+                           holes_played=?, playing_handicap=?, gross=?, net=?, flight=?
+                       WHERE id=?""",
+                    (cid, event_id, p.get("gg_event_id"), p.get("gg_profile_id"),
+                     event_date, course_id, tee_id, holes_played,
+                     p.get("playing_handicap"), p.get("gross"), p.get("net"),
+                     p.get("flight"), srid))
+                replaced += 1
+            else:
+                cur = conn.execute(
+                    """INSERT INTO scoring_rounds
+                           (customer_id, player_name, event_id, gg_event_id,
+                            gg_aggregate_id, gg_profile_id, round_date,
+                            course_id, tee_id, holes_played, playing_handicap,
+                            gross, net, flight)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (cid, p["player_name"], event_id, p.get("gg_event_id"),
+                     p.get("gg_aggregate_id"), p.get("gg_profile_id"),
+                     event_date, course_id, tee_id, holes_played,
+                     p.get("playing_handicap"), p.get("gross"), p.get("net"),
+                     p.get("flight")))
+                srid = cur.lastrowid
+                imported += 1
+            for hole, h in sorted(p["holes"].items()):
+                conn.execute(
+                    """INSERT OR REPLACE INTO scoring_holes
+                           (scoring_round_id, hole_number, strokes,
+                            strokes_received, gg_result)
+                       VALUES (?,?,?,?,?)""",
+                    (srid, hole, h.get("strokes"), h.get("dots") or 0,
+                     h.get("result")))
+            # Bridge the legacy derived layer (same physical round)
+            if cid and event_date:
+                n = conn.execute(
+                    """UPDATE handicap_rounds SET scoring_round_id = ?
+                       WHERE scoring_round_id IS NULL AND customer_id = ?
+                         AND round_date = ?""",
+                    (srid, cid, event_date)).rowcount
+                bridged += n
+        conn.commit()
+
+    logger.info("Scorecard import: %d new, %d replaced, %d unresolved names, "
+                "%d handicap rounds bridged", imported, replaced, unresolved, bridged)
+    return {"imported": imported, "replaced": replaced,
+            "unresolved_names": unresolved, "handicap_rounds_bridged": bridged,
+            "players_seen": len(data["players"]), "event_id": event_id}
+
+
+def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
+                            customer_id: int | None = None, limit: int = 100,
+                            db_path: str | Path = DB_PATH) -> list:
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        clauses, params = ["1=1"], []
+        if player:
+            clauses.append("sr.player_name LIKE ?"); params.append(f"%{player}%")
+        if customer_id:
+            clauses.append("sr.customer_id = ?"); params.append(customer_id)
+        if event:
+            clauses.append("e.item_name LIKE ?"); params.append(f"%{event}%")
+        params.append(limit)
+        rows = conn.execute(
+            f"""SELECT sr.*, e.item_name AS event_name, c.name AS course_name,
+                       t.tee_name, t.slope, t.rating
+                FROM scoring_rounds sr
+                LEFT JOIN events e ON e.id = sr.event_id
+                LEFT JOIN courses c ON c.course_id = sr.course_id
+                LEFT JOIN course_tees t ON t.tee_id = sr.tee_id
+                WHERE {' AND '.join(clauses)}
+                ORDER BY sr.round_date DESC, sr.id DESC LIMIT ?""",
+            params).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_scorecard(scoring_round_id: int, db_path: str | Path = DB_PATH) -> dict | None:
+    """Full card: facts + per-hole derivations through the formula layer."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        sr = conn.execute(
+            """SELECT sr.*, e.item_name AS event_name, c.name AS course_name,
+                      t.tee_name, t.slope, t.rating
+               FROM scoring_rounds sr
+               LEFT JOIN events e ON e.id = sr.event_id
+               LEFT JOIN courses c ON c.course_id = sr.course_id
+               LEFT JOIN course_tees t ON t.tee_id = sr.tee_id
+               WHERE sr.id = ?""", (scoring_round_id,)).fetchone()
+        if not sr:
+            return None
+        holes = conn.execute(
+            """SELECT sh.hole_number, sh.strokes, sh.strokes_received,
+                      sh.gg_result, cth.par, cth.yardage, cth.stroke_index
+               FROM scoring_holes sh
+               LEFT JOIN course_tee_holes cth
+                 ON cth.tee_id = ? AND cth.hole_number = sh.hole_number
+               WHERE sh.scoring_round_id = ? ORDER BY sh.hole_number""",
+            (sr["tee_id"], scoring_round_id)).fetchall()
+    formulas = get_scoring_formulas(db_path)
+    out_holes = []
+    totals = {"stableford_net": 0, "stableford_gross": 0, "adjusted_gross": 0}
+    for h in holes:
+        d = compute_hole_derivations(h["par"], h["strokes"],
+                                     h["strokes_received"] or 0, formulas)
+        row = dict(h) | d
+        out_holes.append(row)
+        if d["stableford_net"] is not None:
+            totals["stableford_net"] += d["stableford_net"]
+            totals["stableford_gross"] += d["stableford_gross"]
+            totals["adjusted_gross"] += d["adjusted_strokes"] or 0
+    return {"round": dict(sr), "holes": out_holes, "derived_totals": totals,
+            "formulas": formulas}
+
+
+def verify_scoring_round(scoring_round_id: int,
+                         db_path: str | Path = DB_PATH) -> dict:
+    """Parallel-run checks against GG's own numbers (admin requirement):
+    stored sums vs recomputed, net vs gross-minus-handicap, and GG's
+    par-relative markings vs our par data."""
+    card = get_scorecard(scoring_round_id, db_path=db_path)
+    if not card:
+        return {"error": f"scoring_round {scoring_round_id} not found"}
+    r, holes = card["round"], card["holes"]
+    checks = []
+    def chk(name, ok, detail):
+        checks.append({"check": name, "ok": bool(ok), "detail": detail})
+    strokes = [h["strokes"] for h in holes if h["strokes"] is not None]
+    front = sum(h["strokes"] for h in holes
+                if h["strokes"] is not None and h["hole_number"] <= 9)
+    total = sum(strokes)
+    chk("gross_sum", r["gross"] is None or total == r["gross"],
+        f"holes sum {total} vs GG gross {r['gross']}")
+    if r["gross"] is not None and r["net"] is not None and r["playing_handicap"] is not None:
+        chk("net_equals_gross_minus_handicap",
+            abs((r["gross"] - r["playing_handicap"]) - r["net"]) < 0.01,
+            f"{r['gross']} - {r['playing_handicap']} vs GG net {r['net']}")
+    # GG's circle/square markings are NET-relative (verified on live data:
+    # 2 strokes on a par 3 WITH a handicap dot renders double_circle = net
+    # eagle) — so compare against net_vs_par, not gross vs par
+    mismatches = []
+    for h in holes:
+        if h["par"] is None or h["strokes"] is None:
+            continue
+        vs = h["net_vs_par"]
+        expected = ("double_circle" if vs <= -2 else
+                    "simple_circle" if vs == -1 else
+                    "simple_square" if vs == 1 else
+                    "double_square" if vs >= 2 else None)
+        if (h["gg_result"] or None) != expected:
+            mismatches.append(f"hole {h['hole_number']}: net_vs_par {vs} "
+                              f"gg={h['gg_result']} expected={expected}")
+    chk("gg_net_markings_match_course_par", not mismatches,
+        "; ".join(mismatches) or "all holes consistent")
+    return {"scoring_round_id": scoring_round_id,
+            "player_name": r["player_name"], "checks": checks,
+            "all_ok": all(c["ok"] for c in checks),
+            "derived_totals": card["derived_totals"]}
+
+
+def list_courses(db_path: str | Path = DB_PATH) -> list:
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        rows = conn.execute(
+            """SELECT c.course_id, c.name,
+                      COUNT(DISTINCT t.tee_id) AS n_tees,
+                      COUNT(DISTINCT sr.id) AS n_rounds
+               FROM courses c
+               LEFT JOIN course_tees t ON t.course_id = c.course_id
+               LEFT JOIN scoring_rounds sr ON sr.course_id = c.course_id
+               GROUP BY c.course_id ORDER BY c.name""").fetchall()
+        out = []
+        for r in rows:
+            tees = conn.execute(
+                """SELECT tee_id, tee_name, slope, rating, yardage_total
+                   FROM course_tees WHERE course_id = ? ORDER BY tee_id""",
+                (r["course_id"],)).fetchall()
+            out.append(dict(r) | {"tees": [dict(t) for t in tees]})
+        return out
 
 
 def _repair_gg_email_pins(conn: sqlite3.Connection) -> None:

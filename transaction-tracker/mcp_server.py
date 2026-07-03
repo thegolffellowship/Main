@@ -1389,6 +1389,77 @@ def probe_golf_genius(url: str, extract: str = "summary", max_chars: int = 60000
     return result
 
 
+@mcp.tool()
+def import_gg_scorecards(tournament_url: str, event_code: str = "") -> str:
+    """Import every player's hole-by-hole scorecard from a Golf Genius
+    tournament page into tracker-owned tables (scoring_rounds/scoring_holes,
+    plus the course database which accretes from tee blocks). Idempotent —
+    re-import replaces existing cards. Raw responses are archived gzipped.
+
+    Args:
+        tournament_url: Full v2tournaments URL, e.g.
+            https://tgf-sa.golfgenius.com/v2tournaments/4739997?player_stats_for_portal=true&round_index=29
+        event_code: Tracker event code to link rounds to (e.g. 's9.16') —
+            resolves event_id and round_date from the events table
+    """
+    from email_parser.database import import_gg_scorecards as _imp
+    try:
+        return json.dumps(_imp(tournament_url, event_code=event_code or None), indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def get_scoring_rounds(player: str = "", event: str = "",
+                       customer_id: int = 0, limit: int = 100) -> str:
+    """List imported scoring rounds (scorecard headers) with course/tee/event
+    context. Filter by partial player name, partial event name, or exact
+    customer_id.
+    """
+    from email_parser.database import get_scoring_rounds_list
+    return json.dumps(get_scoring_rounds_list(
+        player or None, event or None, customer_id or None, limit), indent=2)
+
+
+@mcp.tool()
+def get_scorecard_detail(scoring_round_id: int) -> str:
+    """One full scorecard: per-hole strokes, strokes received (handicap
+    dots), par/yardage/stroke index from the course DB, plus DERIVED values
+    computed through the admin formula settings (vs par, adjusted strokes
+    per WHS net double bogey, net + gross stableford points) and derived
+    totals. Facts and derivations are kept separate by design.
+
+    Args:
+        scoring_round_id: scoring_rounds.id (from get_scoring_rounds)
+    """
+    from email_parser.database import get_scorecard
+    card = get_scorecard(scoring_round_id)
+    return json.dumps(card if card else {"error": "not found"}, indent=2)
+
+
+@mcp.tool()
+def verify_scoring_round_tool(scoring_round_id: int) -> str:
+    """Parallel-run verification against Golf Genius's own numbers: hole
+    sums vs GG gross, net vs gross-minus-handicap, and GG's par-relative
+    markings (circles/squares) vs our course par data. Use after imports
+    to prove the tracker computes what GG computes.
+
+    Args:
+        scoring_round_id: scoring_rounds.id
+    """
+    from email_parser.database import verify_scoring_round
+    return json.dumps(verify_scoring_round(scoring_round_id), indent=2)
+
+
+@mcp.tool()
+def get_courses() -> str:
+    """The tracker's own course database (accreted from scorecard imports):
+    courses with their tees (slope/rating/yardage) and imported round counts.
+    """
+    from email_parser.database import list_courses
+    return json.dumps(list_courses(), indent=2)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  ENTRYPOINT
 # ═══════════════════════════════════════════════════════════════════════
