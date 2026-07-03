@@ -6133,6 +6133,8 @@ _GG_POINTS_RACES: dict = {
         "page_id": "6028090",
         "contest_type": "NET Points Race",
         "chapter": "San Antonio",
+        # NET races are chapter-scoped: only same-chapter buy-ins count
+        "enroll_chapter": "San Antonio",
     },
     "players_cup_gross": {
         "label": "THE PLAYERS CUP 2026",
@@ -6141,8 +6143,39 @@ _GG_POINTS_RACES: dict = {
         "page_id": "6050326",
         "contest_type": "GROSS Points Race",
         "chapter": "San Antonio",
+        # The Players Cup is cross-chapter: an Austin GROSS buy-in counts
+        # (Robert Straiton et al. showed wrongly red when this was scoped
+        # to San Antonio)
+        "enroll_chapter": None,
+        # Flights assigned from the CURRENT 18-hole handicap index
+        # (handicap_index_18 = 9-hole TGF index x 2, same value the GG
+        # export syncs). Computed at read time so a handicap change moves
+        # the player automatically. (label, min_inclusive, max_exclusive).
+        "flights": (
+            ("1st Flight", None, 6.0),
+            ("2nd Flight", 6.0, 12.0),
+            ("3rd Flight", 12.0, 18.0),
+            ("4th Flight", 18.0, None),
+        ),
     },
 }
+
+
+def _flight_range_text(lo, hi) -> str:
+    if lo is None:
+        return f"HCP < {hi:g}"
+    if hi is None:
+        return f"HCP {lo:g}+"
+    return f"HCP {lo:g}–{hi - 0.1:g}"
+
+
+def _assign_flight(index: float | None, flights) -> str | None:
+    if index is None:
+        return None
+    for label, lo, hi in flights:
+        if (lo is None or index >= lo) and (hi is None or index < hi):
+            return label
+    return None
 
 
 def _gg_name_candidates(raw_name: str) -> list:
@@ -6297,9 +6330,9 @@ def get_points_race_standings(race_key: str,
 
         clauses = ["contest_type = ?"]
         params: list = [race["contest_type"]]
-        if race.get("chapter"):
+        if race.get("enroll_chapter"):
             clauses.append("(chapter = ? OR chapter IS NULL OR chapter = '')")
-            params.append(race["chapter"])
+            params.append(race["enroll_chapter"])
         enr_rows = conn.execute(
             f"""SELECT customer_id, customer_name FROM season_contests
                 WHERE {' AND '.join(clauses)}""",
@@ -6310,6 +6343,24 @@ def get_points_race_standings(race_key: str,
             (r["customer_name"] or "").strip().lower(): r["customer_id"]
             for r in enr_rows
         }
+
+        # Current handicap per customer (flighted races): 18-hole index via
+        # handicap_player_links — computed at read time so a handicap change
+        # moves a player to their new flight automatically
+        flights = race.get("flights")
+        idx_by_cid: dict = {}
+        if flights:
+            idx_by_name = {
+                p["player_name"]: p["handicap_index_18"]
+                for p in get_all_handicap_players(db_path)
+                if p.get("handicap_index_18") is not None
+            }
+            for lr in conn.execute(
+                    """SELECT player_name, customer_id FROM handicap_player_links
+                       WHERE customer_id IS NOT NULL""").fetchall():
+                v = idx_by_name.get(lr["player_name"])
+                if v is not None and lr["customer_id"] not in idx_by_cid:
+                    idx_by_cid[lr["customer_id"]] = v
 
         ranked_ids: set = set()
         out_rows = []
@@ -6329,6 +6380,10 @@ def get_points_race_standings(race_key: str,
             if cid:
                 ranked_ids.add(cid)
             r["enrolled"] = bool(cid and cid in enrolled_ids)
+            if flights:
+                hcp = idx_by_cid.get(cid) if cid else None
+                r["handicap_index"] = hcp
+                r["flight"] = _assign_flight(hcp, flights)
             out_rows.append(r)
 
         enrolled_not_ranked = [
@@ -6349,6 +6404,11 @@ def get_points_race_standings(race_key: str,
         "enrolled_not_ranked": enrolled_not_ranked,
         "fetched_at": fetched_at,
         "gg_error": gg_error,
+        "flights": (
+            [{"label": lbl, "range": _flight_range_text(lo, hi)}
+             for lbl, lo, hi in race["flights"]]
+            if race.get("flights") else None
+        ),
     }
 
 

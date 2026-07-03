@@ -929,6 +929,17 @@ docs/claude/handicaps.md → public-portal probe for the fetch layer).
 - UI colors: green = enrolled, red = profile but no buy-in, amber =
   unmatched GG name (fix by adding a name alias to the right customer).
   Below the table: players bought in but absent from the GG standings.
+- **Enrollment scope (v2.20.0)**: each race declares `enroll_chapter` —
+  NET races are chapter-scoped; THE PLAYERS CUP uses None (cross-chapter,
+  admin-confirmed) so Austin GROSS buy-ins count. Scoping the cup to SA
+  showed Robert Straiton et al. wrongly red.
+- **Flights (v2.20.0, Players Cup only)**: `flights` in the registry —
+  1st <6.0 / 2nd 6-11.9 / 3rd 12-17.9 / 4th 18+, assigned by
+  `_assign_flight()` from the CURRENT 18-hole index (handicap_index_18 =
+  9-hole WHS index x2 via get_all_handicap_players + handicap_player_links)
+  at READ time — never stored, so handicap changes re-flight automatically.
+  No linked index -> 'flight unassigned' bucket. UI groups standings under
+  flight header rows and adds an HCP column.
 - **Expandable detail (v2.19.2)**: rows with a `member_card_id` (captured
   from the widget's `data-member-card-id` attributes at refresh time,
   stored on the snapshot) toggle a per-player round-by-round breakdown on
