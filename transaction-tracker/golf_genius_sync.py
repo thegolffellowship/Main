@@ -911,9 +911,12 @@ def parse_scorecard_details(fragment: str) -> dict:
         net_id = gg_event_id = None
         if link:
             net_id, gg_event_id = link.group(2), link.group(3)
-            phm = re.search(r"\((\d+(?:\.\d+)?)\)", link.group(4))
+            # Plus handicaps render as "(+1)" — stored NEGATIVE so the
+            # arithmetic stays uniform: net = gross - ph (36 - (-1) = 37)
+            phm = re.search(r"\((\+?\d+(?:\.\d+)?)\)", link.group(4))
             if phm:
-                ph = float(phm.group(1))
+                raw_ph = phm.group(1)
+                ph = -float(raw_ph[1:]) if raw_ph.startswith("+") else float(raw_ph)
         holes = {}
         for hm in re.finditer(
                 r"<td class='([^']*\bhole(\d+)\b[^']*)'[^>]*>(.*?)</td>",

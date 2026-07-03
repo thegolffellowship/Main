@@ -2053,7 +2053,7 @@
                 <td><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(r.event_name || "")}</td>
                 <td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>
                 <td style="text-align:center;">${r.holes_played ?? ""}</td>
-                <td style="text-align:center;">${r.playing_handicap ?? ""}</td>
+                <td style="text-align:center;">${prFmtHcp(r.playing_handicap)}</td>
                 <td style="text-align:center;font-weight:700;">${r.gross ?? ""}</td>
                 <td style="text-align:center;">${r.net ?? ""}</td>
             </tr>`;
@@ -2118,8 +2118,8 @@
 
         const td = "padding:2px 6px;text-align:center;border:1px solid #e2e8f0;min-width:2em;";
         const lbl = `padding:2px 8px;border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
-        const scoreCell = h => {
-            if (h.strokes == null) return `<td style="${td}"></td>`;
+        const scoreCell = (h, extra = "") => {
+            if (h.strokes == null) return `<td style="${td}${extra}"></td>`;
             // GG's markings are NET-relative: red circles = net under par,
             // blue squares = net over par (double = by 2+)
             let deco = "";
@@ -2127,10 +2127,12 @@
             else if (h.gg_result === "double_circle") deco = "border:1.5px solid #dc2626;border-radius:50%;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #dc2626;";
             else if (h.gg_result === "simple_square") deco = "border:1.5px solid #2563eb;";
             else if (h.gg_result === "double_square") deco = "border:1.5px solid #2563eb;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #2563eb;";
-            const dots = h.strokes_received
-                ? `<span style="font-size:0.6em;vertical-align:super;color:#334155;">${"●".repeat(h.strokes_received)}</span>`
+            const sr = h.strokes_received || 0;
+            // ● = stroke received; ○ = stroke GIVEN BACK (plus handicap)
+            const dots = sr
+                ? `<span style="font-size:0.6em;vertical-align:super;color:#334155;">${(sr > 0 ? "●" : "○").repeat(Math.abs(sr))}</span>`
                 : "";
-            return `<td style="${td}"><span style="display:inline-block;min-width:1.4em;line-height:1.4em;${deco}">${h.strokes}</span>${dots}</td>`;
+            return `<td style="${td}${extra}"><span style="display:inline-block;min-width:1.4em;line-height:1.4em;${deco}">${h.strokes}</span>${dots}</td>`;
         };
         const sum = (hs, f) => hs.reduce((a, h) => a + (f(h) || 0), 0);
         // Stableford totals can legitimately be 0 or negative — show them
@@ -2140,22 +2142,31 @@
             return any ? t : "";
         };
 
+        // Visual hierarchy: course facts on top, then a thick-bordered
+        // score section (GROSS most important, then NET), then points
+        const sectTop = "border-top:3px solid #0f172a;";
+        const sectBot = "border-bottom:3px solid #0f172a;";
+        const netOf = h => (h.strokes == null ? null : h.strokes - (h.strokes_received || 0));
         const tables = blocks.map(([label, hs]) => {
             const holeRow = hs.map(h => `<td style="${td}font-weight:700;background:#111;color:#fff;">${h.hole_number}</td>`).join("");
             const parRow = hs.map(h => `<td style="${td}">${h.par ?? ""}</td>`).join("");
             const ydsRow = hs.map(h => `<td style="${td}">${h.yardage ?? ""}</td>`).join("");
             const siRow = hs.map(h => `<td style="${td}color:var(--text-muted);">${h.stroke_index ?? ""}</td>`).join("");
-            const scRow = hs.map(scoreCell).join("");
+            const scRow = hs.map(h => scoreCell(h, sectTop + "font-weight:700;")).join("");
+            const netRow = hs.map(h => `<td style="${td}${sectBot}">${netOf(h) ?? ""}</td>`).join("");
             const npRow = hs.map(h => `<td style="${td}">${h.stableford_net ?? ""}</td>`).join("");
             const gpRow = hs.map(h => `<td style="${td}color:var(--text-muted);">${h.stableford_gross ?? ""}</td>`).join("");
             const tot = `style="${td}font-weight:700;background:#f1f5f9;"`;
+            const totG = `style="${td}${sectTop}font-weight:700;background:#f1f5f9;"`;
+            const totN = `style="${td}${sectBot}font-weight:700;background:#f1f5f9;"`;
             const totHead = `style="${td}font-weight:700;background:#111;color:#fff;"`;
             return `<table style="border-collapse:collapse;font-size:0.8rem;margin:0.25rem 0;">
                 <tr><td style="${lbl}background:#111;color:#fff;">HOLE</td>${holeRow}<td ${totHead}>${label}</td></tr>
                 <tr><td style="${lbl}">PAR</td>${parRow}<td ${tot}>${sum(hs, h => h.par) || ""}</td></tr>
                 <tr><td style="${lbl}">YARDS</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td></tr>
                 <tr><td style="${lbl}" title="Hole handicap ranking (stroke index): 1 = hardest — decides which holes a player's handicap dots land on">HCP</td>${siRow}<td ${tot}></td></tr>
-                <tr><td style="${lbl}">SCORE</td>${scRow}<td ${tot}>${sum(hs, h => h.strokes) || ""}</td></tr>
+                <tr><td style="${lbl}${sectTop}font-weight:700;">GROSS SCORE</td>${scRow}<td ${totG}>${sum(hs, h => h.strokes) || ""}</td></tr>
+                <tr><td style="${lbl}${sectBot}" title="Gross strokes minus handicap strokes received on the hole">NET SCORE</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
                 <tr><td style="${lbl}" title="Net stableford points per hole (through the admin formula settings)">NET PTS</td>${npRow}<td ${tot}>${sumPts(hs, h => h.stableford_net)}</td></tr>
                 <tr><td style="${lbl}color:var(--text-muted);" title="Gross stableford points per hole">GROSS PTS</td>${gpRow}<td ${tot}>${sumPts(hs, h => h.stableford_gross)}</td></tr>
             </table>`;
@@ -2164,16 +2175,23 @@
         const r = card.round || {}, dt = card.derived_totals || {};
         const bits = [];
         if (r.gross != null) bits.push(`Gross <strong>${r.gross}</strong>`);
-        if (r.net != null) bits.push(`Net <strong>${r.net}</strong>${r.playing_handicap != null ? ` (HCP ${r.playing_handicap})` : ""}`);
+        if (r.net != null) bits.push(`Net <strong>${r.net}</strong>${r.playing_handicap != null ? ` (HCP ${prFmtHcp(r.playing_handicap)})` : ""}`);
         if (dt.stableford_net != null) bits.push(`Stableford ${dt.stableford_net} net / ${dt.stableford_gross} gross`);
         if (dt.adjusted_gross != null) bits.push(`Adj. gross ${dt.adjusted_gross}`);
         return `<div style="overflow-x:auto;">${tables}</div>
             <div style="font-size:0.8rem;color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
             <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
-                ● = handicap strokes received &nbsp;·&nbsp;
+                ● = handicap stroke received &nbsp;·&nbsp; ○ = stroke given back (plus handicap) &nbsp;·&nbsp;
                 <span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> net under par &nbsp;
                 <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> net over par (doubled ring/box = by 2+)
             </div>`;
+    }
+
+    // GG convention: plus handicaps display as "+1" (stored negative so
+    // net = gross - ph stays uniform)
+    function prFmtHcp(v) {
+        if (v == null) return "";
+        return v < 0 ? `+${Math.abs(v) % 1 ? Math.abs(v).toFixed(1) : Math.abs(v)}` : `${v}`;
     }
 
     function prRenderDetailTables(tables, rounds, claimed) {
