@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.24.1";
+window.TGF_VERSION = "2.24.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.24.2",
+    date: "2026-07-03",
+    changes: [
+      "Identity repair, pass 2: handicap links created WITHOUT a customer_name (nothing recorded about who the link is for) are now checked against the GG player name itself — when that name is a customer's exact canonical name and the link points at a different profile, the link and its handicap rounds are re-pointed (alias-mediated or ambiguous matches are left alone). Found via the first full-field scorecard import: Kailey Lopez's nameless link pointed at Steve Kulawik, silently feeding her rounds into his handicap record and blocking her scorecard import as his 'duplicate'. Moved rounds get their scorecard bridge reset so the next import re-links them to the right card.",
+    ],
+  },
   {
     version: "2.24.1",
     date: "2026-07-03",

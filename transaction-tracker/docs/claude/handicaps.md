@@ -99,6 +99,20 @@ member. Emails can only be gained or corrected by this change, never lost
 every boot (log-only) and lists players whose sync address changed or who are
 newly included, so the deploy log shows the effect before the next 02:00 sync.
 
+**Link identity repair (`_repair_player_link_identities`, boot):** two
+passes, both idempotent, both re-point the link AND its player's
+handicap_rounds. Pass 1 (v2.16.x): links whose `customer_name` (who the
+link is FOR) resolves uniquely to a different profile than `customer_id`
+— the buyer-email misattribution class (Will Massey → Colby Johnson).
+Pass 2 (v2.24.2): links with NO customer_name are checked against the GG
+`player_name` itself, re-pointed only when that name is a customer's
+EXACT canonical name (alias-mediated or ambiguous matches left alone).
+Found when Kailey Lopez's nameless link pointed at Steve Kulawik — her
+rounds fed his handicap record and her scorecard import was skipped as
+his cross-tournament "duplicate". Moved rounds get
+`scoring_round_id = NULL` so the next scorecard import re-bridges them
+to the right card.
+
 **Admin exclusions (v2.17.14):** `_GG_SYNC_EXCLUDES` in `database.py` lists
 players the admin intentionally REMOVED from Golf Genius (inactive members
 kept fully active in the tracker — currently Matt/Matthew Lawyer). The
