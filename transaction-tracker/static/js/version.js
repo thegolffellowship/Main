@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.23.4";
+window.TGF_VERSION = "2.24.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.24.0",
+    date: "2026-07-03",
+    changes: [
+      "Scorecards are now VISIBLE: expanding a player on Contests → Points Races shows a SCORECARDS section under their points breakdown — every imported round (date, event, course/tee with slope/rating, holes, HCP, gross, net), and clicking a round renders the classic hole-by-hole card: black HOLE header, PAR/YARDS/S.I. rows from the course DB, scores with handicap-stroke dots and GG's net-relative circle/square markings, OUT/IN totals, plus a summary line with stableford points and adjusted gross.",
+      "Scorecard importer now recognizes that one physical round appears under EVERY Golf Genius game that day (Individual Net, ALL Gross, Skins…) with different aggregate ids: the first tournament to bring a player's card owns the row, later tournaments only FILL players still missing (result field skipped_other_tournament). This is what lets a full-field game like ALL Gross top up the 11 s9.16 players who weren't in the Individual Net game without duplicating the 21 who were.",
+    ],
+  },
   {
     version: "2.23.4",
     date: "2026-07-03",

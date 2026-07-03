@@ -6921,12 +6921,32 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
             conn.execute("INSERT INTO gg_raw_archive (url, body_gz) VALUES (?, ?)",
                          (url, zlib.compress(body.encode("utf-8"))))
 
-        imported = replaced = unresolved = bridged = 0
+        imported = replaced = unresolved = skipped = bridged = 0
         verified_ids: list = []
         for p in data["players"]:
             if not p.get("player_name") or not p.get("holes"):
                 continue
             cid = _resolve_scoring_player(conn, p["player_name"])
+            existing = conn.execute(
+                """SELECT id FROM scoring_rounds
+                   WHERE gg_aggregate_id = ? AND player_name = ?""",
+                (p.get("gg_aggregate_id"), p["player_name"])).fetchone()
+            # One physical round appears under EVERY GG game for that day
+            # (Individual Net, ALL Gross, Skins, ...) with a different
+            # aggregate id. The first tournament to bring a player's card
+            # owns the row; later tournaments only FILL players still
+            # missing. Import the richest game first (Individual Net has
+            # playing handicap + strokes received), then a full-field one
+            # (ALL Gross) to catch players who weren't in it.
+            if not existing:
+                dup = conn.execute(
+                    """SELECT id FROM scoring_rounds
+                       WHERE (round_date = ? OR (event_id IS NOT NULL AND event_id = ?))
+                         AND (customer_id = ? OR LOWER(player_name) = LOWER(?))""",
+                    (event_date, event_id, cid or -1, p["player_name"])).fetchone()
+                if dup:
+                    skipped += 1
+                    continue
             if not cid:
                 unresolved += 1
             course_id = tee_id = None
@@ -6934,10 +6954,6 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 course_id, tee_id = _upsert_course_tee(conn, p["tee"])
             holes_played = sum(1 for h in p["holes"].values()
                                if h.get("strokes") is not None)
-            existing = conn.execute(
-                """SELECT id FROM scoring_rounds
-                   WHERE gg_aggregate_id = ? AND player_name = ?""",
-                (p.get("gg_aggregate_id"), p["player_name"])).fetchone()
             if existing:
                 srid = existing["id"]
                 conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?", (srid,))
@@ -7024,10 +7040,14 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                               f"correct the course/tee data."))
         conn.commit()
 
-    logger.info("Scorecard import: %d new, %d replaced, %d unresolved names, "
-                "%d handicap rounds bridged, %d verified OK, %d discrepancies",
-                imported, replaced, unresolved, bridged, n_ok, len(discrepancies))
+    logger.info("Scorecard import: %d new, %d replaced, %d skipped (round "
+                "already captured from another tournament), %d unresolved "
+                "names, %d handicap rounds bridged, %d verified OK, "
+                "%d discrepancies",
+                imported, replaced, skipped, unresolved, bridged, n_ok,
+                len(discrepancies))
     return {"imported": imported, "replaced": replaced,
+            "skipped_other_tournament": skipped,
             "unresolved_names": unresolved, "handicap_rounds_bridged": bridged,
             "players_seen": len(data["players"]), "event_id": event_id,
             "verified_ok": n_ok, "discrepancies": discrepancies}
