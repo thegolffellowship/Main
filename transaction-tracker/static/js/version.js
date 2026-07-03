@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.24.0";
+window.TGF_VERSION = "2.24.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.24.1",
+    date: "2026-07-03",
+    changes: [
+      "Added scoring-resolve:<gg_name> to the probe bridge — identity debugging that shows a GG name's parse candidates, any handicap_player_links rows they hit, and the final customer resolution. Built to chase why Kailey Lopez's ALL Gross card was skipped as a duplicate when she had no round on file.",
+    ],
+  },
   {
     version: "2.24.0",
     date: "2026-07-03",
