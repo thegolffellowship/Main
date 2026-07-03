@@ -54,10 +54,18 @@ player_name) and (round_date or event_id) and SKIPS if found
 (`skipped_other_tournament` in the result). Re-importing the same
 tournament still replaces (refresh path).
 
-Ordering rule: import the richest game FIRST — Individual Net carries
-playing handicap + strokes-received dots — then a full-field game
-(ALL Gross) to top up players who weren't in the net game (guests,
-non-buyers). The round-N tournament list lives at
+Ordering rule (admin-corrected): **ALL Net and ALL Gross are the gold
+standard** — both carry the FULL field. ALL Net has everyone's playing
+handicaps + strokes-received dots (Individual Net is a PURCHASED game
+under NET Games and only covers buyers — importing it first was the
+original mistake that left 11 of 32 s9.16 players without handicaps).
+ALL Gross is the raw-score baseline — the layer our own calculations
+build on to reverse-engineer GG's derivations and validate in parallel.
+Recipe per event: ALL Net first, then ALL Gross to fill anyone left.
+Order mistakes self-heal: a net-game card (playing_handicap present)
+UPGRADES a stored raw-gross card for the same physical round
+(`upgraded_with_handicap` in the result), never the reverse. The
+round-N tournament list lives at
 `/leagues/<league_id>/widgets/tournament_results?shared=false`
 (iframe inside the Event Results portal page).
 
