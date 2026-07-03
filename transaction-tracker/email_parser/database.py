@@ -6361,12 +6361,12 @@ def get_points_race_standings(race_key: str,
             for r in enr_rows
         }
 
-        # Current handicap per customer (flighted races): 18-hole index via
-        # handicap_player_links — computed at read time so a handicap change
-        # moves a player to their new flight automatically
+        # Current handicap per customer (every race, admin request): 18-hole
+        # index via handicap_player_links — computed at read time so a
+        # handicap change updates the column (and any flight) automatically
         flights = race.get("flights")
         idx_by_cid: dict = {}
-        if flights:
+        if True:
             idx_by_name = {
                 p["player_name"]: p["handicap_index_18"]
                 for p in get_all_handicap_players(db_path)
@@ -6397,9 +6397,9 @@ def get_points_race_standings(race_key: str,
             if cid:
                 ranked_ids.add(cid)
             r["enrolled"] = bool(cid and cid in enrolled_ids)
+            hcp = idx_by_cid.get(cid) if cid else None
+            r["handicap_index"] = hcp
             if flights:
-                hcp = idx_by_cid.get(cid) if cid else None
-                r["handicap_index"] = hcp
                 r["flight"] = _assign_flight(hcp, flights)
             out_rows.append(r)
 

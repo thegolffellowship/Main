@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.20.2";
+window.TGF_VERSION = "2.20.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.20.3",
+    date: "2026-07-03",
+    changes: [
+      "Points race polish (admin requests): enrolled rows are a brighter green so buy-ins pop; every race now shows a current-handicap (HCP) column, not just the flighted Players Cup — computed live, so it always reflects today's index; BEHIND and WINS columns removed; the GROSS sub-tab is renamed THE PLAYERS CUP (the underlying contest data name is unchanged).",
+    ],
+  },
   {
     version: "2.20.2",
     date: "2026-07-03",
