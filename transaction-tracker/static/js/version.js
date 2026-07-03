@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.21.1";
+window.TGF_VERSION = "2.21.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.21.2",
+    date: "2026-07-03",
+    changes: [
+      "Points race table: POINTS and Rounds data now centered (was right-justified); new empty POINTS RESET column between them (placeholder — no data yet, reserved for the upcoming points-reset feature).",
+    ],
+  },
   {
     version: "2.21.1",
     date: "2026-07-03",
