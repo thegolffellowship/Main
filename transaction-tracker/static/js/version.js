@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.24.2";
+window.TGF_VERSION = "2.24.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.24.3",
+    date: "2026-07-03",
+    changes: [
+      "Identity repair, pass 3 (the one that actually fixes Kailey Lopez): her link wasn't nameless — the email auto-matcher had filled BOTH customer_name and customer_id with the BUYER ('Steve Kulawik', whose email her guest spots were bought on), so pass 1 saw a self-consistent link and pass 2 didn't apply. New pass re-points links whose GG player_name is EXACTLY one other customer's canonical name while the linked customer separately holds a link under their own name — proof the row can't be a display-name variant. The wrong customer_name is corrected along with the id; nickname links (GG 'Mike Murphy' → Michael Murphy) are untouched.",
+    ],
+  },
   {
     version: "2.24.2",
     date: "2026-07-03",

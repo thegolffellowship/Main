@@ -6151,6 +6151,63 @@ def _repair_player_link_identities(conn: sqlite3.Connection) -> None:
             "→ cid %s (%d round(s) followed; scorecard bridge reset)",
             pname, r["customer_id"], r["linked_name"], want, moved_rounds,
         )
+
+    # Pass 3: the email auto-matcher sometimes filled BOTH customer_name and
+    # customer_id with the BUYER (Kailey Lopez's link recorded
+    # customer_name='Steve Kulawik' because her guest spots were bought on
+    # his email) — pass 1 sees a self-consistent link, pass 2 requires an
+    # empty customer_name. Repair only under two hard guards: the GG
+    # player_name is EXACTLY one other customer's canonical name (no alias
+    # inference, ambiguity refusal), AND the linked customer separately
+    # holds a link under their OWN name — proof this second player row
+    # can't just be their GG display-name variant. The wrong customer_name
+    # is corrected along with the id.
+    rows = conn.execute(
+        """SELECT l.rowid AS rid, l.player_name, l.customer_name, l.customer_id,
+                  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS linked_name
+           FROM handicap_player_links l
+           JOIN customers c ON c.customer_id = l.customer_id
+           WHERE l.customer_id IS NOT NULL
+             AND l.customer_name IS NOT NULL AND TRIM(l.customer_name) != ''
+             AND l.player_name IS NOT NULL AND TRIM(l.player_name) != ''"""
+    ).fetchall()
+    for r in rows:
+        pname = " ".join((r["player_name"] or "").split())
+        stored = " ".join((r["customer_name"] or "").split()).lower()
+        linked = " ".join((r["linked_name"] or "").split()).lower()
+        if not pname or pname.lower() == linked or stored != linked:
+            continue   # own-name link, or pass-1 territory
+        others = conn.execute(
+            """SELECT customer_id,
+                      TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS nm
+               FROM customers
+               WHERE LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) = LOWER(?)""",
+            (pname,)).fetchall()
+        if len(others) != 1 or others[0]["customer_id"] == r["customer_id"]:
+            continue
+        own = conn.execute(
+            """SELECT 1 FROM handicap_player_links
+               WHERE customer_id = ? AND rowid != ?
+                 AND LOWER(TRIM(player_name)) = ? LIMIT 1""",
+            (r["customer_id"], r["rid"], linked)).fetchone()
+        if not own:
+            continue
+        want, want_name = others[0]["customer_id"], others[0]["nm"]
+        conn.execute(
+            """UPDATE handicap_player_links
+               SET customer_id = ?, customer_name = ? WHERE rowid = ?""",
+            (want, want_name, r["rid"]),
+        )
+        moved_rounds = conn.execute(
+            "UPDATE handicap_rounds SET customer_id = ?, scoring_round_id = NULL "
+            "WHERE customer_id = ? AND player_name = ?",
+            (want, r["customer_id"], r["player_name"]),
+        ).rowcount
+        logger.info(
+            "Player link identity (buyer-filled link): %r re-pointed cid %s "
+            "(%r) → cid %s (%d round(s) followed; scorecard bridge reset)",
+            pname, r["customer_id"], r["linked_name"], want, moved_rounds,
+        )
     conn.commit()
 
 
