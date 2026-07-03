@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.21.2";
+window.TGF_VERSION = "2.21.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.21.3",
+    date: "2026-07-03",
+    changes: [
+      "Expanded player detail reshaped (admin request): Points is now the first column and the redundant Event column ('TGF San Antonio 2026' on nearly every row) is dropped — leaving Points | Tournament | Awarded Date | Position. GG's 'points not counted in standings' divider now spans the full table width instead of rendering as a stray single cell.",
+    ],
+  },
   {
     version: "2.21.2",
     date: "2026-07-03",

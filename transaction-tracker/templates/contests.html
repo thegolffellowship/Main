@@ -1943,11 +1943,30 @@
             return '<span style="color:var(--text-muted);">No round-by-round detail available for this player.</span>';
         }
         return tables.map(t => {
-            const head = t[0] || [];
-            const body = t.slice(1).filter(r => r.some(c => (c || "").trim()));
+            const orig = t[0] || [];
+            // Reshape GG's columns: drop Event, lead with Points
+            let order = null;
+            if (orig.length) {
+                const norm = orig.map(h => (h || "").trim().toLowerCase());
+                const ptsIdx = norm.indexOf("points");
+                const evIdx = norm.indexOf("event");
+                if (ptsIdx > -1) {
+                    order = [ptsIdx];
+                    for (let i = 0; i < orig.length; i++) {
+                        if (i !== ptsIdx && i !== evIdx) order.push(i);
+                    }
+                }
+            }
+            const remap = row => (order && row.length === orig.length) ? order.map(i => row[i]) : row;
+            const head = remap(orig);
+            const width = head.length;
+            const body = t.slice(1).filter(r => r.some(c => (c || "").trim())).map(remap);
+            const rowHtml = r => r.length === width
+                ? `<tr>${r.map(c => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`
+                : `<tr><td colspan="${width}" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(r.join(" "))}</td></tr>`;
             return `<table class="enrollment-table" style="margin:0.35rem 0;font-size:0.82rem;">
                 <thead><tr>${head.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
-                <tbody>${body.map(r => `<tr>${r.map(c => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("")}</tbody>
+                <tbody>${body.map(rowHtml).join("")}</tbody>
             </table>`;
         }).join("");
     }
