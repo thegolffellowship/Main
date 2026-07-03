@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.21.0";
+window.TGF_VERSION = "2.21.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.21.1",
+    date: "2026-07-03",
+    changes: [
+      "Points race table polish: fixed pixel widths on the Rank / POINTS / Rounds / Buy-in columns so all three race tabs lay out identically (columns were auto-sizing to each tab's content, making SA Net's POINTS/Rounds spacing drift from the others). Flight heading rows are now black with white text, with the flight name in ALL CAPS ('1ST FLIGHT') and the range/count in regular weight; the no-handicap bucket matches as 'FLIGHT UNASSIGNED'.",
+    ],
+  },
   {
     version: "2.21.0",
     date: "2026-07-03",

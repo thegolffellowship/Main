@@ -1825,7 +1825,12 @@
 
         const hasFlights = !!(d.flights && d.flights.length);
         const nCols = 5;
-        const ptsStyle = "text-align:right;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;";
+        // Fixed widths on every column but Player so the three race tabs
+        // lay out identically regardless of content
+        const rankStyle = "width:56px;";
+        const ptsStyle = "width:90px;text-align:right;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;";
+        const rndStyle = "width:80px;text-align:right;";
+        const buyStyle = "width:110px;";
 
         const rowHtml = r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
@@ -1846,11 +1851,11 @@
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
                 : '';
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${expandable ? ` data-card="${r.member_card_id}"` : ''}>
-                <td>${escapeHtml(r.rank)}</td>
+                <td style="${rankStyle}">${escapeHtml(r.rank)}</td>
                 <td>${nameCell}${hcp}${chevron}</td>
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
-                <td style="text-align:right;">${r.tournaments ?? ""}</td>
-                <td>${badge}</td>
+                <td style="${rndStyle}">${r.tournaments ?? ""}</td>
+                <td style="${buyStyle}">${badge}</td>
             </tr>`;
         };
 
@@ -1862,12 +1867,12 @@
             for (const f of d.flights) {
                 const members = d.standings.filter(r => r.flight === f.label);
                 if (!members.length) continue;
-                sections.push(`<tr><td colspan="${nCols}" style="background:#eef2f7;font-weight:700;font-size:0.82rem;letter-spacing:0.02em;">${escapeHtml(f.label)} (${escapeHtml(f.range)}) — ${members.length} player${members.length === 1 ? "" : "s"}</td></tr>`);
+                sections.push(`<tr><td colspan="${nCols}" style="background:#111;color:#fff;font-weight:700;font-size:0.82rem;letter-spacing:0.04em;">${escapeHtml(f.label.toUpperCase())} <span style="font-weight:400;">(${escapeHtml(f.range)}) — ${members.length} player${members.length === 1 ? "" : "s"}</span></td></tr>`);
                 sections.push(members.map(rowHtml).join(""));
             }
             const noHcp = d.standings.filter(r => !r.flight);
             if (noHcp.length) {
-                sections.push(`<tr><td colspan="${nCols}" style="background:#fffbeb;font-weight:700;font-size:0.82rem;" title="No linked handicap rounds in the current window">No current handicap — flight unassigned (${noHcp.length})</td></tr>`);
+                sections.push(`<tr><td colspan="${nCols}" style="background:#111;color:#fff;font-weight:700;font-size:0.82rem;letter-spacing:0.04em;" title="No linked handicap rounds in the current window">FLIGHT UNASSIGNED <span style="font-weight:400;">— no current handicap (${noHcp.length})</span></td></tr>`);
                 sections.push(noHcp.map(rowHtml).join(""));
             }
             bodyRows = sections.join("");
@@ -1886,10 +1891,10 @@
         $("pr-table-container").innerHTML = `
             <table class="enrollment-table">
                 <thead><tr>
-                    <th>Rank</th><th>Player</th>
+                    <th style="${rankStyle}">Rank</th><th>Player</th>
                     <th style="${ptsStyle}">POINTS</th>
-                    <th style="text-align:right;">Rounds</th>
-                    <th>Buy-in</th>
+                    <th style="${rndStyle}">Rounds</th>
+                    <th style="${buyStyle}">Buy-in</th>
                 </tr></thead>
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
