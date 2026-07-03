@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.22.3";
+window.TGF_VERSION = "2.22.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.22.4",
+    date: "2026-07-03",
+    changes: [
+      "THE PLAYERS CUP gains a Chapter column (tracker profile's chapter first, GG affiliation as fallback for unmatched names), and both it and THE FELLOWSHIP CUP's Chapter columns get the same vertical border treatment as POINTS. NET tabs stay single-chapter with no extra column.",
+    ],
+  },
   {
     version: "2.22.3",
     date: "2026-07-03",

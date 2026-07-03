@@ -6515,14 +6515,16 @@ def get_points_race_standings(race_key: str,
         # a member status; unresolved rows hide unless GG's own affiliation
         # says they're a current TGF chapter member. Buy-ins always show.
         status_by_cid: dict = {}
+        chapter_by_cid: dict = {}
         cids = list({r["customer_id"] for r in out_rows if r["customer_id"]})
         if cids:
             qmarks = ",".join("?" * len(cids))
             for sr in conn.execute(
-                    f"""SELECT customer_id, current_player_status
+                    f"""SELECT customer_id, current_player_status, chapter
                         FROM customers WHERE customer_id IN ({qmarks})""",
                     cids).fetchall():
                 status_by_cid[sr["customer_id"]] = sr["current_player_status"]
+                chapter_by_cid[sr["customer_id"]] = sr["chapter"]
         hidden_nonmembers = []
         visible_rows = []
         for r in out_rows:
@@ -6541,6 +6543,13 @@ def get_points_race_standings(race_key: str,
         # tossed entirely — they must not hold positions or create phantom
         # ties (a "T59" whose only tie partner was hidden shows plain 59).
         # GG's original rank is kept as gg_rank for reference.
+        for r in out_rows:
+            cid = r["customer_id"]
+            aff = (r.get("affiliation") or "").strip()
+            r["player_chapter"] = (
+                (chapter_by_cid.get(cid) if cid else None)
+                or (aff[4:] if aff.lower().startswith("tgf ") else aff)
+            )
         for i, r in enumerate(out_rows):
             r["gg_rank"] = r["rank"]
             if i and out_rows[i - 1]["total_points"] == r["total_points"]:
@@ -6618,6 +6627,7 @@ def get_points_race_standings(race_key: str,
         "contest_type": race["contest_type"],
         "chapter": race["chapter"],
         "standings": out_rows,
+        "cross_chapter": race.get("enroll_chapter") is None,
         "n_players": len(out_rows),
         "n_enrolled": sum(1 for r in out_rows if r["enrolled"]),
         "n_unresolved": sum(1 for r in out_rows if not r["customer_id"]),
