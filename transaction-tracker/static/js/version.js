@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.22.2";
+window.TGF_VERSION = "2.22.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.22.3",
+    date: "2026-07-03",
+    changes: [
+      "POINTS RESET column headers now carry an amber '(Projected)' label above the title on all four sub-tabs — making clear the values are live projections until the actual reset after the City Championships.",
+    ],
+  },
   {
     version: "2.22.2",
     date: "2026-07-03",
