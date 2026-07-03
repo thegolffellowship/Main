@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv
 import io
 import json as _json
+from html import unescape as _unescape
 import logging
 import os
 import re
@@ -893,7 +894,7 @@ def parse_scorecard_details(fragment: str) -> dict:
     flight = None
     m = re.search(r"<td colspan='\d+'>\s*(Flight[^<]*)</td>", fragment)
     if m:
-        flight = " ".join(m.group(1).split())
+        flight = _unescape(" ".join(m.group(1).split()))
     prof = re.search(r"/profiles/(\d+)", fragment)
 
     players = []
@@ -902,7 +903,7 @@ def parse_scorecard_details(fragment: str) -> dict:
     for i in range(1, len(chunks), 2):
         head, body = chunks[i], chunks[i + 1]
         nm = re.search(r"data-net-name='([^']*)'", head)
-        name = nm.group(1) if nm else None
+        name = _unescape(nm.group(1)) if nm else None
         ph = None
         link = re.search(
             r"expand-tee-details[^>]*href=\"(/tournaments2/nets/(\d+)\?event_id=(\d+))\"[^>]*>([^<]*)",
@@ -948,7 +949,7 @@ def parse_tee_block(fragment: str) -> dict | None:
         r"tee_data[^>]*>\s*<td[^>]*>\s*([^<]*SLOPE[^<]*)</td>", fragment)
     if not hm:
         return None
-    header = " ".join(hm.group(1).split())
+    header = _unescape(" ".join(hm.group(1).split()))
     # "1 - Blue Tee / SLOPE®: 135 / Course Rating™: 36.6 / TPC San Antonio - Oaks"
     parts = [p.strip() for p in header.split("/")]
     tee_name = parts[0] if parts else header

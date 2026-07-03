@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.23.3";
+window.TGF_VERSION = "2.23.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.23.4",
+    date: "2026-07-03",
+    changes: [
+      "Scorecard parser now HTML-unescapes text pulled from GG partials (flight labels, player names, tee headers) — the first real import stored 'Flight 1 (HCP &lt;12.0)' with the raw entity. Facts land clean; re-import (idempotent) rewrites existing rows.",
+    ],
+  },
   {
     version: "2.23.3",
     date: "2026-07-03",
