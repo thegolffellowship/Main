@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.21.5";
+window.TGF_VERSION = "2.21.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.21.6",
+    date: "2026-07-03",
+    changes: [
+      "Hill Country Matches rounds drop the code prefix in the expanded detail (admin preference): 'Hill Country Matches - Valley / Hills / Creeks' instead of 'hcmR1 …'. Regular events keep their codes ('a9.13 Star Ranch').",
+    ],
+  },
   {
     version: "2.21.5",
     date: "2026-07-03",

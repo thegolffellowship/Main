@@ -6240,9 +6240,10 @@ _GG_EVENT_CODE_RE = re.compile(r"^([a-z]+\d+(?:\.\d+)?)\b", re.I)
 # (2026-07-03). A tracker event with the same code would win — live data
 # over static — since these only fill gaps left by the events table.
 _GG_CODE_NAME_OVERRIDES: dict = {
-    "hcmr1": "hcmR1 Hill Country Matches - Valley",
-    "hcmr2": "hcmR2 Hill Country Matches - Hills",
-    "hcmr3": "hcmR3 Hill Country Matches - Creeks",
+    # No code prefix on these (admin preference) — the round name carries it
+    "hcmr1": "Hill Country Matches - Valley",
+    "hcmr2": "Hill Country Matches - Hills",
+    "hcmr3": "Hill Country Matches - Creeks",
 }
 
 
