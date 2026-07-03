@@ -1325,7 +1325,8 @@ def get_venmo_transactions(
 
 
 @mcp.tool()
-def probe_golf_genius(url: str, extract: str = "summary", max_chars: int = 60000) -> str:
+def probe_golf_genius(url: str, extract: str = "summary", max_chars: int = 60000,
+                      xhr: bool = False) -> str:
     """Fetch a PUBLIC Golf Genius portal page server-side and return its parsed
     structure. Read-only, no login, restricted to *.golfgenius.com URLs. Built
     to explore what league data (events, results, standings) is available for
@@ -1338,11 +1339,13 @@ def probe_golf_genius(url: str, extract: str = "summary", max_chars: int = 60000
             table), 'links' (links only), 'tables' (all tables in full),
             'text' (visible text), or 'raw' (raw HTML, truncated)
         max_chars: Truncation cap for text/raw output (default 60000)
+        xhr: Send XMLHttpRequest headers (for GG widget detail routes that
+            answer XHR with a JS partial instead of a full page)
     """
     from golf_genius_sync import fetch_public_page, parse_page_structure
 
     try:
-        page = fetch_public_page(url)
+        page = fetch_public_page(url, xhr=xhr)
     except Exception as e:
         return json.dumps({"error": str(e)})
     if page["status_code"] != 200:

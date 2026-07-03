@@ -929,3 +929,15 @@ docs/claude/handicaps.md → public-portal probe for the fetch layer).
 - UI colors: green = enrolled, red = profile but no buy-in, amber =
   unmatched GG name (fix by adding a name alias to the right customer).
   Below the table: players bought in but absent from the GG standings.
+- **Expandable detail (v2.19.2)**: rows with a `member_card_id` (captured
+  from the widget's `data-member-card-id` attributes at refresh time,
+  stored on the snapshot) toggle a per-player round-by-round breakdown on
+  click. `golf_genius_sync.fetch_points_race_member_detail()` replays
+  GG's own row-expansion XHR (`season_points_v2/individual_info` with
+  `X-Requested-With: XMLHttpRequest` — non-XHR requests get a full page
+  back), unwraps the `$("#info_<id>").html("…")` JS partial, parses its
+  tables, and refuses responses that look like the standings page.
+  Endpoint GET /api/season-contests/points-race/detail?race=&card=
+  (manager role), cached 10 min per (race, card). The GG bundle handler
+  that revealed the endpoint: `window.glg.standings.init_info` →
+  `window.season_points_more_info_path`.

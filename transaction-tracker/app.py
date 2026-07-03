@@ -8341,6 +8341,46 @@ def api_season_contest_points_race():
     return jsonify(data)
 
 
+_points_detail_cache: dict = {}
+_POINTS_DETAIL_CACHE_TTL = 600
+
+
+@app.route("/api/season-contests/points-race/detail")
+@require_role("manager")
+def api_season_contest_points_race_detail():
+    """One player's per-round points breakdown (GG row expansion), live.
+
+    Proxies GG's season_points_v2/individual_info XHR for the given
+    member_card_id and returns the parsed tables. Cached 10 minutes per
+    (race, card) — expansion detail is browse-heavy but changes per round.
+    """
+    from email_parser.database import _GG_POINTS_RACES
+    from golf_genius_sync import fetch_points_race_member_detail
+    race_key = request.args.get("race", "san_antonio_net")
+    card = (request.args.get("card") or "").strip()
+    race = _GG_POINTS_RACES.get(race_key)
+    if not race:
+        return jsonify({"error": f"Unknown race {race_key!r}"}), 400
+    if not card.isdigit():
+        return jsonify({"error": "card must be a numeric member_card_id"}), 400
+
+    now = time.time()
+    cached = _points_detail_cache.get((race_key, card))
+    if cached and now - cached[0] < _POINTS_DETAIL_CACHE_TTL:
+        return jsonify(cached[1])
+
+    try:
+        data = fetch_points_race_member_detail(
+            page_id=race["page_id"], member_card_id=card,
+            league_id=race["league_id"], host=race["host"])
+    except Exception as e:
+        logger.exception("Points race detail fetch failed")
+        return jsonify({"error": f"Golf Genius fetch failed: {e}"}), 502
+
+    _points_detail_cache[(race_key, card)] = (now, data)
+    return jsonify(data)
+
+
 @app.route("/api/season-contests/<int:enrollment_id>", methods=["DELETE"])
 @require_role("manager")
 def api_delete_season_contest(enrollment_id):
