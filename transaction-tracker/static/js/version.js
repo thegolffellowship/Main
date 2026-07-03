@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.21.3";
+window.TGF_VERSION = "2.21.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.21.4",
+    date: "2026-07-03",
+    changes: [
+      "Expanded player detail shows real event names (admin request): GG tournament labels like 'a9.13 POINTS Gross - THE PLAYERS CUP' are swapped for the tracker's event name ('a9.13 Star Ranch') by matching the shared event-code prefix against events.item_name. 18-hole Front/Back splits keep their qualifier ('s18.7 KISSING TREE — Front'); labels with no matching tracker event (e.g. Hill Country Matches rounds) pass through unchanged.",
+    ],
+  },
   {
     version: "2.21.3",
     date: "2026-07-03",

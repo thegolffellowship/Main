@@ -8373,6 +8373,8 @@ def api_season_contest_points_race_detail():
         data = fetch_points_race_member_detail(
             page_id=race["page_id"], member_card_id=card,
             league_id=race["league_id"], host=race["host"])
+        from email_parser.database import substitute_gg_tournament_names
+        data["tables"] = substitute_gg_tournament_names(data["tables"])
     except Exception as e:
         logger.exception("Points race detail fetch failed")
         return jsonify({"error": f"Golf Genius fetch failed: {e}"}), 502
