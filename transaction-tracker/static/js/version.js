@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.22.1";
+window.TGF_VERSION = "2.22.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.22.2",
+    date: "2026-07-03",
+    changes: [
+      "Hidden non-members no longer affect rankings (admin rule): standings re-rank over the visible list, so a player whose only tie partner was hidden shows a plain rank (Michelle DelCarmen's phantom T59 becomes 59), positions close up, and real ties among visible players keep their T-marks. GG's original rank is preserved internally as gg_rank. The reset ladder likewise counts ELIGIBLE players only — a visible-but-ineligible row (expired member kept visible by their buy-in, or a member with zero rounds) consumes no ladder position.",
+    ],
+  },
   {
     version: "2.22.1",
     date: "2026-07-03",
