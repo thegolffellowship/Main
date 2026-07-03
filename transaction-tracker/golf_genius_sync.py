@@ -810,9 +810,12 @@ def fetch_points_race_member_detail(page_id: str, member_card_id: str,
         raise RuntimeError(f"Golf Genius returned HTTP {page['status_code']}")
     body = page["html"]
 
-    # JS-partial shape: $("#info_<id>").html("<escaped fragment>")
+    # JS-partial shape: $("#info_<id>").append("<escaped fragment>") — GG
+    # uses .append() here; accept the other jQuery injectors too
     frag = None
-    m = re.search(r'\.html\(\s*"((?:\\.|[^"\\])*)"', body, re.S)
+    m = re.search(
+        r'\.(?:append|html|prepend|replaceWith)\(\s*"((?:\\.|[^"\\])*)"',
+        body, re.S)
     if m:
         s = m.group(1).replace("\\'", "'")
         try:

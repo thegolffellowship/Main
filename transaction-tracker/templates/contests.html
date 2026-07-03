@@ -1817,7 +1817,10 @@
             + (fetched ? ` · from Golf Genius ${fetched}` : "")
             + (d.gg_error ? ` · ⚠ refresh failed (showing last snapshot)` : "");
 
-        const rows = d.standings.map(r => {
+        const hasFlights = !!(d.flights && d.flights.length);
+        const nCols = hasFlights ? 8 : 7;
+
+        const rowHtml = r => {
             const bg = r.enrolled ? "background:#f0fdf4;"
                      : (r.customer_id ? "background:#fef2f2;" : "background:#fffbeb;");
             const badge = r.enrolled
@@ -1832,16 +1835,41 @@
             const chevron = expandable
                 ? ' <span class="pr-chevron" style="color:var(--text-muted);font-size:0.7rem;" title="Round-by-round points">&#9656;</span>'
                 : '';
+            const hcpCell = hasFlights
+                ? `<td style="text-align:right;">${r.handicap_index != null ? r.handicap_index.toFixed(1) : "—"}</td>`
+                : '';
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${expandable ? ` data-card="${r.member_card_id}"` : ''}>
                 <td>${escapeHtml(r.rank)}</td>
                 <td>${nameCell}${chevron}</td>
+                ${hcpCell}
                 <td style="text-align:right;">${r.total_points ?? ""}</td>
                 <td style="text-align:right;">${r.points_behind ?? ""}</td>
                 <td style="text-align:right;">${r.tournaments ?? ""}</td>
                 <td style="text-align:right;">${r.wins ?? ""}</td>
                 <td>${badge}</td>
             </tr>`;
-        }).join("");
+        };
+
+        let bodyRows;
+        if (hasFlights) {
+            // Flights are assigned server-side from each player's CURRENT
+            // handicap — a handicap change moves them automatically
+            const sections = [];
+            for (const f of d.flights) {
+                const members = d.standings.filter(r => r.flight === f.label);
+                if (!members.length) continue;
+                sections.push(`<tr><td colspan="${nCols}" style="background:#eef2f7;font-weight:700;font-size:0.82rem;letter-spacing:0.02em;">${escapeHtml(f.label)} (${escapeHtml(f.range)}) — ${members.length} player${members.length === 1 ? "" : "s"}</td></tr>`);
+                sections.push(members.map(rowHtml).join(""));
+            }
+            const noHcp = d.standings.filter(r => !r.flight);
+            if (noHcp.length) {
+                sections.push(`<tr><td colspan="${nCols}" style="background:#fffbeb;font-weight:700;font-size:0.82rem;" title="No linked handicap rounds in the current window">No current handicap — flight unassigned (${noHcp.length})</td></tr>`);
+                sections.push(noHcp.map(rowHtml).join(""));
+            }
+            bodyRows = sections.join("");
+        } else {
+            bodyRows = d.standings.map(rowHtml).join("");
+        }
 
         let extra = "";
         if (d.enrolled_not_ranked && d.enrolled_not_ranked.length) {
@@ -1855,13 +1883,14 @@
             <table class="enrollment-table">
                 <thead><tr>
                     <th>Rank</th><th>Player</th>
+                    ${hasFlights ? '<th style="text-align:right;" title="Current 18-hole handicap index">HCP</th>' : ''}
                     <th style="text-align:right;">Points</th>
                     <th style="text-align:right;">Behind</th>
                     <th style="text-align:right;">Rounds</th>
                     <th style="text-align:right;">Wins</th>
                     <th>Buy-in</th>
                 </tr></thead>
-                <tbody>${rows}</tbody>
+                <tbody>${bodyRows}</tbody>
             </table>${extra}`;
 
         $("pr-table-container").querySelectorAll("tr[data-card]").forEach(tr => {
@@ -1886,7 +1915,7 @@
 
         const detail = document.createElement("tr");
         detail.className = "pr-detail-row";
-        detail.innerHTML = '<td colspan="7" style="background:#f8fafc;padding:0.6rem 1rem;color:var(--text-muted);">Loading round-by-round points…</td>';
+        detail.innerHTML = `<td colspan="${tr.children.length}" style="background:#f8fafc;padding:0.6rem 1rem;color:var(--text-muted);">Loading round-by-round points…</td>`;
         tr.after(detail);
         if (chev) chev.innerHTML = "&#9662;";
         try {

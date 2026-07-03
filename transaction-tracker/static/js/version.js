@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.19.2";
+window.TGF_VERSION = "2.20.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.20.0",
+    date: "2026-07-03",
+    changes: [
+      "Fix: round-by-round detail now loads — GG's expansion partial injects via jQuery .append(), not .html(); the unwrapper only matched .html() so every expansion showed 'no detail available'. Verified against the live individual_info response (Event | Tournament | Awarded Date | Position | Points, including GG's 'not counted in standings' section).",
+      "Fix: THE PLAYERS CUP buy-in check is now cross-chapter (admin-confirmed 'The players cup is all chapters') — Robert Straiton and the other Austin GROSS Points Race enrollees showed wrongly red because the enrollment join was scoped to San Antonio. Each race now declares its own enroll_chapter scope; NET races stay chapter-scoped.",
+      "Flights for THE PLAYERS CUP (admin request): standings group into 1st Flight (HCP <6.0), 2nd (6-11.9), 3rd (12-17.9), 4th (18+), assigned from each player's CURRENT 18-hole handicap index (TGF 9-hole index x2 - the same value the GG export syncs) computed at render time, so a handicap change moves a player to their new flight automatically. Players with no linked handicap rounds appear under 'No current handicap - flight unassigned'. An HCP column shows the index used. Flight boundaries live in the _GG_POINTS_RACES registry.",
+    ],
+  },
   {
     version: "2.19.2",
     date: "2026-07-03",
