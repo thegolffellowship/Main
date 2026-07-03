@@ -6234,6 +6234,55 @@ def _gg_name_candidates(raw_name: str) -> list:
     return cands
 
 
+_GG_EVENT_CODE_RE = re.compile(r"^([a-z]+\d+(?:\.\d+)?)\b", re.I)
+
+
+def substitute_gg_tournament_names(tables: list,
+                                   db_path: str | Path = DB_PATH) -> list:
+    """Swap GG tournament labels for tracker event names by event code.
+
+    'a9.13 POINTS Gross - THE PLAYERS CUP' -> 'a9.13 Star Ranch' (admin
+    request): the leading code token is the TGF event code both systems
+    share, so it keys into events.item_name. Front/Back qualifiers from
+    18-hole splits are preserved; unmatched labels pass through unchanged.
+    """
+    with _connect(db_path) as conn:
+        code_map: dict = {}
+        for r in conn.execute("SELECT item_name FROM events").fetchall():
+            name = (r["item_name"] or "").strip()
+            m = _GG_EVENT_CODE_RE.match(name)
+            if m:
+                code_map.setdefault(m.group(1).lower(), name)
+
+    out = []
+    for table in tables or []:
+        if not table:
+            out.append(table)
+            continue
+        header = [(c or "").strip().lower() for c in table[0]]
+        if "tournament" not in header:
+            out.append(table)
+            continue
+        t_idx = header.index("tournament")
+        new_table = [table[0]]
+        for row in table[1:]:
+            row = list(row)
+            if t_idx < len(row):
+                cell = (row[t_idx] or "").strip()
+                m = _GG_EVENT_CODE_RE.match(cell)
+                if m and m.group(1).lower() in code_map:
+                    repl = code_map[m.group(1).lower()]
+                    low = cell.lower()
+                    if "front" in low:
+                        repl += " — Front"
+                    elif "back" in low:
+                        repl += " — Back"
+                    row[t_idx] = repl
+            new_table.append(row)
+        out.append(new_table)
+    return out
+
+
 def _ensure_gg_points_table(conn: sqlite3.Connection) -> None:
     """Lazy-create the persisted GG standings snapshot (pairings pattern)."""
     conn.execute(
