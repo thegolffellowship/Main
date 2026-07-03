@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.21.6";
+window.TGF_VERSION = "2.21.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.21.7",
+    date: "2026-07-03",
+    changes: [
+      "Points race table: vertical column borders extended to POINTS RESET and Rounds (right-edge rules, so adjacent columns share a single 2px line with POINTS's existing borders).",
+    ],
+  },
   {
     version: "2.21.6",
     date: "2026-07-03",
