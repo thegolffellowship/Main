@@ -1356,6 +1356,31 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(card if card else {"error": "not found"}, indent=2)
         if cmd == "scoring-courses":
             return json.dumps(db.list_courses(), indent=2)
+        if cmd == "scoring-resolve":
+            # Identity debugging: how does a GG name resolve to a customer?
+            with db._connect() as conn:
+                cands = db._gg_name_candidates(arg)
+                link_hits = []
+                for c in cands:
+                    for row in conn.execute(
+                            """SELECT customer_id, player_name
+                               FROM handicap_player_links
+                               WHERE LOWER(player_name) = LOWER(?)""", (c,)):
+                        link_hits.append({"candidate": c,
+                                          "customer_id": row["customer_id"],
+                                          "link_name": row["player_name"]})
+                cid = db._resolve_scoring_player(conn, arg)
+                canonical = None
+                if cid:
+                    r = conn.execute(
+                        """SELECT first_name || ' ' || last_name AS nm
+                           FROM customers WHERE customer_id = ?""",
+                        (cid,)).fetchone()
+                    canonical = r["nm"] if r else None
+            return json.dumps({"gg_name": arg, "candidates": cands,
+                               "handicap_link_hits": link_hits,
+                               "resolved_customer_id": cid,
+                               "canonical_name": canonical}, indent=2)
         return json.dumps({"error": f"unknown scoring command: {cmd}"})
     except Exception as e:
         return json.dumps({"error": str(e)})
