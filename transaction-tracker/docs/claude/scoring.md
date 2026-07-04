@@ -159,9 +159,13 @@ border — bold score row (vs-par circle/square marks computed from
 tracker facts: gross row from `vs_par`, net row from `net_vs_par`) over
 a grey points band; handicap stroke dots (● received / ○ given back)
 sit on the NET row only, absolutely pinned to the cell corner so they
-never displace the number. Phones (media query max-width 640px OR
-physical screen ≤ 640 — the latter catches desktop-site mode) get a
-compact variant: tighter padding, smaller type, abbreviated labels.
+never displace the number. Phones (prIsCompact(): media query max-width
+640px OR physical screen ≤ 640 — the latter catches desktop-site mode)
+compact ALL THREE drill-down levels: standings, round-by-round points
+tables, and the scorecard (tight cells, short labels, abbreviated
+chapters). Compact enrollment tables use table-layout:fixed so declared
+column widths are binding — an expanded scorecard pans inside its own
+row instead of stretching the parent tables.
 The member portal shares this via `static/js/scorecard-render.js` —
 keep it in sync with prRenderScorecard until unified.
 
