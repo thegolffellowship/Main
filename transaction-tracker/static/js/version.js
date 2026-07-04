@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.29.0";
+window.TGF_VERSION = "2.29.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.29.1",
+    date: "2026-07-04",
+    changes: [
+      "MVP importer hotfix: parse_page_structure requires the page URL for link resolution — the v2.29.0 walker crashed on its first fetch. Both call sites now pass it.",
+      "Scorecard legend trimmed per admin: the '(doubled = by 2+) — gross row vs par, net row vs net' tail is gone everywhere; the legend now reads '● = handicap stroke · ○ = plus stroke · ⊖ under par · ⊞ over par'. Desktop drill-down POS values are centered under their header.",
+    ],
+  },
   {
     version: "2.29.0",
     date: "2026-07-04",
