@@ -13,6 +13,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TGF Tracker">
     <style>
+        /* iOS Safari inflates text inside content wider than the screen
+           (font boosting) — pin it so wide tables don't blow up the page */
+        html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
         /* ── Top-level tabs ── */
         .top-tabs {
             display: flex; gap: 0; margin-bottom: 0;
@@ -2208,7 +2211,7 @@
         if (r.net != null) bits.push(`Net <strong>${r.net}</strong>${r.playing_handicap != null ? ` (HCP ${prFmtHcp(r.playing_handicap)})` : ""}`);
         if (dt.stableford_net != null) bits.push(`Stableford ${dt.stableford_net} net / ${dt.stableford_gross} gross`);
         if (dt.adjusted_gross != null) bits.push(`Adj. gross ${dt.adjusted_gross}`);
-        return `<div style="overflow-x:auto;">${tables}</div>
+        return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
             <div style="font-size:0.8rem;color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
             <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
                 ● = handicap stroke received &nbsp;·&nbsp; ○ = stroke given back (plus handicap) &nbsp;·&nbsp;
