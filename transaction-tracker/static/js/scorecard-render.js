@@ -25,13 +25,13 @@
         // Physical-screen check catches desktop-site mode on phones too
         const compact = (window.matchMedia && window.matchMedia("(max-width: 640px)").matches)
             || (window.screen && Math.min(window.screen.width || 9999, window.screen.height || 9999) <= 640);
-        const td = `padding:${compact ? "1px 2px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.2em" : "2em"};white-space:nowrap;`;
-        const lbl = `padding:${compact ? "1px 3px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
+        const td = `padding:${compact ? "1px 1px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.1em" : "2em"};white-space:nowrap;`;
+        const lbl = `padding:${compact ? "1px 2px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
         const L = compact
             ? { yds: "YDS", gs: "GROSS", gp: "G PTS", ns: "NET", np: "N PTS" }
             : { yds: "YARDS", gs: "GROSS SCORE", gp: "GROSS PTS", ns: "NET SCORE", np: "NET PTS" };
-        const fs = compact ? "0.62rem" : "0.8rem";
-        const spanW = compact ? "1.15em" : "1.4em";
+        const fs = compact ? "0.58rem" : "0.8rem";
+        const spanW = compact ? "1.08em" : "1.4em";
         const sectTop = "border-top:3px solid #0f172a;";
         const sectBot = "border-bottom:3px solid #0f172a;";
         const netOf = h => (h.strokes == null ? null : h.strokes - (h.strokes_received || 0));
