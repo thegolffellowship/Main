@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.26.1";
+window.TGF_VERSION = "2.27.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.27.0",
+    date: "2026-07-03",
+    changes: [
+      "Phase 2 step 1 — differential parity engine: get_differential_parity recomputes every bridged handicap round's adjusted gross (WHS net double bogey through the admin formula layer) and differential (113/slope × (adjusted − rating)) from tracker-owned scorecard facts and compares them to the values imported from Golf Genius's handicap export. Exposed as MCP tool get_differential_parity_tool (56 tools) and the scoring-parity bridge command. 9-hole rounds first; 18-hole front/back splitting is the next pass. When parity holds at 100%, the handicap layer derives from scoring_rounds directly and the manual export/import ritual dies.",
+      "Member portal + email summaries design doc added (docs/claude/member-portal.md): magic-link tokens per customer (reusing the roster opt-in signing pattern), a mobile-first My TGF page (season snapshot, handicap trend, expandable scorecards, par-3/4/5 and stroke-index stats), post-event recap emails triggered by scorecard imports, and a phased rollout that reuses the existing scorecard renderer and read paths.",
+    ],
+  },
   {
     version: "2.26.1",
     date: "2026-07-03",

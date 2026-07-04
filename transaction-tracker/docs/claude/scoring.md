@@ -145,6 +145,20 @@ player expands even without a GG member card. Rendering fns:
 prRenderDetailTables (matching) / prRenderScoreRounds /
 prBindScorecardToggles / prRenderScorecard in templates/contests.html.
 
+## Phase 2 — differential parity (v2.27.0, step 1 live)
+
+`get_differential_parity()` (MCP: get_differential_parity_tool; bridge:
+scoring-parity) recomputes each bridged handicap round's adjusted gross
+(WHS net double bogey via the formula layer) and differential
+(113/slope x (adj − rating), PCC 0) from OUR facts and compares to the
+values imported from GG's handicap export. 9-hole rounds only for now —
+an 18-hole scoring round bridges TWO 9-hole differentials (front/back
+split is the next pass). Tee rows whose slope/rating disagree with the
+handicap row are counted as tee_data_mismatches. When parity holds,
+step 2: compute_handicap_index reads scoring_rounds directly,
+handicap_rounds becomes a view, and the manual export/import ritual
+dies.
+
 ## Phase 2 (queued)
 
 Differential reconciliation (scorecards → differentials vs imported

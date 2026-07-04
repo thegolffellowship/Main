@@ -7005,6 +7005,94 @@ def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | Non
     return None
 
 
+def get_differential_parity(db_path: str | Path = DB_PATH) -> dict:
+    """Phase 2 parity proof: recompute each bridged handicap round's
+    adjusted gross and WHS differential from OUR scorecard facts and
+    compare to the values imported from GG's handicap export.
+
+    differential = (113 / slope) x (adjusted_gross - rating), rounded to
+    0.1 (PCC assumed 0 — TGF does not use it). Computed with the slope/
+    rating stored on the handicap row (what GG used); tee rows whose
+    slope/rating disagree with the handicap row are flagged separately.
+    9-hole rounds only for now: an 18-hole scoring round bridges TWO
+    9-hole differentials (front/back) and splitting those is a later
+    pass — they're counted as skipped_18hole.
+    """
+    formulas = get_scoring_formulas(db_path=db_path)
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        pairs = conn.execute(
+            """SELECT hr.id AS hr_id, hr.player_name, hr.round_date,
+                      hr.adjusted_score AS gg_adj, hr.differential AS gg_diff,
+                      hr.rating AS hr_rating, hr.slope AS hr_slope,
+                      sr.id AS srid, sr.holes_played, sr.tee_id,
+                      ct.rating AS tee_rating, ct.slope AS tee_slope
+               FROM handicap_rounds hr
+               JOIN scoring_rounds sr ON sr.id = hr.scoring_round_id
+               LEFT JOIN course_tees ct ON ct.tee_id = sr.tee_id"""
+        ).fetchall()
+        n_18 = tee_mismatch = missing_par = 0
+        adj_match = diff_match = compared = 0
+        mismatches: list = []
+        for p in pairs:
+            if (p["holes_played"] or 0) > 9:
+                n_18 += 1
+                continue
+            holes = conn.execute(
+                """SELECT sh.strokes, sh.strokes_received, cth.par
+                   FROM scoring_holes sh
+                   LEFT JOIN course_tee_holes cth
+                     ON cth.tee_id = ? AND cth.hole_number = sh.hole_number
+                   WHERE sh.scoring_round_id = ?""",
+                (p["tee_id"], p["srid"])).fetchall()
+            adj = 0
+            bad_par = False
+            for h in holes:
+                if h["strokes"] is None:
+                    continue
+                if h["par"] is None:
+                    bad_par = True
+                    adj += h["strokes"]
+                    continue
+                adj += compute_hole_derivations(
+                    h["par"], h["strokes"], h["strokes_received"] or 0,
+                    formulas)["adjusted_strokes"]
+            if bad_par:
+                missing_par += 1
+            if (p["tee_slope"] is not None and p["hr_slope"] is not None
+                    and (p["tee_slope"] != p["hr_slope"]
+                         or abs((p["tee_rating"] or 0) - p["hr_rating"]) > 0.05)):
+                tee_mismatch += 1
+            compared += 1
+            our_diff = round((113.0 / p["hr_slope"]) * (adj - p["hr_rating"]), 1) \
+                if p["hr_slope"] else None
+            gg_diff = p["gg_diff"]
+            if gg_diff is None and p["hr_slope"]:
+                gg_diff = round((113.0 / p["hr_slope"]) * (p["gg_adj"] - p["hr_rating"]), 1)
+            a_ok = (adj == p["gg_adj"])
+            d_ok = (our_diff is not None and gg_diff is not None
+                    and abs(our_diff - gg_diff) <= 0.05)
+            if a_ok:
+                adj_match += 1
+            if d_ok:
+                diff_match += 1
+            if not (a_ok and d_ok) and len(mismatches) < 40:
+                mismatches.append({
+                    "scoring_round_id": p["srid"], "handicap_round_id": p["hr_id"],
+                    "player_name": p["player_name"], "round_date": p["round_date"],
+                    "our_adjusted": adj, "gg_adjusted": p["gg_adj"],
+                    "our_differential": our_diff, "gg_differential": gg_diff,
+                    "missing_par": bad_par,
+                })
+        return {"pairs": len(pairs), "compared_9hole": compared,
+                "adjusted_gross_match": adj_match,
+                "differential_match": diff_match,
+                "mismatches": mismatches,
+                "skipped_18hole": n_18,
+                "tee_data_mismatches": tee_mismatch,
+                "rounds_with_missing_par": missing_par}
+
+
 def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:
     """Delete zero-hole scoring rounds (tee-sheet no-show/WD artifacts the
     importer stored before v2.26.1), reset their handicap bridges, and
