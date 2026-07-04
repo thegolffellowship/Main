@@ -1844,11 +1844,38 @@
         return (words.length > 1 ? words.map(w => w[0]).join("") : words[0].slice(0, 3)).toUpperCase();
     }
 
-    // "2026-05-16" -> "May 16" (mmm d, admin-specced date format)
+    // Desktop: "2026-05-16" -> "May 16"; phones get the tighter "5/16"
     const PR_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    function prFmtAwardDate(v) {
+    function prFmtAwardDate(v, short) {
         const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || "").trim());
-        return m ? `${PR_MONTHS[+m[2] - 1]} ${+m[3]}` : String(v || "");
+        if (!m) return String(v || "");
+        return short ? `${+m[2]}/${+m[3]}` : `${PR_MONTHS[+m[2] - 1]} ${+m[3]}`;
+    }
+
+    // A 9-hole round at a multi-nine facility gets its nine appended to
+    // the event label ("s9.14 Hill Country" -> "… - Oaks"): the nine rides
+    // in the imported course name ("… - OAKS"). Single short word only, so
+    // annotated course names (archived markers etc.) never leak through.
+    // Event-MVP badges (event_mvps via /api/scoring/rounds flags): amber
+    // MVP (one per city per event) and teal TGF MVP (can be shared)
+    function prMvpBadges(round) {
+        const pill = (label, bg) =>
+            ` <span style="background:${bg};color:#fff;font-size:0.62em;font-weight:700;padding:1px 4px;border-radius:3px;letter-spacing:0.03em;white-space:nowrap;vertical-align:1px;">${label}</span>`;
+        return (round && round.mvp ? pill("MVP", "#f59e0b") : "")
+            + (round && round.tgf_mvp ? pill("TGF MVP", "#0f766e") : "");
+    }
+
+    function prNineSuffix(evt, round) {
+        if (!round || /\b(front|back)\b/i.test(evt)) return "";
+        const cn = String(round.course_name || "").trim();
+        let nine = null;
+        if (/^[A-Za-z]{3,10}$/.test(cn)) nine = cn;              // "Oaks"
+        else {
+            const m = /\s[-–—]\s([A-Za-z]{3,10})$/.exec(cn);     // "… - VALLEY"
+            if (m) nine = m[1];
+        }
+        if (!nine || evt.toLowerCase().includes(nine.toLowerCase())) return "";
+        return " - " + nine.charAt(0).toUpperCase() + nine.slice(1).toLowerCase();
     }
 
     // Phone display of GG event names: ALL-CAPS runs become Title Case
@@ -2080,7 +2107,7 @@
 
         const detail = document.createElement("tr");
         detail.className = "pr-detail-row";
-        detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 1rem"};color:var(--text-muted);">Loading player detail…</td>`;
+        detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 0"};color:var(--text-muted);">Loading player detail…</td>`;
         tr.after(detail);
         if (chev) chev.innerHTML = "&#9662;";
         const cell = detail.firstElementChild;
@@ -2133,14 +2160,14 @@
             const sr = [r.slope != null ? `slope ${r.slope}` : null,
                         r.rating != null ? `rating ${r.rating}` : null].filter(Boolean).join(", ");
             const dateTxt = compact
-                ? prFmtAwardDate(r.round_date)
+                ? prFmtAwardDate(r.round_date, true)
                 : (r.round_date || "");
             const courseCell = compact
                 ? (course ? `<span style="display:block;color:var(--text-muted);font-size:0.85em;" title="${escapeHtml(sr)}">${escapeHtml(course)}</span>` : "")
                 : "";
             return `<tr data-srid="${r.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard">
                 <td style="white-space:nowrap;">${escapeHtml(dateTxt)}</td>
-                <td class="pr-wrap"><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(compact ? prPrettyEvent(r.event_name || "") : (r.event_name || ""))}${courseCell}</td>
+                <td class="pr-wrap"><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(compact ? prPrettyEvent(r.event_name || "") : (r.event_name || ""))}${prMvpBadges(r)}${courseCell}</td>
                 ${compact ? "" : `<td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>`}
                 <td style="text-align:center;">${r.holes_played ?? ""}</td>
                 <td style="text-align:center;">${prFmtHcp(r.playing_handicap)}</td>
@@ -2150,11 +2177,11 @@
         }).join("");
         return `<div style="margin-top:0.7rem;">
             <div style="font-weight:700;font-size:0.8rem;letter-spacing:0.04em;color:#334155;margin-bottom:0.25rem;">
-                SCORECARDS WITHOUT A POINTS LINE${compact ? "" : ' <span style="font-weight:400;color:var(--text-muted);">— imported rounds Golf Genius has not awarded race points for (or guest rounds); click a row for hole-by-hole</span>'}
+                NON-POINTS EVENTS${compact ? "" : ' <span style="font-weight:400;color:var(--text-muted);">— rounds with no points line in this race; click a row for hole-by-hole</span>'}
             </div>
             <table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>
-                    <th${compact ? ' style="width:44px;"' : ""}>Date</th><th>Event</th>
+                    <th${compact ? ' style="width:36px;"' : ""}>Date</th><th>Event</th>
                     ${compact ? "" : "<th>Course / Tee</th>"}
                     <th style="text-align:center;${compact ? "width:20px;" : ""}" title="Holes played">${compact ? "H" : "Holes"}</th>
                     <th style="text-align:center;${compact ? "width:28px;" : ""}">HCP</th>
@@ -2289,12 +2316,14 @@
             </table>`;
         }).join("");
 
+        // Gross/Net/Stableford totals already live in the grid's OUT/IN
+        // columns — the note line carries only the derived extras
         const r = card.round || {}, dt = card.derived_totals || {};
         const bits = [];
-        if (r.gross != null) bits.push(`Gross <strong>${r.gross}</strong>`);
-        if (r.net != null) bits.push(`Net <strong>${r.net}</strong>${r.playing_handicap != null ? ` (HCP ${prFmtHcp(r.playing_handicap)})` : ""}`);
-        if (dt.stableford_net != null) bits.push(`Stableford ${dt.stableford_net} net / ${dt.stableford_gross} gross`);
-        if (dt.adjusted_gross != null) bits.push(`Adj. gross ${dt.adjusted_gross}`);
+        if (dt.adjusted_gross != null) bits.push(`Adj. gross <strong>${dt.adjusted_gross}</strong>`);
+        if (dt.adjusted_gross != null && r.slope && r.rating != null) {
+            bits.push(`Differential <strong>${((113 / r.slope) * (dt.adjusted_gross - r.rating)).toFixed(1)}</strong>`);
+        }
         // Phones: plain-space separators (the &nbsp; glue defeats line
         // wrapping) and a hard viewport cap so the text always folds
         const sep = compact ? " · " : " &nbsp;·&nbsp; ";
@@ -2302,8 +2331,8 @@
         return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
             <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;${noteW}">${bits.join(sep)}</div>
             <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:var(--text-muted);margin-top:0.15rem;${noteW}">
-                ● = handicap stroke received${sep}○ = stroke given back (plus handicap)${sep}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
-                <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par (doubled ring/box = by 2+) —
+                ● = handicap stroke${sep}○ = plus stroke${sep}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
+                <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par (doubled = by 2+) —
                 gross row vs par, net row vs net
             </div>`;
     }
@@ -2373,10 +2402,14 @@
             const lowHead = head.map(h => (h || "").trim().toLowerCase());
             const ptsCol = lowHead.indexOf("points");
             const dateCol = lowHead.findIndex(h => /date/.test(h));
-            // Compact: a trailing spacer column mirrors the level-1 table's
-            // post-points columns (RESET 44 + R 24 + IN 26 = 94px,
-            // border-box) so PTS lines up exactly under the standings PTS
-            const spacer = compact && ptsCol > -1;
+            // Desktop: a trailing spacer column mirrors the level-1 table's
+            // post-points block (RESET 110 + Rounds 80 + Buy-in 110 = 300px
+            // minus the 80px POS column, border-box) so PTS lines up exactly
+            // under the standings PTS column. Phones skip the spacer — PTS
+            // simply rides the right edge with room to breathe.
+            const posCol = lowHead.findIndex(h => h === "position");
+            const spacer = !compact && ptsCol > -1;
+            const spacerW = posCol > -1 ? 220 : 300;
             const totalCols = width + (spacer ? 1 : 0);
             const body = t.slice(1).filter(r => r.some(c => (c || "").trim())).map(r => project(remap(r)));
             // Rows above GG's "not counted" divider are the counted scores
@@ -2394,13 +2427,13 @@
             // "following points are not counted" sentence row)
             const secHdr = (label, bg, fg) => `<tr><td colspan="${totalCols}" class="pr-wrap" style="background:${bg};color:${fg};font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${label}</td></tr>`;
             const parts = [];
-            if (order) parts.push(secHdr('POINTS COUNTED <span style="font-weight:400;text-transform:none;">(Best 10 + City Championship)</span>', "#111", "#fff"));
+            if (order) parts.push(secHdr(`${compact ? "COUNTED" : "POINTS COUNTED"} <span style="font-weight:400;text-transform:none;">(Best 10 + City Championship)</span>`, "#111", "#fff"));
             for (const r of body) {
                 if (r.length !== width) {
                     if (counted) {
                         parts.push(ccRow);
                         counted = false;
-                        if (order) { parts.push(secHdr("Points Not Counted", "#bfbfbf", "#111")); continue; }
+                        if (order) { parts.push(secHdr(compact ? "Not Counted" : "Points Not Counted", "#bfbfbf", "#111")); continue; }
                     }
                     parts.push(`<tr><td colspan="${totalCols}" class="pr-wrap" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;
@@ -2426,7 +2459,10 @@
                     if (!match) {
                         const segs = evtRaw.split(/\s+[-–—|]\s+/);
                         const base = (segs[0] || "").trim().toLowerCase();
-                        const qual = segs.length > 1 ? segs[segs.length - 1].trim().toLowerCase() : "";
+                        // last WORD of the qualifier: "R1 Valley" -> "valley"
+                        const qual = segs.length > 1
+                            ? (segs[segs.length - 1].trim().toLowerCase().split(/\s+/).pop() || "")
+                            : "";
                         if (base.length >= 8 && qual) {
                             match = (rounds || []).find(x =>
                                 (x.event_name || "").trim().toLowerCase().startsWith(base)
@@ -2444,20 +2480,22 @@
                     else if (i === evtCol) style = bold;
                     else style = counted ? "" : "color:var(--text-muted);";
                     let val = nb(c);
-                    if (i === dateCol) val = prFmtAwardDate(val);
+                    if (i === dateCol) val = prFmtAwardDate(val, compact);
                     else if (compact && i === evtCol) val = prPrettyEvent(val);
-                    return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${escapeHtml(val)}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`;
+                    if (i === evtCol && match) val += prNineSuffix(val, match);
+                    const badges = i === evtCol && match ? prMvpBadges(match) : "";
+                    return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${escapeHtml(val)}${badges}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`;
                 }).join("")}${spacer ? "<td></td>" : ""}</tr>`);
             }
             if (counted) parts.push(ccRow);
             return `<table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>${head.map((c, i) => {
                     const key = (c || "").trim().toLowerCase();
-                    if (i === ptsCol) return `<th style="width:${compact ? "34px" : "70px"};text-align:center;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${compact ? "PTS" : "POINTS"}</th>`;
-                    if (i === dateCol) return `<th style="width:${compact ? "44px" : "110px"};">${compact ? "DATE" : escapeHtml(nb(c))}</th>`;
-                    if (key === "position") return `<th style="width:80px;text-align:center;">${escapeHtml(nb(c))}</th>`;
+                    if (i === ptsCol) return `<th style="width:${compact ? "40px" : "90px"};text-align:center;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${compact ? "PTS" : "POINTS"}</th>`;
+                    if (i === dateCol) return `<th style="width:${compact ? "36px" : "110px"};">Date</th>`;
+                    if (key === "position") return `<th style="width:80px;text-align:center;">POS</th>`;
                     return `<th>${escapeHtml(nb(c))}</th>`;
-                }).join("")}${spacer ? '<th style="width:94px;"></th>' : ""}</tr></thead>
+                }).join("")}${spacer ? `<th style="width:${spacerW}px;"></th>` : ""}</tr></thead>
                 <tbody>${parts.join("")}</tbody>
             </table>`;
         }).join("");

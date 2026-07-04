@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.28.15";
+window.TGF_VERSION = "2.29.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.29.0",
+    date: "2026-07-04",
+    changes: [
+      "MVP badges: a new event_mvps layer imports each event's 'MVP $' and 'TGF MVP $' games from Golf Genius (winner = the purse>0 rows, which is how GG records tiebreaker outcomes — one MVP per city per event, TGF MVP can be shared; a tied MVP with no purse posted is left unresolved rather than guessed). The points drill-down and Non-Points Events list show an amber MVP pill and a teal TGF MVP pill right of the event name. Import via the scoring-mvp-import bridge command (walks a portal's rounds with a time budget; repeated calls converge).",
+      "Points drill-down polish batch per admin: section list renamed to NON-POINTS EVENTS; mobile banners shorten to COUNTED (Best 10 + City Championship) / NOT COUNTED; mobile dates go M/D (3/24); desktop date header is just DATE and POSITION is POS; Hill Country Matches lines read HILL COUNTRY MATCHES - R1 Valley (round number + nine, ALL CAPS on desktop, standard case on phones); matched lines append the nine played when the course carries one (s9.14 Hill Country - Oaks) or Front/Back for 18-hole splits.",
+      "Points column alignment: on desktop the drill-down's POINTS column now lines up exactly under the standings POINTS column (90px + a spacer mirroring RESET/Rounds/Buy-in; the drill-down row lost its side indent to make the geometry true). On phones the spacer is gone — PTS rides the right edge with breathing room instead of being pinched in the middle.",
+      "Scorecard footer slimmed per admin: the Gross/Net/Stableford totals (already visible in the grid) are gone; the note line now carries Adjusted Gross plus the round's Differential computed from the tee's slope/rating — the same formula as the Phase 2 parity engine. Legend shortens to '● = handicap stroke · ○ = plus stroke'. Portal renderer matched.",
+    ],
+  },
   {
     version: "2.28.15",
     date: "2026-07-04",

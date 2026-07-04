@@ -184,6 +184,21 @@ grew on player expand and the scorecard showed ~1 hole. Fix: pin
 `max-width: calc(100vw - 2rem)` so it pans inside its own box. Any new
 page with wide tables intended for phone viewing needs the same pin.
 
+## Event MVPs (v2.29.0)
+
+`event_mvps` records each event's "MVP $" and "TGF MVP $" game winners
+(one MVP per city per event, tiebreaker resolved; TGF MVP can be
+shared). Winner detection = purse>0 rows on the GG tournament table
+(that's where GG records the tiebreaker outcome); an MVP table with no
+purse falls back to the outright Pos 1 row, and unresolved T1 ties
+record nothing. `import_gg_event_mvps(widget_url)` walks a portal's
+Event Results rounds (mvp_import_rounds tracks progress; time-budgeted
+— call until rounds_left==0); bridge command `scoring-mvp-import` with
+url = the tournament_results widget. `/api/scoring/rounds` rows carry
+`mvp` / `tgf_mvp` flags (EXISTS on event_id+customer_id); the Contests
+drill-down renders amber MVP / teal TGF MVP pills after the event name.
+event_mvps is in _CUSTOMER_FK_COLUMNS (merge-safe).
+
 ## Phase 2 — differential parity (v2.27.0, step 1 live)
 
 `get_differential_parity()` (MCP: get_differential_parity_tool; bridge:
