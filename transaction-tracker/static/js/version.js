@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.30.1";
+window.TGF_VERSION = "2.30.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.30.2",
+    date: "2026-07-04",
+    changes: [
+      "MONTHLY player expansion now matches the other drill-downs: the same DATE | EVENT | PTS | POS points table (pulled from the player's chapter season page, filtered to the month) with clickable rows opening the hole-by-hole scorecard — no counted/not-counted split since ALL points count monthly. Imported rounds without a points line follow in an OTHER ROUNDS THIS MONTH list.",
+      "Bottom-level expand chevrons sit LEFT of the event name everywhere (points-detail rows and rounds lists) per admin preference.",
+      "Rounds-list dates use the same month-day formats as the points tables: 'Jun 30' on desktop, '6/30' on phones (a regression had them back at full ISO).",
+      "MONTHLY chapter column on phones now shows initials only — 'A' for Austin, 'SA' for San Antonio — AUS overflowed the narrow column.",
+    ],
+  },
   {
     version: "2.30.1",
     date: "2026-07-04",

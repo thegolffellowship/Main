@@ -2176,6 +2176,12 @@
             const win = sel.complete && sel.winners.some(w =>
                 (w.customer_id != null && w.customer_id === r.customer_id) || w.player_name === r.player_name);
             const bg = win ? "background:#fde68a;" : "";
+            // Points detail comes from the player's chapter season page —
+            // the monthly table itself is TGF-wide, so pick the race by chapter
+            const race = r.chapter === "Austin" ? "austin_net" : "san_antonio_net";
+            // Chapter column is narrow here (PURSE takes the slack): initials
+            // only on phones — "A" / "SA" — since even AUS overflows
+            const chAbbr = String(r.chapter || "").trim().split(/\s+/).filter(Boolean).map(w => w[0]).join("").toUpperCase();
             const name = r.customer_id
                 ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
@@ -2186,10 +2192,10 @@
             if (win) purse = `<strong>$${sel.winners[0].share}</strong>`;
             else if (!sel.complete && r.rank === 1)
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}" style="${bg}cursor:pointer;"` : ` style="${bg}"`}>
+            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
                 <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${win ? " &#127942;" : ""}${chevron}</td>
-                <td style="${chapStyle}" title="${escapeHtml(r.chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.chapter) : (r.chapter || ""))}</td>
+                <td style="${chapStyle}" title="${escapeHtml(r.chapter || "")}">${escapeHtml(compact ? chAbbr : (r.chapter || ""))}</td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>
@@ -2225,8 +2231,10 @@
         });
     }
 
-    // Expand a monthly row: that month's imported rounds, each expandable
-    // to the same hole-by-hole card as everywhere else
+    // Expand a monthly row: the same DATE | EVENT | PTS | POS points detail
+    // as the race drill-downs, filtered to this month (plain mode — no
+    // counted/not-counted sections since ALL points count monthly), plus
+    // any imported rounds without a points line. Rows expand to scorecards.
     async function prMonthlyToggle(tr, monthKey) {
         const chev = tr.querySelector(".pr-chevron");
         const next = tr.nextElementSibling;
@@ -2245,12 +2253,34 @@
         if (chev) chev.innerHTML = "&#9662;";
         const cell = detail.firstElementChild;
         try {
-            const res = await fetch(`/api/scoring/rounds?customer_id=${encodeURIComponent(tr.dataset.cid)}&limit=100`);
-            const rounds = res.ok ? await res.json() : [];
+            // GG points detail (chapter season page) and imported scorecards
+            // load in parallel; either side is optional
+            const [ptsTables, rounds] = await Promise.all([
+                tr.dataset.card && tr.dataset.race
+                    ? fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(tr.dataset.race)}&card=${encodeURIComponent(tr.dataset.card)}`)
+                        .then(async res => {
+                            const data = await res.json();
+                            return res.ok ? data.tables : null;
+                        })
+                        .catch(() => null)
+                    : Promise.resolve(null),
+                tr.dataset.cid
+                    ? fetch(`/api/scoring/rounds?customer_id=${encodeURIComponent(tr.dataset.cid)}&limit=100`)
+                        .then(async res => res.ok ? await res.json() : [])
+                        .catch(() => [])
+                    : Promise.resolve([]),
+            ]);
             const inMonth = (rounds || []).filter(x => String(x.round_date || "").startsWith(monthKey));
-            cell.innerHTML = prRenderScoreRounds(inMonth,
-                {title: "ROUNDS THIS MONTH", explainer: "— click a row for hole-by-hole"})
-                || '<span style="color:var(--text-muted);">No imported scorecards for this month.</span>';
+            const claimed = new Set();
+            let html = ptsTables && ptsTables.length
+                ? prRenderDetailTables(ptsTables, inMonth, claimed, {monthFilter: monthKey, plain: true})
+                : "";
+            const leftovers = inMonth.filter(r => !claimed.has(r.id));
+            html += prRenderScoreRounds(leftovers, html
+                ? {title: "OTHER ROUNDS THIS MONTH", explainer: "— no points line this month; click a row for hole-by-hole"}
+                : {title: "ROUNDS THIS MONTH", explainer: "— click a row for hole-by-hole"});
+            cell.innerHTML = html
+                || '<span style="color:var(--text-muted);">No points detail or scorecards for this month.</span>';
             cell.style.color = "";
             prBindScorecardToggles(cell);
         } catch (e) {
@@ -2327,9 +2357,7 @@
             const course = [r.course_name, tee].filter(Boolean).join(" — ");
             const sr = [r.slope != null ? `slope ${r.slope}` : null,
                         r.rating != null ? `rating ${r.rating}` : null].filter(Boolean).join(", ");
-            const dateTxt = compact
-                ? prFmtAwardDate(r.round_date, true)
-                : (r.round_date || "");
+            const dateTxt = prFmtAwardDate(r.round_date, compact);
             const courseCell = compact
                 ? (course ? `<span style="display:block;color:var(--text-muted);font-size:0.85em;" title="${escapeHtml(sr)}">${escapeHtml(course)}</span>` : "")
                 : "";
@@ -2511,7 +2539,10 @@
         return v < 0 ? `+${Math.abs(v) % 1 ? Math.abs(v).toFixed(1) : Math.abs(v)}` : `${v}`;
     }
 
-    function prRenderDetailTables(tables, rounds, claimed) {
+    function prRenderDetailTables(tables, rounds, claimed, opts = {}) {
+        // opts.monthFilter (YYYY-MM) keeps only rows awarded that month;
+        // opts.plain skips the counted/not-counted sections and CITY row
+        // (the monthly race has no best-10 split)
         if (!tables || !tables.length) {
             return '<span style="color:var(--text-muted);">No round-by-round detail available for this player.</span>';
         }
@@ -2596,9 +2627,10 @@
             // "following points are not counted" sentence row)
             const secHdr = (label, bg, fg) => `<tr><td colspan="${totalCols}" class="pr-wrap" style="background:${bg};color:${fg};font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${label}</td></tr>`;
             const parts = [];
-            if (order) parts.push(secHdr(`${compact ? "COUNTED" : "POINTS COUNTED"} <span style="font-weight:400;text-transform:none;">(Best 10 + City Championship)</span>`, "#111", "#fff"));
+            if (order && !opts.plain) parts.push(secHdr(`${compact ? "COUNTED" : "POINTS COUNTED"} <span style="font-weight:400;text-transform:none;">(Best 10 + City Championship)</span>`, "#111", "#fff"));
             for (const r of body) {
                 if (r.length !== width) {
+                    if (opts.plain) continue;
                     if (counted) {
                         parts.push(ccRow);
                         counted = false;
@@ -2607,6 +2639,8 @@
                     parts.push(`<tr><td colspan="${totalCols}" class="pr-wrap" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;
                 }
+                if (opts.monthFilter && dateCol > -1
+                    && !nb(r[dateCol]).startsWith(opts.monthFilter)) continue;
                 // Section banners carry the counted/not-counted contrast on
                 // phones — bold event text there just crowds the column
                 const bold = counted ? (compact ? "" : "font-weight:700;") : "color:var(--text-muted);";
@@ -2653,13 +2687,16 @@
                     if (i === dateCol) val = prFmtAwardDate(val, compact);
                     else if (compact && i === evtCol) val = prPrettyEvent(val);
                     if (i === evtCol && match) val += prNineSuffix(val, match);
-                    const chev = match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--primary);font-size:0.85rem;">&#9656;</span>' : "";
+                    const chev = match && i === evtCol ? '<span class="pr-sc-chev" style="color:var(--primary);font-size:0.85rem;">&#9656;</span> ' : "";
                     const badges = i === evtCol && match
                         ? prBadgeLayout(prMvpBadges(match), val, compact) : "";
-                    return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${escapeHtml(val)}${chev}${badges}</td>`;
+                    return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${chev}${escapeHtml(val)}${badges}</td>`;
                 }).join("")}${spacer ? "<td></td>" : ""}</tr>`);
             }
-            if (counted) parts.push(ccRow);
+            if (counted && !opts.plain) parts.push(ccRow);
+            // A month filter can empty a table entirely — skip it rather
+            // than render a lone header row
+            if (opts.plain && !parts.length) return "";
             return `<table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>${head.map((c, i) => {
                     const key = (c || "").trim().toLowerCase();
