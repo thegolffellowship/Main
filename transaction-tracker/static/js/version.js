@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.28.12";
+window.TGF_VERSION = "2.28.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.13",
+    date: "2026-07-04",
+    changes: [
+      "Wrapping is now opt-in per cell instead of table-wide: v2.28.12's blanket white-space:normal let unintended cells fold (content wrapping under the RDS column in the standings). A pr-wrap class now marks exactly the cells that may wrap — event names (drill-down + Other Scorecards), the counted/not-counted section banners, flight header bars, and the scorecard's summary/legend container — while players, numbers, dates, and badges are single-line again.",
+      "Mobile standings Rounds header shortened from RDS to R (full word in the tooltip).",
+    ],
+  },
   {
     version: "2.28.12",
     date: "2026-07-04",
