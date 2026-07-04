@@ -274,8 +274,10 @@
         .enrollment-table td { padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border); }
         .enrollment-table tbody tr:hover { background: var(--row-hover); }
         /* Phone-compact standings variant: tight cells + small type so every
-           column of a points-race table fits on screen at once */
-        .enrollment-table.pr-compact { font-size: 0.72rem; }
+           column of a points-race table fits on screen at once. Fixed layout
+           makes the declared column widths binding — long content wraps
+           inside its cell instead of pushing columns off the screen edge */
+        .enrollment-table.pr-compact { font-size: 0.72rem; table-layout: fixed; }
         .enrollment-table.pr-compact th {
             padding: 0.3rem 0.25rem; font-size: 0.6rem; letter-spacing: 0;
         }
@@ -1862,12 +1864,12 @@
         // lay out identically regardless of content; phones get narrow
         // columns + short labels so the whole table fits on screen at once
         const compact = prIsCompact();
-        const chapStyle = `width:${compact ? "34px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const chapStyle = `width:${compact ? "32px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
-        const ptsStyle = `width:${compact ? "36px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const ptsStyle = `width:${compact ? "34px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const resetStyle = `width:${compact ? "44px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;`;
-        const rndStyle = `width:${compact ? "26px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
-        const buyStyle = compact ? "width:28px;text-align:center;" : "width:110px;";
+        const rndStyle = `width:${compact ? "24px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
+        const buyStyle = compact ? "width:26px;text-align:center;" : "width:110px;";
 
         const rowHtml = r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
@@ -2033,7 +2035,7 @@
 
         const detail = document.createElement("tr");
         detail.className = "pr-detail-row";
-        detail.innerHTML = `<td colspan="${tr.children.length}" style="background:#f8fafc;padding:0.6rem 1rem;color:var(--text-muted);">Loading player detail…</td>`;
+        detail.innerHTML = `<td colspan="${tr.children.length}" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0.15rem" : "0.6rem 1rem"};color:var(--text-muted);">Loading player detail…</td>`;
         tr.after(detail);
         if (chev) chev.innerHTML = "&#9662;";
         const cell = detail.firstElementChild;
@@ -2077,15 +2079,24 @@
 
     function prRenderScoreRounds(rounds) {
         if (!rounds || !rounds.length) return "";
+        // Phones fold Course/Tee into a muted second line under the event
+        // and shorten the date so all the numeric columns stay on screen
+        const compact = prIsCompact();
         const rows = rounds.map(r => {
             const tee = (r.tee_name || "").replace(/^\d+\s*-\s*/, "");
             const course = [r.course_name, tee].filter(Boolean).join(" — ");
             const sr = [r.slope != null ? `slope ${r.slope}` : null,
                         r.rating != null ? `rating ${r.rating}` : null].filter(Boolean).join(", ");
+            const dateTxt = compact
+                ? String(r.round_date || "").slice(5).replace("-", "/")
+                : (r.round_date || "");
+            const courseCell = compact
+                ? (course ? `<span style="display:block;color:var(--text-muted);font-size:0.85em;" title="${escapeHtml(sr)}">${escapeHtml(course)}</span>` : "")
+                : "";
             return `<tr data-srid="${r.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard">
-                <td style="white-space:nowrap;">${escapeHtml(r.round_date || "")}</td>
-                <td><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(r.event_name || "")}</td>
-                <td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>
+                <td style="white-space:nowrap;">${escapeHtml(dateTxt)}</td>
+                <td><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(r.event_name || "")}${courseCell}</td>
+                ${compact ? "" : `<td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>`}
                 <td style="text-align:center;">${r.holes_played ?? ""}</td>
                 <td style="text-align:center;">${prFmtHcp(r.playing_handicap)}</td>
                 <td style="text-align:center;font-weight:700;">${r.gross ?? ""}</td>
@@ -2094,15 +2105,16 @@
         }).join("");
         return `<div style="margin-top:0.7rem;">
             <div style="font-weight:700;font-size:0.8rem;letter-spacing:0.04em;color:#334155;margin-bottom:0.25rem;">
-                OTHER SCORECARDS <span style="font-weight:400;color:var(--text-muted);">— rounds without a points line above; click a row for hole-by-hole</span>
+                OTHER SCORECARDS${compact ? "" : ' <span style="font-weight:400;color:var(--text-muted);">— rounds without a points line above; click a row for hole-by-hole</span>'}
             </div>
-            <table class="enrollment-table" style="margin:0;font-size:0.82rem;">
+            <table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>
-                    <th>Date</th><th>Event</th><th>Course / Tee</th>
-                    <th style="text-align:center;">Holes</th>
-                    <th style="text-align:center;">HCP</th>
-                    <th style="text-align:center;">Gross</th>
-                    <th style="text-align:center;">Net</th>
+                    <th${compact ? ' style="width:38px;"' : ""}>Date</th><th>Event</th>
+                    ${compact ? "" : "<th>Course / Tee</th>"}
+                    <th style="text-align:center;${compact ? "width:20px;" : ""}" title="Holes played">${compact ? "H" : "Holes"}</th>
+                    <th style="text-align:center;${compact ? "width:28px;" : ""}">HCP</th>
+                    <th style="text-align:center;${compact ? "width:24px;" : ""}" title="Gross">${compact ? "G" : "Gross"}</th>
+                    <th style="text-align:center;${compact ? "width:24px;" : ""}" title="Net">${compact ? "N" : "Net"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
@@ -2124,7 +2136,7 @@
                 }
                 const det = document.createElement("tr");
                 det.className = "pr-sc-detail";
-                det.innerHTML = `<td colspan="${row.children.length}" style="background:#fff;padding:0.5rem 0.75rem;"><span style="color:var(--text-muted);">Loading scorecard…</span></td>`;
+                det.innerHTML = `<td colspan="${row.children.length}" style="background:#fff;padding:${prIsCompact() ? "0.4rem 0.1rem" : "0.5rem 0.75rem"};"><span style="color:var(--text-muted);">Loading scorecard…</span></td>`;
                 row.after(det);
                 if (chev) chev.innerHTML = "&#9662;";
                 try {
@@ -2153,13 +2165,13 @@
         // Compact variant on phones: tighter cells, smaller type, and
         // abbreviated row labels so a full nine fits with minimal scrolling
         const compact = prIsCompact();
-        const td = `padding:${compact ? "1px 3px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.4em" : "2em"};white-space:nowrap;`;
-        const lbl = `padding:${compact ? "1px 4px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
+        const td = `padding:${compact ? "1px 2px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.2em" : "2em"};white-space:nowrap;`;
+        const lbl = `padding:${compact ? "1px 3px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
         const L = compact
             ? { yds: "YDS", gs: "GROSS", gp: "G PTS", ns: "NET", np: "N PTS" }
             : { yds: "YARDS", gs: "GROSS SCORE", gp: "GROSS PTS", ns: "NET SCORE", np: "NET PTS" };
-        const fs = compact ? "0.68rem" : "0.8rem";
-        const spanW = compact ? "1.25em" : "1.4em";
+        const fs = compact ? "0.62rem" : "0.8rem";
+        const spanW = compact ? "1.15em" : "1.4em";
         // Circle/square marks are vs-par symbols computed from OUR facts:
         // the GROSS row uses vs_par, the NET row uses net_vs_par (GG's own
         // markings are net-relative and stay stored for verification only)
@@ -2239,8 +2251,8 @@
         if (dt.stableford_net != null) bits.push(`Stableford ${dt.stableford_net} net / ${dt.stableford_gross} gross`);
         if (dt.adjusted_gross != null) bits.push(`Adj. gross ${dt.adjusted_gross}`);
         return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
-            <div style="font-size:0.8rem;color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
-            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
+            <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
+            <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:var(--text-muted);margin-top:0.15rem;">
                 ● = handicap stroke received &nbsp;·&nbsp; ○ = stroke given back (plus handicap) &nbsp;·&nbsp;
                 <span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
                 <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par (doubled ring/box = by 2+) —
@@ -2259,6 +2271,7 @@
         if (!tables || !tables.length) {
             return '<span style="color:var(--text-muted);">No round-by-round detail available for this player.</span>';
         }
+        const compact = prIsCompact();
         // Index the player's imported scorecards by event name (and by the
         // event-code prefix as fallback) so points lines expand in place
         const codeOf = s => {
@@ -2323,8 +2336,11 @@
                     `<td style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(c)}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`).join("")}</tr>`);
             }
             if (counted) parts.push(ccRow);
-            return `<table class="enrollment-table" style="margin:0.35rem 0;font-size:0.82rem;">
-                <thead><tr>${head.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+            return `<table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
+                <thead><tr>${head.map(c => {
+                    const isPts = (c || "").trim().toLowerCase() === "points";
+                    return `<th${compact && isPts ? ' style="width:34px;"' : ""}>${escapeHtml(compact && isPts ? "PTS" : c)}</th>`;
+                }).join("")}</tr></thead>
                 <tbody>${parts.join("")}</tbody>
             </table>`;
         }).join("");

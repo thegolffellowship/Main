@@ -25,13 +25,13 @@
         // Physical-screen check catches desktop-site mode on phones too
         const compact = (window.matchMedia && window.matchMedia("(max-width: 640px)").matches)
             || (window.screen && Math.min(window.screen.width || 9999, window.screen.height || 9999) <= 640);
-        const td = `padding:${compact ? "1px 3px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.4em" : "2em"};white-space:nowrap;`;
-        const lbl = `padding:${compact ? "1px 4px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
+        const td = `padding:${compact ? "1px 2px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.2em" : "2em"};white-space:nowrap;`;
+        const lbl = `padding:${compact ? "1px 3px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
         const L = compact
             ? { yds: "YDS", gs: "GROSS", gp: "G PTS", ns: "NET", np: "N PTS" }
             : { yds: "YARDS", gs: "GROSS SCORE", gp: "GROSS PTS", ns: "NET SCORE", np: "NET PTS" };
-        const fs = compact ? "0.68rem" : "0.8rem";
-        const spanW = compact ? "1.25em" : "1.4em";
+        const fs = compact ? "0.62rem" : "0.8rem";
+        const spanW = compact ? "1.15em" : "1.4em";
         const sectTop = "border-top:3px solid #0f172a;";
         const sectBot = "border-bottom:3px solid #0f172a;";
         const netOf = h => (h.strokes == null ? null : h.strokes - (h.strokes_received || 0));
@@ -105,8 +105,8 @@
         if (r.net != null) bits.push(`Net <strong>${r.net}</strong>${r.playing_handicap != null ? ` (HCP ${fmtHcp(r.playing_handicap)})` : ""}`);
         if (dt.stableford_net != null) bits.push(`Stableford ${dt.stableford_net} net / ${dt.stableford_gross} gross`);
         return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
-            <div style="font-size:0.8rem;color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
-            <div style="font-size:0.72rem;color:#64748b;margin-top:0.15rem;">
+            <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
+            <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:#64748b;margin-top:0.15rem;">
                 ● = handicap stroke received &nbsp;·&nbsp; ○ = stroke given back (plus handicap) &nbsp;·&nbsp;
                 <span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
                 <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par (doubled = by 2+) —
