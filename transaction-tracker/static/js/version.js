@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.28.7";
+window.TGF_VERSION = "2.28.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.8",
+    date: "2026-07-04",
+    changes: [
+      "Points-race drill-down (level 2) is now compact on phones: the round-by-round points tables shrink to the same tight type as the standings, the POINTS column narrows to a 34px PTS column (it was auto-sizing very wide), and the detail row's side indent drops from 1rem to almost nothing so the event names get the width.",
+      "OTHER SCORECARDS list on phones: Course/Tee folds into a muted second line under the event name, the date shortens to MM/DD, and Holes/Gross/Net headers abbreviate to H/G/N — the full 7-column desktop layout no longer runs off screen.",
+      "Compact tables now use table-layout:fixed, which makes the declared column widths binding — nothing can push the right-edge columns (the IN badge was slightly clipped in v2.28.7) off screen; long names wrap inside the Player cell instead.",
+      "Scorecard (level 3) tightened on phones — 0.62rem type, slimmer cells — so a full nine plus the OUT column fits the screen at once; and because the standings/detail tables are width-locked now, an expanded scorecard pans inside its own row instead of stretching the whole drill-down (which is what was spreading level 2 out). Portal renderer updated to match.",
+    ],
+  },
   {
     version: "2.28.7",
     date: "2026-07-04",
