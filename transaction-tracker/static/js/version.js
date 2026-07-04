@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.28.1";
+window.TGF_VERSION = "2.28.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.2",
+    date: "2026-07-03",
+    changes: [
+      "Scorecard dot-marker fix: handicap-stroke dots were wrapping under the score number on narrow (mobile) cells, pushing scores out of line — dots are now pinned to the cell's top-right corner (like a printed card) and cells no longer wrap, so the number always stays centered.",
+      "Scorecard rows regrouped per admin: GROSS section (GROSS SCORE bold, GROSS PTS directly beneath on a grey band) then NET section (NET SCORE bold, NET PTS beneath on grey), each opened with a thick border — scores read visually stronger than points. Applied to both the Contests drill-down and the member portal renderer.",
+    ],
+  },
   {
     version: "2.28.1",
     date: "2026-07-03",
