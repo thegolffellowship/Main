@@ -457,6 +457,7 @@
                     <button class="sub-tab" data-pr="austin">Austin NET</button>
                     <button class="sub-tab" data-pr="tfc">THE FELLOWSHIP CUP</button>
                     <button class="sub-tab" data-pr="gross">THE PLAYERS CUP</button>
+                    <button class="sub-tab" data-pr="monthly">MONTHLY</button>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
@@ -642,6 +643,14 @@
 
     async function loadPrRoster() {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+        if (kind === "monthly") {
+            $("pr-roster-title").textContent = "MONTHLY POINTS — how it works";
+            $("pr-roster").innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">'
+                + 'No buy-in — every member is automatically in the running each month. '
+                + 'ALL points earned in the calendar month count (no best-10 cap). '
+                + 'The award is $1 per TGF member as of the close of the month; ties split it.</p>';
+            return;
+        }
         const contest = kind === "gross" ? "GROSS Points Race" : "NET Points Race";
         // NET races are chapter-scoped; the Players Cup (gross) is all chapters
         const chapter = kind === "net" ? "San Antonio" : (kind === "austin" ? "Austin" : "");
@@ -1865,6 +1874,16 @@
             + (round && round.tgf_mvp ? pill("TGF MVP", "#0f766e") : "");
     }
 
+    // Phones: badges drop to their own line under the event name — unless
+    // the name is long enough to wrap already, then they stay inline at
+    // the end (length heuristic; true wrap isn't knowable at render time)
+    function prBadgeLayout(badges, text, compact) {
+        if (!badges) return "";
+        return compact && String(text || "").length <= 28
+            ? `<span style="display:block;margin-top:1px;">${badges.replace(/^\s+/, "")}</span>`
+            : badges;
+    }
+
     function prNineSuffix(evt, round) {
         if (!round || /\b(front|back)\b/i.test(evt)) return "";
         const cn = String(round.course_name || "").trim();
@@ -1877,8 +1896,9 @@
         if (nine && !evt.toLowerCase().includes(nine.toLowerCase()))
             return " - " + nine.charAt(0).toUpperCase() + nine.slice(1).toLowerCase();
         // 18-hole venue, one nine played: the hole range says which nine
-        // (holes 10-18 = Back). Named-nine courses were handled above.
-        if (!nine && round.holes_played === 9 && round.first_hole != null)
+        // (holes 10-18 = Back). League rounds (HCM) play true 9-hole
+        // nines — no front/back there.
+        if (round.holes_played === 9 && round.first_hole != null && !round.gg_league_round_id)
             return round.first_hole >= 10 ? " - Back" : " - Front";
         return "";
     }
@@ -1898,6 +1918,7 @@
     async function prLoadStandings(force = false) {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
         if (kind === "tfc") return prLoadFellowship(force);
+        if (kind === "monthly") return prLoadMonthly(force);
         const race = PR_RACE_BY_TAB[kind];
         const cont = $("pr-table-container");
         if (!cont.innerHTML || force) {
@@ -2098,6 +2119,93 @@
             </table>`;
     }
 
+    // ── MONTHLY points races: combined chapters, $1/member purse ──
+    let prMonthlyData = null, prMonthlySel = null;
+
+    async function prLoadMonthly(force = false) {
+        const cont = $("pr-table-container");
+        $("pr-standings-title").textContent = "MONTHLY POINTS";
+        $("pr-summary").textContent = "";
+        if (!prMonthlyData || force) {
+            cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">'
+                + (force ? "Refreshing monthly points from Golf Genius…"
+                         : "Loading monthly points from both portals…") + "</div>";
+            try {
+                const res = await fetch(`/api/season-contests/monthly-points${force ? "?force=1" : ""}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                prMonthlyData = data;
+            } catch (e) {
+                cont.innerHTML = `<div style="padding:1rem;color:#b91c1c;">${escapeHtml(e.message)}</div>`;
+                return;
+            }
+        }
+        prRenderMonthly();
+    }
+
+    function prRenderMonthly() {
+        const cont = $("pr-table-container");
+        const months = (prMonthlyData && prMonthlyData.months) || [];
+        if (!months.length) {
+            cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">No monthly points pages found in the portals.</div>';
+            return;
+        }
+        const sel = months.find(x => x.month === prMonthlySel) || months[months.length - 1];
+        prMonthlySel = sel.month;
+        const compact = prIsCompact();
+
+        const nav = months.map(x => {
+            const on = x.month === sel.month;
+            return `<button data-mp="${x.month}" title="${x.complete ? "Final" : "In progress"}"
+                style="padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;letter-spacing:0.03em;
+                       border:1px solid ${on ? "var(--primary)" : "var(--border)"};border-radius:999px;
+                       background:${on ? "var(--primary)" : "var(--surface)"};color:${on ? "#fff" : "var(--text-muted)"};">
+                ${compact ? x.name.slice(0, 3) : x.name}${x.complete ? "" : " •"}</button>`;
+        }).join(" ");
+
+        $("pr-standings-title").textContent = `MONTHLY POINTS — ${sel.name}${sel.complete ? "" : " (in progress)"}`;
+        $("pr-summary").textContent = sel.complete
+            ? `Final — purse $${sel.purse} ($1 × ${sel.member_count} members on ${sel.month_end})`
+              + (sel.winners.length
+                  ? ` · winner${sel.winners.length > 1 ? "s (split)" : ""}: ${sel.winners.map(w => `${w.player_name} ($${w.share})`).join(", ")}`
+                  : "")
+            : `In progress — projected purse $${sel.purse} ($1 × ${sel.member_count} current members) · all points this month count, no cap`;
+
+        const rankStyle = `width:${compact ? "28px" : "56px"};`;
+        const chapStyle = `width:${compact ? "32px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const rndStyle = `width:${compact ? "24px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
+        const ptsStyle = `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const rows = sel.standings.map(r => {
+            const win = sel.complete && sel.winners.some(w =>
+                (w.customer_id != null && w.customer_id === r.customer_id) || w.player_name === r.player_name);
+            const bg = win ? "background:#fde68a;" : "";
+            const name = r.customer_id
+                ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
+                : escapeHtml(r.player_name);
+            return `<tr style="${bg}">
+                <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
+                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${win ? " &#127942;" : ""}</td>
+                <td style="${chapStyle}" title="${escapeHtml(r.chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.chapter) : (r.chapter || ""))}</td>
+                <td style="${rndStyle}">${r.rounds ?? ""}</td>
+                <td style="${ptsStyle}">${r.points}</td>
+            </tr>`;
+        }).join("");
+
+        cont.innerHTML = `
+            <div style="display:flex;flex-wrap:wrap;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}</div>
+            <table class="enrollment-table${compact ? " pr-compact" : ""}">
+                <thead><tr>
+                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th>Player</th>
+                    <th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>
+                    <th style="${rndStyle}" title="Rounds this month">${compact ? "R" : "Rounds"}</th>
+                    <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        cont.querySelectorAll("button[data-mp]").forEach(b =>
+            b.addEventListener("click", () => { prMonthlySel = b.dataset.mp; prRenderMonthly(); }));
+    }
+
     async function prToggleDetail(tr, raceKey) {
         const chev = tr.querySelector(".pr-chevron");
         const next = tr.nextElementSibling;
@@ -2172,7 +2280,7 @@
                 : "";
             return `<tr data-srid="${r.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard">
                 <td style="white-space:nowrap;">${escapeHtml(dateTxt)}</td>
-                <td class="pr-wrap"><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(compact ? prPrettyEvent(r.event_name || "") : (r.event_name || ""))}${prMvpBadges(r)}${courseCell}</td>
+                <td class="pr-wrap"><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml((compact ? prPrettyEvent(r.event_name || "") : (r.event_name || "")).replace(/[–—]/g, "-"))}${prBadgeLayout(prMvpBadges(r), r.event_name, compact)}${courseCell}</td>
                 ${compact ? "" : `<td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>`}
                 <td style="text-align:center;">${r.holes_played ?? ""}</td>
                 <td style="text-align:center;">${prFmtHcp(r.playing_handicap)}</td>
@@ -2391,7 +2499,9 @@
             // GG cells separate words with non-breaking spaces — swap them
             // for regular spaces or the text can't wrap and paints over the
             // neighboring column in the width-locked compact tables
-            const nb = v => String(v ?? "").replace(/[\s\u200b\u2060]+/g, " ");
+            // ... and long/short hyphens vary between GG and admin naming \u2014
+            // normalize every dash to a plain hyphen (admin preference)
+            const nb = v => String(v ?? "").replace(/[\s\u200b\u2060]+/g, " ").replace(/[\u2013\u2014]/g, "-");
             const remap = row => (order && row.length === orig.length) ? order.map(i => row[i]) : row;
             let head = remap(orig).map(h => (h || "").trim().toLowerCase() === "tournament" ? "EVENT" : h);
             let evtCol = remap(orig).findIndex(h => (h || "").trim().toLowerCase() === "tournament");
@@ -2488,8 +2598,10 @@
                     if (i === dateCol) val = prFmtAwardDate(val, compact);
                     else if (compact && i === evtCol) val = prPrettyEvent(val);
                     if (i === evtCol && match) val += prNineSuffix(val, match);
-                    const badges = i === evtCol && match ? prMvpBadges(match) : "";
-                    return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${escapeHtml(val)}${badges}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`;
+                    const chev = match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : "";
+                    const badges = i === evtCol && match
+                        ? prBadgeLayout(prMvpBadges(match), val, compact) : "";
+                    return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${escapeHtml(val)}${chev}${badges}</td>`;
                 }).join("")}${spacer ? "<td></td>" : ""}</tr>`);
             }
             if (counted) parts.push(ccRow);

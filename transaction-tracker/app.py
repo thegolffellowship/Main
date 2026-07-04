@@ -8498,6 +8498,39 @@ def api_season_contest_points_race_detail():
     return jsonify(data)
 
 
+_monthly_points_cache: dict = {}
+_MONTHLY_POINTS_CACHE_TTL = 600
+
+
+@app.route("/api/season-contests/monthly-points")
+@require_role("manager")
+def api_season_contest_monthly_points():
+    """Combined monthly points races (both chapters) with winner + purse.
+
+    Live-fetched from the portals' '<MONTH> Points' pages (discovered
+    from each portal's page menu) and cached 10 minutes; ?force=1
+    refetches. Purse = $1 per active TGF member at the close of the
+    month; ties split it.
+    """
+    from email_parser.database import get_monthly_points
+    force = request.args.get("force") == "1"
+    now = time.time()
+    cached = _monthly_points_cache.get("data")
+    if cached and not force and now - cached[0] < _MONTHLY_POINTS_CACHE_TTL:
+        return jsonify(cached[1])
+    try:
+        data = get_monthly_points()
+    except Exception as e:
+        logger.exception("Monthly points fetch failed")
+        if cached:
+            stale = dict(cached[1])
+            stale["gg_error"] = str(e)
+            return jsonify(stale)
+        return jsonify({"error": f"Golf Genius fetch failed: {e}"}), 502
+    _monthly_points_cache["data"] = (now, data)
+    return jsonify(data)
+
+
 @app.route("/api/season-contests/<int:enrollment_id>", methods=["DELETE"])
 @require_role("manager")
 def api_delete_season_contest(enrollment_id):

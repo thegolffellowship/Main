@@ -6431,10 +6431,11 @@ def substitute_gg_tournament_names(tables: list,
                     repl = code_map.get(cell.split(" ", 1)[0].lower())
                 if repl:
                     low = cell.lower()
+                    # plain hyphen per admin — long/short dashes varied
                     if "front" in low:
-                        repl += " — Front"
+                        repl += " - Front"
                     elif "back" in low:
-                        repl += " — Back"
+                        repl += " - Back"
                     row[t_idx] = repl
             new_table.append(row)
         out.append(new_table)
@@ -7220,6 +7221,111 @@ def import_gg_event_mvps(widget_url: str, db_path: str | Path = DB_PATH,
         result["rounds_skipped"] = len(options) - len(pending)
         result["rounds_left"] = len(pending) - result["rounds_done"]
     return result
+
+
+# ── Monthly points races (v2.30.0) ─────────────────────────────────────
+# Each chapter portal publishes per-month season-points pages ("JUNE
+# Points"). The monthly race counts ALL points earned that month (no
+# best-10 cap); the award is $1 per active TGF member at the close of
+# the month, split on ties. Standings merge both chapters; a player
+# appearing in both portals (cross-chapter play) keeps their higher
+# total, never the sum.
+
+_MONTH_NUMS = {m.lower(): i + 1 for i, m in enumerate(
+    ["January", "February", "March", "April", "May", "June", "July",
+     "August", "September", "October", "November", "December"])}
+
+
+def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
+    import calendar
+    from golf_genius_sync import (fetch_public_page, parse_page_structure,
+                                  fetch_season_points_race)
+    from .timezone_utils import today_central
+
+    month_pages: dict = {}
+    errors = []
+    for race_key in ("san_antonio_net", "austin_net"):
+        cfg = _GG_POINTS_RACES[race_key]
+        host, league, chapter = cfg["host"], cfg["league_id"], cfg["chapter"]
+        try:
+            page = fetch_public_page(f"https://{host}/")
+            struct = parse_page_structure(
+                page["html"], page.get("final_url") or f"https://{host}/")
+        except Exception as e:
+            errors.append(f"{chapter}: {e}")
+            continue
+        for l in struct.get("links") or []:
+            m = re.match(r"^([A-Za-z]+)\s+Points$", (l.get("text") or "").strip())
+            if not m or m.group(1).lower() not in _MONTH_NUMS:
+                continue
+            pid = re.search(r"/pages/(\d+)", l.get("href") or "")
+            if not pid:
+                continue
+            key = f"{today_central().year}-{_MONTH_NUMS[m.group(1).lower()]:02d}"
+            month_pages.setdefault(key, []).append(
+                (chapter, host, league, pid.group(1)))
+
+    out_months = []
+    with _connect(db_path) as conn:
+        today = today_central().isoformat()
+        for key in sorted(month_pages):
+            year, mnum = int(key[:4]), int(key[5:7])
+            last_day = calendar.monthrange(year, mnum)[1]
+            month_end = f"{year:04d}-{mnum:02d}-{last_day:02d}"
+            complete = today > month_end
+            member_count = conn.execute(
+                """SELECT COUNT(DISTINCT customer_id) AS c
+                   FROM customer_memberships
+                   WHERE date(started_at) <= ? AND date(expires_at) >= ?""",
+                (month_end, month_end)).fetchone()["c"]
+            best: dict = {}
+            for chapter, host, league, pid in month_pages[key]:
+                try:
+                    rows = fetch_season_points_race(pid, league, host)
+                except Exception as e:
+                    errors.append(f"{chapter} {key}: {e}")
+                    continue
+                for r in rows:
+                    pts = r.get("total_points")
+                    if pts is None:
+                        continue
+                    cid = _resolve_scoring_player(conn, r["player_name"])
+                    k = cid if cid is not None else f"n:{r['player_name'].lower()}"
+                    cur = best.get(k)
+                    if cur is None or pts > cur["points"]:
+                        best[k] = {"player_name": r["player_name"],
+                                   "customer_id": cid,
+                                   "chapter": chapter,
+                                   "rounds": r.get("tournaments"),
+                                   "points": pts}
+            standings = sorted(best.values(), key=lambda x: -x["points"])
+            last_pts, last_rank = None, 0
+            for i, row in enumerate(standings, 1):
+                if row["points"] != last_pts:
+                    last_rank, last_pts = i, row["points"]
+                row["rank"] = last_rank
+            for row in standings:
+                tied = sum(1 for x in standings if x["rank"] == row["rank"]) > 1
+                row["rank_label"] = f"T{row['rank']}" if tied else str(row["rank"])
+            top = standings[0]["points"] if standings else None
+            winners = [x for x in standings
+                       if top is not None and x["points"] == top and top > 0]
+            share = (round(member_count / len(winners), 2)
+                     if complete and winners else None)
+            out_months.append({
+                "month": key,
+                "name": calendar.month_name[mnum].upper(),
+                "month_end": month_end,
+                "complete": complete,
+                "member_count": member_count,
+                "purse": member_count,
+                "winners": ([{"player_name": w["player_name"],
+                              "customer_id": w["customer_id"],
+                              "share": share} for w in winners]
+                            if complete else []),
+                "standings": standings,
+            })
+    return {"months": out_months, "errors": errors}
 
 
 # ── Member portal (M1): magic-link tokens + per-member summary ─────────
