@@ -140,10 +140,16 @@ discrepancies.
 
 Contests → Points Races → expand a player: points lines that have an
 imported scorecard are themselves clickable (chevron on the EVENT cell)
-and expand the hole-by-hole card in place — matched by event name with
-an event-code-prefix fallback, Front/Back suffixes stripped. Rounds NOT
-represented by a points line (guests without points detail) fall back
-to an OTHER SCORECARDS list below. Grid rows: PAR / YARDS / HCP
+and expand the hole-by-hole card in place — matched by event name, then
+event-code prefix, then (for code-less league lines like Hill Country
+Matches) base-name prefix + qualifier-vs-course matching; Front/Back
+suffixes stripped. Rounds NOT represented by a points line fall back to
+a SCORECARDS WITHOUT A POINTS LINE list below — that includes rounds GG
+never awarded race points for (e.g. s9.12/s9.5/s18.1/s18.2 as of
+2026-07-04: verified absent from GG's own member cards) and guest
+rounds. Server-side, substitute_gg_tournament_names swaps GG labels for
+tracker event names by code, handling compound codes with letter
+suffixes (hcmR1nm -> hcmr1 override fallback). Grid rows: PAR / YARDS / HCP
 (stroke index — relabeled per admin; 1 = hardest, decides where
 handicap dots land) / SCORE (● dots + GG's net-relative circle/square
 markings) / NET PTS / GROSS PTS (per-hole stableford through the admin

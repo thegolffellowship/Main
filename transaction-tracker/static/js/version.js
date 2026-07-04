@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.28.13";
+window.TGF_VERSION = "2.28.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.14",
+    date: "2026-07-04",
+    changes: [
+      "Hill Country Matches rounds now match their points lines instead of duplicating into the scorecards list below. Two fixes: (1) GG's HCM tournament codes grew a suffix (hcmR1 → hcmR1nm) that broke the code parser, so the admin label overrides (Valley/Hills/Creeks) silently stopped applying — the parser now handles compound codes and falls back to the stripped base; (2) the drill-down matcher gained a league fallback for code-less lines: base-name prefix plus qualifier-vs-course matching links 'Hill Country Matches - Valley' to the imported Comanche Trace round whose course carries VALLEY.",
+      "OTHER SCORECARDS renamed to SCORECARDS WITHOUT A POINTS LINE with an explainer (desktop): investigation of the admin's report showed rounds like s9.12, s9.5, s18.1, and s18.2 sit there because Golf Genius's own member cards have no points rows for those tournaments (verified by fetching a card directly — 0-point rows do appear, so absence means the race never awarded that event). That's a GG-side configuration gap, not an import problem; the section title now says what the section actually holds.",
+    ],
+  },
   {
     version: "2.28.13",
     date: "2026-07-04",

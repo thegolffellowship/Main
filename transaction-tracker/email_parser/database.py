@@ -6355,6 +6355,11 @@ def _gg_name_candidates(raw_name: str) -> list:
 
 _GG_EVENT_CODE_RE = re.compile(r"^([a-z]+\d+(?:\.\d+)?)\b", re.I)
 
+# Compound codes with a trailing letter suffix ("hcmR1nm POINTS Net …") —
+# GG tournament renames grow suffixes onto the base code, which the plain
+# code regex can't parse (no word boundary between "1" and "nm")
+_GG_EVENT_CODE_COMPOUND_RE = re.compile(r"^([a-z]+\d+(?:\.\d+)?[a-z]*)\b", re.I)
+
 # Admin-provided labels for GG event codes with no tracker event
 # (2026-07-03). A tracker event with the same code would win — live data
 # over static — since these only fill gaps left by the events table.
@@ -6400,9 +6405,17 @@ def substitute_gg_tournament_names(tables: list,
             row = list(row)
             if t_idx < len(row):
                 cell = (row[t_idx] or "").strip()
-                m = _GG_EVENT_CODE_RE.match(cell)
-                if m and m.group(1).lower() in code_map:
-                    repl = code_map[m.group(1).lower()]
+                # Try the compound form first ("hcmR1nm" -> hcmr1nm), then
+                # fall back to its base with the letter suffix stripped
+                # ("hcmr1") so the admin overrides keep working after GG
+                # tournament renames grow suffixes onto the code
+                repl = None
+                m = _GG_EVENT_CODE_COMPOUND_RE.match(cell)
+                if m:
+                    code = m.group(1).lower()
+                    repl = code_map.get(code) or code_map.get(
+                        re.sub(r"[a-z]+$", "", code))
+                if repl:
                     low = cell.lower()
                     if "front" in low:
                         repl += " — Front"
