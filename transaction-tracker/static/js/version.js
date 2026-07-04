@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.28.11";
+window.TGF_VERSION = "2.28.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.12",
+    date: "2026-07-04",
+    changes: [
+      "THE actual wrap bug, found and killed: dashboard.css sets a GLOBAL tbody td { white-space: nowrap } that every table on every page inherits — which is why event names, the section banners, and even the scorecard legend never wrapped no matter what wrapping properties were added. The contests enrollment tables now restore white-space: normal (cells that need nowrap, like dates, set it inline).",
+      "Phone display of Golf Genius event names is de-shouted: ALL-CAPS runs become Title Case (KISSING TREE → Kissing Tree; acronyms TPC/TGF/HCM stay uppercase; single letters like the L in Flying L Ranch survive) and 'San Antonio' abbreviates to 'SA' (SAN ANTONIO KICKOFF → SA Kickoff). Display-only — scorecard matching still uses the raw name; desktop shows names exactly as GG sends them.",
+      "Counted banner: the (Best 10 + City Championship) parenthetical is now standard case and unbolded so it fits beside POINTS COUNTED without competing; the POINTS NOT COUNTED banner lightens from 40% to 25% gray per admin spec.",
+    ],
+  },
   {
     version: "2.28.11",
     date: "2026-07-04",

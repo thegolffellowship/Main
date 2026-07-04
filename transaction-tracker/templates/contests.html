@@ -285,7 +285,13 @@
             color: var(--text-muted); text-transform: uppercase;
             padding: 0.4rem 0.75rem; border-bottom: 2px solid var(--border);
         }
-        .enrollment-table td { padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border); }
+        .enrollment-table td {
+            padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border);
+            /* dashboard.css sets a GLOBAL tbody td { white-space: nowrap } —
+               that's why nothing in these tables ever wrapped. Restore
+               normal wrapping here; cells that need nowrap set it inline */
+            white-space: normal;
+        }
         /* hover-capable devices only — on touch screens iOS leaves :hover
            stuck on whatever row was last tapped */
         @media (hover: hover) {
@@ -1841,6 +1847,16 @@
         return (words.length > 1 ? words.map(w => w[0]).join("") : words[0].slice(0, 3)).toUpperCase();
     }
 
+    // Phone display of GG event names: ALL-CAPS runs become Title Case
+    // (KISSING TREE -> Kissing Tree; short tokens like TPC stay acronyms)
+    // and the chapter prefix abbreviates (San Antonio Kickoff -> SA Kickoff).
+    // Display-only — scorecard matching always uses the raw name.
+    function prPrettyEvent(name) {
+        return String(name || "")
+            .replace(/\b[A-Z][A-Z'&-]{2,}\b/g, w => /^(TPC|TGF|HCM)$/.test(w) ? w : w.charAt(0) + w.slice(1).toLowerCase())
+            .replace(/\bSan Antonio\b/gi, "SA");
+    }
+
     $("pr-refresh-btn").addEventListener("click", () => prLoadStandings(true));
 
     async function prLoadStandings(force = false) {
@@ -2120,7 +2136,7 @@
                 : "";
             return `<tr data-srid="${r.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard">
                 <td style="white-space:nowrap;">${escapeHtml(dateTxt)}</td>
-                <td><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(r.event_name || "")}${courseCell}</td>
+                <td><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(compact ? prPrettyEvent(r.event_name || "") : (r.event_name || ""))}${courseCell}</td>
                 ${compact ? "" : `<td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>`}
                 <td style="text-align:center;">${r.holes_played ?? ""}</td>
                 <td style="text-align:center;">${prFmtHcp(r.playing_handicap)}</td>
@@ -2360,13 +2376,13 @@
             // "following points are not counted" sentence row)
             const secHdr = (label, bg, fg) => `<tr><td colspan="${width}" style="background:${bg};color:${fg};font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${label}</td></tr>`;
             const parts = [];
-            if (order) parts.push(secHdr("Points Counted (Best 10 + City Championship)", "#111", "#fff"));
+            if (order) parts.push(secHdr('POINTS COUNTED <span style="font-weight:400;text-transform:none;">(Best 10 + City Championship)</span>', "#111", "#fff"));
             for (const r of body) {
                 if (r.length !== width) {
                     if (counted) {
                         parts.push(ccRow);
                         counted = false;
-                        if (order) { parts.push(secHdr("Points Not Counted", "#999", "#111")); continue; }
+                        if (order) { parts.push(secHdr("Points Not Counted", "#bfbfbf", "#111")); continue; }
                     }
                     parts.push(`<tr><td colspan="${width}" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;
@@ -2384,7 +2400,7 @@
                 }
                 if (match && claimed) claimed.add(match.id);
                 parts.push(`<tr${match ? ` data-srid="${match.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) =>
-                    `<td style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(nb(c))}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`).join("")}</tr>`);
+                    `<td style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(compact && i === evtCol ? prPrettyEvent(nb(c)) : nb(c))}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`).join("")}</tr>`);
             }
             if (counted) parts.push(ccRow);
             return `<table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
