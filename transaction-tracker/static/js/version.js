@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.28.0";
+window.TGF_VERSION = "2.28.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.1",
+    date: "2026-07-03",
+    changes: [
+      "Scorecard symbols now match their row (admin request): the GROSS SCORE row's circles/squares reflect the GROSS score vs par, and the net-relative symbols moved to the NET SCORE row. Both are computed from tracker facts (vs_par / net_vs_par) — GG's own markings, which are net-relative, stay stored untouched and are used only by the verifier. Applied to both the Contests drill-down and the member portal renderer; legend updated.",
+    ],
+  },
   {
     version: "2.28.0",
     date: "2026-07-03",
