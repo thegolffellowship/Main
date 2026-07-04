@@ -285,12 +285,16 @@
             color: var(--text-muted); text-transform: uppercase;
             padding: 0.4rem 0.75rem; border-bottom: 2px solid var(--border);
         }
-        .enrollment-table td {
-            padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border);
-            /* dashboard.css sets a GLOBAL tbody td { white-space: nowrap } —
-               that's why nothing in these tables ever wrapped. Restore
-               normal wrapping here; cells that need nowrap set it inline */
+        .enrollment-table td { padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border); }
+        /* dashboard.css sets a GLOBAL tbody td { white-space: nowrap } — no
+           table text can wrap unless a cell opts in. Only designated cells
+           (event names, section banners, scorecard notes) carry pr-wrap;
+           everything else (players, numbers, badges) stays single-line.
+           Safari ignores overflow-wrap in table cells; word-break works */
+        .enrollment-table td.pr-wrap {
             white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
         /* hover-capable devices only — on touch screens iOS leaves :hover
            stuck on whatever row was last tapped */
@@ -305,14 +309,7 @@
         .enrollment-table.pr-compact th {
             padding: 0.3rem 0.25rem; font-size: 0.6rem; letter-spacing: 0;
         }
-        .enrollment-table.pr-compact td {
-            padding: 0.3rem 0.25rem;
-            /* long event/player names must break INSIDE their cell — never
-               paint across the neighboring column. Safari ignores
-               overflow-wrap inside table cells; word-break is what works */
-            overflow-wrap: anywhere;
-            word-break: break-word;
-        }
+        .enrollment-table.pr-compact td { padding: 0.3rem 0.25rem; }
 
         /* ── Points Race placeholder ── */
         .pr-section { padding: 1.5rem 2rem; }
@@ -1949,12 +1946,12 @@
             for (const f of d.flights) {
                 const members = d.standings.filter(r => r.flight === f.label);
                 if (!members.length) continue;
-                sections.push(`<tr><td colspan="${nCols}" style="background:#111;color:#fff;font-weight:700;font-size:0.82rem;letter-spacing:0.04em;">${escapeHtml(f.label.toUpperCase())} <span style="font-weight:400;">(${escapeHtml(f.range)}) — ${members.length} player${members.length === 1 ? "" : "s"}</span></td></tr>`);
+                sections.push(`<tr><td colspan="${nCols}" class="pr-wrap" style="background:#111;color:#fff;font-weight:700;font-size:0.82rem;letter-spacing:0.04em;">${escapeHtml(f.label.toUpperCase())} <span style="font-weight:400;">(${escapeHtml(f.range)}) — ${members.length} player${members.length === 1 ? "" : "s"}</span></td></tr>`);
                 sections.push(members.map(rowHtml).join(""));
             }
             const noHcp = d.standings.filter(r => !r.flight);
             if (noHcp.length) {
-                sections.push(`<tr><td colspan="${nCols}" style="background:#111;color:#fff;font-weight:700;font-size:0.82rem;letter-spacing:0.04em;" title="No linked handicap rounds in the current window">FLIGHT UNASSIGNED <span style="font-weight:400;">— no current handicap (${noHcp.length})</span></td></tr>`);
+                sections.push(`<tr><td colspan="${nCols}" class="pr-wrap" style="background:#111;color:#fff;font-weight:700;font-size:0.82rem;letter-spacing:0.04em;" title="No linked handicap rounds in the current window">FLIGHT UNASSIGNED <span style="font-weight:400;">— no current handicap (${noHcp.length})</span></td></tr>`);
                 sections.push(noHcp.map(rowHtml).join(""));
             }
             bodyRows = sections.join("");
@@ -1977,7 +1974,7 @@
                     ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
                     <th style="${resetStyle}"><span style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};color:#d97706;font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
-                    <th style="${rndStyle}" title="Rounds">${compact ? "RDS" : "Rounds"}</th>
+                    <th style="${rndStyle}" title="Rounds">${compact ? "R" : "Rounds"}</th>
                     <th style="${buyStyle}" title="Buy-in">${compact ? "IN" : "Buy-in"}</th>
                 </tr></thead>
                 <tbody>${bodyRows}</tbody>
@@ -2076,7 +2073,7 @@
 
         const detail = document.createElement("tr");
         detail.className = "pr-detail-row";
-        detail.innerHTML = `<td colspan="${tr.children.length}" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0.15rem" : "0.6rem 1rem"};color:var(--text-muted);">Loading player detail…</td>`;
+        detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0.15rem" : "0.6rem 1rem"};color:var(--text-muted);">Loading player detail…</td>`;
         tr.after(detail);
         if (chev) chev.innerHTML = "&#9662;";
         const cell = detail.firstElementChild;
@@ -2136,7 +2133,7 @@
                 : "";
             return `<tr data-srid="${r.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard">
                 <td style="white-space:nowrap;">${escapeHtml(dateTxt)}</td>
-                <td><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(compact ? prPrettyEvent(r.event_name || "") : (r.event_name || ""))}${courseCell}</td>
+                <td class="pr-wrap"><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml(compact ? prPrettyEvent(r.event_name || "") : (r.event_name || ""))}${courseCell}</td>
                 ${compact ? "" : `<td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>`}
                 <td style="text-align:center;">${r.holes_played ?? ""}</td>
                 <td style="text-align:center;">${prFmtHcp(r.playing_handicap)}</td>
@@ -2177,7 +2174,7 @@
                 }
                 const det = document.createElement("tr");
                 det.className = "pr-sc-detail";
-                det.innerHTML = `<td colspan="${row.children.length}" style="background:#fff;padding:${prIsCompact() ? "0.4rem 0.1rem" : "0.5rem 0.75rem"};"><span style="color:var(--text-muted);">Loading scorecard…</span></td>`;
+                det.innerHTML = `<td colspan="${row.children.length}" class="pr-wrap" style="background:#fff;padding:${prIsCompact() ? "0.4rem 0.1rem" : "0.5rem 0.75rem"};"><span style="color:var(--text-muted);">Loading scorecard…</span></td>`;
                 row.after(det);
                 if (chev) chev.innerHTML = "&#9662;";
                 try {
@@ -2374,7 +2371,7 @@
             // Admin-specced section banners: counted = black bar with white
             // text, not counted = 40% gray with black text (replaces GG's
             // "following points are not counted" sentence row)
-            const secHdr = (label, bg, fg) => `<tr><td colspan="${width}" style="background:${bg};color:${fg};font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${label}</td></tr>`;
+            const secHdr = (label, bg, fg) => `<tr><td colspan="${width}" class="pr-wrap" style="background:${bg};color:${fg};font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${label}</td></tr>`;
             const parts = [];
             if (order) parts.push(secHdr('POINTS COUNTED <span style="font-weight:400;text-transform:none;">(Best 10 + City Championship)</span>', "#111", "#fff"));
             for (const r of body) {
@@ -2384,7 +2381,7 @@
                         counted = false;
                         if (order) { parts.push(secHdr("Points Not Counted", "#bfbfbf", "#111")); continue; }
                     }
-                    parts.push(`<tr><td colspan="${width}" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
+                    parts.push(`<tr><td colspan="${width}" class="pr-wrap" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;
                 }
                 // Section banners carry the counted/not-counted contrast on
@@ -2400,7 +2397,7 @@
                 }
                 if (match && claimed) claimed.add(match.id);
                 parts.push(`<tr${match ? ` data-srid="${match.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) =>
-                    `<td style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(compact && i === evtCol ? prPrettyEvent(nb(c)) : nb(c))}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`).join("")}</tr>`);
+                    `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(compact && i === evtCol ? prPrettyEvent(nb(c)) : nb(c))}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`).join("")}</tr>`);
             }
             if (counted) parts.push(ccRow);
             return `<table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
