@@ -115,8 +115,7 @@
             <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;${noteW}">${bits.join(sep)}</div>
             <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:#64748b;margin-top:0.15rem;${noteW}">
                 ● = handicap stroke${sep}○ = plus stroke${sep}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
-                <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par (doubled = by 2+) —
-                gross row vs par, net row vs net
+                <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par
             </div>`;
     }
 

@@ -7168,8 +7168,8 @@ def import_gg_event_mvps(widget_url: str, db_path: str | Path = DB_PATH,
         for rid, _lbl in pending:
             if monotonic() - started > time_budget:
                 break
-            rhtml = fetch(f"{base_url}&round={rid}")
-            struct = parse_page_structure(rhtml)
+            round_url = f"{base_url}&round={rid}"
+            struct = parse_page_structure(fetch(round_url), round_url)
             links = struct.get("links") or []
             names_blob = " ".join(l.get("text") or "" for l in links)
             # Event linkage: any coded tournament name in the round; the
@@ -7193,7 +7193,7 @@ def import_gg_event_mvps(widget_url: str, db_path: str | Path = DB_PATH,
                     continue
                 if href.startswith("/"):
                     href = f"https://{host}{href}"
-                tstruct = parse_page_structure(fetch(href))
+                tstruct = parse_page_structure(fetch(href), href)
                 for table in tstruct.get("tables") or []:
                     for name, chapter, purse in _mvp_winners_from_table(table, kind):
                         cid = _resolve_scoring_player(conn, name)
