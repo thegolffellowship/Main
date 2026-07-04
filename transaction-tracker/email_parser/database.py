@@ -7301,7 +7301,8 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
                                    "customer_id": cid,
                                    "chapter": aff or chapter,
                                    "rounds": r.get("tournaments"),
-                                   "points": pts}
+                                   "points": pts,
+                                   "member_card_id": r.get("member_card_id")}
             standings = sorted(best.values(), key=lambda x: -x["points"])
             last_pts, last_rank = None, 0
             for i, row in enumerate(standings, 1):

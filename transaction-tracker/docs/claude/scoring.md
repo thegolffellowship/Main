@@ -212,6 +212,13 @@ ranks, and computes the award: $1 x active TGF members at month close
 date), split across tied winners. Route
 /api/season-contests/monthly-points (manager; 10-min cache; ?force=1).
 Winner rows highlight gold with a trophy on completed months.
+Rows expand (v2.30.2) to the standard points-detail table: the row's
+member_card_id + chapter pick the season race (Austin -> austin_net,
+else san_antonio_net), prRenderDetailTables runs with
+{monthFilter: "YYYY-MM", plain: true} — plain skips the counted /
+not-counted banners and CITY row (no best-10 monthly), monthFilter
+keeps only rows whose GG date cell starts with that month. Imported
+rounds without a points line render below as OTHER ROUNDS THIS MONTH.
 
 ## Phase 2 — differential parity (v2.27.0, step 1 live)
 
