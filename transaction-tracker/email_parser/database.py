@@ -7703,6 +7703,9 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
         rows = conn.execute(
             f"""SELECT sr.*, e.item_name AS event_name, c.name AS course_name,
                        t.tee_name, t.slope, t.rating,
+                       (SELECT MIN(h.hole_number) FROM scoring_holes h
+                        WHERE h.scoring_round_id = sr.id
+                          AND h.strokes IS NOT NULL) AS first_hole,
                        EXISTS(SELECT 1 FROM event_mvps m
                               WHERE m.event_id = sr.event_id
                                 AND m.customer_id = sr.customer_id
