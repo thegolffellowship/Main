@@ -2117,8 +2117,12 @@
         if (back.some(h => h.strokes != null)) blocks.push(["IN", back]);
 
         // Compact variant on phones: tighter cells, smaller type, and
-        // abbreviated row labels so a full nine fits with minimal scrolling
-        const compact = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+        // abbreviated row labels so a full nine fits with minimal scrolling.
+        // Checks the PHYSICAL screen too — desktop-site mode / wide admin
+        // tables keep the layout viewport wide on a phone, so the media
+        // query alone misses it
+        const compact = (window.matchMedia && window.matchMedia("(max-width: 640px)").matches)
+            || (window.screen && Math.min(window.screen.width || 9999, window.screen.height || 9999) <= 640);
         const td = `padding:${compact ? "1px 3px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.4em" : "2em"};white-space:nowrap;`;
         const lbl = `padding:${compact ? "1px 4px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
         const L = compact

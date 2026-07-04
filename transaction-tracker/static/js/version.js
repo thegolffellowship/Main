@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.28.4";
+window.TGF_VERSION = "2.28.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.5",
+    date: "2026-07-03",
+    changes: [
+      "Compact scorecard detection now also checks the PHYSICAL screen (smaller dimension <= 640 CSS points): the media query alone reports a wide viewport when a phone runs in desktop-site mode or inside the tracker's wide admin tables, which is why the compact card showed on the portal but not the Contests drill-down. Phones now get the compact card everywhere; iPads/desktops keep the full layout.",
+    ],
+  },
   {
     version: "2.28.4",
     date: "2026-07-03",
