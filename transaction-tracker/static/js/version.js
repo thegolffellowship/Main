@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.29.2";
+window.TGF_VERSION = "2.30.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.30.0",
+    date: "2026-07-04",
+    changes: [
+      "MONTHLY points races: a new MONTHLY tab under Points Races with a month nav bar (every month the portals have published, completed or in progress). Standings come live from each portal's '<MONTH> Points' pages (both chapters merged; a cross-chapter player keeps their higher portal total, never a double-counted sum) — ALL points earned in the month count, no best-10 cap. Completed months highlight the winner (gold row + trophy) and show the award: $1 per active TGF member as of the close of that month (from customer_memberships), split on ties. In-progress months show the projected purse. Served by /api/season-contests/monthly-points (10-minute cache, ?force=1 via the Refresh button).",
+      "Dash normalization per admin: every en/em dash in drill-down labels renders as a plain hyphen, and the server-side Front/Back suffixes now use '- Front'/'- Back'.",
+      "s9.16 renamed to 's9.16 TPC San Antonio | Oaks' (was 'TPC Oaks'), and the nine-suffix logic now falls through to Front/Back when the course's nine name is already part of the event name — so s9.16 and s9.9 read '… | Oaks - Front' / '… | Canyons - Front' from their actual hole ranges. Hill Country Matches league rounds are exempt (true 9-hole nines have no front/back).",
+      "Mobile MVP badges drop to their own line under the event name unless the name is long enough to wrap already (then they stay inline at the end).",
+    ],
+  },
   {
     version: "2.29.2",
     date: "2026-07-04",

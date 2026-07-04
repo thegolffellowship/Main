@@ -199,6 +199,20 @@ url = the tournament_results widget. `/api/scoring/rounds` rows carry
 drill-down renders amber MVP / teal TGF MVP pills after the event name.
 event_mvps is in _CUSTOMER_FK_COLUMNS (merge-safe).
 
+## Monthly points races (v2.30.0)
+
+Contests -> Points Races -> MONTHLY: month nav bar over combined-chapter
+standings pulled live from each portal's "<MONTH> Points" pages
+(discovered from the portal page menu; season_points_v2 widget via
+fetch_season_points_race). ALL points in the month count (no best-10).
+get_monthly_points() (database.py) merges chapters — cross-chapter
+players keep their higher portal total, never the sum — recomputes
+ranks, and computes the award: $1 x active TGF members at month close
+(customer_memberships started_at/expires_at spanning the month-end
+date), split across tied winners. Route
+/api/season-contests/monthly-points (manager; 10-min cache; ?force=1).
+Winner rows highlight gold with a trophy on completed months.
+
 ## Phase 2 — differential parity (v2.27.0, step 1 live)
 
 `get_differential_parity()` (MCP: get_differential_parity_tool; bridge:
