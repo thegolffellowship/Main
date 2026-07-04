@@ -19,7 +19,10 @@
         /* ── Top-level tabs ── */
         .top-tabs {
             display: flex; gap: 0; margin-bottom: 0;
-            border-bottom: 2px solid var(--border); padding: 0 2rem;
+            border-bottom: 2px solid var(--border);
+            /* viewport-scaled paddings: matches the site tab-nav sizing and
+               keeps all three tabs on screen on a phone */
+            padding: 0 clamp(0.4rem, 2vw, 2rem);
             background: var(--surface);
             /* strip slides sideways on its own when wider than the screen
                (base behavior — mobile breakpoints don't fire reliably) */
@@ -28,8 +31,9 @@
         }
         .top-tabs::-webkit-scrollbar { display: none; }
         .top-tab {
-            padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem;
-            font-weight: 700; color: var(--text-muted); border-bottom: 3px solid transparent;
+            padding: 0.65rem clamp(0.5rem, 1.5vw, 1.25rem); cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 600; color: var(--text-muted); border-bottom: 3px solid transparent;
             margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
             background: none; border-top: none; border-left: none; border-right: none;
             text-transform: uppercase; letter-spacing: 0.04em;
@@ -298,8 +302,10 @@
         .enrollment-table.pr-compact td {
             padding: 0.3rem 0.25rem;
             /* long event/player names must break INSIDE their cell — never
-               paint across the neighboring column */
+               paint across the neighboring column. Safari ignores
+               overflow-wrap inside table cells; word-break is what works */
             overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* ── Points Race placeholder ── */
@@ -397,13 +403,13 @@
 
         <!-- Top-level tabs -->
         <div class="top-tabs">
-            <button class="top-tab active" data-top="match-play">Match Play</button>
-            <button class="top-tab" data-top="points-race">Points Races</button>
+            <button class="top-tab active" data-top="points-race">Points Races</button>
+            <button class="top-tab" data-top="match-play">Match Play</button>
             <button class="top-tab" data-top="enrollment">Enrollment</button>
         </div>
 
         <!-- ═══════════ MATCH PLAY ═══════════ -->
-        <div id="section-match-play">
+        <div id="section-match-play" class="section-hidden">
             <div class="cmp-chapter-bar">
                 <button class="cmp-chapter-tab active" data-chapter="Austin">Austin</button>
                 <button class="cmp-chapter-tab" data-chapter="San Antonio">San Antonio</button>
@@ -441,7 +447,7 @@
         </div>
 
         <!-- ═══════════ POINTS RACE ═══════════ -->
-        <div id="section-points-race" class="section-hidden">
+        <div id="section-points-race">
             <div class="pr-section">
                 <div class="sub-tabs">
                     <button class="sub-tab active" data-pr="net">San Antonio NET</button>
@@ -2325,7 +2331,7 @@
             // GG cells separate words with non-breaking spaces — swap them
             // for regular spaces or the text can't wrap and paints over the
             // neighboring column in the width-locked compact tables
-            const nb = v => String(v ?? "").replace(/[\u00a0\u1680\u2000-\u200b\u202f\u205f\u3000\ufeff]/g, " ");
+            const nb = v => String(v ?? "").replace(/[\s\u200b\u2060]+/g, " ");
             const remap = row => (order && row.length === orig.length) ? order.map(i => row[i]) : row;
             let head = remap(orig).map(h => (h || "").trim().toLowerCase() === "tournament" ? "EVENT" : h);
             let evtCol = remap(orig).findIndex(h => (h || "").trim().toLowerCase() === "tournament");
@@ -2349,14 +2355,25 @@
                 <td style="font-weight:700;">CITY CHAMPIONSHIP Total</td>
                 ${Array(Math.max(0, width - 2)).fill("<td></td>").join("")}
             </tr>`;
+            // Admin-specced section banners: counted = black bar with white
+            // text, not counted = 40% gray with black text (replaces GG's
+            // "following points are not counted" sentence row)
+            const secHdr = (label, bg, fg) => `<tr><td colspan="${width}" style="background:${bg};color:${fg};font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${label}</td></tr>`;
             const parts = [];
+            if (order) parts.push(secHdr("Points Counted (Best 10 + City Championship)", "#111", "#fff"));
             for (const r of body) {
                 if (r.length !== width) {
-                    if (counted) { parts.push(ccRow); counted = false; }
+                    if (counted) {
+                        parts.push(ccRow);
+                        counted = false;
+                        if (order) { parts.push(secHdr("Points Not Counted", "#999", "#111")); continue; }
+                    }
                     parts.push(`<tr><td colspan="${width}" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;
                 }
-                const bold = counted ? "font-weight:700;" : "color:var(--text-muted);";
+                // Section banners carry the counted/not-counted contrast on
+                // phones — bold event text there just crowds the column
+                const bold = counted ? (compact ? "" : "font-weight:700;") : "color:var(--text-muted);";
                 // Points line with an imported scorecard → click to expand
                 // the hole-by-hole card right under this row
                 let match = null;
@@ -2387,7 +2404,10 @@
     async function onAuthReady() {
         const role = typeof currentRole !== "undefined" ? currentRole : null;
         applyRole(role);
-        // Auto-load Austin on page open
+        // Points Races is the landing tab — load it immediately; Match Play
+        // still warms in the background so switching to it stays instant
+        loadPrRoster();
+        prLoadStandings();
         cmpLoad();
     }
 
