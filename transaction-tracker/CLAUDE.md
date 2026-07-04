@@ -322,6 +322,18 @@ benign elapsed-time/logging/rate-limit `datetime.now()` calls. Never rewrite
 stored historical timestamps — fix only new-record defaults and live
 "today"-relative computations so the **past-events-are-frozen** principle holds.
 
+## Global CSS gotcha: tbody td is nowrap everywhere (IMPORTANT)
+
+`static/css/dashboard.css` declares a global `tbody td { white-space: nowrap; }`
+(transactions-table heritage). Every table on every page inherits it — text in
+ANY table cell will never wrap, and block children inside a cell inherit nowrap
+too. This silently defeated `overflow-wrap`/`word-break` on the Contests
+drill-down for several releases (v2.28.9–v2.28.11) before being identified.
+If a new page needs wrapping table text, override with
+`white-space: normal` on that table's `td` (see `.enrollment-table td` in
+contests.html) and set nowrap back inline on the specific cells that need it
+(dates, numbers).
+
 ## Jinja gotcha in inline CSS (IMPORTANT)
 
 Flask templates are parsed by Jinja2, which treats `{#` as the start of a comment and `#}` as the end. **CSS rules that pack `{` directly against `#`** (e.g. `@media(max-width:900px){#some-id{...}}`) will crash template rendering with `TemplateSyntaxError: Missing end of comment tag` and the global 500 handler returns `{"error":"Internal server error"}`.
