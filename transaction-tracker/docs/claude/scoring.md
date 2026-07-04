@@ -54,6 +54,15 @@ player_name) and (round_date or event_id) and SKIPS if found
 (`skipped_other_tournament` in the result). Re-importing the same
 tournament still replaces (refresh path).
 
+Multi-round days (v2.28.0): Hill Country Matches is its own league
+(tgf-hcm2026.golfgenius.com, league 537708) with SIX rounds all dated
+the same Saturday (Matches 1-3, Shootout, Non-Matches 1-2). The
+importer takes a `round_key` (the GG league round id; bridge syntax
+`scoring-import:<event_code>@<round_key>`) stored as
+scoring_rounds.gg_league_round_id — the cross-tournament dedupe scopes
+to it, so same-day rounds don't collapse while ALL Net/ALL Gross of the
+SAME round still dedupe. NULL round_key keeps one-round behavior.
+
 Ordering rule (admin-corrected): **ALL Net and ALL Gross are the gold
 standard** — both carry the FULL field. ALL Net has everyone's playing
 handicaps + strokes-received dots (Individual Net is a PURCHASED game

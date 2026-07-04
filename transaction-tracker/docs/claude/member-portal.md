@@ -1,4 +1,16 @@
-# Member Portal & Email Summaries — Design (proposed, not yet built)
+# Member Portal & Email Summaries — M1 LIVE (v2.28.0), M2/M3 designed
+
+M1 shipped: `/me?t=<token>` (templates/me.html, mobile-first) + token-only
+API endpoints in app.py (`/api/me/summary|scorecards|scorecard/<id>`),
+`get_member_summary`/`make_portal_token`/`verify_portal_token` in
+database.py, `customers.portal_token_version` (guarded ALTER), shared
+renderer static/js/scorecard-render.js (mirror of the Contests card —
+keep in sync), admin link endpoint GET
+/api/customers/<cid>/portal-link (manager) and the scoring-portal-link
+bridge command. End-to-end tested: 401 on bad/absent/revoked tokens,
+404 on cross-customer card access, revocation via version bump.
+
+Original design (M2 recap emails + M3 digest still to build):
 
 The first true CUSTOMER-VIEWS surface (guiding principle 5). Members see
 their own scoring records, handicap trend, and points-race standing —

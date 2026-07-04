@@ -6900,6 +6900,21 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
                      "INTEGER REFERENCES scoring_rounds(id)")
     except sqlite3.OperationalError:
         pass
+    # Multi-round days (Hill Country Matches: six GG rounds all dated the
+    # same Saturday): the cross-tournament dedupe scopes to the GG league
+    # round when the importer passes one — NULL for ordinary one-round
+    # events keeps prior behavior.
+    try:
+        conn.execute("ALTER TABLE scoring_rounds ADD COLUMN gg_league_round_id TEXT")
+    except sqlite3.OperationalError:
+        pass
+    # Member portal: bumping a customer's token version revokes every
+    # outstanding magic link for them.
+    try:
+        conn.execute("ALTER TABLE customers ADD COLUMN portal_token_version "
+                     "INTEGER NOT NULL DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass
 
 
 # Admin-controllable scoring formulas (defaults = current TGF models; the
@@ -7003,6 +7018,148 @@ def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | Non
         if cid:
             return cid
     return None
+
+
+# ── Member portal (M1): magic-link tokens + per-member summary ─────────
+# Members are customers, not staff — no PINs. A per-customer HMAC token
+# (same signing pattern as the roster opt-in links) is the only key, and
+# every /api/me/* endpoint derives customer_id FROM THE TOKEN, never from
+# a parameter. Bumping customers.portal_token_version revokes all
+# outstanding links for that member. See docs/claude/member-portal.md.
+
+def _portal_secret() -> bytes:
+    import os as _os
+    s = _os.getenv("SECRET_KEY") or "tgf-portal-token-dev-fallback-do-not-use-in-prod"
+    return ("portal:" + s).encode("utf-8")
+
+
+def make_portal_token(customer_id: int, db_path: str | Path = DB_PATH) -> str | None:
+    import base64, hashlib, hmac as _hmac
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        row = conn.execute(
+            "SELECT portal_token_version FROM customers WHERE customer_id = ?",
+            (customer_id,)).fetchone()
+    if not row:
+        return None
+    raw = json.dumps({"c": customer_id, "v": row["portal_token_version"]},
+                     separators=(",", ":")).encode("utf-8")
+    body = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+    sig = _hmac.new(_portal_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()[:32]
+    return f"{body}.{sig}"
+
+
+def verify_portal_token(token: str, db_path: str | Path = DB_PATH) -> int | None:
+    """Return the customer_id the token grants, or None."""
+    import base64, hashlib, hmac as _hmac
+    if not token or "." not in token:
+        return None
+    body, sig = token.rsplit(".", 1)
+    expected = _hmac.new(_portal_secret(), body.encode("ascii"),
+                         hashlib.sha256).hexdigest()[:32]
+    if not _hmac.compare_digest(sig, expected):
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
+        payload = json.loads(raw)
+        cid, ver = int(payload["c"]), int(payload["v"])
+    except (ValueError, KeyError, json.JSONDecodeError):
+        return None
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        row = conn.execute(
+            "SELECT portal_token_version FROM customers WHERE customer_id = ?",
+            (cid,)).fetchone()
+    if not row or row["portal_token_version"] != ver:
+        return None
+    return cid
+
+
+def get_member_summary(customer_id: int, db_path: str | Path = DB_PATH) -> dict | None:
+    """Everything the My TGF page header needs — own data only."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        cust = conn.execute(
+            """SELECT customer_id, TRIM(first_name || ' ' || last_name) AS name,
+                      chapter, current_player_status
+               FROM customers WHERE customer_id = ?""",
+            (customer_id,)).fetchone()
+        if not cust:
+            return None
+        s = conn.execute(
+            """SELECT COUNT(*) AS rounds,
+                      MIN(CASE WHEN holes_played <= 9 THEN gross END) AS best_gross_9,
+                      MIN(CASE WHEN holes_played <= 9 THEN net END)  AS best_net_9,
+                      MIN(CASE WHEN holes_played > 9 THEN gross END) AS best_gross_18,
+                      MIN(CASE WHEN holes_played > 9 THEN net END)  AS best_net_18
+               FROM scoring_rounds WHERE customer_id = ?""",
+            (customer_id,)).fetchone()
+        trend = [dict(r) for r in conn.execute(
+            """SELECT round_date, differential FROM handicap_rounds
+               WHERE customer_id = ? AND differential IS NOT NULL
+               ORDER BY round_date DESC, id DESC LIMIT 20""",
+            (customer_id,))][::-1]
+        par_splits = [dict(r) for r in conn.execute(
+            """SELECT cth.par, COUNT(*) AS holes,
+                      ROUND(AVG(sh.strokes), 2) AS avg_strokes,
+                      ROUND(AVG(sh.strokes) - cth.par, 2) AS avg_vs_par
+               FROM scoring_holes sh
+               JOIN scoring_rounds sr ON sr.id = sh.scoring_round_id
+               JOIN course_tee_holes cth
+                 ON cth.tee_id = sr.tee_id AND cth.hole_number = sh.hole_number
+               WHERE sr.customer_id = ? AND sh.strokes IS NOT NULL
+                 AND cth.par IN (3, 4, 5)
+               GROUP BY cth.par ORDER BY cth.par""",
+            (customer_id,))]
+        si_buckets = [dict(r) for r in conn.execute(
+            """SELECT CASE WHEN cth.stroke_index <= 6 THEN 'hardest (SI 1-6)'
+                           WHEN cth.stroke_index <= 12 THEN 'middle (SI 7-12)'
+                           ELSE 'easiest (SI 13-18)' END AS bucket,
+                      COUNT(*) AS holes,
+                      ROUND(AVG(sh.strokes - cth.par), 2) AS avg_vs_par
+               FROM scoring_holes sh
+               JOIN scoring_rounds sr ON sr.id = sh.scoring_round_id
+               JOIN course_tee_holes cth
+                 ON cth.tee_id = sr.tee_id AND cth.hole_number = sh.hole_number
+               WHERE sr.customer_id = ? AND sh.strokes IS NOT NULL
+                 AND cth.stroke_index IS NOT NULL AND cth.par IS NOT NULL
+               GROUP BY 1 ORDER BY MIN(cth.stroke_index)""",
+            (customer_id,))]
+        # Current 18-hole index — same read-time source the points races use
+        hcp_index = None
+        try:
+            idx_by_name = {
+                p["player_name"]: p["handicap_index_18"]
+                for p in get_all_handicap_players(db_path)
+                if p.get("handicap_index_18") is not None}
+            for lr in conn.execute(
+                    """SELECT player_name FROM handicap_player_links
+                       WHERE customer_id = ?""", (customer_id,)):
+                v = idx_by_name.get(lr["player_name"])
+                if v is not None:
+                    hcp_index = v
+                    break
+        except Exception:
+            logger.exception("member summary: handicap index lookup failed")
+    # Points races: read from the cached snapshots (own row only)
+    races = []
+    for key, race in _GG_POINTS_RACES.items():
+        try:
+            data = get_points_race_standings(key, db_path=db_path)
+        except Exception:
+            continue
+        for r in data.get("standings", []):
+            if r.get("customer_id") == customer_id:
+                races.append({"race": race.get("label", key),
+                              "rank": r.get("rank"),
+                              "points": r.get("total_points"),
+                              "points_reset_projected": r.get("points_reset"),
+                              "flight": r.get("flight")})
+                break
+    return {"customer": dict(cust), "handicap_index_18": hcp_index,
+            "season": dict(s), "handicap_trend": trend,
+            "par_splits": par_splits, "si_buckets": si_buckets,
+            "points_races": races}
 
 
 def get_differential_parity(db_path: str | Path = DB_PATH) -> dict:
@@ -7118,12 +7275,18 @@ def _cleanup_empty_scoring_rounds(conn: sqlite3.Connection) -> None:
 
 
 def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
+                         round_key: str | None = None,
                          db_path: str | Path = DB_PATH) -> dict:
     """Import every player scorecard from a GG tournament page.
 
     Idempotent: re-import replaces holes for existing (aggregate, player)
     rows. Commits courses/tees, scoring rounds/holes, raw archives, cid
     resolution, event linkage (by code), and handicap_rounds bridging.
+
+    round_key: the GG league round id — REQUIRED for multi-round days
+    (Hill Country Matches has six rounds all dated the same Saturday);
+    the cross-tournament dedupe scopes to it so different rounds of the
+    same day don't collapse into one. Omit for ordinary one-round events.
     """
     import zlib
     from golf_genius_sync import fetch_tournament_scorecards
@@ -7176,8 +7339,10 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 dup = conn.execute(
                     """SELECT id, playing_handicap FROM scoring_rounds
                        WHERE (round_date = ? OR (event_id IS NOT NULL AND event_id = ?))
+                         AND COALESCE(gg_league_round_id, '') = ?
                          AND (customer_id = ? OR LOWER(player_name) = LOWER(?))""",
-                    (event_date, event_id, cid or -1, p["player_name"])).fetchone()
+                    (event_date, event_id, round_key or "",
+                     cid or -1, p["player_name"])).fetchone()
                 if dup:
                     if (p.get("playing_handicap") is not None
                             and dup["playing_handicap"] is None):
@@ -7200,12 +7365,12 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                     """UPDATE scoring_rounds SET customer_id=?, event_id=?, gg_event_id=?,
                            gg_aggregate_id=?, gg_profile_id=?, round_date=?, course_id=?,
                            tee_id=?, holes_played=?, playing_handicap=?, gross=?, net=?,
-                           flight=?
+                           flight=?, gg_league_round_id=?
                        WHERE id=?""",
                     (cid, event_id, p.get("gg_event_id"), p.get("gg_aggregate_id"),
                      p.get("gg_profile_id"), event_date, course_id, tee_id, holes_played,
                      p.get("playing_handicap"), p.get("gross"), p.get("net"),
-                     p.get("flight"), srid))
+                     p.get("flight"), round_key, srid))
                 if is_upgrade:
                     upgraded += 1
                 else:
@@ -7217,13 +7382,13 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                            (customer_id, player_name, event_id, gg_event_id,
                             gg_aggregate_id, gg_profile_id, round_date,
                             course_id, tee_id, holes_played, playing_handicap,
-                            gross, net, flight)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            gross, net, flight, gg_league_round_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (cid, p["player_name"], event_id, p.get("gg_event_id"),
                      p.get("gg_aggregate_id"), p.get("gg_profile_id"),
                      event_date, course_id, tee_id, holes_played,
                      p.get("playing_handicap"), p.get("gross"), p.get("net"),
-                     p.get("flight")))
+                     p.get("flight"), round_key))
                 srid = cur.lastrowid
                 imported += 1
                 verified_ids.append(srid)

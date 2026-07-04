@@ -1344,8 +1344,12 @@ def _scoring_dispatch(url: str, extract: str):
     from email_parser import database as db
     try:
         if cmd == "scoring-import":
+            # "scoring-import:<event_code>" or, for multi-round days,
+            # "scoring-import:<event_code>@<gg_league_round_id>"
+            code, _, rkey = arg.partition("@")
             return json.dumps(
-                db.import_gg_scorecards(url, event_code=arg or None), indent=2)
+                db.import_gg_scorecards(url, event_code=code.strip() or None,
+                                        round_key=rkey.strip() or None), indent=2)
         if cmd == "scoring-rounds":
             return json.dumps(
                 db.get_scoring_rounds_list(None, arg or None, None, 200), indent=2)
@@ -1358,6 +1362,13 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.list_courses(), indent=2)
         if cmd == "scoring-parity":
             return json.dumps(db.get_differential_parity(), indent=2)
+        if cmd == "scoring-portal-link":
+            tok = db.make_portal_token(int(arg))
+            if not tok:
+                return json.dumps({"error": f"no customer {arg}"})
+            base = os.getenv("PUBLIC_BASE_URL", "https://tgf-tracker.up.railway.app")
+            return json.dumps({"customer_id": int(arg),
+                               "url": f"{base}/me?t={tok}"}, indent=2)
         if cmd == "scoring-resolve":
             # Identity debugging: how does a GG name resolve to a customer?
             with db._connect() as conn:

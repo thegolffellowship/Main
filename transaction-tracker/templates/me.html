@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>My TGF</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         background: #f1f5f9; color: #0f172a; padding-bottom: 3rem; }
+  header { background: #0f172a; color: #fff; padding: 1rem 1.1rem; }
+  header h1 { font-size: 1.15rem; letter-spacing: 0.04em; }
+  header .sub { color: #94a3b8; font-size: 0.85rem; margin-top: 0.2rem; }
+  main { max-width: 720px; margin: 0 auto; padding: 0.9rem; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+          padding: 0.9rem 1rem; margin-bottom: 0.9rem; }
+  .card h2 { font-size: 0.8rem; letter-spacing: 0.06em; color: #475569;
+             text-transform: uppercase; margin-bottom: 0.6rem; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 0.55rem; }
+  .tile { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+          padding: 0.55rem; text-align: center; }
+  .tile .v { font-size: 1.25rem; font-weight: 700; }
+  .tile .k { font-size: 0.68rem; color: #64748b; letter-spacing: 0.03em; text-transform: uppercase; margin-top: 0.15rem; }
+  table.list { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  table.list th { text-align: left; font-size: 0.7rem; color: #64748b;
+                  text-transform: uppercase; letter-spacing: 0.04em;
+                  border-bottom: 2px solid #e2e8f0; padding: 0.3rem 0.4rem; }
+  table.list td { border-bottom: 1px solid #f1f5f9; padding: 0.45rem 0.4rem; }
+  tr[data-srid] { cursor: pointer; }
+  tr[data-srid]:active { background: #f8fafc; }
+  .chev { color: #94a3b8; font-size: 0.7rem; }
+  .err { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+         border-radius: 10px; padding: 1rem; margin: 1rem 0; }
+  .muted { color: #64748b; }
+  .spark { width: 100%; height: 56px; }
+  footer { text-align: center; color: #94a3b8; font-size: 0.72rem; margin-top: 1.5rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="hdr-name">MY TGF</h1>
+  <div class="sub" id="hdr-sub">Loading…</div>
+</header>
+<main id="main"></main>
+<footer>The Golf Fellowship · personal scoring record</footer>
+
+<script src="/static/js/scorecard-render.js"></script>
+<script>
+(function () {
+    "use strict";
+    const token = new URLSearchParams(location.search).get("t") || "";
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? "").replace(/[&<>"']/g,
+        c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    const api = p => fetch(p + (p.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(token))
+        .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d; });
+
+    function tile(v, k) {
+        return `<div class="tile"><div class="v">${v ?? "—"}</div><div class="k">${k}</div></div>`;
+    }
+
+    function sparkline(points) {
+        if (!points || points.length < 2) return '<div class="muted" style="font-size:0.8rem;">Not enough rounds yet for a trend.</div>';
+        const vals = points.map(p => p.differential);
+        const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+        const W = 300, H = 50;
+        const pts = vals.map((v, i) =>
+            `${(i / (vals.length - 1) * (W - 8) + 4).toFixed(1)},${(H - 6 - (v - min) / span * (H - 12)).toFixed(1)}`).join(" ");
+        return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+            <polyline points="${pts}" fill="none" stroke="#0f766e" stroke-width="2"/>
+        </svg>
+        <div class="muted" style="font-size:0.72rem;">Last ${vals.length} differentials · best ${min.toFixed(1)} · latest ${vals[vals.length-1].toFixed(1)}</div>`;
+    }
+
+    function fail(msg) {
+        $("hdr-sub").textContent = "";
+        $("main").innerHTML = `<div class="err">${esc(msg)}<br><span class="muted" style="font-size:0.8rem;">Ask TGF for a fresh link if this one has been reset.</span></div>`;
+    }
+
+    async function load() {
+        if (!token) return fail("This page needs your personal link.");
+        let s;
+        try { s = await api("/api/me/summary"); }
+        catch (e) { return fail(e.message); }
+
+        const c = s.customer || {};
+        $("hdr-name").textContent = (c.name || "MY TGF").toUpperCase();
+        $("hdr-sub").textContent = [c.chapter, (c.current_player_status || "").replace(/_/g, " "),
+            s.handicap_index_18 != null ? `HCP index ${window.tgfFmtHcp(s.handicap_index_18)}` : null]
+            .filter(Boolean).join(" · ");
+
+        const season = s.season || {};
+        let html = `<div class="card"><h2>Season</h2><div class="tiles">
+            ${tile(season.rounds, "rounds")}
+            ${tile(season.best_gross_9, "best gross (9)")}
+            ${tile(season.best_net_9, "best net (9)")}
+            ${tile(season.best_gross_18, "best gross (18)")}
+            ${tile(season.best_net_18, "best net (18)")}
+        </div></div>`;
+
+        if ((s.points_races || []).length) {
+            html += `<div class="card"><h2>Points races</h2><table class="list">
+                <tr><th>Race</th><th>Rank</th><th>Points</th><th>Reset (proj.)</th></tr>
+                ${s.points_races.map(r => `<tr>
+                    <td>${esc(r.race)}${r.flight ? ` <span class="muted" style="font-size:0.75em;">${esc(r.flight)}</span>` : ""}</td>
+                    <td>${esc(r.rank ?? "")}</td><td><strong>${r.points ?? ""}</strong></td>
+                    <td>${r.points_reset_projected ?? "—"}</td></tr>`).join("")}
+            </table></div>`;
+        }
+
+        html += `<div class="card"><h2>Handicap trend</h2>${sparkline(s.handicap_trend)}</div>`;
+
+        if ((s.par_splits || []).length || (s.si_buckets || []).length) {
+            html += `<div class="card"><h2>Scoring stats</h2><table class="list">
+                <tr><th>Split</th><th>Holes</th><th>Avg vs par</th></tr>
+                ${(s.par_splits || []).map(p => `<tr><td>Par ${p.par}s</td><td>${p.holes}</td>
+                    <td>${p.avg_vs_par > 0 ? "+" : ""}${p.avg_vs_par}</td></tr>`).join("")}
+                ${(s.si_buckets || []).map(b => `<tr><td>${esc(b.bucket)}</td><td>${b.holes}</td>
+                    <td>${b.avg_vs_par > 0 ? "+" : ""}${b.avg_vs_par}</td></tr>`).join("")}
+            </table></div>`;
+        }
+
+        html += `<div class="card"><h2>Scorecards</h2><div id="cards" class="muted" style="font-size:0.85rem;">Loading…</div></div>`;
+        $("main").innerHTML = html;
+
+        try {
+            const rounds = await api("/api/me/scorecards");
+            if (!rounds.length) { $("cards").textContent = "No imported scorecards yet."; return; }
+            $("cards").innerHTML = `<table class="list">
+                <tr><th>Date</th><th>Event</th><th>Gross</th><th>Net</th></tr>
+                ${rounds.map(r => `<tr data-srid="${r.id}">
+                    <td style="white-space:nowrap;">${esc(r.round_date || "")}</td>
+                    <td><span class="chev">&#9656;</span> ${esc(r.event_name || r.course_name || "")}</td>
+                    <td><strong>${r.gross ?? ""}</strong></td><td>${r.net ?? ""}</td></tr>`).join("")}
+            </table>`;
+            $("cards").classList.remove("muted");
+            document.querySelectorAll("tr[data-srid]").forEach(row => {
+                row.addEventListener("click", async () => {
+                    const next = row.nextElementSibling;
+                    const chev = row.querySelector(".chev");
+                    if (next && next.classList.contains("sc-detail")) {
+                        next.remove();
+                        if (chev) chev.innerHTML = "&#9656;";
+                        return;
+                    }
+                    const det = document.createElement("tr");
+                    det.className = "sc-detail";
+                    det.innerHTML = `<td colspan="4" style="background:#fff;padding:0.5rem 0.2rem;"><span class="muted">Loading…</span></td>`;
+                    row.after(det);
+                    if (chev) chev.innerHTML = "&#9662;";
+                    try {
+                        const card = await api("/api/me/scorecard/" + row.dataset.srid);
+                        det.firstElementChild.innerHTML = window.tgfRenderScorecard(card);
+                    } catch (e) {
+                        det.firstElementChild.innerHTML = `<span style="color:#b91c1c;">${esc(e.message)}</span>`;
+                    }
+                });
+            });
+        } catch (e) {
+            $("cards").textContent = e.message;
+        }
+    }
+
+    load();
+})();
+</script>
+</body>
+</html>

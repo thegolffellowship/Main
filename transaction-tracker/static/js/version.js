@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.27.0";
+window.TGF_VERSION = "2.28.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.0",
+    date: "2026-07-03",
+    changes: [
+      "MEMBER PORTAL M1: /me — a mobile-first personal page each member opens with their own magic link (HMAC-signed per-customer token; every /api/me endpoint derives the customer FROM the token, so no one can request anyone else's data; bumping customers.portal_token_version revokes a member's links). Shows season snapshot (rounds, best gross/net 9 & 18), points-race ranks with projected reset, handicap-differential trend sparkline, par-3/4/5 and hole-difficulty scoring splits, and every imported scorecard expandable to the full hole-by-hole card (shared renderer static/js/scorecard-render.js). Admins fetch a member's link via GET /api/customers/<id>/portal-link. End-to-end tested incl. bad-token 401s, cross-customer 404s, and link revocation.",
+      "Multi-round import support: Hill Country Matches is its own GG league with six rounds all dated the same Saturday — the importer now accepts a round_key (GG league round id, stored as scoring_rounds.gg_league_round_id) so same-day rounds don't collapse into one while ALL Net/ALL Gross of the same round still dedupe.",
+      "s9.12 Canyon Springs imported after the admin released results: 39 players, 39/39 verified, 2 no-show tee-sheet cards auto-skipped. Every published 2026 round in both chapter portals is now in the tracker.",
+    ],
+  },
   {
     version: "2.27.0",
     date: "2026-07-03",
