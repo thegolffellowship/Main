@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.29.1";
+window.TGF_VERSION = "2.29.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.29.2",
+    date: "2026-07-04",
+    changes: [
+      "9-hole events at 18-hole courses now say which nine was played: matched event lines append ' - Front' or ' - Back' from the round's actual hole range (holes 10-18 = Back). Named-nine facilities keep their nine's name (Oaks, Valley, Hills) as before; 18-hole Front/Back splits already carried the suffix from GG.",
+      "MVP backfill ran across all three portals after the v2.29.1 walker fix: San Antonio 32 winners over 21 rounds, Austin 26 winners over 18 rounds, Hill Country Matches none (no MVP games in the matches league) — 58 records, every name resolved to a customer profile. Badges are live in the drill-down.",
+    ],
+  },
   {
     version: "2.29.1",
     date: "2026-07-04",

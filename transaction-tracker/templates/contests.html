@@ -1874,8 +1874,13 @@
             const m = /\s[-–—]\s([A-Za-z]{3,10})$/.exec(cn);     // "… - VALLEY"
             if (m) nine = m[1];
         }
-        if (!nine || evt.toLowerCase().includes(nine.toLowerCase())) return "";
-        return " - " + nine.charAt(0).toUpperCase() + nine.slice(1).toLowerCase();
+        if (nine && !evt.toLowerCase().includes(nine.toLowerCase()))
+            return " - " + nine.charAt(0).toUpperCase() + nine.slice(1).toLowerCase();
+        // 18-hole venue, one nine played: the hole range says which nine
+        // (holes 10-18 = Back). Named-nine courses were handled above.
+        if (!nine && round.holes_played === 9 && round.first_hole != null)
+            return round.first_hole >= 10 ? " - Back" : " - Front";
+        return "";
     }
 
     // Phone display of GG event names: ALL-CAPS runs become Title Case
