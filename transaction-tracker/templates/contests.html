@@ -21,13 +21,19 @@
             display: flex; gap: 0; margin-bottom: 0;
             border-bottom: 2px solid var(--border); padding: 0 2rem;
             background: var(--surface);
+            /* strip slides sideways on its own when wider than the screen
+               (base behavior — mobile breakpoints don't fire reliably) */
+            overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; flex-wrap: nowrap;
         }
+        .top-tabs::-webkit-scrollbar { display: none; }
         .top-tab {
             padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem;
             font-weight: 700; color: var(--text-muted); border-bottom: 3px solid transparent;
             margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
             background: none; border-top: none; border-left: none; border-right: none;
             text-transform: uppercase; letter-spacing: 0.04em;
+            white-space: nowrap; flex: 0 0 auto;
         }
         .top-tab:hover { color: var(--text); }
         .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
@@ -36,12 +42,16 @@
         /* ── Sub-tabs (Points Race) ── */
         .sub-tabs {
             display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem;
+            overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; flex-wrap: nowrap;
         }
+        .sub-tabs::-webkit-scrollbar { display: none; }
         .sub-tab {
             padding: 0.5rem 1.25rem; cursor: pointer; font-size: 0.85rem;
             font-weight: 600; color: var(--text-muted); border-bottom: 2px solid transparent;
             margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
             background: none; border-top: none; border-left: none; border-right: none;
+            white-space: nowrap; flex: 0 0 auto;
         }
         .sub-tab:hover { color: var(--text); }
         .sub-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
@@ -2165,13 +2175,13 @@
         // Compact variant on phones: tighter cells, smaller type, and
         // abbreviated row labels so a full nine fits with minimal scrolling
         const compact = prIsCompact();
-        const td = `padding:${compact ? "1px 2px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.2em" : "2em"};white-space:nowrap;`;
-        const lbl = `padding:${compact ? "1px 3px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
+        const td = `padding:${compact ? "1px 1px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.1em" : "2em"};white-space:nowrap;`;
+        const lbl = `padding:${compact ? "1px 2px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
         const L = compact
             ? { yds: "YDS", gs: "GROSS", gp: "G PTS", ns: "NET", np: "N PTS" }
             : { yds: "YARDS", gs: "GROSS SCORE", gp: "GROSS PTS", ns: "NET SCORE", np: "NET PTS" };
-        const fs = compact ? "0.62rem" : "0.8rem";
-        const spanW = compact ? "1.15em" : "1.4em";
+        const fs = compact ? "0.58rem" : "0.8rem";
+        const spanW = compact ? "1.08em" : "1.4em";
         // Circle/square marks are vs-par symbols computed from OUR facts:
         // the GROSS row uses vs_par, the NET row uses net_vs_par (GG's own
         // markings are net-relative and stay stored for verification only)
@@ -2300,11 +2310,23 @@
                     }
                 }
             }
+            // GG cells separate words with non-breaking spaces — swap them
+            // for regular spaces or the text can't wrap and paints over the
+            // neighboring column in the width-locked compact tables
+            const nb = v => String(v ?? "").replace(/\u00a0/g, " ");
             const remap = row => (order && row.length === orig.length) ? order.map(i => row[i]) : row;
-            const head = remap(orig).map(h => (h || "").trim().toLowerCase() === "tournament" ? "EVENT" : h);
-            const evtCol = remap(orig).findIndex(h => (h || "").trim().toLowerCase() === "tournament");
+            let head = remap(orig).map(h => (h || "").trim().toLowerCase() === "tournament" ? "EVENT" : h);
+            let evtCol = remap(orig).findIndex(h => (h || "").trim().toLowerCase() === "tournament");
+            // Phones drop the Awarded Date column — dates are the least
+            // useful field and the event names need the width
+            const fullWidth = head.length;
+            const dropIdx = compact ? head.findIndex(h => /date/i.test(h || "")) : -1;
+            const project = row => (dropIdx > -1 && row.length === fullWidth)
+                ? row.filter((_, i) => i !== dropIdx) : row;
+            head = project(head);
+            if (dropIdx > -1 && evtCol > dropIdx) evtCol--;
             const width = head.length;
-            const body = t.slice(1).filter(r => r.some(c => (c || "").trim())).map(remap);
+            const body = t.slice(1).filter(r => r.some(c => (c || "").trim())).map(r => project(remap(r)));
             // Rows above GG's "not counted" divider are the counted scores
             // (best 10) — bold their Points + EVENT cells for contrast; the
             // CITY CHAMPIONSHIP Total line joins them (blank until played):
@@ -2319,7 +2341,7 @@
             for (const r of body) {
                 if (r.length !== width) {
                     if (counted) { parts.push(ccRow); counted = false; }
-                    parts.push(`<tr><td colspan="${width}" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(r.join(" "))}</td></tr>`);
+                    parts.push(`<tr><td colspan="${width}" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;
                 }
                 const bold = counted ? "font-weight:700;" : "color:var(--text-muted);";
@@ -2327,19 +2349,21 @@
                 // the hole-by-hole card right under this row
                 let match = null;
                 if (evtCol > -1 && (rounds || []).length) {
-                    const evtRaw = (r[evtCol] || "").replace(/\s+[—-]\s+(Front|Back)$/i, "").trim();
+                    const evtRaw = nb(r[evtCol] || "").replace(/\s+[—-]\s+(Front|Back)$/i, "").trim();
                     match = byEvent[evtRaw.toLowerCase()]
                         || (codeOf(evtRaw) ? byCode[codeOf(evtRaw)] : null);
                 }
                 if (match && claimed) claimed.add(match.id);
                 parts.push(`<tr${match ? ` data-srid="${match.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) =>
-                    `<td style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(c)}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`).join("")}</tr>`);
+                    `<td style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(nb(c))}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`).join("")}</tr>`);
             }
             if (counted) parts.push(ccRow);
             return `<table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>${head.map(c => {
-                    const isPts = (c || "").trim().toLowerCase() === "points";
-                    return `<th${compact && isPts ? ' style="width:34px;"' : ""}>${escapeHtml(compact && isPts ? "PTS" : c)}</th>`;
+                    const key = (c || "").trim().toLowerCase();
+                    if (compact && key === "points") return '<th style="width:34px;">PTS</th>';
+                    if (compact && key === "position") return '<th style="width:34px;">POS</th>';
+                    return `<th>${escapeHtml(nb(c))}</th>`;
                 }).join("")}</tr></thead>
                 <tbody>${parts.join("")}</tbody>
             </table>`;

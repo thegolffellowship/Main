@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.28.8";
+window.TGF_VERSION = "2.28.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.9",
+    date: "2026-07-04",
+    changes: [
+      "Every navigation strip now slides sideways independently of the page when it's wider than the screen: the site nav (ADMIN / TRANSACTIONS / …), the Contests top tabs (MATCH PLAY / POINTS RACES / ENROLLMENT), the race sub-tabs, and the admin sub-nav. Swipe the strip itself to reach the cut-off tabs; the rest of the page stays put. This is base CSS, not a mobile breakpoint — phones in desktop-site mode report a wide viewport and skip media queries, which is why the existing mobile-only nav scrolling never kicked in.",
+      "Fixed the overlapping text in the points drill-down (level 2): Golf Genius separates words with non-breaking spaces, so event names couldn't wrap and painted straight over the AWARDED DATE column in the width-locked compact tables. Cell text is now normalized to regular spaces (which also hardens scorecard matching), and on phones the AWARDED DATE column is dropped entirely and POSITION narrows to a 34px POS column — points, event, and position all fit with no overlap.",
+      "Scorecard (level 3) narrowed one more notch on phones (0.58rem type, slimmer cells and score rings) so the full nine plus OUT/IN totals fit comfortably on screen. Portal renderer matched.",
+    ],
+  },
   {
     version: "2.28.8",
     date: "2026-07-04",

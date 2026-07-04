@@ -393,8 +393,18 @@ footer {
     top: 0;
     z-index: 99;
     background: var(--surface);
+    /* When wider than the screen the strip slides sideways on its own —
+       base behavior (not media-queried) because phones in desktop-site
+       mode report a wide viewport and skip the mobile breakpoints */
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
 }
+.tab-nav::-webkit-scrollbar { display: none; }
 .tab-nav a {
+    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
@@ -423,7 +433,11 @@ footer {
     display: flex; gap: 0; background: var(--surface); border-bottom: 2px solid var(--border);
     padding: 0 1rem; position: sticky; z-index: 97;
     margin-bottom: 1.5rem;
+    overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; flex-wrap: nowrap;
 }
+.admin-subnav::-webkit-scrollbar { display: none; }
+.admin-subnav a { flex: 0 0 auto; }
 .tab-nav + .admin-subnav { margin-top: -1.5rem; }
 .admin-subnav a {
     padding: 0.55rem 1.1rem; border: none; background: none; cursor: pointer;
