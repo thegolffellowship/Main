@@ -1362,6 +1362,10 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.list_courses(), indent=2)
         if cmd == "scoring-parity":
             return json.dumps(db.get_differential_parity(), indent=2)
+        if cmd == "scoring-mvp-import":
+            # url = tournament_results widget (optionally &round=<id>);
+            # time-budgeted — call repeatedly until rounds_left == 0
+            return json.dumps(db.import_gg_event_mvps(url), indent=2)
         if cmd == "scoring-portal-link":
             tok = db.make_portal_token(int(arg))
             if not tok:

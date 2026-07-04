@@ -5526,6 +5526,7 @@ _CUSTOMER_FK_COLUMNS: tuple[tuple[str, str], ...] = (
     ("contractor_payouts", "manager_customer_id"),
     ("gg_points_standings", "customer_id"),
     ("scoring_rounds", "customer_id"),
+    ("event_mvps", "customer_id"),
 )
 
 # Junction tables where UPDATE OR IGNORE can skip a source row because the
@@ -6365,9 +6366,11 @@ _GG_EVENT_CODE_COMPOUND_RE = re.compile(r"^([a-z]+\d+(?:\.\d+)?[a-z]*)\b", re.I)
 # over static — since these only fill gaps left by the events table.
 _GG_CODE_NAME_OVERRIDES: dict = {
     # No code prefix on these (admin preference) — the round name carries it
-    "hcmr1": "Hill Country Matches - Valley",
-    "hcmr2": "Hill Country Matches - Hills",
-    "hcmr3": "Hill Country Matches - Creeks",
+    # ALL CAPS league name per admin (desktop verbatim; the phone-side
+    # prettifier title-cases it automatically)
+    "hcmr1": "HILL COUNTRY MATCHES - R1 Valley",
+    "hcmr2": "HILL COUNTRY MATCHES - R2 Hills",
+    "hcmr3": "HILL COUNTRY MATCHES - R3 Creeks",
     # Austin's kickoff points lines are labeled just "Kickoff" in GG —
     # admin confirmed 2026-07-04 it IS a18.2 (keyed by first word)
     "kickoff": "a18.2 AUSTIN KICKOFF | ShadowGlen",
@@ -7044,6 +7047,181 @@ def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | Non
     return None
 
 
+# ── Event MVP / TGF MVP winners (v2.29.0) ──────────────────────────────
+# GG runs an "<code> MVP $" game (one winner per city per event — ties are
+# settled by a tiebreaker and only the actual MVP is paid) and a
+# "TGF MVP $" game (can be shared). Winners are the purse>0 rows; when an
+# MVP table carries no purse at all we fall back to the outright Pos 1 row.
+
+def _ensure_mvp_tables(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS event_mvps (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id          INTEGER REFERENCES events(id),
+        event_code        TEXT,
+        gg_round_id       TEXT,
+        gg_tournament_id  TEXT,
+        customer_id       INTEGER REFERENCES customers(customer_id),
+        player_name       TEXT NOT NULL,
+        kind              TEXT NOT NULL CHECK (kind IN ('mvp','tgf_mvp')),
+        chapter           TEXT,
+        purse             REAL,
+        imported_at       TEXT DEFAULT (datetime('now')),
+        UNIQUE (gg_tournament_id, player_name, kind))""")
+    # Rounds already walked (incl. rounds with no MVP games) so repeated
+    # import calls converge instead of re-fetching the whole season
+    conn.execute("""CREATE TABLE IF NOT EXISTS mvp_import_rounds (
+        gg_round_id  TEXT NOT NULL,
+        host         TEXT NOT NULL,
+        imported_at  TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (gg_round_id, host))""")
+
+
+def _parse_money(v) -> float:
+    m = re.search(r"([\d,]+(?:\.\d+)?)", str(v or ""))
+    return float(m.group(1).replace(",", "")) if m else 0.0
+
+
+def _mvp_winners_from_table(table: list, kind: str) -> list:
+    """[(player_name, chapter, purse)] winners from a GG MVP results table."""
+    if not table or not table[0]:
+        return []
+    head = [(c or "").strip().lower() for c in table[0]]
+    def col(*names):
+        for n in names:
+            for i, h in enumerate(head):
+                if n in h:
+                    return i
+        return -1
+    pos_i, player_i, purse_i = col("pos"), col("player"), col("purse")
+    if player_i < 0:
+        return []
+    rows = []
+    for r in table[1:]:
+        if len(r) != len(head):
+            continue        # blank separators / "Total Purse Allocated"
+        raw = (r[player_i] or "").strip()
+        if not raw:
+            continue
+        m = re.search(r"\s+TGF\s+([A-Za-z .'-]+)$", raw)
+        chapter = m.group(1).strip() if m else None
+        name = raw[:m.start()].strip() if m else raw
+        purse = _parse_money(r[purse_i]) if purse_i > -1 else 0.0
+        pos = (r[pos_i] or "").strip().lower() if pos_i > -1 else ""
+        rows.append((name, chapter, purse, pos))
+    winners = [(n, c, p) for n, c, p, _ in rows if p > 0]
+    if not winners and kind == "mvp":
+        # No purse posted — take the outright leader only (a T1 tie with no
+        # purse is unresolved; the tiebreaker note lives in GG comments)
+        winners = [(n, c, p) for n, c, p, pos in rows if pos == "1"]
+    return winners
+
+
+def import_gg_event_mvps(widget_url: str, db_path: str | Path = DB_PATH,
+                         time_budget: float = 42.0) -> dict:
+    """Walk a portal's Event Results rounds and record MVP / TGF MVP winners.
+
+    widget_url: .../leagues/<id>/widgets/tournament_results?shared=false
+    (a &round=<id> in the URL restricts the walk to that round). Rounds
+    already recorded in mvp_import_rounds are skipped, and the walk stops
+    at time_budget seconds — call repeatedly until rounds_left == 0.
+    """
+    from time import monotonic
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    started = monotonic()
+    parts = urlparse(widget_url)
+    host = parts.netloc
+    qs = parse_qs(parts.query)
+    only_round = (qs.pop("round", [None]) or [None])[0]
+    base_url = urlunparse(parts._replace(query=urlencode(qs, doseq=True)))
+
+    def fetch(url):
+        page = fetch_public_page(url, xhr=False)
+        if page["status_code"] != 200:
+            raise RuntimeError(f"GG returned HTTP {page['status_code']} for {url}")
+        return page["html"]
+
+    # Round inventory from the widget's round selector
+    html = fetch(base_url)
+    sel = re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>', html, re.S)
+    options = re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
+                         sel.group(1) if sel else "", re.S)
+    if only_round:
+        options = [(rid, lbl) for rid, lbl in options if rid == only_round] \
+            or [(only_round, "")]
+
+    result = {"rounds_done": 0, "rounds_skipped": 0, "winners_recorded": 0,
+              "rounds_left": 0, "unresolved_names": [], "notes": []}
+    with _connect(db_path) as conn:
+        _ensure_mvp_tables(conn)
+        done = {r["gg_round_id"] for r in conn.execute(
+            "SELECT gg_round_id FROM mvp_import_rounds WHERE host = ?",
+            (host,)).fetchall()}
+        code_map = {}
+        for r in conn.execute("SELECT id, item_name FROM events").fetchall():
+            m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
+            if m:
+                code_map.setdefault(m.group(1).lower(), (r["id"], r["item_name"]))
+
+        pending = [(rid, lbl) for rid, lbl in options if rid not in done]
+        for rid, _lbl in pending:
+            if monotonic() - started > time_budget:
+                break
+            rhtml = fetch(f"{base_url}&round={rid}")
+            struct = parse_page_structure(rhtml)
+            links = struct.get("links") or []
+            names_blob = " ".join(l.get("text") or "" for l in links)
+            # Event linkage: any coded tournament name in the round; the
+            # Austin Kickoff round has no code anywhere -> a18.2 by keyword
+            ev_id, ev_code = None, None
+            m = re.search(r"\b([sa]\d+(?:\.\d+)?)\b", names_blob)
+            if m and m.group(1).lower() in code_map:
+                ev_code = m.group(1).lower()
+                ev_id = code_map[ev_code][0]
+            elif "kickoff" in names_blob.lower() and "austin" in host:
+                ev_code = "a18.2"
+                ev_id = code_map.get("a18.2", (None,))[0]
+            for l in links:
+                text = (l.get("text") or "").strip()
+                if not re.search(r"\bMVP\b", text, re.I) or "POINTS" in text.upper():
+                    continue
+                kind = "tgf_mvp" if re.search(r"\bTGF\s+MVP\b", text, re.I) else "mvp"
+                href = l.get("href") or ""
+                tid_m = re.search(r"/v2tournaments/(\d+)", href)
+                if not tid_m:
+                    continue
+                if href.startswith("/"):
+                    href = f"https://{host}{href}"
+                tstruct = parse_page_structure(fetch(href))
+                for table in tstruct.get("tables") or []:
+                    for name, chapter, purse in _mvp_winners_from_table(table, kind):
+                        cid = _resolve_scoring_player(conn, name)
+                        if cid is None and name not in result["unresolved_names"]:
+                            result["unresolved_names"].append(name)
+                        conn.execute(
+                            """INSERT INTO event_mvps
+                                   (event_id, event_code, gg_round_id,
+                                    gg_tournament_id, customer_id, player_name,
+                                    kind, chapter, purse)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               ON CONFLICT (gg_tournament_id, player_name, kind)
+                               DO UPDATE SET purse = excluded.purse,
+                                             customer_id = COALESCE(excluded.customer_id, event_mvps.customer_id),
+                                             event_id = COALESCE(excluded.event_id, event_mvps.event_id)""",
+                            (ev_id, ev_code, rid, tid_m.group(1), cid, name,
+                             kind, chapter, purse))
+                        result["winners_recorded"] += 1
+            conn.execute(
+                "INSERT OR IGNORE INTO mvp_import_rounds (gg_round_id, host) VALUES (?, ?)",
+                (rid, host))
+            conn.commit()
+            result["rounds_done"] += 1
+        result["rounds_skipped"] = len(options) - len(pending)
+        result["rounds_left"] = len(pending) - result["rounds_done"]
+    return result
+
+
 # ── Member portal (M1): magic-link tokens + per-member summary ─────────
 # Members are customers, not staff — no PINs. A per-customer HMAC token
 # (same signing pattern as the roster opt-in links) is the only key, and
@@ -7513,6 +7691,7 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
                             db_path: str | Path = DB_PATH) -> list:
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
+        _ensure_mvp_tables(conn)
         clauses, params = ["1=1"], []
         if player:
             clauses.append("sr.player_name LIKE ?"); params.append(f"%{player}%")
@@ -7523,7 +7702,15 @@ def get_scoring_rounds_list(player: str | None = None, event: str | None = None,
         params.append(limit)
         rows = conn.execute(
             f"""SELECT sr.*, e.item_name AS event_name, c.name AS course_name,
-                       t.tee_name, t.slope, t.rating
+                       t.tee_name, t.slope, t.rating,
+                       EXISTS(SELECT 1 FROM event_mvps m
+                              WHERE m.event_id = sr.event_id
+                                AND m.customer_id = sr.customer_id
+                                AND m.kind = 'mvp') AS mvp,
+                       EXISTS(SELECT 1 FROM event_mvps m
+                              WHERE m.event_id = sr.event_id
+                                AND m.customer_id = sr.customer_id
+                                AND m.kind = 'tgf_mvp') AS tgf_mvp
                 FROM scoring_rounds sr
                 LEFT JOIN events e ON e.id = sr.event_id
                 LEFT JOIN courses c ON c.course_id = sr.course_id
