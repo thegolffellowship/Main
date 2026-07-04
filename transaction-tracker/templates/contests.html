@@ -1844,6 +1844,13 @@
         return (words.length > 1 ? words.map(w => w[0]).join("") : words[0].slice(0, 3)).toUpperCase();
     }
 
+    // "2026-05-16" -> "May 16" (mmm d, admin-specced date format)
+    const PR_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    function prFmtAwardDate(v) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || "").trim());
+        return m ? `${PR_MONTHS[+m[2] - 1]} ${+m[3]}` : String(v || "");
+    }
+
     // Phone display of GG event names: ALL-CAPS runs become Title Case
     // (KISSING TREE -> Kissing Tree; short tokens like TPC stay acronyms)
     // and the chapter prefix abbreviates (San Antonio Kickoff -> SA Kickoff).
@@ -2073,7 +2080,7 @@
 
         const detail = document.createElement("tr");
         detail.className = "pr-detail-row";
-        detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0.15rem" : "0.6rem 1rem"};color:var(--text-muted);">Loading player detail…</td>`;
+        detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 1rem"};color:var(--text-muted);">Loading player detail…</td>`;
         tr.after(detail);
         if (chev) chev.innerHTML = "&#9662;";
         const cell = detail.firstElementChild;
@@ -2126,7 +2133,7 @@
             const sr = [r.slope != null ? `slope ${r.slope}` : null,
                         r.rating != null ? `rating ${r.rating}` : null].filter(Boolean).join(", ");
             const dateTxt = compact
-                ? String(r.round_date || "").slice(5).replace("-", "/")
+                ? prFmtAwardDate(r.round_date)
                 : (r.round_date || "");
             const courseCell = compact
                 ? (course ? `<span style="display:block;color:var(--text-muted);font-size:0.85em;" title="${escapeHtml(sr)}">${escapeHtml(course)}</span>` : "")
@@ -2147,7 +2154,7 @@
             </div>
             <table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>
-                    <th${compact ? ' style="width:38px;"' : ""}>Date</th><th>Event</th>
+                    <th${compact ? ' style="width:44px;"' : ""}>Date</th><th>Event</th>
                     ${compact ? "" : "<th>Course / Tee</th>"}
                     <th style="text-align:center;${compact ? "width:20px;" : ""}" title="Holes played">${compact ? "H" : "Holes"}</th>
                     <th style="text-align:center;${compact ? "width:28px;" : ""}">HCP</th>
@@ -2334,10 +2341,17 @@
                 const norm = orig.map(h => (h || "").trim().toLowerCase());
                 const ptsIdx = norm.indexOf("points");
                 const evIdx = norm.indexOf("event");
+                const dateIdx = norm.findIndex(h => /date/.test(h));
+                const tourIdx = norm.indexOf("tournament");
                 if (ptsIdx > -1) {
-                    order = [ptsIdx];
+                    // Admin order: DATE | EVENT | PTS | POSITION — points sit
+                    // right of the event, mirroring the level-1 standings
+                    order = [];
+                    if (dateIdx > -1) order.push(dateIdx);
+                    if (tourIdx > -1) order.push(tourIdx);
+                    order.push(ptsIdx);
                     for (let i = 0; i < orig.length; i++) {
-                        if (i !== ptsIdx && i !== evIdx) order.push(i);
+                        if (!order.includes(i) && i !== evIdx) order.push(i);
                     }
                 }
             }
@@ -2348,15 +2362,22 @@
             const remap = row => (order && row.length === orig.length) ? order.map(i => row[i]) : row;
             let head = remap(orig).map(h => (h || "").trim().toLowerCase() === "tournament" ? "EVENT" : h);
             let evtCol = remap(orig).findIndex(h => (h || "").trim().toLowerCase() === "tournament");
-            // Phones drop the Awarded Date column — dates are the least
-            // useful field and the event names need the width
+            // Phones drop the Position column (the date shows instead)
             const fullWidth = head.length;
-            const dropIdx = compact ? head.findIndex(h => /date/i.test(h || "")) : -1;
+            const dropIdx = compact ? head.findIndex(h => /position/i.test(h || "")) : -1;
             const project = row => (dropIdx > -1 && row.length === fullWidth)
                 ? row.filter((_, i) => i !== dropIdx) : row;
             head = project(head);
             if (dropIdx > -1 && evtCol > dropIdx) evtCol--;
             const width = head.length;
+            const lowHead = head.map(h => (h || "").trim().toLowerCase());
+            const ptsCol = lowHead.indexOf("points");
+            const dateCol = lowHead.findIndex(h => /date/.test(h));
+            // Compact: a trailing spacer column mirrors the level-1 table's
+            // post-points columns (RESET 44 + R 24 + IN 26 = 94px,
+            // border-box) so PTS lines up exactly under the standings PTS
+            const spacer = compact && ptsCol > -1;
+            const totalCols = width + (spacer ? 1 : 0);
             const body = t.slice(1).filter(r => r.some(c => (c || "").trim())).map(r => project(remap(r)));
             // Rows above GG's "not counted" divider are the counted scores
             // (best 10) — bold their Points + EVENT cells for contrast; the
@@ -2364,14 +2385,14 @@
             // final = best 10 point totals + City Championship total.
             let counted = true;
             const ccRow = `<tr style="background:#eef2f7;">
-                <td style="font-weight:700;"></td>
+                <td></td>
                 <td style="font-weight:700;">CITY CHAMPIONSHIP Total</td>
-                ${Array(Math.max(0, width - 2)).fill("<td></td>").join("")}
+                ${Array(Math.max(0, totalCols - 2)).fill("<td></td>").join("")}
             </tr>`;
             // Admin-specced section banners: counted = black bar with white
             // text, not counted = 40% gray with black text (replaces GG's
             // "following points are not counted" sentence row)
-            const secHdr = (label, bg, fg) => `<tr><td colspan="${width}" class="pr-wrap" style="background:${bg};color:${fg};font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${label}</td></tr>`;
+            const secHdr = (label, bg, fg) => `<tr><td colspan="${totalCols}" class="pr-wrap" style="background:${bg};color:${fg};font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${label}</td></tr>`;
             const parts = [];
             if (order) parts.push(secHdr('POINTS COUNTED <span style="font-weight:400;text-transform:none;">(Best 10 + City Championship)</span>', "#111", "#fff"));
             for (const r of body) {
@@ -2381,7 +2402,7 @@
                         counted = false;
                         if (order) { parts.push(secHdr("Points Not Counted", "#bfbfbf", "#111")); continue; }
                     }
-                    parts.push(`<tr><td colspan="${width}" class="pr-wrap" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
+                    parts.push(`<tr><td colspan="${totalCols}" class="pr-wrap" style="text-align:center;font-weight:600;background:#f8fafc;">${escapeHtml(nb(r.join(" ")))}</td></tr>`);
                     continue;
                 }
                 // Section banners carry the counted/not-counted contrast on
@@ -2392,17 +2413,20 @@
                 let match = null;
                 if (evtCol > -1 && (rounds || []).length) {
                     const evtRaw = nb(r[evtCol] || "").replace(/\s+[—-]\s+(Front|Back)$/i, "").trim();
+                    // Code lookup tolerates a series-only event name: GG
+                    // "a18.3" still finds a round under "a18 CRYSTAL FALLS"
+                    const code = codeOf(evtRaw);
                     match = byEvent[evtRaw.toLowerCase()]
-                        || (codeOf(evtRaw) ? byCode[codeOf(evtRaw)] : null);
+                        || (code ? byCode[code] || byCode[code.replace(/\.\d+$/, "")] : null);
                     // League lines have no code and a different name shape:
                     // GG "Hill Country Matches - Valley" vs imported round
                     // "Hill Country Matches | Comanche Trace" whose COURSE
                     // carries the nine ("… - VALLEY"). Fall back to base-name
                     // prefix + qualifier-vs-course/tee matching.
                     if (!match) {
-                        const parts = evtRaw.split(/\s+[-–—|]\s+/);
-                        const base = (parts[0] || "").trim().toLowerCase();
-                        const qual = parts.length > 1 ? parts[parts.length - 1].trim().toLowerCase() : "";
+                        const segs = evtRaw.split(/\s+[-–—|]\s+/);
+                        const base = (segs[0] || "").trim().toLowerCase();
+                        const qual = segs.length > 1 ? segs[segs.length - 1].trim().toLowerCase() : "";
                         if (base.length >= 8 && qual) {
                             match = (rounds || []).find(x =>
                                 (x.event_name || "").trim().toLowerCase().startsWith(base)
@@ -2412,17 +2436,28 @@
                     }
                 }
                 if (match && claimed) claimed.add(match.id);
-                parts.push(`<tr${match ? ` data-srid="${match.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) =>
-                    `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${i <= 1 ? bold : (counted ? "" : "color:var(--text-muted);")}">${escapeHtml(compact && i === evtCol ? prPrettyEvent(nb(c)) : nb(c))}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`).join("")}</tr>`);
+                parts.push(`<tr${match ? ` data-srid="${match.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) => {
+                    // PTS column mirrors the level-1 standings points column:
+                    // centered, bold, 2px side borders
+                    let style;
+                    if (i === ptsCol) style = `text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;${counted ? "" : "color:var(--text-muted);"}`;
+                    else if (i === evtCol) style = bold;
+                    else style = counted ? "" : "color:var(--text-muted);";
+                    let val = nb(c);
+                    if (i === dateCol) val = prFmtAwardDate(val);
+                    else if (compact && i === evtCol) val = prPrettyEvent(val);
+                    return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${escapeHtml(val)}${match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : ""}</td>`;
+                }).join("")}${spacer ? "<td></td>" : ""}</tr>`);
             }
             if (counted) parts.push(ccRow);
             return `<table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0.35rem 0;font-size:${compact ? "0.72rem" : "0.82rem"};">
-                <thead><tr>${head.map(c => {
+                <thead><tr>${head.map((c, i) => {
                     const key = (c || "").trim().toLowerCase();
-                    if (compact && key === "points") return '<th style="width:34px;">PTS</th>';
-                    if (compact && key === "position") return '<th style="width:34px;">POS</th>';
+                    if (i === ptsCol) return `<th style="width:${compact ? "34px" : "70px"};text-align:center;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${compact ? "PTS" : "POINTS"}</th>`;
+                    if (i === dateCol) return `<th style="width:${compact ? "44px" : "110px"};">${compact ? "DATE" : escapeHtml(nb(c))}</th>`;
+                    if (key === "position") return `<th style="width:80px;text-align:center;">${escapeHtml(nb(c))}</th>`;
                     return `<th>${escapeHtml(nb(c))}</th>`;
-                }).join("")}</tr></thead>
+                }).join("")}${spacer ? '<th style="width:94px;"></th>' : ""}</tr></thead>
                 <tbody>${parts.join("")}</tbody>
             </table>`;
         }).join("");

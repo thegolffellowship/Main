@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.28.14";
+window.TGF_VERSION = "2.28.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.15",
+    date: "2026-07-04",
+    changes: [
+      "Points drill-down columns reordered per admin spec: DATE | EVENT | PTS | POSITION (points were on the left, which read backwards under a standings header whose points sit right of the player). Dates render as mmm d (May 16); on phones POSITION hides and the date shows instead, and the PTS column gets the same centered/bold/2px-bordered treatment as the standings PTS column plus a 94px trailing spacer that mirrors the standings' RESET+R+IN block, so the two points columns align exactly. The Other Scorecards list uses the same date format.",
+      "Austin Kickoff points lines now match their rounds: Golf Genius labels them just 'Kickoff' with no a18.2 code (admin confirmed they're the same event), so the name substitution gained a first-word override (Kickoff → a18.2 AUSTIN KICKOFF | ShadowGlen) and a series fallback that resolves GG's a18.3 to the tracker's 'a18 CRYSTAL FALLS' event; the drill-down matcher tolerates the same series-only lookup client-side.",
+    ],
+  },
   {
     version: "2.28.14",
     date: "2026-07-04",
