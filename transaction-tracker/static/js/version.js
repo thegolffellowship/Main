@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.28.10";
+window.TGF_VERSION = "2.28.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.11",
+    date: "2026-07-04",
+    changes: [
+      "Event-name wrapping finally works on phones: Safari ignores overflow-wrap inside table cells, so compact cells now also carry word-break:break-word (the property Safari does honor in tables), and the space normalizer was rebuilt on \\s so it collapses every Unicode whitespace plus zero-width characters. Long names like the Cedar Creek events wrap to a second line inside their cell.",
+      "Points drill-down restyle per admin spec: a black banner with white text reading POINTS COUNTED (BEST 10 + CITY CHAMPIONSHIP) opens the counted section, and a 40% gray banner with black text reading POINTS NOT COUNTED replaces Golf Genius's 'following points are not counted' sentence row. With the banners carrying the contrast, event rows are no longer bold on phones (bold stays on desktop).",
+      "Contests tab strip (POINTS RACES / MATCH PLAY / ENROLLMENT) now matches the site nav's sizing (0.82rem, weight 600) with viewport-scaled padding so all three tabs fit on a phone screen without sliding.",
+      "POINTS RACES is now the first tab and the landing view when opening Contests — it loads immediately on page open; Match Play still warms in the background so switching to it stays instant.",
+    ],
+  },
   {
     version: "2.28.10",
     date: "2026-07-04",
