@@ -6368,6 +6368,9 @@ _GG_CODE_NAME_OVERRIDES: dict = {
     "hcmr1": "Hill Country Matches - Valley",
     "hcmr2": "Hill Country Matches - Hills",
     "hcmr3": "Hill Country Matches - Creeks",
+    # Austin's kickoff points lines are labeled just "Kickoff" in GG —
+    # admin confirmed 2026-07-04 it IS a18.2 (keyed by first word)
+    "kickoff": "a18.2 AUSTIN KICKOFF | ShadowGlen",
 }
 
 
@@ -6413,8 +6416,16 @@ def substitute_gg_tournament_names(tables: list,
                 m = _GG_EVENT_CODE_COMPOUND_RE.match(cell)
                 if m:
                     code = m.group(1).lower()
-                    repl = code_map.get(code) or code_map.get(
-                        re.sub(r"[a-z]+$", "", code))
+                    repl = (code_map.get(code)
+                            # letter-suffix renames: hcmR1nm -> hcmr1
+                            or code_map.get(re.sub(r"[a-z]+$", "", code))
+                            # series-only event names: GG "a18.3" vs a
+                            # tracker event named "a18 CRYSTAL FALLS"
+                            or code_map.get(re.sub(r"\.\d+$", "", code)))
+                elif cell:
+                    # Code-less labels ("Kickoff POINTS Net - …") — the first
+                    # word can still key an admin override
+                    repl = code_map.get(cell.split(" ", 1)[0].lower())
                 if repl:
                     low = cell.lower()
                     if "front" in low:
