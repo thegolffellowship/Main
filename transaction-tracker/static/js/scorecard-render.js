@@ -20,8 +20,17 @@
         if (front.some(h => h.strokes != null)) blocks.push(["OUT", front]);
         if (back.some(h => h.strokes != null)) blocks.push(["IN", back]);
 
-        const td = "padding:2px 6px;text-align:center;border:1px solid #e2e8f0;min-width:2em;white-space:nowrap;";
-        const lbl = "padding:2px 8px;border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;";
+        // Compact variant on phones: tighter cells, smaller type, and
+        // abbreviated row labels so a full nine fits with minimal scrolling
+        const compact = typeof window !== "undefined" && window.matchMedia
+            && window.matchMedia("(max-width: 640px)").matches;
+        const td = `padding:${compact ? "1px 3px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.4em" : "2em"};white-space:nowrap;`;
+        const lbl = `padding:${compact ? "1px 4px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
+        const L = compact
+            ? { yds: "YDS", gs: "GROSS", gp: "G PTS", ns: "NET", np: "N PTS" }
+            : { yds: "YARDS", gs: "GROSS SCORE", gp: "GROSS PTS", ns: "NET SCORE", np: "NET PTS" };
+        const fs = compact ? "0.68rem" : "0.8rem";
+        const spanW = compact ? "1.25em" : "1.4em";
         const sectTop = "border-top:3px solid #0f172a;";
         const sectBot = "border-bottom:3px solid #0f172a;";
         const netOf = h => (h.strokes == null ? null : h.strokes - (h.strokes_received || 0));
@@ -38,7 +47,7 @@
         };
         const scoreCell = (h, extra) => {
             if (h.strokes == null) return `<td style="${td}${extra}"></td>`;
-            return `<td style="${td}${extra}"><span style="display:inline-block;min-width:1.4em;line-height:1.4em;${decoFor(h.vs_par)}">${h.strokes}</span></td>`;
+            return `<td style="${td}${extra}"><span style="display:inline-block;min-width:${spanW};line-height:${spanW};${decoFor(h.vs_par)}">${h.strokes}</span></td>`;
         };
         // stroke dots live on the NET row (they're what turns gross into
         // net), pinned to the cell corner so they never displace the number
@@ -68,7 +77,7 @@
             const netRow = hs.map(h => {
                 const n = netOf(h);
                 if (n == null) return `<td style="${td}${sectTop}"></td>`;
-                return `<td style="${td}${sectTop}font-weight:700;position:relative;">${strokeDots(h)}<span style="display:inline-block;min-width:1.4em;line-height:1.4em;${decoFor(h.net_vs_par)}">${n}</span></td>`;
+                return `<td style="${td}${sectTop}font-weight:700;position:relative;">${strokeDots(h)}<span style="display:inline-block;min-width:${spanW};line-height:${spanW};${decoFor(h.net_vs_par)}">${n}</span></td>`;
             }).join("");
             const npRow = hs.map(h => `<td style="${td}${grey}${sectBot}">${h.stableford_net ?? ""}</td>`).join("");
             const tot = `style="${td}font-weight:700;background:#f1f5f9;"`;
@@ -77,15 +86,15 @@
             const totN = `style="${td}${sectTop}font-weight:700;background:#f1f5f9;"`;
             const totNP = `style="${td}${grey}${sectBot}font-weight:600;"`;
             const totHead = `style="${td}font-weight:700;background:#111;color:#fff;"`;
-            return `<table style="border-collapse:collapse;font-size:0.8rem;margin:0.25rem 0;">
+            return `<table style="border-collapse:collapse;font-size:${fs};margin:0.25rem 0;">
                 <tr><td style="${lbl}background:#111;color:#fff;">HOLE</td>${holeRow}<td ${totHead}>${label}</td></tr>
                 <tr><td style="${lbl}">PAR</td>${parRow}<td ${tot}>${sum(hs, h => h.par) || ""}</td></tr>
-                <tr><td style="${lbl}">YARDS</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td></tr>
+                <tr><td style="${lbl}">${L.yds}</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td></tr>
                 <tr><td style="${lbl}" title="Hole handicap ranking: 1 = hardest">HCP</td>${siRow}<td ${tot}></td></tr>
-                <tr><td style="${lbl}${sectTop}font-weight:700;">GROSS SCORE</td>${scRow}<td ${totG}>${sum(hs, h => h.strokes) || ""}</td></tr>
-                <tr><td style="${lbl}${grey}">GROSS PTS</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>
-                <tr><td style="${lbl}${sectTop}font-weight:700;">NET SCORE</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
-                <tr><td style="${lbl}${grey}${sectBot}">NET PTS</td>${npRow}<td ${totNP}>${sumPts(hs, h => h.stableford_net)}</td></tr>
+                <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${scRow}<td ${totG}>${sum(hs, h => h.strokes) || ""}</td></tr>
+                <tr><td style="${lbl}${grey}">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>
+                <tr><td style="${lbl}${sectTop}font-weight:700;">${L.ns}</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
+                <tr><td style="${lbl}${grey}${sectBot}">${L.np}</td>${npRow}<td ${totNP}>${sumPts(hs, h => h.stableford_net)}</td></tr>
             </table>`;
         }).join("");
 

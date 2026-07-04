@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.28.3";
+window.TGF_VERSION = "2.28.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.4",
+    date: "2026-07-03",
+    changes: [
+      "Compact scorecard on phones: on screens up to 640px the card renders with tighter cell padding, smaller type, narrower score rings, and abbreviated row labels (GROSS / G PTS / NET / N PTS / YDS) so a full nine fits with minimal horizontal scrolling. Desktop rendering is unchanged. Applies to both the Contests drill-down and the member portal (shared logic in each renderer).",
+    ],
+  },
   {
     version: "2.28.3",
     date: "2026-07-03",
