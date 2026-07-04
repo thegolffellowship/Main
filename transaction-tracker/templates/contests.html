@@ -2143,7 +2143,7 @@
         }).join("");
         return `<div style="margin-top:0.7rem;">
             <div style="font-weight:700;font-size:0.8rem;letter-spacing:0.04em;color:#334155;margin-bottom:0.25rem;">
-                OTHER SCORECARDS${compact ? "" : ' <span style="font-weight:400;color:var(--text-muted);">— rounds without a points line above; click a row for hole-by-hole</span>'}
+                SCORECARDS WITHOUT A POINTS LINE${compact ? "" : ' <span style="font-weight:400;color:var(--text-muted);">— imported rounds Golf Genius has not awarded race points for (or guest rounds); click a row for hole-by-hole</span>'}
             </div>
             <table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>
@@ -2394,6 +2394,22 @@
                     const evtRaw = nb(r[evtCol] || "").replace(/\s+[—-]\s+(Front|Back)$/i, "").trim();
                     match = byEvent[evtRaw.toLowerCase()]
                         || (codeOf(evtRaw) ? byCode[codeOf(evtRaw)] : null);
+                    // League lines have no code and a different name shape:
+                    // GG "Hill Country Matches - Valley" vs imported round
+                    // "Hill Country Matches | Comanche Trace" whose COURSE
+                    // carries the nine ("… - VALLEY"). Fall back to base-name
+                    // prefix + qualifier-vs-course/tee matching.
+                    if (!match) {
+                        const parts = evtRaw.split(/\s+[-–—|]\s+/);
+                        const base = (parts[0] || "").trim().toLowerCase();
+                        const qual = parts.length > 1 ? parts[parts.length - 1].trim().toLowerCase() : "";
+                        if (base.length >= 8 && qual) {
+                            match = (rounds || []).find(x =>
+                                (x.event_name || "").trim().toLowerCase().startsWith(base)
+                                && `${x.event_name || ""} ${x.course_name || ""} ${x.tee_name || ""}`.toLowerCase().includes(qual)
+                            ) || null;
+                        }
+                    }
                 }
                 if (match && claimed) claimed.add(match.id);
                 parts.push(`<tr${match ? ` data-srid="${match.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard"` : ""}>${r.map((c, i) =>
