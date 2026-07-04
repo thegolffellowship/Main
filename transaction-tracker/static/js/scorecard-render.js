@@ -38,14 +38,15 @@
         };
         const scoreCell = (h, extra) => {
             if (h.strokes == null) return `<td style="${td}${extra}"></td>`;
-            const deco = decoFor(h.vs_par);
+            return `<td style="${td}${extra}"><span style="display:inline-block;min-width:1.4em;line-height:1.4em;${decoFor(h.vs_par)}">${h.strokes}</span></td>`;
+        };
+        // stroke dots live on the NET row (they're what turns gross into
+        // net), pinned to the cell corner so they never displace the number
+        const strokeDots = h => {
             const sr = h.strokes_received || 0;
-            // dots pinned to the cell's top-right corner so they never
-            // wrap under or displace the score number
-            const dots = sr
+            return sr
                 ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#334155;">${(sr > 0 ? "●" : "○").repeat(Math.abs(sr))}</span>`
                 : "";
-            return `<td style="${td}${extra}position:relative;">${dots}<span style="display:inline-block;min-width:1.4em;line-height:1.4em;${deco}">${h.strokes}</span></td>`;
         };
         const sum = (hs, f) => hs.reduce((a, h) => a + (f(h) || 0), 0);
         const sumPts = (hs, f) => {
@@ -67,7 +68,7 @@
             const netRow = hs.map(h => {
                 const n = netOf(h);
                 if (n == null) return `<td style="${td}${sectTop}"></td>`;
-                return `<td style="${td}${sectTop}font-weight:700;"><span style="display:inline-block;min-width:1.4em;line-height:1.4em;${decoFor(h.net_vs_par)}">${n}</span></td>`;
+                return `<td style="${td}${sectTop}font-weight:700;position:relative;">${strokeDots(h)}<span style="display:inline-block;min-width:1.4em;line-height:1.4em;${decoFor(h.net_vs_par)}">${n}</span></td>`;
             }).join("");
             const npRow = hs.map(h => `<td style="${td}${grey}${sectBot}">${h.stableford_net ?? ""}</td>`).join("");
             const tot = `style="${td}font-weight:700;background:#f1f5f9;"`;
