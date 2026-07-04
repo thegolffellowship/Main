@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.28.2";
+window.TGF_VERSION = "2.28.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.3",
+    date: "2026-07-03",
+    changes: [
+      "Handicap-stroke dots moved from the GROSS SCORE row to the NET SCORE row (admin request) — the dots are what turn gross into net, so they now annotate the number they produce. Gross row shows the clean score with its vs-par symbol; net row carries the corner-pinned dots plus its net-vs-par symbol. Both renderers (Contests drill-down + member portal).",
+    ],
+  },
   {
     version: "2.28.2",
     date: "2026-07-03",
