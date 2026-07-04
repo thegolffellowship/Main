@@ -8396,6 +8396,66 @@ def api_course_tees():
     return jsonify(list_courses())
 
 
+# ── Member portal (M1) — magic-link access, own data only ──────────────
+# No PIN/role gate: the signed token IS the credential, and customer_id is
+# derived exclusively from it (docs/claude/member-portal.md). Bumping
+# customers.portal_token_version revokes a member's outstanding links.
+
+def _portal_cid_or_none():
+    from email_parser.database import verify_portal_token
+    return verify_portal_token((request.args.get("t") or "").strip())
+
+
+@app.route("/me")
+def member_portal_page():
+    # The page itself carries no data — its JS presents the token to the
+    # /api/me endpoints. Render even with a bad token so the error is shown.
+    return render_template("me.html")
+
+
+@app.route("/api/me/summary")
+def api_me_summary():
+    cid = _portal_cid_or_none()
+    if not cid:
+        return jsonify({"error": "invalid or revoked link"}), 401
+    from email_parser.database import get_member_summary
+    summary = get_member_summary(cid)
+    return (jsonify(summary), 200) if summary else (jsonify({"error": "not found"}), 404)
+
+
+@app.route("/api/me/scorecards")
+def api_me_scorecards():
+    cid = _portal_cid_or_none()
+    if not cid:
+        return jsonify({"error": "invalid or revoked link"}), 401
+    from email_parser.database import get_scoring_rounds_list
+    return jsonify(get_scoring_rounds_list(None, None, cid, 100))
+
+
+@app.route("/api/me/scorecard/<int:scoring_round_id>")
+def api_me_scorecard(scoring_round_id):
+    cid = _portal_cid_or_none()
+    if not cid:
+        return jsonify({"error": "invalid or revoked link"}), 401
+    from email_parser.database import get_scorecard
+    card = get_scorecard(scoring_round_id)
+    if not card or card["round"].get("customer_id") != cid:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(card)
+
+
+@app.route("/api/customers/<int:customer_id>/portal-link")
+@require_role("manager")
+def api_customer_portal_link(customer_id):
+    """Generate (or re-fetch) a member's magic link for sharing."""
+    from email_parser.database import make_portal_token
+    tok = make_portal_token(customer_id)
+    if not tok:
+        return jsonify({"error": "unknown customer"}), 404
+    return jsonify({"customer_id": customer_id,
+                    "url": request.url_root.rstrip("/") + "/me?t=" + tok})
+
+
 _points_detail_cache: dict = {}
 _POINTS_DETAIL_CACHE_TTL = 600
 
