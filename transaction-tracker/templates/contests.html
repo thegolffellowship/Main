@@ -2118,15 +2118,20 @@
 
         const td = "padding:2px 6px;text-align:center;border:1px solid #e2e8f0;min-width:2em;";
         const lbl = `padding:2px 8px;border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
+        // Circle/square marks are vs-par symbols computed from OUR facts:
+        // the GROSS row uses vs_par, the NET row uses net_vs_par (GG's own
+        // markings are net-relative and stay stored for verification only)
+        const decoFor = d => {
+            if (d == null) return "";
+            if (d <= -2) return "border:1.5px solid #dc2626;border-radius:50%;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #dc2626;";
+            if (d === -1) return "border:1.5px solid #dc2626;border-radius:50%;";
+            if (d === 1) return "border:1.5px solid #2563eb;";
+            if (d >= 2) return "border:1.5px solid #2563eb;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #2563eb;";
+            return "";
+        };
         const scoreCell = (h, extra = "") => {
             if (h.strokes == null) return `<td style="${td}${extra}"></td>`;
-            // GG's markings are NET-relative: red circles = net under par,
-            // blue squares = net over par (double = by 2+)
-            let deco = "";
-            if (h.gg_result === "simple_circle") deco = "border:1.5px solid #dc2626;border-radius:50%;";
-            else if (h.gg_result === "double_circle") deco = "border:1.5px solid #dc2626;border-radius:50%;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #dc2626;";
-            else if (h.gg_result === "simple_square") deco = "border:1.5px solid #2563eb;";
-            else if (h.gg_result === "double_square") deco = "border:1.5px solid #2563eb;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #2563eb;";
+            const deco = decoFor(h.vs_par);
             const sr = h.strokes_received || 0;
             // ● = stroke received; ○ = stroke GIVEN BACK (plus handicap)
             const dots = sr
@@ -2153,7 +2158,11 @@
             const ydsRow = hs.map(h => `<td style="${td}">${h.yardage ?? ""}</td>`).join("");
             const siRow = hs.map(h => `<td style="${td}color:var(--text-muted);">${h.stroke_index ?? ""}</td>`).join("");
             const scRow = hs.map(h => scoreCell(h, sectTop + "font-weight:700;")).join("");
-            const netRow = hs.map(h => `<td style="${td}${sectBot}">${netOf(h) ?? ""}</td>`).join("");
+            const netRow = hs.map(h => {
+                const n = netOf(h);
+                if (n == null) return `<td style="${td}${sectBot}"></td>`;
+                return `<td style="${td}${sectBot}"><span style="display:inline-block;min-width:1.4em;line-height:1.4em;${decoFor(h.net_vs_par)}">${n}</span></td>`;
+            }).join("");
             const npRow = hs.map(h => `<td style="${td}">${h.stableford_net ?? ""}</td>`).join("");
             const gpRow = hs.map(h => `<td style="${td}color:var(--text-muted);">${h.stableford_gross ?? ""}</td>`).join("");
             const tot = `style="${td}font-weight:700;background:#f1f5f9;"`;
@@ -2182,8 +2191,9 @@
             <div style="font-size:0.8rem;color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
             <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
                 ● = handicap stroke received &nbsp;·&nbsp; ○ = stroke given back (plus handicap) &nbsp;·&nbsp;
-                <span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> net under par &nbsp;
-                <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> net over par (doubled ring/box = by 2+)
+                <span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
+                <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par (doubled ring/box = by 2+) —
+                gross row vs par, net row vs net
             </div>`;
     }
 
