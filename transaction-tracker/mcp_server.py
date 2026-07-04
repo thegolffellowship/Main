@@ -1356,6 +1356,8 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(card if card else {"error": "not found"}, indent=2)
         if cmd == "scoring-courses":
             return json.dumps(db.list_courses(), indent=2)
+        if cmd == "scoring-parity":
+            return json.dumps(db.get_differential_parity(), indent=2)
         if cmd == "scoring-resolve":
             # Identity debugging: how does a GG name resolve to a customer?
             with db._connect() as conn:
@@ -1517,6 +1519,17 @@ def verify_scoring_round_tool(scoring_round_id: int) -> str:
     """
     from email_parser.database import verify_scoring_round
     return json.dumps(verify_scoring_round(scoring_round_id), indent=2)
+
+
+@mcp.tool()
+def get_differential_parity_tool() -> str:
+    """Phase 2 parity proof: recompute every bridged handicap round's
+    adjusted gross + WHS differential from tracker-owned scorecard facts
+    and compare against the values imported from GG's handicap export.
+    When this holds at 100%, the handicap layer can derive from
+    scoring_rounds directly and the manual export/import ritual dies."""
+    from email_parser.database import get_differential_parity
+    return json.dumps(get_differential_parity(), indent=2)
 
 
 @mcp.tool()
