@@ -273,6 +273,13 @@
         }
         .enrollment-table td { padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border); }
         .enrollment-table tbody tr:hover { background: var(--row-hover); }
+        /* Phone-compact standings variant: tight cells + small type so every
+           column of a points-race table fits on screen at once */
+        .enrollment-table.pr-compact { font-size: 0.72rem; }
+        .enrollment-table.pr-compact th {
+            padding: 0.3rem 0.25rem; font-size: 0.6rem; letter-spacing: 0;
+        }
+        .enrollment-table.pr-compact td { padding: 0.3rem 0.25rem; }
 
         /* ── Points Race placeholder ── */
         .pr-section { padding: 1.5rem 2rem; }
@@ -331,7 +338,10 @@
             .pool-members { border-right: none; border-bottom: 1px solid var(--border); }
             .cmp-controls { padding: 0.65rem 1rem; }
             .enrollment-section { padding: 0.75rem 1rem; }
-            .pr-section { padding: 0.75rem 1rem; }
+            .pr-section { padding: 0.75rem 0.5rem; }
+            /* the two points-race cards carry inline padding:1rem 2rem —
+               reclaim that width on phones so the standings table fits */
+            .pr-section .standings-section { padding: 0.75rem 0.4rem !important; }
             .stableford-ref { grid-template-columns: 1fr; }
         }
     </style>
@@ -424,7 +434,7 @@
                         <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
                     </div>
                     <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
-                    <div id="pr-table-container"></div>
+                    <div id="pr-table-container" style="overflow-x:auto;"></div>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
                     <h4 id="pr-roster-title">Enrolled Players</h4>
@@ -1789,6 +1799,21 @@
 
     const PR_RACE_BY_TAB = { net: "san_antonio_net", austin: "austin_net", gross: "players_cup_gross" };
 
+    // Phones get compact standings + scorecard variants. The physical-screen
+    // check catches desktop-site mode, where the media query reports wide
+    function prIsCompact() {
+        return (window.matchMedia && window.matchMedia("(max-width: 640px)").matches)
+            || (window.screen && Math.min(window.screen.width || 9999, window.screen.height || 9999) <= 640);
+    }
+
+    // "San Antonio" -> SA, "Austin" -> AUS: initials for multi-word chapter
+    // names, first three letters otherwise (full name stays in the title)
+    function prAbbrevChapter(v) {
+        const words = String(v || "").trim().split(/\s+/).filter(Boolean);
+        if (!words.length) return "";
+        return (words.length > 1 ? words.map(w => w[0]).join("") : words[0].slice(0, 3)).toUpperCase();
+    }
+
     $("pr-refresh-btn").addEventListener("click", () => prLoadStandings(true));
 
     async function prLoadStandings(force = false) {
@@ -1833,23 +1858,25 @@
         const hasFlights = !!(d.flights && d.flights.length);
         const showChapter = !!d.cross_chapter;
         const nCols = showChapter ? 7 : 6;
-        const chapStyle = "width:130px;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;";
         // Fixed widths on every column but Player so the three race tabs
-        // lay out identically regardless of content
-        const rankStyle = "width:56px;";
-        const ptsStyle = "width:90px;text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;";
-        const resetStyle = "width:110px;text-align:center;border-right:2px solid #cbd5e1;";
-        const rndStyle = "width:80px;text-align:center;border-right:2px solid #cbd5e1;";
-        const buyStyle = "width:110px;";
+        // lay out identically regardless of content; phones get narrow
+        // columns + short labels so the whole table fits on screen at once
+        const compact = prIsCompact();
+        const chapStyle = `width:${compact ? "34px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const rankStyle = `width:${compact ? "28px" : "56px"};`;
+        const ptsStyle = `width:${compact ? "36px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const resetStyle = `width:${compact ? "44px" : "110px"};text-align:center;border-right:2px solid #cbd5e1;`;
+        const rndStyle = `width:${compact ? "26px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
+        const buyStyle = compact ? "width:28px;text-align:center;" : "width:110px;";
 
         const rowHtml = r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
                      : (r.customer_id ? "" : "background:#fffbeb;");
             const badge = r.enrolled
-                ? '<span style="color:#15803d;font-weight:700;">&#10003; IN</span>'
+                ? `<span style="color:#15803d;font-weight:700;" title="Bought in">&#10003;${compact ? "" : " IN"}</span>`
                 : (r.customer_id
-                    ? '<span style="color:#b91c1c;font-weight:600;">&#10007; Not in</span>'
-                    : '<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">? Unmatched</span>');
+                    ? `<span style="color:#b91c1c;font-weight:600;" title="Not bought in">&#10007;${compact ? "" : " Not in"}</span>`
+                    : `<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">?${compact ? "" : " Unmatched"}</span>`);
             const nameCell = r.customer_id
                 ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
@@ -1863,7 +1890,7 @@
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}>
                 <td style="${rankStyle}">${escapeHtml(r.rank)}</td>
                 <td>${nameCell}${hcp}${chevron}</td>
-                ${showChapter ? `<td style="${chapStyle}">${escapeHtml(r.player_chapter || "")}</td>` : ""}
+                ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
                 <td style="${resetStyle}">${prFmtReset(r.points_reset)}</td>
                 <td style="${rndStyle}">${r.tournaments ?? ""}</td>
@@ -1901,14 +1928,14 @@
         }
 
         $("pr-table-container").innerHTML = `
-            <table class="enrollment-table">
+            <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
-                    <th style="${rankStyle}">Rank</th><th>Player</th>
-                    ${showChapter ? `<th style="${chapStyle}">Chapter</th>` : ""}
-                    <th style="${ptsStyle}">POINTS</th>
-                    <th style="${resetStyle}"><span style="display:block;font-size:0.65rem;color:#d97706;font-weight:600;letter-spacing:0.03em;">(Projected)</span>POINTS RESET</th>
-                    <th style="${rndStyle}">Rounds</th>
-                    <th style="${buyStyle}">Buy-in</th>
+                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th>Player</th>
+                    ${showChapter ? `<th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>` : ""}
+                    <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
+                    <th style="${resetStyle}"><span style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};color:#d97706;font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
+                    <th style="${rndStyle}" title="Rounds">${compact ? "RDS" : "Rounds"}</th>
+                    <th style="${buyStyle}" title="Buy-in">${compact ? "IN" : "Buy-in"}</th>
                 </tr></thead>
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
@@ -1958,7 +1985,11 @@
             + (d.gg_error ? ` · ⚠ ${d.gg_error}` : "");
         $("pr-summary").title = "Projection only — the actual reset happens after the City Championships";
 
-        const resetTh = "width:110px;text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;";
+        const compact = prIsCompact();
+        const rankTh = `width:${compact ? "28px" : "56px"};`;
+        const chapTh = `width:${compact ? "34px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const netTh = `width:${compact ? "34px" : "90px"};text-align:center;`;
+        const resetTh = `width:${compact ? "44px" : "110px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rows = d.standings.map(r => {
             const bg = r.enrolled ? "background:#bbf7d0;"
                      : (r.customer_id ? "" : "background:#fffbeb;");
@@ -1968,21 +1999,21 @@
                 ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             return `<tr style="${bg}">
-                <td style="width:56px;">${escapeHtml(r.rank)}</td>
+                <td style="${rankTh}">${escapeHtml(r.rank)}</td>
                 <td>${nameCell}${hcp}</td>
-                <td style="width:130px;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${escapeHtml(r.chapter || "")}</td>
-                <td style="width:90px;text-align:center;">${escapeHtml(String(r.net_rank))}</td>
+                <td style="${chapTh}" title="${escapeHtml(r.chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.chapter) : (r.chapter || ""))}</td>
+                <td style="${netTh}">${escapeHtml(String(r.net_rank))}</td>
                 <td style="${resetTh}">${prFmtReset(r.points_reset)}</td>
             </tr>`;
         }).join("");
 
         $("pr-table-container").innerHTML = `
-            <table class="enrollment-table">
+            <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
-                    <th style="width:56px;">Rank</th><th>Player</th>
-                    <th style="width:130px;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">Chapter</th>
-                    <th style="width:90px;text-align:center;">NET Rank</th>
-                    <th style="${resetTh}"><span style="display:block;font-size:0.65rem;color:#d97706;font-weight:600;letter-spacing:0.03em;">(Projected)</span>POINTS RESET</th>
+                    <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th>Player</th>
+                    <th style="${chapTh}">${compact ? "CH" : "Chapter"}</th>
+                    <th style="${netTh}" title="Rank in their chapter's NET race">${compact ? "NET #" : "NET Rank"}</th>
+                    <th style="${resetTh}"><span style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};color:#d97706;font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>${compact ? "RESET" : "POINTS RESET"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
@@ -2120,12 +2151,8 @@
         if (back.some(h => h.strokes != null)) blocks.push(["IN", back]);
 
         // Compact variant on phones: tighter cells, smaller type, and
-        // abbreviated row labels so a full nine fits with minimal scrolling.
-        // Checks the PHYSICAL screen too — desktop-site mode / wide admin
-        // tables keep the layout viewport wide on a phone, so the media
-        // query alone misses it
-        const compact = (window.matchMedia && window.matchMedia("(max-width: 640px)").matches)
-            || (window.screen && Math.min(window.screen.width || 9999, window.screen.height || 9999) <= 640);
+        // abbreviated row labels so a full nine fits with minimal scrolling
+        const compact = prIsCompact();
         const td = `padding:${compact ? "1px 3px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.4em" : "2em"};white-space:nowrap;`;
         const lbl = `padding:${compact ? "1px 4px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`;
         const L = compact

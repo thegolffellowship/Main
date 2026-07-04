@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.28.6";
+window.TGF_VERSION = "2.28.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.7",
+    date: "2026-07-04",
+    changes: [
+      "Points-race standings now fit entirely on a phone screen — no more POINTS column cut off at the right edge. On phones the standings tables (all four tabs: San Antonio NET, Austin NET, The Fellowship Cup, The Players Cup) switch to a compact variant: narrow fixed columns, tighter cell padding, short headers (# / PTS / RESET / RDS / IN), the buy-in badge collapses to just ✓ / ✗ / ?, and chapter names abbreviate (San Antonio → SA, Austin → AUS) with the full value in the tooltip. Desktop layout is unchanged.",
+      "The two points-race cards' side padding shrinks on phones (their inline 2rem padding was eating 64px of table width), and the standings container got an overflow-x guard as a fallback so any residual overflow pans inside the card instead of stretching the page.",
+      "The phone-detection logic (viewport media query OR physical screen ≤ 640) now lives in one shared prIsCompact() helper used by both the standings tables and the scorecard renderer.",
+    ],
+  },
   {
     version: "2.28.6",
     date: "2026-07-04",
