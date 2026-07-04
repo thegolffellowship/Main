@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.28.5";
+window.TGF_VERSION = "2.28.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.6",
+    date: "2026-07-04",
+    changes: [
+      "Fixed the giant text on the tracker's mobile Contests drill-down: iOS Safari 'font boosting' inflates text whenever page content is wider than the screen, and the wide fixed-width standings tables triggered it — expanding a player made all the text grow and the scorecard showed only about one hole. Contests and My TGF pages now pin text-size-adjust to 100% so Safari never rescales.",
+      "The inline scorecard's scroll container is now capped at the viewport width (max-width: calc(100vw - 2rem)) on both the Contests drill-down and the member portal, so the card pans horizontally inside its own box instead of stretching the page.",
+    ],
+  },
   {
     version: "2.28.5",
     date: "2026-07-03",

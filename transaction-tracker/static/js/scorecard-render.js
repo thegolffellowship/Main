@@ -104,7 +104,7 @@
         if (r.gross != null) bits.push(`Gross <strong>${r.gross}</strong>`);
         if (r.net != null) bits.push(`Net <strong>${r.net}</strong>${r.playing_handicap != null ? ` (HCP ${fmtHcp(r.playing_handicap)})` : ""}`);
         if (dt.stableford_net != null) bits.push(`Stableford ${dt.stableford_net} net / ${dt.stableford_gross} gross`);
-        return `<div style="overflow-x:auto;">${tables}</div>
+        return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
             <div style="font-size:0.8rem;color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
             <div style="font-size:0.72rem;color:#64748b;margin-top:0.15rem;">
                 ● = handicap stroke received &nbsp;·&nbsp; ○ = stroke given back (plus handicap) &nbsp;·&nbsp;
