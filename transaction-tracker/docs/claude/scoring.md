@@ -154,6 +154,26 @@ player expands even without a GG member card. Rendering fns:
 prRenderDetailTables (matching) / prRenderScoreRounds /
 prBindScorecardToggles / prRenderScorecard in templates/contests.html.
 
+Card layout (v2.28.x): GROSS and NET sections each open with a thick
+border — bold score row (vs-par circle/square marks computed from
+tracker facts: gross row from `vs_par`, net row from `net_vs_par`) over
+a grey points band; handicap stroke dots (● received / ○ given back)
+sit on the NET row only, absolutely pinned to the cell corner so they
+never displace the number. Phones (media query max-width 640px OR
+physical screen ≤ 640 — the latter catches desktop-site mode) get a
+compact variant: tighter padding, smaller type, abbreviated labels.
+The member portal shares this via `static/js/scorecard-render.js` —
+keep it in sync with prRenderScorecard until unified.
+
+**iOS font-boosting gotcha (v2.28.6):** Safari inflates text on any
+page whose content is wider than the screen ("font boosting"), and the
+Contests page's wide fixed-width standings tables trigger it — text
+grew on player expand and the scorecard showed ~1 hole. Fix: pin
+`html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }`
+(contests.html + me.html) and cap the scorecard scroll container at
+`max-width: calc(100vw - 2rem)` so it pans inside its own box. Any new
+page with wide tables intended for phone viewing needs the same pin.
+
 ## Phase 2 — differential parity (v2.27.0, step 1 live)
 
 `get_differential_parity()` (MCP: get_differential_parity_tool; bridge:
