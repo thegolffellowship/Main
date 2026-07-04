@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.28.9";
+window.TGF_VERSION = "2.28.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.28.10",
+    date: "2026-07-04",
+    changes: [
+      "Long event names now wrap inside their cell instead of running across the POS column (the Cedar Creek case): the drill-down's space normalizer now catches the full family of exotic Unicode spaces Golf Genius emits (narrow no-break, en/em spaces, zero-width, BOM — not just plain &nbsp;), and compact table cells carry overflow-wrap:anywhere as a hard guarantee that text breaks rather than paints over a neighbor.",
+      "The scorecard's summary line (Gross/Net/Stableford) and symbol legend were running off screen without wrapping — their &nbsp;-glued separators defeated line breaking. On phones they now use plain separators and a viewport-width cap, so they fold into multiple lines.",
+      "Row hover highlighting is now limited to hover-capable devices — on iPhones the desktop :hover background stuck to whatever row you last tapped (the lavender row in the drill-down) until you tapped somewhere else.",
+    ],
+  },
   {
     version: "2.28.9",
     date: "2026-07-04",

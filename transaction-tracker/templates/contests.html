@@ -282,7 +282,11 @@
             padding: 0.4rem 0.75rem; border-bottom: 2px solid var(--border);
         }
         .enrollment-table td { padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border); }
-        .enrollment-table tbody tr:hover { background: var(--row-hover); }
+        /* hover-capable devices only — on touch screens iOS leaves :hover
+           stuck on whatever row was last tapped */
+        @media (hover: hover) {
+            .enrollment-table tbody tr:hover { background: var(--row-hover); }
+        }
         /* Phone-compact standings variant: tight cells + small type so every
            column of a points-race table fits on screen at once. Fixed layout
            makes the declared column widths binding — long content wraps
@@ -291,7 +295,12 @@
         .enrollment-table.pr-compact th {
             padding: 0.3rem 0.25rem; font-size: 0.6rem; letter-spacing: 0;
         }
-        .enrollment-table.pr-compact td { padding: 0.3rem 0.25rem; }
+        .enrollment-table.pr-compact td {
+            padding: 0.3rem 0.25rem;
+            /* long event/player names must break INSIDE their cell — never
+               paint across the neighboring column */
+            overflow-wrap: anywhere;
+        }
 
         /* ── Points Race placeholder ── */
         .pr-section { padding: 1.5rem 2rem; }
@@ -2260,11 +2269,14 @@
         if (r.net != null) bits.push(`Net <strong>${r.net}</strong>${r.playing_handicap != null ? ` (HCP ${prFmtHcp(r.playing_handicap)})` : ""}`);
         if (dt.stableford_net != null) bits.push(`Stableford ${dt.stableford_net} net / ${dt.stableford_gross} gross`);
         if (dt.adjusted_gross != null) bits.push(`Adj. gross ${dt.adjusted_gross}`);
+        // Phones: plain-space separators (the &nbsp; glue defeats line
+        // wrapping) and a hard viewport cap so the text always folds
+        const sep = compact ? " · " : " &nbsp;·&nbsp; ";
+        const noteW = compact ? "max-width:calc(100vw - 3rem);" : "";
         return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
-            <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
-            <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:var(--text-muted);margin-top:0.15rem;">
-                ● = handicap stroke received &nbsp;·&nbsp; ○ = stroke given back (plus handicap) &nbsp;·&nbsp;
-                <span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
+            <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;${noteW}">${bits.join(sep)}</div>
+            <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:var(--text-muted);margin-top:0.15rem;${noteW}">
+                ● = handicap stroke received${sep}○ = stroke given back (plus handicap)${sep}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
                 <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par (doubled ring/box = by 2+) —
                 gross row vs par, net row vs net
             </div>`;
@@ -2313,7 +2325,7 @@
             // GG cells separate words with non-breaking spaces — swap them
             // for regular spaces or the text can't wrap and paints over the
             // neighboring column in the width-locked compact tables
-            const nb = v => String(v ?? "").replace(/\u00a0/g, " ");
+            const nb = v => String(v ?? "").replace(/[\u00a0\u1680\u2000-\u200b\u202f\u205f\u3000\ufeff]/g, " ");
             const remap = row => (order && row.length === orig.length) ? order.map(i => row[i]) : row;
             let head = remap(orig).map(h => (h || "").trim().toLowerCase() === "tournament" ? "EVENT" : h);
             let evtCol = remap(orig).findIndex(h => (h || "").trim().toLowerCase() === "tournament");

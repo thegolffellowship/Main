@@ -104,11 +104,14 @@
         if (r.gross != null) bits.push(`Gross <strong>${r.gross}</strong>`);
         if (r.net != null) bits.push(`Net <strong>${r.net}</strong>${r.playing_handicap != null ? ` (HCP ${fmtHcp(r.playing_handicap)})` : ""}`);
         if (dt.stableford_net != null) bits.push(`Stableford ${dt.stableford_net} net / ${dt.stableford_gross} gross`);
+        // Phones: plain-space separators (the &nbsp; glue defeats line
+        // wrapping) and a hard viewport cap so the text always folds
+        const sep = compact ? " · " : " &nbsp;·&nbsp; ";
+        const noteW = compact ? "max-width:calc(100vw - 3rem);" : "";
         return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
-            <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;">${bits.join(" &nbsp;·&nbsp; ")}</div>
-            <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:#64748b;margin-top:0.15rem;">
-                ● = handicap stroke received &nbsp;·&nbsp; ○ = stroke given back (plus handicap) &nbsp;·&nbsp;
-                <span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
+            <div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;${noteW}">${bits.join(sep)}</div>
+            <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:#64748b;margin-top:0.15rem;${noteW}">
+                ● = handicap stroke received${sep}○ = stroke given back (plus handicap)${sep}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
                 <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par (doubled = by 2+) —
                 gross row vs par, net row vs net
             </div>`;
