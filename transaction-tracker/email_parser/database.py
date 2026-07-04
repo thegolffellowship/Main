@@ -7293,9 +7293,13 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
                     k = cid if cid is not None else f"n:{r['player_name'].lower()}"
                     cur = best.get(k)
                     if cur is None or pts > cur["points"]:
+                        # chapter from the ROW's affiliation ("TGF Austin"),
+                        # not the portal — the monthly tables are TGF-wide
+                        aff = re.sub(r"^TGF\s+", "",
+                                     (r.get("affiliation") or "").strip())
                         best[k] = {"player_name": r["player_name"],
                                    "customer_id": cid,
-                                   "chapter": chapter,
+                                   "chapter": aff or chapter,
                                    "rounds": r.get("tournaments"),
                                    "points": pts}
             standings = sorted(best.values(), key=lambda x: -x["points"])

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.30.0";
+window.TGF_VERSION = "2.30.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.30.1",
+    date: "2026-07-04",
+    changes: [
+      "MONTHLY tab refinements per admin: player rows now expand to that month's rounds (each opening the same hole-by-hole scorecard as everywhere else); a PURSE column shows the winner's split on final months and the projected total on the current leader for in-progress months; the title and purse-calculation summary lines are gone (the month tabs carry the context); Refresh is now a small inline button right of the month tabs.",
+      "Fixed the Chapter column showing San Antonio for every player: the merge stamped the portal's chapter instead of each row's affiliation — and since the monthly tables are TGF-wide, the SA portal's pass won every row. Chapter now comes from the player's own affiliation.",
+      "All expand chevrons in the points-race drill-downs are bigger and blue (primary color) so they read as tappable.",
+    ],
+  },
   {
     version: "2.30.0",
     date: "2026-07-04",

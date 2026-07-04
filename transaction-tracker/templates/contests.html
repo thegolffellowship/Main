@@ -1917,6 +1917,8 @@
 
     async function prLoadStandings(force = false) {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "net";
+        // monthly swaps the header refresh button for an inline one
+        $("pr-refresh-btn").style.display = kind === "monthly" ? "none" : "";
         if (kind === "tfc") return prLoadFellowship(force);
         if (kind === "monthly") return prLoadMonthly(force);
         const race = PR_RACE_BY_TAB[kind];
@@ -1982,7 +1984,7 @@
                 : escapeHtml(r.player_name);
             const expandable = !!(r.member_card_id || r.customer_id);
             const chevron = expandable
-                ? ' <span class="pr-chevron" style="color:var(--text-muted);font-size:0.7rem;" title="Round-by-round points & imported scorecards">&#9656;</span>'
+                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:0.85rem;" title="Round-by-round points & imported scorecards">&#9656;</span>'
                 : '';
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
@@ -2124,7 +2126,9 @@
 
     async function prLoadMonthly(force = false) {
         const cont = $("pr-table-container");
-        $("pr-standings-title").textContent = "MONTHLY POINTS";
+        // no standing title/summary for monthly — the month tabs carry it,
+        // and the global refresh button is replaced by an inline one
+        $("pr-standings-title").textContent = "";
         $("pr-summary").textContent = "";
         if (!prMonthlyData || force) {
             cont.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">'
@@ -2163,18 +2167,11 @@
                 ${compact ? x.name.slice(0, 3) : x.name}${x.complete ? "" : " •"}</button>`;
         }).join(" ");
 
-        $("pr-standings-title").textContent = `MONTHLY POINTS — ${sel.name}${sel.complete ? "" : " (in progress)"}`;
-        $("pr-summary").textContent = sel.complete
-            ? `Final — purse $${sel.purse} ($1 × ${sel.member_count} members on ${sel.month_end})`
-              + (sel.winners.length
-                  ? ` · winner${sel.winners.length > 1 ? "s (split)" : ""}: ${sel.winners.map(w => `${w.player_name} ($${w.share})`).join(", ")}`
-                  : "")
-            : `In progress — projected purse $${sel.purse} ($1 × ${sel.member_count} current members) · all points this month count, no cap`;
-
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
         const chapStyle = `width:${compact ? "32px" : "130px"};border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const rndStyle = `width:${compact ? "24px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const ptsStyle = `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
+        const purseStyle = `width:${compact ? "48px" : "90px"};text-align:center;`;
         const rows = sel.standings.map(r => {
             const win = sel.complete && sel.winners.some(w =>
                 (w.customer_id != null && w.customer_id === r.customer_id) || w.player_name === r.player_name);
@@ -2182,28 +2179,83 @@
             const name = r.customer_id
                 ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
-            return `<tr style="${bg}">
+            const chevron = r.customer_id
+                ? ' <span class="pr-chevron" style="color:var(--primary);font-size:0.85rem;" title="This month&#39;s rounds & scorecards">&#9656;</span>'
+                : '';
+            let purse = "";
+            if (win) purse = `<strong>$${sel.winners[0].share}</strong>`;
+            else if (!sel.complete && r.rank === 1)
+                purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
+            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}" style="${bg}cursor:pointer;"` : ` style="${bg}"`}>
                 <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${win ? " &#127942;" : ""}</td>
+                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${win ? " &#127942;" : ""}${chevron}</td>
                 <td style="${chapStyle}" title="${escapeHtml(r.chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.chapter) : (r.chapter || ""))}</td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td style="${ptsStyle}">${r.points}</td>
+                <td style="${purseStyle}">${purse}</td>
             </tr>`;
         }).join("");
 
         cont.innerHTML = `
-            <div style="display:flex;flex-wrap:wrap;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}</div>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
+                <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius"
+                    style="padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;
+                           border:1px solid var(--border);border-radius:999px;background:var(--surface);
+                           color:var(--text-muted);margin-left:auto;">&#8635; Refresh</button>
+            </div>
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
                     <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th>Player</th>
                     <th style="${chapStyle}">${compact ? "CH" : "Chapter"}</th>
                     <th style="${rndStyle}" title="Rounds this month">${compact ? "R" : "Rounds"}</th>
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
+                    <th style="${purseStyle}" title="$1 per TGF member at month close; ties split">${compact ? "$" : "PURSE"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
         cont.querySelectorAll("button[data-mp]").forEach(b =>
             b.addEventListener("click", () => { prMonthlySel = b.dataset.mp; prRenderMonthly(); }));
+        const rbtn = cont.querySelector("#pr-monthly-refresh");
+        if (rbtn) rbtn.addEventListener("click", () => prLoadMonthly(true));
+        cont.querySelectorAll("tr[data-cid]").forEach(tr => {
+            tr.addEventListener("click", ev => {
+                if (ev.target.closest("a") || ev.target.closest("button")) return;
+                prMonthlyToggle(tr, sel.month);
+            });
+        });
+    }
+
+    // Expand a monthly row: that month's imported rounds, each expandable
+    // to the same hole-by-hole card as everywhere else
+    async function prMonthlyToggle(tr, monthKey) {
+        const chev = tr.querySelector(".pr-chevron");
+        const next = tr.nextElementSibling;
+        if (next && next.classList.contains("pr-mo-detail")) {
+            next.remove();
+            if (chev) chev.innerHTML = "&#9656;";
+            return;
+        }
+        const cont = $("pr-table-container");
+        cont.querySelectorAll("tr.pr-mo-detail").forEach(x => x.remove());
+        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9656;");
+        const detail = document.createElement("tr");
+        detail.className = "pr-mo-detail";
+        detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 0"};color:var(--text-muted);">Loading rounds…</td>`;
+        tr.after(detail);
+        if (chev) chev.innerHTML = "&#9662;";
+        const cell = detail.firstElementChild;
+        try {
+            const res = await fetch(`/api/scoring/rounds?customer_id=${encodeURIComponent(tr.dataset.cid)}&limit=100`);
+            const rounds = res.ok ? await res.json() : [];
+            const inMonth = (rounds || []).filter(x => String(x.round_date || "").startsWith(monthKey));
+            cell.innerHTML = prRenderScoreRounds(inMonth,
+                {title: "ROUNDS THIS MONTH", explainer: "— click a row for hole-by-hole"})
+                || '<span style="color:var(--text-muted);">No imported scorecards for this month.</span>';
+            cell.style.color = "";
+            prBindScorecardToggles(cell);
+        } catch (e) {
+            cell.innerHTML = `<span style="color:#b91c1c;">${escapeHtml(e.message)}</span>`;
+        }
     }
 
     async function prToggleDetail(tr, raceKey) {
@@ -2262,8 +2314,11 @@
     // /api/scoring/rounds rows → compact list; clicking a row lazy-loads
     // /api/scoring/scorecard/<id> and renders the classic hole-by-hole grid.
 
-    function prRenderScoreRounds(rounds) {
+    function prRenderScoreRounds(rounds, opts = {}) {
         if (!rounds || !rounds.length) return "";
+        const secTitle = opts.title || "NON-POINTS EVENTS";
+        const secNote = opts.explainer !== undefined ? opts.explainer
+            : "— rounds with no points line in this race; click a row for hole-by-hole";
         // Phones fold Course/Tee into a muted second line under the event
         // and shorten the date so all the numeric columns stay on screen
         const compact = prIsCompact();
@@ -2280,7 +2335,7 @@
                 : "";
             return `<tr data-srid="${r.id}" style="cursor:pointer;" title="Click for the hole-by-hole scorecard">
                 <td style="white-space:nowrap;">${escapeHtml(dateTxt)}</td>
-                <td class="pr-wrap"><span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span> ${escapeHtml((compact ? prPrettyEvent(r.event_name || "") : (r.event_name || "")).replace(/[–—]/g, "-"))}${prBadgeLayout(prMvpBadges(r), r.event_name, compact)}${courseCell}</td>
+                <td class="pr-wrap"><span class="pr-sc-chev" style="color:var(--primary);font-size:0.85rem;">&#9656;</span> ${escapeHtml((compact ? prPrettyEvent(r.event_name || "") : (r.event_name || "")).replace(/[–—]/g, "-"))}${prBadgeLayout(prMvpBadges(r), r.event_name, compact)}${courseCell}</td>
                 ${compact ? "" : `<td>${escapeHtml(course)}${sr ? ` <span style="color:var(--text-muted);font-size:0.8em;">(${escapeHtml(sr)})</span>` : ""}</td>`}
                 <td style="text-align:center;">${r.holes_played ?? ""}</td>
                 <td style="text-align:center;">${prFmtHcp(r.playing_handicap)}</td>
@@ -2290,7 +2345,7 @@
         }).join("");
         return `<div style="margin-top:0.7rem;">
             <div style="font-weight:700;font-size:0.8rem;letter-spacing:0.04em;color:#334155;margin-bottom:0.25rem;">
-                NON-POINTS EVENTS${compact ? "" : ' <span style="font-weight:400;color:var(--text-muted);">— rounds with no points line in this race; click a row for hole-by-hole</span>'}
+                ${secTitle}${compact || !secNote ? "" : ` <span style="font-weight:400;color:var(--text-muted);">${secNote}</span>`}
             </div>
             <table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0;font-size:${compact ? "0.72rem" : "0.82rem"};">
                 <thead><tr>
@@ -2598,7 +2653,7 @@
                     if (i === dateCol) val = prFmtAwardDate(val, compact);
                     else if (compact && i === evtCol) val = prPrettyEvent(val);
                     if (i === evtCol && match) val += prNineSuffix(val, match);
-                    const chev = match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--text-muted);font-size:0.7rem;">&#9656;</span>' : "";
+                    const chev = match && i === evtCol ? ' <span class="pr-sc-chev" style="color:var(--primary);font-size:0.85rem;">&#9656;</span>' : "";
                     const badges = i === evtCol && match
                         ? prBadgeLayout(prMvpBadges(match), val, compact) : "";
                     return `<td${i === evtCol ? ' class="pr-wrap"' : ""} style="${style}">${escapeHtml(val)}${chev}${badges}</td>`;
