@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.32.2";
+window.TGF_VERSION = "2.32.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.3",
+    date: "2026-07-05",
+    changes: [
+      "New docs/claude/side-games.md: the full side-games catalog reverse-engineered from live GG portal results and reconciled against the prize matrix — fee architecture ($7/player event game money, $13 NET package, $15 GROSS package), TEAM Net best-ball with blind draws, flighted Individual Net/Gross and Skins, city/TGF MVP pots at $2/buyer, CTPs at $1/player, hole-in-one reserve, and season match play brackets. Marked DRAFT pending admin verification; open questions listed (teamMWP meaning, CTP no-winner handling, GROSS $2 residual, first MVP tiebreaker).",
+    ],
+  },
   {
     version: "2.32.2",
     date: "2026-07-05",
