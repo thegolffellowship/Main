@@ -7333,6 +7333,32 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
     return {"months": out_months, "errors": errors}
 
 
+def get_customer_gg_cards(customer_id: int, db_path: str | Path = DB_PATH) -> list[dict]:
+    """Races a customer appears in, from the gg_points_standings snapshot.
+
+    Powers the Customers Points tab: each row carries the member_card_id
+    the points-race detail endpoint needs plus the last-known standings
+    line for the summary strip. Freshness rides the standings' 12h
+    auto-refresh (any Contests visit also refreshes) — fetched_at shows
+    the age.
+    """
+    with _connect(db_path) as conn:
+        _ensure_gg_points_table(conn)
+        rows = conn.execute(
+            """SELECT race_key, rank, player_name, tournaments, wins,
+                      total_points, points_behind, member_card_id, fetched_at
+               FROM gg_points_standings WHERE customer_id = ?
+               ORDER BY race_key""",
+            (customer_id,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["race_label"] = (_GG_POINTS_RACES.get(r["race_key"]) or {}).get("label") or r["race_key"]
+        out.append(d)
+    return out
+
+
 # ── Golf Genius data snapshots ──────────────────────────────────────────
 # GG-derived payloads persisted so page opens serve instantly from the DB
 # instead of waiting on live portal fetches. Refreshed by a daily

@@ -4298,6 +4298,19 @@ def api_customer_winnings():
     return jsonify(get_customer_winnings(name, customer_id=customer_id))
 
 
+@app.route("/api/customers/<int:customer_id>/gg-cards")
+@require_role("manager")
+def api_customer_gg_cards(customer_id):
+    """Races this customer appears in (persisted GG standings rows).
+
+    Powers the Customers Points tab: race_key + member_card_id feed the
+    existing points-race detail endpoint; rank/points make the summary
+    strip. Manager role matches the Contests endpoints the tab chains to.
+    """
+    from email_parser.database import get_customer_gg_cards
+    return jsonify({"cards": get_customer_gg_cards(customer_id)})
+
+
 @app.route("/api/customers/from-rsvp", methods=["POST"])
 @require_role("manager")
 def api_create_customer_from_rsvp():
