@@ -49,12 +49,13 @@ now runs most of TGF's operations:
 These were reverse-engineered from live GG data and cross-verified —
 they are load-bearing for Platform scoring design:
 
-- **Race points = each player's net Stableford score in the event's
-  POINTS game, floored at 0.** There is no position→points table.
-  Season standing = best 10 events + City Championship. (Verified
-  against two players' full point histories plus a complete event
-  table; same-position-different-points cases rule out position
-  schedules.)
+- **Race points = each player's Stableford score in the event's
+  POINTS game, floored at 0** — net Stableford for NET races, gross
+  Stableford for THE PLAYERS CUP. No position→points table exists.
+  Season standing = best 10 events + City Championship (both race
+  types). (Verified across both models against live GG member details
+  and complete event tables, including direct floor-at-0 confirmation
+  on a -6 gross round.)
 - **Monthly races**: ALL points earned in the month count (no best-10);
   purse = $1 × active TGF members at month close; ties split.
 - **member_card_id == GG profile id**, global across GG leagues.
