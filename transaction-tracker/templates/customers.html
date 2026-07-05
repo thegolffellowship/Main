@@ -4195,7 +4195,27 @@
             return false;
         }
 
-        // Auto-refresh every 30s to keep multiple users in sync
+        // Auto-refresh every 30s to keep multiple users in sync — but only
+        // rebuild the page when the data actually changed. Most ticks change
+        // nothing; skipping them leaves the DOM untouched (scroll position,
+        // expanded cards, open scorecards, active tab all survive). The
+        // fingerprint covers the payloads init() renders from; a changed
+        // tick falls through to the full init() rebuild as before.
+        let _lastSyncFp = null;
+        const _syncHash = str => {
+            let h = 5381;
+            for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+            return h.toString(36);
+        };
+        async function autoRefreshIfChanged() {
+            const urls = ["/api/items", "/api/customers", "/api/memberships/current", "/api/handicaps/players"];
+            const texts = await Promise.all(urls.map(u =>
+                fetch(u).then(r => r.ok ? r.text() : "").catch(() => "")));
+            const fp = texts.map(t => `${t.length}:${_syncHash(t)}`).join("|");
+            if (fp === _lastSyncFp) return;
+            await init();
+            _lastSyncFp = fp;
+        }
         setInterval(async () => {
             try {
                 const creditOverlay = document.getElementById("cust-credit-overlay");
@@ -4203,7 +4223,7 @@
                 const creditOpen = creditOverlay && creditOverlay.style.display === "flex";
                 const loginOpen = loginOverlay && loginOverlay.style.display === "flex";
                 if (!creditOpen && !loginOpen && !hasOpenCustomerEdit()) {
-                    await init();
+                    await autoRefreshIfChanged();
                 }
             } catch (err) {
                 console.warn("Auto-refresh failed:", err);
