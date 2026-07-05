@@ -22,7 +22,17 @@ now runs most of TGF's operations:
   generator (seed/lock/cart pairs/round-robin history), payouts with
   screenshot import (Claude Vision), side-games prize matrix.
 - **Accounting** — multi-entity ledger, bank reconciliation with match
-  queue, cash-flow view, duplicate detective, month-end close.
+  queue, cash-flow view, duplicate detective, month-end close;
+  automated expense ingestion (CC/bank alert emails classified and
+  categorized by vendor).
+- **Handicaps** — TGF 9-hole index system computed from
+  handicap_rounds (lookback + best-N differentials), curated GG-name
+  links; today's GG sync is a manual CSV export the admin uploads in
+  the GG UI — Phase 2 (differential parity, step 1 live) aims to
+  derive differentials from our own imported scorecards and kill that
+  ritual entirely.
+- **Participation** — last-played/frequency/trend analysis per member
+  with a re-engagement email composer.
 - **COO layer** — dashboard with action items + AI chat (6 specialist
   agents), daily digest email with DB health metrics.
 - **SCORING (the big 2026 build)** — hole-by-hole scorecards imported
