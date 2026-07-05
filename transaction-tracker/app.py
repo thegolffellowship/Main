@@ -1289,6 +1289,39 @@ def start_scheduler():
     # for explicit admin-triggered attempts.
     logger.info("Golf Genius nightly sync disabled — handicaps are exported manually via CSV")
 
+    # Monthly points snapshot — daily GG refresh so the Contests MONTHLY
+    # tab serves instantly from the DB; the Refresh button covers
+    # same-day needs. 05:30 Central sits between the digest jobs.
+    def refresh_monthly_points_job():
+        from email_parser.database import refresh_monthly_points_snapshot
+        try:
+            refresh_monthly_points_snapshot()
+            logger.info("Monthly points snapshot refreshed from Golf Genius")
+        except Exception:
+            logger.exception("Monthly points snapshot refresh failed (non-fatal)")
+
+    scheduler.add_job(
+        refresh_monthly_points_job,
+        "cron",
+        hour=5,
+        minute=30,
+        timezone="US/Central",
+        id="monthly_points_snapshot",
+        replace_existing=True,
+    )
+    logger.info("Monthly points snapshot refresh scheduled daily at 05:30 US/Central")
+
+    # First boot after this ships (or a fresh volume): populate the
+    # snapshot in the background so the first MONTHLY open doesn't wait
+    try:
+        from email_parser.database import load_gg_snapshot
+        if load_gg_snapshot("monthly_points") is None:
+            scheduler.add_job(refresh_monthly_points_job,
+                              id="monthly_points_bootstrap", replace_existing=True)
+            logger.info("No monthly points snapshot found — bootstrap fetch queued")
+    except Exception:
+        logger.exception("Monthly points bootstrap check failed (non-fatal)")
+
     # Weekly cleanup: prune old processed_emails records (>90 days)
     scheduler.add_job(
         prune_processed_emails,
@@ -8498,36 +8531,31 @@ def api_season_contest_points_race_detail():
     return jsonify(data)
 
 
-_monthly_points_cache: dict = {}
-_MONTHLY_POINTS_CACHE_TTL = 600
-
-
 @app.route("/api/season-contests/monthly-points")
 @require_role("manager")
 def api_season_contest_monthly_points():
     """Combined monthly points races (both chapters) with winner + purse.
 
-    Live-fetched from the portals' '<MONTH> Points' pages (discovered
-    from each portal's page menu) and cached 10 minutes; ?force=1
-    refetches. Purse = $1 per active TGF member at the close of the
-    month; ties split it.
+    Served from the persisted DB snapshot (gg_data_snapshots) so opening
+    the MONTHLY tab never waits on Golf Genius. ?force=1 (the Refresh
+    button) live-refetches and updates the snapshot; a daily scheduler
+    job does the same, bounding staleness at ~24h. Purse = $1 per active
+    TGF member at the close of the month; ties split it.
     """
-    from email_parser.database import get_monthly_points
+    from email_parser.database import load_gg_snapshot, refresh_monthly_points_snapshot
     force = request.args.get("force") == "1"
-    now = time.time()
-    cached = _monthly_points_cache.get("data")
-    if cached and not force and now - cached[0] < _MONTHLY_POINTS_CACHE_TTL:
-        return jsonify(cached[1])
+    snapshot = load_gg_snapshot("monthly_points")
+    if snapshot and not force:
+        return jsonify(snapshot)
     try:
-        data = get_monthly_points()
+        data = refresh_monthly_points_snapshot()
     except Exception as e:
         logger.exception("Monthly points fetch failed")
-        if cached:
-            stale = dict(cached[1])
+        if snapshot:
+            stale = dict(snapshot)
             stale["gg_error"] = str(e)
             return jsonify(stale)
         return jsonify({"error": f"Golf Genius fetch failed: {e}"}), 502
-    _monthly_points_cache["data"] = (now, data)
     return jsonify(data)
 
 

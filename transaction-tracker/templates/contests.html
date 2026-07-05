@@ -1747,7 +1747,7 @@
         const isManager = userRole === "admin" || userRole === "manager";
         const rows = data.map(e => `
             <tr>
-                <td><a href="/customers?name=${encodeURIComponent(e.customer_name || '')}" class="cell-link">${escapeHtml(e.customer_name)}</a></td>
+                <td><a href="${custHref(e.customer_id, e.customer_name)}" class="cell-link">${escapeHtml(e.customer_name)}</a></td>
                 <td>${escapeHtml(e.chapter || '—')}</td>
                 <td>${escapeHtml(e.contest_type)}</td>
                 <td>${escapeHtml(e.season || '—')}</td>
@@ -1809,7 +1809,7 @@
 
         const rows = data.map(r => `
             <tr>
-                <td><a href="/customers?name=${encodeURIComponent(r.customer_name || '')}" class="cell-link">${escapeHtml(r.customer_name)}</a></td>
+                <td><a href="${custHref(r.customer_id, r.customer_name)}" class="cell-link">${escapeHtml(r.customer_name)}</a></td>
                 <td>${escapeHtml(r.chapter || '—')}</td>
                 <td>${escapeHtml(r.contest_type)}</td>
                 <td>${escapeHtml(r.season || '—')}</td>
@@ -1843,6 +1843,14 @@
     function prIsCompact() {
         return (window.matchMedia && window.matchMedia("(max-width: 640px)").matches)
             || (window.screen && Math.min(window.screen.width || 9999, window.screen.height || 9999) <= 640);
+    }
+
+    // Deep-link to a customer profile by id — the Customers page matches
+    // cid exactly, while GG-format names ("Rob Callaway") don't match the
+    // tracker's "Callaway, Rob" cards. Name href kept only as a fallback
+    // for rows that never resolved to a profile.
+    function custHref(cid, name) {
+        return cid ? `/customers?cid=${cid}` : `/customers?name=${encodeURIComponent(name || "")}`;
     }
 
     // "San Antonio" -> SA, "Austin" -> AUS: initials for multi-word chapter
@@ -1980,7 +1988,7 @@
                     ? `<span style="color:#b91c1c;font-weight:600;" title="Not bought in">&#10007;${compact ? "" : " Not in"}</span>`
                     : `<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">?${compact ? "" : " Unmatched"}</span>`);
             const nameCell = r.customer_id
-                ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
+                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             const expandable = !!(r.member_card_id || r.customer_id);
             const chevron = expandable
@@ -2098,7 +2106,7 @@
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
             const nameCell = r.customer_id
-                ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
+                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             return `<tr style="${bg}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}</td>
@@ -2183,7 +2191,7 @@
             // only on phones — "A" / "SA" — since even AUS overflows
             const chAbbr = String(r.chapter || "").trim().split(/\s+/).filter(Boolean).map(w => w[0]).join("").toUpperCase();
             const name = r.customer_id
-                ? `<a href="/customers?name=${encodeURIComponent(r.player_name)}" class="cell-link">${escapeHtml(r.player_name)}</a>`
+                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             const chevron = r.customer_id
                 ? ' <span class="pr-chevron" style="color:var(--primary);font-size:0.85rem;" title="This month&#39;s rounds & scorecards">&#9656;</span>'
@@ -2204,10 +2212,11 @@
 
         cont.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
-                <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius"
+                <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius${prMonthlyData.fetched_at ? ` (last: ${prMonthlyData.fetched_at})` : ""}"
                     style="padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;
                            border:1px solid var(--border);border-radius:999px;background:var(--surface);
                            color:var(--text-muted);margin-left:auto;">&#8635; Refresh</button>
+                ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml(prMonthlyData.fetched_at)}</span>` : ""}
             </div>
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>

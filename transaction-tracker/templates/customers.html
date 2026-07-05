@@ -3850,11 +3850,24 @@
 
             if (!initialLoadDone) {
                 initialLoadDone = true;
-                // Check if URL has ?name= parameter to pre-select a customer
+                // Check if URL has ?cid= or ?name= to pre-select a customer.
+                // cid is the reliable key (Contests links send it); name is a
+                // fallback matched loosely — referrers send "Rob Callaway"
+                // while cards read "Callaway, Rob", so exact equality alone
+                // would miss every cross-page link.
                 const params = new URLSearchParams(window.location.search);
                 const nameParam = params.get("name");
-                if (nameParam) {
-                    const match = allCustomers.find(c => c.name === nameParam);
+                const cidParam = params.get("cid");
+                if (nameParam || cidParam) {
+                    const tokens = s => String(s || "").toLowerCase().replace(/,/g, " ")
+                        .split(/\s+/).filter(Boolean).sort().join(" ");
+                    let match = cidParam
+                        ? allCustomers.find(c => String(c.customer_id) === cidParam)
+                        : null;
+                    if (!match && nameParam) {
+                        match = allCustomers.find(c => c.name === nameParam)
+                            || allCustomers.find(c => tokens(c.name) === tokens(nameParam));
+                    }
                     if (match) {
                         // Set selected so both desktop and mobile render expanded
                         selectedCustomer = match;
@@ -3878,7 +3891,7 @@
                                 desktopRow.scrollIntoView({ behavior: "smooth", block: "center" });
                             }
                         });
-                    } else {
+                    } else if (nameParam) {
                         // Try partial match via search
                         document.getElementById("customer-search").value = nameParam;
                         renderCustomers();
