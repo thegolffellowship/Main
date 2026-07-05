@@ -965,18 +965,23 @@
             return `<div class="mc-field"><span class="mc-field-label">${f.label}</span>${inputHtml}</div>`;
         }).join("");
 
+        // Persist the active tab across re-renders (the 30s auto-refresh
+        // rebuilds this card; hardcoding transactions here yanked the user
+        // off Scores/Winnings/Points mid-read)
+        const _mt = activeDetailTab;
+        const mtabStyle = t => `flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_mt === t ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_mt === t ? '#2563eb' : 'var(--text-muted)'}; white-space:nowrap;`;
         return `
         <div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border); overflow-x:auto;">
-            <button type="button" class="cust-tab active" data-tab="transactions" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; color:#2563eb; white-space:nowrap;">Transactions</button>
-            <button type="button" class="cust-tab" data-tab="scores" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted); white-space:nowrap;">Scores</button>
-            <button type="button" class="cust-tab" data-tab="winnings" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted); white-space:nowrap;">Winnings</button>
-            <button type="button" class="cust-tab" data-tab="points" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted); white-space:nowrap;">Points</button>
-            <button type="button" class="cust-tab" data-tab="info" style="flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted); white-space:nowrap;">Info</button>
+            <button type="button" class="cust-tab ${_mt === 'transactions' ? 'active' : ''}" data-tab="transactions" style="${mtabStyle('transactions')}">Transactions</button>
+            <button type="button" class="cust-tab ${_mt === 'scores' ? 'active' : ''}" data-tab="scores" style="${mtabStyle('scores')}">Scores</button>
+            <button type="button" class="cust-tab ${_mt === 'winnings' ? 'active' : ''}" data-tab="winnings" style="${mtabStyle('winnings')}">Winnings</button>
+            <button type="button" class="cust-tab ${_mt === 'points' ? 'active' : ''}" data-tab="points" style="${mtabStyle('points')}">Points</button>
+            <button type="button" class="cust-tab ${_mt === 'info' ? 'active' : ''}" data-tab="info" style="${mtabStyle('info')}">Info</button>
         </div>
-        <div class="cust-tab-content cust-tab-transactions">
+        <div class="cust-tab-content cust-tab-transactions" style="${_mt !== 'transactions' ? 'display:none;' : ''}">
             ${renderCustDetailMobile(customer)}
         </div>
-        <div class="cust-tab-content cust-tab-scores" style="display:none;">
+        <div class="cust-tab-content cust-tab-scores" style="${_mt !== 'scores' ? 'display:none;' : ''}">
             <div class="cust-scores-container" data-customer-name="${escapeHtml(customer.name)}">
                 ${customer.handicapIndex !== null
                     ? '<div style="margin-bottom:0.5rem; font-size:1.1rem; font-weight:700; color:#2563eb;">' + (customer.handicapIndex < 0 ? '+' + Math.abs(customer.handicapIndex).toFixed(1) : customer.handicapIndex.toFixed(1)) + ' N</div>'
@@ -986,21 +991,21 @@
                 </div>
             </div>
         </div>
-        <div class="cust-tab-content cust-tab-winnings" style="display:none;">
+        <div class="cust-tab-content cust-tab-winnings" style="${_mt !== 'winnings' ? 'display:none;' : ''}">
             <div class="cust-winnings-container" data-customer-name="${escapeHtml(customer.name)}" data-customer-id="${customer.customer_id || ''}">
                 <div class="cust-winnings-wrapper" style="font-size:0.82rem;">
                     <span style="color:var(--text-muted);">Loading winnings...</span>
                 </div>
             </div>
         </div>
-        <div class="cust-tab-content cust-tab-points" style="display:none;">
+        <div class="cust-tab-content cust-tab-points" style="${_mt !== 'points' ? 'display:none;' : ''}">
             <div class="cust-points-container" data-customer-id="${customer.customer_id || ''}">
                 <div class="cust-points-wrapper" style="font-size:0.82rem;">
                     <span style="color:var(--text-muted);">Loading points...</span>
                 </div>
             </div>
         </div>
-        <div class="cust-tab-content cust-tab-info" style="display:none;">
+        <div class="cust-tab-content cust-tab-info" style="${_mt !== 'info' ? 'display:none;' : ''}">
             <div class="mc-field-grid">
                 ${infoHtml}
             </div>
@@ -1216,6 +1221,37 @@
                         }
                     });
                 });
+
+                // Re-renders (30s auto-refresh) rebuild the card with the
+                // persisted tab active — reload that tab's lazy pane so it
+                // doesn't sit on "Loading…"
+                if (activeDetailTab === "scores") {
+                    const wrapper = expandedCard.querySelector(".cust-scores-table-wrapper");
+                    if (wrapper && wrapper.textContent.includes("Loading")) {
+                        const custName = expandedCard.querySelector(".cust-scores-container")?.dataset?.customerName;
+                        if (custName) loadCustomerScores(custName, wrapper);
+                    }
+                } else if (activeDetailTab === "winnings") {
+                    const wrapper = expandedCard.querySelector(".cust-winnings-wrapper");
+                    if (wrapper && wrapper.textContent.includes("Loading")) {
+                        const wContainer = expandedCard.querySelector(".cust-winnings-container");
+                        const custName = wContainer?.dataset?.customerName;
+                        if (custName) loadCustomerWinnings(custName, wrapper, wContainer?.dataset?.customerId);
+                    }
+                } else if (activeDetailTab === "points") {
+                    const wrapper = expandedCard.querySelector(".cust-points-wrapper");
+                    if (wrapper && wrapper.textContent.includes("Loading")) {
+                        const pContainer = expandedCard.querySelector(".cust-points-container");
+                        loadCustomerPoints(pContainer?.dataset?.customerId, wrapper);
+                    }
+                } else if (activeDetailTab === "info") {
+                    const infoTab = expandedCard.querySelector(".cust-tab-info");
+                    if (infoTab && !infoTab._membershipsLoaded) {
+                        infoTab._membershipsLoaded = true;
+                        loadCustomerMemberships(expandedCard);
+                        wireMembershipUI(expandedCard);
+                    }
+                }
 
                 // Save customer info
                 const saveBtn = expandedCard.querySelector(".cust-save-info");

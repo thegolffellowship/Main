@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.31.0";
+window.TGF_VERSION = "2.31.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.31.1",
+    date: "2026-07-05",
+    changes: [
+      "Fixed the mobile customer card snapping back to the Transactions tab moments after opening Points (or Scores/Winnings/Info): the page's 30-second auto-refresh rebuilds every card, and the mobile template hardcoded Transactions as the active tab. Mobile now persists the active tab across re-renders like desktop, and reloads the open tab's content after each refresh so it never sits on a stuck 'Loading…'.",
+    ],
+  },
   {
     version: "2.31.0",
     date: "2026-07-05",
