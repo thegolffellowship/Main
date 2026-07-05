@@ -1,4 +1,5 @@
 # Member Portal & Email Summaries — M1 LIVE (v2.28.0), M2/M3 designed
+#   + Platform roadmap: native app + website (plan of record, 2026-07-05)
 
 M1 shipped: `/me?t=<token>` (templates/me.html, mobile-first) + token-only
 API endpoints in app.py (`/api/me/summary|scorecards|scorecard/<id>`),
@@ -73,3 +74,62 @@ token-version column) and reuses existing renderers and read paths.
 Own data only behind the token; anything cross-player (leaderboards,
 race standings) shows exactly what the public GG portal already shows.
 No emails/phones/DOBs anywhere on the page.
+
+## Platform roadmap: native app + website (PLAN OF RECORD, 2026-07-05)
+
+Admin-agreed path from the Tracker to the TGF Platform's member-facing
+app. Core insight: **"native app + website" is one backend with two
+faces**, not two products. The website stays the admin/manager console;
+the app is the member experience; both consume the same API against the
+same database, so nothing can drift.
+
+```
+                    +- Website (admin/manager console — today's Tracker)
+One backend + API --+
+                    +- Member app (scores, points, RSVPs, live scoring)
+```
+
+Phases — each independently shippable, each building on the last:
+
+1. **Member portal as mobile-first website** (M1 above — LIVE). The
+   magic-link portal IS the app's foundation; everything after is
+   packaging and plumbing.
+2. **PWA** — manifest + service worker + offline cache on the portal:
+   installable from the browser ("Add to Home Screen" → TGF icon,
+   full-screen, no chrome). This phase also carries the **offline
+   score-entry queue** required for own live scoring at courses with
+   dead zones. Still one codebase.
+3. **Capacitor wrap** — the same web app inside a native iOS/Android
+   shell: real App Store / Play Store listings, reliable push
+   notifications, camera/GPS access. Thin wrapper, zero rewrite.
+   Process costs: Apple dev account ($99/yr), Google ($25 once), app
+   review, TestFlight beta with members first. A ground-up
+   Swift/Kotlin rewrite is explicitly NOT the plan — doubles the
+   codebase for benefits this class of app doesn't need.
+4. **Native dividends** — push ("results are in — you finished T2"),
+   tee-time reminders, live championship alerts; later GPS/camera
+   features.
+
+Architecture requirements underneath:
+
+- **API-first discipline from phase 1**: every member-facing feature is
+  a JSON endpoint + UI (the /api/me/* token pattern), never a
+  server-rendered page. Admin pages may stay Jinja.
+- **Real-time channel**: the live-updates ladder (v2.31.2 fingerprint
+  skip → targeted DOM updates → SSE/WebSocket push) serves both the
+  website's live standings and the app's live feed. Same work, double
+  duty.
+- **Database growth path**: SQLite on Railway is fine until live
+  scoring means many concurrent writers; then managed Postgres on
+  Railway (already the Platform assumption).
+
+Sequencing against the real calendar: championships live standings
+(website, GG-tap) → member portal M2/M3 → PWA + shadow-mode live
+scoring pilots at regular events → Capacitor + TestFlight → stores.
+
+Related: live points standings during events (GG live scoring tapped
+and converted to provisional race points — points = net Stableford
+floored at 0, verified 2026-07-05 against member details) and the
+own-live-scoring shadow pilot are documented decisions from the same
+planning thread; see docs/claude/scoring.md for the points-model
+finding.

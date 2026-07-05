@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.31.2";
+window.TGF_VERSION = "2.31.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.31.3",
+    date: "2026-07-05",
+    changes: [
+      "Platform roadmap folded into docs/claude/member-portal.md as the plan of record: one backend with two faces (admin website + member app), phased as mobile-first portal (live) -> PWA with offline score entry -> Capacitor native wrap with store listings and push -> native extras. Also records the points-model finding (race points = net Stableford floored at 0, verified against GG member details) that unblocks live championship standings.",
+    ],
+  },
   {
     version: "2.31.2",
     date: "2026-07-05",
