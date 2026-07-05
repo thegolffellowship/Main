@@ -15,7 +15,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/member-portal.md` (member-facing profile + email summaries — proposed design)
 - `docs/claude/customer-merge-repair.md` (playbook for fixing absorbed customer profiles)
 - `docs/claude/state-of-the-tracker.md` (Platform-facing brief for the claude.ai Golf Fellowship Project — refresh after major build waves)
-- `docs/claude/side-games.md` (side-games catalog reverse-engineered from GG portals — DRAFT pending admin verification)
+- `docs/claude/side-games.md` (side-games RATIFIED SPEC v1.0 — buy-ins, game rules, prize-matrix derivation; open flags at bottom)
 
 ## Guiding Principles
 

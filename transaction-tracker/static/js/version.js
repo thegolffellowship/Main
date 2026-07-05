@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.32.3";
+window.TGF_VERSION = "2.32.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.4",
+    date: "2026-07-05",
+    changes: [
+      "side-games.md promoted from draft to RATIFIED SPEC v1.0 after the full mailbox reconciliation with the Platform planning docs (admin ratified all eight open items same-day): buy-in pricing with pool/markup decompositions and the combo-event nuance, CTP flat-entry + Longest Putt fallback + shortest-par-3 selection + carryover rule, hole-in-one accrual with members-only wins, MVP $4/$8 with the single-vs-multi-event-day split and full tiebreaker chain, TGF MVP higher-points rule, and Match Play season payouts (50/25/15/10).",
+      "Prize matrix fully decoded and published: every line is a per-buyer multiple with flight-count bands; skins arrays verified as flight-pot / skin-count. teamMWP mystery resolved — a vestigial column from the source spreadsheet that no payout logic reads; recommended for deletion. Three new discrepancies flagged for the admin: the 9-hole GROSS pool pays $15/buyer above 19 buyers vs the pricing doc's $13, the 18-hole MVP pot caps at $100 flat in the matrix, and one skins-array data-entry anomaly at N=18.",
+    ],
+  },
   {
     version: "2.32.3",
     date: "2026-07-05",
