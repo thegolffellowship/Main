@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.32.1";
+window.TGF_VERSION = "2.32.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.2",
+    date: "2026-07-05",
+    changes: [
+      "State-of-the-Tracker brief completeness pass: added the handicap system (9-hole index, manual GG CSV ritual, Phase 2 parity goal), participation analysis / re-engagement, and automated expense ingestion — pre-existing systems that matter to Platform planning but were missing from the Platform-facing brief.",
+    ],
+  },
   {
     version: "2.32.1",
     date: "2026-07-05",
