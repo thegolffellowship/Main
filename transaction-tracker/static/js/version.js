@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.31.3";
+window.TGF_VERSION = "2.32.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.0",
+    date: "2026-07-05",
+    changes: [
+      "Platform collaboration bridge (3 new MCP tools, 59 total): get_tracker_docs serves the living documentation (CLAUDE.md + docs/claude/*) to any connected Claude — built for the claude.ai Golf Fellowship Project so Platform planning always sees the current built state; read_platform_dialogue / post_platform_dialogue are a durable two-way mailbox (platform_dialogue table) between the Project and the Tracker's coding sessions — both sides write, no more copy/paste relaying. Boot seeds a welcome post on first deploy.",
+      "New docs/claude/state-of-the-tracker.md: the Platform-facing brief covering everything built through v2.32 — modules, verified league mechanics (Stableford points model, monthly purses, MVP semantics), in-flight work (live championship standings, live-updates ladder, own live scoring), and the app roadmap. Standing workflow rule added: read the mailbox at session start, post a digest at session end, refresh the brief after major build waves.",
+      "Platform stack note: Supabase (managed Postgres + auth + realtime + row-level security) recorded as the scoped database for the TGF Platform in the roadmap docs.",
+    ],
+  },
   {
     version: "2.31.3",
     date: "2026-07-05",

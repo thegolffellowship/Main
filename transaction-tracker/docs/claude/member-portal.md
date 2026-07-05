@@ -120,8 +120,10 @@ Architecture requirements underneath:
   website's live standings and the app's live feed. Same work, double
   duty.
 - **Database growth path**: SQLite on Railway is fine until live
-  scoring means many concurrent writers; then managed Postgres on
-  Railway (already the Platform assumption).
+  scoring means many concurrent writers; then Postgres — scoped as
+  **Supabase** for the Platform (managed Postgres + auth + realtime
+  subscriptions + row-level security; realtime is the live-scoring
+  push channel, RLS is the members-see-own-data rule at the DB layer).
 
 Sequencing against the real calendar: championships live standings
 (website, GG-tap) → member portal M2/M3 → PWA + shadow-mode live
