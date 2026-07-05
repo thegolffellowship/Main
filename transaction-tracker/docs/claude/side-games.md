@@ -72,13 +72,13 @@ Per-player-count N, closed forms verified across the whole matrix:
 | Line | 9-hole | 18-hole |
 |---|---|---|
 | Event game money | $7×N | $14×N |
-| Team Net pot | $4×N (1st only; 2nd appears ~N≥40) | $8×N (same shape) |
+| Team Net pot | $6×N CART Net (N=4–15, incl. CTP money); $4×N TEAM Net at 16+ (2nd place appears ~N≥40) | $12×N / $8×N (same shape) |
 | CTP total | $2×N split evenly over active CTPs | $4×N; CTP count grows 2→3→4 at N=16/24/32, pot splits evenly |
 | Hole-in-One | $1×N | $2×N |
 | NET pool | $13×N | $26×N |
 | Individual Net | $9×N | $26×N − MVP pot |
-| City MVP + TGF MVP | $2×N + $2×N | MVP pot = $8×N **capped at $100 flat from N≥16** (FLAG) |
-| GROSS pool | $13×N below 20 buyers; **$15×N at 20+** (FLAG) | $26×N |
+| City MVP + TGF MVP | $2×N + $2×N | single-event day: min($8×N, $100), excess → Ind Net; multi-event day: $4×N + $4×N |
+| GROSS pool | $13×N always (totals column fixed 2026-07-05) | $26×N |
 | Skins | $9×N (all of pool below 20) | $18×N equivalent share |
 | Individual Gross | $4×N + $1×N gross-low (active N≥20) | $8×N |
 | Net flights | 1 (≤11), 2 (12+) | 1 (≤13), 2 (14-33), 3 (34-49), 4 (50-64) |
@@ -88,24 +88,64 @@ Per-player-count N, closed forms verified across the whole matrix:
 Skins payout arrays = flight pot ÷ skins count (verified exact), with
 ONE data anomaly: 9h N=18, 3-skin value reads 24.67 vs computed 39.00.
 
-## teamMWP investigation (owed per mailbox id 8) — RESOLVED
+## teamMWP — RESOLVED (admin, 2026-07-05)
 
-The "MWP" line originated in the source spreadsheet
-25-SideGame-PrizeMatrix.xlsx and was carried verbatim into the Matrix
-UI (matrix.html "MWP" sub-row under Team Game) and games-matrix.js at
-~$1×N. **No Tracker payout logic reads it** — display-only. Admin has
-ruled the game does not exist; recommend deleting the row from the
-matrix UI/data (pending admin go-ahead). Likely the same artifact as
-the Platform docs' "Team MVP" naming slip.
+**MWP = Maximum Winnings Potential.** Not a game: it is the largest
+amount one person can win from the team game = team1st ÷ team size
+(verified exact across the matrix once team type is known). Consumed
+by the Events page GAMES tab, which shows an MWP column per game and
+sums an event-level Max Winnings Potential. KEEP — earlier deletion
+recommendation retracted. (The Platform docs' "Team MVP" label remains
+a separate naming slip for Team Net.)
 
-## Open flags (for admin)
+## Matrix audit (admin-requested, run 2026-07-05)
 
-1. 9h GROSS pool: pricing doc says $13/buyer; the matrix pays $15×N
-   once Ind Gross activates (N≥20) — and the matrix's own gross total
-   exceeds the sum of its listed lines by $1×N there. Which is right?
-2. 18h MVP pot capped at $100 flat (matrix) vs $8×N (pricing doc).
-3. The 9h N=18 skins-array anomaly (24.67 vs 39.00) — data entry?
-4. Delete teamMWP from the matrix?
+Programmatic audit of every cell in both matrices against the ratified
+pool model ($13-of-$16 / $26-of-$30 to pots, rollover rules). Results:
+
+**Real defects (both FIXED — boot repair `_repair_matrix_gross_totals`
+patches the DB copy; static seed corrected in-repo):**
+1. 9h `grossTotalPot` column read $15×N for every N≥20 while its own
+   game pots correctly sum to $13×N (Skins 9 + Ind Gross 4). Display
+   column only — but it fed the Events Games-tab gross subtotal, which
+   overstated. 45 cells corrected to 13×N. (This was the source of the
+   earlier "$15/buyer" confusion; the 18h totals were always correct.)
+2. 9h N=18 skins array, 3-skin cell: 24.67 → 39.00 (= flight pot 117
+   ÷ 3, the ratified formula). 1 cell corrected.
+3. Cosmetic, unfixed: N=2–3 rows show eventTotalPot $7×N while every
+   event game is NO_EVENT.
+
+**Not defects — the "removed Excel formulas" survive as encoded rules:**
+- **CART Net below 16 players**: teamType switches to CART Net
+  (2-person cart teams) for N=4–15 with team pot $6×N — the $2×N CTP
+  money rides in the team pot because no CTPs run below 16; TEAM Net
+  foursomes at $4×N + CTPs $2×N from N=16. Event money is $7×N either
+  way. (18h mirror: $12×N cart pot below 16, $8×N + $4×N CTPs at 16+.)
+- **Ind Gross → Skins rollover**: below ~20 gross buyers (9h) / 16
+  (18h) Individual Gross cancels and its $4×N/$8×N rolls into Skins
+  (skins pot = full $13×N/$26×N). Real-world confirmed: s9.16 ran
+  Skins-only with total purse $195.01 = 13 × 15 gross buyers.
+- **18h MVP cap**: mvp = min($8×N, $100), and Individual Net = $26×N −
+  mvp — the excess above the cap flows to Individual Net automatically.
+  Matches admin intent for SINGLE-event days (below).
+
+## 18h MVP day-type rule (admin, 2026-07-05 — understanding to confirm)
+
+- **Single 18h event that day**: all MVP money to City MVP, capped at
+  $100; MVP-designated money above the cap reroutes to Individual Net
+  payouts. (The matrix encodes exactly this.)
+- **Multiple TGF events that day**: follow the 9-hole model — split
+  evenly, $4/buyer City MVP + $4/buyer TGF MVP, no cap (pending admin
+  confirmation on the no-cap reading). The matrix currently encodes
+  only the single-event variant; day-type awareness is a runtime
+  concern for payout tooling.
+
+## Remaining open item
+
+GG game SETUP layer (handicap %, scoring basis, par-3 strokes, etc.):
+admin will supply Golf Genius setup screenshots per tournament rather
+than have it reverse-engineered. Fold into this doc as they arrive,
+modeled as versioned game definitions per the ratified requirement.
 
 ## Next phase (ratified direction, mailbox ids 10-11)
 
