@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.32.0";
+window.TGF_VERSION = "2.32.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.1",
+    date: "2026-07-05",
+    changes: [
+      "Points model fully verified across BOTH race types and recorded in scoring.md: race points = the player's Stableford score in that race's POINTS game floored at 0 (net Stableford for the NET races, gross for THE PLAYERS CUP), best 10 + City Championship for both. GROSS confirmed via Pat Youngs (3rd place, gross Stableford 13 -> 13 points; five wins paying 25/23/22/21/19 rule out any position table) and the 0-floor confirmed directly via a -6 gross round showing 0 awarded. First real exchange completed over the new platform dialogue mailbox (entries 2-4).",
+    ],
+  },
   {
     version: "2.32.0",
     date: "2026-07-05",

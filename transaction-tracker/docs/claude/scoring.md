@@ -212,6 +212,24 @@ CSS so host pages don't need the Contests stylesheet. Edit the module,
 never re-inline copies. (scorecard-render.js remains the member-portal
 twin of prRenderScorecard — keep the two in sync until unified.)
 
+## Points-race scoring model (VERIFIED 2026-07-05)
+
+Race points are NOT a position schedule. For every race:
+POINTS(player, event, race) = max(0, Stableford score in that race's
+POINTS game) — net Stableford for the NET races, gross Stableford for
+THE PLAYERS CUP. Season standing = best 10 + City Championship (BOTH
+race types). Monthly races count all points. Verified against live GG
+member details: NET via Callaway/Baker full histories + the complete
+s9.16 event table (T18/Stableford 1 -> 1 pt; T2/8 -> 8 pts;
+same-position-different-points cases kill position tables); GROSS via
+Pat Youngs (pos 3 / gross Stableford 13 -> 13 pts; five 1st places
+paying 25/23/22/21/19) and floor-at-0 via Mike Murphy (-6 gross
+Stableford -> 0 awarded). Consequence for live standings: GG's live
+POINTS-game Stableford totals ARE the provisional race points — no
+mapping needed, and our formula layer can parallel-verify them.
+Open business rule (Kerry to ratify): championship weighting/reset
+mechanics.
+
 ## Monthly points races (v2.30.0)
 
 Contests -> Points Races -> MONTHLY: month nav bar over combined-chapter
