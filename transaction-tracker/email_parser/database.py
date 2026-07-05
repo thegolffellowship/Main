@@ -3480,11 +3480,11 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Payout customer dedup migration failed: %s", e)
 
-        # Matrix audit fixes: 9h gross totals + skins-array formula cells
+        # Matrix audit fixes: gross totals, skins-array formula, teamMWP
         try:
             _repair_matrix_gross_totals(conn)
         except Exception as e:
-            logger.warning("Matrix gross-totals repair failed: %s", e)
+            logger.warning("Matrix repair failed: %s", e)
 
         # Platform dialogue mailbox: seed the welcome post on first boot
         try:
@@ -7372,49 +7372,62 @@ def get_customer_gg_cards(customer_id: int, db_path: str | Path = DB_PATH) -> li
 
 
 def _repair_matrix_gross_totals(conn) -> None:
-    """Matrix audit fixes (admin-ratified 2026-07-05). Two defects from
-    the de-formula'd Excel import: (1) the 9-hole grossTotalPot column
-    overstated the GROSS pool at $15xN for N>=20 while the game pots
-    themselves sum to the correct $13xN (admin rule: $13 of the $16
-    add-on is pot) — the bad total fed the Events Games-tab subtotals;
-    (2) stray skins-array cells that violate the ratified
-    flight-pot / skin-count formula (one found: 9h N=18, 3 skins).
-    Patches the DB-saved matrix copy when present (the Matrix UI's
-    save path re-derives skins arrays the same way); the static seed
-    file is corrected in the repo. Idempotent."""
-    row = conn.execute(
-        "SELECT value FROM app_settings WHERE key = 'games_matrix_9'"
-    ).fetchone()
-    if not row or not row["value"]:
-        return
-    m9 = json.loads(row["value"])
-    changed = 0
-    for pc, e in m9.items():
-        try:
-            n = int(pc)
-        except (TypeError, ValueError):
+    """Matrix audit fixes (admin-ratified 2026-07-05, live audit same
+    day). Repairs value-guarded defect patterns in the DB-saved matrix
+    copies (both 9h and 18h):
+    (1) grossTotalPot overstating the GROSS pool at $15xN/hole-multiple
+        while the game pots themselves sum to the correct $13xN (admin
+        rule: $13 of $16 / $26 of $30 add-on is pot) — the bad total
+        fed the Events Games-tab subtotals;
+    (2) skins-array cells that violate the ratified flight-pot /
+        skin-count formula — includes stale arrays left behind when a
+        Matrix UI edit lowered skinsTotal without recomputing payouts
+        (live audit found 18h N=12-15 still paying full-pool values);
+    (3) teamMWP cells that violate the ratified MWP = team1st / team
+        size formula — stale after a UI edit split team1st/team2nd
+        without recomputing MWP (live audit found 18h N=32-35).
+    The static seed file mirrors the corrected live copy in-repo.
+    Idempotent."""
+    for key, mult in (("games_matrix_9", 1), ("games_matrix_18", 2)):
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,)
+        ).fetchone()
+        if not row or not row["value"]:
             continue
-        st, ig, gt = e.get("skinsTotal"), e.get("individualGross"), e.get("grossTotalPot")
-        nums = lambda *vs: all(isinstance(v, (int, float)) for v in vs)
-        if nums(st, ig, gt) and abs(st + ig - 13 * n) < 0.02 and abs(gt - 15 * n) < 0.02:
-            e["grossTotalPot"] = 13.0 * n
-            changed += 1
-        sf, arr = e.get("skinsFlights"), e.get("skins")
-        if nums(st, sf) and sf and isinstance(arr, list):
-            pot = st / sf
-            for i, v in enumerate(arr):
-                good = round(pot / (i + 1), 2)
-                if isinstance(v, (int, float)) and abs(v - good) > 0.02:
-                    arr[i] = good
-                    changed += 1
-    if changed:
-        conn.execute(
-            "UPDATE app_settings SET value = ?, updated_at = datetime('now') "
-            "WHERE key = 'games_matrix_9'",
-            (json.dumps(m9),),
-        )
-        conn.commit()
-        logger.info("Matrix repair: corrected %d cells in games_matrix_9", changed)
+        matrix = json.loads(row["value"])
+        changed = 0
+        for pc, e in matrix.items():
+            try:
+                n = int(pc)
+            except (TypeError, ValueError):
+                continue
+            nums = lambda *vs: all(isinstance(v, (int, float)) for v in vs)
+            st, ig, gt = e.get("skinsTotal"), e.get("individualGross"), e.get("grossTotalPot")
+            pool = 13.0 * mult * n
+            if nums(st, ig, gt) and abs(st + ig - pool) < 0.02 and abs(gt - 15.0 * mult * n) < 0.02:
+                e["grossTotalPot"] = pool
+                changed += 1
+            sf, arr = e.get("skinsFlights"), e.get("skins")
+            if nums(st, sf) and sf and isinstance(arr, list):
+                pot = st / sf
+                for i, v in enumerate(arr):
+                    good = round(pot / (i + 1), 2)
+                    if isinstance(v, (int, float)) and abs(v - good) > 0.02:
+                        arr[i] = good
+                        changed += 1
+            t1, mwp = e.get("team1st"), e.get("teamMWP")
+            size = 2 if "CART" in str(e.get("teamType") or "").upper() else 4
+            if nums(t1, mwp) and abs(mwp - t1 / size) > 0.02:
+                e["teamMWP"] = round(t1 / size, 2)
+                changed += 1
+        if changed:
+            conn.execute(
+                "UPDATE app_settings SET value = ?, updated_at = datetime('now') "
+                "WHERE key = ?",
+                (json.dumps(matrix), key),
+            )
+            conn.commit()
+            logger.info("Matrix repair: corrected %d cells in %s", changed, key)
 
 
 # ── Platform dialogue (tracker-claude <-> platform-claude mailbox) ─────

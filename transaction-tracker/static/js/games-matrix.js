@@ -38,9 +38,9 @@ window.GAMES_MATRIX_9 = {
       2.89
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "3": {
     "eventTotalPot": 21.0,
@@ -78,9 +78,9 @@ window.GAMES_MATRIX_9 = {
       4.33
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "4": {
     "eventTotalPot": 28.0,
@@ -118,9 +118,9 @@ window.GAMES_MATRIX_9 = {
       5.78
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "5": {
     "eventTotalPot": 35.0,
@@ -158,9 +158,9 @@ window.GAMES_MATRIX_9 = {
       7.22
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "6": {
     "eventTotalPot": 42.0,
@@ -198,9 +198,9 @@ window.GAMES_MATRIX_9 = {
       8.67
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "7": {
     "eventTotalPot": 49.0,
@@ -238,9 +238,9 @@ window.GAMES_MATRIX_9 = {
       10.11
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "8": {
     "eventTotalPot": 56.0,
@@ -278,9 +278,9 @@ window.GAMES_MATRIX_9 = {
       5.78
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "9": {
     "eventTotalPot": 63.0,
@@ -318,9 +318,9 @@ window.GAMES_MATRIX_9 = {
       6.5
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "10": {
     "eventTotalPot": 70.0,
@@ -358,9 +358,9 @@ window.GAMES_MATRIX_9 = {
       7.22
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "11": {
     "eventTotalPot": 77.0,
@@ -398,9 +398,9 @@ window.GAMES_MATRIX_9 = {
       7.94
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "12": {
     "eventTotalPot": 84.0,
@@ -438,9 +438,9 @@ window.GAMES_MATRIX_9 = {
       8.67
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "13": {
     "eventTotalPot": 91.0,
@@ -478,9 +478,9 @@ window.GAMES_MATRIX_9 = {
       9.39
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "14": {
     "eventTotalPot": 98.0,
@@ -518,9 +518,9 @@ window.GAMES_MATRIX_9 = {
       10.11
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "15": {
     "eventTotalPot": 105.0,
@@ -558,9 +558,9 @@ window.GAMES_MATRIX_9 = {
       10.83
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
+    "individualGross": "NO_GAME",
     "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "grossFlights": null
   },
   "16": {
     "eventTotalPot": 112.0,
@@ -585,22 +585,22 @@ window.GAMES_MATRIX_9 = {
     "cityMVP": 32.0,
     "tgfMVP": 32.0,
     "grossTotalPot": 208.0,
-    "skinsTotal": 208.0,
+    "skinsTotal": 144,
     "skins": [
-      104.0,
-      52.0,
-      34.67,
-      26.0,
-      20.8,
-      17.33,
-      14.86,
-      13.0,
-      11.56
+      72.0,
+      36.0,
+      24.0,
+      18.0,
+      14.4,
+      12.0,
+      10.29,
+      9.0,
+      8.0
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "individualGross": 64,
+    "grossLow1st": 21,
+    "grossFlights": 3
   },
   "17": {
     "eventTotalPot": 119.0,
@@ -625,22 +625,22 @@ window.GAMES_MATRIX_9 = {
     "cityMVP": 34.0,
     "tgfMVP": 34.0,
     "grossTotalPot": 221.0,
-    "skinsTotal": 221.0,
+    "skinsTotal": 153,
     "skins": [
-      110.5,
-      55.25,
-      36.83,
-      27.62,
-      22.1,
-      18.42,
-      15.79,
-      13.81,
-      12.28
+      76.5,
+      38.25,
+      25.5,
+      19.12,
+      15.3,
+      12.75,
+      10.93,
+      9.56,
+      8.5
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "individualGross": 68,
+    "grossLow1st": 22,
+    "grossFlights": 3
   },
   "18": {
     "eventTotalPot": 126.0,
@@ -665,22 +665,22 @@ window.GAMES_MATRIX_9 = {
     "cityMVP": 36.0,
     "tgfMVP": 36.0,
     "grossTotalPot": 234.0,
-    "skinsTotal": 234.0,
+    "skinsTotal": 162,
     "skins": [
-      117.0,
-      58.5,
-      39.0,
-      29.25,
-      23.4,
-      19.5,
-      16.71,
-      14.62,
-      13.0
+      81.0,
+      40.5,
+      27.0,
+      20.25,
+      16.2,
+      13.5,
+      11.57,
+      10.12,
+      9.0
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "individualGross": 72,
+    "grossLow1st": 23,
+    "grossFlights": 3
   },
   "19": {
     "eventTotalPot": 133.0,
@@ -705,22 +705,22 @@ window.GAMES_MATRIX_9 = {
     "cityMVP": 38.0,
     "tgfMVP": 38.0,
     "grossTotalPot": 247.0,
-    "skinsTotal": 247.0,
+    "skinsTotal": 171,
     "skins": [
-      123.5,
-      61.75,
-      41.17,
-      30.88,
-      24.7,
-      20.58,
-      17.64,
-      15.44,
-      13.72
+      85.5,
+      42.75,
+      28.5,
+      21.38,
+      17.1,
+      14.25,
+      12.21,
+      10.69,
+      9.5
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": null,
-    "grossFlights": "NO_GAME"
+    "individualGross": 76,
+    "grossLow1st": 24,
+    "grossFlights": 3
   },
   "20": {
     "eventTotalPot": 140.0,
@@ -744,7 +744,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 40.0,
     "tgfMVP": 40.0,
-    "grossTotalPot": 260.0,
+    "grossTotalPot": 260,
     "skinsTotal": 180.0,
     "skins": [
       90.0,
@@ -784,7 +784,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 42.0,
     "tgfMVP": 42.0,
-    "grossTotalPot": 273.0,
+    "grossTotalPot": 273,
     "skinsTotal": 189.0,
     "skins": [
       94.5,
@@ -824,7 +824,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 44.0,
     "tgfMVP": 44.0,
-    "grossTotalPot": 286.0,
+    "grossTotalPot": 286,
     "skinsTotal": 198.0,
     "skins": [
       99.0,
@@ -864,7 +864,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 46.0,
     "tgfMVP": 46.0,
-    "grossTotalPot": 299.0,
+    "grossTotalPot": 299,
     "skinsTotal": 207.0,
     "skins": [
       103.5,
@@ -904,7 +904,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 48.0,
     "tgfMVP": 48.0,
-    "grossTotalPot": 312.0,
+    "grossTotalPot": 312,
     "skinsTotal": 216.0,
     "skins": [
       108.0,
@@ -2573,10 +2573,10 @@ window.GAMES_MATRIX_18 = {
       5.78
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "3": {
     "eventTotalPot": 42.0,
@@ -2626,10 +2626,10 @@ window.GAMES_MATRIX_18 = {
       8.67
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "4": {
     "eventTotalPot": 56.0,
@@ -2679,10 +2679,10 @@ window.GAMES_MATRIX_18 = {
       11.56
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "5": {
     "eventTotalPot": 70.0,
@@ -2732,10 +2732,10 @@ window.GAMES_MATRIX_18 = {
       14.44
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "6": {
     "eventTotalPot": 84.0,
@@ -2785,10 +2785,10 @@ window.GAMES_MATRIX_18 = {
       17.33
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "7": {
     "eventTotalPot": 98.0,
@@ -2838,10 +2838,10 @@ window.GAMES_MATRIX_18 = {
       20.22
     ],
     "skinsFlights": 1.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "8": {
     "eventTotalPot": 112.0,
@@ -2891,10 +2891,10 @@ window.GAMES_MATRIX_18 = {
       11.56
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "9": {
     "eventTotalPot": 126.0,
@@ -2944,10 +2944,10 @@ window.GAMES_MATRIX_18 = {
       13.0
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "10": {
     "eventTotalPot": 140.0,
@@ -2997,10 +2997,10 @@ window.GAMES_MATRIX_18 = {
       14.44
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "11": {
     "eventTotalPot": 154.0,
@@ -3050,10 +3050,10 @@ window.GAMES_MATRIX_18 = {
       15.89
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": "NO_GAME",
+    "grossLow1st": null,
+    "grossLow2nd": null,
+    "grossFlights": null
   },
   "12": {
     "eventTotalPot": 168.0,
@@ -3090,23 +3090,23 @@ window.GAMES_MATRIX_18 = {
     "netFlights": 1.0,
     "mvp": 96.0,
     "grossTotalPot": 312.0,
-    "skinsTotal": 312.0,
+    "skinsTotal": 216,
     "skins": [
-      156.0,
-      78.0,
-      52.0,
-      39.0,
-      31.2,
-      26.0,
-      22.29,
-      19.5,
-      17.33
+      108.0,
+      54.0,
+      36.0,
+      27.0,
+      21.6,
+      18.0,
+      15.43,
+      13.5,
+      12.0
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": 96,
+    "grossLow1st": 32,
+    "grossLow2nd": null,
+    "grossFlights": 3
   },
   "13": {
     "eventTotalPot": 182.0,
@@ -3143,23 +3143,23 @@ window.GAMES_MATRIX_18 = {
     "netFlights": 1.0,
     "mvp": 100.0,
     "grossTotalPot": 338.0,
-    "skinsTotal": 338.0,
+    "skinsTotal": 234,
     "skins": [
-      169.0,
-      84.5,
-      56.33,
-      42.25,
-      33.8,
-      28.17,
-      24.14,
-      21.12,
-      18.78
+      117.0,
+      58.5,
+      39.0,
+      29.25,
+      23.4,
+      19.5,
+      16.71,
+      14.62,
+      13.0
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": 104,
+    "grossLow1st": 34.67,
+    "grossLow2nd": null,
+    "grossFlights": 3
   },
   "14": {
     "eventTotalPot": 196.0,
@@ -3196,23 +3196,23 @@ window.GAMES_MATRIX_18 = {
     "netFlights": 2.0,
     "mvp": 100.0,
     "grossTotalPot": 364.0,
-    "skinsTotal": 364.0,
+    "skinsTotal": 252,
     "skins": [
-      182.0,
-      91.0,
-      60.67,
-      45.5,
-      36.4,
-      30.33,
-      26.0,
-      22.75,
-      20.22
+      126.0,
+      63.0,
+      42.0,
+      31.5,
+      25.2,
+      21.0,
+      18.0,
+      15.75,
+      14.0
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": 112,
+    "grossLow1st": 37.33,
+    "grossLow2nd": null,
+    "grossFlights": 3
   },
   "15": {
     "eventTotalPot": 210.0,
@@ -3249,23 +3249,23 @@ window.GAMES_MATRIX_18 = {
     "netFlights": 2.0,
     "mvp": 100.0,
     "grossTotalPot": 390.0,
-    "skinsTotal": 390.0,
+    "skinsTotal": 270,
     "skins": [
-      195.0,
-      97.5,
-      65.0,
-      48.75,
-      39.0,
-      32.5,
-      27.86,
-      24.38,
-      21.67
+      135.0,
+      67.5,
+      45.0,
+      33.75,
+      27.0,
+      22.5,
+      19.29,
+      16.88,
+      15.0
     ],
     "skinsFlights": 2.0,
-    "individualGross": null,
-    "grossLow1st": "NO_GAME",
-    "grossLow2nd": "NO_GAME",
-    "grossFlights": "NO_GAME"
+    "individualGross": 120,
+    "grossLow1st": 40,
+    "grossLow2nd": null,
+    "grossFlights": 3
   },
   "16": {
     "eventTotalPot": 224.0,
@@ -4118,9 +4118,9 @@ window.GAMES_MATRIX_18 = {
   "32": {
     "eventTotalPot": 448.0,
     "teamTotal": 256.0,
-    "team1st": 256.0,
-    "team2nd": null,
-    "teamMWP": 64.0,
+    "team1st": 170.67,
+    "team2nd": 85.33,
+    "teamMWP": 42.67,
     "teamType": "TEAM Net",
     "ctpTotal": 128.0,
     "ctp1": 32.0,
@@ -4171,9 +4171,9 @@ window.GAMES_MATRIX_18 = {
   "33": {
     "eventTotalPot": 462.0,
     "teamTotal": 264.0,
-    "team1st": 264.0,
-    "team2nd": null,
-    "teamMWP": 66.0,
+    "team1st": 176,
+    "team2nd": 88,
+    "teamMWP": 44.0,
     "teamType": "TEAM Net",
     "ctpTotal": 132.0,
     "ctp1": 33.0,
@@ -4224,9 +4224,9 @@ window.GAMES_MATRIX_18 = {
   "34": {
     "eventTotalPot": 476.0,
     "teamTotal": 272.0,
-    "team1st": 272.0,
-    "team2nd": null,
-    "teamMWP": 68.0,
+    "team1st": 181.33,
+    "team2nd": 90.6666,
+    "teamMWP": 45.33,
     "teamType": "TEAM Net",
     "ctpTotal": 136.0,
     "ctp1": 34.0,
@@ -4277,9 +4277,9 @@ window.GAMES_MATRIX_18 = {
   "35": {
     "eventTotalPot": 490.0,
     "teamTotal": 280.0,
-    "team1st": 280.0,
-    "team2nd": null,
-    "teamMWP": 70.0,
+    "team1st": 186.67,
+    "team2nd": 93.33,
+    "teamMWP": 46.67,
     "teamType": "TEAM Net",
     "ctpTotal": 140.0,
     "ctp1": 35.0,
