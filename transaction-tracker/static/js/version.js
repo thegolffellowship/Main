@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.31.1";
+window.TGF_VERSION = "2.31.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.31.2",
+    date: "2026-07-05",
+    changes: [
+      "Customers page auto-refresh now checks whether the data actually changed before rebuilding the page (a fingerprint of the synced payloads). Most 30-second ticks change nothing, so the page sits perfectly still — scroll position, expanded cards, open scorecards, and the active tab are physically untouched. When something did change, the full rebuild runs exactly as before. First rung of the live-updates ladder (next: targeted row updates, then true push for live event standings).",
+    ],
+  },
   {
     version: "2.31.1",
     date: "2026-07-05",
