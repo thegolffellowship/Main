@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.32.7";
+window.TGF_VERSION = "2.32.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.8",
+    date: "2026-07-05",
+    changes: [
+      "LIVE prize-matrix audit complete (via get_side_games_matrix, source app_settings). Admin's Matrix UI edits CONFIRMED: Individual Gross now activates at 16 players (9h) / 12 players (18h) with self-consistent pots (Ind Gross $4/$8 per buyer, Skins $9/$18, gross pool intact at $13/$26), plus an 18-hole Team Net 1st/2nd split extended down to 32 players. Earlier repairs verified applied with zero collateral on admin-edited rows.",
+      "Two stale companion-cell families the Matrix UI edits did not recompute, now auto-repaired: 18h N=12-15 skins payout arrays still showed FULL-pool values (would overpay skins ~44% at those buyer counts; 36 cells -> flight pot / skin count) and 18h N=32-35 teamMWP still showed the winner-take-all value after the 1st/2nd split (4 cells -> team1st / 4). Boot repair extended to cover both matrices and the ratified MWP formula; repo seed regenerated from the repaired live copy so fresh boots keep the admin's 16/12 thresholds. side-games.md updated to live-verified rules.",
+    ],
+  },
   {
     version: "2.32.7",
     date: "2026-07-05",

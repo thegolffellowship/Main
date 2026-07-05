@@ -59,34 +59,38 @@ prize matrix (analysis below). Open flags listed at the bottom.
   flight); flighted (2 flights at 8+ buyers on 9h — below 8 the
   matrix runs Skins ½ Net — up to 4 flights on 18s); each flight's
   pot divides equally per skin won.
-- **Individual Gross** — raw gross, flighted (activates ~20 buyers on
-  9h / 16 on 18h per matrix; manager may override below — observed
-  running with 13 buyers and 3 flights on s18.7), 1st per flight
-  (2nd added at large counts on 18s).
+- **Individual Gross** — raw gross, flighted. Activates at **16
+  buyers (9h) / 12 (18h)** per the LIVE matrix — admin lowered the
+  thresholds via the Matrix UI (the old Excel seed said 20/16); 3
+  flights in the new bands (9h 16-19, 18h 12-15), 4 flights at 20+/
+  16+. 1st per flight (2nd added at large counts on 18s). s18.7's
+  observed 13 buyers / 3 flights matches the live rule exactly (it
+  was never a manager override).
 
-## Prize matrix — derived rules (from games-matrix.js seed;
-## live copy in app_settings, edited via the Matrix UI)
+## Prize matrix — derived rules (verified against the LIVE
+## app_settings copy 2026-07-05; seed regenerated to mirror it)
 
 Per-player-count N, closed forms verified across the whole matrix:
 
 | Line | 9-hole | 18-hole |
 |---|---|---|
 | Event game money | $7×N | $14×N |
-| Team Net pot | $6×N CART Net (N=4–15, incl. CTP money); $4×N TEAM Net at 16+ (2nd place appears ~N≥40) | $12×N / $8×N (same shape) |
+| Team Net pot | $6×N CART Net (N=4–15, incl. CTP money; pays 2 places at 12–15); $4×N TEAM Net at 16+ (winner-take-all to 47, 1st+2nd at 48+) | $12×N / $8×N (same shape; TEAM 1st+2nd from N=32 — admin edit, was 36) |
 | CTP total | $2×N split evenly over active CTPs | $4×N; CTP count grows 2→3→4 at N=16/24/32, pot splits evenly |
 | Hole-in-One | $1×N | $2×N |
 | NET pool | $13×N | $26×N |
 | Individual Net | $9×N | $26×N − MVP pot |
 | City MVP + TGF MVP | $2×N + $2×N | single-event day: min($8×N, $100), excess → Ind Net; multi-event day: $4×N + $4×N |
 | GROSS pool | $13×N always (totals column fixed 2026-07-05) | $26×N |
-| Skins | $9×N (all of pool below 20) | $18×N equivalent share |
-| Individual Gross | $4×N + $1×N gross-low (active N≥20) | $8×N |
+| Skins | $9×N (all of pool below 16) | $18×N (all of pool below 12) |
+| Individual Gross | $4×N (active N≥16 — admin edit, was 20) | $8×N (active N≥12 — admin edit, was 16) |
 | Net flights | 1 (≤11), 2 (12+) | 1 (≤13), 2 (14-33), 3 (34-49), 4 (50-64) |
 | Skins flights | 1 (<8), 2 (8+) | 2 (8-31), 3 (32-47), 4 (48+) |
-| Gross flights | off (<20), 4 (20+) | off (<16), 4 (16+) |
+| Gross flights | off (<16), 3 (16–19), 4 (20+) | off (<12), 3 (12–15), 4 (16+) |
 
-Skins payout arrays = flight pot ÷ skins count (verified exact), with
-ONE data anomaly: 9h N=18, 3-skin value reads 24.67 vs computed 39.00.
+Skins payout arrays = flight pot ÷ skins count — verified exact
+across the LIVE matrix after the 2026-07-05 repairs (the old 9h N=18
+24.67 anomaly was superseded by the admin's threshold edit).
 
 ## teamMWP — RESOLVED (admin, 2026-07-05)
 
@@ -114,6 +118,38 @@ patches the DB copy; static seed corrected in-repo):**
    ÷ 3, the ratified formula). 1 cell corrected.
 3. Cosmetic, unfixed: N=2–3 rows show eventTotalPot $7×N while every
    event game is NO_EVENT.
+
+## LIVE-matrix audit (2026-07-05, via get_side_games_matrix)
+
+Admin flagged that the earlier audit ran against the repo seed, which
+drifts from the live app_settings copy (Matrix UI saves rewrite the
+static file only on Railway's ephemeral disk). Full re-audit against
+the LIVE copy (source: `app_settings`):
+
+- **Admin's threshold edits CONFIRMED**: Individual Gross activates
+  at N=16 (9h) / N=12 (18h) in the live matrix, exactly as stated;
+  new rows are self-consistent (ig=$4×N/$8×N, skins drop to $9×N/
+  $18×N, gross total stays $13×N/$26×N, 3 gross flights in the new
+  bands). The 9h band's skins arrays were correctly recomputed.
+- **Earlier repairs confirmed applied, no collateral**: live 9h
+  grossTotalPot reads $13×N everywhere; the value guards left every
+  admin-edited row untouched; the 24.67 anomaly row was superseded by
+  the admin's own edit.
+- **Two stale-companion families found** (cells the Matrix UI edit
+  did not recompute), both now fixed by the extended boot repair:
+  1. 18h N=12–15 skins arrays still paid FULL-pool values (implied
+     $26×N: 312/338/364/390) on the new $18×N pots — would overpay
+     skins ~44% at those buyer counts. 36 cells → flight pot ÷ count.
+  2. 18h N=32–35 teamMWP still showed the winner-take-all value
+     (teamTotal÷4) after the admin added a 2/3–1/3 1st/2nd split;
+     4 cells → team1st÷4 (e.g. N=32: $64 → $42.67).
+- Boot repair now covers BOTH matrices + the MWP formula; the repo
+  seed was regenerated from the repaired live copy so a fresh DB
+  no longer regresses the thresholds to 20/16.
+- **Minor, left as-is for admin's call**: 9h N=16–19 grossLow1st is
+  hand-entered at whole dollars ($21/22/23/24) vs exact pot÷3
+  ($21.33/$22.67/$24/$25.33) — leaves $1/$2/$3/$4 undistributed
+  (N=18 pays $23 where exact is $24).
 
 **Not defects — the "removed Excel formulas" survive as encoded rules:**
 - **CART Net below 16 players**: teamType switches to CART Net
