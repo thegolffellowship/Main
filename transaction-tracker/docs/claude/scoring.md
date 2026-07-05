@@ -210,7 +210,14 @@ players keep their higher portal total, never the sum — recomputes
 ranks, and computes the award: $1 x active TGF members at month close
 (customer_memberships started_at/expires_at spanning the month-end
 date), split across tied winners. Route
-/api/season-contests/monthly-points (manager; 10-min cache; ?force=1).
+/api/season-contests/monthly-points (manager). Served from the
+persisted gg_data_snapshots table (v2.30.3) — no GG wait on tab open;
+?force=1 (Refresh button) live-refetches and re-persists, and a daily
+scheduler job (05:30 Central, id monthly_points_snapshot) bounds
+staleness at ~24h; boot queues a bootstrap fetch when no snapshot
+exists. Helpers: save_gg_snapshot / load_gg_snapshot /
+refresh_monthly_points_snapshot (database.py). load adds fetched_at
+(Central, display-ready) to the payload.
 Winner rows highlight gold with a trophy on completed months.
 Rows expand (v2.30.2) to the standard points-detail table: the row's
 member_card_id + chapter pick the season race (Austin -> austin_net,

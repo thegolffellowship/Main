@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.30.2";
+window.TGF_VERSION = "2.30.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.30.3",
+    date: "2026-07-05",
+    changes: [
+      "Fixed player-name links from Contests landing on the Customers page with 'can't find': the deep link now carries the customer id (?cid=) instead of the Golf Genius-format name, which never matched the tracker's 'Last, First' cards. The name fallback also matches loosely now (order- and case-insensitive) for any remaining name-only referrers.",
+      "MONTHLY standings persist in the database (gg_data_snapshots) instead of re-fetching Golf Genius whenever the old 10-minute cache went cold — opening the tab is now instant. A scheduler job refreshes the snapshot daily at 5:30 AM Central, the Refresh button still pulls live on demand, and desktop shows an 'as of' stamp next to it. First boot after this release queues a background fetch so nobody waits.",
+    ],
+  },
   {
     version: "2.30.2",
     date: "2026-07-04",

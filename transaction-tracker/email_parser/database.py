@@ -7333,6 +7333,63 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
     return {"months": out_months, "errors": errors}
 
 
+# ── Golf Genius data snapshots ──────────────────────────────────────────
+# GG-derived payloads persisted so page opens serve instantly from the DB
+# instead of waiting on live portal fetches. Refreshed by a daily
+# scheduler job and on demand (Refresh button / ?force=1).
+
+def _ensure_gg_snapshot_table(conn) -> None:
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS gg_data_snapshots (
+            snapshot_key TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            fetched_at TEXT NOT NULL
+        )"""
+    )
+
+
+def save_gg_snapshot(key: str, data: dict, db_path: str | Path = DB_PATH) -> str:
+    """Persist a GG payload under ``key``; returns the display-ready
+    Central-time stamp written to ``fetched_at``."""
+    fetched_at = now_central().strftime("%Y-%m-%d %H:%M")
+    with _connect(db_path) as conn:
+        _ensure_gg_snapshot_table(conn)
+        conn.execute(
+            "INSERT INTO gg_data_snapshots (snapshot_key, payload, fetched_at) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(snapshot_key) DO UPDATE SET "
+            "payload = excluded.payload, fetched_at = excluded.fetched_at",
+            (key, json.dumps(data), fetched_at),
+        )
+        conn.commit()
+    return fetched_at
+
+
+def load_gg_snapshot(key: str, db_path: str | Path = DB_PATH) -> dict | None:
+    with _connect(db_path) as conn:
+        _ensure_gg_snapshot_table(conn)
+        row = conn.execute(
+            "SELECT payload, fetched_at FROM gg_data_snapshots WHERE snapshot_key = ?",
+            (key,),
+        ).fetchone()
+    if not row:
+        return None
+    data = json.loads(row["payload"])
+    data["fetched_at"] = row["fetched_at"]
+    return data
+
+
+def refresh_monthly_points_snapshot(db_path: str | Path = DB_PATH) -> dict:
+    """Live-fetch monthly points from GG and persist the snapshot.
+
+    Called by the daily scheduler job, the Refresh button (?force=1),
+    and the boot-time bootstrap when no snapshot exists yet.
+    """
+    data = get_monthly_points(db_path)
+    data["fetched_at"] = save_gg_snapshot("monthly_points", data, db_path)
+    return data
+
+
 # ── Member portal (M1): magic-link tokens + per-member summary ─────────
 # Members are customers, not staff — no PINs. A per-customer HMAC token
 # (same signing pattern as the roster opt-in links) is the only key, and
