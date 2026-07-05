@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.32.8";
+window.TGF_VERSION = "2.32.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.9",
+    date: "2026-07-05",
+    changes: [
+      "Per admin ruling, the 9-hole Individual Gross flight payouts at 16-19 players snap to exact division ($21.33/$22.67/$24/$25.33 = pot / 3 flights, replacing the hand-rounded whole dollars). Boot repair now enforces the gross-flight payout formula matrix-wide: flight pot = Ind Gross pot / flights, winner-take-all per flight, 2/3-1/3 split once a 2nd place is in play (18h 48+, verified already exact). Seed regenerated.",
+      "GG game SETUP layer begins in side-games.md from admin's screenshots: TEAM Net definition v1 (Stroke / Foursome v. Field / Best Ball each hole / USGA Net off-lowest at 75% / Retain Ties / winner-take-all purse from matrix -- s9.16's $128 pot cross-checks exactly as $4 x 32 players) plus GLOBAL standards: Maximum Playing Handicap 36 (18h) / 18 (9h) for all genders and games (never more than 2 pops a hole), Disallow Strokes on Par 3 Holes for all team competitions, and the gross Max Triple pickup rule. Standard variation noted: alternate events run Best 2 Balls at 85%.",
+    ],
+  },
   {
     version: "2.32.8",
     date: "2026-07-05",
