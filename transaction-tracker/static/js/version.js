@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.32.4";
+window.TGF_VERSION = "2.32.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.5",
+    date: "2026-07-05",
+    changes: [
+      "Prize matrix audit (admin-requested) complete, with two defects found and FIXED: the 9-hole GROSS Total Pot column overstated at $15/buyer for fields of 20+ while its own game pots correctly summed to the ratified $13 (45 cells corrected — this also fed the Events Games-tab gross subtotal), and one bad skins cell at 18 players (24.67 -> 39.00). A boot repair patches the live DB matrix copy; the static seed is corrected in-repo. Not defects: the audit proved the 'lost Excel formulas' survive as encoded rules — CART Net pairs below 16 players (team pot absorbs the CTP money), Individual Gross cancelling into Skins at low buyer counts (real-world confirmed: s9.16 skins purse $195.01 = 13 x 15 buyers), and the 18-hole MVP $100 cap flowing excess into Individual Net.",
+      "teamMWP identified by admin as Maximum Winnings Potential (one player's max share of the team game, = team 1st / team size — verified exact) feeding the Events Games-tab MWP column; deletion recommendation retracted. side-games.md updated with the audit, the MVP day-type rule (single 18h-event day: City MVP capped $100 with excess to Individual Net; multi-event day: $4+$4 uncapped pending confirmation), and the CART Net / rollover rules.",
+    ],
+  },
   {
     version: "2.32.4",
     date: "2026-07-05",

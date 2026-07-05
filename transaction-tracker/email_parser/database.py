@@ -3480,6 +3480,12 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Payout customer dedup migration failed: %s", e)
 
+        # Matrix audit fixes: 9h gross totals + skins-array formula cells
+        try:
+            _repair_matrix_gross_totals(conn)
+        except Exception as e:
+            logger.warning("Matrix gross-totals repair failed: %s", e)
+
         # Platform dialogue mailbox: seed the welcome post on first boot
         try:
             _seed_platform_dialogue(conn)
@@ -7363,6 +7369,52 @@ def get_customer_gg_cards(customer_id: int, db_path: str | Path = DB_PATH) -> li
         d["race_label"] = (_GG_POINTS_RACES.get(r["race_key"]) or {}).get("label") or r["race_key"]
         out.append(d)
     return out
+
+
+def _repair_matrix_gross_totals(conn) -> None:
+    """Matrix audit fixes (admin-ratified 2026-07-05). Two defects from
+    the de-formula'd Excel import: (1) the 9-hole grossTotalPot column
+    overstated the GROSS pool at $15xN for N>=20 while the game pots
+    themselves sum to the correct $13xN (admin rule: $13 of the $16
+    add-on is pot) — the bad total fed the Events Games-tab subtotals;
+    (2) stray skins-array cells that violate the ratified
+    flight-pot / skin-count formula (one found: 9h N=18, 3 skins).
+    Patches the DB-saved matrix copy when present (the Matrix UI's
+    save path re-derives skins arrays the same way); the static seed
+    file is corrected in the repo. Idempotent."""
+    row = conn.execute(
+        "SELECT value FROM app_settings WHERE key = 'games_matrix_9'"
+    ).fetchone()
+    if not row or not row["value"]:
+        return
+    m9 = json.loads(row["value"])
+    changed = 0
+    for pc, e in m9.items():
+        try:
+            n = int(pc)
+        except (TypeError, ValueError):
+            continue
+        st, ig, gt = e.get("skinsTotal"), e.get("individualGross"), e.get("grossTotalPot")
+        nums = lambda *vs: all(isinstance(v, (int, float)) for v in vs)
+        if nums(st, ig, gt) and abs(st + ig - 13 * n) < 0.02 and abs(gt - 15 * n) < 0.02:
+            e["grossTotalPot"] = 13.0 * n
+            changed += 1
+        sf, arr = e.get("skinsFlights"), e.get("skins")
+        if nums(st, sf) and sf and isinstance(arr, list):
+            pot = st / sf
+            for i, v in enumerate(arr):
+                good = round(pot / (i + 1), 2)
+                if isinstance(v, (int, float)) and abs(v - good) > 0.02:
+                    arr[i] = good
+                    changed += 1
+    if changed:
+        conn.execute(
+            "UPDATE app_settings SET value = ?, updated_at = datetime('now') "
+            "WHERE key = 'games_matrix_9'",
+            (json.dumps(m9),),
+        )
+        conn.commit()
+        logger.info("Matrix repair: corrected %d cells in games_matrix_9", changed)
 
 
 # ── Platform dialogue (tracker-claude <-> platform-claude mailbox) ─────

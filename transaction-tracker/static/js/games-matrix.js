@@ -669,7 +669,7 @@ window.GAMES_MATRIX_9 = {
     "skins": [
       117.0,
       58.5,
-      24.67,
+      39.0,
       29.25,
       23.4,
       19.5,
@@ -744,7 +744,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 40.0,
     "tgfMVP": 40.0,
-    "grossTotalPot": 300.0,
+    "grossTotalPot": 260.0,
     "skinsTotal": 180.0,
     "skins": [
       90.0,
@@ -784,7 +784,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 42.0,
     "tgfMVP": 42.0,
-    "grossTotalPot": 315.0,
+    "grossTotalPot": 273.0,
     "skinsTotal": 189.0,
     "skins": [
       94.5,
@@ -824,7 +824,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 44.0,
     "tgfMVP": 44.0,
-    "grossTotalPot": 330.0,
+    "grossTotalPot": 286.0,
     "skinsTotal": 198.0,
     "skins": [
       99.0,
@@ -864,7 +864,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 46.0,
     "tgfMVP": 46.0,
-    "grossTotalPot": 345.0,
+    "grossTotalPot": 299.0,
     "skinsTotal": 207.0,
     "skins": [
       103.5,
@@ -904,7 +904,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 48.0,
     "tgfMVP": 48.0,
-    "grossTotalPot": 360.0,
+    "grossTotalPot": 312.0,
     "skinsTotal": 216.0,
     "skins": [
       108.0,
@@ -944,7 +944,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 50.0,
     "tgfMVP": 50.0,
-    "grossTotalPot": 375.0,
+    "grossTotalPot": 325.0,
     "skinsTotal": 225.0,
     "skins": [
       112.5,
@@ -984,7 +984,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 52.0,
     "tgfMVP": 52.0,
-    "grossTotalPot": 390.0,
+    "grossTotalPot": 338.0,
     "skinsTotal": 234.0,
     "skins": [
       117.0,
@@ -1024,7 +1024,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 54.0,
     "tgfMVP": 54.0,
-    "grossTotalPot": 405.0,
+    "grossTotalPot": 351.0,
     "skinsTotal": 243.0,
     "skins": [
       121.5,
@@ -1064,7 +1064,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 56.0,
     "tgfMVP": 56.0,
-    "grossTotalPot": 420.0,
+    "grossTotalPot": 364.0,
     "skinsTotal": 252.0,
     "skins": [
       126.0,
@@ -1104,7 +1104,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 58.0,
     "tgfMVP": 58.0,
-    "grossTotalPot": 435.0,
+    "grossTotalPot": 377.0,
     "skinsTotal": 261.0,
     "skins": [
       130.5,
@@ -1144,7 +1144,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 60.0,
     "tgfMVP": 60.0,
-    "grossTotalPot": 450.0,
+    "grossTotalPot": 390.0,
     "skinsTotal": 270.0,
     "skins": [
       135.0,
@@ -1184,7 +1184,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 62.0,
     "tgfMVP": 62.0,
-    "grossTotalPot": 465.0,
+    "grossTotalPot": 403.0,
     "skinsTotal": 279.0,
     "skins": [
       139.5,
@@ -1224,7 +1224,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 64.0,
     "tgfMVP": 64.0,
-    "grossTotalPot": 480.0,
+    "grossTotalPot": 416.0,
     "skinsTotal": 288.0,
     "skins": [
       144.0,
@@ -1264,7 +1264,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 66.0,
     "tgfMVP": 66.0,
-    "grossTotalPot": 495.0,
+    "grossTotalPot": 429.0,
     "skinsTotal": 297.0,
     "skins": [
       148.5,
@@ -1304,7 +1304,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 68.0,
     "tgfMVP": 68.0,
-    "grossTotalPot": 510.0,
+    "grossTotalPot": 442.0,
     "skinsTotal": 306.0,
     "skins": [
       153.0,
@@ -1344,7 +1344,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 70.0,
     "tgfMVP": 70.0,
-    "grossTotalPot": 525.0,
+    "grossTotalPot": 455.0,
     "skinsTotal": 315.0,
     "skins": [
       157.5,
@@ -1384,7 +1384,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 72.0,
     "tgfMVP": 72.0,
-    "grossTotalPot": 540.0,
+    "grossTotalPot": 468.0,
     "skinsTotal": 324.0,
     "skins": [
       162.0,
@@ -1424,7 +1424,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 74.0,
     "tgfMVP": 74.0,
-    "grossTotalPot": 555.0,
+    "grossTotalPot": 481.0,
     "skinsTotal": 333.0,
     "skins": [
       166.5,
@@ -1464,7 +1464,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 76.0,
     "tgfMVP": 76.0,
-    "grossTotalPot": 570.0,
+    "grossTotalPot": 494.0,
     "skinsTotal": 342.0,
     "skins": [
       171.0,
@@ -1504,7 +1504,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 78.0,
     "tgfMVP": 78.0,
-    "grossTotalPot": 585.0,
+    "grossTotalPot": 507.0,
     "skinsTotal": 351.0,
     "skins": [
       175.5,
@@ -1544,7 +1544,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 80.0,
     "tgfMVP": 80.0,
-    "grossTotalPot": 600.0,
+    "grossTotalPot": 520.0,
     "skinsTotal": 360.0,
     "skins": [
       180.0,
@@ -1584,7 +1584,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 82.0,
     "tgfMVP": 82.0,
-    "grossTotalPot": 615.0,
+    "grossTotalPot": 533.0,
     "skinsTotal": 369.0,
     "skins": [
       184.5,
@@ -1624,7 +1624,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 84.0,
     "tgfMVP": 84.0,
-    "grossTotalPot": 630.0,
+    "grossTotalPot": 546.0,
     "skinsTotal": 378.0,
     "skins": [
       189.0,
@@ -1664,7 +1664,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 86.0,
     "tgfMVP": 86.0,
-    "grossTotalPot": 645.0,
+    "grossTotalPot": 559.0,
     "skinsTotal": 387.0,
     "skins": [
       193.5,
@@ -1704,7 +1704,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 88.0,
     "tgfMVP": 88.0,
-    "grossTotalPot": 660.0,
+    "grossTotalPot": 572.0,
     "skinsTotal": 396.0,
     "skins": [
       198.0,
@@ -1744,7 +1744,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 90.0,
     "tgfMVP": 90.0,
-    "grossTotalPot": 675.0,
+    "grossTotalPot": 585.0,
     "skinsTotal": 405.0,
     "skins": [
       202.5,
@@ -1784,7 +1784,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 92.0,
     "tgfMVP": 92.0,
-    "grossTotalPot": 690.0,
+    "grossTotalPot": 598.0,
     "skinsTotal": 414.0,
     "skins": [
       207.0,
@@ -1824,7 +1824,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 94.0,
     "tgfMVP": 94.0,
-    "grossTotalPot": 705.0,
+    "grossTotalPot": 611.0,
     "skinsTotal": 423.0,
     "skins": [
       211.5,
@@ -1864,7 +1864,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 96.0,
     "tgfMVP": 96.0,
-    "grossTotalPot": 720.0,
+    "grossTotalPot": 624.0,
     "skinsTotal": 432.0,
     "skins": [
       216.0,
@@ -1904,7 +1904,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 98.0,
     "tgfMVP": 98.0,
-    "grossTotalPot": 735.0,
+    "grossTotalPot": 637.0,
     "skinsTotal": 441.0,
     "skins": [
       220.5,
@@ -1944,7 +1944,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 100.0,
     "tgfMVP": 100.0,
-    "grossTotalPot": 750.0,
+    "grossTotalPot": 650.0,
     "skinsTotal": 450.0,
     "skins": [
       225.0,
@@ -1984,7 +1984,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 102.0,
     "tgfMVP": 102.0,
-    "grossTotalPot": 765.0,
+    "grossTotalPot": 663.0,
     "skinsTotal": 459.0,
     "skins": [
       229.5,
@@ -2024,7 +2024,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 104.0,
     "tgfMVP": 104.0,
-    "grossTotalPot": 780.0,
+    "grossTotalPot": 676.0,
     "skinsTotal": 468.0,
     "skins": [
       234.0,
@@ -2064,7 +2064,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 106.0,
     "tgfMVP": 106.0,
-    "grossTotalPot": 795.0,
+    "grossTotalPot": 689.0,
     "skinsTotal": 477.0,
     "skins": [
       238.5,
@@ -2104,7 +2104,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 108.0,
     "tgfMVP": 108.0,
-    "grossTotalPot": 810.0,
+    "grossTotalPot": 702.0,
     "skinsTotal": 486.0,
     "skins": [
       243.0,
@@ -2144,7 +2144,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 110.0,
     "tgfMVP": 110.0,
-    "grossTotalPot": 825.0,
+    "grossTotalPot": 715.0,
     "skinsTotal": 495.0,
     "skins": [
       247.5,
@@ -2184,7 +2184,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 112.0,
     "tgfMVP": 112.0,
-    "grossTotalPot": 840.0,
+    "grossTotalPot": 728.0,
     "skinsTotal": 504.0,
     "skins": [
       252.0,
@@ -2224,7 +2224,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 114.0,
     "tgfMVP": 114.0,
-    "grossTotalPot": 855.0,
+    "grossTotalPot": 741.0,
     "skinsTotal": 513.0,
     "skins": [
       256.5,
@@ -2264,7 +2264,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 116.0,
     "tgfMVP": 116.0,
-    "grossTotalPot": 870.0,
+    "grossTotalPot": 754.0,
     "skinsTotal": 522.0,
     "skins": [
       261.0,
@@ -2304,7 +2304,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 118.0,
     "tgfMVP": 118.0,
-    "grossTotalPot": 885.0,
+    "grossTotalPot": 767.0,
     "skinsTotal": 531.0,
     "skins": [
       265.5,
@@ -2344,7 +2344,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 120.0,
     "tgfMVP": 120.0,
-    "grossTotalPot": 900.0,
+    "grossTotalPot": 780.0,
     "skinsTotal": 540.0,
     "skins": [
       270.0,
@@ -2384,7 +2384,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 122.0,
     "tgfMVP": 122.0,
-    "grossTotalPot": 915.0,
+    "grossTotalPot": 793.0,
     "skinsTotal": 549.0,
     "skins": [
       274.5,
@@ -2424,7 +2424,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 124.0,
     "tgfMVP": 124.0,
-    "grossTotalPot": 930.0,
+    "grossTotalPot": 806.0,
     "skinsTotal": 558.0,
     "skins": [
       279.0,
@@ -2464,7 +2464,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 126.0,
     "tgfMVP": 126.0,
-    "grossTotalPot": 945.0,
+    "grossTotalPot": 819.0,
     "skinsTotal": 567.0,
     "skins": [
       283.5,
@@ -2504,7 +2504,7 @@ window.GAMES_MATRIX_9 = {
     "netFlights": 2.0,
     "cityMVP": 128.0,
     "tgfMVP": 128.0,
-    "grossTotalPot": 960.0,
+    "grossTotalPot": 832.0,
     "skinsTotal": 576.0,
     "skins": [
       288.0,
