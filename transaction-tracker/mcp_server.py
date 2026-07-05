@@ -1604,6 +1604,47 @@ def get_tracker_docs(name: str = "") -> str:
 
 
 @mcp.tool()
+def get_side_games_matrix(holes: int = 0) -> str:
+    """Return the LIVE side-games prize matrix (both hole counts).
+
+    Reads the app_settings copy that the Matrix UI edits — the
+    authoritative version. The static games-matrix.js in the repo is
+    only a seed: UI saves rewrite it on the deployed container's
+    EPHEMERAL disk, so the repo copy silently drifts from live. Always
+    read this tool for current thresholds and payouts.
+
+    Args:
+        holes: 9 or 18 for one matrix; 0 (default) for both
+    """
+    import re as _re
+    from email_parser.database import get_app_setting
+
+    def _seed():
+        root = Path(__file__).resolve().parent
+        content = (root / "static" / "js" / "games-matrix.js").read_text()
+        m9 = _re.search(r"window\.GAMES_MATRIX_9\s*=\s*(\{.*?\});", content, _re.DOTALL)
+        m18 = _re.search(r"window\.GAMES_MATRIX_18\s*=\s*(\{.*?\});", content, _re.DOTALL)
+        return json.loads(m9.group(1)), json.loads(m18.group(1))
+
+    db9 = get_app_setting("games_matrix_9")
+    db18 = get_app_setting("games_matrix_18")
+    if db9 and db18:
+        m9, m18 = json.loads(db9), json.loads(db18)
+        source = "app_settings (live — carries Matrix UI edits)"
+    else:
+        m9, m18 = _seed()
+        source = "static seed (matrix never saved via UI)"
+    out = {"source": source}
+    if holes == 9:
+        out["matrix9"] = m9
+    elif holes == 18:
+        out["matrix18"] = m18
+    else:
+        out["matrix9"], out["matrix18"] = m9, m18
+    return json.dumps(out, indent=2)
+
+
+@mcp.tool()
 def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0) -> str:
     """Read the tracker-claude <-> platform-claude planning mailbox (newest first).
 

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.32.5";
+window.TGF_VERSION = "2.32.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.6",
+    date: "2026-07-05",
+    changes: [
+      "New MCP tool get_side_games_matrix (60 total) serves the LIVE prize matrix from the database — the copy the Matrix UI actually edits. Root cause documented: UI saves rewrite the repo's games-matrix.js only on Railway's ephemeral disk, so the checked-in seed silently drifts from live (the admin's Ind Gross minimum changes to 16/12 players never reached the seed). The seed-based audit will be re-run against the live matrix; the v2.32.5 boot repair was value-guarded so it could not touch legitimate edits.",
+    ],
+  },
   {
     version: "2.32.5",
     date: "2026-07-05",
