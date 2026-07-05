@@ -197,9 +197,11 @@ toward full automation (see governing docs).
   hole in any competition.
 - **Team competitions**: Handicaps → "Disallow Strokes on Par 3
   Holes" (all team games).
-- **Max Triple** (advanced hole-by-hole maximum score rule) is
-  applied to GROSS — players know to pick up once they're not holed
-  out after attempting double bogey.
+- **Max Triple** (advanced hole-by-hole maximum score rule): gross
+  triple bogey is the maximum recorded score in ALL games, net or
+  not — net pops are applied FROM the capped gross. Players know to
+  pick up once they're not holed out after attempting double bogey.
+  (admin, 2026-07-05)
 - Payout places are selected per the prize matrix when a game pays
   multiple places (the matrix is the source of truth for amounts).
 
@@ -217,19 +219,72 @@ toward full automation (see governing docs).
 | Handicaps (advanced) | Disallow Strokes on Par 3 Holes |
 | Enter One Team Score | OFF (individual scores entered) |
 
-Standard variations (admin): typically every other event runs **Best
-2 Balls on each hole at 85%** allowance; Best 3 or Best 4 at 100%
-are conceivable. 18-hole Team Net is the same shape (18 holes;
-payout selector set for 1st+2nd when the matrix pays two places).
-Open questions posted to admin: whether allowance is formally tied
-to ball count (1→75%, 2→85%, 3/4→100%) and whether Max Triple
-applies to all games or team games only.
+**Variant rules (admin answers, 2026-07-05):**
+
+- Allowance IS tied to ball count — they are the standard USGA
+  recommendations: **Best 1 → 75%, Best 2 → 85%, Best 3 → 100%,
+  Best 4 → 100%**. Encode the pairing; the % follows the ball count.
+- Scheduling rule for automation: **standard rotation every other
+  event between Best 1 and Best 2**, admin/manager-overridable to
+  Best 3/Best 4 (or to run Best 1 in lieu of Best 2).
+- 18-hole Team Net is the same shape (18 holes; payout selector set
+  for 1st+2nd when the matrix pays two places).
+- **"Off lowest" handicapping** (admin: "essentially yes, strokes
+  play off the lowest handicap — the nuance lies in how it's
+  applied"): the reduction scope follows the competition scope —
+  flighted games apply it WITHIN each flight, field games across the
+  field, match play just between the two players in the match.
+  Details to be worked in a dedicated session before our own engine
+  implements it.
+
+### MVP (City MVP) — definition v1 (s9.16 "s9.16 MVP $" setup)
+
+| Setting | Value |
+|---|---|
+| GG name | "s9.16 MVP $" (per-event) |
+| Divisions | the event's NET division ONLY (s9.16 Net) — matches members-only NET-bundle eligibility |
+| Format | **Stableford** · Player v. Field · Own Ball on each hole · 9 Holes (Front or Back) |
+| Assign Points | HIO **8** · Triple Eagle+ **4** · Double Eagle **4** · Eagle **3** · Birdie **2** · Par **1** · Bogey **0** · Double Bogey **-1** · Triple Bogey **-1** · Others **0** |
+| Handicap | USGA Net (plain, NOT off-lowest) · allowance **100%** · Drop Worst 0 |
+| Tie-breaking | Retain Ties (admin settles via the ratified tiebreaker chain — Ind Net, then Gross, then split — recorded through payment) |
+| Payout | Purse & Points "by Winner takes all" · purse pot $42 = **$2 × 21 NET buyers** (multi-event-day City MVP half-share — cross-checks the ratified $2/$2 split exactly) · points 0 |
+| Season Points | none |
+
+Schedule notes: (a) a hole-in-one pays 8 regardless of par; (b) the
+"Others" (worse than triple) slot at 0 is unreachable in practice —
+the global gross Max Triple rule caps every recorded score at triple
+bogey (which scores -1); (c) this custom schedule is NOT classic
+Stableford — whether the POINTS games use the same Assign Points
+table is the key open question for live standings math (awaiting the
+points-game setup screenshot).
+
+### Individual Net — definition v1 (s9.16 "INDIVIDUAL Net $" setup)
+
+| Setting | Value |
+|---|---|
+| GG name | "INDIVIDUAL Net $" (per-event) |
+| Divisions | the event's NET division ONLY (s9.16 Net) |
+| Format | **Stroke** (not Stableford) · **Player v. Flight** · Own Ball on each hole · 9 Holes (Front or Back) |
+| Handicap | USGA Net (plain) · allowance **100%** · Drop Worst 0 |
+| Tie-breaking | Retain Ties (ties split combined place money per ratified rules) |
+| Payout | Purse & Points "by 1st, 2nd, … Nth" **per flight**: 1st $63 / 2nd $31.50 (flight total $94.50) · points 0 |
+| Max scores | Advanced: "Max Triple" (gross) |
+| Leaderboard | ALSO displays total gross score + Playing Handicap™ as separate columns |
+| Season Points | none |
+
+Cross-check (exact): 2 flights × $94.50 = $189 = $9 × 21 NET buyers
+— the same 21 buyers the MVP pot implied, and the matrix N=21 row
+verbatim (netFlights 2 at 12+ buyers, places at 2/3–1/3). Flights
+are configured under Cut Lines & Sections (split observed at HCP
+12.0). Note the handicap dropdown: individual games use plain "USGA
+Net"; only TEAM games use "USGA Net (off lowest)".
 
 ### Definitions still to capture
 
-CTP / Longest Putt, Hole-in-One, Individual Net, MVP, Skins,
-Individual Gross, Match Play, POINTS games — as admin supplies
-screenshots.
+CTP / Longest Putt, Hole-in-One, Skins, Individual Gross, Match
+Play, POINTS games (s9.16 Net / race divisions — highest priority:
+feeds live championship standings), TGF MVP recording on multi-event
+days — as admin supplies screenshots.
 
 ## Next phase (ratified direction, mailbox ids 10-11)
 

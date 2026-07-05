@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.32.9";
+window.TGF_VERSION = "2.32.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.10",
+    date: "2026-07-05",
+    changes: [
+      "Matrix page now opens to the 9-hole games by default (admin request) — the toggle previously landed on 18 holes.",
+      "Team Net variant rules ratified into side-games.md from admin answers: allowance follows ball count per USGA standard recommendations (Best 1 -> 75%, Best 2 -> 85%, Best 3/4 -> 100%); automation should rotate Best 1 / Best 2 every other event with admin override for the other variants; gross Max Triple caps the recorded score in ALL games (net pops apply from the capped gross); off-lowest handicapping scopes to the competition (flight, field, or the two players in a match) with details deferred to a dedicated session.",
+      "GG setup definitions v1 added for MVP and Individual Net from admin screenshots. MVP: Stableford (custom schedule: ace 8, eagle 3, birdie 2, par 1, bogey 0, double/triple -1), NET division only, USGA Net 100%, winner-take-all purse -- s9.16's $42 pot cross-checks the multi-event-day $2/NET-buyer City MVP half-share at 21 buyers. Individual Net: Stroke, Player v. Flight, per-flight purse $63/$31.50 -- 2 flights x $94.50 = $189 = $9 x 21 buyers, matching the matrix N=21 row verbatim. Both games carry the Max Triple rule; individual games use plain USGA Net while team games use off-lowest.",
+    ],
+  },
   {
     version: "2.32.9",
     date: "2026-07-05",

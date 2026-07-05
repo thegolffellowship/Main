@@ -221,8 +221,8 @@
 
         <div class="matrix-controls">
             <div class="toggle-group" id="holes-toggle">
-                <button data-holes="9">9 Holes</button>
-                <button data-holes="18" class="active">18 Holes</button>
+                <button data-holes="9" class="active">9 Holes</button>
+                <button data-holes="18">18 Holes</button>
             </div>
             <div class="range-controls">
                 <label>Players:</label>
@@ -262,7 +262,7 @@
     <script src="/static/js/chat-widget.js"></script>
     <script>
     (function() {
-        let currentHoles = 18;
+        let currentHoles = 9;
         let rangeMin = 2;
         let rangeMax = 20;
         let pendingChanges = {};  // { "holes:playerCount:fieldKey": newValue }
