@@ -4231,9 +4231,20 @@
             }
 
             if (holes === 9) {
-                if (gNet.cityMVP) { netMWP += numVal(gNet.cityMVP); html += `<tr><td>City MVP</td><td>${fmt$(gNet.cityMVP)}</td><td>${fmt$(gNet.cityMVP)}</td><td></td>${empty4}</tr>`; }
-                if (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME") {
-                    const mvpInfo = getMvpLinkedEvents(ev);
+                // Day-type rule (admin, 2026-07-05): TGF MVP only exists when
+                // another same-day TGF event is linked. On single-event days
+                // (or when all others are unlinked/rained out) the TGF MVP
+                // money folds into City MVP — no phantom TGF MVP game.
+                const tgfVal = (gNet.tgfMVP && gNet.tgfMVP !== "NO_GAME") ? numVal(gNet.tgfMVP) : 0;
+                const mvpInfo = tgfVal ? getMvpLinkedEvents(ev) : null;
+                if (gNet.cityMVP) {
+                    const cityVal = numVal(gNet.cityMVP) + (mvpInfo ? 0 : tgfVal);
+                    netMWP += cityVal;
+                    const foldNote = (!mvpInfo && tgfVal)
+                        ? ' <span style="font-size:0.8em;color:#6366f1;" title="No linked same-day event — TGF MVP money folds into City MVP">(incl. TGF $)</span>' : '';
+                    html += `<tr><td>City MVP${foldNote}</td><td>${fmt$(cityVal)}</td><td>${fmt$(cityVal)}</td><td></td>${empty4}</tr>`;
+                }
+                if (tgfVal) {
                     if (mvpInfo) {
                         // Combined TGF MVP — linked same-day events
                         netMWP += mvpInfo.combinedPot;
@@ -4245,8 +4256,8 @@
                             html += `<tr class="games-row-sub"><td class="games-indent">${le.course || le.event_name}${unlinkBtn}</td><td>${fmt$(le.tgfMVP)}</td><td></td><td></td>${empty4}</tr>`;
                         });
                     } else {
-                        // Standalone TGF MVP
-                        netMWP += numVal(gNet.tgfMVP);
+                        // No linked same-day event: money already folded into
+                        // City MVP above — only surface admin relink buttons
                         // Find same-day events that could be linked (either this event or others are unlinked)
                         let relinkHtml = '';
                         if (currentRole === 'admin' && ev.event_date) {
@@ -4261,7 +4272,9 @@
                                 }
                             }
                         }
-                        html += `<tr><td>TGF MVP${relinkHtml}</td><td>${fmt$(gNet.tgfMVP)}</td><td>${fmt$(gNet.tgfMVP)}</td><td></td>${empty4}</tr>`;
+                        if (relinkHtml) {
+                            html += `<tr class="games-row-sub"><td class="games-indent">TGF MVP: no linked same-day event${relinkHtml}</td><td></td><td></td><td></td>${empty4}</tr>`;
+                        }
                     }
                 }
             } else {
