@@ -342,6 +342,7 @@
 
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/points-render.js"></script>
     <script src="/static/js/chat-widget.js"></script>
     <script>
     let allCustomers = [];
@@ -993,9 +994,10 @@
             </div>
         </div>
         <div class="cust-tab-content cust-tab-points" style="display:none;">
-            <div style="text-align:center; padding:2rem 1rem;">
-                <div style="font-size:1.5rem; color:var(--text-muted); margin-bottom:0.5rem;">Feature Coming Soon!</div>
-                <div style="font-size:0.85rem; color:var(--text-muted);">Season points tracking will be available here.</div>
+            <div class="cust-points-container" data-customer-id="${customer.customer_id || ''}">
+                <div class="cust-points-wrapper" style="font-size:0.82rem;">
+                    <span style="color:var(--text-muted);">Loading points...</span>
+                </div>
             </div>
         </div>
         <div class="cust-tab-content cust-tab-info" style="display:none;">
@@ -1194,7 +1196,16 @@
                             }
                         }
                         const mPoints = expandedCard.querySelector(".cust-tab-points");
-                        if (mPoints) mPoints.style.display = target === "points" ? "" : "none";
+                        if (mPoints) {
+                            mPoints.style.display = target === "points" ? "" : "none";
+                            if (target === "points") {
+                                const wrapper = mPoints.querySelector(".cust-points-wrapper");
+                                if (wrapper && wrapper.textContent.includes("Loading")) {
+                                    const pContainer = mPoints.querySelector(".cust-points-container");
+                                    loadCustomerPoints(pContainer?.dataset?.customerId, wrapper);
+                                }
+                            }
+                        }
                         const infoTab = expandedCard.querySelector(".cust-tab-info");
                         infoTab.style.display = target === "info" ? "" : "none";
                         // Lazy-load membership terms on first Info-tab view.
@@ -2156,11 +2167,12 @@
             </div>
         </div>`;
 
-        // Points tab content (Coming Soon placeholder)
+        // Points tab content (loaded async)
         html += `<div class="cust-tab-content cust-tab-points" style="${_at !== 'points' ? 'display:none;' : ''}">
-            <div style="text-align:center; padding:2rem 1rem;">
-                <div style="font-size:1.5rem; color:var(--text-muted); margin-bottom:0.5rem;">Feature Coming Soon!</div>
-                <div style="font-size:0.85rem; color:var(--text-muted);">Season points tracking will be available here.</div>
+            <div class="cust-points-container" data-customer-id="${customer.customer_id || ''}">
+                <div class="cust-points-wrapper" style="font-size:0.82rem;">
+                    <span style="color:var(--text-muted);">Loading points...</span>
+                </div>
             </div>
         </div>`;
 
@@ -2274,6 +2286,97 @@
         }
     }
 
+    // ---- Points tab (season races + monthly) ---------------------------
+    // Reuses the Contests drill-down renderers (points-render.js). Races
+    // the player appears in come from the persisted GG standings snapshot
+    // (/api/customers/<cid>/gg-cards); each race section renders the same
+    // DATE | EVENT | PTS | POS breakdown as Contests, points lines expand
+    // to hole-by-hole scorecards in place, and a MONTHLY strip shows the
+    // player's month totals with wins highlighted gold.
+    async function loadCustomerPoints(customerIdRaw, wrapper) {
+        const customerId = parseInt(customerIdRaw, 10) || null;
+        if (!customerId) {
+            wrapper.innerHTML = '<span style="color:var(--text-muted);">No customer profile linked — points lookup needs a linked profile.</span>';
+            return;
+        }
+        try {
+            const [cardsRes, rounds, monthly] = await Promise.all([
+                fetch(`/api/customers/${customerId}/gg-cards`),
+                fetch(`/api/scoring/rounds?customer_id=${customerId}&limit=100`)
+                    .then(async r => r.ok ? await r.json() : []).catch(() => []),
+                fetch("/api/season-contests/monthly-points")
+                    .then(async r => r.ok ? await r.json() : null).catch(() => null),
+            ]);
+            if (cardsRes.status === 403) {
+                wrapper.innerHTML = '<span style="color:var(--text-muted);">Points detail requires manager access.</span>';
+                return;
+            }
+            if (!cardsRes.ok) throw new Error(`HTTP ${cardsRes.status}`);
+            const cards = (await cardsRes.json()).cards || [];
+            // one detail fetch per race the player appears in (10-min server
+            // cache); a failed fetch degrades that section to summary-only
+            const details = await Promise.all(cards.map(c =>
+                fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(c.race_key)}&card=${encodeURIComponent(c.member_card_id)}`)
+                    .then(async r => { const d = await r.json(); return r.ok ? d.tables : null; })
+                    .catch(() => null)));
+
+            const compact = prIsCompact();
+            const secTitle = (label, note) => `<div style="font-weight:700;font-size:0.85rem;letter-spacing:0.05em;color:#0f172a;margin:0.9rem 0 0.15rem;">${label}${note ? (compact
+                ? `<span style="display:block;font-weight:400;font-size:0.72rem;color:var(--text-muted);letter-spacing:0;">${note}</span>`
+                : ` <span style="font-weight:400;color:var(--text-muted);letter-spacing:0;">${note}</span>`) : ""}</div>`;
+            let html = "";
+            const claimed = new Set();
+            cards.forEach((c, i) => {
+                const bits = [];
+                if (c.rank != null) bits.push(`#${escapeHtml(String(c.rank))}`);
+                bits.push(`${c.total_points ?? 0} pts`);
+                if (c.tournaments != null) bits.push(`${c.tournaments} rounds`);
+                if (c.wins) bits.push(`${c.wins} ${c.wins === 1 ? "win" : "wins"}`);
+                html += secTitle(escapeHtml(c.race_label || c.race_key), `— ${bits.join(" · ")}`);
+                html += details[i] && details[i].length
+                    ? prRenderDetailTables(details[i], rounds || [], claimed)
+                    : '<div style="color:var(--text-muted);font-size:0.8rem;">Round-by-round detail unavailable right now — try again in a minute.</div>';
+            });
+
+            // MONTHLY strip from the persisted snapshot (only months where
+            // this player scored points)
+            const moRows = [];
+            ((monthly && monthly.months) || []).forEach(m => {
+                const row = (m.standings || []).find(x => x.customer_id === customerId);
+                if (!row) return;
+                const win = m.complete && (m.winners || []).some(w => w.customer_id === customerId);
+                moRows.push(`<tr${win ? ' style="background:#fde68a;"' : ""}>
+                    <td${win ? ' style="font-weight:700;"' : ""}>${escapeHtml(m.name)}${win ? " &#127942;" : ""}</td>
+                    <td style="text-align:center;">${row.rounds ?? ""}</td>
+                    <td style="text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${row.points}</td>
+                    <td style="text-align:center;">${escapeHtml(String(row.rank_label ?? row.rank ?? ""))}</td>
+                    <td style="text-align:center;">${win ? `<strong>$${(m.winners[0] || {}).share ?? ""}</strong>` : ""}</td>
+                </tr>`);
+            });
+            if (moRows.length) {
+                html += secTitle("MONTHLY RACE", "— every point earned in the month counts; purse = $1 per member at month close");
+                html += `<table class="enrollment-table${compact ? " pr-compact" : ""}" style="margin:0;font-size:${compact ? "0.72rem" : "0.82rem"};">
+                    <thead><tr><th>Month</th>
+                        <th style="text-align:center;${compact ? "width:24px;" : "width:80px;"}" title="Rounds that month">${compact ? "R" : "Rounds"}</th>
+                        <th style="text-align:center;${compact ? "width:40px;" : "width:90px;"}border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;">${compact ? "PTS" : "POINTS"}</th>
+                        <th style="text-align:center;${compact ? "width:36px;" : "width:80px;"}">Rank</th>
+                        <th style="text-align:center;${compact ? "width:48px;" : "width:90px;"}" title="$1 per TGF member at month close; ties split">${compact ? "$" : "WON"}</th>
+                    </tr></thead><tbody>${moRows.join("")}</tbody></table>`;
+            }
+
+            const leftovers = (rounds || []).filter(r => !claimed.has(r.id));
+            html += prRenderScoreRounds(leftovers, {
+                title: cards.length ? "OTHER IMPORTED ROUNDS" : "IMPORTED ROUNDS",
+                explainer: "— no points line in a race; click a row for hole-by-hole",
+            });
+            wrapper.innerHTML = html
+                || '<span style="color:var(--text-muted);">No points-race appearances or imported scorecards yet.</span>';
+            prBindScorecardToggles(wrapper);
+        } catch (e) {
+            wrapper.innerHTML = `<span style="color:#dc2626;">Failed to load points: ${escapeHtml(e.message)}</span>`;
+        }
+    }
+
     function attachCustDetailHandlers(container) {
         container.querySelectorAll("[data-cust-credit-id]").forEach(btn => {
             btn.addEventListener("click", (e) => {
@@ -2367,6 +2470,13 @@
                 const pointsTab = container.querySelector(".cust-tab-points");
                 if (pointsTab) {
                     pointsTab.style.display = target === "points" ? "" : "none";
+                    if (target === "points") {
+                        const wrapper = pointsTab.querySelector(".cust-points-wrapper");
+                        if (wrapper && wrapper.textContent.includes("Loading")) {
+                            const pContainer = pointsTab.querySelector(".cust-points-container");
+                            loadCustomerPoints(pContainer?.dataset?.customerId, wrapper);
+                        }
+                    }
                 }
             });
         });
@@ -2391,6 +2501,18 @@
                     const wContainer = winningsTab.querySelector(".cust-winnings-container");
                     const custName = wContainer?.dataset?.customerName;
                     if (custName) loadCustomerWinnings(custName, wrapper, wContainer?.dataset?.customerId);
+                }
+            }
+        }
+
+        // Auto-load points if points tab is already active on re-render
+        if (activeDetailTab === "points") {
+            const pointsTab = container.querySelector(".cust-tab-points");
+            if (pointsTab) {
+                const wrapper = pointsTab.querySelector(".cust-points-wrapper");
+                if (wrapper && wrapper.textContent.includes("Loading")) {
+                    const pContainer = pointsTab.querySelector(".cust-points-container");
+                    loadCustomerPoints(pContainer?.dataset?.customerId, wrapper);
                 }
             }
         }
@@ -2705,11 +2827,12 @@
             </div>
         </div>`;
 
-        // Points tab (Coming Soon)
+        // Points tab (loaded async)
         panelHtml += `<div class="cust-tab-content cust-tab-points" style="${_at2 !== 'points' ? 'display:none;' : ''}">
-            <div style="text-align:center; padding:2rem 1rem;">
-                <div style="font-size:1.5rem; color:var(--text-muted); margin-bottom:0.5rem;">Feature Coming Soon!</div>
-                <div style="font-size:0.85rem; color:var(--text-muted);">Season points tracking will be available here.</div>
+            <div class="cust-points-container" data-customer-id="${customer.customer_id || ''}">
+                <div class="cust-points-wrapper" style="font-size:0.82rem;">
+                    <span style="color:var(--text-muted);">Loading points...</span>
+                </div>
             </div>
         </div>`;
 

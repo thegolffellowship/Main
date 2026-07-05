@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.30.3";
+window.TGF_VERSION = "2.31.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.31.0",
+    date: "2026-07-05",
+    changes: [
+      "Customer Points tab is live (was 'Feature Coming Soon'). Expanding a customer and opening Points shows every points race the player appears in — rank, total points, rounds, wins — with the same DATE | EVENT | PTS | POS round-by-round breakdown as the Contests drill-downs; points lines with an imported scorecard expand to the hole-by-hole card in place, MVP badges included. A MONTHLY RACE strip lists the player's month totals and rank with wins highlighted gold and the $ share shown. Imported rounds without a points line follow in their own list.",
+      "Race membership comes from the persisted Golf Genius standings snapshot via the new /api/customers/<id>/gg-cards endpoint — no live GG wait, freshness rides the standings' existing 12-hour auto-refresh.",
+      "The Contests drill-down renderers (points tables, rounds lists, hole-by-hole scorecard, badges, formatting) moved from contests.html into shared static/js/points-render.js so the Contests page and the customer Points tab render from one code path and can never drift apart. No visual change on Contests.",
+    ],
+  },
   {
     version: "2.30.3",
     date: "2026-07-05",

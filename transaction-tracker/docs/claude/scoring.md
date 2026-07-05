@@ -199,6 +199,19 @@ url = the tournament_results widget. `/api/scoring/rounds` rows carry
 drill-down renders amber MVP / teal TGF MVP pills after the event name.
 event_mvps is in _CUSTOMER_FK_COLUMNS (merge-safe).
 
+## Shared drill-down renderers (v2.31.0)
+
+The Points Races drill-down renderers — prRenderDetailTables,
+prRenderScoreRounds, prRenderScorecard, prBindScorecardToggles, and
+their helpers (prIsCompact, prFmtAwardDate, prMvpBadges, prBadgeLayout,
+prPrettyEvent, prNineSuffix, prFmtHcp) — live in
+`static/js/points-render.js` (moved out of contests.html), exported on
+window and consumed by BOTH the Contests page and the Customers Points
+tab. The module injects its own .enrollment-table/.pr-wrap/.pr-compact
+CSS so host pages don't need the Contests stylesheet. Edit the module,
+never re-inline copies. (scorecard-render.js remains the member-portal
+twin of prRenderScorecard — keep the two in sync until unified.)
+
 ## Monthly points races (v2.30.0)
 
 Contests -> Points Races -> MONTHLY: month nav bar over combined-chapter

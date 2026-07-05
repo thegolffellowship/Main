@@ -326,6 +326,30 @@ both halves in sync if either changes.
   Exists and works correctly, but the Info tab UI doesn't call it (see above).
 - `POST /api/customers/sync-roles` — replaces full role set.
 
+## Points Tab (v2.31.0)
+
+The customer detail's Points tab (all three surfaces: mobile card,
+desktop list row, cards-view panel) lazy-loads on first view via
+`loadCustomerPoints(customerId, wrapper)`:
+
+- `/api/customers/<cid>/gg-cards` (manager) -> the races the player
+  appears in, from the persisted `gg_points_standings` snapshot
+  (`get_customer_gg_cards()` in database.py). Each row carries
+  race_key + member_card_id + last-known rank/points/rounds/wins.
+- Per race: `/api/season-contests/points-race/detail?race&card` (the
+  Contests endpoint, 10-min cache) rendered with the shared
+  `prRenderDetailTables` from `static/js/points-render.js` — identical
+  to the Contests drill-down, scorecard expansion and MVP badges
+  included. `/api/scoring/rounds?customer_id=` supplies the imported
+  rounds for matching; unmatched ones list under OTHER IMPORTED ROUNDS.
+- MONTHLY strip filters `/api/season-contests/monthly-points` (served
+  from the DB snapshot) to rows with this customer_id; wins highlight
+  gold with the $ share.
+
+View-only sessions get a "requires manager access" note (the chained
+endpoints are manager-gated). Customers without a customer_id get a
+"no profile linked" note.
+
 ## Status Derivation (`deriveStatus`)
 
 `deriveStatus(items, roles, currentPlayerStatus, membershipTerm, statusName)`

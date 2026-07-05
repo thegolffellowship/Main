@@ -288,6 +288,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `static/js/coo-dashboard.js` — COO Dashboard logic: chat, agents, editable values, action items
 - `static/js/auth.js` — PIN auth + role management + sticky nav offsets
 - `static/js/games-matrix.js` — Prize matrix data (9-hole & 18-hole, 2-64 players)
+- `static/js/points-render.js` — Shared Points Races drill-down renderers (Contests page + Customers Points tab); injects its own table CSS
 - `static/js/version.js` — Version number + changelog data
 - `static/js/chat-widget.js` — Support/feedback chat widget
 - `golf_genius_sync.py` — Golf Genius handicap sync via HTTP
