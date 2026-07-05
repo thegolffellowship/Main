@@ -1560,6 +1560,90 @@ def get_courses() -> str:
 #  ENTRYPOINT
 # ═══════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════
+#  PLATFORM COLLABORATION TOOLS
+#  Bridge between tracker-claude (Claude Code building this repo) and
+#  platform-claude (the claude.ai Golf Fellowship Project planning the
+#  TGF Platform). Docs are the architecture picture; the dialogue table
+#  is the durable two-way mailbox — no copy/paste relaying needed.
+# ═══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def get_tracker_docs(name: str = "") -> str:
+    """Read the Tracker's living documentation (CLAUDE.md + docs/claude/*.md).
+
+    Call with no arguments to list available docs; pass a doc name (e.g.
+    'state-of-the-tracker.md', 'scoring.md', 'member-portal.md',
+    'CLAUDE.md') to get its full text. These docs are kept current by the
+    Tracker's dev workflow after every change, so they are the
+    authoritative picture of what is built. Start with
+    'state-of-the-tracker.md' — the Platform-facing brief.
+
+    Args:
+        name: Doc filename to fetch; empty lists all docs
+    """
+    root = Path(__file__).resolve().parent
+    docs_dir = root / "docs" / "claude"
+    available = {"CLAUDE.md": root / "CLAUDE.md"}
+    if docs_dir.is_dir():
+        for f in sorted(docs_dir.glob("*.md")):
+            available[f.name] = f
+    if not name:
+        return json.dumps({
+            "docs": [{"name": k, "bytes": v.stat().st_size}
+                     for k, v in available.items() if v.is_file()],
+            "hint": "Call again with name='<doc>.md' for full text. "
+                    "Start with state-of-the-tracker.md.",
+        }, indent=2)
+    key = name.strip().lstrip("/").split("/")[-1]
+    f = available.get(key)
+    if not f or not f.is_file():
+        return json.dumps({"error": f"Unknown doc {name!r}",
+                           "docs": sorted(available)})
+    return f.read_text(encoding="utf-8")
+
+
+@mcp.tool()
+def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0) -> str:
+    """Read the tracker-claude <-> platform-claude planning mailbox (newest first).
+
+    The durable two-way channel between the Claude building the Tracker
+    codebase ('tracker-claude') and the claude.ai Golf Fellowship Project
+    planning the TGF Platform ('platform-claude'). Check it at the start
+    of a planning discussion or working session; reply with
+    post_platform_dialogue.
+
+    Args:
+        limit: Max entries to return (default 20, cap 200)
+        topic: Filter by topic substring (e.g. 'live-scoring')
+        since_id: Only entries with id greater than this (catch-up reads)
+    """
+    from email_parser.database import read_platform_dialogue_entries
+    return json.dumps(read_platform_dialogue_entries(limit, topic, since_id), indent=2)
+
+
+@mcp.tool()
+def post_platform_dialogue(body: str, topic: str = "", author: str = "platform-claude") -> str:
+    """Post to the tracker-claude <-> platform-claude planning mailbox.
+
+    Write questions, decisions, proposals, and session digests here so
+    the other side reads them directly — no copy/paste relaying. Sign
+    with who you are: author='platform-claude' (claude.ai Project),
+    'tracker-claude' (Claude Code on the Tracker repo), or 'kerry' when
+    the admin dictates a message verbatim.
+
+    Args:
+        body: The message (markdown welcome)
+        topic: Short topic tag (e.g. 'live-scoring', 'app-roadmap')
+        author: Who is posting (default 'platform-claude')
+    """
+    from email_parser.database import post_platform_dialogue_entry
+    try:
+        return json.dumps(post_platform_dialogue_entry(author, body, topic), indent=2)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+
+
 if __name__ == "__main__":
     transport = "sse" if "--sse" in sys.argv else "stdio"
     mcp.run(transport=transport)

@@ -3480,6 +3480,12 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Payout customer dedup migration failed: %s", e)
 
+        # Platform dialogue mailbox: seed the welcome post on first boot
+        try:
+            _seed_platform_dialogue(conn)
+        except Exception as e:
+            logger.warning("Platform dialogue seed failed: %s", e)
+
         # Always-run repair: re-attribute Tanner Chalfant items corrupted by bad merge
         try:
             _repair_chalfant_attribution(conn)
@@ -7357,6 +7363,90 @@ def get_customer_gg_cards(customer_id: int, db_path: str | Path = DB_PATH) -> li
         d["race_label"] = (_GG_POINTS_RACES.get(r["race_key"]) or {}).get("label") or r["race_key"]
         out.append(d)
     return out
+
+
+# ── Platform dialogue (tracker-claude <-> platform-claude mailbox) ─────
+# Durable two-way channel between the Claude Code sessions building the
+# Tracker ("tracker-claude") and the claude.ai Golf Fellowship Project
+# planning the TGF Platform ("platform-claude"). Both sides read/write
+# through MCP tools; the admin triggers each side's turn. created_at is
+# a UTC audit stamp (see CLAUDE.md Timezone rules).
+
+def _ensure_platform_dialogue_table(conn) -> None:
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS platform_dialogue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            author TEXT NOT NULL,
+            topic TEXT,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )"""
+    )
+
+
+def post_platform_dialogue_entry(author: str, body: str, topic: str = "",
+                                 db_path: str | Path = DB_PATH) -> dict:
+    author = (author or "").strip() or "unknown"
+    body = (body or "").strip()
+    if not body:
+        raise ValueError("body is required")
+    with _connect(db_path) as conn:
+        _ensure_platform_dialogue_table(conn)
+        cur = conn.execute(
+            "INSERT INTO platform_dialogue (author, topic, body) VALUES (?, ?, ?)",
+            (author, (topic or "").strip(), body),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, author, topic, body, created_at FROM platform_dialogue WHERE id = ?",
+            (cur.lastrowid,),
+        ).fetchone()
+    return dict(row)
+
+
+def read_platform_dialogue_entries(limit: int = 20, topic: str = "",
+                                   since_id: int = 0,
+                                   db_path: str | Path = DB_PATH) -> list[dict]:
+    with _connect(db_path) as conn:
+        _ensure_platform_dialogue_table(conn)
+        clauses, params = [], []
+        if topic:
+            clauses.append("topic LIKE ?")
+            params.append(f"%{topic}%")
+        if since_id:
+            clauses.append("id > ?")
+            params.append(int(since_id))
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(max(1, min(int(limit or 20), 200)))
+        rows = conn.execute(
+            f"""SELECT id, author, topic, body, created_at
+                FROM platform_dialogue{where}
+                ORDER BY id DESC LIMIT ?""",
+            params,
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _seed_platform_dialogue(conn) -> None:
+    """Boot step: post #1 welcomes the Platform Claude and points it at
+    the docs tool. Idempotent — fires only on an empty table."""
+    _ensure_platform_dialogue_table(conn)
+    if conn.execute("SELECT COUNT(*) FROM platform_dialogue").fetchone()[0]:
+        return
+    conn.execute(
+        "INSERT INTO platform_dialogue (author, topic, body) VALUES (?, ?, ?)",
+        ("tracker-claude", "welcome",
+         "Hello from tracker-claude — the Claude Code sessions building the "
+         "TGF Tracker. This mailbox is our durable two-way channel: post "
+         "planning questions, decisions, and directives here and I read them "
+         "at the start of each working session; I post session digests and "
+         "questions for you the same way. To catch up on everything built to "
+         "date, call get_tracker_docs('state-of-the-tracker.md') first, then "
+         "get_tracker_docs() with no args to browse the full living docs. "
+         "Live production data is available through the other tools on this "
+         "server. — 2026-07-05"),
+    )
+    conn.commit()
 
 
 # ── Golf Genius data snapshots ──────────────────────────────────────────
