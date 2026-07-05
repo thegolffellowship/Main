@@ -599,7 +599,7 @@ window.GAMES_MATRIX_9 = {
     ],
     "skinsFlights": 2.0,
     "individualGross": 64,
-    "grossLow1st": 21,
+    "grossLow1st": 21.33,
     "grossFlights": 3
   },
   "17": {
@@ -639,7 +639,7 @@ window.GAMES_MATRIX_9 = {
     ],
     "skinsFlights": 2.0,
     "individualGross": 68,
-    "grossLow1st": 22,
+    "grossLow1st": 22.67,
     "grossFlights": 3
   },
   "18": {
@@ -679,7 +679,7 @@ window.GAMES_MATRIX_9 = {
     ],
     "skinsFlights": 2.0,
     "individualGross": 72,
-    "grossLow1st": 23,
+    "grossLow1st": 24.0,
     "grossFlights": 3
   },
   "19": {
@@ -719,7 +719,7 @@ window.GAMES_MATRIX_9 = {
     ],
     "skinsFlights": 2.0,
     "individualGross": 76,
-    "grossLow1st": 24,
+    "grossLow1st": 25.33,
     "grossFlights": 3
   },
   "20": {

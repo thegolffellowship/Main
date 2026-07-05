@@ -7385,7 +7385,12 @@ def _repair_matrix_gross_totals(conn) -> None:
         (live audit found 18h N=12-15 still paying full-pool values);
     (3) teamMWP cells that violate the ratified MWP = team1st / team
         size formula — stale after a UI edit split team1st/team2nd
-        without recomputing MWP (live audit found 18h N=32-35).
+        without recomputing MWP (live audit found 18h N=32-35);
+    (4) grossLow (Individual Gross per-flight payout) cells that
+        violate flight pot = individualGross / grossFlights — winner-
+        take-all per flight, 2/3-1/3 once grossLow2nd is in play
+        (admin ruled 2026-07-05 the hand-rounded 9h N=16-19 values
+        should snap to exact division).
     The static seed file mirrors the corrected live copy in-repo.
     Idempotent."""
     for key, mult in (("games_matrix_9", 1), ("games_matrix_18", 2)):
@@ -7420,6 +7425,18 @@ def _repair_matrix_gross_totals(conn) -> None:
             if nums(t1, mwp) and abs(mwp - t1 / size) > 0.02:
                 e["teamMWP"] = round(t1 / size, 2)
                 changed += 1
+            g1, g2 = e.get("grossLow1st"), e.get("grossLow2nd")
+            ig2, gfl = e.get("individualGross"), e.get("grossFlights")
+            if nums(ig2, gfl) and gfl:
+                fpot = ig2 / gfl
+                two_places = isinstance(g2, (int, float)) and g2 > 0
+                exp1 = round(fpot * 2 / 3, 2) if two_places else round(fpot, 2)
+                if isinstance(g1, (int, float)) and abs(g1 - exp1) > 0.02:
+                    e["grossLow1st"] = exp1
+                    changed += 1
+                if two_places and abs(g2 - fpot / 3) > 0.02:
+                    e["grossLow2nd"] = round(fpot / 3, 2)
+                    changed += 1
         if changed:
             conn.execute(
                 "UPDATE app_settings SET value = ?, updated_at = datetime('now') "

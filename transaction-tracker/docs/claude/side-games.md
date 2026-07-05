@@ -84,6 +84,7 @@ Per-player-count N, closed forms verified across the whole matrix:
 | GROSS pool | $13×N always (totals column fixed 2026-07-05) | $26×N |
 | Skins | $9×N (all of pool below 16) | $18×N (all of pool below 12) |
 | Individual Gross | $4×N (active N≥16 — admin edit, was 20) | $8×N (active N≥12 — admin edit, was 16) |
+| Gross flight payout | flight pot = pot÷flights, winner-take-all | same; 1st/2nd at 2/3–1/3 from N=48 |
 | Net flights | 1 (≤11), 2 (12+) | 1 (≤13), 2 (14-33), 3 (34-49), 4 (50-64) |
 | Skins flights | 1 (<8), 2 (8+) | 2 (8-31), 3 (32-47), 4 (48+) |
 | Gross flights | off (<16), 3 (16–19), 4 (20+) | off (<12), 3 (12–15), 4 (16+) |
@@ -146,10 +147,13 @@ the LIVE copy (source: `app_settings`):
 - Boot repair now covers BOTH matrices + the MWP formula; the repo
   seed was regenerated from the repaired live copy so a fresh DB
   no longer regresses the thresholds to 20/16.
-- **Minor, left as-is for admin's call**: 9h N=16–19 grossLow1st is
-  hand-entered at whole dollars ($21/22/23/24) vs exact pot÷3
-  ($21.33/$22.67/$24/$25.33) — leaves $1/$2/$3/$4 undistributed
-  (N=18 pays $23 where exact is $24).
+- **RESOLVED (admin ruling, same day)**: 9h N=16–19 grossLow1st was
+  hand-entered at whole dollars ($21/22/23/24) vs exact pot÷3 —
+  admin ruled it should be exact; repaired to $21.33/$22.67/$24/
+  $25.33. The boot repair now enforces the gross-flight payout
+  formula everywhere: flight pot = Ind Gross pot ÷ flights, winner-
+  take-all per flight, 2/3–1/3 once a 2nd place is in play (18h
+  N≥48 — verified exact across the live matrix).
 
 **Not defects — the "removed Excel formulas" survive as encoded rules:**
 - **CART Net below 16 players**: teamType switches to CART Net
@@ -176,12 +180,56 @@ the LIVE copy (source: `app_settings`):
   only the single-event variant; day-type awareness is a runtime
   concern for payout tooling.
 
-## Remaining open item
+## GG game SETUP layer (admin-supplied screenshots — versioned
+## game definitions; first arrived 2026-07-05)
 
-GG game SETUP layer (handicap %, scoring basis, par-3 strokes, etc.):
-admin will supply Golf Genius setup screenshots per tournament rather
-than have it reverse-engineered. Fold into this doc as they arrive,
-modeled as versioned game definitions per the ratified requirement.
+The admin supplies Golf Genius setup screenshots per game rather than
+have setup reverse-engineered. Target per the ratified requirement:
+every setting below becomes an admin-editable, VERSIONED game
+definition with standard defaults — GG's tournament library exists
+but managers must manually re-verify setup each event; TGF builds
+toward full automation (see governing docs).
+
+### Global standards (ALL games and events — admin, 2026-07-05)
+
+- **Maximum Playing Handicap™: 36 (M and F) for 18-hole competitions,
+  18 (M and F) for 9-hole** — TGF never awards more than 2 pops per
+  hole in any competition.
+- **Team competitions**: Handicaps → "Disallow Strokes on Par 3
+  Holes" (all team games).
+- **Max Triple** (advanced hole-by-hole maximum score rule) is
+  applied to GROSS — players know to pick up once they're not holed
+  out after attempting double bogey.
+- Payout places are selected per the prize matrix when a game pays
+  multiple places (the matrix is the source of truth for amounts).
+
+### TEAM Net — definition v1 (s9.16 TPC San Antonio | Oaks setup)
+
+| Setting | Value |
+|---|---|
+| GG name | "TEAM Net $" |
+| Divisions | All Golfers only (no points/skins/match-play divisions) |
+| Format | Stroke · Foursome v. Field · Best Ball on each hole · 9 Holes (Front or Back) |
+| Handicap | USGA Net (off lowest) · allowance **75%** · Drop Worst 0 holes |
+| Tie-breaking | Retain Ties |
+| Payout | Purse & Points "by Winner takes all" · purse pot from matrix (s9.16: $128 = $4 × 32 players — matrix cross-check exact) · points 0 |
+| Max scores | Advanced hole-by-hole: "Max Triple" (gross) |
+| Handicaps (advanced) | Disallow Strokes on Par 3 Holes |
+| Enter One Team Score | OFF (individual scores entered) |
+
+Standard variations (admin): typically every other event runs **Best
+2 Balls on each hole at 85%** allowance; Best 3 or Best 4 at 100%
+are conceivable. 18-hole Team Net is the same shape (18 holes;
+payout selector set for 1st+2nd when the matrix pays two places).
+Open questions posted to admin: whether allowance is formally tied
+to ball count (1→75%, 2→85%, 3/4→100%) and whether Max Triple
+applies to all games or team games only.
+
+### Definitions still to capture
+
+CTP / Longest Putt, Hole-in-One, Individual Net, MVP, Skins,
+Individual Gross, Match Play, POINTS games — as admin supplies
+screenshots.
 
 ## Next phase (ratified direction, mailbox ids 10-11)
 
