@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.32.6";
+window.TGF_VERSION = "2.32.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.7",
+    date: "2026-07-05",
+    changes: [
+      "Events Games tab now applies the MVP day-type rule the admin ratified: when a 9-hole event has NO linked same-day TGF event (single-event day, or the other nine unlinked/rained out), the TGF MVP money folds into City MVP (shown as 'City MVP (incl. TGF $)' at the full $4/buyer) instead of rendering a phantom standalone TGF MVP game. Admin relink buttons still appear so a mistakenly-unlinked nine can be reattached.",
+    ],
+  },
   {
     version: "2.32.6",
     date: "2026-07-05",
