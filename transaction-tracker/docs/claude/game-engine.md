@@ -111,3 +111,81 @@ NOW: prototype the definition schema, and run the Stage-1 shadow
 leaderboard as a portable experiment — everything built rules-based and
 customer_id-keyed so it lifts to the Platform (Supabase) with minimal
 rework.
+
+
+## Platform reconciliation (mailbox ids 16-20, 2026-07-06)
+
+**Key finding (id 16):** the Platform's "Game Creator" is COMMERCE
+configuration only (what's sold, price, who can buy) — scoring/
+execution config was deliberately never designed. **This doc is the
+first scoring-config design in TGF's documentation = the V2.0
+prototype.** Platform entity model is LOCKED; stay portable to it:
+
+- `games` (master library: name, category enum, default buy-ins,
+  requires_handicap; NO scoring columns) · `bundles`/`bundle_games`
+  (price = SUM(buy-ins) + markup, never stored) ·
+  `event_included_games` (event↔game junction w/ buy_in_override).
+- `season_contests` — chapter_id FK → **org_units (hierarchical:
+  chapter → region → national)**, contest_type enum, best_of_count,
+  **scoring_config JSONB ← the V2.0 hook: every attribute in this doc
+  must serialize into it unchanged**, lsc_qualifying, lifecycle.
+- `season_contest_enrollments` (user + chapter CAPTURED AT ENROLLMENT
+  + order_item linkage) · `season_contest_events` (points_multiplier
+  column exists but is NOT the championship mechanism — inert at 1.00
+  per the id 17 ratification; championships = required-add).
+- **Scope**: resolve our scope attribute to an org_unit reference
+  (TGF-wide = national node, regional = region node) — no scope column.
+- **Versioning**: Platform V1.0 does NOT version definitions (archive
+  only; point-in-time truth on purchase records). V2.0 ADDS our
+  versioned tables on top — design them to key to games.game_id /
+  season_contests ids so the migration is additive.
+- **Identity**: Platform has ZERO scoring tables; key all scoring
+  records by customer_id, which maps 1:1 to users.user_id at Stage 4.
+  Chapter routing equivalent: users.home_chapter_id + enrollment-time
+  snapshot.
+- Alignment asks accepted: keep entity names close; JSON-shaped
+  attributes; our attribute-driven design will obsolete contest_type
+  enum (acceptable V2.0 evolution, noted).
+
+**Season-contest payout economics (id 18, Kerry-ratified; full spec
+TGF_Season_Contest_Payouts_v1_0.md, OneDrive 7_Web & App Development/):**
+NET Bundle $90 = $40 City Net (chapter) + $40 Fellowship Cup
+(TGF-wide) + $10 markup; Players Cup $50 = $40 + $10; Match Play $50 =
+$40 + $10 (CHAPTER scope). Universal: exact-division rounding; places
+graduate by field size (places = round(N × %paid(N)), %paid decays
+linearly); 1st never decreases as N grows; City = broad, Cup =
+top-heavy. City Net %paid 30%@N=10 → 20%@N=60 (min 2). Fellowship Cup
+15%@N=20 → 10%@N=100 (min 3); **Cup 1st = 45% flat until $1,008 at
+N=56, then $1,008 + 20% of pot above $2,240**. Players Cup: 4 fixed
+flights (<6.0 / 6-11.9 / 12-17.9 / 18+), 10% Champion off top, 90% ÷ 4
+flights, 67/33 within flight. Config needs: pot rate/entry,
+places-curve (two endpoints + min), ladder families, fixed-share
+anchors w/ dollar-threshold tapers, flight structures + champion
+bonus, pool-structure lookup + per-pool bonus, per-win payout mode.
+
+## NEXT BUILD DIRECTIVE (Kerry via ids 19-20): Match Play in CONTESTS
+
+Wire the ratified Match Play design into the Tracker CONTESTS page.
+Source: TGF_Season_Contest_Payouts_v1_0.md §7 + **OneDrive/
+01_STANDARDS/Prizes/"Prizes-Match Play Matrix.xlsx"** (spaces in
+filename; July 6 final — read via M365 for the full 29-column matrix).
+Hand-tuned lookup by N (4-32):
+- POOLS: 4-5→1 | 6-10→2 | 11-15→3 | 16-19→4 | 20-23→5 | 24-27→6 |
+  28-31→7 | 32→8 (pool sizes 3-5; 2 advance per pool)
+- KNOCKOUT: 4-5→2 | 6-10→4 | 11-19→8 | 20-23→12 **w/ first-round byes
+  for top 4 seeds** | 24-32→16
+- WILDCARDS: 0 (4-10, 16-19, 32) | 2 (11-15, 20-23, 28-31) | 4 (24-27)
+- SEEDING: knockout seeds = most Stableford points accumulated across
+  the events where pool matches were played (ratified)
+- POOL WINNER BONUS: $20/pool winner universal ($25 at N=4), off the
+  pot before the ladder
+- LADDERS (adjusted pot): 4-5→75/25 | 6→62.5/22.5/15 | 7→55/25/20 |
+  8-10→50/30/20 | 11+→50/25/15/10. Pot = $40×N. Exact-division cents.
+  Ties split combined places (default, pending Kerry confirm). 1st
+  monotonic (verified).
+Build: (1) ALL of the above as admin-editable VERSIONED config
+(payout_templates pattern, not hard-code); (2) 2026 fields = 10 SA /
+10 Austin (enrollments already in season_contest tables); (3) views
+under CONTESTS: pool assignment, standings, knockout bracket w/
+seeding + byes, payouts. Post questions to mailbox topic
+match-play-implementation.
