@@ -227,8 +227,16 @@ paying 25/23/22/21/19) and floor-at-0 via Mike Murphy (-6 gross
 Stableford -> 0 awarded). Consequence for live standings: GG's live
 POINTS-game Stableford totals ARE the provisional race points — no
 mapping needed, and our formula layer can parallel-verify them.
-Open business rule (Kerry to ratify): championship weighting/reset
-mechanics.
+
+**Championship weighting (admin, 2026-07-05):** City Championship and
+TGF Championship use the regular Assign Points schedule shifted **+1
+per category**. Net championship values: Triple 0 · Double 0 ·
+Bogey 1 · Par 2 · Birdie 3 · Eagle 4 · Double Eagle 5 · HIO 9
+(regular: -1/-1/0/1/2/3/4/8). Effect: ~+1 point per hole played vs a
+regular event, so championships naturally weigh heavier in the
+best-10+CC season standing. The live-standings points engine must
+select the schedule per event (regular vs championship). Still open:
+reset mechanics.
 
 ## Monthly points races (v2.30.0)
 
