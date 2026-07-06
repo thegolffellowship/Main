@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.33.5";
+window.TGF_VERSION = "2.33.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.33.6",
+    date: "2026-07-06",
+    changes: [
+      "Ratified the points-race scope rules (admin): CITY NET season races route to a player's HOME chapter ONLY (a member is in exactly one city Net race today), so a visitor's net points never count in the host chapter's race. THE PLAYERS CUP (gross) and the MONTHLY races are TGF-WIDE -- everyone's points count regardless of chapter. This resolves the cross-chapter routing open question: the engine routes Net by customers.chapter and pools gross/monthly across all of TGF.",
+      "Refined the monthly-race rules (admin): TGF-wide (not per chapter), all members automatically entered (a dues-funded membership benefit, no opt-in), funded $1/month from every membership (purse = $1 x active memberships that month), and it runs only in March-July plus September and October (7 months) -- no August or off-season race. Documented in scoring.md; the canonical active-months list should be encoded as a rule so no phantom August race is invented.",
+    ],
+  },
   {
     version: "2.33.5",
     date: "2026-07-06",

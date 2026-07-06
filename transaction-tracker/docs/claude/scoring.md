@@ -317,12 +317,23 @@ attach the Austin division to that event's game.
 
 **Our system must automate this.** We already hold everything needed:
 `customers.chapter` is the player's home chapter, resolved via
-`customer_id` from any scoring round. So the points engine computes
-each player's net/gross Stableford once, then routes it to the race(s)
-keyed off the player's HOME chapter automatically — zero manual wiring.
-Open rule to confirm with admin: does a visitor earn points ONLY in
-their home-chapter race, or ALSO in the host chapter's race (and how
-does the monthly race handle a visitor — host month or home month)?
+`customer_id` from any scoring round (and the tracker already keeps
+`items.chapter` = event location distinct from `customers.chapter` =
+home chapter — see CLAUDE.md identity-drift note). So the points engine
+computes each player's net/gross Stableford once, then routes by scope:
+
+**Routing rules (RATIFIED admin 2026-07-06):**
+- **CITY NET (season Net race) = HOME-chapter only.** A member can be
+  in exactly ONE city Net race (their home chapter) — this may change
+  in future, but today a visitor's Net points go ONLY to their home
+  Net race, never the host chapter's. (This is why the SA event's net
+  game had AUSTIN Net wired in — to send the two Austin visitors' Net
+  points home.) The engine routes Net by `customers.chapter`.
+- **THE PLAYERS CUP (gross season race) = TGF-WIDE.** One gross race
+  across all of TGF; every player's gross points count regardless of
+  chapter. No per-chapter routing — everyone feeds the single race.
+- **MONTHLY races = TGF-WIDE.** See below — all members auto-entered,
+  everyone's points count toward the single TGF-wide monthly race.
 
 ### These are TGF standards, not GG's (framing, admin 2026-07-06)
 
@@ -345,11 +356,27 @@ Contests -> Points Races -> MONTHLY: month nav bar over combined-chapter
 standings pulled live from each portal's "<MONTH> Points" pages
 (discovered from the portal page menu; season_points_v2 widget via
 fetch_season_points_race). ALL points in the month count (no best-10).
-get_monthly_points() (database.py) merges chapters — cross-chapter
-players keep their higher portal total, never the sum — recomputes
-ranks, and computes the award: $1 x active TGF members at month close
-(customer_memberships started_at/expires_at spanning the month-end
-date), split across tied winners. Route
+
+**Monthly race rules (RATIFIED admin 2026-07-06):**
+- **TGF-WIDE, not per chapter.** One monthly race across all chapters;
+  everyone's points count. `get_monthly_points()` already merges the
+  chapter portals into one standing (cross-chapter players keep their
+  higher portal total, never the sum).
+- **All members AUTOMATICALLY entered** — no buy-in, no opt-in; it is
+  a membership benefit, funded by the dues.
+- **Funding: $1 per month from every membership** → purse = $1 x active
+  memberships that month (this is what the code computes at month
+  close: customer_memberships started_at/expires_at spanning the
+  month-end date), split across tied winners.
+- **Active months: March, April, May, June, July, September, October**
+  (7 months). NO monthly race in August or the off-season (Nov-Feb).
+  The month nav / purse logic should only recognize these months —
+  today it is naturally bounded by which GG "<MONTH> Points" pages
+  exist, but the canonical list should be encoded as a rule so the
+  system does not invent a phantom August race.
+
+get_monthly_points() (database.py) merges chapters, recomputes ranks,
+and computes the award as above, split across tied winners. Route
 /api/season-contests/monthly-points (manager). Served from the
 persisted gg_data_snapshots table (v2.30.3) — no GG wait on tab open;
 ?force=1 (Refresh button) live-refetches and re-persists, and a daily
