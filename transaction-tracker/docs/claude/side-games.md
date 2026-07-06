@@ -282,7 +282,10 @@ eagle 8 / double eagle 16. A RAW ace (gross 1) awards the HIGHER of an
 8-pt HIO bonus and its vs-par value (par-3 ace 8, par-4 ace 16 gross),
 in both net and gross; a net-1 via strokes is NOT a HIO. Championship
 is asymmetric: NET +1 on every category (incl. HIO -> 9); GROSS +1 on
-the HIO bonus only (-> 9), vs-par gross unchanged.
+the HIO bonus only (-> 9), vs-par gross unchanged. The GROSS table is
+VALIDATED against GG's own game config (TPC26reg screenshot, 2026-07-06)
+— exact match on every reachable category; see the gross POINTS game
+definition below.
 
 ### Platform consolidation concept (admin direction, 2026-07-05)
 
@@ -351,11 +354,46 @@ awaiting-results/single-event-day states). GG-recorded event_mvps
 names ride along for cross-checking. Verified on a synthetic DB: 5
 scenarios incl. both tiebreaker layers and tie splits.
 
+### THE PLAYERS CUP gross POINTS game — definition v1 (regular, VALIDATES the gross schedule)
+
+Admin-supplied GG setup (2026-07-06) for the season GROSS points game.
+This is the authoritative source that VALIDATES our gross Stableford
+table (see scoring.md) — every reachable category matches exactly.
+
+| Setting | Value |
+|---|---|
+| Format | **Stableford** · Player v. Field · Own Ball on each hole · 9 Holes (Front or Back) |
+| Handicap | **None (Gross)** — raw gross, no strokes (confirms gross games use no handicap) |
+| Assign Points | HIO **8** · Triple Eagle or Better **16** · Double Eagle **16** · Eagle **8** · Birdie **4** · Par **2** · Bogey **1** · Double Bogey **0** · Triple Bogey **-1** · Others **0** |
+| Drop Worst | 0 |
+| Tie-breaking | Retain Ties |
+| Payout | Purse & Points **None** (points-only game — no purse; feeds the season race) |
+| Division / Point Category | **THE PLAYERS CUP / TPC26reg** (the "reg" = regular-season category; the championship uses a separate category) |
+
+Validation notes (all confirmed 2026-07-06):
+- Every reachable gross category matches our engine's table exactly:
+  eagle 8, double eagle 16, birdie 4, par 2, bogey 1, double bogey 0,
+  triple bogey -1. This is GG's own config — definitive, no eagle
+  round needed.
+- GG lists **both** "Hole in One = 8" AND "Triple Eagle or Better =
+  16" as separate boxes. Combined with the admin's "award the higher
+  value" rule, this VALIDATES our max(HIO, vs-par) implementation: a
+  par-5 ace (a triple-eagle by vs-par) scores max(8, 16) = 16, not 8.
+- "**Others = 0**" is GG's catch-all for no-score / worse-than-triple.
+  It is unreachable for a PLAYED hole because the global Max Triple
+  rule caps every gross hole at triple bogey (-1); our clamp gives the
+  same -1 for a played quad, and a genuine no-score (null hole) is
+  skipped in our totals (contributes 0) — matching GG both ways. No
+  code change needed.
+- The separate `TPC26reg` point category confirms the regular/
+  championship split is realized in GG as distinct categories (the
+  championship category carries the +1-on-HIO gross variant).
+
 ### Definitions still to capture
 
 CTP / Longest Putt, Hole-in-One, Skins, Individual Gross, Match
-Play, POINTS games (s9.16 Net / race divisions — highest priority:
-feeds live championship standings) — as admin supplies screenshots.
+Play, the NET points game (SAN ANTONIO Net division) and the
+championship point categories — as admin supplies screenshots.
 
 ## Next phase (ratified direction, mailbox ids 10-11)
 
