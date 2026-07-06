@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.33.3";
+window.TGF_VERSION = "2.33.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.33.4",
+    date: "2026-07-06",
+    changes: [
+      "NET points schedule VALIDATED against Golf Genius's own game configuration. The admin supplied the GG setup for the SAN ANTONIO Net points game (category 26-SAn): its Assign Points row reads HIO 8, Triple Eagle-or-Better 4, Double Eagle 4, Eagle 3, Birdie 2, Par 1, Bogey 0, Double Bogey -1, Triple Bogey -1, Others -1 -- an exact match to our net table on every category, including Others = -1 (a direct match to our clamp, unlike the gross game where Others = 0). Both net and gross points schedules are now GG-config-validated.",
+      "Confirmed one net game feeds multiple point categories -- the season chapter race (26-SAn) and the monthly race (26-Jun) draw from the SAME per-event net Stableford -- validating the model that monthly (all points) and season (best-10 + City Championship) accumulate identical numbers differently. Flagged one curiosity for the admin: the same net game also lists AUSTIN Net (26-An), unexpected for a San Antonio game. Docs gain the authoritative NET points game definition; no code change required.",
+    ],
+  },
   {
     version: "2.33.3",
     date: "2026-07-06",
