@@ -7235,6 +7235,224 @@ def import_gg_event_mvps(widget_url: str, db_path: str | Path = DB_PATH,
     return result
 
 
+# ── TGF MVP determination (v2.33.0) ────────────────────────────────────
+# Automates the manual step GG cannot do (admin, 2026-07-05): compare
+# the linked same-day events' City MVPs and name the TGF MVP. City MVP
+# = highest NET STABLEFORD POINTS among that event's NET-bundle buyers
+# (ratified: points, not the best net stroke score); tiebreakers
+# 1) Individual Net stroke score, 2) Gross, 3) split. TGF MVP = the
+# City MVP with the higher points across the day's linked events; tie
+# splits with no further tiebreaker. Same-day linkage mirrors the
+# Events Games tab: event_date equality, minus event_mvp_unlinks,
+# 9-hole/combo nines only.
+
+def _classify_side_games_type(side_games) -> str:
+    s = (side_games or "").upper().strip()
+    if not s or s == "NONE":
+        return "NO GAMES"
+    if s == "BOTH" or ("NET" in s and "GROSS" in s):
+        return "BOTH"
+    if "NET" in s:
+        return "NET"
+    if "GROSS" in s:
+        return "GROSS"
+    return "NO GAMES"
+
+
+def _event_holes_type(item_name: str, fmt: str) -> int:
+    f = (fmt or "").lower()
+    if "combo" in f:
+        m = re.match(r"^[a-z](\d+)\.", (item_name or "").strip(), re.I)
+        return 18 if (m and m.group(1) == "18") else 9
+    if "18" in f or "27" in f:
+        return 18
+    return 9
+
+
+def _event_net_buyers(conn, event_name: str) -> dict:
+    """NET-bundle buyers for an event (parents with effective type
+    NET/BOTH after merging child add-on payments), alias-aware, using
+    the Games-tab eligibility rules: credited/refunded/transferred and
+    rsvp_only rows are out; wd rows stay only if net_games was NOT
+    credited back. Returns {"buyers": {customer_id: name}, "unlinked":
+    [names without customer_id]}."""
+    names = [event_name]
+    names += [r["alias_name"] for r in conn.execute(
+        "SELECT alias_name FROM event_aliases WHERE canonical_event_name = ? COLLATE NOCASE",
+        (event_name,)).fetchall() if r["alias_name"]]
+    ph = ",".join("?" for _ in names)
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT id, parent_item_id, customer_id, customer, side_games, "
+        f"       COALESCE(transaction_status,'active') AS ts, wd_credits "
+        f"FROM items WHERE LOWER(item_name) IN ({ph})",
+        [n.lower() for n in names]).fetchall()]
+    kids = {}
+    for r in rows:
+        if r["parent_item_id"]:
+            kids.setdefault(str(r["parent_item_id"]), []).append(r)
+    buyers, no_cid = {}, []
+    for r in rows:
+        if r["parent_item_id"]:
+            continue
+        if r["ts"] in ("credited", "refunded", "transferred", "rsvp_only"):
+            continue
+        t = _classify_side_games_type(r["side_games"])
+        has_net = t in ("NET", "BOTH")
+        for c in kids.get(str(r["id"]), []):
+            ct = _classify_side_games_type(c["side_games"])
+            if ct in ("NET", "BOTH"):
+                has_net = True
+        if r["ts"] == "wd":
+            try:
+                wd = json.loads(r["wd_credits"] or "{}")
+            except (TypeError, ValueError):
+                wd = {}
+            if "net_games" in wd:
+                has_net = False
+        if not has_net:
+            continue
+        if r["customer_id"]:
+            buyers[int(r["customer_id"])] = r["customer"] or ""
+        else:
+            no_cid.append(r["customer"] or "(unnamed)")
+    return {"buyers": buyers, "no_customer_id": no_cid}
+
+
+def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
+    """Compute City MVP for each linked same-day event from OUR imported
+    scorecards + the formula layer, then determine the TGF MVP."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        _ensure_mvp_tables(conn)
+        ev = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        ev = dict(ev)
+        try:
+            unlinked = {u.lower() for u in get_mvp_unlinked_events(db_path=db_path)}
+        except sqlite3.OperationalError:
+            unlinked = set()  # table is created by init_db; absent on fresh DBs
+        day = []
+        if ev["event_date"]:
+            for r in conn.execute(
+                    "SELECT * FROM events WHERE event_date = ? ORDER BY item_name",
+                    (ev["event_date"],)).fetchall():
+                r = dict(r)
+                if r["item_name"].lower() in unlinked:
+                    continue
+                if _event_holes_type(r["item_name"], r.get("format")) == 18:
+                    continue
+                day.append(r)
+        if not any(d["item_name"].lower() == ev["item_name"].lower() for d in day):
+            day.insert(0, ev)  # this event even if unlinked/18h — still gets City MVP
+
+        # per-player rounds for the whole day, keyed (event_id, customer_id)
+        event_ids = [d["id"] for d in day]
+        ph = ",".join("?" for _ in event_ids)
+        round_map = {}
+        for r in conn.execute(
+                f"SELECT id, event_id, customer_id, player_name, gross, net, "
+                f"       playing_handicap FROM scoring_rounds "
+                f"WHERE event_id IN ({ph}) AND customer_id IS NOT NULL "
+                f"ORDER BY id", event_ids).fetchall():
+            round_map[(r["event_id"], r["customer_id"])] = dict(r)  # latest wins
+
+        buyers_by_event = {d["item_name"]: _event_net_buyers(conn, d["item_name"])
+                           for d in day}
+
+    def _round_points(rd: dict) -> dict:
+        card = get_scorecard(rd["id"], db_path=db_path)
+        pts = card["derived_totals"]["stableford_net"] if card else None
+        gross = rd["gross"]
+        if gross is None and card:
+            gross = sum(h["strokes"] for h in card["holes"]
+                        if h["strokes"] is not None)
+        net = rd["net"]
+        if net is None and gross is not None and rd["playing_handicap"] is not None:
+            net = gross - rd["playing_handicap"]
+        return {"points": pts, "net": net, "gross": gross}
+
+    per_event, all_city_mvps = [], []
+    for d in day:
+        binfo = buyers_by_event[d["item_name"]]
+        entrants = []
+        for cid, name in binfo["buyers"].items():
+            rd = round_map.get((d["id"], cid))
+            if not rd:
+                continue
+            sc = _round_points(rd)
+            if sc["points"] is None:
+                continue
+            entrants.append({"customer_id": cid,
+                             "player": rd["player_name"] or name, **sc})
+        entry = {"event_name": d["item_name"], "course": d.get("course"),
+                 "net_buyers": len(binfo["buyers"]),
+                 "buyers_without_customer_id": binfo["no_customer_id"],
+                 "rounds_matched": len(entrants)}
+        if not binfo["buyers"]:
+            entry["city_mvp"] = {"status": "no_net_buyers", "winners": []}
+        elif not entrants:
+            entry["city_mvp"] = {"status": "awaiting_results", "winners": []}
+        else:
+            entrants.sort(key=lambda e: (
+                -e["points"],
+                e["net"] if e["net"] is not None else float("inf"),
+                e["gross"] if e["gross"] is not None else float("inf")))
+            top = entrants[0]
+            winners = [e for e in entrants if
+                       e["points"] == top["points"] and e["net"] == top["net"]
+                       and e["gross"] == top["gross"]]
+            entry["city_mvp"] = {"status": "determined", "winners": winners,
+                                 "split": len(winners) > 1,
+                                 "field": entrants[:5]}
+            for w in winners:
+                all_city_mvps.append({**w, "event_name": d["item_name"]})
+        with _connect(db_path) as conn2:
+            entry["gg_recorded_mvp"] = [
+                r["player_name"] for r in conn2.execute(
+                    "SELECT player_name FROM event_mvps WHERE event_id = ? "
+                    "AND kind = 'mvp'", (d["id"],)).fetchall()]
+        per_event.append(entry)
+
+    out = {"event": ev["item_name"], "event_date": ev["event_date"],
+           "linked_events": [d["item_name"] for d in day],
+           "per_event": per_event}
+    if len(day) < 2:
+        out["tgf_mvp"] = {"status": "single_event_day",
+                          "note": "all MVP money to City MVP — no TGF MVP"}
+        return out
+    waiting = [e["event_name"] for e in per_event
+               if e["city_mvp"]["status"] == "awaiting_results"]
+    if waiting:
+        out["tgf_mvp"] = {"status": "awaiting_results", "waiting_on": waiting}
+        return out
+    if not all_city_mvps:
+        out["tgf_mvp"] = {"status": "no_city_mvps"}
+        return out
+    # day points per City MVP = their net Stableford summed across the
+    # day's linked events (usually just their own nine)
+    for w in all_city_mvps:
+        total = 0
+        for d in day:
+            rd = round_map.get((d["id"], w["customer_id"]))
+            if rd:
+                sc = _round_points(rd)
+                if sc["points"] is not None:
+                    total += sc["points"]
+        w["day_points"] = total
+    best = max(w["day_points"] for w in all_city_mvps)
+    winners = [w for w in all_city_mvps if w["day_points"] == best]
+    out["tgf_mvp"] = {"status": "determined", "split": len(winners) > 1,
+                      "winners": [{"player": w["player"],
+                                   "customer_id": w["customer_id"],
+                                   "event_name": w["event_name"],
+                                   "day_points": w["day_points"]}
+                                  for w in winners]}
+    return out
+
+
 # ── Monthly points races (v2.30.0) ─────────────────────────────────────
 # Each chapter portal publishes per-month season-points pages ("JUNE
 # Points"). The monthly race counts ALL points earned that month (no

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.32.13";
+window.TGF_VERSION = "2.33.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.33.0",
+    date: "2026-07-06",
+    changes: [
+      "TGF MVP determination AUTOMATED (admin: 'Build it') -- the manual step GG cannot do. determine_tgf_mvp() computes each linked same-day event's City MVP from our imported scorecards through the formula layer (highest net Stableford POINTS among NET-bundle buyers; tiebreakers Individual Net stroke score, then Gross, then split) and names the TGF MVP (higher day points across the day's events; ties split with no further tiebreaker). Buyer eligibility mirrors the Games-tab rules exactly, including child add-on upgrades and wd/net-credited exclusions.",
+      "Surfaced three ways: GET /api/events/tgf-mvp (manager), new MCP tool determine_tgf_mvp (61 tools), and trophy winner rows on the Events Games tab -- the City MVP row and combined TGF MVP block now lazy-hydrate the computed winners, with honest 'awaiting results' and single-event-day states. GG-recorded MVP names are returned alongside for cross-checking. Verified against a synthetic database across five scenarios (determination, single-event day, TGF tie split, City tiebreaker on Individual Net, awaiting-results).",
+    ],
+  },
   {
     version: "2.32.13",
     date: "2026-07-06",

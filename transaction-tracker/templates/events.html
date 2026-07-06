@@ -4123,6 +4123,49 @@
 
     // ─────────────────────────────────────────────────────────────────────────
 
+    // TGF/City MVP winner determination (v2.33.0) — lazy-fills the
+    // .mvp-det spans rendered by renderGamesPanel from
+    // /api/events/tgf-mvp (computed from our imported scorecards +
+    // formula layer; the manual GG-impossible comparison automated).
+    const _mvpDetCache = {};
+    async function hydrateMvpDeterminations() {
+        const spans = document.querySelectorAll('.mvp-det[data-event]:not([data-done])');
+        if (!spans.length) return;
+        const eventNames = [...new Set([...spans].map(sp => sp.dataset.event))];
+        for (const evName of eventNames) {
+            if (!(evName in _mvpDetCache)) {
+                try {
+                    const res = await fetch(`/api/events/tgf-mvp?event=${encodeURIComponent(evName)}`);
+                    _mvpDetCache[evName] = res.ok ? await res.json() : null;
+                } catch (e) { _mvpDetCache[evName] = null; }
+            }
+            const det = _mvpDetCache[evName];
+            document.querySelectorAll('.mvp-det[data-event]:not([data-done])').forEach(sp => {
+                if (sp.dataset.event !== evName) return;
+                sp.dataset.done = "1";
+                if (!det || det.error) { sp.textContent = ""; return; }
+                if (sp.dataset.kind === "city") {
+                    const pe = (det.per_event || []).find(e => e.event_name === evName);
+                    const cm = pe && pe.city_mvp;
+                    if (cm && cm.status === "determined" && cm.winners.length) {
+                        const names = cm.winners.map(w => escapeHtml(w.player)).join(" & ");
+                        sp.innerHTML = `<span style="color:#059669;font-weight:600;">&#x1F3C6; ${names} (${cm.winners[0].points} pts${cm.split ? ", split" : ""})</span>`;
+                    }
+                } else {
+                    const t = det.tgf_mvp || {};
+                    if (t.status === "determined" && (t.winners || []).length) {
+                        const names = t.winners.map(w => `${escapeHtml(w.player)} (${w.day_points} pts)`).join(" & ");
+                        sp.innerHTML = `<span style="color:#059669;font-weight:600;">&#x1F3C6; Winner: ${names}${t.split ? " — split, no tiebreaker" : ""}</span>`;
+                    } else if (t.status === "awaiting_results") {
+                        sp.textContent = `Winner pending — awaiting results: ${(t.waiting_on || []).join(", ")}`;
+                    } else {
+                        sp.textContent = "";
+                    }
+                }
+            });
+        }
+    }
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -4242,7 +4285,7 @@
                     netMWP += cityVal;
                     const foldNote = (!mvpInfo && tgfVal)
                         ? ' <span style="font-size:0.8em;color:#6366f1;" title="No linked same-day event — TGF MVP money folds into City MVP">(incl. TGF $)</span>' : '';
-                    html += `<tr><td>City MVP${foldNote}</td><td>${fmt$(cityVal)}</td><td>${fmt$(cityVal)}</td><td></td>${empty4}</tr>`;
+                    html += `<tr><td>City MVP${foldNote} <span class="mvp-det" data-event="${ev.item_name}" data-kind="city"></span></td><td>${fmt$(cityVal)}</td><td>${fmt$(cityVal)}</td><td></td>${empty4}</tr>`;
                 }
                 if (tgfVal) {
                     if (mvpInfo) {
@@ -4255,6 +4298,7 @@
                             const unlinkBtn = currentRole === 'admin' ? ` <span class="mvp-unlink-btn" data-event="${le.event_name}" title="Unlink from combined TGF MVP" style="cursor:pointer;color:#dc2626;font-size:0.75em;">&#x2716;</span>` : '';
                             html += `<tr class="games-row-sub"><td class="games-indent">${le.course || le.event_name}${unlinkBtn}</td><td>${fmt$(le.tgfMVP)}</td><td></td><td></td>${empty4}</tr>`;
                         });
+                        html += `<tr class="games-row-sub"><td class="games-indent" colspan="4"><span class="mvp-det" data-event="${ev.item_name}" data-kind="tgf" style="color:#6b7280;font-size:0.85em;">Determining winner&hellip;</span></td>${empty4}</tr>`;
                     } else {
                         // No linked same-day event: money already folded into
                         // City MVP above — only surface admin relink buttons
@@ -4340,6 +4384,7 @@
 
         html += '</table>';
         html += '</div>';
+        setTimeout(hydrateMvpDeterminations, 60);
         return html;
     }
 
