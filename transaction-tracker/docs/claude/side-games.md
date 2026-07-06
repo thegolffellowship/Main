@@ -275,12 +275,14 @@ game restricted to NET buyers; the POINTS game is a SEPARATE GG game
 capturing the same net Stableford for EVERYONE in the field (that
 race's division). Same math, different rosters and payouts.
 
-**Points schedules (admin, corrected 2026-07-06 — full table in
+**Points schedules (admin-ratified 2026-07-06 — full table in
 scoring.md):** NET (net-vs-par) birdie 2 / par 1 / bogey 0 / eagle 3 /
-double eagle 4, no net HIO bonus. GROSS (gross-vs-par) birdie 4 / par 2
-/ bogey 1 / eagle 8 / double eagle 16, plus a raw-ace HIO override of 8
-(an ace scores 8 regardless of par). Championship = +1 on HIO only
-(->9) OR +1 across all categories — PENDING admin re-confirmation.
+double eagle 4. GROSS (gross-vs-par) birdie 4 / par 2 / bogey 1 /
+eagle 8 / double eagle 16. A RAW ace (gross 1) awards the HIGHER of an
+8-pt HIO bonus and its vs-par value (par-3 ace 8, par-4 ace 16 gross),
+in both net and gross; a net-1 via strokes is NOT a HIO. Championship
+is asymmetric: NET +1 on every category (incl. HIO -> 9); GROSS +1 on
+the HIO bonus only (-> 9), vs-par gross unchanged.
 
 ### Platform consolidation concept (admin direction, 2026-07-05)
 

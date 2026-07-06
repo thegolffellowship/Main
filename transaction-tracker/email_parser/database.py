@@ -6964,8 +6964,6 @@ _SCORING_FORMULA_DEFAULTS: dict = {
     # Points by (net- or gross-)vs-par per hole (admin-ratified 2026-07-06).
     # NET table (keyed by net-vs-par): triple-eagle-or-better 4, double
     # eagle 4, eagle 3, birdie 2, par 1, bogey 0, double/triple bogey -1.
-    # There is NO net hole-in-one bonus — a net ace is scored as its net
-    # achievement (a net eagle or better via this table).
     "stableford_net_table": {"-4": 4, "-3": 4, "-2": 3, "-1": 2, "0": 1,
                              "1": 0, "2": -1, "3": -1},
     # GROSS table (keyed by gross-vs-par): double-eagle-or-better 16,
@@ -6973,11 +6971,17 @@ _SCORING_FORMULA_DEFAULTS: dict = {
     # (doubling ladder up the birdie/eagle/albatross line).
     "stableford_gross_table": {"-4": 16, "-3": 16, "-2": 8, "-1": 4,
                                "0": 2, "1": 1, "2": 0, "3": -1},
-    # Gross HOLE-IN-ONE override: a raw ace (gross strokes == 1) scores
-    # exactly this, regardless of par — so an ace on a par 4/5 gets the
-    # HIO value, NOT a double/triple eagle. Set null to disable and fall
-    # back to the vs-par table. (Championship raises this to 9 — pending
-    # re-confirmation of championship-schedule scope; see scoring.md.)
+    # RAW HOLE-IN-ONE bonus (admin, 2026-07-06): an actual ace (gross
+    # strokes == 1) is ALSO a hole result (an eagle on a par 3, a double
+    # eagle on a par 4...), so it awards the HIGHER of this HIO bonus and
+    # the vs-par table value — never both. So a par-3 ace = 8 (eagle =
+    # HIO), a par-4 ace = 16 gross (double eagle beats the HIO bonus). A
+    # "net hole-in-one" (net 1 reached via handicap strokes, gross > 1)
+    # is NOT a raw ace and is scored by the tables above. Championship:
+    # net gets +1 on EVERY category incl. this bonus (->9); gross keeps
+    # its vs-par table and only the HIO bonus goes +1 (->9). See
+    # get_championship_formulas(). null disables the bonus.
+    "stableford_net_hio": 8,
     "stableford_gross_hio": 8,
     # 'whs_net_double_bogey' (par + 2 + strokes received, per WHS) | 'none'
     "adjusted_gross_method": "whs_net_double_bogey",
@@ -6997,6 +7001,23 @@ def get_scoring_formulas(db_path: str | Path | None = None) -> dict:
     return cfg
 
 
+def get_championship_formulas(base: dict | None = None,
+                              db_path: str | Path | None = None) -> dict:
+    """City/TGF Championship schedule (admin-ratified 2026-07-06). NET
+    gets +1 on EVERY category (incl. the raw-HIO bonus). GROSS keeps its
+    regular vs-par table and only the raw-HIO bonus goes +1. The
+    live-standings engine passes this for championship events; regular
+    events use get_scoring_formulas()."""
+    f = dict(base if base is not None else get_scoring_formulas(db_path))
+    f["stableford_net_table"] = {k: v + 1 for k, v in f["stableford_net_table"].items()}
+    if f.get("stableford_net_hio") is not None:
+        f["stableford_net_hio"] = f["stableford_net_hio"] + 1
+    if f.get("stableford_gross_hio") is not None:
+        f["stableford_gross_hio"] = f["stableford_gross_hio"] + 1
+    # GROSS vs-par table intentionally unchanged for championships.
+    return f
+
+
 def compute_hole_derivations(par: int | None, strokes: int | None,
                              strokes_received: int, formulas: dict) -> dict:
     """Derived per-hole values — never stored, always computed through the
@@ -7014,16 +7035,21 @@ def compute_hole_derivations(par: int | None, strokes: int | None,
         keys = sorted(int(k) for k in table)
         d = max(keys[0], min(keys[-1], diff))
         return table.get(str(d), 0)
-    out["stableford_net"] = _tbl(formulas["stableford_net_table"], out["net_vs_par"])
-    # Gross hole-in-one is a raw-ace override (admin, 2026-07-06): only
-    # HIO points apply, regardless of par, so an ace on a par 4/5 scores
-    # the HIO value rather than a double/triple eagle. NET has no HIO
-    # bonus — a net ace is scored by net-vs-par through the table above.
-    hio = formulas.get("stableford_gross_hio")
-    if strokes == 1 and hio is not None:
-        out["stableford_gross"] = hio
+    net_tbl = _tbl(formulas["stableford_net_table"], out["net_vs_par"])
+    gross_tbl = _tbl(formulas["stableford_gross_table"], out["vs_par"])
+    # Raw hole-in-one (gross strokes == 1): an ace IS a hole result, so
+    # award the HIGHER of the HIO bonus and the vs-par value, never both
+    # (admin, 2026-07-06) — par-3 ace = 8 (= eagle), par-4 ace = 16
+    # (double eagle beats HIO). A "net hole-in-one" (net 1 via handicap
+    # strokes, gross > 1) is NOT a raw ace.
+    if strokes == 1:
+        net_hio = formulas.get("stableford_net_hio")
+        gross_hio = formulas.get("stableford_gross_hio")
+        out["stableford_net"] = max(net_tbl, net_hio) if net_hio is not None else net_tbl
+        out["stableford_gross"] = max(gross_tbl, gross_hio) if gross_hio is not None else gross_tbl
     else:
-        out["stableford_gross"] = _tbl(formulas["stableford_gross_table"], out["vs_par"])
+        out["stableford_net"] = net_tbl
+        out["stableford_gross"] = gross_tbl
     return out
 
 
