@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.33.1";
+window.TGF_VERSION = "2.33.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.33.2",
+    date: "2026-07-06",
+    changes: [
+      "Finalized the hole-in-one and championship points rules per admin. A RAW hole-in-one (actual ace, gross strokes == 1) is also a hole result, so it now awards the HIGHER of the 8-point HIO bonus and its vs-par value -- never both: a par-3 ace scores 8 (its eagle value equals the bonus), a par-4 ace scores 16 gross (double eagle beats the bonus), 8 net. A \"net hole-in-one\" (a net 1 reached via handicap strokes) is not a raw ace and is scored normally. Applies to both net and gross (max of bonus vs table).",
+      "Championship schedule RATIFIED (resolves the earlier +1 contradiction; it is asymmetric): the NET table gets +1 on every category including the HIO bonus (par 1->2, birdie 2->3, ... HIO 8->9), while the GROSS table keeps its vs-par values and only the raw-HIO bonus goes +1 (8->9) -- so a championship par-3 ace scores 9 gross. get_championship_formulas() builds this for the live-standings engine; per-event championship selection is future wiring. Verified across 22 regular + championship cases.",
+    ],
+  },
   {
     version: "2.33.1",
     date: "2026-07-06",

@@ -228,48 +228,57 @@ Stableford -> 0 awarded). Consequence for live standings: GG's live
 POINTS-game Stableford totals ARE the provisional race points — no
 mapping needed, and our formula layer can parallel-verify them.
 
-### Assign Points schedules (admin, corrected 2026-07-06)
+### Assign Points schedules (admin-ratified 2026-07-06)
 
 Points are computed per hole by (net- or gross-)vs-par through the
 formula layer (`_SCORING_FORMULA_DEFAULTS` / `compute_hole_derivations`),
-admin-tunable via handicap_settings. **Regular-season** values (matching
+admin-tunable via handicap_settings. **Regular-season** values (match
 the GG game setups):
 
-| Result | NET (net-vs-par) | GROSS (gross-vs-par) |
+| Result (by vs-par) | NET | GROSS |
 |---|---|---|
-| Hole-in-One (raw ace) | *no HIO bonus* — scored as its net achievement | **8** (override, any par) |
-| Double Eagle | 4 | 16 |
-| Eagle | 3 | 8 |
-| Birdie | 2 | 4 |
-| Par | 1 | 2 |
-| Bogey | 0 | 1 |
-| Double Bogey | -1 | 0 |
-| Triple Bogey (& worse) | -1 | -1 |
-| Triple Eagle or better | 4 | (n/a — capped by HIO) |
+| Triple Eagle or better (-4) | 4 | 16 |
+| Double Eagle (-3) | 4 | 16 |
+| Eagle (-2) | 3 | 8 |
+| Birdie (-1) | 2 | 4 |
+| Par (0) | 1 | 2 |
+| Bogey (+1) | 0 | 1 |
+| Double Bogey (+2) | -1 | 0 |
+| Triple Bogey & worse (+3) | -1 | -1 |
+| **Raw hole-in-one bonus** | **8** | **8** |
 
-Rules (admin, 2026-07-06):
-- **Gross HIO is a raw-ace override**: an actual hole-in-one (gross
-  strokes == 1) scores the HIO value (8) regardless of par — so an ace
-  on a par 4/5 gets 8, NOT a double/triple eagle. Only HIO points apply.
-- **Net has no HIO bonus**: a net ace is scored by its net-vs-par (a net
-  eagle or better via the table) — there is no "net hole-in-one."
-- The gross ladder doubles up the birdie/eagle/albatross line (4/8/16).
-- Codebase correction: the previous gross table read eagle 4 / double
-  eagle 8 (both wrong) and the net table's -4 bucket read 8 (a mistaken
-  HIO encoding). Fixed in v2.33.1; net MVP/points totals for ordinary
-  scores are unchanged (only net-triple-eagle holes and all gross totals
-  shift). This supersedes the earlier "the net table matches exactly"
-  note — it did not (the -4 bucket was wrong).
+**Raw hole-in-one rule (both tables):** an actual ace (gross strokes
+== 1) is ALSO a hole result, so it awards the HIGHER of the HIO bonus
+and its vs-par value — never both. So a **par-3 ace = 8** (its eagle
+value equals the HIO bonus), a **par-4 ace = 16 gross** (double eagle
+beats the HIO bonus), 8 net. A "net hole-in-one" — a net score of 1
+reached through handicap strokes (a gross 2 on a par 3, a gross 3 on a
+par 4) — is NOT a raw ace and is scored normally by its vs-par. Only a
+literal 1 on the card triggers the HIO bonus. (Implemented as
+`max(hio_bonus, table_value)` on `strokes == 1`.)
 
-**Championship schedule — PENDING RE-CONFIRMATION.** Two admin readings
-conflict: (a) 2026-07-05: regular schedule shifted **+1 per category**
-(net Triple 0 / Double 0 / Bogey 1 / Par 2 / Birdie 3 / Eagle 4 / Dbl
-Eagle 5 / HIO 9); (b) 2026-07-06: "**only plus 1 on the hole-in-one**"
-(HIO -> 9 for net and gross, everything else identical to regular).
-These are materially different for season weighting — (a) makes each
-championship hole worth ~+1, (b) leaves per-hole points unchanged and
-lets the championship's weight come only from being an always-counted
-event (best-10+CC). NOT coded pending admin's answer. Still open: reset
+The gross ladder doubles the birdie/eagle/albatross line (4/8/16).
+Codebase history: an earlier gross table read eagle 4 / double eagle 8
+(both wrong) and the net -4 bucket read 8 (a stray HIO encoding);
+corrected v2.33.1-.3. Ordinary net totals (par/birdie/bogey) are
+unchanged, so MVP and net standings for normal scores are unaffected;
+only aces, net-triple-eagles, and gross eagle-or-better shift.
+
+**Championship schedule (RATIFIED 2026-07-06 — resolves the earlier
+contradiction; ASYMMETRIC):**
+- **NET table: +1 on EVERY category**, including the HIO bonus →
+  Triple 0 / Double 0 / Bogey 1 / Par 2 / Birdie 3 / Eagle 4 / Double
+  Eagle 5 / Triple-Eagle+ 5 / raw-HIO bonus 9.
+- **GROSS table: +1 on the raw-HIO bonus ONLY** (8 → 9); the vs-par
+  gross values are unchanged (birdie 4 / eagle 8 / double eagle 16).
+  Consequence: a championship **par-3 ace = 9 gross** (HIO 9 now beats
+  the eagle 8), while a par-4 ace stays 16 (double eagle > 9).
+
+`get_championship_formulas()` builds this from the regular config; the
+live-standings engine passes it for championship events (which need an
+is-championship flag — future wiring). The net +1 gives championships a
+real per-hole weighting on top of the City Championship being an
+always-counted event in the best-10+CC standing. Still open: reset
 mechanics.
 
 ## Monthly points races (v2.30.0)
