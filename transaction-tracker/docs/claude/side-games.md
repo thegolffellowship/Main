@@ -389,11 +389,45 @@ Validation notes (all confirmed 2026-07-06):
   championship split is realized in GG as distinct categories (the
   championship category carries the +1-on-HIO gross variant).
 
+### NET POINTS game — definition v1 (SAN ANTONIO Net, VALIDATES the net schedule)
+
+Admin-supplied GG setup (2026-07-06) for the season NET points game.
+Authoritative source that VALIDATES our net Stableford table.
+
+| Setting | Value |
+|---|---|
+| Format | **Stableford** · Player v. Field · Own Ball on each hole · 9 Holes (Front or Back) |
+| Handicap | net (USGA Net — the Advanced Options show a Handicaps section; unlike the gross game's None/Gross) |
+| Assign Points | HIO **8** · Triple Eagle or Better **4** · Double Eagle **4** · Eagle **3** · Birdie **2** · Par **1** · Bogey **0** · Double Bogey **-1** · Triple Bogey **-1** · Others **-1** |
+| Tie-breaking | Retain Ties |
+| Season Points (Division / Category) | **SAN ANTONIO Net / 26-SAn**, **JUNE Points / 26-Jun**, **AUSTIN Net / 26-An** |
+
+Validation notes (confirmed 2026-07-06):
+- Every net category matches our engine's table exactly — including
+  **Others = -1** (a DIRECT match to our clamp, unlike the gross game
+  where Others = 0). HIO = 8 is validated via the max(HIO, vs-par)
+  rule (same as gross).
+- **One net game feeds MULTIPLE point categories**: the season chapter
+  race (26-SAn) AND the monthly race (26-Jun) draw from the SAME
+  per-event net Stableford — confirming the model that monthly (all
+  points) and season (best-10 + CC) accumulate the same numbers
+  differently. (This is why GG forces divisions-with-season-points to
+  be attached inside each game — the friction the live leaderboard
+  removes.)
+- **Curiosity for admin**: this net game also lists **AUSTIN Net /
+  26-An**. A San Antonio net game feeding the Austin race is
+  unexpected — confirm whether this screenshot is a combined/cross-
+  chapter event, a shared template, or an intentional cross-award.
+- **Net "Others" differs between games**: this POINTS game uses -1,
+  while the MVP $ game uses 0. Our single net table (Others -> -1)
+  matches the POINTS game exactly; the MVP divergence is only on
+  played quads, which Max Triple makes unreachable. No code change.
+
 ### Definitions still to capture
 
 CTP / Longest Putt, Hole-in-One, Skins, Individual Gross, Match
-Play, the NET points game (SAN ANTONIO Net division) and the
-championship point categories — as admin supplies screenshots.
+Play, and the CHAMPIONSHIP point categories (TPC26champ / net
+championship variants) — as admin supplies screenshots.
 
 ## Next phase (ratified direction, mailbox ids 10-11)
 

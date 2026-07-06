@@ -257,6 +257,17 @@ par 4) — is NOT a raw ace and is scored normally by its vs-par. Only a
 literal 1 on the card triggers the HIO bonus. (Implemented as
 `max(hio_bonus, table_value)` on `strokes == 1`.)
 
+**NET schedule VALIDATED against GG (2026-07-06):** the admin's GG
+setup for the SAN ANTONIO Net points game (category 26-SAn) shows
+Assign Points HIO 8 / Triple Eagle-or-Better 4 / Double Eagle 4 /
+Eagle 3 / Birdie 2 / Par 1 / Bogey 0 / Double Bogey -1 / Triple Bogey
+-1 / Others -1 — an EXACT match to our net table on every category,
+including Others = -1 (a direct match to our clamp). One net game
+feeds both the season (26-SAn) and monthly (26-Jun) categories from
+the same per-event net Stableford. (The MVP $ game uses Others = 0;
+our single net table matches the POINTS game and diverges from MVP
+only on played quads, unreachable under Max Triple.)
+
 **GROSS schedule VALIDATED against GG (2026-07-06):** the admin's
 GG setup screenshot for THE PLAYERS CUP gross points game (category
 TPC26reg, Handicap None/Gross) shows Assign Points HIO 8 / Triple
