@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.32.12";
+window.TGF_VERSION = "2.32.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.13",
+    date: "2026-07-06",
+    changes: [
+      "Leaderboard information architecture captured from admin: horizontal tab nav (Team / Gross / Net / Skins / Points / Proxies) replacing GG's vertically stacked game lists, with Match Play as a contextual tab shown only on bracket-match days. Also documented the GG friction the live leaderboard removes: points games need dedicated divisions with season points attached, and points post only after the round.",
+    ],
+  },
   {
     version: "2.32.12",
     date: "2026-07-05",
