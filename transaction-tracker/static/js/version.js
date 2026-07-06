@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.33.7";
+window.TGF_VERSION = "2.33.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.33.8",
+    date: "2026-07-06",
+    changes: [
+      "Banked the Platform mailbox exchange (ids 16-20) into the docs. Championship season progression RATIFIED (no multiplier anywhere): best-10 regular season; City Championship 18h Stableford added at face value as a REQUIRED amount (never droppable; winner = Lone Star Cup Captain); Points Reset (v2.22.0 methodology stands); TGF Championship 36h scored with the +1 championship values added to the reset number, placewinners fill LSC rosters. Accumulation model = three phases: best-X, required-add, reset-checkpoint. Closes the last open points-model question.",
+      "game-engine.md gains the full Platform reconciliation: the Platform's Game Creator is commerce-only config -- scoring config was never designed, making game-engine.md the V2.0 scoring prototype. Locked entity model recorded (games/bundles/season_contests with scoring_config JSONB hook, hierarchical org_units for scope, no V1.0 versioning -- V2.0 adds ours additively, customer_id maps 1:1 to users.user_id). Season-contest payout economics ratified (NET Bundle $90 = $40 City Net + $40 Fellowship Cup + $10; Cup 1st = 45% flat to $1,008 then threshold taper; Players Cup 4 fixed flights, 10% champion).",
+      "NEXT BUILD DIRECTIVE captured from Kerry: wire the ratified Match Play design into CONTESTS -- World Cup pools + wildcards + knockout with seeding/byes, $20 pool-winner bonuses, place ladders on a $40 x N pot, all as admin-editable versioned config; full N=4-32 lookup recorded in game-engine.md; source matrix at OneDrive/01_STANDARDS/Prizes/. Queued as the top item for the next session.",
+    ],
+  },
   {
     version: "2.33.7",
     date: "2026-07-06",

@@ -302,8 +302,30 @@ contradiction; ASYMMETRIC):**
 live-standings engine passes it for championship events (which need an
 is-championship flag — future wiring). The net +1 gives championships a
 real per-hole weighting on top of the City Championship being an
-always-counted event in the best-10+CC standing. Still open: reset
-mechanics.
+always-counted event in the best-10+CC standing.
+
+**Season progression (RATIFIED via mailbox id 17, 2026-07-06 — closes
+the reset-mechanics open item). NO multiplier anywhere:**
+1. **Regular season**: 9-hole Stableford values accrue; season total =
+   best 10 added together.
+2. **City Championship**: the full 18-hole Stableford total is added at
+   FACE VALUE as an additional, REQUIRED amount on top of the Best 10 —
+   it can never be dropped or swapped into the best-10 set. Placewinners
+   paid; the winner is named **Captain of that chapter's Lone Star Cup
+   team**.
+3. **Points Reset**: compresses the field ahead of the finals (the
+   v2.22.0 reset methodology stands as the mechanism); the reset value
+   is each player's starting number.
+4. **TGF Championship**: 36-hole/2-day, scored with the championship
+   (+1) values; ALL championship points add to the reset number.
+   Placewinners paid; X net + gross placewinners fill the remaining
+   Lone Star Cup roster spots (exact count per side unspecified).
+
+Engine consequence: the accumulation model has THREE phases — best-X
+(regular), required-add (championships, never droppable), and
+reset-checkpoint (between City Champ and TGF Champ). The Platform's
+season_contest_events.points_multiplier column is confirmed NOT the
+mechanism (stays inert at 1.00).
 
 ### Cross-chapter points routing (TGF standard — automation requirement, admin 2026-07-06)
 
