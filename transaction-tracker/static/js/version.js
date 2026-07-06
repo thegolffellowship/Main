@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.32.11";
+window.TGF_VERSION = "2.32.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.12",
+    date: "2026-07-05",
+    changes: [
+      "Championship points weighting captured from admin (resolves the open business rule): City Championship and TGF Championship use the regular Assign Points schedule shifted +1 per category -- net values Triple 0 / Double 0 / Bogey 1 / Par 2 / Birdie 3 / Eagle 4 / Double Eagle 5 / HIO 9 (~+1 point per hole vs regular events). The live-standings points engine must select the schedule per event; documented in scoring.md points model and side-games.md.",
+      "MVP definition precision per admin: City MVP is the highest net Stableford POINTS (per the MVP Assign Points schedule), not the best net stroke score, among NET buyers.",
+    ],
+  },
   {
     version: "2.32.11",
     date: "2026-07-05",

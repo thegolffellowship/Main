@@ -48,7 +48,9 @@ prize matrix (analysis below). Open flags listed at the bottom.
 - **MVP** — $4/buyer (9h) / $8 (18h) from the NET bundle. Multiple TGF
   events same day → split evenly: **City MVP $2 + TGF MVP $2** (9h) /
   $4 + $4 (18h). Single-event day → ALL MVP money to City MVP, no TGF
-  MVP. City MVP = best net Stableford among buyers; tiebreakers:
+  MVP. City MVP = **highest net Stableford POINTS** (per the MVP
+  Assign Points schedule — not the best net stroke score) among
+  buyers; tiebreakers:
   1) Individual Net score, 2) Gross score, 3) split. **TGF MVP** = the
   City MVP with the HIGHER points across the day's events; tie →
   split, no tiebreaker. Recorded purse-only in GG (Pos "None").
@@ -260,6 +262,13 @@ the same Assign Points table is the key open question for live
 standings math (awaiting the points-game setup screenshot; the -6
 gross total once observed on THE PLAYERS CUP is only producible with
 negative per-hole values like these, so a shared schedule is likely).
+
+**Championship schedule (admin, 2026-07-05):** City Championship
+and TGF Championship events use the same table shifted **+1 per
+category**. Net: Triple 0 · Double 0 · Bogey 1 · Par 2 · Birdie 3 ·
+Eagle 4 · Double Eagle 5 · HIO 9. (~+1 point per hole vs regular
+events — the championship weighting in the season race; see
+scoring.md points model.)
 
 **MVP vs POINTS structure (admin, 2026-07-05):** MVP is a per-event
 game restricted to NET buyers; the POINTS game is a SEPARATE GG game
