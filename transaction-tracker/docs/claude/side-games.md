@@ -275,6 +275,13 @@ game restricted to NET buyers; the POINTS game is a SEPARATE GG game
 capturing the same net Stableford for EVERYONE in the field (that
 race's division). Same math, different rosters and payouts.
 
+**Points schedules (admin, corrected 2026-07-06 — full table in
+scoring.md):** NET (net-vs-par) birdie 2 / par 1 / bogey 0 / eagle 3 /
+double eagle 4, no net HIO bonus. GROSS (gross-vs-par) birdie 4 / par 2
+/ bogey 1 / eagle 8 / double eagle 16, plus a raw-ace HIO override of 8
+(an ace scores 8 regardless of par). Championship = +1 on HIO only
+(->9) OR +1 across all categories — PENDING admin re-confirmation.
+
 ### Platform consolidation concept (admin direction, 2026-07-05)
 
 GG currently needs three games per event (MVP $, net POINTS, gross

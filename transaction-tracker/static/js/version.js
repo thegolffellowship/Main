@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.33.0";
+window.TGF_VERSION = "2.33.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.33.1",
+    date: "2026-07-06",
+    changes: [
+      "Corrected the GROSS Stableford points table to the admin's actual values: birdie 4, eagle 8, double eagle 16 (the code previously had eagle 4 / double eagle 8 -- both wrong). Added a raw hole-in-one override for GROSS: an actual ace (1 stroke) scores the HIO value (8) regardless of par, so an ace on a par 4/5 gets 8 rather than a double/triple eagle -- only HIO points apply. The value is admin-tunable (stableford_gross_hio).",
+      "Corrected the NET Stableford table: the -4 bucket was 8 (a mistaken hole-in-one encoding) and is now 4 (triple-eagle-or-better). NET has no hole-in-one bonus -- a net ace is scored as its net achievement (a net eagle or better). Ordinary net totals (par/birdie/bogey) are unchanged, so MVP and net points standings for normal scores are unaffected; only net-triple-eagle holes and all gross totals shift to match GG. Verified across the full table plus the TGF MVP determination suite.",
+      "Championship points schedule is documented but NOT yet coded: two admin readings conflict (+1 on all categories vs +1 on the hole-in-one only) and are held pending re-confirmation. See scoring.md.",
+    ],
+  },
   {
     version: "2.33.0",
     date: "2026-07-06",
