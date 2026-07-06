@@ -163,29 +163,63 @@ places-curve (two endpoints + min), ladder families, fixed-share
 anchors w/ dollar-threshold tapers, flight structures + champion
 bonus, pool-structure lookup + per-pool bonus, per-win payout mode.
 
-## NEXT BUILD DIRECTIVE (Kerry via ids 19-20): Match Play in CONTESTS
+## Match Play in CONTESTS — BUILT v2.34.0 (directive: Kerry via ids 19-20)
 
-Wire the ratified Match Play design into the Tracker CONTESTS page.
-Source: TGF_Season_Contest_Payouts_v1_0.md §7 + **OneDrive/
-01_STANDARDS/Prizes/"Prizes-Match Play Matrix.xlsx"** (spaces in
-filename; July 6 final — read via M365 for the full 29-column matrix).
-Hand-tuned lookup by N (4-32):
+Shipped 2026-07-06. The 29-column **Prizes-Match Play Matrix.xlsx**
+(OneDrive/01_STANDARDS/Prizes/, July 6 final) is implemented as
+versioned rules-as-data; `test_match_play.py` proves engine↔xlsx parity
+on every column. Matrix by N (4-32):
 - POOLS: 4-5→1 | 6-10→2 | 11-15→3 | 16-19→4 | 20-23→5 | 24-27→6 |
-  28-31→7 | 32→8 (pool sizes 3-5; 2 advance per pool)
+  28-31→7 | 32→8 (pool sizes 3-5, balanced; 2 advance per pool;
+  ~3 matches/player — pools of 5 may play 4)
 - KNOCKOUT: 4-5→2 | 6-10→4 | 11-19→8 | 20-23→12 **w/ first-round byes
   for top 4 seeds** | 24-32→16
 - WILDCARDS: 0 (4-10, 16-19, 32) | 2 (11-15, 20-23, 28-31) | 4 (24-27)
+  — filled by the best non-advancing pool finishers by the seeding metric
 - SEEDING: knockout seeds = most Stableford points accumulated across
-  the events where pool matches were played (ratified)
-- POOL WINNER BONUS: $20/pool winner universal ($25 at N=4), off the
-  pot before the ladder
-- LADDERS (adjusted pot): 4-5→75/25 | 6→62.5/22.5/15 | 7→55/25/20 |
-  8-10→50/30/20 | 11+→50/25/15/10. Pot = $40×N. Exact-division cents.
-  Ties split combined places (default, pending Kerry confirm). 1st
-  monotonic (verified).
-Build: (1) ALL of the above as admin-editable VERSIONED config
-(payout_templates pattern, not hard-code); (2) 2026 fields = 10 SA /
-10 Austin (enrollments already in season_contest tables); (3) views
-under CONTESTS: pool assignment, standings, knockout bracket w/
-seeding + byes, payouts. Post questions to mailbox topic
-match-play-implementation.
+  the pool matches (ratified); classic placement 1v8/4v5/2v7/3v6, a
+  12-field plays inside a 16 template (missing seeds = byes)
+- POOL WINNER BONUS: $20/pool winner ($25 at N=4), off the pot first
+- LADDERS (% of adjusted pot): 4→71.5/28.5 (=$97/$38) | 5→66.67/33.33
+  (=$120/$60) | 6→62.5/22.5/15 | 7→55/25/20 | 8-10→50/30/20 |
+  11+→50/25/15/10. (The xlsx supersedes the earlier "4-5→75/25" note.)
+  Pot = $40×N. Largest-remainder cents allocation → payouts always sum
+  exactly. Ties split combined places (SF losers split 3rd+4th);
+  default pending Kerry confirm, posted as mailbox id 21 Q2.
+
+**Implementation (the Game Creator engine's first concrete instance):**
+- `email_parser/match_play.py` — pure engine (no DB/Flask; Platform-
+  portable): `SEED_MATCH_PLAY_CONFIG`, `structure_for_n`,
+  `allocate_cents`/`split_cents`, `seed_order`/`seed_bracket` (byes),
+  `ladder_payout_rows`.
+- Tables: `season_contest_templates` + `season_contest_versions`
+  (append-only config_json versions, payout_templates pattern) +
+  `season_contest_config_snapshots` (season+chapter pinned to a version
+  on first structural action → seasons in flight are frozen; admin can
+  re-pin). Boot seed `_seed_match_play_template` creates v1.
+  `cmp_bracket` gains `player_seed`/`is_wildcard`.
+- DB ops (database.py): `sct_get_active_config`/`sct_list_versions`/
+  `sct_get_version`/`sct_save_version` (validates every N before
+  accepting)/`sct_ensure_snapshot`/`sct_pin_snapshot`;
+  `cmp_enrolled_entrants` (customer_id-deduped, canonical names),
+  `cmp_auto_assign_pools` (guards recorded results),
+  `cmp_seed_knockout` (advancers+wildcards+seeds+byes, guards recorded
+  results), `cmp_get_payout_sheet`.
+- API: `/api/cmp/config` (+`/versions`, `/versions/<id>`, `/snapshot`),
+  `/api/cmp/structure` (?n= | full matrix | ?version_id= preview),
+  `/api/cmp/pools/auto-assign`, `/api/cmp/bracket/seed`,
+  `/api/cmp/payouts`. Reads = view-only, actions = manager, config
+  writes/pins = admin.
+- UI (contests.html → Match Play): structure banner (N → matrix chips,
+  config-version badge w/ pinned state, Auto-Assign + Config buttons),
+  server-side Seed Knockout w/ seed/WC chips + Round-of-16 + bye
+  rendering, Payouts view (bonus + ladder tables, provisional/final/TBD
+  statuses), admin Config editor modal (version history, JSON edit,
+  computed-matrix preview via ?version_id, save-as-new-version,
+  pin-season-to-version).
+
+Open questions to Kerry live in mailbox topic
+**match-play-implementation** (id 21): N=4/5 ladder per xlsx, tie-split
+default, wildcard rule, bye scope, random vs handicap-snake pool
+assignment, pools-of-5 scheduling. Defaults are implemented; answers
+only require a config edit or small rule tweak.

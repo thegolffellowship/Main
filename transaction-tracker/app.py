@@ -8805,6 +8805,167 @@ def api_cmp_clear_bracket():
     return jsonify({"ok": True, "deleted": deleted})
 
 
+# ── Match Play versioned config + config-driven operations (v2.34.0) ──
+
+@app.route("/api/cmp/config")
+@require_role("view-only")
+def api_cmp_get_config():
+    """Active config for a season/chapter (snapshot-resolved) + structure
+    for the currently enrolled N when season+chapter are given."""
+    season = (request.args.get("season") or "").strip()
+    chapter = (request.args.get("chapter") or "").strip()
+    from email_parser.database import cmp_enrolled_entrants, sct_get_active_config
+    active = sct_get_active_config("match_play", season or None, chapter or None)
+    if not active:
+        return jsonify({"error": "No Match Play config template found"}), 404
+    out = dict(active)
+    if season and chapter:
+        from email_parser.match_play import structure_for_n
+        entrants = cmp_enrolled_entrants(season, chapter)
+        out["n_enrolled"] = len(entrants)
+        out["entrants"] = entrants
+        try:
+            out["structure"] = structure_for_n(active["config"], len(entrants))
+        except ValueError as e:
+            out["structure_error"] = str(e)
+    return jsonify(out)
+
+
+@app.route("/api/cmp/config/versions")
+@require_role("view-only")
+def api_cmp_config_versions():
+    from email_parser.database import sct_list_versions
+    return jsonify(sct_list_versions("match_play"))
+
+
+@app.route("/api/cmp/config/versions/<int:version_id>")
+@require_role("view-only")
+def api_cmp_config_version_detail(version_id):
+    from email_parser.database import sct_get_version
+    v = sct_get_version(version_id)
+    if not v:
+        return jsonify({"error": "Version not found"}), 404
+    return jsonify(v)
+
+
+@app.route("/api/cmp/config/versions", methods=["POST"])
+@require_role("admin")
+def api_cmp_save_config_version():
+    data = request.get_json(silent=True) or {}
+    config = data.get("config")
+    if not isinstance(config, dict):
+        return jsonify({"error": "config (object) required"}), 400
+    from email_parser.database import sct_save_version
+    try:
+        result = sct_save_version("match_play", config,
+                                  saved_by=session.get("role", "admin"),
+                                  notes=(data.get("notes") or "").strip() or None)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(result), 201
+
+
+@app.route("/api/cmp/config/snapshot", methods=["POST"])
+@require_role("admin")
+def api_cmp_pin_config_snapshot():
+    """Re-pin a season/chapter to a specific (or the current) config version."""
+    data = request.get_json(silent=True) or {}
+    season = (data.get("season") or "").strip()
+    chapter = (data.get("chapter") or "").strip()
+    if not season or not chapter:
+        return jsonify({"error": "season and chapter required"}), 400
+    from email_parser.database import sct_pin_snapshot
+    try:
+        snap = sct_pin_snapshot("match_play", season, chapter,
+                                version_id=data.get("version_id"),
+                                by=session.get("role", "admin"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(snap)
+
+
+@app.route("/api/cmp/structure")
+@require_role("view-only")
+def api_cmp_structure():
+    """Computed matrix row(s). ?n=12 for one field size, else all N.
+    ?version_id previews a specific config version instead of the active one."""
+    season = (request.args.get("season") or "").strip() or None
+    chapter = (request.args.get("chapter") or "").strip() or None
+    from email_parser.database import sct_get_active_config, sct_get_version
+    from email_parser.match_play import structure_for_n
+    version_id = request.args.get("version_id", type=int)
+    if version_id:
+        v = sct_get_version(version_id)
+        if not v:
+            return jsonify({"error": "Version not found"}), 404
+        active = {"version_no": v["version_no"], "config": v["config"]}
+    else:
+        active = sct_get_active_config("match_play", season, chapter)
+    if not active:
+        return jsonify({"error": "No Match Play config template found"}), 404
+    cfg = active["config"]
+    n_arg = request.args.get("n", type=int)
+    if n_arg:
+        try:
+            return jsonify(structure_for_n(cfg, n_arg))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+    rows = []
+    for n in range(int(cfg.get("n_min", 4)), int(cfg.get("n_max", 32)) + 1):
+        try:
+            rows.append(structure_for_n(cfg, n))
+        except ValueError:
+            continue
+    return jsonify({"config_version": active["version_no"], "rows": rows})
+
+
+@app.route("/api/cmp/pools/auto-assign", methods=["POST"])
+@require_role("manager")
+def api_cmp_auto_assign_pools():
+    data = request.get_json(silent=True) or {}
+    season = (data.get("season") or "").strip()
+    chapter = (data.get("chapter") or "").strip()
+    if not season or not chapter:
+        return jsonify({"error": "season and chapter required"}), 400
+    from email_parser.database import cmp_auto_assign_pools
+    try:
+        result = cmp_auto_assign_pools(season, chapter,
+                                       created_by=session.get("role"),
+                                       force=bool(data.get("force")))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(result)
+
+
+@app.route("/api/cmp/bracket/seed", methods=["POST"])
+@require_role("manager")
+def api_cmp_seed_knockout():
+    data = request.get_json(silent=True) or {}
+    season = (data.get("season") or "").strip()
+    chapter = (data.get("chapter") or "").strip()
+    if not season or not chapter:
+        return jsonify({"error": "season and chapter required"}), 400
+    from email_parser.database import cmp_seed_knockout
+    try:
+        result = cmp_seed_knockout(season, chapter,
+                                   created_by=session.get("role"),
+                                   force=bool(data.get("force")))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(result)
+
+
+@app.route("/api/cmp/payouts")
+@require_role("view-only")
+def api_cmp_payouts():
+    season = (request.args.get("season") or "").strip()
+    chapter = (request.args.get("chapter") or "").strip()
+    if not season or not chapter:
+        return jsonify({"error": "season and chapter required"}), 400
+    from email_parser.database import cmp_get_payout_sheet
+    return jsonify(cmp_get_payout_sheet(season, chapter))
+
+
 # ---------------------------------------------------------------------------
 # Routes — Authentication
 # ---------------------------------------------------------------------------
