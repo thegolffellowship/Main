@@ -250,13 +250,38 @@ toward full automation (see governing docs).
 | Payout | Purse & Points "by Winner takes all" · purse pot $42 = **$2 × 21 NET buyers** (multi-event-day City MVP half-share — cross-checks the ratified $2/$2 split exactly) · points 0 |
 | Season Points | none |
 
-Schedule notes: (a) a hole-in-one pays 8 regardless of par; (b) the
-"Others" (worse than triple) slot at 0 is unreachable in practice —
-the global gross Max Triple rule caps every recorded score at triple
-bogey (which scores -1); (c) this custom schedule is NOT classic
-Stableford — whether the POINTS games use the same Assign Points
-table is the key open question for live standings math (awaiting the
-points-game setup screenshot).
+Schedule notes: (a) the schedule scores **NET** results (net
+Stableford — admin confirmed 2026-07-05); (b) a hole-in-one pays 8
+regardless of par; (c) the "Others" (worse than triple) slot at 0 is
+unreachable in practice — the global gross Max Triple rule caps every
+recorded score at triple bogey (which scores -1); (d) this custom
+schedule is NOT classic Stableford — whether the POINTS games use
+the same Assign Points table is the key open question for live
+standings math (awaiting the points-game setup screenshot; the -6
+gross total once observed on THE PLAYERS CUP is only producible with
+negative per-hole values like these, so a shared schedule is likely).
+
+**MVP vs POINTS structure (admin, 2026-07-05):** MVP is a per-event
+game restricted to NET buyers; the POINTS game is a SEPARATE GG game
+capturing the same net Stableford for EVERYONE in the field (that
+race's division). Same math, different rosters and payouts.
+
+### Platform consolidation concept (admin direction, 2026-07-05)
+
+GG currently needs three games per event (MVP $, net POINTS, gross
+POINTS). On the Platform / live leaderboard these consolidate into
+ONE computation over the whole field:
+
+- Compute net AND gross Stableford for every player (the Tracker's
+  formula layer already produces both per scorecard).
+- One leaderboard, three outputs: net points column = the points
+  race for everyone; gross points column = THE PLAYERS CUP race;
+  MVP = best net among the color-coded MVP ENTRANTS (buy-in flag
+  from commerce data — non-entrants still accrue points, just
+  aren't payout-eligible).
+- Entrant color-coding replaces roster-splitting; payout eligibility
+  is a flag, not a separate game. Fits the versioned game-definition
+  standard (one points-schedule definition, per-event snapshots).
 
 ### Individual Net — definition v1 (s9.16 "INDIVIDUAL Net $" setup)
 
@@ -279,12 +304,20 @@ are configured under Cut Lines & Sections (split observed at HCP
 12.0). Note the handicap dropdown: individual games use plain "USGA
 Net"; only TEAM games use "USGA Net (off lowest)".
 
+**TGF MVP recording (admin, 2026-07-05):** GG CANNOT configure TGF
+MVP — it is a fully manual step today (admin compares the City MVPs'
+points across the day's events and records the payout by hand).
+Prime automation target for the Tracker/app: the Events Games tab
+already computes the TGF MVP pot and link-day awareness
+(getMvpLinkedEvents); what's missing is automating the WINNER
+determination (compare linked events' City MVP points, tie → split)
+once results land.
+
 ### Definitions still to capture
 
 CTP / Longest Putt, Hole-in-One, Skins, Individual Gross, Match
 Play, POINTS games (s9.16 Net / race divisions — highest priority:
-feeds live championship standings), TGF MVP recording on multi-event
-days — as admin supplies screenshots.
+feeds live championship standings) — as admin supplies screenshots.
 
 ## Next phase (ratified direction, mailbox ids 10-11)
 

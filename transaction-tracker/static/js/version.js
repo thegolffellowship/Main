@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.32.10";
+window.TGF_VERSION = "2.32.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.32.11",
+    date: "2026-07-05",
+    changes: [
+      "Docs: MVP Stableford schedule confirmed as NET Stableford; MVP-vs-POINTS structure recorded (MVP = per-event buyers-only game; POINTS = separate GG game capturing the same net Stableford for the whole field). Admin's Platform consolidation concept captured: one leaderboard computing net AND gross Stableford for everyone -- net points column serves the points race, gross column serves THE PLAYERS CUP, MVP = best net among color-coded entrants (buy-in flag from commerce data) -- collapsing three GG games into one live view.",
+      "TGF MVP recording documented as a manual step today (GG cannot configure it); flagged as a prime Tracker automation target since the Events Games tab already computes the pot and same-day link awareness -- only winner determination (compare linked City MVPs' points, tie splits) needs building.",
+    ],
+  },
   {
     version: "2.32.10",
     date: "2026-07-05",
