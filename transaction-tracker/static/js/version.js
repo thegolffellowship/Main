@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.33.4";
+window.TGF_VERSION = "2.33.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.33.5",
+    date: "2026-07-06",
+    changes: [
+      "Captured the cross-chapter points-routing requirement (admin): every event can draw members from other chapters, and a visitor earns season points toward THEIR home chapter's race -- in GG this is a manual wire-up each event, which our system must automate. We already hold the data (customers.chapter via customer_id), so the points engine can route each player's Stableford to their home-chapter race automatically. Documented in scoring.md with the open rule to confirm (home-only vs also-host, and monthly handling).",
+      "Reframed the points/games documentation: these are TGF standards the admin authored, not GG's. GG is a configurable engine and the current entry surface, not the source of truth; it does not lock a game's definition for subsequent events. The automation goal is for the Tracker/Platform to persist every game as an admin-editable versioned definition that applies to future events by default -- the definitions captured in side-games.md ARE that lock, and the GG cross-checks confirm our encoding matches the admin's standard.",
+    ],
+  },
   {
     version: "2.33.4",
     date: "2026-07-06",
