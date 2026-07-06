@@ -325,13 +325,22 @@ are configured under Cut Lines & Sections (split observed at HCP
 Net"; only TEAM games use "USGA Net (off lowest)".
 
 **TGF MVP recording (admin, 2026-07-05):** GG CANNOT configure TGF
-MVP — it is a fully manual step today (admin compares the City MVPs'
-points across the day's events and records the payout by hand).
-Prime automation target for the Tracker/app: the Events Games tab
-already computes the TGF MVP pot and link-day awareness
-(getMvpLinkedEvents); what's missing is automating the WINNER
-determination (compare linked events' City MVP points, tie → split)
-once results land.
+MVP — it was a fully manual step (admin compared the City MVPs'
+points across the day's events and recorded the payout by hand).
+**AUTOMATED in v2.33.0** (admin: "Build it"): `determine_tgf_mvp()`
+(database.py) computes each linked event's City MVP from OUR imported
+scorecards + the formula layer — highest net Stableford POINTS among
+NET-bundle buyers, tiebreakers Ind Net stroke score → Gross → split —
+then names the TGF MVP (higher day points, tie splits). Buyer
+eligibility mirrors the Games-tab rules (credited/refunded/
+transferred/rsvp_only out; wd out only if net_games credited; child
+add-on payments upgrade the parent's game type). Surfaced three ways:
+`/api/events/tgf-mvp?event=` (manager), the MCP tool
+`determine_tgf_mvp`, and 🏆 winner rows on the Events Games tab
+(City MVP row + TGF MVP block, lazy-hydrated; shows
+awaiting-results/single-event-day states). GG-recorded event_mvps
+names ride along for cross-checking. Verified on a synthetic DB: 5
+scenarios incl. both tiebreaker layers and tie splits.
 
 ### Definitions still to capture
 

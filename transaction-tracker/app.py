@@ -5504,6 +5504,22 @@ def api_mvp_relink():
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/events/tgf-mvp")
+@require_role("manager")
+def api_tgf_mvp_determination():
+    """Compute City MVP per linked same-day event (highest net Stableford
+    points among NET buyers, ratified tiebreakers) and the TGF MVP."""
+    event = (request.args.get("event") or "").strip()
+    if not event:
+        return jsonify({"error": "event parameter required"}), 400
+    try:
+        from email_parser.database import determine_tgf_mvp
+        return jsonify(determine_tgf_mvp(event))
+    except Exception as e:
+        logger.exception("TGF MVP determination failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/orphaned-items")
 def api_orphaned_items():
     """Return items whose item_name doesn't match any event."""

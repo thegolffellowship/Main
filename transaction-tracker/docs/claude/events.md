@@ -638,3 +638,26 @@ in `events`/`acct_transactions` for combined P&L views.
 - `POST /api/tgf` — actions: `add_event`, `import_payouts`, `add_golfer`,
   `import_golfers`, `update_event`, `delete_event`
 - `POST /api/tgf/parse-screenshot` — AI screenshot parsing (manager+ role)
+
+
+## TGF MVP determination (v2.33.0)
+
+`determine_tgf_mvp(event_name)` (database.py) automates the manual
+cross-event comparison GG cannot do. Flow: resolve the event's
+same-day linked set (event_date equality minus event_mvp_unlinks,
+9-hole/combo nines only — mirrors getMvpLinkedEvents); per event,
+collect NET-bundle buyers from items (alias-aware, Games-tab
+eligibility rules, child add-ons merged); match buyers to
+scoring_rounds by customer_id + event_id; score each round through
+the formula layer (get_scorecard → stableford_net); City MVP =
+highest points, tiebreakers Individual Net stroke score → Gross →
+split; TGF MVP = City MVP with higher day points (summed across the
+day's linked events), tie splits. States: single_event_day (all MVP
+money to City MVP), awaiting_results (lists which events lack
+imported rounds), no_net_buyers. Output includes the top-5 field per
+event and GG-recorded event_mvps names for cross-check.
+
+Surfaces: `GET /api/events/tgf-mvp?event=<item_name>` (manager);
+MCP tool `determine_tgf_mvp`; Events Games tab 🏆 rows — City MVP
+row and TGF MVP block hydrate lazily via hydrateMvpDeterminations()
+(per-event fetch cache `_mvpDetCache`, spans marked data-done).

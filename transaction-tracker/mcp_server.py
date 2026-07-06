@@ -1604,6 +1604,25 @@ def get_tracker_docs(name: str = "") -> str:
 
 
 @mcp.tool()
+def determine_tgf_mvp(event_name: str) -> str:
+    """Determine City MVP and TGF MVP for an event's day from imported scorecards.
+
+    Automates the manual GG-impossible step (admin, 2026-07-05): for the
+    event and its linked same-day events, City MVP = highest NET
+    Stableford POINTS among NET-bundle buyers (tiebreakers: Individual
+    Net stroke score, then Gross, then split), and TGF MVP = the City
+    MVP with the higher points across the day's events (tie splits).
+    Reports awaiting_results / single_event_day states, per-event buyer
+    counts, the top-5 field, and GG-recorded MVP names for cross-check.
+
+    Args:
+        event_name: the event's item_name (e.g. "s9.16 TPC San Antonio | Oaks")
+    """
+    from email_parser.database import determine_tgf_mvp as _det
+    return json.dumps(_det(event_name), indent=2, default=str)
+
+
+@mcp.tool()
 def get_side_games_matrix(holes: int = 0) -> str:
     """Return the LIVE side-games prize matrix (both hole counts).
 
