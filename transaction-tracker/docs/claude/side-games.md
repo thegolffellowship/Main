@@ -291,6 +291,17 @@ ONE computation over the whole field:
 - Entrant color-coding replaces roster-splitting; payout eligibility
   is a flag, not a separate game. Fits the versioned game-definition
   standard (one points-schedule definition, per-event snapshots).
+- **Leaderboard IA (admin, 2026-07-06):** horizontal tab nav —
+  **Team · Gross · Net · Skins · Points · Proxies** — instead of
+  GG's vertically stacked game lists. ("Proxies" = CTP / Longest
+  Putt.) Match Play could be a seventh tab but may be too busy —
+  candidate for a "More" overflow or showing only when a bracket
+  round is live. Goal: one simplified, logical results surface per
+  event.
+- GG friction this replaces (admin): points games require dedicated
+  divisions with season points attached before GG will award them,
+  and points post only AFTER the round — an anticlimactic finish.
+  The live leaderboard computes points during play.
 
 ### Individual Net — definition v1 (s9.16 "INDIVIDUAL Net $" setup)
 
