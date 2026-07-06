@@ -228,15 +228,49 @@ Stableford -> 0 awarded). Consequence for live standings: GG's live
 POINTS-game Stableford totals ARE the provisional race points — no
 mapping needed, and our formula layer can parallel-verify them.
 
-**Championship weighting (admin, 2026-07-05):** City Championship and
-TGF Championship use the regular Assign Points schedule shifted **+1
-per category**. Net championship values: Triple 0 · Double 0 ·
-Bogey 1 · Par 2 · Birdie 3 · Eagle 4 · Double Eagle 5 · HIO 9
-(regular: -1/-1/0/1/2/3/4/8). Effect: ~+1 point per hole played vs a
-regular event, so championships naturally weigh heavier in the
-best-10+CC season standing. The live-standings points engine must
-select the schedule per event (regular vs championship). Still open:
-reset mechanics.
+### Assign Points schedules (admin, corrected 2026-07-06)
+
+Points are computed per hole by (net- or gross-)vs-par through the
+formula layer (`_SCORING_FORMULA_DEFAULTS` / `compute_hole_derivations`),
+admin-tunable via handicap_settings. **Regular-season** values (matching
+the GG game setups):
+
+| Result | NET (net-vs-par) | GROSS (gross-vs-par) |
+|---|---|---|
+| Hole-in-One (raw ace) | *no HIO bonus* — scored as its net achievement | **8** (override, any par) |
+| Double Eagle | 4 | 16 |
+| Eagle | 3 | 8 |
+| Birdie | 2 | 4 |
+| Par | 1 | 2 |
+| Bogey | 0 | 1 |
+| Double Bogey | -1 | 0 |
+| Triple Bogey (& worse) | -1 | -1 |
+| Triple Eagle or better | 4 | (n/a — capped by HIO) |
+
+Rules (admin, 2026-07-06):
+- **Gross HIO is a raw-ace override**: an actual hole-in-one (gross
+  strokes == 1) scores the HIO value (8) regardless of par — so an ace
+  on a par 4/5 gets 8, NOT a double/triple eagle. Only HIO points apply.
+- **Net has no HIO bonus**: a net ace is scored by its net-vs-par (a net
+  eagle or better via the table) — there is no "net hole-in-one."
+- The gross ladder doubles up the birdie/eagle/albatross line (4/8/16).
+- Codebase correction: the previous gross table read eagle 4 / double
+  eagle 8 (both wrong) and the net table's -4 bucket read 8 (a mistaken
+  HIO encoding). Fixed in v2.33.1; net MVP/points totals for ordinary
+  scores are unchanged (only net-triple-eagle holes and all gross totals
+  shift). This supersedes the earlier "the net table matches exactly"
+  note — it did not (the -4 bucket was wrong).
+
+**Championship schedule — PENDING RE-CONFIRMATION.** Two admin readings
+conflict: (a) 2026-07-05: regular schedule shifted **+1 per category**
+(net Triple 0 / Double 0 / Bogey 1 / Par 2 / Birdie 3 / Eagle 4 / Dbl
+Eagle 5 / HIO 9); (b) 2026-07-06: "**only plus 1 on the hole-in-one**"
+(HIO -> 9 for net and gross, everything else identical to regular).
+These are materially different for season weighting — (a) makes each
+championship hole worth ~+1, (b) leaves per-hole points unchanged and
+lets the championship's weight come only from being an always-counted
+event (best-10+CC). NOT coded pending admin's answer. Still open: reset
+mechanics.
 
 ## Monthly points races (v2.30.0)
 
