@@ -315,12 +315,15 @@ just SAN ANTONIO Net. In GG this is a MANUAL wire-up each time (GG does
 not auto-recognize the visitor's home chapter) — the admin had to hand-
 attach the Austin division to that event's game.
 
-**Our system must automate this.** We already hold everything needed:
-`customers.chapter` is the player's home chapter, resolved via
-`customer_id` from any scoring round (and the tracker already keeps
-`items.chapter` = event location distinct from `customers.chapter` =
-home chapter — see CLAUDE.md identity-drift note). So the points engine
-computes each player's net/gross Stableford once, then routes by scope:
+**Our system must automate this — with NO dependency on the items
+table.** The routing key is `customers.chapter`, reached through the
+`customer_id` FK that `scoring_rounds` already carries. Points routing
+is a clean FK join `scoring_rounds.customer_id -> customers.chapter`;
+it NEVER reads `items.chapter` (that field is only a per-order
+event-location snapshot and is deliberately excluded from identity and
+routing — `customer_id` is the one true key, per CLAUDE.md Guiding
+Principle 6). So the engine computes each player's net/gross Stableford
+once, then routes by scope:
 
 **Routing rules (RATIFIED admin 2026-07-06):**
 - **CITY NET (season Net race) = HOME-chapter only.** A member can be

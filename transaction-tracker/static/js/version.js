@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.33.6";
+window.TGF_VERSION = "2.33.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.33.7",
+    date: "2026-07-06",
+    changes: [
+      "Clarified (per admin's concern about the historically FK-shaky items table) that cross-chapter points routing has ZERO dependency on the items table: the routing key is customers.chapter reached through the customer_id FK that scoring_rounds already carries -- a clean join scoring_rounds.customer_id -> customers.chapter. items.chapter (a per-order event-location snapshot) is never read for identity or routing.",
+      "New design-of-record doc game-engine.md: the TGF Game Creator engine (versioned, admin-editable create/edit/version-control for every event game AND season contest) plus the staged untether-from-GG plan (Stage 0 done: parity-verified against GG; Stage 1: parallel shadow leaderboard computing everything ourselves from raw gross hole scores; Stage 2: our own score-entry app, GG out of the loop). Two definition layers (game defs + season-contest defs) with a config-JSON attribute set (scope chapter/TGF-wide/regional, basis net/gross, accumulation best-X/all, months toggle, funding, weighting) mirroring the payout_templates versioning pattern. To be reconciled with the Platform's existing Game Creator planning (TGF Project + OneDrive).",
+    ],
+  },
   {
     version: "2.33.6",
     date: "2026-07-06",

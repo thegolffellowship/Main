@@ -16,6 +16,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/customer-merge-repair.md` (playbook for fixing absorbed customer profiles)
 - `docs/claude/state-of-the-tracker.md` (Platform-facing brief for the claude.ai Golf Fellowship Project — refresh after major build waves)
 - `docs/claude/side-games.md` (side-games RATIFIED SPEC v1.0 — buy-ins, game rules, prize-matrix derivation; open flags at bottom)
+- `docs/claude/game-engine.md` (Game Creator engine + untether-from-GG staging — versioned game/season-contest definitions; design of record)
 
 ## Guiding Principles
 
