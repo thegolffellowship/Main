@@ -185,6 +185,13 @@ the LIVE copy (source: `app_settings`):
 ## GG game SETUP layer (admin-supplied screenshots — versioned
 ## game definitions; first arrived 2026-07-05)
 
+**Framing (admin, 2026-07-06):** these are **TGF standards the admin
+authored**, not GG's — GG is a configurable engine and the current
+entry surface, but the source of truth is TGF. GG cross-checks below
+confirm our engine matches the admin's current config; the goal is for
+the Tracker to LOCK these as versioned definitions (which GG does not
+do well) so they apply automatically to every future event.
+
 The admin supplies Golf Genius setup screenshots per game rather than
 have setup reverse-engineered. Target per the ratified requirement:
 every setting below becomes an admin-editable, VERSIONED game

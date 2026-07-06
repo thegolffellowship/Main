@@ -305,6 +305,40 @@ real per-hole weighting on top of the City Championship being an
 always-counted event in the best-10+CC standing. Still open: reset
 mechanics.
 
+### Cross-chapter points routing (TGF standard — automation requirement, admin 2026-07-06)
+
+Every event can draw members from other chapters. A player earns
+season points toward **their HOME chapter's race**, not (only) the
+host event's chapter. Example: two Austin members played a San Antonio
+event; their net Stableford must feed the AUSTIN Net race (26-An), not
+just SAN ANTONIO Net. In GG this is a MANUAL wire-up each time (GG does
+not auto-recognize the visitor's home chapter) — the admin had to hand-
+attach the Austin division to that event's game.
+
+**Our system must automate this.** We already hold everything needed:
+`customers.chapter` is the player's home chapter, resolved via
+`customer_id` from any scoring round. So the points engine computes
+each player's net/gross Stableford once, then routes it to the race(s)
+keyed off the player's HOME chapter automatically — zero manual wiring.
+Open rule to confirm with admin: does a visitor earn points ONLY in
+their home-chapter race, or ALSO in the host chapter's race (and how
+does the monthly race handle a visitor — host month or home month)?
+
+### These are TGF standards, not GG's (framing, admin 2026-07-06)
+
+The point values, game rules, flight bands, and matrix are **TGF
+standards the admin authored** — GG is a general, highly-configurable
+game engine that happens to be the current entry surface. GG does not
+"lock" a game's definition for subsequent events (its Tournament
+Library templates only some of it, not enough). The automation goal:
+the Tracker/Platform persists every game as an admin-editable,
+VERSIONED definition (payout_templates pattern) that applies to every
+future event by default and auto-adapts (player counts, flights,
+cross-chapter routing) — so a manager never re-enters or re-wires a
+game. The game definitions captured in side-games.md ARE that lock;
+GG cross-checks confirm our encoding matches the admin's current
+standard, but the standard is TGF's, not GG's.
+
 ## Monthly points races (v2.30.0)
 
 Contests -> Points Races -> MONTHLY: month nav bar over combined-chapter
