@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.33.2";
+window.TGF_VERSION = "2.33.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.33.3",
+    date: "2026-07-06",
+    changes: [
+      "GROSS points schedule VALIDATED against Golf Genius's own game configuration. The admin supplied the GG setup for THE PLAYERS CUP gross points game (category TPC26reg, Handicap None/Gross): its Assign Points row reads HIO 8, Triple Eagle-or-Better 16, Double Eagle 16, Eagle 8, Birdie 4, Par 2, Bogey 1, Double Bogey 0, Triple Bogey -1, Others 0 -- an exact match to our corrected table on every reachable category. This is GG's authoritative config, so no eagle round was needed to confirm it. GG lists both a Hole-in-One box (8) and a Triple-Eagle box (16), which with the admin's 'award the higher' rule validates our max(HIO, vs-par) implementation (a par-5 ace scores 16, not 8). 'Others = 0' is a no-score / worse-than-triple catch-all, unreachable for played holes under the Max Triple cap; our engine matches both ways. Docs updated with the authoritative gross game definition; no code change required.",
+    ],
+  },
   {
     version: "2.33.2",
     date: "2026-07-06",

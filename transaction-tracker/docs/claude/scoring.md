@@ -257,6 +257,19 @@ par 4) — is NOT a raw ace and is scored normally by its vs-par. Only a
 literal 1 on the card triggers the HIO bonus. (Implemented as
 `max(hio_bonus, table_value)` on `strokes == 1`.)
 
+**GROSS schedule VALIDATED against GG (2026-07-06):** the admin's
+GG setup screenshot for THE PLAYERS CUP gross points game (category
+TPC26reg, Handicap None/Gross) shows Assign Points HIO 8 / Triple
+Eagle-or-Better 16 / Double Eagle 16 / Eagle 8 / Birdie 4 / Par 2 /
+Bogey 1 / Double Bogey 0 / Triple Bogey -1 / Others 0 — an EXACT match
+to our table on every reachable category. GG lists both a Hole-in-One
+box (8) and a Triple-Eagle box (16), which together with the admin's
+"award the higher" rule confirms the max(HIO, vs-par) implementation.
+GG's "Others = 0" is a no-score / worse-than-triple catch-all,
+unreachable for played holes under Max Triple (which caps gross at
+triple = -1, exactly what our clamp yields); null holes are skipped
+(contribute 0). No code change needed.
+
 The gross ladder doubles the birdie/eagle/albatross line (4/8/16).
 Codebase history: an earlier gross table read eagle 4 / double eagle 8
 (both wrong) and the net -4 bucket read 8 (a stray HIO encoding);
