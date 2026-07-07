@@ -1,5 +1,22 @@
-window.TGF_VERSION = "2.33.8";
+window.TGF_VERSION = "2.34.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.34.1",
+    date: "2026-07-07",
+    changes: [
+      "Adversarial review pass over the v2.34.0 Match Play build fixed 8 confirmed issues before deploy: (1) a seeded bracket's shape is now frozen -- rendering/auto-advance derive rounds from the SAVED bracket rows, not the live enrollment count, so an enrollment change after seeding no longer hides rounds or advances winners through the wrong template; (2) the payout sheet always splits the combined 3rd/4th money by the expected TWO semifinal losers, so a lone recorded SF loser shows $52.50 (of $105) instead of the full combined amount marked final; (3) two DIFFERENT customers who share a name both count as entrants (dedup is customer_id-first per Principle 6) -- name-dedup only applies to legacy id-less rows; (4) the payout ladder renders any config shape without crashing (no more hard [0]/[1] indexing; places beyond 4th render as TBD rows so the sheet always sums to the pot) and sct_save_version now rejects ladders paying fewer than 2 places; (5) seeding with fewer than 2 qualifiers returns a clear error instead of a 500; (6) the standings 'Advances' badge and header honor the config's advance_per_pool and mention wildcards instead of hardcoding 'Top 2'; (7) a bracket slot's seed/WC chips clear when a different player lands in the slot (stale-chip fix in the upsert); (8) the payout sheet warns when chapterless enrollments are being counted in every chapter's field.",
+    ],
+  },
+  {
+    version: "2.34.0",
+    date: "2026-07-06",
+    changes: [
+      "MATCH PLAY lands in CONTESTS as the first Game Creator engine build (Kerry's directive, mailbox ids 18-21). The full 29-column Prizes-Match Play Matrix.xlsx (July 6 final) is now RULES-AS-DATA: pools, knockout size, wildcards, first-round byes, $20/pool-winner bonuses ($25 at N=4), and the payout ladders all live in a versioned admin-editable config -- nothing is hard-coded. New tables season_contest_templates / season_contest_versions (append-only, payout_templates pattern) and season_contest_config_snapshots, which pins a season+chapter to a config version on its first structural action so later template edits never rewrite a season in flight (past-events-frozen). Boot seeds City Match Play v1 from the matrix; test_match_play.py proves the engine reproduces every xlsx column exactly.",
+      "New pure engine email_parser/match_play.py (no DB, no Flask -- lifts to the Platform unchanged): structure_for_n (pot $40 x N, bonuses, balanced pool sizes 3-5, ladder bands 71.5/28.5 at N=4 through 50/25/15/10 at N=11+ with whole-dollar overrides where percentages don't divide), largest-remainder cents allocation so payouts always sum to the pot exactly, classic seeded bracket placement (1v8/4v5...) with automatic byes (12-bracket = top 4 seeds skip round 1), and tie splits (semifinal losers split combined 3rd+4th place money).",
+      "Match Play tab is now config-driven end to end: a structure banner shows N enrolled -> pools/knockout/wildcards/byes/pot/ladder with the config version badge (pinned state visible); Auto-Assign Pools randomly fills the matrix-prescribed pools from enrollments (refuses to destroy recorded results without confirmation); Seed Knockout moved server-side -- advancers per pool + cross-pool wildcards by Stableford, global seeding (most Stableford points across pool matches, ratified), seed/WC chips on the bracket, Round-of-16 support; new Payouts view computes pool-winner bonuses (leaders provisional until the bracket is seeded) and the knockout ladder with exact-cent tie splits; admins get a Config editor (version history, JSON edit, computed-matrix preview, save-as-new-version, pin-season-to-version).",
+      "New API: GET/POST /api/cmp/config(+/versions, /snapshot), GET /api/cmp/structure (?n= or full matrix, ?version_id= preview), POST /api/cmp/pools/auto-assign, POST /api/cmp/bracket/seed, GET /api/cmp/payouts. cmp_bracket gains player_seed / is_wildcard columns (idempotent migration). Design questions posted to mailbox topic match-play-implementation (id 21): N=4/5 ladder per xlsx supersedes the 75/25 note, tie-split default, wildcard rule, bye scope, random-vs-snake pool assignment.",
+    ],
+  },
   {
     version: "2.33.8",
     date: "2026-07-06",

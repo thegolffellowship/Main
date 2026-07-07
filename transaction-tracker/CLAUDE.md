@@ -273,6 +273,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `email_parser/parser.py` — AI extraction prompt and logic
 - `email_parser/database.py` — schema, CRUD, audit queries, customer matching, COO context, bank reconciliation (~12000+ lines)
 - `email_parser/memberships.py` — `customer_memberships` schema/backfill, renewal detection, reminder email templates, daily scheduler job, signed roster opt-in/out tokens
+- `email_parser/match_play.py` — pure Match Play engine (versioned-config evaluation: structure, seeded bracket w/ byes, exact-cents payout ladders); seed = the ratified 29-column matrix; tests in `test_match_play.py`; see `docs/claude/game-engine.md`
 - `email_parser/fetcher.py` — Microsoft Graph email fetching
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)

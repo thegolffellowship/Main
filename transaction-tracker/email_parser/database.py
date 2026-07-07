@@ -3239,6 +3239,8 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("opponent_id",         "INTEGER REFERENCES customers(customer_id)"),
             ("winner_id",           "INTEGER REFERENCES customers(customer_id)"),
             ("event_id",            "INTEGER REFERENCES events(id)"),
+            ("player_seed",         "INTEGER"),
+            ("is_wildcard",         "INTEGER"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE cmp_bracket ADD COLUMN {_col} {_def}")
@@ -5182,8 +5184,73 @@ def init_db(db_path: str | Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_event_type_template_map_lookup "
             "ON event_type_template_map(event_type, holes)"
         )
+        # ──────────────────────────────────────────────────────────────────
+        # Season-Contest Config Templates (v2.34.0) — the Game Creator
+        # engine's first concrete instance (docs/claude/game-engine.md →
+        # "NEXT BUILD DIRECTIVE"). Mirrors the payout_templates pattern:
+        # append-only versions holding config_json, a per-season/chapter
+        # snapshot table so past seasons are frozen (Guiding Principle 4),
+        # and a boot-time seed (City Match Play v1 from the ratified
+        # Prizes-Match Play Matrix.xlsx).
+        # ──────────────────────────────────────────────────────────────────
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS season_contest_templates (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                name                TEXT NOT NULL UNIQUE,
+                kind                TEXT NOT NULL,
+                current_version_id  INTEGER REFERENCES season_contest_versions(id),
+                notes               TEXT,
+                created_at          TEXT DEFAULT (datetime('now')),
+                created_by          TEXT,
+                archived            INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS season_contest_versions (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_id  INTEGER NOT NULL REFERENCES season_contest_templates(id),
+                version_no   INTEGER NOT NULL,
+                config_json  TEXT NOT NULL,
+                saved_at     TEXT DEFAULT (datetime('now')),
+                saved_by     TEXT,
+                notes        TEXT,
+                UNIQUE(template_id, version_no)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sc_versions_template "
+            "ON season_contest_versions(template_id)"
+        )
+        # One row per (season, chapter, template): which config version that
+        # season runs under. Created on the first structural action
+        # (auto-assign pools / seed bracket) so later template edits never
+        # silently rewrite a season in flight.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS season_contest_config_snapshots (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                season       TEXT NOT NULL,
+                chapter      TEXT NOT NULL,
+                template_id  INTEGER NOT NULL REFERENCES season_contest_templates(id),
+                version_id   INTEGER NOT NULL REFERENCES season_contest_versions(id),
+                snapped_at   TEXT DEFAULT (datetime('now')),
+                snapped_by   TEXT,
+                UNIQUE(season, chapter, template_id)
+            )
+            """
+        )
+
         conn.commit()  # required: _connect() does not autocommit; without this,
-                       # the three CREATE TABLEs above are rolled back on close.
+                       # the CREATE TABLEs above are rolled back on close.
+
+        try:
+            _seed_match_play_template(conn)
+        except Exception:
+            logger.exception("Match Play template seed failed (non-fatal)")
 
         logger.info("Database initialized at %s", db_path or DB_PATH)
 
@@ -18999,12 +19066,14 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
         return dict(row) if row else {}
 
 
-def cmp_get_standings(season: str, chapter: str, db_path=None) -> list[dict]:
+def cmp_get_standings(season: str, chapter: str, db_path=None,
+                      advance_per_pool: int = 2) -> list[dict]:
     """Return pool standings for a chapter/season.
 
     W/L/D is determined by match play winner_name (traditional match play result).
     Stableford points are accumulated independently — a match loser can outscore the winner.
-    Advancement (top 2) = W/L/D record; tiebreaker = total Stableford points.
+    Advancement (top advance_per_pool, from the versioned config) = W/L/D
+    record; tiebreaker = total Stableford points.
     Bracket seeding = total Stableford points across all pool matches.
     """
     with _connect(db_path) as conn:
@@ -19070,7 +19139,7 @@ def cmp_get_standings(season: str, chapter: str, db_path=None) -> list[dict]:
                     "losses": s["losses"],
                     "draws": s["draws"],
                     "stableford_pts": round(s["pts"], 1),
-                    "advances": rank <= 2,
+                    "advances": rank <= advance_per_pool,
                 })
         return standings
 
@@ -19110,7 +19179,15 @@ def cmp_save_bracket_slot(season: str, chapter: str, round_: str, slot: int,
                              opponent_stableford = excluded.opponent_stableford,
                              winner_name         = excluded.winner_name,
                              margin              = excluded.margin,
-                             event_id            = excluded.event_id""",
+                             event_id            = excluded.event_id,
+                             -- seed/WC chips belong to the occupant: keep
+                             -- them on a result re-save, clear them when a
+                             -- different player lands in the slot (IS is
+                             -- SQLite's NULL-safe equality)
+                             player_seed = CASE WHEN excluded.player_name IS player_name
+                                                THEN player_seed ELSE NULL END,
+                             is_wildcard = CASE WHEN excluded.player_name IS player_name
+                                                THEN is_wildcard ELSE NULL END""",
             (season, chapter, round_, slot,
              player_name, player_stableford,
              opponent_name, opponent_stableford,
@@ -19133,6 +19210,600 @@ def cmp_clear_bracket(season: str, chapter: str, db_path=None) -> int:
         )
         conn.commit()
         return cur.rowcount
+
+
+# ---------------------------------------------------------------------------
+# Season-Contest Config Templates (Game Creator engine, v2.34.0)
+# ---------------------------------------------------------------------------
+# Versioned, admin-editable config per the payout_templates pattern. The
+# structure/payout RULES for a contest live in config_json (never in code);
+# email_parser/match_play.py is the pure engine that evaluates them. A
+# season+chapter gets pinned to a version via
+# season_contest_config_snapshots on its first structural action, so
+# template edits never rewrite a season in flight (Guiding Principle 4).
+
+MATCH_PLAY_TEMPLATE_NAME = "City Match Play"
+
+
+def _seed_match_play_template(conn: sqlite3.Connection) -> None:
+    """Boot seed (idempotent): City Match Play v1 from the ratified matrix."""
+    from email_parser.match_play import SEED_MATCH_PLAY_CONFIG
+
+    row = conn.execute(
+        "SELECT id, current_version_id FROM season_contest_templates "
+        "WHERE kind = 'match_play' AND archived = 0 ORDER BY id LIMIT 1"
+    ).fetchone()
+    if row and row["current_version_id"]:
+        return
+    if row:
+        template_id = row["id"]
+    else:
+        cur = conn.execute(
+            "INSERT INTO season_contest_templates (name, kind, notes, created_by) "
+            "VALUES (?, 'match_play', ?, 'boot-seed')",
+            (MATCH_PLAY_TEMPLATE_NAME,
+             "Structure + payouts for the City Match Play season contest."),
+        )
+        template_id = cur.lastrowid
+    next_no = (conn.execute(
+        "SELECT COALESCE(MAX(version_no), 0) + 1 FROM season_contest_versions "
+        "WHERE template_id = ?", (template_id,)
+    ).fetchone()[0])
+    cur = conn.execute(
+        "INSERT INTO season_contest_versions "
+        "(template_id, version_no, config_json, saved_by, notes) "
+        "VALUES (?, ?, ?, 'boot-seed', ?)",
+        (template_id, next_no, json.dumps(SEED_MATCH_PLAY_CONFIG),
+         "Seeded from Prizes-Match Play Matrix.xlsx (July 6 final)"),
+    )
+    conn.execute(
+        "UPDATE season_contest_templates SET current_version_id = ? WHERE id = ?",
+        (cur.lastrowid, template_id),
+    )
+    conn.commit()
+    logger.info("Seeded '%s' config template v%d", MATCH_PLAY_TEMPLATE_NAME, next_no)
+
+
+def sct_get_active_config(kind: str, season: str | None = None,
+                          chapter: str | None = None, db_path=None) -> dict | None:
+    """Resolve the config a season runs under: snapshot first, else current.
+
+    Returns {template_id, template_name, version_id, version_no, config,
+    snapshotted, snapped_at} or None if no template exists.
+    """
+    with _connect(db_path) as conn:
+        t = conn.execute(
+            "SELECT * FROM season_contest_templates "
+            "WHERE kind = ? AND archived = 0 ORDER BY id LIMIT 1", (kind,)
+        ).fetchone()
+        if not t:
+            return None
+        snap = None
+        if season and chapter:
+            snap = conn.execute(
+                "SELECT * FROM season_contest_config_snapshots "
+                "WHERE season = ? AND chapter = ? AND template_id = ?",
+                (season, chapter, t["id"]),
+            ).fetchone()
+        version_id = snap["version_id"] if snap else t["current_version_id"]
+        if not version_id:
+            return None
+        v = conn.execute(
+            "SELECT * FROM season_contest_versions WHERE id = ?", (version_id,)
+        ).fetchone()
+        if not v:
+            return None
+        return {
+            "template_id": t["id"],
+            "template_name": t["name"],
+            "version_id": v["id"],
+            "version_no": v["version_no"],
+            "config": json.loads(v["config_json"]),
+            "snapshotted": bool(snap),
+            "snapped_at": snap["snapped_at"] if snap else None,
+        }
+
+
+def sct_list_versions(kind: str, db_path=None) -> list[dict]:
+    """Version history (meta only — fetch config via sct_get_version)."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT v.id, v.version_no, v.saved_at, v.saved_by, v.notes,
+                      (v.id = t.current_version_id) AS is_current
+               FROM season_contest_versions v
+               JOIN season_contest_templates t ON t.id = v.template_id
+               WHERE t.kind = ? AND t.archived = 0
+               ORDER BY v.version_no DESC""",
+            (kind,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def sct_get_version(version_id: int, db_path=None) -> dict | None:
+    with _connect(db_path) as conn:
+        v = conn.execute(
+            "SELECT * FROM season_contest_versions WHERE id = ?", (version_id,)
+        ).fetchone()
+        if not v:
+            return None
+        out = dict(v)
+        out["config"] = json.loads(out.pop("config_json"))
+        return out
+
+
+def sct_save_version(kind: str, config: dict, saved_by: str | None = None,
+                     notes: str | None = None, db_path=None) -> dict:
+    """Append a new config version and make it current.
+
+    Validates match_play configs by evaluating every N in the configured
+    range — a config that can't produce a structure or whose ladder doesn't
+    sum to the adjusted pot is rejected (raises ValueError).
+    """
+    if kind == "match_play":
+        from email_parser.match_play import structure_for_n
+        n_min = int(config.get("n_min", 4))
+        n_max = int(config.get("n_max", 32))
+        for n in range(n_min, n_max + 1):
+            s = structure_for_n(config, n)  # raises on missing N
+            if sum(s["ladder_amounts_cents"]) != s["adjusted_pot_cents"]:
+                raise ValueError(
+                    f"N={n}: ladder sums to "
+                    f"{sum(s['ladder_amounts_cents']) / 100:.2f}, expected "
+                    f"adjusted pot {s['adjusted_pot_cents'] / 100:.2f}"
+                )
+            if not s["ladder_pcts"] and not config.get(
+                    "amount_overrides", {}).get(str(n)):
+                raise ValueError(f"N={n}: no ladder band or amount override")
+            if len(s["ladder_amounts_cents"]) < 2:
+                raise ValueError(f"N={n}: ladder must pay at least 2 places")
+    with _connect(db_path) as conn:
+        t = conn.execute(
+            "SELECT id FROM season_contest_templates "
+            "WHERE kind = ? AND archived = 0 ORDER BY id LIMIT 1", (kind,)
+        ).fetchone()
+        if not t:
+            raise ValueError(f"No template of kind '{kind}'")
+        next_no = conn.execute(
+            "SELECT COALESCE(MAX(version_no), 0) + 1 FROM season_contest_versions "
+            "WHERE template_id = ?", (t["id"],)
+        ).fetchone()[0]
+        cur = conn.execute(
+            "INSERT INTO season_contest_versions "
+            "(template_id, version_no, config_json, saved_by, notes) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (t["id"], next_no, json.dumps(config), saved_by, notes),
+        )
+        conn.execute(
+            "UPDATE season_contest_templates SET current_version_id = ? WHERE id = ?",
+            (cur.lastrowid, t["id"]),
+        )
+        conn.commit()
+        return {"version_id": cur.lastrowid, "version_no": next_no}
+
+
+def sct_ensure_snapshot(kind: str, season: str, chapter: str,
+                        by: str | None = None, db_path=None) -> dict | None:
+    """Pin (season, chapter) to the template's CURRENT version if not pinned.
+
+    Called by structural actions (auto-assign pools, seed bracket) so the
+    season's rules freeze at first use. No-op if already pinned.
+    """
+    with _connect(db_path) as conn:
+        t = conn.execute(
+            "SELECT id, current_version_id FROM season_contest_templates "
+            "WHERE kind = ? AND archived = 0 ORDER BY id LIMIT 1", (kind,)
+        ).fetchone()
+        if not t or not t["current_version_id"]:
+            return None
+        conn.execute(
+            """INSERT INTO season_contest_config_snapshots
+               (season, chapter, template_id, version_id, snapped_by)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(season, chapter, template_id) DO NOTHING""",
+            (season, chapter, t["id"], t["current_version_id"], by),
+        )
+        conn.commit()
+        snap = conn.execute(
+            "SELECT * FROM season_contest_config_snapshots "
+            "WHERE season = ? AND chapter = ? AND template_id = ?",
+            (season, chapter, t["id"]),
+        ).fetchone()
+        return dict(snap) if snap else None
+
+
+def sct_pin_snapshot(kind: str, season: str, chapter: str,
+                     version_id: int | None = None, by: str | None = None,
+                     db_path=None) -> dict:
+    """Admin re-pin: point a season/chapter at a specific (or current) version."""
+    with _connect(db_path) as conn:
+        t = conn.execute(
+            "SELECT id, current_version_id FROM season_contest_templates "
+            "WHERE kind = ? AND archived = 0 ORDER BY id LIMIT 1", (kind,)
+        ).fetchone()
+        if not t:
+            raise ValueError(f"No template of kind '{kind}'")
+        vid = version_id or t["current_version_id"]
+        v = conn.execute(
+            "SELECT id FROM season_contest_versions WHERE id = ? AND template_id = ?",
+            (vid, t["id"]),
+        ).fetchone()
+        if not v:
+            raise ValueError(f"Version {vid} does not belong to this template")
+        conn.execute(
+            """INSERT INTO season_contest_config_snapshots
+               (season, chapter, template_id, version_id, snapped_by)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(season, chapter, template_id)
+               DO UPDATE SET version_id = excluded.version_id,
+                             snapped_at = datetime('now'),
+                             snapped_by = excluded.snapped_by""",
+            (season, chapter, t["id"], vid, by),
+        )
+        conn.commit()
+        snap = conn.execute(
+            "SELECT * FROM season_contest_config_snapshots "
+            "WHERE season = ? AND chapter = ? AND template_id = ?",
+            (season, chapter, t["id"]),
+        ).fetchone()
+        return dict(snap)
+
+
+# ---------------------------------------------------------------------------
+# City Match Play — config-driven operations (auto-assign, seeding, payouts)
+# ---------------------------------------------------------------------------
+
+def cmp_enrolled_entrants(season: str, chapter: str, db_path=None) -> list[dict]:
+    """Deduped City Match Play entrants for a chapter/season.
+
+    Dedup by customer_id first (Principle 6), then by canonical-name
+    fallback for legacy rows without one. Names resolve to the canonical
+    customers.customer_name so pool members match standings rows.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT sc.id, sc.customer_name, sc.customer_id,
+                      c.first_name || ' ' || c.last_name AS canonical_name
+               FROM season_contests sc
+               LEFT JOIN customers c ON c.customer_id = sc.customer_id
+               WHERE sc.contest_type = 'City Match Play'
+                 AND sc.season = ?
+                 AND (sc.chapter IS NULL OR sc.chapter = '' OR sc.chapter = ?)
+               ORDER BY sc.enrolled_at""",
+            (season, chapter),
+        ).fetchall()
+    seen_ids, seen_names, out = set(), set(), []
+    for r in rows:
+        name = r["canonical_name"] or r["customer_name"]
+        if not name:
+            continue
+        if r["customer_id"]:
+            # customer_id is the identity — two DIFFERENT ids that share a
+            # name are two real entrants and must both count (Principle 6).
+            if r["customer_id"] in seen_ids:
+                continue
+            seen_ids.add(r["customer_id"])
+            seen_names.add(name.lower())
+        else:
+            # Legacy id-less row: name is all we have to dedup on.
+            if name.lower() in seen_names:
+                continue
+            seen_names.add(name.lower())
+        out.append({"customer_name": name, "customer_id": r["customer_id"],
+                    "enrollment_id": r["id"]})
+    return out
+
+
+def cmp_auto_assign_pools(season: str, chapter: str, created_by: str | None = None,
+                          force: bool = False, db_path=None) -> dict:
+    """Create pools per the versioned matrix and randomly assign entrants.
+
+    Pool count and balanced sizes come from the active config for N
+    enrolled. Refuses to wipe pools that already have recorded match
+    results unless force=True. Pins the season's config snapshot.
+    """
+    import random
+
+    active = sct_get_active_config("match_play", season, chapter, db_path=db_path)
+    if not active:
+        raise ValueError("No Match Play config template found")
+    from email_parser.match_play import pool_sizes, structure_for_n
+
+    entrants = cmp_enrolled_entrants(season, chapter, db_path=db_path)
+    n = len(entrants)
+    structure = structure_for_n(active["config"], n)  # raises if N out of range
+
+    with _connect(db_path) as conn:
+        played = conn.execute(
+            """SELECT COUNT(*) FROM cmp_matches m
+               JOIN cmp_pools p ON p.id = m.pool_id
+               WHERE p.season = ? AND p.chapter = ? AND m.played_at IS NOT NULL""",
+            (season, chapter),
+        ).fetchone()[0]
+        if played and not force:
+            raise ValueError(
+                f"{played} pool match result(s) already recorded for "
+                f"{chapter} {season} — auto-assign would destroy them. "
+                "Rearrange manually instead."
+            )
+        old = conn.execute(
+            "SELECT id FROM cmp_pools WHERE season = ? AND chapter = ?",
+            (season, chapter),
+        ).fetchall()
+        for p in old:
+            conn.execute("DELETE FROM cmp_matches WHERE pool_id = ?", (p["id"],))
+            conn.execute("DELETE FROM cmp_pool_members WHERE pool_id = ?", (p["id"],))
+            conn.execute("DELETE FROM cmp_pools WHERE id = ?", (p["id"],))
+
+        shuffled = list(entrants)
+        random.shuffle(shuffled)
+        sizes = pool_sizes(n, structure["pools"])
+        pools_out, idx = [], 0
+        for i, size in enumerate(sizes):
+            pool_name = f"Pool {chr(65 + i)}"
+            cur = conn.execute(
+                "INSERT INTO cmp_pools (season, chapter, pool_name) VALUES (?, ?, ?)",
+                (season, chapter, pool_name),
+            )
+            pool_id = cur.lastrowid
+            members = shuffled[idx: idx + size]
+            idx += size
+            for m in members:
+                conn.execute(
+                    "INSERT INTO cmp_pool_members (pool_id, customer_name, customer_id) "
+                    "VALUES (?, ?, ?)",
+                    (pool_id, m["customer_name"], m["customer_id"]),
+                )
+            pools_out.append({"pool_name": pool_name, "size": size,
+                              "members": [m["customer_name"] for m in members]})
+        conn.commit()
+
+    sct_ensure_snapshot("match_play", season, chapter, by=created_by, db_path=db_path)
+    return {"n": n, "structure": structure, "pools": pools_out}
+
+
+def _cmp_seed_metric(row: dict) -> tuple:
+    """Seeding order: most Stableford points across pool matches (ratified),
+    tiebreak wins, then name for determinism."""
+    return (-(row.get("stableford_pts") or 0), -(row.get("wins") or 0),
+            row.get("player_name") or "")
+
+
+def cmp_seed_knockout(season: str, chapter: str, created_by: str | None = None,
+                      force: bool = False, db_path=None) -> dict:
+    """Server-side knockout seeding per the versioned config.
+
+    Advancers = top advance_per_pool per pool (pool rank). Wildcards = best
+    remaining by the seeding metric, cross-pool. Global seeds by the same
+    metric; standard single-elim placement; first-round byes resolve
+    automatically (12-bracket → top 4 seeds skip round 1). Refuses to
+    overwrite a bracket that already has results unless force=True.
+    """
+    active = sct_get_active_config("match_play", season, chapter, db_path=db_path)
+    if not active:
+        raise ValueError("No Match Play config template found")
+    from email_parser.match_play import seed_bracket, structure_for_n
+
+    entrants = cmp_enrolled_entrants(season, chapter, db_path=db_path)
+    n = len(entrants)
+    structure = structure_for_n(active["config"], n)
+
+    standings = cmp_get_standings(season, chapter, db_path=db_path)
+    if not standings:
+        raise ValueError("No pool standings yet — assign pools and record matches first.")
+
+    warnings = []
+    adv = [r for r in standings if r["rank"] <= structure["advance_per_pool"]]
+    rest = [r for r in standings if r["rank"] > structure["advance_per_pool"]]
+    wc_count = structure["wildcards"]
+    wildcards = sorted(rest, key=_cmp_seed_metric)[:wc_count]
+    wc_names = {w["player_name"] for w in wildcards}
+    field = adv + wildcards
+    if len(field) < structure["knockout"]:
+        warnings.append(
+            f"Only {len(field)} qualifiers for a {structure['knockout']}-player "
+            "bracket — extra byes will be created."
+        )
+    played_any = any((r.get("wins") or r.get("losses") or r.get("draws"))
+                     for r in standings)
+    if not played_any:
+        warnings.append("No pool matches recorded yet — seeding is arbitrary.")
+
+    seeded = sorted(field, key=_cmp_seed_metric)
+    if len(field) < 2:
+        raise ValueError("Not enough qualifiers to seed a knockout — need at least 2.")
+    entrant_rows = [
+        {"player_name": r["player_name"],
+         "stableford": r.get("stableford_pts") or 0,
+         "is_wildcard": 1 if r["player_name"] in wc_names else 0}
+        for r in seeded
+    ]
+    plan = seed_bracket(entrant_rows, structure["knockout"])
+    if plan["bye_placements"] and len(plan["rounds"]) < 2:
+        # 2-player template with a bye = only one qualifier reached the
+        # bracket; there is no next round to place the bye into.
+        raise ValueError("Not enough qualifiers to seed a knockout — need at least 2.")
+
+    # name → customer_id from pool membership (Principle 6)
+    with _connect(db_path) as conn:
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM cmp_bracket "
+            "WHERE season = ? AND chapter = ? AND winner_name IS NOT NULL",
+            (season, chapter),
+        ).fetchone()[0]
+        if existing and not force:
+            raise ValueError(
+                f"The bracket already has {existing} recorded result(s) — "
+                "re-seeding would destroy them."
+            )
+        id_map = {r["customer_name"]: r["customer_id"] for r in conn.execute(
+            """SELECT pm.customer_name, pm.customer_id FROM cmp_pool_members pm
+               JOIN cmp_pools p ON p.id = pm.pool_id
+               WHERE p.season = ? AND p.chapter = ?""",
+            (season, chapter),
+        ).fetchall()}
+
+        conn.execute("DELETE FROM cmp_bracket WHERE season = ? AND chapter = ?",
+                     (season, chapter))
+        seed_no = {e["player_name"]: i + 1 for i, e in enumerate(entrant_rows)}
+
+        def _insert(round_, slot, player):
+            conn.execute(
+                """INSERT INTO cmp_bracket
+                   (season, chapter, round, slot, player_name,
+                    player_stableford, player_id, player_seed, is_wildcard)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (season, chapter, round_, slot, player["player_name"],
+                 player["stableford"], id_map.get(player["player_name"]),
+                 seed_no[player["player_name"]], player["is_wildcard"]),
+            )
+
+        rounds = plan["rounds"]
+        for entry in plan["first_round"]:
+            _insert(rounds[0], entry["slot"], entry["player"])
+        for entry in plan["bye_placements"]:
+            _insert(rounds[1], entry["slot"], entry["player"])
+        conn.commit()
+
+    sct_ensure_snapshot("match_play", season, chapter, by=created_by, db_path=db_path)
+    return {
+        "n": n,
+        "structure": structure,
+        "rounds": plan["rounds"],
+        "seeds": [{"seed": i + 1, **e} for i, e in enumerate(entrant_rows)],
+        "byes": [e["player"]["player_name"] for e in plan["bye_placements"]],
+        "warnings": warnings,
+    }
+
+
+def cmp_get_payout_sheet(season: str, chapter: str, db_path=None) -> dict:
+    """The money view: pot, pool-winner bonuses, ladder places, tie splits.
+
+    Every dollar figure comes from the versioned config via the engine —
+    nothing hard-coded. Bonus winners are pool standings leaders (marked
+    provisional until the bracket is seeded); ladder places fill in from
+    bracket results (champion, runner-up, semifinal losers split combined
+    places per tie_policy).
+    """
+    from email_parser.match_play import split_cents, structure_for_n
+
+    active = sct_get_active_config("match_play", season, chapter, db_path=db_path)
+    if not active:
+        return {"error": "No Match Play config template found"}
+    entrants = cmp_enrolled_entrants(season, chapter, db_path=db_path)
+    n = len(entrants)
+    try:
+        structure = structure_for_n(active["config"], n)
+    except ValueError as e:
+        return {"error": str(e), "n": n,
+                "config_version": active["version_no"],
+                "snapshotted": active["snapshotted"]}
+
+    standings = cmp_get_standings(season, chapter, db_path=db_path)
+    bracket = cmp_get_bracket(season, chapter, db_path=db_path)
+    bracket_seeded = bool(bracket)
+
+    # ── Pool winner bonuses ──
+    by_pool: dict = {}
+    for r in standings:
+        by_pool.setdefault(r["pool_name"], []).append(r)
+    bonus_rows = []
+    for pool_name in sorted(by_pool):
+        rows = by_pool[pool_name]
+        leader = min(rows, key=lambda r: r["rank"])
+        has_results = any((r["wins"] or r["losses"] or r["draws"]) for r in rows)
+        bonus_rows.append({
+            "pool_name": pool_name,
+            "player_name": leader["player_name"] if has_results else None,
+            "amount": structure["pool_winner_bonus_each"],
+            "status": "final" if (has_results and bracket_seeded) else "projected",
+        })
+
+    # ── Ladder places from bracket results ──
+    def match_players(round_key):
+        """[(player_a, player_b, winner), …] per match of a bracket round."""
+        rows = [b for b in bracket if b["round"] == round_key]
+        slots = {b["slot"]: b for b in rows}
+        out = []
+        for mi in range(0, (max(slots) // 2 + 1) if slots else 0):
+            a = slots.get(mi * 2)
+            b = slots.get(mi * 2 + 1)
+            names = [x["player_name"] for x in (a, b) if x and x["player_name"]]
+            winner = next((x["winner_name"] for x in (a, b)
+                           if x and x["winner_name"]), None)
+            if names:
+                out.append((names, winner))
+        return out
+
+    finals = match_players("final")
+    champion = runner_up = None
+    if finals:
+        names, winner = finals[0]
+        if winner:
+            champion = winner
+            runner_up = next((x for x in names if x != winner), None)
+    sf_losers = []
+    for names, winner in match_players("sf"):
+        if winner:
+            sf_losers.extend(x for x in names if x != winner)
+
+    amounts = structure["ladder_amounts_cents"]
+    ladder_rows = []
+    if amounts:
+        ladder_rows.append({"place_label": "1st", "player_name": champion,
+                            "amount": amounts[0] / 100.0,
+                            "status": "final" if champion else "tbd"})
+    if len(amounts) >= 2:
+        ladder_rows.append({"place_label": "2nd", "player_name": runner_up,
+                            "amount": amounts[1] / 100.0,
+                            "status": "final" if runner_up else "tbd"})
+    if len(amounts) > 2:
+        # Places 3(+4) belong to the TWO semifinal losers jointly (tie
+        # policy: split combined places). Always split by the expected two
+        # so a lone recorded SF loser never shows the full combined amount.
+        combined = sum(amounts[2:4])
+        label = "3rd" if len(amounts) == 3 else "3rd–4th (T)"
+        shares = split_cents(combined, 2)
+        losers = sorted(sf_losers)[:2]
+        for i, cents in enumerate(shares):
+            name = losers[i] if i < len(losers) else None
+            ladder_rows.append({"place_label": label, "player_name": name,
+                                "amount": cents / 100.0,
+                                "status": "final" if name else "tbd"})
+    # Any configured places beyond 4th still render (TBD) so the sheet
+    # always sums to the pot even under a nonstandard admin config.
+    for idx in range(4, len(amounts)):
+        ladder_rows.append({"place_label": f"{idx + 1}th", "player_name": None,
+                            "amount": amounts[idx] / 100.0, "status": "tbd"})
+
+    warnings = []
+    with _connect(db_path) as conn:
+        chapterless = conn.execute(
+            """SELECT COUNT(*) FROM season_contests
+               WHERE contest_type = 'City Match Play' AND season = ?
+                 AND (chapter IS NULL OR chapter = '')""",
+            (season,),
+        ).fetchone()[0]
+    if chapterless:
+        warnings.append(
+            f"{chapterless} enrollment(s) have no chapter and are counted in "
+            "every chapter's field — set their chapter on the Enrollment tab."
+        )
+    pool_member_count = sum(len(v) for v in by_pool.values())
+    if by_pool and pool_member_count != n:
+        warnings.append(
+            f"{n} enrolled but {pool_member_count} in pools — pot is based "
+            "on enrollment."
+        )
+    return {
+        "n": n,
+        "structure": structure,
+        "config_version": active["version_no"],
+        "snapshotted": active["snapshotted"],
+        "bonus_rows": bonus_rows,
+        "ladder_rows": ladder_rows,
+        "bracket_seeded": bracket_seeded,
+        "warnings": warnings,
+    }
 
 
 # ---------------------------------------------------------------------------

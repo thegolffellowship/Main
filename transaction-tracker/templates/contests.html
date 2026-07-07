@@ -258,6 +258,57 @@
             font-size: 0.7rem; padding: 0.12rem 0.3rem;
             border: 1px solid var(--border); border-radius: 3px; flex: 1; min-width: 90px;
         }
+        .seed-chip {
+            font-size: 0.62rem; font-weight: 700; background: #eef2ff; color: #4338ca;
+            padding: 0.05rem 0.3rem; border-radius: 8px; flex-shrink: 0;
+        }
+        .wc-chip {
+            font-size: 0.6rem; font-weight: 700; background: #fef3c7; color: #92400e;
+            padding: 0.05rem 0.3rem; border-radius: 8px; flex-shrink: 0;
+        }
+
+        /* ── Structure banner (versioned config) ── */
+        .cmp-banner {
+            border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surface); padding: 0.75rem 1rem; margin-bottom: 1.25rem;
+        }
+        .cmp-banner-head {
+            display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+            margin-bottom: 0.5rem;
+        }
+        .cmp-banner-head h3 { font-size: 0.9rem; font-weight: 700; margin: 0; }
+        .cfg-version-badge {
+            font-size: 0.62rem; font-weight: 700; padding: 0.1rem 0.45rem;
+            border-radius: 9px; background: #eef2ff; color: #4338ca;
+        }
+        .cfg-version-badge.pinned { background: #dcfce7; color: #166534; }
+        .cmp-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+        .cmp-chip {
+            font-size: 0.72rem; background: #f3f4f6; border: 1px solid var(--border);
+            border-radius: 6px; padding: 0.18rem 0.5rem; white-space: nowrap;
+        }
+        .cmp-chip b { color: var(--primary); }
+        .cmp-banner-warn { color: #b45309; font-size: 0.75rem; margin-top: 0.4rem; }
+
+        /* ── Payouts ── */
+        .payout-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        @media (max-width: 760px) { .payout-grid { grid-template-columns: 1fr; } }
+        .payout-status {
+            font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+            padding: 0.06rem 0.35rem; border-radius: 8px;
+        }
+        .payout-status.final { background: #dcfce7; color: #166534; }
+        .payout-status.projected, .payout-status.tbd { background: #f3f4f6; color: #6b7280; }
+
+        /* ── Config editor modal ── */
+        .cfg-modal { max-width: 860px; width: 96%; max-height: 88vh; overflow-y: auto; }
+        .cfg-json-ta {
+            width: 100%; min-height: 260px; font-family: ui-monospace, monospace;
+            font-size: 0.72rem; border: 1px solid var(--border); border-radius: 4px;
+            padding: 0.5rem; white-space: pre; overflow-x: auto;
+        }
+        .cfg-matrix-wrap { overflow-x: auto; margin-top: 0.6rem; }
+        .cfg-matrix-wrap table td, .cfg-matrix-wrap table th { white-space: nowrap; }
         .bracket-margin-input {
             width: 72px; padding: 0.12rem 0.25rem; border: 1px solid var(--border);
             border-radius: 3px; font-size: 0.68rem;
@@ -423,6 +474,7 @@
                 </div>
             </div>
             <div class="cmp-body">
+                <div id="cmp-structure-banner"></div>
                 <div id="cmp-pools-container">
                     <div class="empty-state">
                         <h3>Select a chapter and season, then click Load</h3>
@@ -433,7 +485,7 @@
                         <h3>Knockout Bracket</h3>
                         <div class="bracket-controls">
                             <button class="btn manager-only" id="cmp-seed-bracket-btn" style="display:none;">
-                                &#8635; Seed from Pool Standings
+                                &#8635; Seed Knockout (Stableford)
                             </button>
                             <button class="btn btn-danger manager-only" id="cmp-clear-bracket-btn" style="display:none;">
                                 &#215; Clear Bracket
@@ -441,8 +493,17 @@
                         </div>
                         <div id="cmp-bracket-container">
                             <p style="color:var(--text-muted);font-size:0.85rem;">
-                                Once pool play is complete, click "Seed from Pool Standings" to auto-populate bracket slots.
+                                Once pool play is complete, click "Seed Knockout" — seeds, wildcards, and
+                                first-round byes come from the versioned Match Play config.
                             </p>
+                        </div>
+                    </div>
+                </div>
+                <div id="cmp-payouts-section" style="display:none;">
+                    <div class="bracket-section">
+                        <h3>Payouts</h3>
+                        <div id="cmp-payouts-container">
+                            <p style="color:var(--text-muted);font-size:0.85rem;">Loading…</p>
                         </div>
                     </div>
                 </div>
@@ -549,6 +610,41 @@
             <div style="display:flex; justify-content:flex-end; margin-top:0.75rem;">
                 <button id="cmp-player-modal-cancel" class="btn btn-secondary">Cancel</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Match Play Config Editor (admin) -->
+    <div id="cfg-modal" class="modal-overlay" style="display:none;">
+        <div class="modal cfg-modal">
+            <h3 style="font-size:1rem; font-weight:700; margin-bottom:0.25rem;">Match Play Config — Versioned</h3>
+            <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem;">
+                Structure, wildcards, byes, bonuses, and ladders are rules-as-data. Saving creates a
+                <strong>new version</strong>; seasons already under way stay pinned to the version they started with.
+            </p>
+            <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.6rem;">
+                <label style="font-size:0.78rem; font-weight:600;">Version</label>
+                <select id="cfg-version-sel" class="modal-input" style="width:auto; margin:0;"></select>
+                <span id="cfg-pin-state" style="font-size:0.75rem; color:var(--text-muted);"></span>
+                <button class="btn" id="cfg-pin-btn" style="font-size:0.72rem;">Pin season to this version</button>
+            </div>
+            <div style="display:flex; gap:1rem; align-items:baseline; flex-wrap:wrap;">
+                <h4 style="font-size:0.78rem; margin:0.4rem 0;">Config JSON</h4>
+                <span style="font-size:0.7rem; color:var(--text-muted);">
+                    structure (per-N pools/knockout/wildcards) · pool_winner_bonus · byes · ladder bands · amount_overrides · tie_policy
+                </span>
+            </div>
+            <textarea id="cfg-json" class="cfg-json-ta" spellcheck="false"></textarea>
+            <label style="display:block; font-size:0.78rem; color:var(--text-muted); margin:0.5rem 0 0.15rem;">Version notes</label>
+            <input type="text" id="cfg-notes" class="modal-input" placeholder="What changed and why" maxlength="300">
+            <div id="cfg-error" style="display:none; color:#dc2626; font-size:0.78rem; margin-top:0.4rem;"></div>
+            <div style="display:flex; justify-content:space-between; gap:0.5rem; margin-top:0.75rem; flex-wrap:wrap;">
+                <button class="btn" id="cfg-preview-btn">Preview matrix (this version)</button>
+                <div style="display:flex; gap:0.5rem;">
+                    <button class="btn btn-secondary" id="cfg-cancel-btn">Close</button>
+                    <button class="btn btn-primary" id="cfg-save-btn">Save as New Version</button>
+                </div>
+            </div>
+            <div id="cfg-matrix-preview" class="cfg-matrix-wrap"></div>
         </div>
     </div>
 
@@ -696,6 +792,9 @@
         document.querySelectorAll(".manager-only").forEach(el => {
             el.style.display = isManager ? "" : "none";
         });
+        document.querySelectorAll(".admin-only").forEach(el => {
+            el.style.display = role === "admin" ? "" : "none";
+        });
     }
 
     // ═══════════ MATCH PLAY ═══════════
@@ -704,7 +803,9 @@
         season: "2026", chapter: "Austin", pools: [], enrollees: [], bracket: [],
         handicapMap: {},        // lowercase name → { index_9, index_18 }
         customerIdToName: {},   // customer_id → canonical customer_name (for hcp fallback)
-        events: []              // [{id, item_name, event_date, chapter}, …] sorted newest first
+        events: [],             // [{id, item_name, event_date, chapter}, …] sorted newest first
+        configMeta: null,       // /api/cmp/config response: versioned config + structure for N
+        structure: null         // computed matrix row for the enrolled N (null if N out of range)
     };
 
     // ── Chapter tabs ──
@@ -729,6 +830,7 @@
         if (!res.ok) { alert("Failed to clear bracket."); return; }
         cmpState.bracket = [];
         cmpRenderBracket();
+        loadCmpPayouts();
     });
 
     function hcpLabel(name, customerId) {
@@ -748,17 +850,20 @@
         const chapter = cmpState.chapter;
         cmpState.season = season;
 
-        // Fetch pools, enrollees, handicap map, events, and (if not cached) customers in parallel
+        // Fetch pools, enrollees, handicap map, events, config, and (if not cached) customers in parallel
         const fetches = [
             fetch(`/api/cmp/pools?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`),
             fetch(`/api/season-contests?contest_type=City+Match+Play&season=${encodeURIComponent(season)}`),
             fetch(`/api/handicaps/index-map`),
             fetch("/api/events"),
+            fetch(`/api/cmp/config?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`),
         ];
         if (!_allCustomers) fetches.push(fetch("/api/customers"));
-        const [poolsRes, enrollRes, hcpRes, eventsRes, custRes] = await Promise.all(fetches);
+        const [poolsRes, enrollRes, hcpRes, eventsRes, cfgRes, custRes] = await Promise.all(fetches);
 
         cmpState.pools = poolsRes.ok ? await poolsRes.json() : [];
+        cmpState.configMeta = cfgRes.ok ? await cfgRes.json() : null;
+        cmpState.structure = cmpState.configMeta ? (cmpState.configMeta.structure || null) : null;
         const rawEnrollees = enrollRes.ok ? await enrollRes.json() : [];
         // Pass 1: chapter filter only (dedup happens after customerIdToName is built)
         const rawFiltered = rawEnrollees.filter(e => e.customer_name && (!e.chapter || e.chapter === chapter));
@@ -805,11 +910,155 @@
                 return true;
             });
 
+        cmpRenderBanner();
         cmpRender();
 
         const bRes = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
         cmpState.bracket = bRes.ok ? await bRes.json() : [];
         cmpRenderBracket();
+        loadCmpPayouts();
+    }
+
+    // ── Structure banner: everything is driven by the versioned config ──
+
+    function fmtMoney(v) {
+        return "$" + Number(v).toLocaleString("en-US",
+            { minimumFractionDigits: (v % 1 ? 2 : 0), maximumFractionDigits: 2 });
+    }
+
+    function cmpRenderBanner() {
+        const el = $("cmp-structure-banner");
+        const meta = cmpState.configMeta;
+        if (!meta) { el.innerHTML = ""; return; }
+        const s = cmpState.structure;
+        const isManager = userRole === "admin" || userRole === "manager";
+        const isAdmin = userRole === "admin";
+        const badge = meta.snapshotted
+            ? `<span class="cfg-version-badge pinned" title="This season is frozen to config v${meta.version_no} — template edits won't change it">config v${meta.version_no} · pinned</span>`
+            : `<span class="cfg-version-badge" title="Season not pinned yet — pins automatically on first Auto-Assign / Seed">config v${meta.version_no}</span>`;
+        let chips = "";
+        let warn = "";
+        if (s) {
+            const ladder = s.ladder_amounts.map(fmtMoney).join(" / ");
+            chips = `
+                <div class="cmp-chips">
+                    <span class="cmp-chip">Entrants <b>${s.n}</b></span>
+                    <span class="cmp-chip">Pools <b>${s.pools}</b> (${s.pool_sizes.join("+")})</span>
+                    <span class="cmp-chip">Knockout <b>${s.knockout}</b>${s.byes ? ` · <b>${s.byes}</b> byes` : ""}</span>
+                    <span class="cmp-chip">Wildcards <b>${s.wildcards}</b></span>
+                    <span class="cmp-chip">Pot <b>${fmtMoney(s.pot)}</b></span>
+                    <span class="cmp-chip">Pool winner bonus <b>${fmtMoney(s.pool_winner_bonus_each)}</b> ×${s.pools}</span>
+                    <span class="cmp-chip">Ladder <b>${ladder}</b></span>
+                </div>`;
+        } else if (meta.structure_error) {
+            warn = `<div class="cmp-banner-warn">${escapeHtml(meta.structure_error)} — pools and payouts activate at 4+ entrants.</div>`;
+        }
+        el.innerHTML = `
+            <div class="cmp-banner">
+                <div class="cmp-banner-head">
+                    <h3>${escapeHtml(cmpState.chapter)} Match Play ${escapeHtml(cmpState.season)}</h3>
+                    ${badge}
+                    <span style="flex:1;"></span>
+                    ${isManager ? `<button class="btn manager-only" id="cmp-auto-assign-btn" style="font-size:0.75rem;">&#9861; Auto-Assign Pools</button>` : ""}
+                    ${isAdmin ? `<button class="btn admin-only" id="cmp-config-btn" style="font-size:0.75rem;">&#9881; Config</button>` : ""}
+                </div>
+                ${chips}
+                ${warn}
+            </div>`;
+        const aab = $("cmp-auto-assign-btn");
+        if (aab) aab.addEventListener("click", cmpAutoAssignPools);
+        const cfgBtn = $("cmp-config-btn");
+        if (cfgBtn) cfgBtn.addEventListener("click", openCfgModal);
+    }
+
+    async function cmpAutoAssignPools(ev, force = false) {
+        const { season, chapter } = cmpState;
+        const s = cmpState.structure;
+        if (!s) { alert("Not enough entrants for the configured matrix (needs 4+)."); return; }
+        const msg = force
+            ? "Pool matches already recorded — re-assigning DESTROYS those results. Really continue?"
+            : `Randomly assign the ${s.n} enrolled players into ${s.pools} pool${s.pools === 1 ? "" : "s"} (${s.pool_sizes.join("+")})?\nExisting empty pools are replaced.`;
+        if (!confirm(msg)) return;
+        const res = await fetch("/api/cmp/pools/auto-assign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ season, chapter, force }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (!force && (data.error || "").includes("already recorded")) {
+                cmpAutoAssignPools(null, true);
+            } else {
+                alert(data.error || "Auto-assign failed.");
+            }
+            return;
+        }
+        cmpLoad();
+    }
+
+    // ── Payouts (versioned config → engine → sheet) ──
+
+    async function loadCmpPayouts() {
+        const { season, chapter } = cmpState;
+        const section = $("cmp-payouts-section");
+        const el = $("cmp-payouts-container");
+        if (!cmpState.pools.length) { section.style.display = "none"; return; }
+        section.style.display = "";
+        el.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Loading…</p>';
+        const res = await fetch(`/api/cmp/payouts?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
+        const sheet = res.ok ? await res.json() : null;
+        if (!sheet || sheet.error) {
+            el.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem;">${escapeHtml((sheet && sheet.error) || "Payouts unavailable.")}</p>`;
+            return;
+        }
+        const s = sheet.structure;
+        const statusPill = st => `<span class="payout-status ${st}">${st === "tbd" ? "TBD" : st}</span>`;
+        const bonusRows = sheet.bonus_rows.map(r => `
+            <tr>
+                <td>${escapeHtml(r.pool_name)}</td>
+                <td>${r.player_name ? escapeHtml(r.player_name) : '<span style="color:var(--text-muted);">—</span>'}</td>
+                <td style="text-align:right;font-weight:600;">${fmtMoney(r.amount)}</td>
+                <td>${statusPill(r.status)}</td>
+            </tr>`).join("");
+        const ladderRows = sheet.ladder_rows.map(r => `
+            <tr>
+                <td>${escapeHtml(r.place_label)}</td>
+                <td>${r.player_name ? escapeHtml(r.player_name) : '<span style="color:var(--text-muted);">—</span>'}</td>
+                <td style="text-align:right;font-weight:600;">${fmtMoney(r.amount)}</td>
+                <td>${statusPill(r.status)}</td>
+            </tr>`).join("");
+        const warns = (sheet.warnings || []).map(w =>
+            `<div class="cmp-banner-warn">${escapeHtml(w)}</div>`).join("");
+        el.innerHTML = `
+            <div class="cmp-chips" style="margin-bottom:0.75rem;">
+                <span class="cmp-chip">Pot <b>${fmtMoney(s.pot)}</b> (${s.n} × ${fmtMoney(s.entry_fee)})</span>
+                <span class="cmp-chip">Pool winner bonuses <b>${fmtMoney(s.pool_winner_bonus_total)}</b></span>
+                <span class="cmp-chip">Knockout ladder <b>${fmtMoney(s.adjusted_pot)}</b></span>
+                <span class="cmp-chip">Config v<b>${sheet.config_version}</b>${sheet.snapshotted ? " (pinned)" : ""}</span>
+            </div>
+            <div class="payout-grid">
+                <div>
+                    <h4 style="font-size:0.72rem;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.4rem;">Pool Winner Bonuses</h4>
+                    <table class="standings-table" style="background:#fff;">
+                        <thead><tr><th style="text-align:left;">Pool</th><th style="text-align:left;">Leader / Winner</th><th style="text-align:right;">Bonus</th><th></th></tr></thead>
+                        <tbody>${bonusRows}</tbody>
+                    </table>
+                    <p style="font-size:0.7rem;color:var(--text-muted);margin-top:0.35rem;">
+                        Provisional until the knockout is seeded (pool play closed).
+                    </p>
+                </div>
+                <div>
+                    <h4 style="font-size:0.72rem;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.4rem;">Knockout Ladder</h4>
+                    <table class="standings-table" style="background:#fff;">
+                        <thead><tr><th style="text-align:left;">Place</th><th style="text-align:left;">Player</th><th style="text-align:right;">Amount</th><th></th></tr></thead>
+                        <tbody>${ladderRows}</tbody>
+                    </table>
+                    <p style="font-size:0.7rem;color:var(--text-muted);margin-top:0.35rem;">
+                        Semifinal losers split the combined 3rd${s.ladder_amounts.length > 3 ? "+4th" : ""} place money (tie policy).
+                    </p>
+                </div>
+            </div>
+            ${warns}`;
     }
 
     function cmpRender() {
@@ -1018,7 +1267,7 @@
             </div>
             <div class="pool-card-body">
                 <div class="pool-members">
-                    <h4>Members (${pool.members.length}/4)</h4>
+                    <h4>Members (${pool.members.length})</h4>
                     ${memberRows}
                     ${addRow}
                 </div>
@@ -1117,7 +1366,7 @@
             </tr>
         `).join("");
         el.innerHTML = `
-            <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top 2 advance · tiebreaker: Stableford pts</span></h4>
+            <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top ${(cmpState.structure || {}).advance_per_pool ?? 2} advance${(cmpState.structure || {}).wildcards ? ` (+${cmpState.structure.wildcards} wildcards across pools)` : ""} · tiebreaker: Stableford pts</span></h4>
             <table class="standings-table">
                 <thead><tr><th style="text-align:left;">Player</th><th>W</th><th>L</th><th>D</th><th title="Total Stableford points accumulated">Pts</th></tr></thead>
                 <tbody>${rows}</tbody>
@@ -1183,6 +1432,7 @@
                 if (dot) { dot.classList.add("unplayed"); dot.title = "Not yet played"; }
                 btn.disabled = false;
                 loadPoolStandings(pid);
+                loadCmpPayouts();
             });
         });
 
@@ -1245,6 +1495,7 @@
 
                 setTimeout(() => { btn.textContent = "Save"; btn.disabled = false; }, 1800);
                 loadPoolStandings(pid);
+                loadCmpPayouts();
             });
         });
 
@@ -1274,30 +1525,58 @@
 
     // ── Bracket ──
 
-    function buildBracketRounds(advancerCount) {
-        const rounds = [];
-        let n = advancerCount;
-        while (n >= 2) {
-            if (n >= 8)      rounds.push({ key: "qf", label: "Quarterfinals", matchCount: Math.floor(n / 2) });
-            else if (n >= 4) rounds.push({ key: "sf", label: "Semifinals",    matchCount: Math.floor(n / 2) });
-            else             rounds.push({ key: "final", label: "Final",       matchCount: 1 });
-            n = Math.floor(n / 2);
+    const ROUND_DEFS = {
+        r16:   { label: "Round of 16",  matchCount: 8 },
+        qf:    { label: "Quarterfinals", matchCount: 4 },
+        sf:    { label: "Semifinals",    matchCount: 2 },
+        final: { label: "Final",         matchCount: 1 },
+    };
+
+    function buildBracketRounds(bracketSize) {
+        // Template = next power of two (a 12-player field plays inside a 16
+        // template with byes); the versioned config supplies bracketSize.
+        let template = 2;
+        while (template < bracketSize) template *= 2;
+        const keys = template >= 16 ? ["r16", "qf", "sf", "final"]
+                   : template >= 8  ? ["qf", "sf", "final"]
+                   : template >= 4  ? ["sf", "final"]
+                   : ["final"];
+        return keys.map(k => ({ key: k, ...ROUND_DEFS[k] }));
+    }
+
+    function cmpBracketSize() {
+        // A SAVED bracket's rounds are the truth: once seeded, the bracket
+        // shape is frozen even if enrollment (and therefore the configured
+        // knockout size) changes afterwards. The live config only sizes a
+        // bracket that hasn't been seeded yet.
+        const present = new Set((cmpState.bracket || []).map(b => b.round));
+        if (present.size) {
+            if (present.has("r16")) return 16;
+            if (present.has("qf")) return 8;
+            if (present.has("sf")) return 4;
+            return 2;
         }
-        const seen = new Set();
-        return rounds.filter(r => { if (seen.has(r.key)) return false; seen.add(r.key); return true; });
+        if (cmpState.structure) return cmpState.structure.knockout;
+        return Math.max(2, cmpState.pools.length * 2);
+    }
+
+    function seedChips(slot) {
+        if (!slot || !slot.player_name) return '';
+        const seed = slot.player_seed ? `<span class="seed-chip">#${slot.player_seed}</span>` : '';
+        const wc = slot.is_wildcard ? '<span class="wc-chip" title="Wildcard qualifier">WC</span>' : '';
+        return seed + wc;
     }
 
     function cmpRenderBracket() {
         const container = $("cmp-bracket-container");
         const bracket = cmpState.bracket || [];
-        const advancerCount = cmpState.pools.length * 2;
 
         if (!cmpState.pools.length) {
             container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Create pools first.</p>';
             return;
         }
 
-        const rounds = buildBracketRounds(advancerCount);
+        const rounds = buildBracketRounds(cmpBracketSize());
         const isManager = userRole === "admin" || userRole === "manager";
 
         // Build slot map: "round:slot" → bracket row
@@ -1308,6 +1587,9 @@
             const matchHtml = Array.from({ length: round.matchCount }, (_, mi) => {
                 const s1 = slotMap[`${round.key}:${mi * 2}`] || {};
                 const s2 = slotMap[`${round.key}:${mi * 2 + 1}`] || {};
+                // First round of a bye bracket (e.g. 12 inside a 16 template):
+                // matches with no players at all are byes — don't render them.
+                if (ri === 0 && bracket.length && !s1.player_name && !s2.player_name) return '';
                 const winner = s1.winner_name || s2.winner_name || null;
                 const slot1Win = winner && winner === s1.player_name;
                 const slot2Win = winner && winner === s2.player_name;
@@ -1323,10 +1605,10 @@
                 return `
                 <div class="bracket-match" style="margin-bottom:${round.matchCount > 1 ? '1rem' : '0'};">
                     <div class="bracket-slot${slot1Win ? ' winner' : ''}">
-                        <span class="bracket-slot-name">${escapeHtml(s1.player_name || '—')}</span>
+                        ${seedChips(s1)}<span class="bracket-slot-name">${escapeHtml(s1.player_name || '—')}</span>
                     </div>
                     <div class="bracket-slot${slot2Win ? ' winner' : ''}">
-                        <span class="bracket-slot-name">${escapeHtml(s2.player_name || '—')}</span>
+                        ${seedChips(s2)}<span class="bracket-slot-name">${escapeHtml(s2.player_name || '—')}</span>
                     </div>
                     ${isManager ? `
                     <div class="bracket-match-footer">
@@ -1427,7 +1709,7 @@
 
                     // Auto-advance winner to next round slot
                     if (winner_name) {
-                        const allRounds = buildBracketRounds(cmpState.pools.length * 2);
+                        const allRounds = buildBracketRounds(cmpBracketSize());
                         const roundIdx = allRounds.findIndex(r => r.key === round);
                         if (roundIdx >= 0 && roundIdx < allRounds.length - 1) {
                             const nextRound = allRounds[roundIdx + 1];
@@ -1456,78 +1738,156 @@
                     const bRes = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
                     cmpState.bracket = bRes.ok ? await bRes.json() : [];
                     cmpRenderBracket();
+                    loadCmpPayouts();
                 });
             });
         }
     }
 
-    async function cmpSeedBracket() {
+    async function cmpSeedBracket(ev, force = false) {
+        // Server-side seeding from the versioned config: advancers per pool,
+        // wildcards by Stableford, global seeds, standard placement, byes.
         const { season, chapter } = cmpState;
-        const res = await fetch(`/api/cmp/standings?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
-        if (!res.ok) return;
-        const standings = await res.json();
-
-        // Group advancers by pool, collect top 2 per pool sorted by stableford pts (bracket seeding)
-        const poolMap = {};
-        standings.forEach(r => {
-            if (!poolMap[r.pool_name]) poolMap[r.pool_name] = [];
-            poolMap[r.pool_name].push(r);
-        });
-        // Sort each pool by stableford_pts desc for bracket seeding
-        Object.values(poolMap).forEach(g => g.sort((a, b) => b.stableford_pts - a.stableford_pts));
-        const poolGroups = Object.values(poolMap).filter(g => g.length >= 2);
-
-        if (!poolGroups.length) {
-            alert("No pool results yet. Enter match results first.");
-            return;
-        }
-
-        // Cross-pool seeding for 2 pools: Pool A #1 vs Pool B #2, Pool B #1 vs Pool A #2
-        let seeded = [];
-        if (poolGroups.length === 2) {
-            seeded = [
-                poolGroups[0][0].player_name,
-                poolGroups[1][1] ? poolGroups[1][1].player_name : null,
-                poolGroups[1][0].player_name,
-                poolGroups[0][1] ? poolGroups[0][1].player_name : null,
-            ].filter(Boolean);
-        } else {
-            poolGroups.forEach(g => {
-                seeded.push(g[0].player_name);
-                if (g[1]) seeded.push(g[1].player_name);
-            });
-        }
-
-        if (seeded.length < 2) {
-            alert("Not enough pool results to seed bracket.");
-            return;
-        }
-
-        const rounds = buildBracketRounds(seeded.length);
-        const firstRound = rounds[0];
-        if (!firstRound) return;
-
-        const saves = seeded.map((name, i) => fetch("/api/cmp/bracket", {
+        const s = cmpState.structure;
+        const summary = s
+            ? `Seed the ${s.knockout}-player knockout?\nTop ${s.advance_per_pool} per pool advance` +
+              (s.wildcards ? ` + ${s.wildcards} wildcard${s.wildcards === 1 ? "" : "s"}` : "") +
+              (s.byes ? `; top ${s.byes} seeds get a first-round bye.` : ".") +
+              "\nSeeds = most Stableford points across pool matches."
+            : "Seed the knockout bracket from pool standings?";
+        if (!force && !confirm(summary)) return;
+        const res = await fetch("/api/cmp/bracket/seed", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                season, chapter,
-                round: firstRound.key,
-                slot: i,
-                player_name: name,
-                player_stableford: null,
-                opponent_name: null,
-                opponent_stableford: null,
-                winner_name: null,
-                margin: null,
-            }),
-        }));
-        await Promise.all(saves);
+            body: JSON.stringify({ season, chapter, force }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (!force && (data.error || "").includes("recorded result")) {
+                if (confirm(data.error + "\n\nRe-seed anyway?")) cmpSeedBracket(null, true);
+            } else {
+                alert(data.error || "Seeding failed.");
+            }
+            return;
+        }
+        if (data.warnings && data.warnings.length) alert(data.warnings.join("\n"));
 
         const bRes = await fetch(`/api/cmp/bracket?season=${encodeURIComponent(season)}&chapter=${encodeURIComponent(chapter)}`);
         cmpState.bracket = bRes.ok ? await bRes.json() : [];
         cmpRenderBracket();
+        loadCmpPayouts();
     }
+
+    // ═══════════ MATCH PLAY CONFIG EDITOR (admin) ═══════════
+
+    let cfgVersions = [];
+
+    async function openCfgModal() {
+        $("cfg-modal").style.display = "flex";
+        $("cfg-error").style.display = "none";
+        $("cfg-matrix-preview").innerHTML = "";
+        $("cfg-notes").value = "";
+        const res = await fetch("/api/cmp/config/versions");
+        cfgVersions = res.ok ? await res.json() : [];
+        const sel = $("cfg-version-sel");
+        sel.innerHTML = cfgVersions.map(v =>
+            `<option value="${v.id}">v${v.version_no}${v.is_current ? " (current)" : ""} — ${escapeHtml((v.saved_at || "").slice(0, 10))}${v.notes ? " · " + escapeHtml(v.notes.slice(0, 40)) : ""}</option>`
+        ).join("");
+        const meta = cmpState.configMeta;
+        $("cfg-pin-state").textContent = meta
+            ? (meta.snapshotted
+                ? `${cmpState.chapter} ${cmpState.season} is pinned to v${meta.version_no}`
+                : `${cmpState.chapter} ${cmpState.season} follows the current version (v${meta.version_no})`)
+            : "";
+        if (cfgVersions.length) await loadCfgVersion(cfgVersions[0].id);
+    }
+
+    async function loadCfgVersion(versionId) {
+        const res = await fetch(`/api/cmp/config/versions/${versionId}`);
+        if (!res.ok) return;
+        const v = await res.json();
+        $("cfg-json").value = JSON.stringify(v.config, null, 2);
+    }
+
+    $("cfg-version-sel").addEventListener("change", e => loadCfgVersion(Number(e.target.value)));
+    $("cfg-cancel-btn").addEventListener("click", () => { $("cfg-modal").style.display = "none"; });
+    $("cfg-modal").addEventListener("click", e => {
+        if (e.target === $("cfg-modal")) $("cfg-modal").style.display = "none";
+    });
+
+    $("cfg-preview-btn").addEventListener("click", async () => {
+        const vid = Number($("cfg-version-sel").value);
+        const res = await fetch(`/api/cmp/structure?version_id=${vid}`);
+        const data = res.ok ? await res.json() : null;
+        const el = $("cfg-matrix-preview");
+        if (!data || !data.rows) { el.innerHTML = '<p style="color:#dc2626;font-size:0.8rem;">Preview failed.</p>'; return; }
+        const head = ["N", "Pools", "Sizes", "KO", "WC", "Byes", "Pot", "Bonus", "Ladder pool", "Payouts"];
+        const rows = data.rows.map(r => `
+            <tr>
+                <td style="font-weight:700;">${r.n}</td>
+                <td>${r.pools}</td>
+                <td>${r.pool_sizes.join("+")}</td>
+                <td>${r.knockout}</td>
+                <td>${r.wildcards || ""}</td>
+                <td>${r.byes || ""}</td>
+                <td>${fmtMoney(r.pot)}</td>
+                <td>${fmtMoney(r.pool_winner_bonus_each)}×${r.pools}</td>
+                <td>${fmtMoney(r.adjusted_pot)}</td>
+                <td>${r.ladder_amounts.map(fmtMoney).join(" / ")}</td>
+            </tr>`).join("");
+        el.innerHTML = `
+            <h4 style="font-size:0.72rem;text-transform:uppercase;color:var(--text-muted);margin:0.6rem 0 0.3rem;">Computed matrix — v${data.config_version}</h4>
+            <table class="standings-table" style="font-size:0.72rem;">
+                <thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    });
+
+    $("cfg-save-btn").addEventListener("click", async () => {
+        const errEl = $("cfg-error");
+        errEl.style.display = "none";
+        let config;
+        try {
+            config = JSON.parse($("cfg-json").value);
+        } catch (e) {
+            errEl.textContent = "Invalid JSON: " + e.message;
+            errEl.style.display = "";
+            return;
+        }
+        const btn = $("cfg-save-btn");
+        btn.disabled = true; btn.textContent = "Validating…";
+        const res = await fetch("/api/cmp/config/versions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config, notes: $("cfg-notes").value.trim() }),
+        });
+        const data = await res.json().catch(() => ({}));
+        btn.disabled = false; btn.textContent = "Save as New Version";
+        if (!res.ok) {
+            errEl.textContent = data.error || "Save failed.";
+            errEl.style.display = "";
+            return;
+        }
+        alert(`Saved as v${data.version_no}. Seasons already pinned keep their version; new seasons use v${data.version_no}.`);
+        $("cfg-modal").style.display = "none";
+        cmpLoad();
+    });
+
+    $("cfg-pin-btn").addEventListener("click", async () => {
+        const vid = Number($("cfg-version-sel").value);
+        const vno = (cfgVersions.find(v => v.id === vid) || {}).version_no;
+        if (!confirm(`Pin ${cmpState.chapter} ${cmpState.season} to config v${vno}? This changes the rules the season runs under.`)) return;
+        const res = await fetch("/api/cmp/config/snapshot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ season: cmpState.season, chapter: cmpState.chapter, version_id: vid }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { alert(data.error || "Pin failed."); return; }
+        alert(`Pinned to v${vno}.`);
+        $("cfg-modal").style.display = "none";
+        cmpLoad();
+    });
 
     // ═══════════ PLAYER SEARCH MODAL ═══════════
 
