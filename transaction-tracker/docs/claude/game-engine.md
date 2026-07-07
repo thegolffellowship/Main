@@ -163,6 +163,22 @@ places-curve (two endpoints + min), ladder families, fixed-share
 anchors w/ dollar-threshold tapers, flight structures + champion
 bonus, pool-structure lookup + per-pool bonus, per-win payout mode.
 
+## Wallet/refund contract notes (mailbox ids 22/24, Kerry-ratified 2026-07-06)
+
+Platform-side decisions banked for the Stage-4 bridge (no Tracker code
+change yet): (1) **VOID verb ratified** — wallet contract is ADD (Tracker)
+/ VOID (Tracker requests, Platform executes, returns `voided_remaining`)
+/ SPEND (Platform checkout); when a wallet credit is cashed out via
+Venmo, VOID first and Venmo only the returned `voided_remaining`;
+idempotent on the credit's `external_ref` (= our Tracker credit id —
+every ADD must carry it). (2) **"Money goes back the way it came"** —
+the 30-day NEW-member membership guarantee refunds via **Stripe from
+the Platform** (guarantee-only exception; new members, not renewals);
+all Tracker-era money still refunds via Venmo from the Tracker; never
+cross rails. (3) New-member membership revenue is held (Platform
+`held_until`) during the guarantee window — no effect on our $1/active-
+member monthly purse counting.
+
 ## Match Play in CONTESTS — BUILT v2.34.0 (directive: Kerry via ids 19-20)
 
 Shipped 2026-07-06. The 29-column **Prizes-Match Play Matrix.xlsx**
