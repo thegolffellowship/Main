@@ -29601,10 +29601,22 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                 for fl in d.get("flights") or []:
                     if not fl.get("skin_count"):
                         continue
-                    for nm, cnt in (fl.get("per_player") or {}).items():
-                        amt_cents = round(flight_pot_cents / fl["skin_count"] * cnt)
+                    # exact-division cents: apportion the flight pot by skin
+                    # counts with largest remainder so the flight sums to the
+                    # pot exactly (no per-row rounding drift)
+                    holders = sorted((fl.get("per_player") or {}).items(),
+                                     key=lambda kv: (-kv[1], kv[0]))
+                    total_sk = fl["skin_count"]
+                    floors = [(nm, cnt, flight_pot_cents * cnt // total_sk,
+                               (flight_pot_cents * cnt) % total_sk)
+                              for nm, cnt in holders]
+                    short = flight_pot_cents - sum(f[2] for f in floors)
+                    order = sorted(range(len(floors)),
+                                   key=lambda i: (-floors[i][3], i))
+                    bump = set(order[:short])
+                    for i, (nm, cnt, cents, _) in enumerate(floors):
                         rows.append({"golferName": nm, "category": "skins",
-                                     "amount": amt_cents / 100.0,
+                                     "amount": (cents + (1 if i in bump else 0)) / 100.0,
                                      "description": f"Skins {fl['flight']} ×{cnt}"})
             else:
                 notes.append(f"Skins: {d.get('status', 'unknown')} — skipped")

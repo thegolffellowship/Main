@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.39.0";
+window.TGF_VERSION = "2.39.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.39.1",
+    date: "2026-07-07",
+    changes: [
+      "Fix: skins payout rows now apportion the flight pot by skin counts with largest-remainder cents, so each flight sums to its pot exactly -- per-row rounding was drifting a cent (s9.16 Flight 1: 48.75+24.38+24.38 = 97.51 on a 97.50 pot).",
+    ],
+  },
   {
     version: "2.39.0",
     date: "2026-07-07",
