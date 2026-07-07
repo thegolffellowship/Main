@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.39.1";
+window.TGF_VERSION = "2.39.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.39.2",
+    date: "2026-07-07",
+    changes: [
+      "MOBILE CLARITY on the Games tab (Kerry's phone screenshots): (1) winner sub-rows previously wrapped at the horizontally-scrolled TABLE width, running off the right edge -- their content is now pinned sticky-left and capped to the screen width, so every winner line wraps fully on screen and stays visible while the money columns scroll; (2) the Game column now keeps a 150px minimum so labels and the inline CTP/MVP chips stop shredding into one-word-per-line towers (the fixed money columns were squeezing it to nothing) -- inline chips drop to their own line under the bold label; (3) winner text sized to match the table (0.72rem). Verified with headless phone-width screenshots, including pinned behavior mid-scroll.",
+    ],
+  },
   {
     version: "2.39.1",
     date: "2026-07-07",
