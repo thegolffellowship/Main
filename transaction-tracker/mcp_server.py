@@ -1377,9 +1377,12 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.import_gg_game_results(url), indent=2)
         if cmd == "scoring-flights-import":
             # Per-game flight membership from each flighted game's own GG
-            # leaderboard (Ind Net / Ind Gross / Skins); widget-url contract,
-            # time-budgeted — call repeatedly until rounds_left == 0
-            return json.dumps(db.import_gg_game_flights(url), indent=2)
+            # leaderboard (Ind Net / Ind Gross via detail fragments; Skins
+            # via the Expand-All membership view); widget-url contract,
+            # time-budgeted — call repeatedly until rounds_left == 0.
+            # arg "reset" re-walks already-done rounds (safe upserts).
+            return json.dumps(db.import_gg_game_flights(
+                url, reset=(arg.strip().lower() == "reset")), indent=2)
         if cmd == "scoring-game-results":
             # Verify the shadow-computed winners for one event+game:
             # "scoring-game-results:<event>|<game>|<flights>"
