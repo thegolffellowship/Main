@@ -4458,7 +4458,7 @@
                 (d.flights || []).forEach((fl, i) => {
                     const amts = (flightData[i] || []).map(num);
                     rows.push(..._placeSplitRows(fl.ranking, amts, "individual_net",
-                        `Ind Net ${escapeHtml(fl.flight)}`));
+                        `Ind Net ${fl.flight}`));
                 });
             } else if (num(gNet.individualNet) > 0) {
                 notes.push("Individual Net: results not determined yet — skipped");
@@ -4477,7 +4477,7 @@
                     Object.entries(fl.per_player || {}).forEach(([nm, cnt]) => {
                         const amt = Math.round(flightPotCents / fl.skin_count * cnt) / 100;
                         rows.push({ golferName: nm, category: "skins", amount: amt,
-                                    description: `Skins ${escapeHtml(fl.flight)} ×${cnt}` });
+                                    description: `Skins ${fl.flight} ×${cnt}` });
                     });
                 });
             } else {
@@ -4495,7 +4495,7 @@
                 const amts = [num(gGross.grossLow1st), num(gGross.grossLow2nd)].filter(v => v > 0);
                 (d.flights || []).forEach(fl => {
                     rows.push(..._placeSplitRows(fl.ranking, amts, "individual_gross",
-                        `Ind Gross ${escapeHtml(fl.flight)}`));
+                        `Ind Gross ${fl.flight}`));
                 });
             } else {
                 notes.push("Ind. Gross: results not determined yet — skipped");
