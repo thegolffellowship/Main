@@ -452,22 +452,33 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   wrapper) — same Games-tab rules (credited/refunded/transferred/
   rsvp_only out; wd out only when that bundle was credited; child
   add-on payments upgrade the parent).
-- Flights: **GG flight labels ONLY** (Kerry ruling, 2026-07-07 —
-  superseded the v2.35.0 handicap-derived fallback). Multi-flight games
-  group by `scoring_rounds.flight`; if any scored entrant lacks a label
-  the game reports `flights_unknown` ("flights pending GG import" in
-  the UI) — the labels arrive when the game's OWN GG leaderboard (e.g.
-  "INDIVIDUAL Net $") is imported, not just ALL Net/ALL Gross. Flights
-  order low→high by average playing handicap so the matrix-named rows
-  align by index. KNOWN LIMIT: scoring_rounds has ONE flight column per
-  round, so games with different cut lines (Ind Net vs Skins) share
-  whichever label was imported last; per-game labels need an import
-  extension (flagged in mailbox game-results-wiring). The matrix flight
-  count is supplied by the Games tab (`?flights=`); a count mismatch
-  returns a warning. Ties = golf-style shared positions; the ratified
-  split-combined-places rule applies to the money (UI).
+- Flights: **GG flight labels ONLY, per game** (Kerry rulings
+  2026-07-07). Flighting differs per game (Net, Gross, Skins cut
+  differently), so a player's flight is a property of (game, event):
+  `gg_game_flights` (v2.37.0) holds "Joe is in flight X for THIS game",
+  captured by `import_gg_game_flights(widget_url)` (bridge command
+  `scoring-flights-import`) which walks each flighted game's own GG
+  leaderboard — the per-player details fragments carry the "Flight …"
+  section label (same parse as the scorecard importer). The engine
+  prefers gg_game_flights and NEVER mixes sources within a game;
+  `scoring_rounds.flight` (one label per round, last-import-wins)
+  remains only as a legacy fallback when a game has no per-game rows.
+  Missing labels on a multi-flight game → `flights_unknown` ("flights
+  pending GG import"). Flights order low→high by average playing
+  handicap so the matrix-named rows align by index; the response
+  carries `flight_source` for transparency. Ties = golf-style shared
+  positions; the ratified split-combined-places rule applies to the
+  money (UI).
 - Display-only (Stage 1 shadow discipline): GG stays official; no
   payout-ledger writes.
+- Games-tab layout (v2.37.0, Kerry): TEAM Net / Individual Net (per
+  flight) / Skins / Ind. Gross winners render on their OWN sub-rows
+  (`.games-winner-row`, hidden until hydrated) below the game/flight
+  rows; CTP and City MVP winners stay inline next to the name; TGF MVP
+  winner is inline next to the heading, and each TGF MVP event-breakout
+  line shows that event's City MVP winner (non-bold). All game headings
+  are bold. Winner sub-rows wrap freely — this is also the mobile
+  answer (no long inline chips).
 - **GG-RECORDED games (v2.36.0)** — CTP / Longest Putt / Hole-in-One /
   TEAM Net winners are manually entered into GG post-round (Kerry,
   2026-07-07), so the portal is the source of record:

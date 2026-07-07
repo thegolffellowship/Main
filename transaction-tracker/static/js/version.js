@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.36.0";
+window.TGF_VERSION = "2.37.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.37.0",
+    date: "2026-07-07",
+    changes: [
+      "PER-GAME FLIGHTS (Kerry design ruling): flighting differs per game -- Net, Gross, and Skins cut differently -- so a player's flight is now a property of (game, event), not of their round. New gg_game_flights table ('Joe Smith is in flight X for THIS game') populated by import_gg_game_flights(widget_url) (bridge command scoring-flights-import): walks each flighted game's own GG leaderboard per round and reads the Flight section label from the per-player details fragments (the same parse the scorecard importer uses). The results engine prefers gg_game_flights and never mixes sources within a game; scoring_rounds.flight is only a legacy fallback for games with no per-game rows; responses carry flight_source. This closes the single-flight-column limitation flagged in v2.36.0.",
+      "GAMES TAB LAYOUT (Kerry): winners for TEAM Net, Individual Net (per flight), Skins, and Ind. Gross moved to their OWN sub-rows below each game/flight row (hidden until results hydrate) instead of riding inline next to the name -- Individual Net flight placewinners now actually render (the inline flight-cell spans were the miss), Skins shows per-player skin counts WITH dollars (flight pot / skins x count), and Ind. Gross lists each flight on its own line. CTP and City MVP winners stay inline next to the name; the TGF MVP winner moved INLINE next to the heading; each TGF MVP event-breakout line now shows that event's City MVP winner (non-bold). City MVP, TEAM Net, CTP, and Ind. Gross headings are bold to match TGF MVP / Individual Net / Skins Gross.",
+      "MOBILE: the bad inline wrapping is gone -- long results live in the full-width winner sub-rows, which wrap freely (dashed separators); the only inline chips left (CTP, City MVP, TGF MVP) are short and wrap naturally inside the label cell. The v2.36.0 chip-block/max-width mobile hacks were removed.",
+      "New verification bridge commands on probe_golf_genius: scoring-game-results:<event>|<game>|<flights> (shadow-computed winners) and scoring-gg-results:<event> (GG-recorded winners) for checking production data per event.",
+    ],
+  },
   {
     version: "2.36.0",
     date: "2026-07-07",
