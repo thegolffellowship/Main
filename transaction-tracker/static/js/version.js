@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.35.0";
+window.TGF_VERSION = "2.35.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.35.1",
+    date: "2026-07-07",
+    changes: [
+      "Banked mailbox ids 22/24 (Platform adversarial review, Kerry-ratified) into game-engine.md for future sessions: the wallet VOID verb (ADD/VOID/SPEND contract -- VOID before Venmo-ing out a wallet credit, pay only the returned voided_remaining, idempotent on the credit's external_ref), the 'money goes back the way it came' refund rule (30-day new-member guarantee refunds via Stripe from the Platform -- the only exception; Tracker-era money always refunds via Venmo from the Tracker), and the held_until guarantee window on new-member membership revenue (no effect on the $1/active-member monthly purse). No Tracker code change -- contracts finalize at Stage 4.",
+    ],
+  },
   {
     version: "2.35.0",
     date: "2026-07-07",
