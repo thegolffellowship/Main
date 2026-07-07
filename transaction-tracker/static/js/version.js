@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.38.0";
+window.TGF_VERSION = "2.38.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.38.1",
+    date: "2026-07-07",
+    changes: [
+      "Fix: payout descriptions assembled by Record Payouts no longer HTML-escape the GG flight names -- 'Flight 1 (HCP <12.0)' was being stored in the ledger as '&lt;12.0'. Descriptions are data, not markup; the display layer escapes at render time.",
+    ],
+  },
   {
     version: "2.38.0",
     date: "2026-07-07",
