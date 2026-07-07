@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.34.0";
+window.TGF_VERSION = "2.34.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.34.1",
+    date: "2026-07-07",
+    changes: [
+      "Adversarial review pass over the v2.34.0 Match Play build fixed 8 confirmed issues before deploy: (1) a seeded bracket's shape is now frozen -- rendering/auto-advance derive rounds from the SAVED bracket rows, not the live enrollment count, so an enrollment change after seeding no longer hides rounds or advances winners through the wrong template; (2) the payout sheet always splits the combined 3rd/4th money by the expected TWO semifinal losers, so a lone recorded SF loser shows $52.50 (of $105) instead of the full combined amount marked final; (3) two DIFFERENT customers who share a name both count as entrants (dedup is customer_id-first per Principle 6) -- name-dedup only applies to legacy id-less rows; (4) the payout ladder renders any config shape without crashing (no more hard [0]/[1] indexing; places beyond 4th render as TBD rows so the sheet always sums to the pot) and sct_save_version now rejects ladders paying fewer than 2 places; (5) seeding with fewer than 2 qualifiers returns a clear error instead of a 500; (6) the standings 'Advances' badge and header honor the config's advance_per_pool and mention wildcards instead of hardcoding 'Top 2'; (7) a bracket slot's seed/WC chips clear when a different player lands in the slot (stale-chip fix in the upsert); (8) the payout sheet warns when chapterless enrollments are being counted in every chapter's field.",
+    ],
+  },
   {
     version: "2.34.0",
     date: "2026-07-06",

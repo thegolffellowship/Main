@@ -1366,7 +1366,7 @@
             </tr>
         `).join("");
         el.innerHTML = `
-            <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top 2 advance · tiebreaker: Stableford pts</span></h4>
+            <h4>Pool Standings <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:0.4rem;">Top ${(cmpState.structure || {}).advance_per_pool ?? 2} advance${(cmpState.structure || {}).wildcards ? ` (+${cmpState.structure.wildcards} wildcards across pools)` : ""} · tiebreaker: Stableford pts</span></h4>
             <table class="standings-table">
                 <thead><tr><th style="text-align:left;">Player</th><th>W</th><th>L</th><th>D</th><th title="Total Stableford points accumulated">Pts</th></tr></thead>
                 <tbody>${rows}</tbody>
@@ -1545,15 +1545,18 @@
     }
 
     function cmpBracketSize() {
-        // Configured knockout size for the enrolled N; if the config can't
-        // resolve (N out of range), fall back to rounds present in saved
-        // bracket data, then to the legacy pools×2.
-        if (cmpState.structure) return cmpState.structure.knockout;
+        // A SAVED bracket's rounds are the truth: once seeded, the bracket
+        // shape is frozen even if enrollment (and therefore the configured
+        // knockout size) changes afterwards. The live config only sizes a
+        // bracket that hasn't been seeded yet.
         const present = new Set((cmpState.bracket || []).map(b => b.round));
-        if (present.has("r16")) return 16;
-        if (present.has("qf")) return 8;
-        if (present.has("sf")) return 4;
-        if (present.has("final")) return 2;
+        if (present.size) {
+            if (present.has("r16")) return 16;
+            if (present.has("qf")) return 8;
+            if (present.has("sf")) return 4;
+            return 2;
+        }
+        if (cmpState.structure) return cmpState.structure.knockout;
         return Math.max(2, cmpState.pools.length * 2);
     }
 

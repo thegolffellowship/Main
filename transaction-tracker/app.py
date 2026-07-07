@@ -8753,8 +8753,12 @@ def api_cmp_standings():
     chapter = request.args.get("chapter", "")
     if not season or not chapter:
         return jsonify({"error": "season and chapter required"}), 400
-    from email_parser.database import cmp_get_standings
-    return jsonify(cmp_get_standings(season, chapter))
+    from email_parser.database import cmp_get_standings, sct_get_active_config
+    active = sct_get_active_config("match_play", season, chapter)
+    advance = 2
+    if active:
+        advance = int(active["config"].get("advance_per_pool", 2))
+    return jsonify(cmp_get_standings(season, chapter, advance_per_pool=advance))
 
 
 @app.route("/api/cmp/bracket")

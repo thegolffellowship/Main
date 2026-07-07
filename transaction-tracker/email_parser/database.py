@@ -19066,12 +19066,14 @@ def cmp_save_match(pool_id: int, player1: str, player2: str,
         return dict(row) if row else {}
 
 
-def cmp_get_standings(season: str, chapter: str, db_path=None) -> list[dict]:
+def cmp_get_standings(season: str, chapter: str, db_path=None,
+                      advance_per_pool: int = 2) -> list[dict]:
     """Return pool standings for a chapter/season.
 
     W/L/D is determined by match play winner_name (traditional match play result).
     Stableford points are accumulated independently — a match loser can outscore the winner.
-    Advancement (top 2) = W/L/D record; tiebreaker = total Stableford points.
+    Advancement (top advance_per_pool, from the versioned config) = W/L/D
+    record; tiebreaker = total Stableford points.
     Bracket seeding = total Stableford points across all pool matches.
     """
     with _connect(db_path) as conn:
@@ -19137,7 +19139,7 @@ def cmp_get_standings(season: str, chapter: str, db_path=None) -> list[dict]:
                     "losses": s["losses"],
                     "draws": s["draws"],
                     "stableford_pts": round(s["pts"], 1),
-                    "advances": rank <= 2,
+                    "advances": rank <= advance_per_pool,
                 })
         return standings
 
@@ -19177,7 +19179,15 @@ def cmp_save_bracket_slot(season: str, chapter: str, round_: str, slot: int,
                              opponent_stableford = excluded.opponent_stableford,
                              winner_name         = excluded.winner_name,
                              margin              = excluded.margin,
-                             event_id            = excluded.event_id""",
+                             event_id            = excluded.event_id,
+                             -- seed/WC chips belong to the occupant: keep
+                             -- them on a result re-save, clear them when a
+                             -- different player lands in the slot (IS is
+                             -- SQLite's NULL-safe equality)
+                             player_seed = CASE WHEN excluded.player_name IS player_name
+                                                THEN player_seed ELSE NULL END,
+                             is_wildcard = CASE WHEN excluded.player_name IS player_name
+                                                THEN is_wildcard ELSE NULL END""",
             (season, chapter, round_, slot,
              player_name, player_stableford,
              opponent_name, opponent_stableford,
@@ -19344,6 +19354,8 @@ def sct_save_version(kind: str, config: dict, saved_by: str | None = None,
             if not s["ladder_pcts"] and not config.get(
                     "amount_overrides", {}).get(str(n)):
                 raise ValueError(f"N={n}: no ladder band or amount override")
+            if len(s["ladder_amounts_cents"]) < 2:
+                raise ValueError(f"N={n}: ladder must pay at least 2 places")
     with _connect(db_path) as conn:
         t = conn.execute(
             "SELECT id FROM season_contest_templates "
@@ -19464,13 +19476,18 @@ def cmp_enrolled_entrants(season: str, chapter: str, db_path=None) -> list[dict]
         name = r["canonical_name"] or r["customer_name"]
         if not name:
             continue
-        if r["customer_id"] and r["customer_id"] in seen_ids:
-            continue
-        if name.lower() in seen_names:
-            continue
         if r["customer_id"]:
+            # customer_id is the identity — two DIFFERENT ids that share a
+            # name are two real entrants and must both count (Principle 6).
+            if r["customer_id"] in seen_ids:
+                continue
             seen_ids.add(r["customer_id"])
-        seen_names.add(name.lower())
+            seen_names.add(name.lower())
+        else:
+            # Legacy id-less row: name is all we have to dedup on.
+            if name.lower() in seen_names:
+                continue
+            seen_names.add(name.lower())
         out.append({"customer_name": name, "customer_id": r["customer_id"],
                     "enrollment_id": r["id"]})
     return out
@@ -19592,6 +19609,8 @@ def cmp_seed_knockout(season: str, chapter: str, created_by: str | None = None,
         warnings.append("No pool matches recorded yet — seeding is arbitrary.")
 
     seeded = sorted(field, key=_cmp_seed_metric)
+    if len(field) < 2:
+        raise ValueError("Not enough qualifiers to seed a knockout — need at least 2.")
     entrant_rows = [
         {"player_name": r["player_name"],
          "stableford": r.get("stableford_pts") or 0,
@@ -19599,6 +19618,10 @@ def cmp_seed_knockout(season: str, chapter: str, created_by: str | None = None,
         for r in seeded
     ]
     plan = seed_bracket(entrant_rows, structure["knockout"])
+    if plan["bye_placements"] and len(plan["rounds"]) < 2:
+        # 2-player template with a bye = only one qualifier reached the
+        # bracket; there is no next round to place the bye into.
+        raise ValueError("Not enough qualifiers to seed a knockout — need at least 2.")
 
     # name → customer_id from pool membership (Principle 6)
     with _connect(db_path) as conn:
@@ -19724,27 +19747,47 @@ def cmp_get_payout_sheet(season: str, chapter: str, db_path=None) -> dict:
             sf_losers.extend(x for x in names if x != winner)
 
     amounts = structure["ladder_amounts_cents"]
-    ladder_rows = [
-        {"place_label": "1st", "player_name": champion,
-         "amount": amounts[0] / 100.0,
-         "status": "final" if champion else "tbd"},
-        {"place_label": "2nd", "player_name": runner_up,
-         "amount": amounts[1] / 100.0,
-         "status": "final" if runner_up else "tbd"},
-    ]
+    ladder_rows = []
+    if amounts:
+        ladder_rows.append({"place_label": "1st", "player_name": champion,
+                            "amount": amounts[0] / 100.0,
+                            "status": "final" if champion else "tbd"})
+    if len(amounts) >= 2:
+        ladder_rows.append({"place_label": "2nd", "player_name": runner_up,
+                            "amount": amounts[1] / 100.0,
+                            "status": "final" if runner_up else "tbd"})
     if len(amounts) > 2:
-        combined = sum(amounts[2:4])  # places 3(+4) jointly occupied by SF losers
+        # Places 3(+4) belong to the TWO semifinal losers jointly (tie
+        # policy: split combined places). Always split by the expected two
+        # so a lone recorded SF loser never shows the full combined amount.
+        combined = sum(amounts[2:4])
         label = "3rd" if len(amounts) == 3 else "3rd–4th (T)"
-        if sf_losers:
-            shares = split_cents(combined, len(sf_losers))
-            for name, cents in zip(sorted(sf_losers), shares):
-                ladder_rows.append({"place_label": label, "player_name": name,
-                                    "amount": cents / 100.0, "status": "final"})
-        else:
-            ladder_rows.append({"place_label": label, "player_name": None,
-                                "amount": combined / 100.0, "status": "tbd"})
+        shares = split_cents(combined, 2)
+        losers = sorted(sf_losers)[:2]
+        for i, cents in enumerate(shares):
+            name = losers[i] if i < len(losers) else None
+            ladder_rows.append({"place_label": label, "player_name": name,
+                                "amount": cents / 100.0,
+                                "status": "final" if name else "tbd"})
+    # Any configured places beyond 4th still render (TBD) so the sheet
+    # always sums to the pot even under a nonstandard admin config.
+    for idx in range(4, len(amounts)):
+        ladder_rows.append({"place_label": f"{idx + 1}th", "player_name": None,
+                            "amount": amounts[idx] / 100.0, "status": "tbd"})
 
     warnings = []
+    with _connect(db_path) as conn:
+        chapterless = conn.execute(
+            """SELECT COUNT(*) FROM season_contests
+               WHERE contest_type = 'City Match Play' AND season = ?
+                 AND (chapter IS NULL OR chapter = '')""",
+            (season,),
+        ).fetchone()[0]
+    if chapterless:
+        warnings.append(
+            f"{chapterless} enrollment(s) have no chapter and are counted in "
+            "every chapter's field — set their chapter on the Enrollment tab."
+        )
     pool_member_count = sum(len(v) for v in by_pool.values())
     if by_pool and pool_member_count != n:
         warnings.append(
