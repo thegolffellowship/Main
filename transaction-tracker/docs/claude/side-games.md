@@ -493,6 +493,28 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   the Games tab hydrates 🏆 chips on the Team Net/CTP rows and the HIO
   banner (Longest Putt winners ride on the CTP rows). For the future
   untethering, manager or in-round player entry replaces this pull.
+- **Record Payouts (v2.38.0, Kerry directive)** — the Games tab's
+  "💸 Record Payouts" button (manager) assembles every DETERMINED
+  winner into PAYOUTS-tab rows: City MVP (+TGF MVP once, from the
+  event you click — combined pot, warning shown), Ind Net per-flight
+  place ladders with exact-cent tie splits, Skins per player (flight
+  pot ÷ skins × count), Ind Gross per flight, GG-recorded Team Net
+  (split per member, blind draws excluded) and CTP/Longest Putt.
+  HIO is never auto-recorded (accruing cross-event pot).
+  `record_event_game_payouts()` finds/creates the tgf_events row by
+  event code, stamps rows `auto:` and delegates to import_tgf_payouts
+  (customer resolution + Venmo-ledger reconciliation + aggregates);
+  re-recording replaces prior auto rows (pending ledger entries
+  deleted, matched real Venmo txns preserved). Every row ties to a
+  customer_id (Principle 6 / Kerry: non-negotiable).
+- **Payment links (v2.38.0)** — customers gain payment_method /
+  payment_handle; default is Venmo via venmo_username. Boot-seeded
+  exceptions (Kerry): Don Sharitz→PayPal, Brian Thompson→Cash App,
+  Gus Vasquez + Michelle DelCarmen→Zelle. The PAYOUTS tab's pay
+  button is method-aware: Venmo/PayPal.me/Cash App deep links with
+  amount+note prefilled; Zelle (no deep link) shows a badge with the
+  handle and amount, Mark Paid closes it out. Missing handles show
+  "add handle" badges until supplied.
 - Still manual: Skins ½ Net at <8 gross buyers on 9h (half-pop
   allocation rule unratified — the row shows "manual — ½-net rule
   pending").

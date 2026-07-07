@@ -285,6 +285,40 @@
             return `https://venmo.com/${username}?txn=pay&amount=${amount.toFixed(2)}&note=${note}`;
         }
 
+        // Method-aware pay link (v2.38.0): default Venmo via venmo_username;
+        // customers.payment_method overrides (paypal / cashapp / zelle —
+        // Kerry: Sharitz PayPal, Thompson Cash App, Vasquez + DelCarmen
+        // Zelle). Returns {href, label, bg} for a link, {badge} when no
+        // deep link exists (Zelle) or a handle is missing.
+        function payAction(winData, amount, eventCode, eventName) {
+            if (!winData) return null;
+            const method = (winData.payment_method
+                || (winData.venmo_username ? "venmo" : "")).toLowerCase();
+            const handle = (winData.payment_handle || "").trim();
+            const amt = amount.toFixed(2);
+            if (method === "venmo" && winData.venmo_username) {
+                return { href: venmoLink(winData.venmo_username, amount, eventCode, eventName),
+                         label: "Pay", bg: "#008CFF" };
+            }
+            if (method === "paypal") {
+                return handle
+                    ? { href: `https://paypal.me/${handle.replace(/^@/, "")}/${amt}`,
+                        label: "PayPal", bg: "#003087" }
+                    : { badge: "PayPal — add handle" };
+            }
+            if (method === "cashapp") {
+                const tag = handle.replace(/^\$/, "");
+                return tag
+                    ? { href: `https://cash.app/$${tag}/${amt}`,
+                        label: "Cash App", bg: "#00D632" }
+                    : { badge: "Cash App — add handle" };
+            }
+            if (method === "zelle") {
+                return { badge: `Zelle${handle ? ": " + handle : ""} — $${amt}` };
+            }
+            return null;
+        }
+
         function catBadge(cat) {
             const label = CATEGORY_LABELS[cat] || cat;
             return `<span class="cat-badge cat-${cat}">${label}</span>`;
@@ -483,14 +517,17 @@
             golferList.forEach((g, idx) => {
                 // Look up venmo username
                 const winData = Object.values(DATA.winnings).find(w => w.id === g.golfer_id);
-                const venmo = winData ? winData.venmo_username : "";
                 const alreadyPaid = g.payment_status === "paid";
-                const venmoHtml = venmo && !alreadyPaid
-                    ? `<a class="venmo-btn" href="${venmoLink(venmo, g.total, ev.code, ev.name)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+                const act = !alreadyPaid ? payAction(winData, g.total, ev.code, ev.name) : null;
+                let venmoHtml = "";
+                if (act && act.href) {
+                    venmoHtml = `<a class="venmo-btn" style="background:${act.bg};" href="${act.href}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
                          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3c.9 1.5 1.3 3 1.3 5 0 5.5-4.7 12.7-8.5 17H5.2L3 3.5l6-.6 1.2 9.6c1.2-2 2.7-5.2 2.7-7.3 0-1.9-.3-3.2-.8-4.2L19.5 3z"/></svg>
-                         Pay
-                       </a>`
-                    : "";
+                         ${act.label}
+                       </a>`;
+                } else if (act && act.badge) {
+                    venmoHtml = `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.72rem;font-weight:600;background:#ede9fe;color:#5b21b6;" title="No deep link for this method — pay manually, then Mark Paid">${act.badge}</span>`;
+                }
                 const statusBadge = STATUS_BADGE[g.payment_status] || "";
                 const isPending = g.payment_status === "pending" || g.payment_status === "unwired" || g.payment_status === "mixed";
                 const markPaidBtn = isPending
