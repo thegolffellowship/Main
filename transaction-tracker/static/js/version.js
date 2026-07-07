@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.34.1";
+window.TGF_VERSION = "2.34.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.34.2",
+    date: "2026-07-07",
+    changes: [
+      "Refreshed docs/claude/state-of-the-tracker.md (the Platform-facing brief served by get_tracker_docs) with the Match Play build wave: versioned season-contest config as the Game Creator engine's first concrete build, the portable pure engine, and the CONTESTS surfaces -- so Platform planning reads a current picture of the V2.0 scoring_config prototype.",
+    ],
+  },
   {
     version: "2.34.1",
     date: "2026-07-07",
