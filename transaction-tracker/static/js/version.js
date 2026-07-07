@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.34.2";
+window.TGF_VERSION = "2.35.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.35.0",
+    date: "2026-07-07",
+    changes: [
+      "GAME WINNERS ON THE GAMES TAB: following the City/TGF MVP pattern (v2.33.0), the other scorecard-computable side games now shadow-compute their winners from OUR imported scorecards and hydrate 🏆 rows on the Events Games tab: Individual Net (stroke, flighted -- winner names + net scores per flight with golf-style tied positions), Ind. Gross (raw gross per flight), and gross Skins (outright low gross per hole within flight; per-player skin counts shown, ties kill the hole). New engine determine_event_game_results() in database.py + GET /api/events/game-results?event=&game=&flights= (manager). Buyer eligibility reuses the Games-tab rules via the new _event_game_buyers(kind NET|GROSS) generalization of the MVP's buyer helper (credited/refunded/transferred/rsvp_only out; wd out only when that bundle was credited back; child add-on payments upgrade the parent).",
+      "Flights are derived by playing handicap over THIS game's buyer set (balanced split, low handicaps first, spares to the earlier flights). The imported scoring_rounds.flight label is NOT used for grouping -- it reflects whatever GG leaderboard the import walked, not this game's cut lines over this game's buyers -- but is returned for cross-checking. The matrix flight count is passed in by the Games tab, which owns the matrix amounts; the server only ranks. Display-only (Stage 1 shadow discipline): GG stays official, no payout-ledger writes.",
+      "Deliberately NOT auto-computed, pending Kerry (mailbox topic game-results-wiring): CTP / Longest Putt / Hole-in-One (physical contests -- not in scorecard data; proposal = manual winner entry with CTP carry-over + HIO accrual handling), TEAM Net (off-lowest handicap semantics explicitly deferred by admin + no team-of-record source imported; proposal = use saved Pairings), and Skins ½ Net below 8 gross buyers (half-pop allocation rule unratified -- the row shows 'manual -- ½-net rule pending').",
+    ],
+  },
   {
     version: "2.34.2",
     date: "2026-07-07",

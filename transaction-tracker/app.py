@@ -5520,6 +5520,27 @@ def api_tgf_mvp_determination():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/game-results")
+@require_role("manager")
+def api_event_game_results():
+    """Shadow-computed side-game winners from our imported scorecards
+    (individual_net / individual_gross / skins). `flights` is the prize
+    matrix's flight count for this game at the event's buyer count —
+    the Games tab (which owns the matrix amounts) passes it in."""
+    event = (request.args.get("event") or "").strip()
+    game = (request.args.get("game") or "").strip()
+    flights = request.args.get("flights", default=1, type=int)
+    if not event or not game:
+        return jsonify({"error": "event and game parameters required"}), 400
+    try:
+        from email_parser.database import determine_event_game_results
+        return jsonify(determine_event_game_results(event, game,
+                                                    flights=max(1, flights)))
+    except Exception as e:
+        logger.exception("Game results determination failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/orphaned-items")
 def api_orphaned_items():
     """Return items whose item_name doesn't match any event."""
