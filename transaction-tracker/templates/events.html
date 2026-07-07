@@ -4210,6 +4210,11 @@
                     sp.innerHTML = '<span style="color:var(--text-muted);font-size:0.85em;">awaiting results</span>';
                     return;
                 }
+                if (det.status === "flights_unknown") {
+                    if (sp.dataset.fidx === undefined || sp.dataset.fidx === "" || sp.dataset.fidx === "0")
+                        sp.innerHTML = '<span style="color:var(--text-muted);font-size:0.85em;" title="Flights come from GG — import this game\'s own GG leaderboard to bring the flight labels in">flights pending GG import</span>';
+                    return;
+                }
                 if (det.status !== "determined") return;
                 const metric = sp.dataset.game === "individual_net" ? "net" : "gross";
                 (det.flights || []).forEach(fl => {
@@ -4244,6 +4249,68 @@
         }
     }
 
+    // GG-RECORDED winners (v2.36.0) — CTP / Longest Putt / HIO / TEAM Net
+    // are manually entered into GG post-round (Kerry, 2026-07-07), so the
+    // portal is the source of record. import_gg_game_results (run via the
+    // probe_golf_genius scoring-games-import bridge) pulls them into
+    // gg_game_results; these spans read /api/events/gg-game-results.
+    const _ggDetCache = {};
+    function _teamShort(teamStr) {
+        // "HAMILTON, Doug + TALAMANTEZ, Mark + …" → "HAMILTON / TALAMANTEZ / …"
+        return teamStr.split("+").map(s => s.trim().split(",")[0].trim())
+            .filter(Boolean).join(" / ");
+    }
+    async function hydrateGgRecordedResults() {
+        const spans = document.querySelectorAll('.gg-det[data-event]:not([data-done])');
+        if (!spans.length) return;
+        const eventNames = [...new Set([...spans].map(sp => sp.dataset.event))];
+        for (const evName of eventNames) {
+            if (!(evName in _ggDetCache)) {
+                try {
+                    const res = await fetch(`/api/events/gg-game-results?event=${encodeURIComponent(evName)}`);
+                    _ggDetCache[evName] = res.ok ? await res.json() : null;
+                } catch (e) { _ggDetCache[evName] = null; }
+            }
+            const det = _ggDetCache[evName];
+            const results = (det && det.results) || [];
+            document.querySelectorAll('.gg-det[data-event]:not([data-done])').forEach(sp => {
+                if (sp.dataset.event !== evName) return;
+                sp.dataset.done = "1";
+                sp.textContent = "";
+                if (!results.length) return;
+                const g = sp.dataset.game;
+                const win = txt => `<span style="color:#059669;font-weight:600;" title="Recorded in GG">&#x1F3C6; ${txt}</span>`;
+                if (g === "team_net") {
+                    const teams = results.filter(r => r.game === "team_net");
+                    if (teams.length)
+                        sp.innerHTML = win(teams.map(t => escapeHtml(_teamShort(t.player_name))).join(" &middot; 2nd: "));
+                } else if (g === "hio") {
+                    const hio = results.filter(r => r.game === "hio");
+                    if (hio.length)
+                        sp.innerHTML = win(hio.map(r => escapeHtml(r.player_name)).join(" & "));
+                } else if (g === "ctp") {
+                    // Proxies fill the CTP rows in order: CTPs by GG label
+                    // (hole number), then Longest Putt. Overflow lands on
+                    // the last row rather than disappearing.
+                    const proxies = results.filter(r => r.game === "ctp")
+                        .concat(results.filter(r => r.game === "longest_putt"));
+                    if (!proxies.length) return;
+                    const rowSpans = [...document.querySelectorAll(`.gg-det[data-event="${CSS.escape(evName)}"][data-game="ctp"]`)];
+                    const idx = Number(sp.dataset.idx || 0);
+                    const per = rowSpans.length || 1;
+                    const mine = proxies.filter((_, i) => (idx < per - 1 ? i === idx : i >= idx));
+                    if (mine.length) {
+                        sp.innerHTML = win(mine.map(r => {
+                            const holeM = /#\s*(\d+)/.exec(r.game_label || "");
+                            const lbl = r.game === "longest_putt" ? "LP" : (holeM ? `#${holeM[1]}` : "");
+                            return `${lbl ? lbl + ": " : ""}${escapeHtml(r.player_name)}${r.detail ? ` <span style="font-weight:400;color:var(--text-muted);">(${escapeHtml(r.detail)})</span>` : ""}`;
+                        }).join(" &middot; "));
+                    }
+                }
+            });
+        }
+    }
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -4272,7 +4339,7 @@
 
         // Hole-in-One pot — standalone display above the games table, not included in event totals
         if (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
-            html += `<div class="hole-in-one-banner">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)}</div>`;
+            html += `<div class="hole-in-one-banner">Hole-in-One Pot: ${fmt$(gEvent.holeInOne)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="hio"></span></div>`;
         }
 
         html += '<table class="games-table">';
@@ -4288,7 +4355,7 @@
             const teamType = gEvent.teamType || "Team Net";
             if (gEvent.teamTotal !== "NO_EVENT") {
                 inclMWP += numVal(gEvent.teamMWP);
-                html += `<tr><td>${escapeHtml(teamType)}</td><td>${fmt$(gEvent.teamTotal) || "—"}</td><td>${fmt$(gEvent.teamMWP) || "—"}</td><td></td><td>${fmt$(gEvent.team1st) || "—"}</td><td>${fmt$(gEvent.team2nd) || "—"}</td><td></td><td></td></tr>`;
+                html += `<tr><td>${escapeHtml(teamType)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="team_net"></span></td><td>${fmt$(gEvent.teamTotal) || "—"}</td><td>${fmt$(gEvent.teamMWP) || "—"}</td><td></td><td>${fmt$(gEvent.team1st) || "—"}</td><td>${fmt$(gEvent.team2nd) || "—"}</td><td></td><td></td></tr>`;
             }
 
             const ctps = holes === 18 ? [gEvent.ctp1, gEvent.ctp2, gEvent.ctp3, gEvent.ctp4] : [gEvent.ctp1, gEvent.ctp2];
@@ -4297,7 +4364,7 @@
                     html += `<tr class="games-row-disabled"><td>CTP #${i+1}</td><td colspan="${C-1}">No Game</td></tr>`;
                 } else if (v != null) {
                     inclMWP += numVal(v);
-                    html += `<tr><td>CTP #${i+1}</td><td>${fmt$(v)}</td><td>${fmt$(v)}</td><td></td>${empty4}</tr>`;
+                    html += `<tr><td>CTP #${i+1} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="ctp" data-idx="${i}"></span></td><td>${fmt$(v)}</td><td>${fmt$(v)}</td><td></td>${empty4}</tr>`;
                 }
             });
 
@@ -4469,6 +4536,7 @@
         html += '</div>';
         setTimeout(hydrateMvpDeterminations, 60);
         setTimeout(hydrateGameDeterminations, 80);
+        setTimeout(hydrateGgRecordedResults, 100);
         return html;
     }
 

@@ -7573,52 +7573,26 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
     return out
 
 
-# ── Event game results (v2.35.0) ────────────────────────────────────────
+# ── Event game results (v2.35.0; flight rule per Kerry 2026-07-07) ─────
 # Shadow-computes the scorecard-derivable side-game winners for one
 # event from OUR imported scorecards + formula layer, mirroring
 # determine_tgf_mvp: Individual Net (stroke, flighted), Individual
 # Gross (raw gross, flighted), and gross Skins (outright low gross per
 # hole within flight). Buyer eligibility mirrors the Games tab via
-# _event_game_buyers. Flights are derived from playing handicap over
-# THIS game's buyer set (balanced split, low handicaps first) — the
-# imported scoring_rounds.flight label is whatever leaderboard the GG
-# walk saw and does NOT correspond to this game's cut lines, so it is
-# returned for cross-checking only. Display-only (GG stays official —
-# Stage 1 shadow discipline); the Games tab hydrates 🏆 rows from
-# /api/events/game-results. NOT computable from scorecards and
-# therefore not handled here: CTP / Longest Putt / Hole-in-One
-# (physical contests) and TEAM Net (off-lowest handicap semantics +
-# team-of-record source pending ratification — mailbox
-# game-results-wiring).
+# _event_game_buyers. FLIGHTS COME FROM GG ONLY (Kerry ruling): the
+# cut lines are configured per game in GG, so we group by the imported
+# scoring_rounds.flight labels and never derive flights from handicap.
+# Multi-flight games whose scored entrants lack labels report
+# status='flights_unknown' — importing the game's own GG leaderboard
+# (e.g. "INDIVIDUAL Net $"), not just ALL Net/ALL Gross, is what
+# carries the labels. Display-only (GG stays official — Stage 1
+# shadow discipline); the Games tab hydrates 🏆 rows from
+# /api/events/game-results. CTP / Longest Putt / Hole-in-One and TEAM
+# Net winners are GG-RECORDED truth pulled by import_gg_game_results
+# (below) — GG cannot compute them from scorecards and neither can we.
 
 _GAME_RESULT_KINDS = {"individual_net": "NET", "individual_gross": "GROSS",
                       "skins": "GROSS"}
-
-
-def _flight_names(count: int, holes: int) -> list[str]:
-    """Flight display names matching the Games-tab convention."""
-    names = (["Low Flight", "High Flight", "Mid Flight", "4th Flight"]
-             if holes == 18 else ["Low Flight", "High Flight"])
-    if count <= len(names):
-        return names[:count]
-    return names + [f"Flight {i + 1}" for i in range(len(names), count)]
-
-
-def _split_flights(entrants: list[dict], count: int) -> list[list[dict]]:
-    """Balanced flight split by playing handicap (low flight = lowest
-    handicaps; spare players go to the earlier flights). Entrants with
-    no handicap sort last (highest flight)."""
-    count = max(1, min(count, len(entrants) or 1))
-    ordered = sorted(entrants, key=lambda e: (
-        e["playing_handicap"] if e["playing_handicap"] is not None else float("inf"),
-        e["player"]))
-    base, rem = divmod(len(ordered), count)
-    flights, idx = [], 0
-    for i in range(count):
-        size = base + (1 if i < rem else 0)
-        flights.append(ordered[idx: idx + size])
-        idx += size
-    return flights
 
 
 def _rank_with_ties(entrants: list[dict], key: str) -> list[dict]:
@@ -7708,14 +7682,41 @@ def determine_event_game_results(event_name: str, game: str,
             binfo["buyers"][cid] for cid in binfo["buyers"]
             if cid not in {e["customer_id"] for e in scored})
 
-        flight_groups = _split_flights(scored, flights)
-        names = _flight_names(len(flight_groups),
-                              _event_holes_type(ev["item_name"], ev.get("format")))
+        # GG flight labels ONLY (Kerry, 2026-07-07). Single-flight games
+        # need no labels; multi-flight games without labels on every
+        # scored entrant can't be grouped — the labels arrive when the
+        # game's own GG leaderboard is imported.
+        if flights <= 1:
+            flight_groups = [("Field", scored)]
+        else:
+            missing = sorted(e["player"] for e in scored
+                             if not (e["gg_flight"] or "").strip())
+            if missing:
+                out["status"] = "flights_unknown"
+                out["missing_flight_labels"] = missing
+                return out
+            by_label: dict = {}
+            for e in scored:
+                by_label.setdefault(e["gg_flight"].strip(), []).append(e)
+
+            def _avg_hcp(group):
+                vals = [e["playing_handicap"] for e in group
+                        if e["playing_handicap"] is not None]
+                return sum(vals) / len(vals) if vals else float("inf")
+
+            # Low flight first (lowest average handicap) so the UI's
+            # matrix-named rows (Low/High/Mid/4th) align by index.
+            flight_groups = sorted(by_label.items(),
+                                   key=lambda kv: _avg_hcp(kv[1]))
+            if len(flight_groups) != flights:
+                out["warnings"] = [
+                    f"GG shows {len(flight_groups)} flight(s); the prize "
+                    f"matrix expects {flights}."]
         result_flights = []
-        for i, group in enumerate(flight_groups):
+        for label, group in flight_groups:
             hcps = [e["playing_handicap"] for e in group
                     if e["playing_handicap"] is not None]
-            fl = {"flight": names[i], "players": len(group),
+            fl = {"flight": label, "players": len(group),
                   "hcp_range": [min(hcps), max(hcps)] if hcps else None}
             if game == "skins":
                 fl.update(_flight_skins(conn, group))
@@ -7751,6 +7752,231 @@ def _flight_skins(conn, group: list[dict]) -> dict:
             per_player[w["player"]] = per_player.get(w["player"], 0) + 1
     return {"skins": skins, "skin_count": len(skins),
             "per_player": per_player}
+
+
+# ── GG-recorded game results: CTP / Longest Putt / HIO / TEAM Net ──────
+# (v2.36.0, Kerry ruling 2026-07-07): these winners are manually entered
+# into GG post-round, so the portal is the source of record — pull them
+# in rather than compute. Same walk mechanism as import_gg_event_mvps
+# (round selector → per-round tournament links → result tables). Live
+# page recon (s9.17, 2026-07-07): CTP tables are Pos./Player/Details;
+# TEAM Net tables are Pos./Foursome/…/TotalNet with "A + B + C + D TGF
+# <chapter>" team strings. Team rows store the full team string with
+# is_team=1 (no single customer_id — display-only truth capture).
+
+_GG_GAME_PATTERNS = [
+    ("ctp", r"CLOSEST\s+TO\s+(?:THE\s+)?PIN|\bCTP\b"),
+    ("longest_putt", r"LONGEST\s+PUTT"),
+    ("hio", r"HOLE\s*[- ]?\s*IN\s*[- ]?\s*ONE|\bHIO\b"),
+    ("team_net", r"\b(?:TEAM|CART)\s+NET\b"),
+]
+
+
+def _ensure_gg_game_results_tables(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS gg_game_results (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id          INTEGER REFERENCES events(id),
+        event_code        TEXT,
+        gg_round_id       TEXT,
+        gg_tournament_id  TEXT,
+        game              TEXT NOT NULL,
+        game_label        TEXT,
+        customer_id       INTEGER REFERENCES customers(customer_id),
+        player_name       TEXT NOT NULL,
+        is_team           INTEGER NOT NULL DEFAULT 0,
+        chapter           TEXT,
+        position          TEXT,
+        detail            TEXT,
+        purse             REAL,
+        imported_at       TEXT DEFAULT (datetime('now')),
+        UNIQUE (gg_tournament_id, player_name))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS gg_game_results_rounds (
+        gg_round_id  TEXT NOT NULL,
+        host         TEXT NOT NULL,
+        imported_at  TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (gg_round_id, host))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gg_game_results_event "
+                 "ON gg_game_results(event_id, game)")
+
+
+def _game_winners_from_table(table: list) -> list[dict]:
+    """Winner rows from a GG proxies/team result table.
+
+    Returns [{player, chapter, position, detail, purse, is_team}].
+    Winners = rows with purse > 0; if no purse column/values, rows at
+    position 1 (incl. "T1" ties). Blank/notice rows (len mismatch) skip.
+    """
+    if not table or not table[0]:
+        return []
+    head = [(c or "").strip().lower() for c in table[0]]
+
+    def col(*names):
+        for n in names:
+            for i, h in enumerate(head):
+                if n in h:
+                    return i
+        return -1
+
+    pos_i = col("pos")
+    player_i = col("player", "foursome", "team", "twosome", "cart")
+    purse_i = col("purse")
+    detail_i = col("detail")
+    if player_i < 0:
+        return []
+    is_team = 1 if "player" not in head[player_i] else 0
+    rows = []
+    for r in table[1:]:
+        if len(r) != len(head):
+            continue
+        raw = (r[player_i] or "").strip()
+        if not raw:
+            continue
+        m = re.search(r"\s+TGF\s+([A-Za-z .'-]+)$", raw)
+        chapter = m.group(1).strip() if m else None
+        name = raw[:m.start()].strip() if m else raw
+        rows.append({
+            "player": name, "chapter": chapter,
+            "position": (r[pos_i] or "").strip() if pos_i > -1 else "",
+            "detail": (r[detail_i] or "").strip() if detail_i > -1 else None,
+            "purse": _parse_money(r[purse_i]) if purse_i > -1 else 0.0,
+            "is_team": is_team,
+        })
+    winners = [r for r in rows if r["purse"] > 0]
+    if not winners:
+        winners = [r for r in rows
+                   if re.fullmatch(r"t?1\.?", r["position"].lower())]
+    return winners
+
+
+def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
+                           time_budget: float = 42.0) -> dict:
+    """Walk a portal's Event Results rounds and record CTP / Longest
+    Putt / Hole-in-One / TEAM Net winners as GG-recorded truth.
+
+    Same contract as import_gg_event_mvps: widget_url is the
+    tournament_results widget (optionally &round=<id>); already-walked
+    rounds are skipped via gg_game_results_rounds; stops at time_budget
+    seconds — call repeatedly until rounds_left == 0.
+    """
+    from time import monotonic
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    started = monotonic()
+    parts = urlparse(widget_url)
+    host = parts.netloc
+    qs = parse_qs(parts.query)
+    only_round = (qs.pop("round", [None]) or [None])[0]
+    base_url = urlunparse(parts._replace(query=urlencode(qs, doseq=True)))
+
+    def fetch(url):
+        page = fetch_public_page(url, xhr=False)
+        if page["status_code"] != 200:
+            raise RuntimeError(f"GG returned HTTP {page['status_code']} for {url}")
+        return page["html"]
+
+    html = fetch(base_url)
+    sel = re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>', html, re.S)
+    options = re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
+                         sel.group(1) if sel else "", re.S)
+    if only_round:
+        options = [(rid, lbl) for rid, lbl in options if rid == only_round] \
+            or [(only_round, "")]
+
+    result = {"rounds_done": 0, "rounds_skipped": 0, "winners_recorded": 0,
+              "rounds_left": 0, "unresolved_names": [], "notes": []}
+    with _connect(db_path) as conn:
+        _ensure_gg_game_results_tables(conn)
+        done = {r["gg_round_id"] for r in conn.execute(
+            "SELECT gg_round_id FROM gg_game_results_rounds WHERE host = ?",
+            (host,)).fetchall()}
+        code_map = {}
+        for r in conn.execute("SELECT id, item_name FROM events").fetchall():
+            m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
+            if m:
+                code_map.setdefault(m.group(1).lower(), (r["id"], r["item_name"]))
+
+        pending = [(rid, lbl) for rid, lbl in options if rid not in done]
+        for rid, _lbl in pending:
+            if monotonic() - started > time_budget:
+                break
+            round_url = f"{base_url}&round={rid}"
+            struct = parse_page_structure(fetch(round_url), round_url)
+            links = struct.get("links") or []
+            names_blob = " ".join(l.get("text") or "" for l in links)
+            ev_id, ev_code = None, None
+            m = re.search(r"\b([sa]\d+(?:\.\d+)?)\b", names_blob)
+            if m and m.group(1).lower() in code_map:
+                ev_code = m.group(1).lower()
+                ev_id = code_map[ev_code][0]
+            elif "kickoff" in names_blob.lower() and "austin" in host:
+                ev_code = "a18.2"
+                ev_id = code_map.get("a18.2", (None,))[0]
+            for l in links:
+                text = (l.get("text") or "").strip()
+                if "POINTS" in text.upper() or re.search(r"\bMVP\b", text, re.I):
+                    continue
+                game = next((g for g, pat in _GG_GAME_PATTERNS
+                             if re.search(pat, text, re.I)), None)
+                if not game:
+                    continue
+                href = l.get("href") or ""
+                tid_m = re.search(r"/v2tournaments/(\d+)", href)
+                if not tid_m:
+                    continue
+                if href.startswith("/"):
+                    href = f"https://{host}{href}"
+                tstruct = parse_page_structure(fetch(href), href)
+                for table in tstruct.get("tables") or []:
+                    for w in _game_winners_from_table(table):
+                        cid = None
+                        if not w["is_team"]:
+                            cid = _resolve_scoring_player(conn, w["player"])
+                            if cid is None and w["player"] not in result["unresolved_names"]:
+                                result["unresolved_names"].append(w["player"])
+                        conn.execute(
+                            """INSERT INTO gg_game_results
+                                   (event_id, event_code, gg_round_id,
+                                    gg_tournament_id, game, game_label,
+                                    customer_id, player_name, is_team,
+                                    chapter, position, detail, purse)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               ON CONFLICT (gg_tournament_id, player_name)
+                               DO UPDATE SET purse = excluded.purse,
+                                             position = excluded.position,
+                                             detail = excluded.detail,
+                                             customer_id = COALESCE(excluded.customer_id, gg_game_results.customer_id),
+                                             event_id = COALESCE(excluded.event_id, gg_game_results.event_id)""",
+                            (ev_id, ev_code, rid, tid_m.group(1), game, text,
+                             cid, w["player"], w["is_team"], w["chapter"],
+                             w["position"], w["detail"], w["purse"]))
+                        result["winners_recorded"] += 1
+            conn.execute(
+                "INSERT OR IGNORE INTO gg_game_results_rounds (gg_round_id, host) VALUES (?, ?)",
+                (rid, host))
+            conn.commit()
+            result["rounds_done"] += 1
+        result["rounds_skipped"] = len(options) - len(pending)
+        result["rounds_left"] = len(pending) - result["rounds_done"]
+    return result
+
+
+def get_gg_game_results(event_name: str, db_path: str | Path = DB_PATH) -> dict:
+    """GG-recorded winners (CTP/LP/HIO/TEAM Net) for one event."""
+    with _connect(db_path) as conn:
+        _ensure_gg_game_results_tables(conn)
+        ev = conn.execute(
+            "SELECT id, item_name FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        rows = [dict(r) for r in conn.execute(
+            """SELECT game, game_label, player_name, is_team, chapter,
+                      position, detail, purse, customer_id
+               FROM gg_game_results WHERE event_id = ?
+               ORDER BY game, game_label, purse DESC, player_name""",
+            (ev["id"],)).fetchall()]
+        return {"event_name": ev["item_name"], "results": rows}
 
 
 # ── Monthly points races (v2.30.0) ─────────────────────────────────────

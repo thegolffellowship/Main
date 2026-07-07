@@ -452,23 +452,39 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   wrapper) — same Games-tab rules (credited/refunded/transferred/
   rsvp_only out; wd out only when that bundle was credited; child
   add-on payments upgrade the parent).
-- Flights: derived by playing handicap over the game's OWN buyer set
-  (balanced split, low first, spares to earlier flights). The imported
-  `scoring_rounds.flight` label is NOT used for grouping (it reflects
-  whichever GG leaderboard the import walked, not this game's cut
-  lines); it rides along for cross-checking. The matrix flight count is
-  supplied by the Games tab (`?flights=`), which owns matrix amounts —
-  the server only groups and ranks. Ties = golf-style shared positions;
-  the ratified split-combined-places rule applies to the money (UI).
+- Flights: **GG flight labels ONLY** (Kerry ruling, 2026-07-07 —
+  superseded the v2.35.0 handicap-derived fallback). Multi-flight games
+  group by `scoring_rounds.flight`; if any scored entrant lacks a label
+  the game reports `flights_unknown` ("flights pending GG import" in
+  the UI) — the labels arrive when the game's OWN GG leaderboard (e.g.
+  "INDIVIDUAL Net $") is imported, not just ALL Net/ALL Gross. Flights
+  order low→high by average playing handicap so the matrix-named rows
+  align by index. KNOWN LIMIT: scoring_rounds has ONE flight column per
+  round, so games with different cut lines (Ind Net vs Skins) share
+  whichever label was imported last; per-game labels need an import
+  extension (flagged in mailbox game-results-wiring). The matrix flight
+  count is supplied by the Games tab (`?flights=`); a count mismatch
+  returns a warning. Ties = golf-style shared positions; the ratified
+  split-combined-places rule applies to the money (UI).
 - Display-only (Stage 1 shadow discipline): GG stays official; no
   payout-ledger writes.
-- NOT auto-computed (pending Kerry — mailbox topic
-  **game-results-wiring**): CTP / Longest Putt / Hole-in-One (physical
-  contests; proposal: manual winner entry w/ CTP carry-over + HIO
-  accrual), TEAM Net (off-lowest semantics deferred by admin + no
-  team-of-record source; proposal: saved Pairings), Skins ½ Net at <8
-  gross buyers on 9h (half-pop allocation rule unratified — the row
-  shows "manual — ½-net rule pending").
+- **GG-RECORDED games (v2.36.0)** — CTP / Longest Putt / Hole-in-One /
+  TEAM Net winners are manually entered into GG post-round (Kerry,
+  2026-07-07), so the portal is the source of record:
+  `import_gg_game_results(widget_url)` walks the Event Results rounds
+  (same mechanism + time budget as `import_gg_event_mvps`; bridge
+  command `scoring-games-import` on probe_golf_genius) and records
+  winners into `gg_game_results` (purse>0 rows, else position 1/T1;
+  team rows keep the full "A + B + C + D" string with is_team=1 and no
+  single customer_id; CTP Details column captured). Real-page shapes
+  verified 2026-07-07 (s9.17): CTP = Pos./Player/Details, TEAM Net =
+  Pos./Foursome/…/TotalNet. Read path GET /api/events/gg-game-results;
+  the Games tab hydrates 🏆 chips on the Team Net/CTP rows and the HIO
+  banner (Longest Putt winners ride on the CTP rows). For the future
+  untethering, manager or in-round player entry replaces this pull.
+- Still manual: Skins ½ Net at <8 gross buyers on 9h (half-pop
+  allocation rule unratified — the row shows "manual — ½-net rule
+  pending").
 
 ## Next phase (ratified direction, mailbox ids 10-11)
 
