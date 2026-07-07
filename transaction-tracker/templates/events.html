@@ -4151,6 +4151,14 @@
                         const names = cm.winners.map(w => escapeHtml(w.player)).join(" & ");
                         sp.innerHTML = `<span style="color:#059669;font-weight:600;">&#x1F3C6; ${names} (${cm.winners[0].points} pts${cm.split ? ", split" : ""})</span>`;
                     }
+                } else if (sp.dataset.kind === "city-line") {
+                    // City MVP winner beside each TGF MVP event-breakout line (not bold)
+                    const pe = (det.per_event || []).find(e => e.event_name === sp.dataset.lineEvent);
+                    const cm = pe && pe.city_mvp;
+                    if (cm && cm.status === "determined" && cm.winners.length) {
+                        const names = cm.winners.map(w => escapeHtml(w.player)).join(" & ");
+                        sp.innerHTML = `<span style="color:#059669;font-weight:400;font-size:0.9em;">&#x1F3C6; ${names} (${cm.winners[0].points} pts${cm.split ? ", split" : ""})</span>`;
+                    }
                 } else {
                     const t = det.tgf_mvp || {};
                     if (t.status === "determined" && (t.winners || []).length) {
@@ -4205,14 +4213,20 @@
                 if (`${sp.dataset.event}|${sp.dataset.game}|${sp.dataset.flights}` !== key) return;
                 sp.dataset.done = "1";
                 sp.textContent = "";
+                // winner sub-rows render hidden; anything worth showing unhides them
+                const row = sp.closest("tr.games-winner-row");
+                const show = () => { if (row) row.style.removeProperty("display"); };
                 if (!det || det.error || det.status === "no_buyers") return;
                 if (det.status === "awaiting_results") {
                     sp.innerHTML = '<span style="color:var(--text-muted);font-size:0.85em;">awaiting results</span>';
+                    show();
                     return;
                 }
                 if (det.status === "flights_unknown") {
-                    if (sp.dataset.fidx === undefined || sp.dataset.fidx === "" || sp.dataset.fidx === "0")
+                    if (sp.dataset.fidx === undefined || sp.dataset.fidx === "" || sp.dataset.fidx === "0") {
                         sp.innerHTML = '<span style="color:var(--text-muted);font-size:0.85em;" title="Flights come from GG — import this game\'s own GG leaderboard to bring the flight labels in">flights pending GG import</span>';
+                        show();
+                    }
                     return;
                 }
                 if (det.status !== "determined") return;
@@ -4222,28 +4236,36 @@
                 });
                 const awaiting = (det.awaiting || []).length
                     ? ` <span style="color:var(--text-muted);font-size:0.85em;">(${det.awaiting.length} awaiting)</span>` : "";
-                if (sp.dataset.fidx !== undefined && sp.dataset.fidx !== "") {
-                    const fl = (det.flights || [])[Number(sp.dataset.fidx)];
+                if (sp.dataset.game === "individual_net") {
+                    const fl = (det.flights || [])[Number(sp.dataset.fidx || 0)];
                     if (!fl) return;
                     const places = Number(sp.dataset.places || 2);
                     sp.innerHTML = `<span style="color:#059669;font-weight:600;">${_rankText(fl, places)}</span>${awaiting}`;
+                    show();
                 } else if (sp.dataset.game === "skins") {
+                    // per-player dollars: flight pot ÷ skins in flight × count
+                    const pot = Number(sp.dataset.pot || 0);
+                    const nFlights = (det.flights || []).length || 1;
                     const parts = (det.flights || []).map(fl => {
+                        const perSkin = fl.skin_count ? pot / nFlights / fl.skin_count : 0;
                         const holders = Object.entries(fl.per_player || {})
                             .sort((a, b) => b[1] - a[1])
-                            .map(([n, c]) => `${escapeHtml(n)}&times;${c}`).join(" ");
-                        const label = (det.flights || []).length > 1 ? `${escapeHtml(fl.flight)}: ` : "";
-                        return `${label}${holders || "no skins yet"}${fl.skin_count ? ` (${fl.skin_count} skin${fl.skin_count === 1 ? "" : "s"})` : ""}`;
+                            .map(([n, c]) => `${escapeHtml(n)}&times;${c}${perSkin ? ` (${fmt$(Math.round(perSkin * c * 100) / 100)})` : ""}`)
+                            .join(" &middot; ");
+                        const label = nFlights > 1 ? `${escapeHtml(fl.flight)}: ` : "";
+                        return `${label}${holders || "no skins yet"}${fl.skin_count ? ` — ${fl.skin_count} skin${fl.skin_count === 1 ? "" : "s"}` : ""}`;
                     });
-                    sp.innerHTML = `<span style="color:#059669;font-weight:600;">&#x1F3C6; ${parts.join(" &middot; ")}</span>${awaiting}`;
+                    sp.innerHTML = `<span style="color:#059669;font-weight:600;">&#x1F3C6; ${parts.join("<br>")}</span>${awaiting}`;
+                    show();
                 } else {
-                    // one span summarizing every flight (Ind. Gross row)
+                    // Ind. Gross: one sub-row, one line per flight
                     const places = Number(sp.dataset.places || 1);
                     const parts = (det.flights || []).map(fl => {
                         const label = (det.flights || []).length > 1 ? `${escapeHtml(fl.flight)}: ` : "";
                         return `${label}${_rankText(fl, places)}`;
                     });
-                    sp.innerHTML = `<span style="color:#059669;font-weight:600;">${parts.join(" &middot; ")}</span>${awaiting}`;
+                    sp.innerHTML = `<span style="color:#059669;font-weight:600;">${parts.join("<br>")}</span>${awaiting}`;
+                    show();
                 }
             });
         }
@@ -4282,8 +4304,11 @@
                 const win = txt => `<span style="color:#059669;font-weight:600;" title="Recorded in GG">&#x1F3C6; ${txt}</span>`;
                 if (g === "team_net") {
                     const teams = results.filter(r => r.game === "team_net");
-                    if (teams.length)
+                    if (teams.length) {
                         sp.innerHTML = win(teams.map(t => escapeHtml(_teamShort(t.player_name))).join(" &middot; 2nd: "));
+                        const row = sp.closest("tr.games-winner-row");
+                        if (row) row.style.removeProperty("display");
+                    }
                 } else if (g === "hio") {
                     const hio = results.filter(r => r.game === "hio");
                     if (hio.length)
@@ -4355,7 +4380,8 @@
             const teamType = gEvent.teamType || "Team Net";
             if (gEvent.teamTotal !== "NO_EVENT") {
                 inclMWP += numVal(gEvent.teamMWP);
-                html += `<tr><td>${escapeHtml(teamType)} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="team_net"></span></td><td>${fmt$(gEvent.teamTotal) || "—"}</td><td>${fmt$(gEvent.teamMWP) || "—"}</td><td></td><td>${fmt$(gEvent.team1st) || "—"}</td><td>${fmt$(gEvent.team2nd) || "—"}</td><td></td><td></td></tr>`;
+                html += `<tr><td><strong>${escapeHtml(teamType)}</strong></td><td>${fmt$(gEvent.teamTotal) || "—"}</td><td>${fmt$(gEvent.teamMWP) || "—"}</td><td></td><td>${fmt$(gEvent.team1st) || "—"}</td><td>${fmt$(gEvent.team2nd) || "—"}</td><td></td><td></td></tr>`;
+                html += `<tr class="games-row-sub games-winner-row" style="display:none;"><td class="games-indent" colspan="${C}"><span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="team_net"></span></td></tr>`;
             }
 
             const ctps = holes === 18 ? [gEvent.ctp1, gEvent.ctp2, gEvent.ctp3, gEvent.ctp4] : [gEvent.ctp1, gEvent.ctp2];
@@ -4364,7 +4390,7 @@
                     html += `<tr class="games-row-disabled"><td>CTP #${i+1}</td><td colspan="${C-1}">No Game</td></tr>`;
                 } else if (v != null) {
                     inclMWP += numVal(v);
-                    html += `<tr><td>CTP #${i+1} <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="ctp" data-idx="${i}"></span></td><td>${fmt$(v)}</td><td>${fmt$(v)}</td><td></td>${empty4}</tr>`;
+                    html += `<tr><td><strong>CTP #${i+1}</strong> <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="ctp" data-idx="${i}"></span></td><td>${fmt$(v)}</td><td>${fmt$(v)}</td><td></td>${empty4}</tr>`;
                 }
             });
 
@@ -4414,8 +4440,9 @@
                 const fd = netFlightData[i];
                 if (fd.f1 != null && fd.f1 !== "NO_GAME" && fd.f1 !== "NO_EVENT") {
                     const fPlaces = [fd.f1, fd.f2, fd.f3, fd.f4].filter(v => v != null && v !== "NO_GAME" && v !== "NO_EVENT" && numVal(v)).length;
-                    html += `<tr class="games-row-sub"><td class="games-indent">${netFlightNames[i]} <span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="individual_net" data-flights="${netFlights}" data-fidx="${i}" data-places="${fPlaces}"></span></td><td></td><td>${fmt$(fd.f1) || "—"}</td><td></td>`;
+                    html += `<tr class="games-row-sub"><td class="games-indent">${netFlightNames[i]}</td><td></td><td>${fmt$(fd.f1) || "—"}</td><td></td>`;
                     html += `<td>${fmt$(fd.f1) || "—"}</td><td>${fmt$(fd.f2) || "—"}</td><td>${fmt$(fd.f3) || "—"}</td><td>${fmt$(fd.f4) || "—"}</td></tr>`;
+                    html += `<tr class="games-row-sub games-winner-row" style="display:none;"><td class="games-indent" colspan="${C}"><span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="individual_net" data-flights="${netFlights}" data-fidx="${i}" data-places="${fPlaces}"></span></td></tr>`;
                 }
             }
 
@@ -4431,20 +4458,19 @@
                     netMWP += cityVal;
                     const foldNote = (!mvpInfo && tgfVal)
                         ? ' <span style="font-size:0.8em;color:#6366f1;" title="No linked same-day event — TGF MVP money folds into City MVP">(incl. TGF $)</span>' : '';
-                    html += `<tr><td>City MVP${foldNote} <span class="mvp-det" data-event="${ev.item_name}" data-kind="city"></span></td><td>${fmt$(cityVal)}</td><td>${fmt$(cityVal)}</td><td></td>${empty4}</tr>`;
+                    html += `<tr><td><strong>City MVP</strong>${foldNote} <span class="mvp-det" data-event="${ev.item_name}" data-kind="city"></span></td><td>${fmt$(cityVal)}</td><td>${fmt$(cityVal)}</td><td></td>${empty4}</tr>`;
                 }
                 if (tgfVal) {
                     if (mvpInfo) {
                         // Combined TGF MVP — linked same-day events
                         netMWP += mvpInfo.combinedPot;
                         linkedMvpExtra = mvpInfo.combinedPot - mvpInfo.thisEventTgfMVP;
-                        html += `<tr><td><strong>TGF MVP</strong> <span style="font-size:0.8em;color:#6366f1;" title="Combined with same-day events">&#x1F517;</span></td><td>${fmt$(mvpInfo.combinedPot)}</td><td>${fmt$(mvpInfo.combinedPot)}</td><td></td>${empty4}</tr>`;
-                        html += `<tr class="games-row-sub"><td class="games-indent">${ev.course || ev.item_name}</td><td>${fmt$(mvpInfo.thisEventTgfMVP)}</td><td></td><td></td>${empty4}</tr>`;
+                        html += `<tr><td><strong>TGF MVP</strong> <span style="font-size:0.8em;color:#6366f1;" title="Combined with same-day events">&#x1F517;</span> <span class="mvp-det" data-event="${ev.item_name}" data-kind="tgf"></span></td><td>${fmt$(mvpInfo.combinedPot)}</td><td>${fmt$(mvpInfo.combinedPot)}</td><td></td>${empty4}</tr>`;
+                        html += `<tr class="games-row-sub"><td class="games-indent">${ev.course || ev.item_name} <span class="mvp-det" data-event="${ev.item_name}" data-kind="city-line" data-line-event="${escapeHtml(ev.item_name)}"></span></td><td>${fmt$(mvpInfo.thisEventTgfMVP)}</td><td></td><td></td>${empty4}</tr>`;
                         mvpInfo.linked.forEach(le => {
                             const unlinkBtn = currentRole === 'admin' ? ` <span class="mvp-unlink-btn" data-event="${le.event_name}" title="Unlink from combined TGF MVP" style="cursor:pointer;color:#dc2626;font-size:0.75em;">&#x2716;</span>` : '';
-                            html += `<tr class="games-row-sub"><td class="games-indent">${le.course || le.event_name}${unlinkBtn}</td><td>${fmt$(le.tgfMVP)}</td><td></td><td></td>${empty4}</tr>`;
+                            html += `<tr class="games-row-sub"><td class="games-indent">${le.course || le.event_name}${unlinkBtn} <span class="mvp-det" data-event="${ev.item_name}" data-kind="city-line" data-line-event="${escapeHtml(le.event_name)}"></span></td><td>${fmt$(le.tgfMVP)}</td><td></td><td></td>${empty4}</tr>`;
                         });
-                        html += `<tr class="games-row-sub"><td class="games-indent" colspan="4"><span class="mvp-det" data-event="${ev.item_name}" data-kind="tgf" style="color:#6b7280;font-size:0.85em;">Determining winner&hellip;</span></td>${empty4}</tr>`;
                     } else {
                         // No linked same-day event: money already folded into
                         // City MVP above — only surface admin relink buttons
@@ -4486,10 +4512,12 @@
                 const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
                 const skinsMwpVal = numVal(gGross.skinsTotal) / skinsFlights;
                 grossMWP += skinsMwpVal;
-                const skinsDet = grossPC < 8
-                    ? `<span style="color:var(--text-muted);font-size:0.85em;" title="½-net pop allocation rule pending ratification — see mailbox game-results-wiring">manual — ½-net rule pending</span>`
-                    : `<span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="skins" data-flights="${skinsFlights}"></span>`;
-                html += `<tr><td><strong>${skinsLabel}</strong> ${skinsDet}</td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
+                const halfNetNote = grossPC < 8
+                    ? ` <span style="color:var(--text-muted);font-size:0.85em;font-weight:400;" title="½-net pop allocation rule pending ratification — see mailbox game-results-wiring">manual — ½-net rule pending</span>` : "";
+                html += `<tr><td><strong>${skinsLabel}</strong>${halfNetNote}</td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
+                if (grossPC >= 8) {
+                    html += `<tr class="games-row-sub games-winner-row" style="display:none;"><td class="games-indent" colspan="${C}"><span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="skins" data-flights="${skinsFlights}" data-pot="${numVal(gGross.skinsTotal)}"></span></td></tr>`;
+                }
                 // Compute per-skin values on-the-fly: skinsTotal / skinsFlights / N
                 const st = numVal(gGross.skinsTotal);
                 const sf = skinsFlights;
@@ -4512,7 +4540,8 @@
                 if (gGross.grossLow1st) details += `1st: ${fmt$(gGross.grossLow1st)}`;
                 if (gGross.grossLow2nd) details += `, 2nd: ${fmt$(gGross.grossLow2nd)}`;
                 const gPlaces = gGross.grossLow2nd ? 2 : 1;
-                html += `<tr><td><strong>Ind. Gross</strong> <span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="individual_gross" data-flights="${Math.max(1, gFlights)}" data-places="${gPlaces}"></span></td><td>${fmt$(gGross.individualGross)}</td><td>${fmt$(grossIndMWP) || "—"}</td><td>${gFlights}</td><td>${details}</td><td></td><td></td><td></td></tr>`;
+                html += `<tr><td><strong>Ind. Gross</strong></td><td>${fmt$(gGross.individualGross)}</td><td>${fmt$(grossIndMWP) || "—"}</td><td>${gFlights}</td><td>${details}</td><td></td><td></td><td></td></tr>`;
+                html += `<tr class="games-row-sub games-winner-row" style="display:none;"><td class="games-indent" colspan="${C}"><span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="individual_gross" data-flights="${Math.max(1, gFlights)}" data-places="${gPlaces}"></span></td></tr>`;
             } else {
                 html += `<tr class="games-row-disabled"><td>Ind. Gross</td><td colspan="${C-1}">No Game</td></tr>`;
             }

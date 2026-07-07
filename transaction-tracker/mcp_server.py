@@ -1338,6 +1338,9 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-courses              course/tee database listing
       scoring-mvp-import           import_gg_event_mvps(widget_url)
       scoring-games-import         import_gg_game_results(widget_url) — GG-recorded CTP/LP/HIO/TEAM Net winners
+      scoring-flights-import       import_gg_game_flights(widget_url) — per-game flight membership
+      scoring-game-results:<event>|<game>|<flights>  shadow-computed winners for one game
+      scoring-gg-results:<event>   GG-recorded winners for one event
     """
     if not extract.startswith("scoring-"):
         return None
@@ -1372,6 +1375,22 @@ def _scoring_dispatch(url: str, extract: str):
             # GG-recorded CTP / Longest Putt / HIO / TEAM Net winners;
             # same widget-url contract + time budget as scoring-mvp-import
             return json.dumps(db.import_gg_game_results(url), indent=2)
+        if cmd == "scoring-flights-import":
+            # Per-game flight membership from each flighted game's own GG
+            # leaderboard (Ind Net / Ind Gross / Skins); widget-url contract,
+            # time-budgeted — call repeatedly until rounds_left == 0
+            return json.dumps(db.import_gg_game_flights(url), indent=2)
+        if cmd == "scoring-game-results":
+            # Verify the shadow-computed winners for one event+game:
+            # "scoring-game-results:<event>|<game>|<flights>"
+            ev, _, rest = arg.partition("|")
+            game, _, fl = rest.partition("|")
+            return json.dumps(db.determine_event_game_results(
+                ev.strip(), game.strip() or "individual_net",
+                flights=int(fl or 1)), indent=2)
+        if cmd == "scoring-gg-results":
+            # GG-recorded winners (CTP/LP/HIO/TEAM Net) for one event
+            return json.dumps(db.get_gg_game_results(arg), indent=2)
         if cmd == "scoring-portal-link":
             tok = db.make_portal_token(int(arg))
             if not tok:

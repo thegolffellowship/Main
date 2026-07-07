@@ -7682,22 +7682,49 @@ def determine_event_game_results(event_name: str, game: str,
             binfo["buyers"][cid] for cid in binfo["buyers"]
             if cid not in {e["customer_id"] for e in scored})
 
-        # GG flight labels ONLY (Kerry, 2026-07-07). Single-flight games
-        # need no labels; multi-flight games without labels on every
-        # scored entrant can't be grouped — the labels arrive when the
-        # game's own GG leaderboard is imported.
+        # GG flight labels ONLY (Kerry, 2026-07-07). Preferred source:
+        # gg_game_flights — THIS game's own cut lines, captured from the
+        # game's GG leaderboard (flights differ per game, so the single
+        # scoring_rounds.flight label is only a legacy fallback).
+        # Single-flight games need no labels; multi-flight games without
+        # a label on every scored entrant can't be grouped.
+        _ensure_gg_game_flights_tables(conn)
+        game_flights = {}
+        for r in conn.execute(
+                "SELECT customer_id, player_name, flight_label "
+                "FROM gg_game_flights WHERE event_id = ? AND game = ?",
+                (ev["id"], game)).fetchall():
+            if r["customer_id"]:
+                game_flights[("cid", r["customer_id"])] = r["flight_label"]
+            game_flights[("name", (r["player_name"] or "").lower())] = \
+                r["flight_label"]
+        for e in entrants:
+            label = (game_flights.get(("cid", e["customer_id"]))
+                     or game_flights.get(("name", e["player"].lower())))
+            if label:
+                e["game_flight"] = label
+        out["flight_source"] = ("gg_game_flights" if game_flights
+                                else "scoring_rounds")
+
+        def _label(e):
+            # Never mix sources within one game: if per-game flights exist,
+            # an entrant absent from them is genuinely unplaced (different
+            # games cut differently — the legacy label would be wrong).
+            if game_flights:
+                return (e.get("game_flight") or "").strip()
+            return (e["gg_flight"] or "").strip()
+
         if flights <= 1:
             flight_groups = [("Field", scored)]
         else:
-            missing = sorted(e["player"] for e in scored
-                             if not (e["gg_flight"] or "").strip())
+            missing = sorted(e["player"] for e in scored if not _label(e))
             if missing:
                 out["status"] = "flights_unknown"
                 out["missing_flight_labels"] = missing
                 return out
             by_label: dict = {}
             for e in scored:
-                by_label.setdefault(e["gg_flight"].strip(), []).append(e)
+                by_label.setdefault(_label(e), []).append(e)
 
             def _avg_hcp(group):
                 vals = [e["playing_handicap"] for e in group
@@ -7953,6 +7980,173 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                         result["winners_recorded"] += 1
             conn.execute(
                 "INSERT OR IGNORE INTO gg_game_results_rounds (gg_round_id, host) VALUES (?, ?)",
+                (rid, host))
+            conn.commit()
+            result["rounds_done"] += 1
+        result["rounds_skipped"] = len(options) - len(pending)
+        result["rounds_left"] = len(pending) - result["rounds_done"]
+    return result
+
+
+# ── Per-game flights (v2.37.0, Kerry design ruling 2026-07-07) ─────────
+# Flights vary per game (Net, Gross, and Skins cut differently), so a
+# player's flight is a property of (game, event), NOT of their round —
+# scoring_rounds.flight (one label per round, last-import-wins) stays
+# only as a legacy fallback. gg_game_flights holds "Joe Smith is in
+# flight X for THIS game": captured by walking each flighted game's own
+# GG tournament page, whose per-player details fragments carry the
+# "Flight …" section label (the same parse the scorecard importer uses).
+
+_GG_FLIGHT_GAME_PATTERNS = [
+    ("individual_net", r"INDIVIDUAL\s+NET"),
+    ("individual_gross", r"INDIVIDUAL\s+GROSS"),
+    ("skins", r"\bSKINS\b"),
+]
+
+
+def _ensure_gg_game_flights_tables(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS gg_game_flights (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id          INTEGER REFERENCES events(id),
+        event_code        TEXT,
+        gg_round_id       TEXT,
+        gg_tournament_id  TEXT NOT NULL,
+        game              TEXT NOT NULL,
+        flight_label      TEXT NOT NULL,
+        customer_id       INTEGER REFERENCES customers(customer_id),
+        player_name       TEXT NOT NULL,
+        imported_at       TEXT DEFAULT (datetime('now')),
+        UNIQUE (gg_tournament_id, player_name))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS gg_game_flights_rounds (
+        gg_round_id  TEXT NOT NULL,
+        host         TEXT NOT NULL,
+        imported_at  TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (gg_round_id, host))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gg_game_flights_event "
+                 "ON gg_game_flights(event_id, game)")
+
+
+def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
+                           time_budget: float = 42.0) -> dict:
+    """Walk a portal's rounds and capture per-game flight membership.
+
+    For every flighted-game leaderboard (Individual Net / Individual
+    Gross / Skins) in each round, fetch the per-player details fragments
+    and record (game, flight_label, player). Unflighted tournaments
+    (fragments carry no Flight section) record nothing — single-flight
+    games don't need labels. Same contract as the other portal walks:
+    time-budgeted, per-round dedup via gg_game_flights_rounds, call
+    repeatedly until rounds_left == 0.
+    """
+    from time import monotonic
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    from golf_genius_sync import (fetch_public_page, parse_page_structure,
+                                  parse_tournament_aggregates,
+                                  parse_scorecard_details, _unwrap_js_string)
+
+    started = monotonic()
+    parts = urlparse(widget_url)
+    host = parts.netloc
+    qs = parse_qs(parts.query)
+    only_round = (qs.pop("round", [None]) or [None])[0]
+    base_url = urlunparse(parts._replace(query=urlencode(qs, doseq=True)))
+
+    def fetch(url, xhr=False):
+        page = fetch_public_page(url, xhr=xhr)
+        if page["status_code"] != 200:
+            raise RuntimeError(f"GG returned HTTP {page['status_code']} for {url}")
+        return page["html"]
+
+    html = fetch(base_url)
+    sel = re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>', html, re.S)
+    options = re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
+                         sel.group(1) if sel else "", re.S)
+    if only_round:
+        options = [(rid, lbl) for rid, lbl in options if rid == only_round] \
+            or [(only_round, "")]
+
+    result = {"rounds_done": 0, "rounds_skipped": 0, "flights_recorded": 0,
+              "rounds_left": 0, "per_game": {}, "unresolved_names": []}
+    with _connect(db_path) as conn:
+        _ensure_gg_game_flights_tables(conn)
+        done = {r["gg_round_id"] for r in conn.execute(
+            "SELECT gg_round_id FROM gg_game_flights_rounds WHERE host = ?",
+            (host,)).fetchall()}
+        code_map = {}
+        for r in conn.execute("SELECT id, item_name FROM events").fetchall():
+            m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
+            if m:
+                code_map.setdefault(m.group(1).lower(), (r["id"], r["item_name"]))
+
+        pending = [(rid, lbl) for rid, lbl in options if rid not in done]
+        out_of_time = False
+        for rid, _lbl in pending:
+            if monotonic() - started > time_budget:
+                break
+            round_url = f"{base_url}&round={rid}"
+            struct = parse_page_structure(fetch(round_url), round_url)
+            links = struct.get("links") or []
+            names_blob = " ".join(l.get("text") or "" for l in links)
+            ev_id, ev_code = None, None
+            m = re.search(r"\b([sa]\d+(?:\.\d+)?)\b", names_blob)
+            if m and m.group(1).lower() in code_map:
+                ev_code = m.group(1).lower()
+                ev_id = code_map[ev_code][0]
+            for l in links:
+                text = (l.get("text") or "").strip()
+                if "POINTS" in text.upper() or re.search(r"\bMVP\b|\bALL\b", text, re.I):
+                    continue
+                game = next((g for g, pat in _GG_FLIGHT_GAME_PATTERNS
+                             if re.search(pat, text, re.I)), None)
+                if not game:
+                    continue
+                href = l.get("href") or ""
+                tid_m = re.search(r"/v2tournaments/(\d+)", href)
+                if not tid_m:
+                    continue
+                if href.startswith("/"):
+                    href = f"https://{host}{href}"
+                page_html = fetch(href)
+                for agg in parse_tournament_aggregates(page_html):
+                    if monotonic() - started > time_budget:
+                        out_of_time = True
+                        break
+                    frag = _unwrap_js_string(
+                        fetch(f"https://{host}/tournaments2/details/{agg}",
+                              xhr=True))
+                    if not frag:
+                        continue
+                    parsed = parse_scorecard_details(frag)
+                    if not parsed["flight"]:
+                        continue        # unflighted tournament — no labels
+                    for p in parsed["players"]:
+                        if not p.get("player_name"):
+                            continue
+                        cid = _resolve_scoring_player(conn, p["player_name"])
+                        if cid is None and p["player_name"] not in result["unresolved_names"]:
+                            result["unresolved_names"].append(p["player_name"])
+                        conn.execute(
+                            """INSERT INTO gg_game_flights
+                                   (event_id, event_code, gg_round_id,
+                                    gg_tournament_id, game, flight_label,
+                                    customer_id, player_name)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                               ON CONFLICT (gg_tournament_id, player_name)
+                               DO UPDATE SET flight_label = excluded.flight_label,
+                                             customer_id = COALESCE(excluded.customer_id, gg_game_flights.customer_id),
+                                             event_id = COALESCE(excluded.event_id, gg_game_flights.event_id)""",
+                            (ev_id, ev_code, rid, tid_m.group(1), game,
+                             parsed["flight"], cid, p["player_name"]))
+                        result["flights_recorded"] += 1
+                        result["per_game"][game] = result["per_game"].get(game, 0) + 1
+                if out_of_time:
+                    break
+            if out_of_time:
+                # do NOT mark the round done — resume here next call
+                conn.commit()
+                break
+            conn.execute(
+                "INSERT OR IGNORE INTO gg_game_flights_rounds (gg_round_id, host) VALUES (?, ?)",
                 (rid, host))
             conn.commit()
             result["rounds_done"] += 1
