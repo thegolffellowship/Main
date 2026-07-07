@@ -1821,6 +1821,25 @@ tr.order-item.order-item-hidden {
     }
     .games-panel-header { font-size: 0.75rem; margin-bottom: 0.35rem; padding-bottom: 0.25rem; }
     .games-table { font-size: 0.7rem; min-width: 420px; }
+    /* Winner chips (🏆 hydrated .mvp-det/.game-det/.gg-det spans) drop to
+       their own line under the game label and may wrap — overriding the
+       global `tbody td { white-space: nowrap }` — so long names never
+       stretch the Game column and shove the money columns off screen. */
+    .games-table td:first-child {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        max-width: 52vw;
+    }
+    .games-table .mvp-det,
+    .games-table .game-det,
+    .games-table .gg-det {
+        display: block;
+        font-size: 0.94em;
+        line-height: 1.35;
+        margin-top: 0.12rem;
+    }
+    .hole-in-one-banner { white-space: normal; }
+    .hole-in-one-banner .gg-det { display: block; }
     .games-table th,
     .games-table thead th,
     .games-table td { padding: 0.2rem 0.25rem; font-size: 0.68rem; }

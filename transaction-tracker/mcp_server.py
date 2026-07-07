@@ -1336,6 +1336,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-mvp-import           import_gg_event_mvps(widget_url)
+      scoring-games-import         import_gg_game_results(widget_url) — GG-recorded CTP/LP/HIO/TEAM Net winners
     """
     if not extract.startswith("scoring-"):
         return None
@@ -1366,6 +1368,10 @@ def _scoring_dispatch(url: str, extract: str):
             # url = tournament_results widget (optionally &round=<id>);
             # time-budgeted — call repeatedly until rounds_left == 0
             return json.dumps(db.import_gg_event_mvps(url), indent=2)
+        if cmd == "scoring-games-import":
+            # GG-recorded CTP / Longest Putt / HIO / TEAM Net winners;
+            # same widget-url contract + time budget as scoring-mvp-import
+            return json.dumps(db.import_gg_game_results(url), indent=2)
         if cmd == "scoring-portal-link":
             tok = db.make_portal_token(int(arg))
             if not tok:

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.35.1";
+window.TGF_VERSION = "2.36.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.36.0",
+    date: "2026-07-07",
+    changes: [
+      "Kerry's game-results rulings applied (screenshot answers to mailbox id 25). FLIGHT RULE: flights now come from GG ONLY -- multi-flight games group by the imported scoring_rounds.flight labels (ordered low-to-high by average playing handicap so the matrix-named rows align) and the v2.35.0 handicap-derived fallback is removed; games whose scored entrants lack labels show 'flights pending GG import' (the labels arrive when the game's own GG leaderboard is imported, not just ALL Net/ALL Gross). Known limit flagged: scoring_rounds holds one flight label per round, so games with different cut lines share whichever import ran last -- per-game labels queued as an import extension.",
+      "GG-RECORDED WINNERS: CTP / Longest Putt / Hole-in-One / TEAM Net are manually entered into GG post-round, so the portal is the source of record. New import_gg_game_results(widget_url) walks the Event Results rounds exactly like the MVP importer (time-budgeted, per-round dedup, bridge command scoring-games-import on probe_golf_genius) and records winners into the new gg_game_results table (purse>0 rows, else position 1/T1 ties; team rows keep the full 'A + B + C + D' string with is_team=1; CTP feet-and-inches Details captured). Table shapes verified against the LIVE s9.17 round (CTP = Pos./Player/Details, TEAM Net = Pos./Foursome/TotalNet). GET /api/events/gg-game-results serves them; the Games tab hydrates trophy chips on the Team Net and CTP rows and the Hole-in-One banner (Longest Putt winners ride on the CTP rows; team names shorten to surnames).",
+      "MOBILE PRESENTATION: on phones the winner chips (MVP + computed + GG-recorded) drop to their own line under the game label and are allowed to wrap -- overriding the global tbody nowrap that would otherwise let long names stretch the Game column and shove the money columns off screen. Game-label cells cap at ~half the viewport, tighter cell padding, and the Hole-in-One banner wraps. All inside the existing 768px games-panel media block so there is one mobile breakpoint, with the panel's horizontal scroll preserved for the money columns.",
+    ],
+  },
   {
     version: "2.35.1",
     date: "2026-07-07",

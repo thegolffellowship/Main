@@ -5541,6 +5541,23 @@ def api_event_game_results():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/gg-game-results")
+@require_role("manager")
+def api_gg_game_results():
+    """GG-RECORDED winners for one event (CTP / Longest Putt / HIO /
+    TEAM Net — manually entered into GG post-round; the portal is the
+    source of record, pulled by import_gg_game_results)."""
+    event = (request.args.get("event") or "").strip()
+    if not event:
+        return jsonify({"error": "event parameter required"}), 400
+    try:
+        from email_parser.database import get_gg_game_results
+        return jsonify(get_gg_game_results(event))
+    except Exception as e:
+        logger.exception("GG game results read failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/orphaned-items")
 def api_orphaned_items():
     """Return items whose item_name doesn't match any event."""
