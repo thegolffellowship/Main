@@ -5252,6 +5252,22 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception:
             logger.exception("Match Play template seed failed (non-fatal)")
 
+        # ── Customer payment methods (v2.38.0) ───────────────────────────
+        # How each customer prefers to be PAID (prize payouts). Default is
+        # Venmo via customers.venmo_username; these columns cover the
+        # exceptions (PayPal / Cash App / Zelle) so the Payouts tab can
+        # prepare the right payment link per person.
+        for _col in ("payment_method", "payment_handle"):
+            try:
+                conn.execute(f"ALTER TABLE customers ADD COLUMN {_col} TEXT")
+            except sqlite3.OperationalError:
+                pass
+        conn.commit()
+        try:
+            _seed_customer_payment_methods(conn)
+        except Exception:
+            logger.exception("Payment-method seed failed (non-fatal)")
+
         logger.info("Database initialized at %s", db_path or DB_PATH)
 
 
@@ -29155,6 +29171,37 @@ def _resolve_customer_for_payout(conn: sqlite3.Connection, name: str) -> int:
     return new_cid
 
 
+def _seed_customer_payment_methods(conn: sqlite3.Connection) -> None:
+    """Boot seed (idempotent): non-Venmo payment methods Kerry named
+    (2026-07-07). Only sets payment_method when it's empty — an admin
+    edit always wins. Handles stay NULL until supplied (the Payouts tab
+    shows 'add handle' until then); Zelle uses the member's known
+    phone/email at pay time, no deep link exists."""
+    wanted = [
+        ("Don", "Sharitz", "paypal"),
+        ("Brian", "Thompson", "cashapp"),
+        ("Gus", "Vasquez", "zelle"),
+        ("Michelle", "DelCarmen", "zelle"),
+        ("Michelle", "Del Carmen", "zelle"),   # name-spacing variant
+    ]
+    for first, last, method in wanted:
+        rows = conn.execute(
+            "SELECT customer_id, payment_method FROM customers "
+            "WHERE LOWER(first_name) = LOWER(?) AND LOWER(REPLACE(last_name, ' ', '')) = LOWER(REPLACE(?, ' ', ''))",
+            (first, last)).fetchall()
+        if len(rows) != 1:
+            if len(rows) > 1:
+                logger.info("Payment-method seed: '%s %s' ambiguous (%d) — skipping",
+                            first, last, len(rows))
+            continue
+        if rows[0]["payment_method"]:
+            continue
+        conn.execute("UPDATE customers SET payment_method = ? WHERE customer_id = ?",
+                     (method, rows[0]["customer_id"]))
+        logger.info("Payment-method seed: %s %s -> %s", first, last, method)
+    conn.commit()
+
+
 def get_tgf_data(db_path=None):
     """Return all customers with payouts and events with payouts.
 
@@ -29165,7 +29212,8 @@ def get_tgf_data(db_path=None):
         customers = [dict(r) for r in conn.execute(
             """SELECT DISTINCT c.customer_id as id,
                       (c.first_name || ' ' || c.last_name) as name,
-                      c.venmo_username, c.chapter
+                      c.venmo_username, c.payment_method, c.payment_handle,
+                      c.chapter
                FROM customers c
                JOIN tgf_payouts p ON p.customer_id = c.customer_id
                ORDER BY c.last_name, c.first_name"""
@@ -29206,7 +29254,7 @@ def get_tgf_data(db_path=None):
         for row in conn.execute(
             """SELECT c.customer_id as id,
                       (c.first_name || ' ' || c.last_name) as name,
-                      c.venmo_username,
+                      c.venmo_username, c.payment_method, c.payment_handle,
                       c.chapter,
                       COALESCE(SUM(p.amount), 0) as total_winnings,
                       COUNT(DISTINCT p.event_id) as events_played
@@ -29270,6 +29318,79 @@ def add_tgf_event(data: dict, db_path=None) -> dict:
             "payouts_added": len(data.get("payouts", [])),
             "matched": matched,
         }
+
+
+def record_event_game_payouts(event_name: str, payouts: list,
+                              force: bool = False, db_path=None) -> dict:
+    """Record the Games-tab winners as PAYOUTS-tab rows (v2.38.0).
+
+    payouts: [{golferName, category, amount, description}] assembled by
+    the Games tab from the determined winners (computed + GG-recorded;
+    team payouts arrive pre-split per member so every row ties to a
+    customer — Kerry: payouts tying to Customers is non-negotiable).
+
+    Finds or creates the tgf_events row for the tracker event (matched
+    by event code). Rows are stamped description 'auto: …'; re-recording
+    requires force=True, which first removes the previous auto rows —
+    deleting their PENDING ledger entries but never a matched real Venmo
+    transaction. Inserting delegates to import_tgf_payouts so the
+    customer resolution + Venmo reconciliation + aggregates all reuse
+    the proven path.
+    """
+    if not payouts:
+        return {"error": "No payouts provided"}
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        ev = dict(ev)
+        m = _GG_EVENT_CODE_COMPOUND_RE.match((ev["item_name"] or "").strip())
+        code = m.group(1).lower() if m else ev["item_name"].strip().lower()
+
+        trow = conn.execute(
+            "SELECT id FROM tgf_events WHERE LOWER(code) = ?", (code,)
+        ).fetchone()
+        if trow:
+            tgf_event_id = trow["id"]
+        else:
+            cur = conn.execute(
+                """INSERT INTO tgf_events (code, name, event_date, course, chapter)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (code, ev["item_name"], ev.get("event_date") or "",
+                 ev.get("course"), ev.get("chapter")))
+            tgf_event_id = cur.lastrowid
+
+        existing_auto = conn.execute(
+            "SELECT id, acct_transaction_id FROM tgf_payouts "
+            "WHERE event_id = ? AND description LIKE 'auto:%'",
+            (tgf_event_id,)).fetchall()
+        if existing_auto and not force:
+            return {"error": f"{len(existing_auto)} auto-recorded payout(s) "
+                             "already exist for this event — re-recording "
+                             "replaces them.",
+                    "needs_force": True}
+        removed = 0
+        for r in existing_auto:
+            if r["acct_transaction_id"]:
+                txn = conn.execute(
+                    "SELECT id, source FROM acct_transactions WHERE id = ?",
+                    (r["acct_transaction_id"],)).fetchone()
+                if txn and txn["source"] == "pending":
+                    conn.execute("DELETE FROM acct_transactions WHERE id = ?",
+                                 (txn["id"],))
+            conn.execute("DELETE FROM tgf_payouts WHERE id = ?", (r["id"],))
+            removed += 1
+        conn.commit()
+
+    stamped = [{**p, "description": "auto: " + (p.get("description") or "")}
+               for p in payouts]
+    result = import_tgf_payouts(tgf_event_id, stamped, db_path=db_path)
+    if isinstance(result, dict) and not result.get("error"):
+        result["replaced"] = removed
+        result["tgf_event_code"] = code
+    return result
 
 
 def import_tgf_payouts(event_id: int, payouts: list, db_path=None) -> dict:

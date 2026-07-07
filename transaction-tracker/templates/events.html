@@ -4336,6 +4336,205 @@
         }
     }
 
+    // ═══════ RECORD PAYOUTS (v2.38.0) ═══════
+    // Assembles the DETERMINED winners shown on the Games tab into
+    // tgf_payouts rows (PAYOUTS tab) with exact-cent tie splits. Team
+    // payouts are split per member so every row ties to a customer.
+    function _splitCents(totalCents, ways) {
+        const base = Math.floor(totalCents / ways), spare = totalCents - base * ways;
+        return Array.from({length: ways}, (_, i) => base + (i < spare ? 1 : 0));
+    }
+    function _placeSplitRows(ranking, placeAmounts, category, label) {
+        // golf tie rule: tied players split the combined money of the
+        // places they jointly occupy; places beyond the paid ladder pay 0
+        const rows = [];
+        const byPos = {};
+        (ranking || []).forEach(r => { (byPos[r.position] = byPos[r.position] || []).push(r); });
+        Object.keys(byPos).map(Number).sort((a, b) => a - b).forEach(pos => {
+            const grp = byPos[pos];
+            const cents = _splitCents(
+                placeAmounts.slice(pos - 1, pos - 1 + grp.length)
+                    .reduce((s, v) => s + Math.round((v || 0) * 100), 0),
+                grp.length);
+            grp.forEach((r, i) => {
+                if (cents[i] > 0) rows.push({
+                    golferName: r.player, category,
+                    amount: cents[i] / 100,
+                    description: `${label} ${pos === 1 ? "1st" : pos + _ordSuffix(pos)}${grp.length > 1 ? " (T)" : ""}`,
+                });
+            });
+        });
+        return rows;
+    }
+    function _ordSuffix(n) { return n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"; }
+
+    function assembleGamePayouts(ev) {
+        const holes = extractHolesType(ev.item_name, ev.format);
+        const matrix = holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18;
+        const registrants = getRegistrants(ev.item_name);
+        const stats = computeGameStats(registrants, ev.item_name);
+        const gEvent = matrix[String(stats.players)];
+        const gNet = matrix[String(stats.net)];
+        const gGross = matrix[String(stats.gross)];
+        const rows = [], notes = [];
+        const num = v => (v == null || v === "NO_GAME" || v === "NO_EVENT") ? 0 : Number(v) || 0;
+
+        // GG-recorded: Team Net (split per member), CTP / Longest Putt
+        const gg = _ggDetCache[ev.item_name];
+        const ggRows = (gg && gg.results) || [];
+        if (gEvent && gEvent.teamTotal !== "NO_EVENT") {
+            const teamAmts = [num(gEvent.team1st), num(gEvent.team2nd)].filter(v => v > 0);
+            const teams = ggRows.filter(r => r.game === "team_net");
+            teams.forEach((t, i) => {
+                if (i >= teamAmts.length) return;
+                const members = t.player_name.split("+").map(s => s.trim())
+                    .filter(m => m && !/^Bl[\[A-Z]/.test(m));   // blind draws excluded
+                if (!members.length) return;
+                const cents = _splitCents(Math.round(teamAmts[i] * 100), members.length);
+                members.forEach((m, j) => rows.push({
+                    golferName: m, category: "team_net", amount: cents[j] / 100,
+                    description: `${gEvent.teamType || "Team Net"} ${i === 0 ? "1st" : "2nd"} (team split)`,
+                }));
+                if (t.player_name.includes("Bl")) notes.push(`Team ${i + 1}: blind-draw member excluded from the split`);
+            });
+            if (!teams.length) notes.push("Team Net: no GG-recorded winner yet — skipped");
+        }
+        const proxies = ggRows.filter(r => r.game === "ctp")
+            .concat(ggRows.filter(r => r.game === "longest_putt"));
+        const ctpVals = (holes === 18
+            ? [gEvent && gEvent.ctp1, gEvent && gEvent.ctp2, gEvent && gEvent.ctp3, gEvent && gEvent.ctp4]
+            : [gEvent && gEvent.ctp1, gEvent && gEvent.ctp2]).map(num).filter(v => v > 0);
+        proxies.forEach((p, i) => {
+            const amt = ctpVals[Math.min(i, ctpVals.length - 1)] || 0;
+            if (amt > 0) rows.push({
+                golferName: p.player_name,
+                category: p.game === "longest_putt" ? "longest_putt" : "ctp",
+                amount: amt,
+                description: `${p.game === "longest_putt" ? "Longest Putt" : "CTP"} ${p.game_label || ""}`.trim(),
+            });
+        });
+        if (!proxies.length && ctpVals.length) notes.push("CTP: no GG-recorded winners yet — skipped");
+
+        // MVP (computed): City on this event; TGF only when linked (combined
+        // pot is recorded ONCE, from whichever event you click — don't
+        // record it again from the linked event's tab)
+        const det = _mvpDetCache[ev.item_name];
+        const tgfVal = num(gNet && gNet.tgfMVP) || num(gNet && gNet.mvp);
+        const mvpInfo = tgfVal ? getMvpLinkedEvents(ev) : null;
+        if (det && gNet) {
+            const cityVal = num(gNet.cityMVP) + (mvpInfo ? 0 : tgfVal);
+            const pe = (det.per_event || []).find(e => e.event_name === ev.item_name);
+            const cm = pe && pe.city_mvp;
+            if (cm && cm.status === "determined" && cm.winners.length && cityVal > 0) {
+                const cents = _splitCents(Math.round(cityVal * 100), cm.winners.length);
+                cm.winners.forEach((w, i) => rows.push({
+                    golferName: w.player, category: "mvp", amount: cents[i] / 100,
+                    description: `City MVP${cm.split ? " (split)" : ""}`,
+                }));
+            }
+            const t = det.tgf_mvp || {};
+            if (mvpInfo && t.status === "determined" && (t.winners || []).length) {
+                const cents = _splitCents(Math.round(mvpInfo.combinedPot * 100), t.winners.length);
+                t.winners.forEach((w, i) => rows.push({
+                    golferName: w.player, category: "tgf_mvp", amount: cents[i] / 100,
+                    description: `TGF MVP (combined same-day pot)${t.split ? " (split)" : ""}`,
+                }));
+                notes.push("TGF MVP recorded here — do NOT record it again from the linked event");
+            }
+        }
+
+        // Individual Net (per flight place ladder w/ tie splits)
+        if (gNet && stats.net >= 2) {
+            const netFlights = gNet.netFlights ? parseInt(gNet.netFlights) : 1;
+            const d = _gameDetCache[`${ev.item_name}|individual_net|${netFlights}`];
+            if (d && d.status === "determined") {
+                const flightData = holes === 18
+                    ? [[gNet.netLow1st, gNet.netLow2nd, gNet.netLow3rd, gNet.netLow4th],
+                       [gNet.netHigh1st, gNet.netHigh2nd, gNet.netHigh3rd, gNet.netHigh4th],
+                       [gNet.netMid1st, gNet.netMid2nd, gNet.netMid3rd, gNet.netMid4th],
+                       [gNet.net4th1st, gNet.net4th2nd, gNet.net4th3rd, gNet.net4th4th]]
+                    : [[gNet.netLow1st, gNet.netLow2nd, gNet.netLow3rd],
+                       [gNet.netHigh1st, gNet.netHigh2nd, gNet.netHigh3rd]];
+                (d.flights || []).forEach((fl, i) => {
+                    const amts = (flightData[i] || []).map(num);
+                    rows.push(..._placeSplitRows(fl.ranking, amts, "individual_net",
+                        `Ind Net ${escapeHtml(fl.flight)}`));
+                });
+            } else if (num(gNet.individualNet) > 0) {
+                notes.push("Individual Net: results not determined yet — skipped");
+            }
+        }
+
+        // Skins (per flight: pot/flights ÷ skins × count)
+        if (gGross && stats.gross >= 8 && num(gGross.skinsTotal) > 0) {
+            const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
+            const d = _gameDetCache[`${ev.item_name}|skins|${skinsFlights}`];
+            if (d && d.status === "determined") {
+                const nFl = (d.flights || []).length || 1;
+                const flightPotCents = Math.round(num(gGross.skinsTotal) * 100 / nFl);
+                (d.flights || []).forEach(fl => {
+                    if (!fl.skin_count) return;
+                    Object.entries(fl.per_player || {}).forEach(([nm, cnt]) => {
+                        const amt = Math.round(flightPotCents / fl.skin_count * cnt) / 100;
+                        rows.push({ golferName: nm, category: "skins", amount: amt,
+                                    description: `Skins ${escapeHtml(fl.flight)} ×${cnt}` });
+                    });
+                });
+            } else {
+                notes.push("Skins: results not determined yet — skipped");
+            }
+        } else if (gGross && stats.gross > 0 && stats.gross < 8 && num(gGross.skinsTotal) > 0) {
+            notes.push("Skins ½ Net: rule pending — record manually");
+        }
+
+        // Ind. Gross (per flight; winner-take-all or 1st/2nd per matrix)
+        if (gGross && gGross.individualGross && gGross.individualGross !== "NO_GAME" && gGross.individualGross !== "NO_EVENT") {
+            const gFlights = Math.max(1, gGross.grossFlights ? parseInt(gGross.grossFlights) : 1);
+            const d = _gameDetCache[`${ev.item_name}|individual_gross|${gFlights}`];
+            if (d && d.status === "determined") {
+                const amts = [num(gGross.grossLow1st), num(gGross.grossLow2nd)].filter(v => v > 0);
+                (d.flights || []).forEach(fl => {
+                    rows.push(..._placeSplitRows(fl.ranking, amts, "individual_gross",
+                        `Ind Gross ${escapeHtml(fl.flight)}`));
+                });
+            } else {
+                notes.push("Ind. Gross: results not determined yet — skipped");
+            }
+        }
+
+        notes.push("Hole-in-One is an accruing cross-event pot — never auto-recorded");
+        return { rows, notes };
+    }
+
+    async function recordGamePayouts(ev, force = false) {
+        const { rows, notes } = assembleGamePayouts(ev);
+        if (!rows.length) {
+            alert("Nothing to record yet — no determined winners.\n\n" + notes.join("\n"));
+            return;
+        }
+        const total = rows.reduce((s, r) => s + r.amount, 0);
+        if (!force) {
+            const lines = rows.map(r => `${r.golferName} — $${r.amount.toFixed(2)} (${r.description})`);
+            if (!confirm(`Record ${rows.length} payout(s) totaling $${total.toFixed(2)} to the PAYOUTS tab?\n\n${lines.join("\n")}\n\n${notes.join("\n")}`)) return;
+        }
+        const res = await fetch("/api/events/record-game-payouts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ event_name: ev.item_name, payouts: rows, force }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409 && data.needs_force) {
+            if (confirm(data.error + "\n\nReplace them with the current results?"))
+                recordGamePayouts(ev, true);
+            return;
+        }
+        if (!res.ok) { alert(data.error || "Recording failed."); return; }
+        alert(`Recorded ${data.payouts_added} payout(s)` +
+              (data.replaced ? ` (replaced ${data.replaced} previous)` : "") +
+              `.\n${data.matched} matched to existing Venmo payments, ${data.pending} pending.` +
+              `\n\nOpen the PAYOUTS tab (TGF page) for prepared payment links.`);
+    }
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -4360,7 +4559,9 @@
         const empty4 = '<td></td><td></td><td></td><td></td>';
 
         let html = '<div class="games-panel">';
-        html += `<div class="games-panel-header">${holes}-HOLE GAMES &mdash; ${totalPC} Total, ${netPC} Net, ${grossPC} Gross</div>`;
+        const recordBtn = (currentRole === 'admin' || currentRole === 'manager')
+            ? ` <button class="record-payouts-btn" data-event="${escapeHtml(ev.item_name)}" style="float:right;font-size:0.72rem;padding:2px 10px;border-radius:99px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-weight:600;" title="Record the determined winners below into the PAYOUTS tab with prepared payment links">&#x1F4B8; Record Payouts</button>` : '';
+        html += `<div class="games-panel-header">${holes}-HOLE GAMES &mdash; ${totalPC} Total, ${netPC} Net, ${grossPC} Gross${recordBtn}</div>`;
 
         // Hole-in-One pot — standalone display above the games table, not included in event totals
         if (gEvent && gEvent.holeInOne && gEvent.holeInOne !== "NO_EVENT" && gEvent.holeInOne !== "NO_GAME") {
@@ -5803,6 +6004,16 @@
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openAddPaymentModal(btn.dataset.eventName);
+            });
+        });
+
+        // Record Payouts (Games tab -> PAYOUTS tab)
+        container.querySelectorAll(".record-payouts-btn").forEach(btn => {
+            btn.addEventListener("click", e => {
+                e.stopPropagation();
+                const evName = btn.dataset.event;
+                const evObj = allEvents.find(x => x.item_name === evName);
+                if (evObj) recordGamePayouts(evObj);
             });
         });
 

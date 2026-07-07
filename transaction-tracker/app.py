@@ -5541,6 +5541,34 @@ def api_event_game_results():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/record-game-payouts", methods=["POST"])
+@require_role("manager")
+def api_record_game_payouts():
+    """Record the Games tab's determined winners into the PAYOUTS tab
+    (tgf_events/tgf_payouts + ledger reconciliation). Every row ties to
+    a customer via the payout name-resolution cascade; team payouts
+    arrive pre-split per member."""
+    d = request.get_json(silent=True) or {}
+    event = (d.get("event_name") or "").strip()
+    payouts = d.get("payouts") or []
+    if not event or not payouts:
+        return jsonify({"error": "event_name and payouts required"}), 400
+    for p in payouts:
+        if not p.get("golferName") or not isinstance(p.get("amount"), (int, float)):
+            return jsonify({"error": "each payout needs golferName and numeric amount"}), 400
+    try:
+        from email_parser.database import record_event_game_payouts
+        result = record_event_game_payouts(event, payouts,
+                                           force=bool(d.get("force")))
+    except Exception as e:
+        logger.exception("Record game payouts failed")
+        return jsonify({"error": str(e)}), 500
+    status = 200
+    if result.get("error"):
+        status = 409 if result.get("needs_force") else 400
+    return jsonify(result), status
+
+
 @app.route("/api/events/gg-game-results")
 @require_role("manager")
 def api_gg_game_results():

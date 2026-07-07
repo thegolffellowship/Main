@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.37.1";
+window.TGF_VERSION = "2.38.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.38.0",
+    date: "2026-07-07",
+    changes: [
+      "RECORD PAYOUTS (Kerry directive): the Games tab gains a manager-only '💸 Record Payouts' button that assembles every DETERMINED winner into PAYOUTS-tab rows -- City MVP (+the combined TGF MVP pot exactly once, from whichever event's tab you click, with a warning not to record it again from the linked event), Individual Net per-flight place ladders with exact-cent tie splits, Skins per player (flight pot / skins x count), Ind. Gross per flight, GG-recorded TEAM Net split per member (blind-draw fills excluded), and GG-recorded CTP / Longest Putt. Hole-in-One is never auto-recorded (accruing cross-event pot). A confirmation dialog lists every row + total before anything writes.",
+      "Server side record_event_game_payouts() finds-or-creates the tgf_events row by event code and delegates to the proven import_tgf_payouts path, so recorded rows get the full treatment: customer resolution (every payout row carries customer_id -- payouts tie to Customers, per Kerry), automatic matching against existing Venmo prize payments, pending ledger entries for the rest, and event aggregates. Rows are stamped 'auto:'; re-recording asks and then REPLACES the previous auto rows -- their pending ledger entries are deleted but a matched real Venmo transaction is never touched.",
+      "PAYMENT LINKS: customers gain payment_method / payment_handle (admin-editable data; default = Venmo via the existing venmo_username). Boot-seeds Kerry's exceptions: Don Sharitz -> PayPal, Brian Thompson -> Cash App, Gus Vasquez + Michelle DelCarmen -> Zelle (only when the field is empty -- an admin edit always wins). The PAYOUTS tab's pay button is now method-aware: Venmo (blue) / PayPal.me (navy) / Cash App (green) deep links with the amount and 'TGF <event>' note prefilled; Zelle has no deep link so a badge shows the handle + amount and Mark Paid closes it out; missing PayPal/Cash App handles show an 'add handle' badge until supplied.",
+    ],
+  },
   {
     version: "2.37.1",
     date: "2026-07-07",
