@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.38.1";
+window.TGF_VERSION = "2.39.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.39.0",
+    date: "2026-07-07",
+    changes: [
+      "PAYOUT ASSEMBLY MOVED SERVER-SIDE (single source of truth): assemble_event_game_payouts() reads the LIVE prize matrix from app_settings, mirrors the Games tab's player-count rules server-side, and produces the same rows the client showed -- City MVP (18h uses the matrix's capped mvp value; 9h folds TGF money in on single-event days), the combined TGF MVP pot computed across linked same-day events, per-flight Ind Net/Ind Gross ladders with exact-cent tie splits, Skins dollars, GG-recorded Team Net member splits and CTP/Longest Putt. The Games tab's Record Payouts button now previews the server's rows (GET /api/events/game-payouts-preview) and records via the same engine; the v2.38.0 client-side assembly was removed.",
+      "POPULATE ALL EVENTS (Kerry): record_all_event_game_payouts() bulk-records every past event, time-budgeted -- bridge command scoring-record-payouts:ALL (repeat until events_left=0; ':ALL!' also re-records auto rows; ':<event>' does one). Guardrails: events with MANUAL/screenshot-imported payouts are always skipped (never mix -- would double-count the purse; also enforced in record_event_game_payouts itself), already-auto-recorded events skip unless forced, and events with nothing determined are reported, not written.",
+      "FIXES from Kerry's screenshots: tgf_events.code now stores the FULL event name ('s9.15 The Quarry') matching the long-standing convention every consumer keys on -- the TGF sidebar no longer shows a truncated name and the Events page PAYOUTS tab (which matches code === item_name) now finds recorded payouts. Boot repair renames bare-code rows already created (the prod s9.15 row); recording into a legacy bare-code row upgrades it in place. Venmo note no longer duplicates the event name when code == name.",
+    ],
+  },
   {
     version: "2.38.1",
     date: "2026-07-07",

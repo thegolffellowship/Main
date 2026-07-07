@@ -1394,6 +1394,24 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-gg-results":
             # GG-recorded winners (CTP/LP/HIO/TEAM Net) for one event
             return json.dumps(db.get_gg_game_results(arg), indent=2)
+        if cmd == "scoring-record-payouts":
+            # "scoring-record-payouts:<event>" records one event's assembled
+            # winners into the PAYOUTS tab; ":ALL" bulk-populates every past
+            # event (time-budgeted — repeat until events_left == 0; skips
+            # events with manual payouts or already-auto-recorded ones).
+            # ":ALL!" also re-records already-auto-recorded events.
+            if arg.strip().upper().startswith("ALL"):
+                return json.dumps(db.record_all_event_game_payouts(
+                    force=arg.strip().endswith("!")), indent=2)
+            asm = db.assemble_event_game_payouts(arg)
+            if asm.get("error") or not asm.get("rows"):
+                return json.dumps(asm, indent=2)
+            return json.dumps({"assembled": asm,
+                               "result": db.record_event_game_payouts(
+                                   arg, asm["rows"], force=True)}, indent=2)
+        if cmd == "scoring-payouts-preview":
+            # assemble without writing — inspect what would be recorded
+            return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
         if cmd == "scoring-portal-link":
             tok = db.make_portal_token(int(arg))
             if not tok:

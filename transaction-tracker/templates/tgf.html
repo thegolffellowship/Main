@@ -281,7 +281,10 @@
 
         function venmoLink(username, amount, eventCode, eventName) {
             if (!username) return "";
-            const note = encodeURIComponent(`TGF ${eventCode} ${eventName}`);
+            // code is conventionally the full event name — don't repeat it
+            const note = encodeURIComponent(
+                (eventName || "").startsWith(eventCode) || eventCode === eventName
+                    ? `TGF ${eventName}` : `TGF ${eventCode} ${eventName}`);
             return `https://venmo.com/${username}?txn=pay&amount=${amount.toFixed(2)}&note=${note}`;
         }
 

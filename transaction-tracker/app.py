@@ -5551,13 +5551,23 @@ def api_record_game_payouts():
     d = request.get_json(silent=True) or {}
     event = (d.get("event_name") or "").strip()
     payouts = d.get("payouts") or []
-    if not event or not payouts:
-        return jsonify({"error": "event_name and payouts required"}), 400
+    if not event:
+        return jsonify({"error": "event_name required"}), 400
     for p in payouts:
         if not p.get("golferName") or not isinstance(p.get("amount"), (int, float)):
             return jsonify({"error": "each payout needs golferName and numeric amount"}), 400
     try:
-        from email_parser.database import record_event_game_payouts
+        from email_parser.database import (assemble_event_game_payouts,
+                                           record_event_game_payouts)
+        if not payouts:
+            # assemble server-side (the normal path — single source of truth)
+            asm = assemble_event_game_payouts(event)
+            if asm.get("error"):
+                return jsonify(asm), 400
+            payouts = asm["rows"]
+            if not payouts:
+                return jsonify({"error": "nothing determined to record",
+                                "notes": asm.get("notes")}), 400
         result = record_event_game_payouts(event, payouts,
                                            force=bool(d.get("force")))
     except Exception as e:
@@ -5567,6 +5577,22 @@ def api_record_game_payouts():
     if result.get("error"):
         status = 409 if result.get("needs_force") else 400
     return jsonify(result), status
+
+
+@app.route("/api/events/game-payouts-preview")
+@require_role("manager")
+def api_game_payouts_preview():
+    """Server-assembled payout rows for one event (no write) — feeds the
+    Record Payouts confirm dialog."""
+    event = (request.args.get("event") or "").strip()
+    if not event:
+        return jsonify({"error": "event parameter required"}), 400
+    try:
+        from email_parser.database import assemble_event_game_payouts
+        return jsonify(assemble_event_game_payouts(event))
+    except Exception as e:
+        logger.exception("Payout preview failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/events/gg-game-results")

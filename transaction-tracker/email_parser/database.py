@@ -5267,6 +5267,10 @@ def init_db(db_path: str | Path | None = None) -> None:
             _seed_customer_payment_methods(conn)
         except Exception:
             logger.exception("Payment-method seed failed (non-fatal)")
+        try:
+            _repair_tgf_event_bare_codes(conn)
+        except Exception:
+            logger.exception("tgf_events code repair failed (non-fatal)")
 
         logger.info("Database initialized at %s", db_path or DB_PATH)
 
@@ -29320,6 +29324,369 @@ def add_tgf_event(data: dict, db_path=None) -> dict:
         }
 
 
+def _repair_tgf_event_bare_codes(conn: sqlite3.Connection) -> None:
+    """Boot repair (idempotent): tgf_events rows created by early v2.38.0
+    with a bare code ("s9.15") get the full event name as code, matching
+    the convention every consumer keys on. Skips when another row already
+    owns the full-name code."""
+    for r in conn.execute(
+            "SELECT id, code, name FROM tgf_events "
+            "WHERE name != code AND code NOT LIKE '% %'").fetchall():
+        if not re.fullmatch(r"[sa]\d+(\.\d+)?", (r["code"] or "").strip(), re.I):
+            continue
+        clash = conn.execute(
+            "SELECT 1 FROM tgf_events WHERE LOWER(code) = ? AND id != ?",
+            ((r["name"] or "").strip().lower(), r["id"])).fetchone()
+        if clash or not (r["name"] or "").strip():
+            continue
+        conn.execute("UPDATE tgf_events SET code = ? WHERE id = ?",
+                     (r["name"].strip(), r["id"]))
+        logger.info("tgf_events code repair: '%s' -> '%s'", r["code"], r["name"])
+    conn.commit()
+
+
+def _load_games_matrix(db_path=None) -> tuple[dict, dict]:
+    """The LIVE side-games prize matrix (9h, 18h): app_settings copy that
+    the Matrix UI edits, falling back to the repo seed (fresh DBs)."""
+    m9 = get_app_setting("games_matrix_9", db_path=db_path)
+    m18 = get_app_setting("games_matrix_18", db_path=db_path)
+    if m9 and m18:
+        return json.loads(m9), json.loads(m18)
+    root = Path(__file__).resolve().parent.parent
+    content = (root / "static" / "js" / "games-matrix.js").read_text()
+    s9 = re.search(r"window\.GAMES_MATRIX_9\s*=\s*(\{.*?\});", content, re.DOTALL)
+    s18 = re.search(r"window\.GAMES_MATRIX_18\s*=\s*(\{.*?\});", content, re.DOTALL)
+    return json.loads(s9.group(1)), json.loads(s18.group(1))
+
+
+def _matrix_num(v) -> float:
+    if v in (None, "", "NO_GAME", "NO_EVENT"):
+        return 0.0
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _event_player_counts(conn, event_name: str) -> dict:
+    """Server-side mirror of the Games tab's computeGameStats: parent
+    items only; credited/refunded/transferred out; rsvp_overrides
+    'not_playing' out; wd rows counted per un-credited bundle; rsvp_only
+    counts toward total only. (Synthetic RSVP-only rows that exist only
+    in Golf Genius — no purchase — are not counted here; they are rare
+    on past events and the Games-tab UI remains the correction path.)"""
+    names = [event_name]
+    names += [r["alias_name"] for r in conn.execute(
+        "SELECT alias_name FROM event_aliases WHERE canonical_event_name = ? COLLATE NOCASE",
+        (event_name,)).fetchall() if r["alias_name"]]
+    ph = ",".join("?" for _ in names)
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT id, parent_item_id, side_games, wd_credits, "
+        f"       COALESCE(transaction_status,'active') AS ts "
+        f"FROM items WHERE LOWER(item_name) IN ({ph})",
+        [n.lower() for n in names]).fetchall()]
+    try:
+        overrides = {r["item_id"] for r in conn.execute(
+            "SELECT item_id FROM rsvp_overrides WHERE event_name = ? COLLATE NOCASE "
+            "AND status = 'not_playing'", (event_name,)).fetchall()}
+    except sqlite3.OperationalError:
+        overrides = set()
+    kids = {}
+    for r in rows:
+        if r["parent_item_id"]:
+            kids.setdefault(str(r["parent_item_id"]), []).append(r)
+    total = net = gross = 0
+    parents = [r for r in rows if not r["parent_item_id"]]
+    not_playing = 0
+    for r in parents:
+        if r["id"] in overrides or r["ts"] in ("credited", "refunded", "transferred"):
+            not_playing += 1
+            continue
+        t = _classify_side_games_type(r["side_games"])
+        has_net = t in ("NET", "BOTH")
+        has_gross = t in ("GROSS", "BOTH")
+        for c in kids.get(str(r["id"]), []):
+            ct = _classify_side_games_type(c["side_games"])
+            has_net = has_net or ct in ("NET", "BOTH")
+            has_gross = has_gross or ct in ("GROSS", "BOTH")
+        if r["ts"] == "wd":
+            try:
+                wd = json.loads(r["wd_credits"] or "{}")
+            except (TypeError, ValueError):
+                wd = {}
+            if "included_games" in wd:
+                not_playing += 1
+            if "net_games" not in wd and has_net:
+                net += 1
+            if "gross_games" not in wd and has_gross:
+                gross += 1
+            continue
+        if r["ts"] == "rsvp_only":
+            continue
+        if has_net:
+            net += 1
+        if has_gross:
+            gross += 1
+    total = len(parents) - not_playing
+    return {"players": total, "net": net, "gross": gross}
+
+
+def _rows_from_place_ladder(ranking: list, amounts: list, category: str,
+                            label: str) -> list[dict]:
+    """Payout rows from a ranked flight + place-money array, golf tie
+    rule (tied players split the combined money of the places they
+    jointly occupy), exact cents."""
+    from email_parser.match_play import split_cents
+    cents = [round(_matrix_num(a) * 100) for a in amounts]
+    by_pos: dict = {}
+    for r in ranking or []:
+        by_pos.setdefault(r["position"], []).append(r)
+    rows = []
+    for pos in sorted(by_pos):
+        grp = by_pos[pos]
+        pool = sum(cents[pos - 1: pos - 1 + len(grp)])
+        if pool <= 0:
+            continue
+        shares = split_cents(pool, len(grp))
+        suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(pos, f"{pos}th")
+        for r, c in zip(grp, shares):
+            if c > 0:
+                rows.append({"golferName": r["player"], "category": category,
+                             "amount": c / 100.0,
+                             "description": f"{label} {suffix}"
+                                            + (" (T)" if len(grp) > 1 else "")})
+    return rows
+
+
+def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
+    """Server-side assembly of every DETERMINED winner for one event into
+    payout rows — the single source of truth behind both the Games tab's
+    Record Payouts button and the bulk populate (bridge command). Uses
+    the LIVE prize matrix for amounts; skips (with a note) anything not
+    yet determined. Returns {rows, notes, counts, holes}."""
+    from email_parser.match_play import split_cents
+    m9, m18 = _load_games_matrix(db_path=db_path)
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        ev = dict(ev)
+        counts = _event_player_counts(conn, ev["item_name"])
+    holes = _event_holes_type(ev["item_name"], ev.get("format"))
+    matrix = m9 if holes == 9 else m18
+    g_event = matrix.get(str(counts["players"])) or {}
+    g_net = matrix.get(str(counts["net"])) or {}
+    g_gross = matrix.get(str(counts["gross"])) or {}
+    rows: list = []
+    notes: list = []
+
+    def _money_split(total: float, winners: list, category: str, desc: str):
+        cents = split_cents(round(total * 100), len(winners))
+        for w, c in zip(winners, cents):
+            if c > 0:
+                rows.append({"golferName": w, "category": category,
+                             "amount": c / 100.0, "description": desc})
+
+    # ── GG-recorded: Team Net (per-member split), CTP / Longest Putt ──
+    gg = get_gg_game_results(ev["item_name"], db_path=db_path)
+    gg_rows = gg.get("results") or []
+    team_amts = [a for a in (_matrix_num(g_event.get("team1st")),
+                             _matrix_num(g_event.get("team2nd"))) if a > 0]
+    teams = [r for r in gg_rows if r["game"] == "team_net"]
+    if team_amts and g_event.get("teamTotal") not in (None, "NO_EVENT"):
+        if not teams:
+            notes.append("Team Net: no GG-recorded winner yet — skipped")
+        for i, t in enumerate(teams):
+            if i >= len(team_amts):
+                break
+            members = [mname.strip() for mname in t["player_name"].split("+")
+                       if mname.strip() and not re.match(r"^Bl[\[A-Z]", mname.strip())]
+            if not members:
+                continue
+            if len(members) < t["player_name"].count("+") + 1:
+                notes.append("Team Net: blind-draw member excluded from the split")
+            _money_split(team_amts[i], members, "team_net",
+                         f"{g_event.get('teamType') or 'Team Net'} "
+                         f"{'1st' if i == 0 else '2nd'} (team split)")
+    proxies = ([r for r in gg_rows if r["game"] == "ctp"]
+               + [r for r in gg_rows if r["game"] == "longest_putt"])
+    ctp_vals = [v for v in (
+        _matrix_num(g_event.get("ctp1")), _matrix_num(g_event.get("ctp2")),
+        _matrix_num(g_event.get("ctp3")), _matrix_num(g_event.get("ctp4")),
+    ) if v > 0]
+    if ctp_vals and not proxies:
+        notes.append("CTP: no GG-recorded winners yet — skipped")
+    for i, p in enumerate(proxies):
+        amt = ctp_vals[min(i, len(ctp_vals) - 1)] if ctp_vals else 0
+        if amt > 0:
+            label = "Longest Putt" if p["game"] == "longest_putt" else "CTP"
+            rows.append({"golferName": p["player_name"],
+                         "category": "longest_putt" if p["game"] == "longest_putt" else "ctp",
+                         "amount": amt,
+                         "description": f"{label} {p.get('game_label') or ''}".strip()})
+
+    # ── MVP (computed): City here; TGF combined pot once per day ──
+    det = determine_tgf_mvp(ev["item_name"], db_path=db_path)
+    if not det.get("error"):
+        per_event = det.get("per_event") or []
+        linked = [e for e in per_event
+                  if e["event_name"].lower() != ev["item_name"].lower()]
+        tgf_val = _matrix_num(g_net.get("tgfMVP")) or _matrix_num(g_net.get("mvp"))
+        my = next((e for e in per_event
+                   if e["event_name"].lower() == ev["item_name"].lower()), None)
+        city_val = _matrix_num(g_net.get("cityMVP")) + (0 if linked else tgf_val)
+        if holes == 18:
+            city_val = _matrix_num(g_net.get("mvp"))
+        cm = my and my.get("city_mvp")
+        if cm and cm.get("status") == "determined" and cm.get("winners") and city_val > 0:
+            _money_split(city_val, [w["player"] for w in cm["winners"]],
+                         "mvp", "City MVP" + (" (split)" if cm.get("split") else ""))
+        elif city_val > 0:
+            notes.append("City MVP: not determined yet — skipped")
+        t = det.get("tgf_mvp") or {}
+        if linked and holes == 9:
+            if t.get("status") == "determined" and t.get("winners"):
+                combined = tgf_val
+                for le in linked:
+                    le_row = m9.get(str(le.get("net_buyers") or 0)) or {}
+                    combined += _matrix_num(le_row.get("tgfMVP")) or _matrix_num(le_row.get("mvp"))
+                if combined > 0:
+                    _money_split(combined, [w["player"] for w in t["winners"]],
+                                 "tgf_mvp", "TGF MVP (combined same-day pot)"
+                                 + (" (split)" if t.get("split") else ""))
+                    notes.append("TGF MVP recorded here — do NOT record it "
+                                 "again from the linked event")
+            elif t.get("status") == "awaiting_results":
+                notes.append("TGF MVP: awaiting linked-event results — skipped")
+
+    # ── Individual Net (per-flight ladders, tie splits) ──
+    net_flights = int(_matrix_num(g_net.get("netFlights")) or 1)
+    if _matrix_num(g_net.get("individualNet")) > 0 and counts["net"] >= 2:
+        d = determine_event_game_results(ev["item_name"], "individual_net",
+                                         flights=net_flights, db_path=db_path)
+        if d.get("status") == "determined":
+            if holes == 18:
+                flight_amounts = [
+                    [g_net.get("netLow1st"), g_net.get("netLow2nd"), g_net.get("netLow3rd"), g_net.get("netLow4th")],
+                    [g_net.get("netHigh1st"), g_net.get("netHigh2nd"), g_net.get("netHigh3rd"), g_net.get("netHigh4th")],
+                    [g_net.get("netMid1st"), g_net.get("netMid2nd"), g_net.get("netMid3rd"), g_net.get("netMid4th")],
+                    [g_net.get("net4th1st"), g_net.get("net4th2nd"), g_net.get("net4th3rd"), g_net.get("net4th4th")],
+                ]
+            else:
+                flight_amounts = [
+                    [g_net.get("netLow1st"), g_net.get("netLow2nd"), g_net.get("netLow3rd")],
+                    [g_net.get("netHigh1st"), g_net.get("netHigh2nd"), g_net.get("netHigh3rd")],
+                ]
+            for i, fl in enumerate(d.get("flights") or []):
+                rows.extend(_rows_from_place_ladder(
+                    fl.get("ranking") or [], flight_amounts[i] if i < len(flight_amounts) else [],
+                    "individual_net", f"Ind Net {fl['flight']}"))
+        else:
+            notes.append(f"Individual Net: {d.get('status', 'unknown')} — skipped")
+
+    # ── Skins (gross; ½-net rule pending below 8 gross buyers on 9h) ──
+    skins_total = _matrix_num(g_gross.get("skinsTotal"))
+    if skins_total > 0:
+        if holes == 9 and counts["gross"] < 8:
+            notes.append("Skins ½ Net: rule pending — record manually")
+        else:
+            skins_flights = int(_matrix_num(g_gross.get("skinsFlights")) or 1)
+            d = determine_event_game_results(ev["item_name"], "skins",
+                                             flights=skins_flights, db_path=db_path)
+            if d.get("status") == "determined":
+                n_fl = len(d.get("flights") or []) or 1
+                flight_pot_cents = round(skins_total * 100 / n_fl)
+                for fl in d.get("flights") or []:
+                    if not fl.get("skin_count"):
+                        continue
+                    for nm, cnt in (fl.get("per_player") or {}).items():
+                        amt_cents = round(flight_pot_cents / fl["skin_count"] * cnt)
+                        rows.append({"golferName": nm, "category": "skins",
+                                     "amount": amt_cents / 100.0,
+                                     "description": f"Skins {fl['flight']} ×{cnt}"})
+            else:
+                notes.append(f"Skins: {d.get('status', 'unknown')} — skipped")
+
+    # ── Individual Gross (per flight) ──
+    if _matrix_num(g_gross.get("individualGross")) > 0:
+        g_flights = max(1, int(_matrix_num(g_gross.get("grossFlights")) or 1))
+        d = determine_event_game_results(ev["item_name"], "individual_gross",
+                                         flights=g_flights, db_path=db_path)
+        if d.get("status") == "determined":
+            amts = [a for a in (g_gross.get("grossLow1st"), g_gross.get("grossLow2nd"))
+                    if _matrix_num(a) > 0]
+            for fl in d.get("flights") or []:
+                rows.extend(_rows_from_place_ladder(
+                    fl.get("ranking") or [], amts,
+                    "individual_gross", f"Ind Gross {fl['flight']}"))
+        else:
+            notes.append(f"Ind. Gross: {d.get('status', 'unknown')} — skipped")
+
+    notes.append("Hole-in-One is an accruing cross-event pot — never auto-recorded")
+    return {"event_name": ev["item_name"], "holes": holes, "counts": counts,
+            "rows": rows, "notes": notes,
+            "total": round(sum(r["amount"] for r in rows), 2)}
+
+
+def record_all_event_game_payouts(db_path=None, time_budget: float = 42.0,
+                                  force: bool = False) -> dict:
+    """Bulk populate: assemble + record payouts for every PAST event.
+
+    Skips events that already have payout rows (auto rows are only
+    replaced when force=True; events with MANUAL/screenshot-imported
+    rows are always skipped — never mix). Time-budgeted like the
+    portal walks; call repeatedly until events_left == 0.
+    """
+    from time import monotonic
+    from email_parser.timezone_utils import today_central_str
+    started = monotonic()
+    with _connect(db_path) as conn:
+        events = [dict(r) for r in conn.execute(
+            "SELECT item_name FROM events WHERE event_date IS NOT NULL "
+            "AND event_date <= ? ORDER BY event_date DESC",
+            (today_central_str(),)).fetchall()]
+    out = {"recorded": [], "skipped": [], "events_left": 0}
+    for i, ev in enumerate(events):
+        if monotonic() - started > time_budget:
+            out["events_left"] = len(events) - i
+            break
+        name = ev["item_name"]
+        with _connect(db_path) as conn:
+            m = _GG_EVENT_CODE_COMPOUND_RE.match(name.strip())
+            bare = m.group(1).lower() if m else name.strip().lower()
+            trow = conn.execute(
+                "SELECT id FROM tgf_events WHERE LOWER(code) IN (?, ?)",
+                (name.strip().lower(), bare)).fetchone()
+            if trow:
+                kinds = conn.execute(
+                    "SELECT SUM(CASE WHEN description LIKE 'auto:%' THEN 1 ELSE 0 END) a, "
+                    "       SUM(CASE WHEN description LIKE 'auto:%' THEN 0 ELSE 1 END) m "
+                    "FROM tgf_payouts WHERE event_id = ?", (trow["id"],)).fetchone()
+                if (kinds["m"] or 0) > 0:
+                    out["skipped"].append({"event": name, "reason": "manual payouts exist"})
+                    continue
+                if (kinds["a"] or 0) > 0 and not force:
+                    out["skipped"].append({"event": name, "reason": "already auto-recorded"})
+                    continue
+        asm = assemble_event_game_payouts(name, db_path=db_path)
+        if asm.get("error") or not asm.get("rows"):
+            out["skipped"].append({"event": name,
+                                   "reason": asm.get("error") or "nothing determined"})
+            continue
+        res = record_event_game_payouts(name, asm["rows"], force=True,
+                                        db_path=db_path)
+        if res.get("error"):
+            out["skipped"].append({"event": name, "reason": res["error"]})
+        else:
+            out["recorded"].append({"event": name, "payouts": res["payouts_added"],
+                                    "total": asm["total"],
+                                    "notes": [n for n in asm["notes"]
+                                              if "never auto-recorded" not in n]})
+    return out
+
+
 def record_event_game_payouts(event_name: str, payouts: list,
                               force: bool = False, db_path=None) -> dict:
     """Record the Games-tab winners as PAYOUTS-tab rows (v2.38.0).
@@ -29346,22 +29713,38 @@ def record_event_game_payouts(event_name: str, payouts: list,
         if not ev:
             return {"error": f"event not found: {event_name}"}
         ev = dict(ev)
-        m = _GG_EVENT_CODE_COMPOUND_RE.match((ev["item_name"] or "").strip())
-        code = m.group(1).lower() if m else ev["item_name"].strip().lower()
+        # tgf_events.code convention = the FULL event name ("s9.15 The
+        # Quarry") — the TGF sidebar displays code and the Events-page
+        # PAYOUTS tab matches code === item_name. Bare code prefix kept
+        # as a lookup fallback for legacy/manual rows.
+        full = ev["item_name"].strip()
+        m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
+        bare = m.group(1).lower() if m else full.lower()
 
         trow = conn.execute(
-            "SELECT id FROM tgf_events WHERE LOWER(code) = ?", (code,)
-        ).fetchone()
+            "SELECT id, code FROM tgf_events WHERE LOWER(code) = ? OR LOWER(code) = ?",
+            (full.lower(), bare)).fetchone()
         if trow:
             tgf_event_id = trow["id"]
+            if trow["code"].strip().lower() == bare != full.lower():
+                conn.execute("UPDATE tgf_events SET code = ?, name = ? WHERE id = ?",
+                             (full, full, tgf_event_id))
+                conn.commit()
         else:
             cur = conn.execute(
                 """INSERT INTO tgf_events (code, name, event_date, course, chapter)
                    VALUES (?, ?, ?, ?, ?)""",
-                (code, ev["item_name"], ev.get("event_date") or "",
+                (full, full, ev.get("event_date") or "",
                  ev.get("course"), ev.get("chapter")))
             tgf_event_id = cur.lastrowid
 
+        manual = conn.execute(
+            "SELECT COUNT(*) FROM tgf_payouts WHERE event_id = ? "
+            "AND description NOT LIKE 'auto:%'", (tgf_event_id,)).fetchone()[0]
+        if manual:
+            return {"error": f"{manual} manually recorded payout(s) exist for "
+                             "this event — auto-recording would double-count. "
+                             "Manage them on the TGF Payouts page instead."}
         existing_auto = conn.execute(
             "SELECT id, acct_transaction_id FROM tgf_payouts "
             "WHERE event_id = ? AND description LIKE 'auto:%'",
@@ -29389,7 +29772,7 @@ def record_event_game_payouts(event_name: str, payouts: list,
     result = import_tgf_payouts(tgf_event_id, stamped, db_path=db_path)
     if isinstance(result, dict) and not result.get("error"):
         result["replaced"] = removed
-        result["tgf_event_code"] = code
+        result["tgf_event_code"] = full
     return result
 
 
