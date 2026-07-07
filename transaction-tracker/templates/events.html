@@ -4166,6 +4166,84 @@
         }
     }
 
+    // Other game winners (v2.35.0) — lazy-fills .game-det spans from
+    // /api/events/game-results (Individual Net / Ind. Gross / gross
+    // Skins, shadow-computed from our imported scorecards). Flights are
+    // derived server-side by playing handicap over the game's buyer set;
+    // the matrix flight count is passed in because the Games tab owns
+    // the matrix. Display-only: GG stays official (Stage 1 discipline).
+    const _gameDetCache = {};
+    function _rankText(fl, places) {
+        // "🏆 SMITH (31) · 2nd: DOE & ROE (33, T)" up to `places` positions
+        const byPos = {};
+        (fl.ranking || []).forEach(r => { (byPos[r.position] = byPos[r.position] || []).push(r); });
+        const parts = [];
+        Object.keys(byPos).map(Number).sort((a, b) => a - b).forEach(pos => {
+            if (pos > places) return;
+            const grp = byPos[pos];
+            const names = grp.map(r => escapeHtml(r.player)).join(" & ");
+            const score = grp[0].score_shown;
+            const label = pos === 1 ? "&#x1F3C6;" : pos + (pos === 2 ? "nd:" : pos === 3 ? "rd:" : "th:");
+            parts.push(`${label} ${names} (${score}${grp.length > 1 ? ", T" : ""})`);
+        });
+        return parts.join(" &middot; ");
+    }
+    async function hydrateGameDeterminations() {
+        const spans = document.querySelectorAll('.game-det[data-event]:not([data-done])');
+        if (!spans.length) return;
+        const keys = [...new Set([...spans].map(sp => `${sp.dataset.event}|${sp.dataset.game}|${sp.dataset.flights}`))];
+        for (const key of keys) {
+            const [evName, game, flights] = key.split("|");
+            if (!(key in _gameDetCache)) {
+                try {
+                    const res = await fetch(`/api/events/game-results?event=${encodeURIComponent(evName)}&game=${encodeURIComponent(game)}&flights=${encodeURIComponent(flights)}`);
+                    _gameDetCache[key] = res.ok ? await res.json() : null;
+                } catch (e) { _gameDetCache[key] = null; }
+            }
+            const det = _gameDetCache[key];
+            document.querySelectorAll('.game-det[data-event]:not([data-done])').forEach(sp => {
+                if (`${sp.dataset.event}|${sp.dataset.game}|${sp.dataset.flights}` !== key) return;
+                sp.dataset.done = "1";
+                sp.textContent = "";
+                if (!det || det.error || det.status === "no_buyers") return;
+                if (det.status === "awaiting_results") {
+                    sp.innerHTML = '<span style="color:var(--text-muted);font-size:0.85em;">awaiting results</span>';
+                    return;
+                }
+                if (det.status !== "determined") return;
+                const metric = sp.dataset.game === "individual_net" ? "net" : "gross";
+                (det.flights || []).forEach(fl => {
+                    (fl.ranking || []).forEach(r => { r.score_shown = r[metric]; });
+                });
+                const awaiting = (det.awaiting || []).length
+                    ? ` <span style="color:var(--text-muted);font-size:0.85em;">(${det.awaiting.length} awaiting)</span>` : "";
+                if (sp.dataset.fidx !== undefined && sp.dataset.fidx !== "") {
+                    const fl = (det.flights || [])[Number(sp.dataset.fidx)];
+                    if (!fl) return;
+                    const places = Number(sp.dataset.places || 2);
+                    sp.innerHTML = `<span style="color:#059669;font-weight:600;">${_rankText(fl, places)}</span>${awaiting}`;
+                } else if (sp.dataset.game === "skins") {
+                    const parts = (det.flights || []).map(fl => {
+                        const holders = Object.entries(fl.per_player || {})
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([n, c]) => `${escapeHtml(n)}&times;${c}`).join(" ");
+                        const label = (det.flights || []).length > 1 ? `${escapeHtml(fl.flight)}: ` : "";
+                        return `${label}${holders || "no skins yet"}${fl.skin_count ? ` (${fl.skin_count} skin${fl.skin_count === 1 ? "" : "s"})` : ""}`;
+                    });
+                    sp.innerHTML = `<span style="color:#059669;font-weight:600;">&#x1F3C6; ${parts.join(" &middot; ")}</span>${awaiting}`;
+                } else {
+                    // one span summarizing every flight (Ind. Gross row)
+                    const places = Number(sp.dataset.places || 1);
+                    const parts = (det.flights || []).map(fl => {
+                        const label = (det.flights || []).length > 1 ? `${escapeHtml(fl.flight)}: ` : "";
+                        return `${label}${_rankText(fl, places)}`;
+                    });
+                    sp.innerHTML = `<span style="color:#059669;font-weight:600;">${parts.join(" &middot; ")}</span>${awaiting}`;
+                }
+            });
+        }
+    }
+
     function renderGamesPanel(ev) {
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';
@@ -4268,7 +4346,8 @@
             for (let i = 0; i < netFlights && i < netFlightData.length; i++) {
                 const fd = netFlightData[i];
                 if (fd.f1 != null && fd.f1 !== "NO_GAME" && fd.f1 !== "NO_EVENT") {
-                    html += `<tr class="games-row-sub"><td class="games-indent">${netFlightNames[i]}</td><td></td><td>${fmt$(fd.f1) || "—"}</td><td></td>`;
+                    const fPlaces = [fd.f1, fd.f2, fd.f3, fd.f4].filter(v => v != null && v !== "NO_GAME" && v !== "NO_EVENT" && numVal(v)).length;
+                    html += `<tr class="games-row-sub"><td class="games-indent">${netFlightNames[i]} <span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="individual_net" data-flights="${netFlights}" data-fidx="${i}" data-places="${fPlaces}"></span></td><td></td><td>${fmt$(fd.f1) || "—"}</td><td></td>`;
                     html += `<td>${fmt$(fd.f1) || "—"}</td><td>${fmt$(fd.f2) || "—"}</td><td>${fmt$(fd.f3) || "—"}</td><td>${fmt$(fd.f4) || "—"}</td></tr>`;
                 }
             }
@@ -4340,7 +4419,10 @@
                 const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
                 const skinsMwpVal = numVal(gGross.skinsTotal) / skinsFlights;
                 grossMWP += skinsMwpVal;
-                html += `<tr><td><strong>${skinsLabel}</strong></td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
+                const skinsDet = grossPC < 8
+                    ? `<span style="color:var(--text-muted);font-size:0.85em;" title="½-net pop allocation rule pending ratification — see mailbox game-results-wiring">manual — ½-net rule pending</span>`
+                    : `<span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="skins" data-flights="${skinsFlights}"></span>`;
+                html += `<tr><td><strong>${skinsLabel}</strong> ${skinsDet}</td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
                 // Compute per-skin values on-the-fly: skinsTotal / skinsFlights / N
                 const st = numVal(gGross.skinsTotal);
                 const sf = skinsFlights;
@@ -4362,7 +4444,8 @@
                 let details = '';
                 if (gGross.grossLow1st) details += `1st: ${fmt$(gGross.grossLow1st)}`;
                 if (gGross.grossLow2nd) details += `, 2nd: ${fmt$(gGross.grossLow2nd)}`;
-                html += `<tr><td><strong>Ind. Gross</strong></td><td>${fmt$(gGross.individualGross)}</td><td>${fmt$(grossIndMWP) || "—"}</td><td>${gFlights}</td><td>${details}</td><td></td><td></td><td></td></tr>`;
+                const gPlaces = gGross.grossLow2nd ? 2 : 1;
+                html += `<tr><td><strong>Ind. Gross</strong> <span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="individual_gross" data-flights="${Math.max(1, gFlights)}" data-places="${gPlaces}"></span></td><td>${fmt$(gGross.individualGross)}</td><td>${fmt$(grossIndMWP) || "—"}</td><td>${gFlights}</td><td>${details}</td><td></td><td></td><td></td></tr>`;
             } else {
                 html += `<tr class="games-row-disabled"><td>Ind. Gross</td><td colspan="${C-1}">No Game</td></tr>`;
             }
@@ -4385,6 +4468,7 @@
         html += '</table>';
         html += '</div>';
         setTimeout(hydrateMvpDeterminations, 60);
+        setTimeout(hydrateGameDeterminations, 80);
         return html;
     }
 

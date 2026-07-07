@@ -436,6 +436,40 @@ CTP / Longest Putt, Hole-in-One, Skins, Individual Gross, Match
 Play, and the CHAMPIONSHIP point categories (TPC26champ / net
 championship variants) — as admin supplies screenshots.
 
+## Shadow-computed game winners (v2.35.0)
+
+The Games tab hydrates 🏆 winner rows for every side game computable
+from our imported scorecards, mirroring the MVP wiring (v2.33.0):
+
+- Engine: `determine_event_game_results(event, game, flights)` in
+  database.py; route `GET /api/events/game-results` (manager). Games:
+  `individual_net` (net stroke, flighted), `individual_gross` (raw
+  gross, flighted), `skins` (GROSS skins: outright low gross per hole
+  within flight; ties kill the hole; per-player counts — the UI divides
+  the flight pot by skin count).
+- Buyer eligibility: `_event_game_buyers(conn, event, 'NET'|'GROSS')`
+  (generalized from the MVP's `_event_net_buyers`, which remains as a
+  wrapper) — same Games-tab rules (credited/refunded/transferred/
+  rsvp_only out; wd out only when that bundle was credited; child
+  add-on payments upgrade the parent).
+- Flights: derived by playing handicap over the game's OWN buyer set
+  (balanced split, low first, spares to earlier flights). The imported
+  `scoring_rounds.flight` label is NOT used for grouping (it reflects
+  whichever GG leaderboard the import walked, not this game's cut
+  lines); it rides along for cross-checking. The matrix flight count is
+  supplied by the Games tab (`?flights=`), which owns matrix amounts —
+  the server only groups and ranks. Ties = golf-style shared positions;
+  the ratified split-combined-places rule applies to the money (UI).
+- Display-only (Stage 1 shadow discipline): GG stays official; no
+  payout-ledger writes.
+- NOT auto-computed (pending Kerry — mailbox topic
+  **game-results-wiring**): CTP / Longest Putt / Hole-in-One (physical
+  contests; proposal: manual winner entry w/ CTP carry-over + HIO
+  accrual), TEAM Net (off-lowest semantics deferred by admin + no
+  team-of-record source; proposal: saved Pairings), Skins ½ Net at <8
+  gross buyers on 9h (half-pop allocation rule unratified — the row
+  shows "manual — ½-net rule pending").
+
 ## Next phase (ratified direction, mailbox ids 10-11)
 
 Extract the GG game SETUP layer (handicap %, scoring basis, par-3

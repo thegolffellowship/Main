@@ -7383,13 +7383,14 @@ def _event_holes_type(item_name: str, fmt: str) -> int:
     return 9
 
 
-def _event_net_buyers(conn, event_name: str) -> dict:
-    """NET-bundle buyers for an event (parents with effective type
-    NET/BOTH after merging child add-on payments), alias-aware, using
-    the Games-tab eligibility rules: credited/refunded/transferred and
-    rsvp_only rows are out; wd rows stay only if net_games was NOT
-    credited back. Returns {"buyers": {customer_id: name}, "unlinked":
-    [names without customer_id]}."""
+def _event_game_buyers(conn, event_name: str, kind: str = "NET") -> dict:
+    """Bundle buyers for an event (parents with the effective game type
+    after merging child add-on payments), alias-aware, using the
+    Games-tab eligibility rules: credited/refunded/transferred and
+    rsvp_only rows are out; wd rows stay only if the bundle was NOT
+    credited back. kind is 'NET' or 'GROSS'. Returns
+    {"buyers": {customer_id: name}, "no_customer_id": [names]}."""
+    wd_key = "net_games" if kind == "NET" else "gross_games"
     names = [event_name]
     names += [r["alias_name"] for r in conn.execute(
         "SELECT alias_name FROM event_aliases WHERE canonical_event_name = ? COLLATE NOCASE",
@@ -7411,25 +7412,30 @@ def _event_net_buyers(conn, event_name: str) -> dict:
         if r["ts"] in ("credited", "refunded", "transferred", "rsvp_only"):
             continue
         t = _classify_side_games_type(r["side_games"])
-        has_net = t in ("NET", "BOTH")
+        has_kind = t in (kind, "BOTH")
         for c in kids.get(str(r["id"]), []):
             ct = _classify_side_games_type(c["side_games"])
-            if ct in ("NET", "BOTH"):
-                has_net = True
+            if ct in (kind, "BOTH"):
+                has_kind = True
         if r["ts"] == "wd":
             try:
                 wd = json.loads(r["wd_credits"] or "{}")
             except (TypeError, ValueError):
                 wd = {}
-            if "net_games" in wd:
-                has_net = False
-        if not has_net:
+            if wd_key in wd:
+                has_kind = False
+        if not has_kind:
             continue
         if r["customer_id"]:
             buyers[int(r["customer_id"])] = r["customer"] or ""
         else:
             no_cid.append(r["customer"] or "(unnamed)")
     return {"buyers": buyers, "no_customer_id": no_cid}
+
+
+def _event_net_buyers(conn, event_name: str) -> dict:
+    """Back-compat wrapper — NET-bundle buyers (see _event_game_buyers)."""
+    return _event_game_buyers(conn, event_name, "NET")
 
 
 def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
@@ -7565,6 +7571,186 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
                                    "day_points": w["day_points"]}
                                   for w in winners]}
     return out
+
+
+# ── Event game results (v2.35.0) ────────────────────────────────────────
+# Shadow-computes the scorecard-derivable side-game winners for one
+# event from OUR imported scorecards + formula layer, mirroring
+# determine_tgf_mvp: Individual Net (stroke, flighted), Individual
+# Gross (raw gross, flighted), and gross Skins (outright low gross per
+# hole within flight). Buyer eligibility mirrors the Games tab via
+# _event_game_buyers. Flights are derived from playing handicap over
+# THIS game's buyer set (balanced split, low handicaps first) — the
+# imported scoring_rounds.flight label is whatever leaderboard the GG
+# walk saw and does NOT correspond to this game's cut lines, so it is
+# returned for cross-checking only. Display-only (GG stays official —
+# Stage 1 shadow discipline); the Games tab hydrates 🏆 rows from
+# /api/events/game-results. NOT computable from scorecards and
+# therefore not handled here: CTP / Longest Putt / Hole-in-One
+# (physical contests) and TEAM Net (off-lowest handicap semantics +
+# team-of-record source pending ratification — mailbox
+# game-results-wiring).
+
+_GAME_RESULT_KINDS = {"individual_net": "NET", "individual_gross": "GROSS",
+                      "skins": "GROSS"}
+
+
+def _flight_names(count: int, holes: int) -> list[str]:
+    """Flight display names matching the Games-tab convention."""
+    names = (["Low Flight", "High Flight", "Mid Flight", "4th Flight"]
+             if holes == 18 else ["Low Flight", "High Flight"])
+    if count <= len(names):
+        return names[:count]
+    return names + [f"Flight {i + 1}" for i in range(len(names), count)]
+
+
+def _split_flights(entrants: list[dict], count: int) -> list[list[dict]]:
+    """Balanced flight split by playing handicap (low flight = lowest
+    handicaps; spare players go to the earlier flights). Entrants with
+    no handicap sort last (highest flight)."""
+    count = max(1, min(count, len(entrants) or 1))
+    ordered = sorted(entrants, key=lambda e: (
+        e["playing_handicap"] if e["playing_handicap"] is not None else float("inf"),
+        e["player"]))
+    base, rem = divmod(len(ordered), count)
+    flights, idx = [], 0
+    for i in range(count):
+        size = base + (1 if i < rem else 0)
+        flights.append(ordered[idx: idx + size])
+        idx += size
+    return flights
+
+
+def _rank_with_ties(entrants: list[dict], key: str) -> list[dict]:
+    """Rank ascending on `key` (stroke play: lower is better) with
+    golf-style tied positions (1, 2, 2, 4). Entrants with a NULL key
+    are excluded by the caller."""
+    ordered = sorted(entrants, key=lambda e: (e[key], e["player"]))
+    out, pos = [], 0
+    for i, e in enumerate(ordered):
+        if i and e[key] == ordered[i - 1][key]:
+            rank = out[-1]["position"]
+        else:
+            rank = i + 1
+        row = dict(e)
+        row["position"] = rank
+        out.append(row)
+    for row in out:
+        row["tied"] = sum(1 for r in out if r["position"] == row["position"]) > 1
+    return out
+
+
+def determine_event_game_results(event_name: str, game: str,
+                                 flights: int = 1,
+                                 db_path: str | Path = DB_PATH) -> dict:
+    """Compute one side game's results for an event from imported
+    scorecards. game ∈ individual_net | individual_gross | skins.
+    `flights` comes from the prize matrix (the caller/Games tab knows
+    the matrix row for this buyer count)."""
+    if game not in _GAME_RESULT_KINDS:
+        return {"error": f"unknown game '{game}'"}
+    kind = _GAME_RESULT_KINDS[game]
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        ev = conn.execute(
+            "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+            (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        ev = dict(ev)
+        binfo = _event_game_buyers(conn, ev["item_name"], kind)
+        out = {"event_name": ev["item_name"], "game": game, "kind": kind,
+               "buyers": len(binfo["buyers"]),
+               "buyers_without_customer_id": binfo["no_customer_id"]}
+        if not binfo["buyers"]:
+            out["status"] = "no_buyers"
+            return out
+
+        # latest round per buyer for this event
+        rounds = {}
+        for r in conn.execute(
+                "SELECT id, customer_id, player_name, gross, net, "
+                "       playing_handicap, flight FROM scoring_rounds "
+                "WHERE event_id = ? AND customer_id IS NOT NULL ORDER BY id",
+                (ev["id"],)).fetchall():
+            if r["customer_id"] in binfo["buyers"]:
+                rounds[r["customer_id"]] = dict(r)
+        if not rounds:
+            out["status"] = "awaiting_results"
+            return out
+
+        entrants = []
+        for cid, rd in rounds.items():
+            gross = rd["gross"]
+            if gross is None:
+                gross = conn.execute(
+                    "SELECT SUM(strokes) FROM scoring_holes "
+                    "WHERE scoring_round_id = ? AND strokes IS NOT NULL",
+                    (rd["id"],)).fetchone()[0]
+            net = rd["net"]
+            if net is None and gross is not None and rd["playing_handicap"] is not None:
+                net = gross - rd["playing_handicap"]
+            entrants.append({
+                "customer_id": cid,
+                "player": rd["player_name"] or binfo["buyers"][cid],
+                "round_id": rd["id"],
+                "gross": gross, "net": net,
+                "playing_handicap": rd["playing_handicap"],
+                "gg_flight": rd["flight"],
+            })
+        metric = "net" if game == "individual_net" else "gross"
+        scored = [e for e in entrants if e[metric] is not None]
+        if not scored:
+            out["status"] = "awaiting_results"
+            return out
+        out["rounds_matched"] = len(scored)
+        out["awaiting"] = sorted(
+            binfo["buyers"][cid] for cid in binfo["buyers"]
+            if cid not in {e["customer_id"] for e in scored})
+
+        flight_groups = _split_flights(scored, flights)
+        names = _flight_names(len(flight_groups),
+                              _event_holes_type(ev["item_name"], ev.get("format")))
+        result_flights = []
+        for i, group in enumerate(flight_groups):
+            hcps = [e["playing_handicap"] for e in group
+                    if e["playing_handicap"] is not None]
+            fl = {"flight": names[i], "players": len(group),
+                  "hcp_range": [min(hcps), max(hcps)] if hcps else None}
+            if game == "skins":
+                fl.update(_flight_skins(conn, group))
+            else:
+                fl["ranking"] = _rank_with_ties(group, metric)
+            result_flights.append(fl)
+        out["flights"] = result_flights
+        out["status"] = "determined"
+        return out
+
+
+def _flight_skins(conn, group: list[dict]) -> dict:
+    """Gross skins within one flight: a hole's outright lowest gross
+    wins a skin; any tie kills the hole. Returns skins + per-player
+    counts (pot division = flight pot / total skins, done by the UI
+    which owns the matrix amounts)."""
+    holes: dict[int, list[tuple[int, dict]]] = {}
+    for e in group:
+        for h in conn.execute(
+                "SELECT hole_number, strokes FROM scoring_holes "
+                "WHERE scoring_round_id = ? AND strokes IS NOT NULL",
+                (e["round_id"],)).fetchall():
+            holes.setdefault(h["hole_number"], []).append((h["strokes"], e))
+    skins, per_player = [], {}
+    for hole in sorted(holes):
+        scores = holes[hole]
+        low = min(s for s, _ in scores)
+        holders = [e for s, e in scores if s == low]
+        if len(holders) == 1:
+            w = holders[0]
+            skins.append({"hole": hole, "player": w["player"],
+                          "customer_id": w["customer_id"], "strokes": low})
+            per_player[w["player"]] = per_player.get(w["player"], 0) + 1
+    return {"skins": skins, "skin_count": len(skins),
+            "per_player": per_player}
 
 
 # ── Monthly points races (v2.30.0) ─────────────────────────────────────
