@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.37.0";
+window.TGF_VERSION = "2.37.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.37.1",
+    date: "2026-07-07",
+    changes: [
+      "SKINS FLIGHTS SOLVED (Kerry's pointer): the skins leaderboard's Expand All view (/tournaments2/details?adjusting=false&event_id=<tid>) renders one per-player skin grid per flight -- full flight MEMBERSHIP, not just winners. import_gg_game_flights now captures skins flights from that view (one fetch per skins game instead of per-player fragments, which skins pages don't have); a single-section page means unflighted and records nothing. scoring-flights-import accepts a 'reset' arg to re-walk rounds already marked done (upserts make it safe) -- needed once so previously-walked rounds pick up their skins flights.",
+    ],
+  },
   {
     version: "2.37.0",
     date: "2026-07-07",

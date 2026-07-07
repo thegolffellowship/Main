@@ -8004,6 +8004,35 @@ _GG_FLIGHT_GAME_PATTERNS = [
 ]
 
 
+def _skins_flights_from_expandall(tables: list) -> dict:
+    """Flight membership from a skins Expand-All page
+    (/tournaments2/details?adjusting=false&event_id=<tid>).
+
+    Skins leaderboards have no per-player detail fragments, but Expand
+    All renders one per-player skin GRID per flight: a table whose first
+    row is the flight label (single cell), second row the hole header
+    (contains Out/Total), and remaining rows one player each (name in
+    column 0). The hole/Won summary tables (header Hole/Par/Score/Won)
+    are skipped. Returns {flight_label: [player names]}.
+    """
+    out: dict = {}
+    for t in tables or []:
+        if not t or len(t) < 3 or not t[0]:
+            continue
+        first = [c for c in t[0] if (c or "").strip()]
+        if len(first) != 1:
+            continue
+        label = first[0].strip()
+        header = [(c or "").strip().lower() for c in (t[1] or [])]
+        if "out" not in header and "total" not in header:
+            continue
+        for row in t[2:]:
+            name = (row[0] or "").strip() if row else ""
+            if name and name.lower() not in ("hole", "total"):
+                out.setdefault(label, []).append(name)
+    return out
+
+
 def _ensure_gg_game_flights_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS gg_game_flights (
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -8027,7 +8056,8 @@ def _ensure_gg_game_flights_tables(conn: sqlite3.Connection) -> None:
 
 
 def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
-                           time_budget: float = 42.0) -> dict:
+                           time_budget: float = 42.0,
+                           reset: bool = False) -> dict:
     """Walk a portal's rounds and capture per-game flight membership.
 
     For every flighted-game leaderboard (Individual Net / Individual
@@ -8069,6 +8099,12 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
               "rounds_left": 0, "per_game": {}, "unresolved_names": []}
     with _connect(db_path) as conn:
         _ensure_gg_game_flights_tables(conn)
+        if reset:
+            # Re-walk everything (e.g. after a parser extension like the
+            # skins Expand-All membership capture). Upserts make it safe.
+            conn.execute("DELETE FROM gg_game_flights_rounds WHERE host = ?",
+                         (host,))
+            conn.commit()
         done = {r["gg_round_id"] for r in conn.execute(
             "SELECT gg_round_id FROM gg_game_flights_rounds WHERE host = ?",
             (host,)).fetchall()}
@@ -8106,6 +8142,41 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
                     continue
                 if href.startswith("/"):
                     href = f"https://{host}{href}"
+
+                def _record(flight_label, player_name):
+                    cid = _resolve_scoring_player(conn, player_name)
+                    if cid is None and player_name not in result["unresolved_names"]:
+                        result["unresolved_names"].append(player_name)
+                    conn.execute(
+                        """INSERT INTO gg_game_flights
+                               (event_id, event_code, gg_round_id,
+                                gg_tournament_id, game, flight_label,
+                                customer_id, player_name)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                           ON CONFLICT (gg_tournament_id, player_name)
+                           DO UPDATE SET flight_label = excluded.flight_label,
+                                         customer_id = COALESCE(excluded.customer_id, gg_game_flights.customer_id),
+                                         event_id = COALESCE(excluded.event_id, gg_game_flights.event_id)""",
+                        (ev_id, ev_code, rid, tid_m.group(1), game,
+                         flight_label, cid, player_name))
+                    result["flights_recorded"] += 1
+                    result["per_game"][game] = result["per_game"].get(game, 0) + 1
+
+                if game == "skins":
+                    # Skins leaderboards have no per-player fragments; the
+                    # Expand-All view renders full membership per flight
+                    # (Kerry, 2026-07-07).
+                    ex_url = (f"https://{host}/tournaments2/details"
+                              f"?adjusting=false&event_id={tid_m.group(1)}")
+                    ex_struct = parse_page_structure(fetch(ex_url), ex_url)
+                    membership = _skins_flights_from_expandall(
+                        ex_struct.get("tables") or [])
+                    if len(membership) > 1:   # single section = unflighted
+                        for flight_label, names in membership.items():
+                            for nm in names:
+                                _record(flight_label, nm)
+                    continue
+
                 page_html = fetch(href)
                 for agg in parse_tournament_aggregates(page_html):
                     if monotonic() - started > time_budget:
@@ -8122,23 +8193,7 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
                     for p in parsed["players"]:
                         if not p.get("player_name"):
                             continue
-                        cid = _resolve_scoring_player(conn, p["player_name"])
-                        if cid is None and p["player_name"] not in result["unresolved_names"]:
-                            result["unresolved_names"].append(p["player_name"])
-                        conn.execute(
-                            """INSERT INTO gg_game_flights
-                                   (event_id, event_code, gg_round_id,
-                                    gg_tournament_id, game, flight_label,
-                                    customer_id, player_name)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                               ON CONFLICT (gg_tournament_id, player_name)
-                               DO UPDATE SET flight_label = excluded.flight_label,
-                                             customer_id = COALESCE(excluded.customer_id, gg_game_flights.customer_id),
-                                             event_id = COALESCE(excluded.event_id, gg_game_flights.event_id)""",
-                            (ev_id, ev_code, rid, tid_m.group(1), game,
-                             parsed["flight"], cid, p["player_name"]))
-                        result["flights_recorded"] += 1
-                        result["per_game"][game] = result["per_game"].get(game, 0) + 1
+                        _record(parsed["flight"], p["player_name"])
                 if out_of_time:
                     break
             if out_of_time:
