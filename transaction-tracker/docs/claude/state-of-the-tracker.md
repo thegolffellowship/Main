@@ -9,8 +9,8 @@ for session-by-session updates after this brief.
 
 ## What the Tracker is now
 
-Flask + SQLite on Railway (tgf-tracker.up.railway.app), version 2.32.x,
-~200+ routes, 59 MCP tools. Started as a GoDaddy order-email parser;
+Flask + SQLite on Railway (tgf-tracker.up.railway.app), version 2.34.x,
+~200+ routes, 61 MCP tools. Started as a GoDaddy order-email parser;
 now runs most of TGF's operations:
 
 - **Transactions/orders** — AI email parsing (Claude), order grouping,
@@ -53,6 +53,20 @@ now runs most of TGF's operations:
   per-customer version), token-only /api/me/* endpoints, mobile-first
   profile page. M2 (post-event recap emails) and M3 (monthly digest)
   are designed, not yet built.
+- **MATCH PLAY (v2.34, July 2026) — the Game Creator engine's first
+  concrete build.** The ratified 29-column Match Play matrix (pools,
+  knockout sizes, wildcards, first-round byes, pool-winner bonuses,
+  payout ladders on a $40×N pot) lives as VERSIONED admin-editable
+  config: season_contest_templates / season_contest_versions
+  (append-only, payout_templates pattern) + per-season/chapter config
+  snapshots (seasons freeze at first structural action). A pure engine
+  (email_parser/match_play.py — no DB/Flask, Platform-portable)
+  computes structure, seeded brackets with byes, and exact-cents
+  payouts (largest-remainder allocation; ties split combined places).
+  CONTESTS UI: structure banner, auto-assign pools, server-side
+  knockout seeding (Stableford metric, ratified), payouts view, admin
+  config editor with matrix preview + pin-season-to-version. This is
+  the working prototype of the V2.0 scoring_config JSONB hook.
 
 ## Verified league mechanics (July 2026 findings)
 
