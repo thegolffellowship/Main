@@ -1830,10 +1830,29 @@ tr.order-item.order-item-hidden {
     }
     .games-panel-header { font-size: 0.75rem; margin-bottom: 0.35rem; padding-bottom: 0.25rem; }
     .games-table { font-size: 0.7rem; min-width: 420px; }
-    /* Long results live in their own full-width .games-winner-row lines
-       (see above), so the remaining INLINE chips (CTP, City MVP, TGF MVP —
-       all short) just wrap naturally inside the label cell. */
-    .games-table td:first-child { white-space: normal; }
+    /* Mobile clarity (v2.39.2, from Kerry's phone screenshots):
+       1. The Game column must keep real width or labels + inline chips
+          shred into one-word-per-line towers (the fixed money columns
+          squeeze it to nothing).
+       2. Winner sub-rows span the full (horizontally scrolled) table
+          width — pin their content sticky-left so it wraps at SCREEN
+          width and stays visible while the money columns scroll. */
+    .games-table col.gc-game { min-width: 150px; }
+    .games-table td:first-child { white-space: normal; min-width: 150px; }
+    .games-table td:first-child .mvp-det,
+    .games-table td:first-child .gg-det {
+        display: block;
+        margin-top: 0.1rem;
+        font-size: 0.95em;
+    }
+    .games-winner-row td > span {
+        display: block;
+        position: sticky;
+        left: 0.4rem;
+        max-width: calc(100vw - 3.5rem);
+        font-size: 0.72rem;
+        line-height: 1.4;
+    }
     .hole-in-one-banner { white-space: normal; }
     .games-table th,
     .games-table thead th,
