@@ -501,6 +501,11 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   pot ÷ skins × count), Ind Gross per flight, GG-recorded Team Net
   (split per member, blind draws excluded) and CTP/Longest Putt.
   HIO is never auto-recorded (accruing cross-event pot).
+  Team Net ties (v2.41.0, s9.17): tied teams (GG "T1"/"T1") split the
+  combined place money before the member split — one team place at
+  $108 with two T1 teams → $54/team, matching GG's recorded purses.
+  Previously list order gave the first team the whole place and the
+  tied team nothing.
   `record_event_game_payouts()` finds/creates the tgf_events row by
   event code, stamps rows `auto:` and delegates to import_tgf_payouts
   (customer resolution + Venmo-ledger reconciliation + aggregates);
@@ -526,6 +531,13 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   manual step: within the hour the Games tab shows winners and the
   PAYOUTS tab has customer-tied rows with payment links. Manual
   (screenshot) payout events are never touched.
+  Step isolation (v2.41.0): scorecards, games, and flights each run
+  in their own try/except per portal — a transient GG fetch failure
+  in the scorecard walk previously aborted the whole portal, skipping
+  the games/flights walks while the payout refresh still ran, which
+  is how s9.17 Silverhorn got its payouts recorded WITHOUT Team
+  Net/CTP attached (the data was finalized in GG the whole time; the
+  next pass' 3-day force-refresh window then heals it).
 - Still manual: Skins ½ Net at <8 gross buyers on 9h (half-pop
   allocation rule unratified — the row shows "manual — ½-net rule
   pending").

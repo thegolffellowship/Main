@@ -2498,6 +2498,9 @@
                 const desiredFilter = isPast ? "past" : "upcoming";
                 if (eventTimeFilter !== desiredFilter && eventTimeFilter !== "all") {
                     eventTimeFilter = desiredFilter;
+                    if (eventSortField === "event_date") {
+                        eventSortDir = desiredFilter === "past" ? "desc" : "asc";
+                    }
                     document.querySelectorAll("[data-ev-filter]").forEach(b =>
                         b.classList.toggle("active", b.dataset.evFilter === desiredFilter));
                     renderEvents();  // recursive: re-renders + falls through to the
@@ -9892,6 +9895,12 @@
             btn.addEventListener("click", () => {
                 eventTimeFilter = btn.dataset.evFilter;
                 document.querySelectorAll("[data-ev-filter]").forEach(b => b.classList.toggle("active", b.dataset.evFilter === eventTimeFilter));
+                // Natural date order per bucket: PAST reads newest-first,
+                // upcoming/all soonest-first. Only the default date sort is
+                // touched — an explicit column sort survives the switch.
+                if (eventSortField === "event_date") {
+                    eventSortDir = eventTimeFilter === "past" ? "desc" : "asc";
+                }
                 renderEvents();
             });
         });

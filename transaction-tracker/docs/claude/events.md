@@ -9,6 +9,12 @@
 - `transferred` — transferred to another event, shown in **Inactive** section below table. Creates contra-revenue on source event + revenue on target event in `acct_transactions`, plus allocation at target.
 - `wd` — withdrawn, shown in **Inactive** section below table
 
+## Events list ordering (v2.41.0)
+The ALL | UPCOMING | PAST stat-card filter sets the default date sort per
+bucket: PAST lists most-recent-first (Kerry's ask), UPCOMING/ALL keep
+soonest-first. An explicit column-header sort survives filter switches;
+deep-links that auto-flip the filter to PAST get the same newest-first order.
+
 ## Event detail view sections (top to bottom)
 1. **Toggle bar** — PLAYERS | PAIRINGS | GAMES + 9|18 holes filter + NET | GROSS | NONE
 2. **Registrations table** — only active/rsvp players (compact rows)
