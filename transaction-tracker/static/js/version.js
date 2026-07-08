@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.43.1";
+window.TGF_VERSION = "2.44.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.44.0",
+    date: "2026-07-08",
+    changes: [
+      "EVENTS IS THE LANDING PAGE (Kerry): opening the app -- fresh PWA launch, bare URL, or bookmark to / -- now lands on EVENTS instead of TRANSACTIONS. The Transactions dashboard moved to /transactions (all nav tabs updated); old /?txn= deep links redirect there with the transaction still highlighted, the PWA manifest start_url follows, and non-admins hitting an admin URL now land on Events instead of a mislabeled Transactions render.",
+      "ACCESS AUDIT + LOCKDOWN (Kerry: 'tell me what MANAGERS are seeing and have access to'): swept every route's role gate and found 20 API endpoints that answered WITHOUT ANY LOGIN -- left ungated when v2.16.10 sealed the main PII set. Worst were /api/tgf (payout data incl. payment handles) and the RSVP feeds (names/emails); also /api/events, /api/customers/names, /api/matrix, parse warnings, and the check-now trigger. All now require a session: read-only views at view-only, operational/payout data at manager (/api/tgf, orphaned items, parse warnings, message templates, Check Now). Verified before/after with an unauthenticated probe of a live instance: every one of the 20 now returns 401. Final gate counts: 41 view-only / 114 manager / 197 admin routes.",
+    ],
+  },
   {
     version: "2.43.1",
     date: "2026-07-08",
