@@ -205,7 +205,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   with 7 metrics (total items, active items, open parse warnings, open action items,
   credited duplicates, membership mashups, items missing customer ID) plus delta arrows
   (↑/↓) vs the previous day's snapshot.
-- **Auth** — PIN-based with roles ranked `view-only` < `manager` < `admin`; `@require_role(minimum)` enforces the hierarchy (as of v2.16.15 — before that only `admin` was checked and view-only sessions passed manager endpoints). Login rate limiter keys on the LAST X-Forwarded-For hop (Railway-appended; the first entry is client-spoofable)
+- **Auth** — PIN-based with roles ranked `view-only` < `manager` < `admin`; `@require_role(minimum)` enforces the hierarchy (as of v2.16.15). PINs (v2.47.0, Kerry): `ADMIN_PIN`→admin; `AUSTIN_MANAGER_PIN`/`SA_MANAGER_PIN`→manager with `session["chapter"]` set (chapter managers land pre-scoped: Events chapter tab, Contests race, Customers filter, Participation chapter); `VIEWONLY_PIN`→view-only; the LEGACY shared `MANAGER_PIN` is demoted to view-only. View-only nav = EVENTS | CONTESTS | HANDICAPS only; /transactions, /customers, /rsvps, /participation redirect view-only sessions to /events. Login rate limiter keys on the LAST X-Forwarded-For hop (Railway-appended; the first entry is client-spoofable)
 - **`initAuth()`** must be called on every page for nav link visibility (DATABASE link, etc.)
 
 ## Audit Log
