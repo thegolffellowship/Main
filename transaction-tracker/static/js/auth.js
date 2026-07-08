@@ -129,6 +129,12 @@ function updateNavForRole() {
             link.style.display = "";
         }
     });
+    // Header ops buttons are admin-only (Kerry, 2026-07-08): managers and
+    // view-only never see Sync Events / Check RSVPs / Check Now anywhere.
+    ["btn-sync", "btn-check-rsvps", "btn-check-now"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = (currentRole === "admin") ? "" : "none";
+    });
     // Show/hide admin sub-nav on pages where it is conditionally rendered (e.g. changelog)
     document.querySelectorAll(".admin-subnav.admin-nav").forEach(el => {
         el.style.display = (currentRole === "admin") ? "" : "none";

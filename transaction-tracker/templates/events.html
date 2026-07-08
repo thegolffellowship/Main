@@ -91,11 +91,11 @@
             color: var(--text-muted); white-space: nowrap;
         }
         .ev-tab:hover { border-color: var(--primary); color: var(--primary); }
-        .ev-chapter-row .ev-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .ev-chapter-row .ev-tab.active { background: #E87C3E; border-color: #E87C3E; color: #fff; }
         /* Time row = the app's standard segmented control (reconcile-page
            style, Kerry 2026-07-08); active state driven by .active since
            these aren't radio inputs */
-        .ev-time-row .seg-option.active { background: var(--primary); color: #fff; }
+        .ev-time-row .seg-option.active { background: #E87C3E; color: #fff; }
         .ev-tab-count { font-weight: 800; margin-left: 0.15rem; }
         /* TGF-orange breakline between UPCOMING and Past on All Events */
         .ev-past-divider td, .ev-past-divider-card {
@@ -143,9 +143,9 @@
             color: var(--primary);
         }
         .game-stat-badge.active {
-            background: var(--primary);
+            background: #E87C3E;
             color: #fff;
-            border-color: var(--primary);
+            border-color: #E87C3E;
         }
         .game-stat-badge strong {
             font-weight: 700;
@@ -465,7 +465,7 @@
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <a href="/events" class="active">Events</a>
-            <a href="/contests">Contests</a>
+            <a href="/contests">Season Contests</a>
             <a href="/handicaps">Handicaps</a>
             <a href="/transactions">Transactions</a>
             <a href="/customers">Customers</a>
@@ -9727,9 +9727,10 @@
         document.getElementById("btn-sync").addEventListener("click", syncEvents);
         document.getElementById("btn-clear-filters").addEventListener("click", clearEvFilters);
 
-        // RSVP check button — only show if configured
+        // RSVP check button — only show if configured AND admin (ops
+        // buttons are admin-only, Kerry 2026-07-08)
         fetch("/api/rsvps/config-status").then(r => r.json()).then(data => {
-            if (data.configured) {
+            if (data.configured && currentRole === "admin") {
                 document.getElementById("btn-check-rsvps").style.display = "";
             }
         }).catch(() => {});

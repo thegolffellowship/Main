@@ -22,7 +22,7 @@
         </div>
         <div class="header-actions">
             <span id="role-badge" class="role-badge" style="display:none;"></span>
-            <button id="btn-export-csv" class="btn btn-secondary">Export CSV</button>
+            <button id="btn-export-csv" class="btn btn-secondary" style="display:none;">Export CSV</button>
             <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">
                 Log Out
             </button>
@@ -33,7 +33,7 @@
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <a href="/events">Events</a>
-            <a href="/contests">Contests</a>
+            <a href="/contests">Season Contests</a>
             <a href="/handicaps">Handicaps</a>
             <a href="/transactions">Transactions</a>
             <a href="/customers" class="active">Customers</a>
@@ -967,7 +967,7 @@
         // rebuilds this card; hardcoding transactions here yanked the user
         // off Scores/Winnings/Points mid-read)
         const _mt = activeDetailTab;
-        const mtabStyle = t => `flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_mt === t ? '#2563eb' : 'transparent'}; margin-bottom:-2px; color:${_mt === t ? '#2563eb' : 'var(--text-muted)'}; white-space:nowrap;`;
+        const mtabStyle = t => `flex:1; padding:0.35rem 0; font-size:0.72rem; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid ${_mt === t ? '#E87C3E' : 'transparent'}; margin-bottom:-2px; color:${_mt === t ? '#E87C3E' : 'var(--text-muted)'}; white-space:nowrap;`;
         return `
         <div class="cust-tab-bar" style="display:flex; gap:0; margin-bottom:0.5rem; border-bottom:2px solid var(--border); overflow-x:auto;">
             <button type="button" class="cust-tab ${_mt === 'transactions' ? 'active' : ''}" data-tab="transactions" style="${mtabStyle('transactions')}">Transactions</button>
@@ -3851,6 +3851,10 @@
     // page load when already logged in, or right after the login modal).
     // The data endpoints require auth, so this is the only load entry point.
     function onAuthReady() {
+        // Export CSV is admin-only (Kerry, 2026-07-08: managers don't get
+        // bulk download access yet)
+        const exp = document.getElementById("btn-export-csv");
+        if (exp) exp.style.display = (currentRole === "admin") ? "" : "none";
         if (!initialLoadDone) init();
     }
 

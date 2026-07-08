@@ -140,7 +140,7 @@
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <a href="/events">Events</a>
-            <a href="/contests">Contests</a>
+            <a href="/contests">Season Contests</a>
             <a href="/handicaps">Handicaps</a>
             <a href="/transactions" class="active">Transactions</a>
             <a href="/customers">Customers</a>
@@ -152,6 +152,11 @@
         <!-- Controls -->
         <section class="controls" style="margin-bottom: 0.75rem;">
             <input type="text" id="rsvp-search" class="search-box" placeholder="Search by player name, event, email...">
+            <select id="rsvp-chapter-filter" class="filter-select" title="Scope to a chapter's events (shared/TGF events included)">
+                <option value="">All Chapters</option>
+                <option value="Austin">Austin</option>
+                <option value="San Antonio">San Antonio</option>
+            </select>
             <select id="rsvp-event-filter" class="filter-select">
                 <option value="">All Events</option>
             </select>
@@ -383,6 +388,11 @@
         try {
             const res = await fetch("/api/events");
             allEvents = await res.json();
+            const rc = document.getElementById("rsvp-chapter-filter");
+            if (rc && !window._rsvpChapterDefaultApplied && typeof currentChapter !== "undefined" && currentChapter) {
+                window._rsvpChapterDefaultApplied = true;
+                rc.value = currentChapter;
+            }
         } catch (err) {
             console.error("Failed to fetch events:", err);
         }
@@ -425,6 +435,18 @@
             filtered = filtered.filter(r => !r.matched_event);
         } else if (rsvpCategoryFilter === "unlinked") {
             filtered = filtered.filter(r => !r.has_player_card);
+        }
+
+        // Chapter scope (event's chapter; shared TGF events included)
+        const rsvpChapVal = (document.getElementById("rsvp-chapter-filter") || {}).value || "";
+        if (rsvpChapVal) {
+            const chOf = {};
+            (allEvents || []).forEach(e => { chOf[(e.item_name || "").toLowerCase()] = (e.chapter || "").trim(); });
+            filtered = filtered.filter(rr => {
+                const evName = (rr.matched_event || rr.gg_event_name || "").toLowerCase();
+                const ch = chOf[evName];
+                return !ch || ch === rsvpChapVal || ch.toUpperCase() === "TGF";
+            });
         }
 
         // Event dropdown filter
@@ -803,6 +825,7 @@
         });
 
         // Event filter dropdown
+        document.getElementById("rsvp-chapter-filter").addEventListener("change", () => renderRsvps());
         document.getElementById("rsvp-event-filter").addEventListener("change", (e) => {
             rsvpEventFilter = e.target.value;
             renderRsvps();

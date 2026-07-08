@@ -226,3 +226,13 @@ Helpers: `fetch_public_page()` / `parse_page_structure()` (stdlib
 HTMLParser, no bs4) in `golf_genius_sync.py`. Admin's public SA entry
 point: https://tgf-sa.golfgenius.com/pages/5783305. This is the
 exploration path toward importing GG results/standings into the tracker.
+
+## Chapter tabs (v2.48.0, Kerry)
+ALL | AUSTIN | SAN ANTONIO pills above the players table (TGF-orange
+active). Chapter comes from customers.chapter via
+handicap_player_links.customer_id (get_all_handicap_players now
+returns `chapter`); unlinked players have none and only show under
+ALL. Chapter-manager sessions land pre-filtered to their chapter;
+admin lands on ALL. Import Rounds + the three CSV exports are
+consolidated into one Import/Export dropdown (admin-only); Email
+Cards stays standalone.

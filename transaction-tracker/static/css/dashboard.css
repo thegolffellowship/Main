@@ -791,9 +791,9 @@ tr.cust-row-guest:hover { background: #f1f5f9; }
     color: var(--primary);
 }
 .category-btn.active {
-    background: var(--primary);
+    background: #E87C3E;
     color: #fff;
-    border-color: var(--primary);
+    border-color: #E87C3E;
 }
 .label-short { display: none; }
 .label-full { display: inline; }
@@ -1929,7 +1929,7 @@ div.mobile-card.row-rsvp-only {
 .segmented-control .seg-option:last-child { border-right: none; }
 .segmented-control .seg-option input[type="radio"] { display: none; }
 .segmented-control .seg-option:has(input:checked) {
-    background: var(--primary);
+    background: #E87C3E;
     color: #fff;
 }
 
@@ -1947,7 +1947,7 @@ div.mobile-card.row-rsvp-only {
 /* Page sub-tabs (RSVP Log under Transactions, Participation under
    Customers) — segmented-control links */
 .segmented-control a.seg-option { text-decoration: none; color: inherit; display: inline-block; }
-.segmented-control a.seg-option.active { background: var(--primary); color: #fff; }
+.segmented-control a.seg-option.active { background: #E87C3E; color: #fff; }
 .sub-tabs { padding: 0.75rem 2rem 0; }
 
 /* ---- Tee Time Advisor Panel ---- */

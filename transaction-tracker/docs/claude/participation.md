@@ -89,9 +89,12 @@ Bracket-unsupported / typo merge keys are tolerated: a `KeyError`/`IndexError` d
 - **Outreach history** — there's no per-customer "last contacted on" column yet. The `log_message` event with `event_name='participation-reengagement'` is recorded, so a `MAX(message.created_at) WHERE event_name='participation-reengagement' AND recipient_address=...` can be added to the players query when needed.
 - **Scheduled sends** — only ad-hoc bulk sends today. A cron-style "automatically nudge players who hit 120 days dormant once per quarter" is a natural extension but needs a state table to avoid re-sending.
 
-## Landing defaults (v2.47.0, Kerry)
+## Landing defaults (v2.48.0, Kerry)
 First load applies: status = MEMBER, dormancy threshold = >=30 days,
-and — for chapter-manager sessions — chapter = the manager's chapter
-(skipped when that chapter has no rows). Users can change all three;
-defaults apply once per page load. Participation is reached as a
+chapter = the manager's chapter for chapter-manager sessions (skipped
+when that chapter has no rows), and default sort = LAST PLAYED
+most-recent-first (nulls to the end — never-played members no longer
+top the list). A "Played" filter select (any / this calendar year /
+has played / never) sits next to the status filter. Users can change
+everything; defaults apply once per page load. Participation is a
 sub-tab of CUSTOMERS (top-level nav tab removed in v2.47.0).
