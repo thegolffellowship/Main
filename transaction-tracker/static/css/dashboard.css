@@ -864,13 +864,17 @@ th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 .btn-clear-filters.visible { display: inline-flex; }
 
 /* ---- Clickable Links ---- */
+/* Customer/name links read as plain black text (Kerry, 2026-07-08 —
+   the palette swap turned them orange); hover underline keeps the
+   clickable affordance. */
 .cell-link {
-    color: var(--primary);
+    color: var(--text);
     cursor: pointer;
     text-decoration: none;
 }
 .cell-link:hover {
     text-decoration: underline;
+    color: var(--primary-hover);
 }
 
 /* ---- Modal Overlay ---- */
