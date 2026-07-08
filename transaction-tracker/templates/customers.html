@@ -33,7 +33,7 @@
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <a href="/accounting" class="admin-nav" style="display:none;">Admin</a>
-            <a href="/">Transactions</a>
+            <a href="/transactions">Transactions</a>
             <a href="/events">Events</a>
             <a href="/contests">Contests</a>
             <a href="/customers" class="active">Customers</a>
@@ -2461,7 +2461,7 @@
                 if (e.target.closest("a, button")) return;
                 e.stopPropagation();
                 const txnId = tr.dataset.txnId;
-                if (txnId) window.location.href = `/?txn=${txnId}`;
+                if (txnId) window.location.href = `/transactions?txn=${txnId}`;
             });
         });
 

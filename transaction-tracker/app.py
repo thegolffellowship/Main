@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 import anthropic as _anthropic
-from flask import Flask, Response, jsonify, render_template, request, send_file, session
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, session
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -1557,6 +1557,16 @@ def _validate_update_fields(data: dict) -> str | None:
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
+    # EVENTS is the landing page (Kerry, 2026-07-08). Old transaction
+    # deep-links (/?txn=123) keep working by continuing to the
+    # Transactions page with their query intact.
+    if request.args:
+        return redirect("/transactions?" + request.query_string.decode())
+    return redirect("/events")
+
+
+@app.route("/transactions")
+def transactions_page():
     return render_template("index.html")
 
 
@@ -1795,6 +1805,7 @@ def api_delete_manual_player(item_id):
 
 
 @app.route("/api/check-now", methods=["POST"])
+@require_role("manager")
 def api_check_now():
     """Manually trigger an inbox check (runs in background to avoid timeout)."""
     tenant_id = os.getenv("AZURE_TENANT_ID")
@@ -1822,6 +1833,7 @@ def api_check_now():
 
 
 @app.route("/api/check-status")
+@require_role("view-only")
 def api_check_status():
     """Poll this endpoint to check if the background inbox check is done."""
     running = _inbox_check_status["running"]
@@ -1905,6 +1917,7 @@ def api_health():
 
 
 @app.route("/api/config-status")
+@require_role("view-only")
 def api_config_status():
     """Check whether email, AI, and connector credentials are configured."""
     email_ok = all([
@@ -2148,7 +2161,7 @@ def api_audit_emails():
 def matrix_page():
     # Admin-only page
     if session.get("role") != "admin":
-        return render_template("index.html")
+        return redirect("/events")
     matrix9, matrix18 = _load_matrix()
     return render_template("matrix.html", matrix9=matrix9, matrix18=matrix18)
 
@@ -2157,7 +2170,7 @@ def matrix_page():
 def changelog_page():
     # Admin-only page — managers are redirected to home
     if session.get("role") != "admin":
-        return render_template("index.html")
+        return redirect("/events")
     return render_template("changelog.html")
 
 
@@ -2165,14 +2178,14 @@ def changelog_page():
 def audit_page():
     # Admin-only page — managers are redirected to home
     if session.get("role") != "admin":
-        return render_template("index.html")
+        return redirect("/events")
     return render_template("audit.html")
 
 
 @app.route("/database")
 def database_page():
     if session.get("role") != "admin":
-        return render_template("index.html")
+        return redirect("/events")
     return render_template("database.html")
 
 
@@ -2203,7 +2216,7 @@ def _dd_build_summary(candidates):
 @app.route("/admin/duplicate-detective")
 def duplicate_detective_page():
     if session.get("role") != "admin":
-        return render_template("index.html")
+        return redirect("/events")
     candidates = find_duplicate_candidates()
     bootstrap = {
         "candidates": candidates,
@@ -2373,7 +2386,7 @@ def api_duplicate_detective_dismiss(candidate_id):
 @app.route("/admin/duplicate-detective/audit")
 def duplicate_detective_audit_page():
     if session.get("role") != "admin":
-        return render_template("index.html")
+        return redirect("/events")
     rows = get_duplicate_merge_audit(limit=500)
     return render_template(
         "duplicate_detective_audit.html",
@@ -2631,6 +2644,7 @@ def _load_matrix() -> tuple[dict, dict]:
 
 
 @app.route("/api/matrix", methods=["GET"])
+@require_role("view-only")
 def api_matrix_get():
     """Return the current games matrix (from DB if edited, else from static file)."""
     matrix9, matrix18 = _load_matrix()
@@ -4380,6 +4394,7 @@ def api_link_rsvp_to_customer():
 
 
 @app.route("/api/chapters")
+@require_role("view-only")
 def api_chapters():
     """Return all chapters with their IDs."""
     from email_parser.database import _connect
@@ -4391,6 +4406,7 @@ def api_chapters():
 
 
 @app.route("/api/courses")
+@require_role("view-only")
 def api_courses():
     """Return all courses with chapter linkage and aliases."""
     from email_parser.database import _connect
@@ -4439,12 +4455,14 @@ def api_create_course():
 
 
 @app.route("/api/events")
+@require_role("view-only")
 def api_events():
     """Return all events with registration counts and aliases."""
     return jsonify(get_all_events())
 
 
 @app.route("/api/events/aliases")
+@require_role("view-only")
 def api_event_aliases():
     """Return alias_name → canonical_event_name map."""
     return jsonify(get_all_event_aliases())
@@ -5642,12 +5660,14 @@ def api_gg_game_results():
 
 
 @app.route("/api/events/orphaned-items")
+@require_role("manager")
 def api_orphaned_items():
     """Return items whose item_name doesn't match any event."""
     return jsonify(get_orphaned_items())
 
 
 @app.route("/api/sunset")
+@require_role("view-only")
 def api_sunset():
     """Return sunset and civil twilight times for a chapter + date, in Central Time."""
     import pytz
@@ -5718,6 +5738,7 @@ def api_resolve_orphan():
 
 
 @app.route("/api/parse-warnings")
+@require_role("manager")
 def api_parse_warnings():
     """Return open parse warnings (items flagged during parsing)."""
     status = request.args.get("status", "open")
@@ -6195,6 +6216,7 @@ def api_send_reminder_all():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/messages/templates", methods=["GET"])
+@require_role("manager")
 def api_get_templates():
     """Return all message templates."""
     return jsonify(get_message_templates())
@@ -6561,6 +6583,7 @@ def rsvps_page():
 
 
 @app.route("/api/rsvps")
+@require_role("view-only")
 def api_rsvps():
     """Return RSVPs, optionally filtered by event or response."""
     event = request.args.get("event", "")
@@ -6569,12 +6592,14 @@ def api_rsvps():
 
 
 @app.route("/api/rsvps/event/<path:event_name>")
+@require_role("view-only")
 def api_rsvps_for_event(event_name):
     """Return the latest RSVP per player for a specific event."""
     return jsonify(get_rsvps_for_event(event_name))
 
 
 @app.route("/api/rsvps/bulk")
+@require_role("view-only")
 def api_rsvps_bulk():
     """Return all RSVPs, overrides, and email overrides grouped by event.
 
@@ -6585,6 +6610,7 @@ def api_rsvps_bulk():
 
 
 @app.route("/api/rsvps/stats")
+@require_role("view-only")
 def api_rsvp_stats():
     """Return RSVP summary statistics."""
     return jsonify(get_rsvp_stats())
@@ -6656,6 +6682,7 @@ def api_unmatch_rsvp(rsvp_id):
 
 
 @app.route("/api/rsvps/overrides/<path:event_name>")
+@require_role("view-only")
 def api_rsvp_overrides(event_name):
     """Return manual RSVP overrides for an event.
 
@@ -6690,6 +6717,7 @@ def api_set_rsvp_override():
 
 
 @app.route("/api/rsvps/config-status")
+@require_role("view-only")
 def api_rsvp_config_status():
     """Check whether RSVP email credentials are configured."""
     rsvp_ok = bool(os.getenv("RSVP_EMAIL_ADDRESS"))
@@ -7415,6 +7443,7 @@ def api_handicap_unlink_player():
 
 
 @app.route("/api/customers/names")
+@require_role("view-only")
 def api_customer_names():
     """Return a sorted list of unique customer names for autocomplete/linking."""
     conn = get_connection()
@@ -9143,7 +9172,7 @@ def api_auth_logout():
 def accounting_page():
     """Multi-entity accounting dashboard (admin only)."""
     if session.get("role") != "admin":
-        return render_template("index.html")
+        return redirect("/events")
     return render_template("accounting.html")
 
 
@@ -11088,6 +11117,7 @@ def tgf_page():
 
 
 @app.route("/api/tgf")
+@require_role("manager")
 def api_tgf_data():
     return jsonify(get_tgf_data())
 

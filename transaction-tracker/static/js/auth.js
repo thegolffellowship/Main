@@ -4,15 +4,17 @@
    Requires the login modal HTML and role badge/logout button in header.
    ========================================================= */
 
-// Always start at the Transactions page on fresh app launch.
-// sessionStorage persists during tab/navigation but clears when the
-// standalone PWA is fully closed or the browser tab is closed.
+// Always start at the EVENTS page on fresh app launch (Kerry,
+// 2026-07-08 — was Transactions). sessionStorage persists during
+// tab/navigation but clears when the standalone PWA is fully closed
+// or the browser tab is closed. Deep links (?txn=, ?item=, ?cid=…)
+// are honored — a fresh launch on a parameterized URL stays put.
 (function() {
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     if (!sessionStorage.getItem("tgf_session_active")) {
         sessionStorage.setItem("tgf_session_active", "1");
-        if (window.location.pathname !== "/") {
-            window.location.replace("/");
+        if (window.location.pathname !== "/events" && !window.location.search) {
+            window.location.replace("/events");
             return;
         }
     }

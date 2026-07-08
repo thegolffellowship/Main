@@ -894,7 +894,7 @@ function renderTable(items) {
                 setTimeout(() => targetRow.classList.remove("txn-highlight"), 3000);
             }, 100);
             // Clean up URL
-            window.history.replaceState({}, "", "/");
+            window.history.replaceState({}, "", "/transactions");
         }
     }
 }

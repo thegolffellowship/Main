@@ -180,7 +180,12 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   `docs/claude/expense-workflow.md` → **Dedup & Cost Control**. Boot logs
   a loud warning if `DATABASE_PATH` is unset (dedup memory is ephemeral
   without a Railway volume → re-bills the backfill window every redeploy).
-- **Dashboard** at `/` with search, filter, sort, CSV export
+- **Landing page is EVENTS** (v2.44.0, Kerry): `/` 302-redirects to
+  `/events` (or to `/transactions?<qs>` when query params are present, so
+  old `/?txn=` deep links keep working); the Transactions dashboard lives
+  at `/transactions` (search, filter, sort, CSV export). auth.js's
+  fresh-launch redirect and manifest.json start_url also point at
+  `/events`; admin-page guards for non-admins redirect to `/events`.
 - **COO AI** — Claude-powered business intelligence chat with 6 specialist agents
 - **TGF Payouts** — tournament payout tracking with screenshot import via Claude Vision
 - **Golf Genius sync** via direct HTTP requests in `golf_genius_sync.py` (rewritten from Playwright). The nightly 02:00 job is removed as of v2.18.0 (never established a reliable connection) — the live path is the manual CSV export (`/api/handicaps/export-csv`) the admin uploads in the GG UI; see `docs/claude/handicaps.md`
@@ -240,7 +245,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - Filter: `allItems = raw.filter(i => !PLACEHOLDER_MERCHANTS.includes(i.merchant) && i.transaction_status !== "rsvp_only")`
 
 ### Transaction deep-linking
-- URL parameter `?txn=<item_id>` scrolls to and highlights a specific transaction row
+- URL parameter `?txn=<item_id>` (on `/transactions`; bare `/?txn=` redirects there) scrolls to and highlights a specific transaction row
 - Used by Customers page click-to-navigate feature
 - Auto-expands collapsed order groups if the target row is inside one
 - Highlight uses yellow pulse animation (`txn-highlight` class)
