@@ -1311,6 +1311,35 @@ def start_scheduler():
     )
     logger.info("Monthly points snapshot refresh scheduled daily at 05:30 US/Central")
 
+    # ── Auto GG results sync (v2.40.0) ──────────────────────────────
+    # Kerry closes an event in GG → results + payouts appear in the
+    # Tracker without any manual import. Hourly noon-11pm Central (events
+    # finish evenings); pure HTTP against the public portals, no AI spend.
+    # Disable with AUTO_GG_SYNC=0.
+    def auto_gg_results_sync_job():
+        from email_parser.database import auto_gg_results_sync
+        try:
+            res = auto_gg_results_sync()
+            rec = (res.get("payouts") or {}).get("recorded") or []
+            logger.info("Auto GG results sync done: %d portal(s), %d event payout refresh(es)",
+                        len(res.get("portals") or []), len(rec))
+        except Exception:
+            logger.exception("Auto GG results sync failed (non-fatal)")
+
+    if os.getenv("AUTO_GG_SYNC", "1") != "0":
+        scheduler.add_job(
+            auto_gg_results_sync_job,
+            "cron",
+            hour="12-23",
+            minute=10,
+            timezone="US/Central",
+            id="auto_gg_results_sync",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Auto GG results sync scheduled hourly 12:10-23:10 US/Central")
+
     # First boot after this ships (or a fresh volume): populate the
     # snapshot in the background so the first MONTHLY open doesn't wait
     try:
