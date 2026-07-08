@@ -383,9 +383,17 @@ show a compact GG-style movement chip in the Rank column: green
 gg_points_standings.prev_rank; "-" previous = no chip, matching GG).
 Ties compare on the numeric part ("T11" vs "13" → ▲2). Compact
 (phone) tables stack the chip under the rank number so the narrow
-column never widens. Monthly and Fellowship Cup standings are merged
-cross-chapter computations with no GG previous rank, so they carry
-no chip.
+column never widens.
+
+Fellowship Cup (v2.43.0): no GG reference exists (our own computed
+projection), so `_apply_rank_movement_history()` records the Cup's
+ordering in `rank_history_snapshots`/`rank_history_rows` (generic by
+list_key; keyed by customer_id, name fallback; keeps last 12
+snapshots) and rotates ONLY when the order changes — prev_rank comes
+from the superseded snapshot, so chips appear on a standings change
+and persist until the next one (GG's between-events semantics).
+Monthly races still carry no chip — they can adopt the same
+mechanism with their own list_key when wanted.
 
 ## Monthly points races (v2.30.0)
 

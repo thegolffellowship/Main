@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.42.0";
+window.TGF_VERSION = "2.43.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.43.0",
+    date: "2026-07-08",
+    changes: [
+      "FELLOWSHIP CUP MOVEMENT CHIPS (Kerry: 'I know you don't have a GG reference for The Fellowship Cup because that's on our side, but could you create the same movement symbols? Are you recording the changes?'): we weren't -- the Cup is recomputed live from both NET races on every view, so nothing stored the previous order. New rank-history layer (rank_history_snapshots/_rows, generic by list_key): each Cup computation snapshots the ordering and ROTATES only when the order actually changes, so every row gains a prev_rank vs the pre-change state and the same green \\u25b2N / red \\u25bcN chips render in the Rank column (compact stacking on phones included). Chips persist until the NEXT standings change, matching GG's between-events arrow semantics; newcomers show no chip. History starts recording with this release, so the first chips appear after the next event shifts the Cup order. Keeps the last 12 snapshots per list; the monthly races can adopt the same mechanism later.",
+    ],
+  },
   {
     version: "2.42.0",
     date: "2026-07-08",
