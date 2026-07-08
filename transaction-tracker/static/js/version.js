@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.49.0";
+window.TGF_VERSION = "2.49.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.49.1",
+    date: "2026-07-08",
+    changes: [
+      "CUSTOMER TEXT BACK TO BLACK (Kerry): the v2.49.0 palette swap turned customer-name links (.cell-link -- Events roster, Transactions, Customers) orange; they now read as standard black text again, with the hover underline (in orange-hover) keeping the click affordance.",
+    ],
+  },
   {
     version: "2.49.0",
     date: "2026-07-08",
