@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.41.1";
+window.TGF_VERSION = "2.41.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.41.2",
+    date: "2026-07-08",
+    changes: [
+      "AUSTIN IND NET FLIGHTS (a9.17 Falconhead showed 'flights_unknown'): Austin's flighted leaderboards render flight sections ('LOW Flight' / 'HIGH Flight') INSIDE the board itself and expose no per-player detail fragments -- the fragment walk (how SA flights import) recorded nothing there. The flights importer now falls back to parsing the section headings off the leaderboard table when fragments yield no labels (same idea as the skins Expand-All membership capture).",
+      "TGF MVP SINGLE-OWNER RULE: once determined, the combined same-day pot was assembled by BOTH linked events, so a same-pass force-refresh of both (the auto-sync's 3-day heal window, or Populate All) recorded the $72-ish row TWICE -- once under each event. Exactly one event now owns the pot: the winner's own event (deterministic on both sides; cross-event tie splits settle by name order). The other event's assembly notes where it was recorded instead.",
+      "Ran a full force re-record of all past auto-recorded events after deploy so any historical TGF MVP double-records and pre-tie-split Team Net amounts self-heal (manual/screenshot payout events untouched, as always).",
+    ],
+  },
   {
     version: "2.41.1",
     date: "2026-07-08",
