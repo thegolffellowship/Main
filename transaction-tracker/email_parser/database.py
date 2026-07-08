@@ -6959,6 +6959,136 @@ def _apply_rank_movement_history(standings: list, list_key: str,
         r["prev_rank"] = prev_map.get(key_of(r), "-")
 
 
+def seed_fellowship_cup_history(db_path: str | Path = DB_PATH) -> dict:
+    """One-time backfill (v2.43.1, Kerry: 'Any way to reverse engineer
+    the change in The Fellowship Cup by reviewing the history of last
+    GG event and yesterday's?'): reconstruct the Cup ordering as it
+    stood BEFORE the most recent GG event and seed it as the prior
+    rank-history snapshot, so movement chips show the last event's
+    effect immediately instead of waiting for the next one.
+
+    The Cup's reset value is a pure function of a player's POSITION in
+    their NET race (master ladder + coefficient), and GG's race
+    snapshots carry each player's Previous Rank from before the last
+    event — so yesterday's Cup is: previous race positions → previous
+    reset values → previous combined ordering. Players whose first
+    imported round IS the latest round date are treated as new
+    entrants (absent from yesterday's list → no chip). Existing
+    fellowship_cup history is replaced by the seed; the live
+    projection then rotates the current order on top of it.
+    """
+    import hashlib
+    races = [k for k, v in _GG_POINTS_RACES.items()
+             if v.get("reset_mode") == "prorated"]
+    with _connect(db_path) as conn:
+        latest_date = (conn.execute(
+            "SELECT MAX(round_date) FROM scoring_rounds").fetchone()[0]
+            or "")
+
+    def _num(s):
+        m = re.search(r"(\d+)", str(s or ""))
+        return int(m.group(1)) if m else None
+
+    per_race_prev: dict = {}
+    new_entrants: list = []
+    for k in races:
+        d = get_points_race_standings(k, db_path=db_path)
+        kept = []
+        for r in d["standings"]:
+            if r.get("points_reset") is None:
+                continue        # not reset-eligible today
+            prevn = _num(r.get("prev_rank"))
+            curn = _num(r.get("rank"))
+            if prevn is None and r.get("customer_id") and latest_date:
+                with _connect(db_path) as conn:
+                    played_before = conn.execute(
+                        "SELECT 1 FROM scoring_rounds WHERE customer_id = ? "
+                        "AND round_date < ? LIMIT 1",
+                        (r["customer_id"], latest_date)).fetchone()
+                    played_latest = conn.execute(
+                        "SELECT 1 FROM scoring_rounds WHERE customer_id = ? "
+                        "AND round_date = ? LIMIT 1",
+                        (r["customer_id"], latest_date)).fetchone()
+                if played_latest and not played_before:
+                    new_entrants.append(r["player_name"])
+                    continue    # joined the list with the latest event
+            kept.append({
+                "player_name": r["player_name"],
+                "customer_id": r["customer_id"],
+                "pos": prevn or curn or 10 ** 6,
+            })
+        kept.sort(key=lambda x: x["pos"])
+        per_race_prev[k] = kept
+
+    # yesterday's coefficients from yesterday's eligible headcounts
+    counts = {k: len(v) for k, v in per_race_prev.items()}
+    anchor_n = max(counts.values()) if counts else 0
+    combined: list = []
+    for k, kept in per_race_prev.items():
+        coef = (anchor_n / counts[k]) if counts[k] else None
+        if not coef:
+            continue
+        for r in kept:
+            master = int(1 + coef * (r["pos"] - 1) + 0.5)
+            combined.append({**r, "reset": 100 - 0.5 * (master - 1)})
+    combined.sort(key=lambda r: -r["reset"])
+    for i, r in enumerate(combined):
+        j = i
+        while j > 0 and combined[j - 1]["reset"] == r["reset"]:
+            j -= 1
+        r["_n"] = j + 1
+    tally: dict = {}
+    for r in combined:
+        tally[r["_n"]] = tally.get(r["_n"], 0) + 1
+    for r in combined:
+        n = r.pop("_n")
+        r["rank"] = f"T{n}" if tally[n] > 1 else str(n)
+
+    def key_of(r):
+        return (str(r["customer_id"]) if r.get("customer_id")
+                else (r.get("player_name") or "").strip().lower())
+
+    rows = [(key_of(r), r["rank"]) for r in combined]
+    order_hash = hashlib.sha1(
+        "|".join(f"{k}:{rk}" for k, rk in rows).encode()).hexdigest()
+    with _connect(db_path) as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS rank_history_snapshots (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            list_key   TEXT NOT NULL,
+            order_hash TEXT NOT NULL,
+            taken_at   TEXT DEFAULT (datetime('now')))""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS rank_history_rows (
+            snapshot_id INTEGER NOT NULL REFERENCES rank_history_snapshots(id),
+            member_key  TEXT NOT NULL,
+            rank        TEXT,
+            PRIMARY KEY (snapshot_id, member_key))""")
+        conn.execute(
+            "DELETE FROM rank_history_rows WHERE snapshot_id IN "
+            "(SELECT id FROM rank_history_snapshots WHERE list_key = 'fellowship_cup')")
+        conn.execute(
+            "DELETE FROM rank_history_snapshots WHERE list_key = 'fellowship_cup'")
+        sid = conn.execute(
+            "INSERT INTO rank_history_snapshots (list_key, order_hash) "
+            "VALUES ('fellowship_cup', ?)", (order_hash,)).lastrowid
+        conn.executemany(
+            "INSERT OR REPLACE INTO rank_history_rows "
+            "(snapshot_id, member_key, rank) VALUES (?, ?, ?)",
+            [(sid, k, rk) for k, rk in rows])
+        conn.commit()
+
+    # rotate the CURRENT order on top of the seed → chips live now
+    cur = get_fellowship_cup_projection(db_path=db_path)
+    moved = [{"player": r["player_name"], "rank": r["rank"],
+              "prev_rank": r.get("prev_rank")}
+             for r in cur["standings"]
+             if _num(r.get("prev_rank")) and _num(r.get("rank"))
+             and _num(r["prev_rank"]) != _num(r["rank"])]
+    return {"latest_event_date": latest_date,
+            "seeded_rows": len(rows),
+            "new_entrants_excluded": new_entrants,
+            "movers_now": moved}
+
+
 def get_fellowship_cup_projection(force_refresh: bool = False,
                                   db_path: str | Path = DB_PATH) -> dict:
     """THE FELLOWSHIP CUP — combined projected reset standings.

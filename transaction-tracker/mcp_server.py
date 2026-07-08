@@ -1419,6 +1419,13 @@ def _scoring_dispatch(url: str, extract: str):
             # portals, then a payout refresh (recent events force-updated).
             # The hourly scheduler runs the same thing automatically.
             return json.dumps(db.auto_gg_results_sync(), indent=2)
+        if cmd == "scoring-fc-seed":
+            # One-time Fellowship Cup rank-history backfill: reconstruct
+            # the pre-latest-event Cup ordering from the NET races' GG
+            # Previous Rank columns, seed it as the prior snapshot, and
+            # rotate the current order on top — movement chips show the
+            # last event's effect immediately.
+            return json.dumps(db.seed_fellowship_cup_history(), indent=2)
         if cmd == "scoring-portal-link":
             tok = db.make_portal_token(int(arg))
             if not tok:
