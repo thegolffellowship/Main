@@ -7,13 +7,18 @@
 // Always start at the EVENTS page on fresh app launch (Kerry,
 // 2026-07-08 — was Transactions). sessionStorage persists during
 // tab/navigation but clears when the standalone PWA is fully closed
-// or the browser tab is closed. Deep links (?txn=, ?item=, ?cid=…)
-// are honored — a fresh launch on a parameterized URL stays put.
+// or the browser tab is closed. Only REAL deep links (?txn=, ?item=,
+// ?cid= — links from emails/notifications) keep a fresh launch in
+// place; any other restored URL redirects. iOS resurrects the PWA's
+// LAST url on relaunch (e.g. /customers?name=James%20Baker after
+// tapping a customer link), and "any query string stays put" made
+// that stale state the landing page (Kerry, 2026-07-08).
 (function() {
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     if (!sessionStorage.getItem("tgf_session_active")) {
         sessionStorage.setItem("tgf_session_active", "1");
-        if (window.location.pathname !== "/events" && !window.location.search) {
+        const isDeepLink = /[?&](txn|item|cid)=/.test(window.location.search);
+        if (window.location.pathname !== "/events" && !isDeepLink) {
             window.location.replace("/events");
             return;
         }

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.49.2";
+window.TGF_VERSION = "2.49.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.49.3",
+    date: "2026-07-08",
+    changes: [
+      "FRESH LAUNCH ALWAYS LANDS ON EVENTS (Kerry): iOS resurrects the PWA's last URL on relaunch -- after tapping a customer link, the app could reopen on /customers?name=... with the search prefilled. The fresh-launch redirect now only stays put for REAL deep links (?txn= / ?item= / ?cid=, the params email links use); every other restored URL goes to Events.",
+      "NO MORE SURPRISE ZOOM ON MOBILE: added maximum-scale=1 to the viewport meta on every page, which stops iOS from auto-zooming when a small-font input gets focus (that zoom persisted across launches and made the app open 'slightly zoomed in'). Manual pinch-zoom still works -- iOS ignores maximum-scale for user-initiated zoom.",
+    ],
+  },
   {
     version: "2.49.2",
     date: "2026-07-08",
