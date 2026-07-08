@@ -76,6 +76,31 @@
             flex: 1;
             min-width: 120px;
         }
+        /* Chapter scope + compact time tabs (replaces the big stat cards).
+           Chapter row is the outer context; the time row is subordinate. */
+        .ev-filter-tabs { margin-bottom: 1rem; }
+        .ev-tab-row {
+            display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center;
+        }
+        .ev-chapter-row { margin-bottom: 0.4rem; }
+        .ev-tab {
+            cursor: pointer; user-select: none;
+            font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+            padding: 0.35rem 0.85rem; border-radius: 999px;
+            background: var(--surface); border: 1px solid var(--border);
+            color: var(--text-muted); white-space: nowrap;
+        }
+        .ev-tab:hover { border-color: var(--primary); color: var(--primary); }
+        .ev-chapter-row .ev-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .ev-time-row .ev-tab { font-size: 0.72rem; font-weight: 600; padding: 0.28rem 0.7rem; }
+        .ev-time-row .ev-tab.active {
+            background: #eff6ff; border-color: var(--primary); color: var(--primary); font-weight: 700;
+        }
+        .ev-tab-count { font-weight: 800; margin-left: 0.15rem; }
+        @media (max-width: 640px) {
+            .ev-tab { font-size: 0.72rem; padding: 0.3rem 0.65rem; }
+            .ev-time-row .ev-tab { font-size: 0.66rem; padding: 0.24rem 0.55rem; }
+        }
         .empty-msg {
             text-align: center;
             padding: 3rem;
@@ -437,7 +462,7 @@
             <a href="/handicaps">Handicaps</a>
             <a href="/participation">Participation</a>
 
-            <a href="/tgf">Payouts</a>
+            <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
         </nav>
 
         <!-- Controls -->
@@ -451,19 +476,18 @@
             <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
         </section>
 
-        <section class="event-summary" id="summary-section">
-            <div class="stat-card category-btn" data-ev-filter="all" style="cursor:pointer;">
-                <div class="stat-value" id="stat-total">—</div>
-                <div class="stat-label">All Events</div>
-            </div>
-            <div class="stat-card category-btn active" data-ev-filter="upcoming" style="cursor:pointer;">
-                <div class="stat-value" id="stat-upcoming">—</div>
-                <div class="stat-label">Upcoming</div>
-            </div>
-            <div class="stat-card category-btn" data-ev-filter="past" style="cursor:pointer;">
-                <div class="stat-value" id="stat-past">—</div>
-                <div class="stat-label">Past</div>
-            </div>
+        <!-- Chapter scope (top row) over compact time tabs (sub row) — Kerry 2026-07-08 -->
+        <section class="ev-filter-tabs" id="summary-section">
+            <nav class="ev-tab-row ev-chapter-row">
+                <span class="ev-tab active" data-ev-chapter="all">ALL</span>
+                <span class="ev-tab" data-ev-chapter="Austin">AUSTIN</span>
+                <span class="ev-tab" data-ev-chapter="San Antonio">SAN ANTONIO</span>
+            </nav>
+            <nav class="ev-tab-row ev-time-row">
+                <span class="ev-tab" data-ev-filter="all">ALL EVENTS <span class="ev-tab-count" id="stat-total"></span></span>
+                <span class="ev-tab active" data-ev-filter="upcoming">UPCOMING <span class="ev-tab-count" id="stat-upcoming"></span></span>
+                <span class="ev-tab" data-ev-filter="past">PAST <span class="ev-tab-count" id="stat-past"></span></span>
+            </nav>
         </section>
 
         <!-- Action Items Banner (admin/manager) -->
@@ -1687,6 +1711,7 @@
     let eventSortDir = "asc";
     let eventSearchQuery = "";
     let eventTimeFilter = "upcoming";  // "all", "upcoming", "past"
+    let eventChapterFilter = "all";   // "all", "Austin", "San Antonio"
 
     /** Build a "LastName, FirstName..." key for consistent name sorting. */
     function lastNameSortKey(name) {
@@ -1817,7 +1842,7 @@
     }
 
     function updateEvClearButton() {
-        const hasFilters = eventSearchQuery.trim().length > 0 || eventTimeFilter !== "upcoming";
+        const hasFilters = eventSearchQuery.trim().length > 0 || eventTimeFilter !== "upcoming" || eventChapterFilter !== "all";
         document.getElementById("btn-clear-filters").classList.toggle("visible", hasFilters);
     }
 
@@ -1825,6 +1850,9 @@
         document.getElementById("event-search").value = "";
         eventSearchQuery = "";
         eventTimeFilter = "upcoming";
+        eventChapterFilter = "all";
+        document.querySelectorAll("[data-ev-chapter]").forEach(b =>
+            b.classList.toggle("active", b.dataset.evChapter === "all"));
         eventSortField = "event_date";
         eventSortDir = "asc";
         document.querySelectorAll("[data-ev-filter]").forEach(b => b.classList.toggle("active", b.dataset.evFilter === "upcoming"));
@@ -1977,7 +2005,9 @@
     }
 
     function getFilteredSortedEvents() {
-        let filtered = allEvents;
+        let filtered = eventChapterFilter === "all"
+            ? allEvents
+            : allEvents.filter(e => (e.chapter || "") === eventChapterFilter);
         const today = new Date().toISOString().split("T")[0];
 
         // Time filter (unless actively searching — search searches everything)
@@ -2400,11 +2430,14 @@
     function renderEvents() {
         const tbody = document.getElementById("events-body");
 
-        // Summary stats
+        // Summary stats (scoped to the selected chapter)
         const today = new Date().toISOString().split("T")[0];
-        const upcoming = allEvents.filter(e => e.event_date && e.event_date >= today);
-        const past = allEvents.filter(e => !e.event_date || e.event_date < today);
-        document.getElementById("stat-total").textContent = allEvents.length;
+        const scoped = eventChapterFilter === "all"
+            ? allEvents
+            : allEvents.filter(e => (e.chapter || "") === eventChapterFilter);
+        const upcoming = scoped.filter(e => e.event_date && e.event_date >= today);
+        const past = scoped.filter(e => !e.event_date || e.event_date < today);
+        document.getElementById("stat-total").textContent = scoped.length;
         document.getElementById("stat-upcoming").textContent = upcoming.length;
         document.getElementById("stat-past").textContent = past.length;
 
@@ -2496,6 +2529,12 @@
                 const today = new Date().toISOString().split("T")[0];
                 const isPast = !fullMatch.event_date || fullMatch.event_date < today;
                 const desiredFilter = isPast ? "past" : "upcoming";
+                if (eventChapterFilter !== "all"
+                        && (fullMatch.chapter || "") !== eventChapterFilter) {
+                    eventChapterFilter = "all";
+                    document.querySelectorAll("[data-ev-chapter]").forEach(b =>
+                        b.classList.toggle("active", b.dataset.evChapter === "all"));
+                }
                 if (eventTimeFilter !== desiredFilter && eventTimeFilter !== "all") {
                     eventTimeFilter = desiredFilter;
                     if (eventSortField === "event_date") {
@@ -4398,7 +4437,7 @@
         const empty4 = '<td></td><td></td><td></td><td></td>';
 
         let html = '<div class="games-panel">';
-        const recordBtn = (currentRole === 'admin' || currentRole === 'manager')
+        const recordBtn = (currentRole === 'admin')
             ? ` <button class="record-payouts-btn" data-event="${escapeHtml(ev.item_name)}" style="float:right;font-size:0.72rem;padding:2px 10px;border-radius:99px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-weight:600;" title="Record the determined winners below into the PAYOUTS tab with prepared payment links">&#x1F4B8; Record Payouts</button>` : '';
         html += `<div class="games-panel-header">${holes}-HOLE GAMES &mdash; ${totalPC} Total, ${netPC} Net, ${grossPC} Gross${recordBtn}</div>`;
 
@@ -4730,7 +4769,9 @@
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
         }
         html += `<span class="game-stat-badge ${financialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
-        html += `<span class="game-stat-badge ${payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
+        if (currentRole === 'admin') {
+            html += `<span class="game-stat-badge ${payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
+        }
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
@@ -9890,7 +9931,17 @@
             });
         });
 
-        // Event time filter (stat card clicks)
+        // Chapter scope tabs (outer context over the time tabs)
+        document.querySelectorAll("[data-ev-chapter]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                eventChapterFilter = btn.dataset.evChapter;
+                document.querySelectorAll("[data-ev-chapter]").forEach(b =>
+                    b.classList.toggle("active", b.dataset.evChapter === eventChapterFilter));
+                renderEvents();
+            });
+        });
+
+        // Event time filter (compact sub tabs)
         document.querySelectorAll("[data-ev-filter]").forEach(btn => {
             btn.addEventListener("click", () => {
                 eventTimeFilter = btn.dataset.evFilter;

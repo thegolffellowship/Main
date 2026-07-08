@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.44.0";
+window.TGF_VERSION = "2.45.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.45.0",
+    date: "2026-07-08",
+    changes: [
+      "PAYOUTS ARE ADMIN-ONLY (Kerry rulings): managers keep credit/transfer/WD (internal ledger moves -- no real money leaves), but everything that records an actual outbound payment or shows payout data is now admin-only: the Payouts nav tab and /tgf page, the per-event PAYOUTS view, the Games-tab Record Payouts button, the Customers Winnings tab, and the APIs behind them (payout read/write, mark-paid, screenshot import, record/preview game payouts). Refund, partial-refund, and payout-credit were already admin-only -- confirmed, no change needed there. Verified with headless role-by-role checks: the manager session's nav shows 7 tabs with no payout surface anywhere.",
+      "EVENTS CHAPTER TABS (Kerry): the big ALL EVENTS / UPCOMING / PAST stat cards are replaced by two compact tab rows -- a CHAPTER scope on top (ALL | AUSTIN | SAN ANTONIO) with the time tabs (ALL EVENTS | UPCOMING | PAST, with counts) subordinate underneath. Chapter is the outer context: counts, the time buckets, and even search all re-scope to the selected chapter. Clear Filters resets to ALL/UPCOMING; event deep-links widen the chapter scope automatically when the target event is outside it.",
+    ],
+  },
   {
     version: "2.44.0",
     date: "2026-07-08",

@@ -498,7 +498,7 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   banner (Longest Putt winners ride on the CTP rows). For the future
   untethering, manager or in-round player entry replaces this pull.
 - **Record Payouts (v2.38.0, Kerry directive)** — the Games tab's
-  "💸 Record Payouts" button (manager) assembles every DETERMINED
+  "💸 Record Payouts" button (ADMIN-only as of v2.45.0; was manager) assembles every DETERMINED
   winner into PAYOUTS-tab rows: City MVP (+TGF MVP once, from the
   event you click — combined pot, warning shown), Ind Net per-flight
   place ladders with exact-cent tie splits, Skins per player (flight
