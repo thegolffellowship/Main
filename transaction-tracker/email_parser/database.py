@@ -6883,6 +6883,82 @@ def get_points_race_standings(race_key: str,
     }
 
 
+def _apply_rank_movement_history(standings: list, list_key: str,
+                                 db_path: str | Path = DB_PATH,
+                                 keep: int = 12) -> None:
+    """GG-style Previous Rank for OUR OWN computed standings (v2.43.0,
+    Kerry: "I know you don't have a GG reference for The Fellowship Cup
+    because that's on our side, but could you create the same movement
+    symbols?").
+
+    Persists an ordered rank snapshot per list_key and rotates it ONLY
+    when the ordering actually changes, then stamps each row's
+    prev_rank from the superseded snapshot. Chips therefore appear when
+    a standings change lands (new event data) and persist until the
+    next change — the same between-events semantics as GG's arrows.
+    Rows are keyed by customer_id (name fallback for unresolved rows).
+    Generic: any tracker-computed list can adopt it with its own
+    list_key (the monthly races are the obvious next candidate).
+    """
+    import hashlib
+
+    def key_of(r):
+        return (str(r["customer_id"]) if r.get("customer_id")
+                else (r.get("player_name") or "").strip().lower())
+
+    cur = [(key_of(r), str(r.get("rank") or "")) for r in standings]
+    order_hash = hashlib.sha1(
+        "|".join(f"{k}:{rk}" for k, rk in cur).encode()).hexdigest()
+    with _connect(db_path) as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS rank_history_snapshots (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            list_key   TEXT NOT NULL,
+            order_hash TEXT NOT NULL,
+            taken_at   TEXT DEFAULT (datetime('now')))""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS rank_history_rows (
+            snapshot_id INTEGER NOT NULL REFERENCES rank_history_snapshots(id),
+            member_key  TEXT NOT NULL,
+            rank        TEXT,
+            PRIMARY KEY (snapshot_id, member_key))""")
+        snaps = conn.execute(
+            "SELECT id, order_hash FROM rank_history_snapshots "
+            "WHERE list_key = ? ORDER BY id DESC LIMIT 2",
+            (list_key,)).fetchall()
+        latest = snaps[0] if snaps else None
+        if latest and latest["order_hash"] == order_hash:
+            # unchanged since last rotation — movement stays vs the
+            # snapshot that rotation superseded
+            prev_id = snaps[1]["id"] if len(snaps) > 1 else None
+        else:
+            prev_id = latest["id"] if latest else None
+            cur_id = conn.execute(
+                "INSERT INTO rank_history_snapshots (list_key, order_hash) "
+                "VALUES (?, ?)", (list_key, order_hash)).lastrowid
+            conn.executemany(
+                "INSERT OR REPLACE INTO rank_history_rows "
+                "(snapshot_id, member_key, rank) VALUES (?, ?, ?)",
+                [(cur_id, k, rk) for k, rk in cur])
+            old = conn.execute(
+                "SELECT id FROM rank_history_snapshots WHERE list_key = ? "
+                "ORDER BY id DESC LIMIT -1 OFFSET ?",
+                (list_key, keep)).fetchall()
+            if old:
+                ids = [r["id"] for r in old]
+                q = ",".join("?" * len(ids))
+                conn.execute(
+                    f"DELETE FROM rank_history_rows WHERE snapshot_id IN ({q})", ids)
+                conn.execute(
+                    f"DELETE FROM rank_history_snapshots WHERE id IN ({q})", ids)
+        prev_map = {}
+        if prev_id is not None:
+            prev_map = {r["member_key"]: r["rank"] for r in conn.execute(
+                "SELECT member_key, rank FROM rank_history_rows "
+                "WHERE snapshot_id = ?", (prev_id,)).fetchall()}
+        conn.commit()
+    for r in standings:
+        r["prev_rank"] = prev_map.get(key_of(r), "-")
+
+
 def get_fellowship_cup_projection(force_refresh: bool = False,
                                   db_path: str | Path = DB_PATH) -> dict:
     """THE FELLOWSHIP CUP — combined projected reset standings.
@@ -6938,6 +7014,12 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     for r in combined:
         n = r.pop("_rank_num")
         r["rank"] = f"T{n}" if tally[n] > 1 else str(n)
+    # Movement chips vs our own recorded history (no GG reference here)
+    try:
+        _apply_rank_movement_history(combined, "fellowship_cup",
+                                     db_path=db_path)
+    except Exception:
+        logger.warning("fellowship cup rank history failed", exc_info=True)
 
     return {
         "label": "THE FELLOWSHIP CUP",

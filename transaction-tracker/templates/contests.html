@@ -2423,7 +2423,7 @@
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
                 : escapeHtml(r.player_name);
             return `<tr style="${bg}">
-                <td style="${rankTh}">${escapeHtml(r.rank)}</td>
+                <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td>${nameCell}${hcp}</td>
                 <td style="${chapTh}" title="${escapeHtml(r.chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.chapter) : (r.chapter || ""))}</td>
                 <td style="${netTh}">${escapeHtml(String(r.net_rank))}</td>
