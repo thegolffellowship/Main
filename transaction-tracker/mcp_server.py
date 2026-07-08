@@ -1374,7 +1374,8 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-games-import":
             # GG-recorded CTP / Longest Putt / HIO / TEAM Net winners;
             # same widget-url contract + time budget as scoring-mvp-import
-            return json.dumps(db.import_gg_game_results(url), indent=2)
+            _rw = 2 if arg.strip().lower().startswith("rewalk") else 0
+            return json.dumps(db.import_gg_game_results(url, rewalk_recent=_rw), indent=2)
         if cmd == "scoring-flights-import":
             # Per-game flight membership from each flighted game's own GG
             # leaderboard (Ind Net / Ind Gross via detail fragments; Skins
@@ -1412,6 +1413,12 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
+        if cmd == "scoring-auto-sync":
+            # one on-demand pass of the close-event-in-GG pipeline:
+            # scorecards + winners + flights for the newest rounds of BOTH
+            # portals, then a payout refresh (recent events force-updated).
+            # The hourly scheduler runs the same thing automatically.
+            return json.dumps(db.auto_gg_results_sync(), indent=2)
         if cmd == "scoring-portal-link":
             tok = db.make_portal_token(int(arg))
             if not tok:

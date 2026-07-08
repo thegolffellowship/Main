@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.39.2";
+window.TGF_VERSION = "2.40.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.40.0",
+    date: "2026-07-07",
+    changes: [
+      "AUTO GG RESULTS SYNC (Kerry: 'I expected that once I closed the event on GG that results would show up in Tracker'): a scheduled job now runs the whole pipeline hourly (12:10-23:10 Central; AUTO_GG_SYNC=0 disables; pure HTTP against the public portals, no AI spend). Each pass, for BOTH portals: imports scorecards for the newest rounds' ALL Net then ALL Gross boards (net first so handicaps land; idempotent), re-walks the newest rounds for GG-recorded winners (CTP/Longest Putt/HIO/Team Net) and per-game flights -- live rounds get marked walked before results are entered, so recent rounds ALWAYS re-walk (upserts make it safe) -- then refreshes auto-recorded payouts, force-replacing events from the last 3 days so late GG entries flow through while older events and anything manually recorded stay untouched. Close the event in GG; within the hour the Games tab shows winners and the PAYOUTS tab has the rows with payment links.",
+      "On-demand trigger: probe_golf_genius bridge command scoring-auto-sync runs one pass immediately; scoring-games-import accepts a rewalk arg for targeted recent-round re-walks (flights already had reset).",
+    ],
+  },
   {
     version: "2.39.2",
     date: "2026-07-07",

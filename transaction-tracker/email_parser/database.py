@@ -7896,7 +7896,8 @@ def _game_winners_from_table(table: list) -> list[dict]:
 
 
 def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
-                           time_budget: float = 42.0) -> dict:
+                           time_budget: float = 42.0,
+                           rewalk_recent: int = 0) -> dict:
     """Walk a portal's Event Results rounds and record CTP / Longest
     Putt / Hole-in-One / TEAM Net winners as GG-recorded truth.
 
@@ -7937,6 +7938,9 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
         done = {r["gg_round_id"] for r in conn.execute(
             "SELECT gg_round_id FROM gg_game_results_rounds WHERE host = ?",
             (host,)).fetchall()}
+        # A live round gets marked done before its results are entered —
+        # always re-walk the newest N rounds (upserts make it safe).
+        done -= {rid for rid, _ in options[:rewalk_recent]}
         code_map = {}
         for r in conn.execute("SELECT id, item_name FROM events").fetchall():
             m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
@@ -8077,7 +8081,8 @@ def _ensure_gg_game_flights_tables(conn: sqlite3.Connection) -> None:
 
 def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
                            time_budget: float = 42.0,
-                           reset: bool = False) -> dict:
+                           reset: bool = False,
+                           rewalk_recent: int = 0) -> dict:
     """Walk a portal's rounds and capture per-game flight membership.
 
     For every flighted-game leaderboard (Individual Net / Individual
@@ -8128,6 +8133,7 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
         done = {r["gg_round_id"] for r in conn.execute(
             "SELECT gg_round_id FROM gg_game_flights_rounds WHERE host = ?",
             (host,)).fetchall()}
+        done -= {rid for rid, _ in options[:rewalk_recent]}
         code_map = {}
         for r in conn.execute("SELECT id, item_name FROM events").fetchall():
             m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
@@ -8228,6 +8234,97 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
         result["rounds_skipped"] = len(options) - len(pending)
         result["rounds_left"] = len(pending) - result["rounds_done"]
     return result
+
+
+_GG_RESULT_PORTALS = [
+    "https://tgf-sa.golfgenius.com/leagues/514047/widgets/tournament_results?shared=false",
+    "https://tgf-austin.golfgenius.com/leagues/514705/widgets/tournament_results?shared=false",
+]
+
+
+def auto_gg_results_sync(db_path: str | Path = DB_PATH,
+                         scorecard_rounds: int = 2,
+                         rewalk_recent: int = 2,
+                         recent_force_days: int = 3) -> dict:
+    """One pass of the close-the-event-in-GG → results-in-Tracker pipeline
+    (v2.40.0, Kerry: "I expected that once I closed the event on GG that
+    results would show up in Tracker").
+
+    For each portal: (1) import scorecards for the newest N rounds' ALL
+    Net then ALL Gross boards (idempotent; net-first per the ordering
+    rule so handicaps land); (2) re-walk the newest rounds for
+    GG-recorded winners (CTP/LP/HIO/Team Net) and per-game flights —
+    live rounds get marked done before results exist, so recent rounds
+    always re-walk; (3) refresh auto-recorded payouts, force-replacing
+    events from the last few days so late GG entries flow through.
+    Runs from the hourly scheduler job; trigger on demand via the
+    probe_golf_genius bridge (scoring-auto-sync).
+    """
+    from urllib.parse import urlparse
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    out: dict = {"portals": []}
+    for widget in _GG_RESULT_PORTALS:
+        host = urlparse(widget).netloc
+        p: dict = {"host": host}
+        try:
+            page = fetch_public_page(widget, xhr=False)
+            if page["status_code"] != 200:
+                raise RuntimeError(f"GG returned HTTP {page['status_code']}")
+            sel = re.search(r'<select[^>]*name="round"[^>]*>(.*?)</select>',
+                            page["html"], re.S)
+            options = re.findall(r'<option[^>]*value="(\d+)"[^>]*>(.*?)</option>',
+                                 sel.group(1) if sel else "", re.S)
+            with _connect(db_path) as conn:
+                code_map = {}
+                for r in conn.execute("SELECT id, item_name FROM events").fetchall():
+                    m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
+                    if m:
+                        code_map.setdefault(m.group(1).lower(), r["item_name"])
+            p["scorecards"] = []
+            for rid, _lbl in options[:scorecard_rounds]:
+                round_url = f"{widget}&round={rid}"
+                struct = parse_page_structure(
+                    fetch_public_page(round_url, xhr=False)["html"], round_url)
+                links = struct.get("links") or []
+                blob = " ".join(l.get("text") or "" for l in links)
+                m = re.search(r"\b([sa]\d+(?:\.\d+)?)\b", blob)
+                code = m.group(1).lower() if (m and m.group(1).lower() in code_map) else None
+                if not code:
+                    p["scorecards"].append({"round": rid, "note": "no event code — skipped"})
+                    continue
+                for want in ("ALL Net", "ALL Gross"):   # net FIRST (handicaps)
+                    link = next((l for l in links
+                                 if (l.get("text") or "").strip().lower() == want.lower()), None)
+                    if not link:
+                        continue
+                    href = link.get("href") or ""
+                    if href.startswith("/"):
+                        href = f"https://{host}{href}"
+                    try:
+                        res = import_gg_scorecards(href, event_code=code,
+                                                   db_path=db_path)
+                        p["scorecards"].append({
+                            "round": rid, "board": want, "event": code,
+                            **{k: v for k, v in (res or {}).items()
+                               if isinstance(v, (int, float, str))}})
+                    except Exception as e:
+                        p["scorecards"].append({"round": rid, "board": want,
+                                                "error": str(e)})
+            p["games"] = import_gg_game_results(widget, db_path=db_path,
+                                                rewalk_recent=rewalk_recent)
+            p["flights"] = import_gg_game_flights(widget, db_path=db_path,
+                                                  rewalk_recent=rewalk_recent)
+        except Exception as e:
+            p["error"] = str(e)
+        out["portals"].append(p)
+    try:
+        out["payouts"] = record_all_event_game_payouts(
+            db_path=db_path, time_budget=60,
+            recent_force_days=recent_force_days)
+    except Exception as e:
+        out["payouts"] = {"error": str(e)}
+    return out
 
 
 def get_gg_game_results(event_name: str, db_path: str | Path = DB_PATH) -> dict:
@@ -29643,7 +29740,8 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
 
 
 def record_all_event_game_payouts(db_path=None, time_budget: float = 42.0,
-                                  force: bool = False) -> dict:
+                                  force: bool = False,
+                                  recent_force_days: int = 0) -> dict:
     """Bulk populate: assemble + record payouts for every PAST event.
 
     Skips events that already have payout rows (auto rows are only
@@ -29654,11 +29752,16 @@ def record_all_event_game_payouts(db_path=None, time_budget: float = 42.0,
     from time import monotonic
     from email_parser.timezone_utils import today_central_str
     started = monotonic()
+    from datetime import date, timedelta
     with _connect(db_path) as conn:
         events = [dict(r) for r in conn.execute(
-            "SELECT item_name FROM events WHERE event_date IS NOT NULL "
+            "SELECT item_name, event_date FROM events WHERE event_date IS NOT NULL "
             "AND event_date <= ? ORDER BY event_date DESC",
             (today_central_str(),)).fetchall()]
+    recent_cutoff = None
+    if recent_force_days:
+        recent_cutoff = (date.fromisoformat(today_central_str())
+                         - timedelta(days=recent_force_days)).isoformat()
     out = {"recorded": [], "skipped": [], "events_left": 0}
     for i, ev in enumerate(events):
         if monotonic() - started > time_budget:
@@ -29676,10 +29779,12 @@ def record_all_event_game_payouts(db_path=None, time_budget: float = 42.0,
                     "SELECT SUM(CASE WHEN description LIKE 'auto:%' THEN 1 ELSE 0 END) a, "
                     "       SUM(CASE WHEN description LIKE 'auto:%' THEN 0 ELSE 1 END) m "
                     "FROM tgf_payouts WHERE event_id = ?", (trow["id"],)).fetchone()
+                ev_force = force or (recent_cutoff is not None
+                                     and (ev.get("event_date") or "") >= recent_cutoff)
                 if (kinds["m"] or 0) > 0:
                     out["skipped"].append({"event": name, "reason": "manual payouts exist"})
                     continue
-                if (kinds["a"] or 0) > 0 and not force:
+                if (kinds["a"] or 0) > 0 and not ev_force:
                     out["skipped"].append({"event": name, "reason": "already auto-recorded"})
                     continue
         asm = assemble_event_game_payouts(name, db_path=db_path)
