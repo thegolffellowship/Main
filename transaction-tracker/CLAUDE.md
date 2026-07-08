@@ -336,6 +336,18 @@ benign elapsed-time/logging/rate-limit `datetime.now()` calls. Never rewrite
 stored historical timestamps — fix only new-record defaults and live
 "today"-relative computations so the **past-events-are-frozen** principle holds.
 
+## Standard color palette (v2.49.0)
+
+Kerry's ratified brand palette lives as CSS vars in `static/css/dashboard.css`
+`:root`: TGF Orange `#E87C3E` is `--primary` (hover `--primary-hover` `#D06B2E`),
+text `#1B1B1B` on `#F8F8F8`/white surfaces, border `#E5E7EB`, muted `#6B7280`
+(FG2 `--text-body #4B5563`, FG4 `--text-placeholder #9CA3AF` defined for future
+use). Chapter semantic layer: `--chapter-austin #BF5700` (white text),
+`--chapter-sa #D3DDE4` (dark text, alt `--chapter-sa-alt #8FA8B8`),
+`--chapter-national #374151` — applied to the Events/Handicaps chapter pills.
+PWA `theme-color` metas + manifest are TGF orange. Do not reintroduce royal
+blue for interactive/CTA states.
+
 ## Global CSS gotcha: tbody td is nowrap everywhere (IMPORTANT)
 
 `static/css/dashboard.css` declares a global `tbody td { white-space: nowrap; }`

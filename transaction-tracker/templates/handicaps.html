@@ -8,7 +8,7 @@
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
-    <meta name="theme-color" content="#1e40af">
+    <meta name="theme-color" content="#E87C3E">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TGF Tracker">
@@ -213,6 +213,9 @@
             background:var(--surface); border:1px solid var(--border); color:var(--text-muted); white-space:nowrap; }
         .ev-tab:hover { border-color:#E87C3E; color:#E87C3E; }
         .ev-tab.active { background:#E87C3E; border-color:#E87C3E; color:#fff; }
+        /* Chapter semantic colors (standard palette, Kerry 2026-07-08) */
+        .ev-tab.active[data-hcp-chapter="Austin"] { background:var(--chapter-austin, #BF5700); border-color:var(--chapter-austin, #BF5700); color:#fff; }
+        .ev-tab.active[data-hcp-chapter="San Antonio"] { background:var(--chapter-sa, #D3DDE4); border-color:var(--chapter-sa-alt, #8FA8B8); color:#1B1B1B; }
             .hcp-io-item { display:block; width:100%; text-align:left; padding:0.45rem 0.7rem;
             font-size:0.82rem; border:none; background:none; cursor:pointer; border-radius:5px; }
         .hcp-io-item:hover { background: #fff3ec; color: #E87C3E; }

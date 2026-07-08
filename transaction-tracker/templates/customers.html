@@ -8,7 +8,7 @@
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
-    <meta name="theme-color" content="#1e40af">
+    <meta name="theme-color" content="#E87C3E">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TGF Tracker">
@@ -66,6 +66,7 @@
         <!-- Controls -->
         <section class="controls">
             <input type="text" id="customer-search" class="search-box" placeholder="Search customers by name, email, chapter...">
+            <button class="btn-clear-filters" id="btn-clear-filters" title="Clear filters">&#10005;</button>
             <select id="filter-status" class="filter-select">
                 <option value="">All Statuses</option>
                 <option value="MEMBER">Members</option>
@@ -103,7 +104,6 @@
                 <button class="column-toggle-btn" id="cust-col-toggle-btn">Columns &#9662;</button>
                 <div class="column-toggle-dropdown" id="cust-col-toggle-dropdown"></div>
             </div>
-            <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
             <button class="btn btn-primary" id="btn-add-customer" style="font-size:0.78rem; padding:0.35rem 0.8rem;">+ Add Customer</button>
             <button class="btn btn-secondary" id="btn-upload-roster" style="font-size:0.78rem; padding:0.35rem 0.8rem;">Upload Roster</button>
             <div class="view-toggle">

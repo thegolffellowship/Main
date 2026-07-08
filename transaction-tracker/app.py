@@ -8121,16 +8121,21 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
             -- Every items row that joins to an events row with a known,
             -- non-future event_date. This is the strict definition of
             -- "played" — items without a matching events row are dropped.
-            -- JOIN is TRIM + COLLATE NOCASE so casing/whitespace differences
-            -- between AI-parsed items.item_name and manager-entered
-            -- events.item_name don't silently drop registrations.
+            -- items.event_id is the authoritative link (set at insert /
+            -- backfill); the TRIM + COLLATE NOCASE name join is only the
+            -- fallback for legacy rows without one. Name-only joins missed
+            -- real plays whenever the item snapshot and the events row
+            -- drifted apart (e.g. "s9.16 TPC OAKS" vs the renamed
+            -- "s9.16 TPC San Antonio | Oaks" — the Arias case, 2026-07-08).
             SELECT i.customer_id,
                    e.event_date AS played_date,
                    e.item_name  AS item_name,   -- canonical name from events
                    i.id         AS item_id
               FROM items i
               JOIN events e
-                ON TRIM(e.item_name) = TRIM(i.item_name) COLLATE NOCASE
+                ON e.id = i.event_id
+                OR (i.event_id IS NULL
+                    AND TRIM(e.item_name) = TRIM(i.item_name) COLLATE NOCASE)
              WHERE {ev}
                AND e.event_date IS NOT NULL
                AND e.event_date <= DATE(?)
@@ -8143,7 +8148,9 @@ def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
                    i.id         AS item_id
               FROM items i
               JOIN events e
-                ON TRIM(e.item_name) = TRIM(i.item_name) COLLATE NOCASE
+                ON e.id = i.event_id
+                OR (i.event_id IS NULL
+                    AND TRIM(e.item_name) = TRIM(i.item_name) COLLATE NOCASE)
              WHERE {ev}
                AND e.event_date IS NOT NULL
                AND e.event_date > DATE(?)

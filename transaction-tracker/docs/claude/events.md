@@ -46,7 +46,9 @@ survives filter switches; deep-links that auto-flip the filter get the
 same defaults.
 
 ## Event detail view sections (top to bottom)
-1. **Toggle bar** — PLAYERS | PAIRINGS | GAMES + 9|18 holes filter + NET | GROSS | NONE
+1. **Toggle bar** — ROSTER | PAIRINGS | GAMES | PAYOUTS (admin) | FINANCIAL + 9|18 holes
+   filter + NET | GROSS | NONE. (v2.49.0, Kerry: PLAYERS renamed ROSTER; FINANCIAL moved
+   to the end after PAYOUTS.)
 2. **Registrations table** — only active/rsvp players (compact rows)
 3. **Inactive section** — credited/refunded/transferred/WD players in a gray box with Reverse buttons. Names link to `/customers?name=...` (clickable). WD rows with a `credit_amount` and standalone `credited` rows expose an additional **Refund** button (see `Payout Credit / Refund` below).
 4. **Not Playing section** — GG RSVP players marked as not playing (red box). Names render as full "Last, First" (resolved via `rsvps.customer_id` FK → `customers` master record), link to `/customers?name=...`, and surnames render UPPERCASE for elevated-role players. No email rendered on the row.
@@ -506,8 +508,21 @@ already joined).
 - **Group** — click one foursome then another to swap entire groups.
 - **Move** — click a player to pick them up, then click a destination group to place
   them there without swapping. The player is removed from their current position and
-  inserted into the destination group's next open slot. Works for both assigned players
+  inserted into the destination group's lowest open seat. Works for both assigned players
   and unassigned players (see below).
+- **Open seats are click targets (v2.49.0, Kerry):** every group renders all four
+  seats; missing seats show as dashed "— open —" rows (`.pairing-empty-slot`). With a
+  selection active, clicking an open seat drops the selected player into THAT exact
+  seat (Player/Move modes) or moves the selected cart pair into that cart (Cart Pair
+  mode — `_moveCartPair`, which handles the empty-cart case `_swapCartPairs` can't
+  since it swaps data in place; a half-full target cart routes to `_swapCartPairs`).
+  Source groups keep their remaining players' cart positions (no renumbering) so
+  seats stay stable. `_movePlayer` accepts an optional destination seat and otherwise
+  lands in the lowest free position (the old `length+1` could double-book a cart
+  position when seats were sparse).
+- **Hole assignment edit (v2.49.0):** the group header (TGF orange, no more
+  "(Hole)" suffix) is clickable — prompts for a new `slot_label`, marks dirty, and
+  Save persists it (save_event_pairings stores slot_label from the payload).
 - All modes block cross-holes moves — you can't move a 9-hole player into an 18-hole
   group. Shows an alert and resets selection.
 - Cart dots use solid hex colors (`#3b82f6` blue for Cart A, `#22c55e` green for Cart B)
@@ -653,7 +668,7 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
 - **Paste only fires** when events tab is active AND an event is selected
 
 ## Golfer name resolution
-- `_resolve_customer_for_payout(conn, name)` — resolves payout recipient to a `customer_id` via the standard `_lookup_customer_id` cascade; creates a new customer with `acquisition_source='tgf_payout'` if no match found
+- `_resolve_customer_for_payout(conn, name)` — resolves payout recipient to a `customer_id`: `_resolve_scoring_player` FIRST (v2.49.0 — GG results names are "LAST, First Suffix", exactly what the scoring spine's candidate expansion + curated handicap_player_links map resolve; the old comma-split alone turned 'ARIAS, Victor Jr' into first='Victor Jr'/last='Arias' and minted a fresh shell customer per recording pass), then the `_lookup_customer_id` cascade, then an exact first+last guard; creates a new customer with `acquisition_source='tgf_payout'` only if everything misses. The boot repair `_repair_tgf_payout_shells()` merges any identity-less tgf_payout shells whose name re-resolves to a real customer (repoints tgf_payouts, deletes the shell) — it healed the 8 Arias shells of 2026-07-07.
 - Payouts linked to identity via `tgf_payouts.customer_id` (FK to `customers.customer_id`)
 
 ## Category types

@@ -5,7 +5,7 @@
   "start_url": "/events",
   "display": "standalone",
   "background_color": "#f5f7fa",
-  "theme_color": "#1e40af",
+  "theme_color": "#E87C3E",
   "icons": [
     {
       "src": "/static/icon.svg",
