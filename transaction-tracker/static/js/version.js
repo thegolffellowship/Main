@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.41.2";
+window.TGF_VERSION = "2.42.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.42.0",
+    date: "2026-07-08",
+    changes: [
+      "RANK MOVEMENT on the Contests points races (Kerry: 'add some type of movement symbol like is shown on the Golf Genius side... needs to be compact'): the season standings (SAN ANTONIO Net / AUSTIN Net / THE PLAYERS CUP) now show a GG-style chip in the Rank column -- green \\u25b2N for places gained, red \\u25bcN for places lost, computed from GG's own Previous Rank column (which the snapshot already stored but never displayed). A '-' previous rank shows nothing, matching GG; ties compare on the numeric part (T11 from 13 -> \\u25b22). On phones the chip stacks under the rank number so the narrow # column stays narrow. Monthly and Fellowship Cup standings are merged cross-chapter computations with no GG previous rank, so no chip there.",
+      "Backfill/completion sweep behind the a9.17 Falconhead gap: re-walked EVERY round on both portals with the v2.41.2 leaderboard-section flight fallback (~1,300 flight rows, zero unresolved names) and force re-recorded all past auto payouts. All the old Austin 'flights_unknown' Individual Net games are now determined and PAID rows exist (a9.13 Star Ranch $416->$669, a9.16 ShadowGlen $339->$474, a9.9 ShadowGlen $350->$512, etc.). Remaining gaps are boards GG itself doesn't flight-section (s18.7/s18.2 Ind Net, a few early-season skins) plus the unratified Skins \\u00bd-Net rule -- listed per event in the Games tab notes.",
+    ],
+  },
   {
     version: "2.41.2",
     date: "2026-07-08",
