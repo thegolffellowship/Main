@@ -234,5 +234,5 @@ handicap_player_links.customer_id (get_all_handicap_players now
 returns `chapter`); unlinked players have none and only show under
 ALL. Chapter-manager sessions land pre-filtered to their chapter;
 admin lands on ALL. Import Rounds + the three CSV exports are
-consolidated into one Import/Export dropdown (admin-only); Email
+consolidated into one Import/Export dropdown (admin + manager); Email
 Cards stays standalone.

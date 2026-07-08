@@ -419,10 +419,12 @@ async function checkConfig() {
             if (connUrl) connUrl.textContent = window.location.origin + "/api/connector/ingest";
         }
 
-        // Show Send Report button if daily report is configured
+        // Show Send Report button if daily report is configured — admin
+        // only (Kerry, 2026-07-08: managers must not send the report)
         const reportBtn = document.getElementById("btn-send-report");
-        if (reportBtn && data.daily_report) {
-            reportBtn.style.display = "inline-flex";
+        if (reportBtn) {
+            reportBtn.style.display = (data.daily_report && currentRole === "admin")
+                ? "inline-flex" : "none";
         }
     } catch (err) {
         console.error("Failed to check config:", err);

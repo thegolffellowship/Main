@@ -3,19 +3,28 @@
    ========================================================= */
 
 :root {
-    --bg: #f5f7fa;
-    --surface: #ffffff;
-    --text: #1a1a2e;
-    --text-muted: #6b7280;
-    --primary: #2563eb;
-    --primary-hover: #1d4ed8;
-    --border: #e5e7eb;
+    /* TGF standard palette (Kerry, 2026-07-08): TGF Orange accent on a
+       monochrome foundation; chapter colors are a semantic layer. */
+    --bg: #F8F8F8;               /* SURFACE LIGHT / BG2 */
+    --surface: #ffffff;          /* WHITE */
+    --text: #1B1B1B;             /* FG1 — primary text (TGF BLACK) */
+    --text-body: #4B5563;        /* FG2 — body */
+    --text-muted: #6B7280;       /* FG3 — muted */
+    --text-placeholder: #9CA3AF; /* FG4 — placeholder */
+    --primary: #E87C3E;          /* TGF ORANGE — accent / CTAs */
+    --primary-hover: #D06B2E;    /* ORANGE HOVER */
+    --footer: #111111;
+    --chapter-sa: #D3DDE4;       /* San Antonio (dark text; alt below) */
+    --chapter-sa-alt: #8FA8B8;
+    --chapter-austin: #BF5700;   /* Austin (white text) */
+    --chapter-national: #374151; /* National / TGF-wide (white text) */
+    --border: #E5E7EB;
     --green: #059669;
     --red: #dc2626;
     --radius: 8px;
     --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
     --shadow-lg: 0 4px 12px rgba(0,0,0,0.1);
-    --row-hover: #eef2ff;
+    --row-hover: #fff3ec;
     --detail-bg: #f8fafc;
     --rsvp-only-tint: rgba(251, 191, 36, 0.15);
     --games-active-bg: #166534;
@@ -45,6 +54,16 @@ header {
     position: sticky;
     top: 0;
     z-index: 100;
+}
+/* Keep the role badge + header buttons on ONE line (Kerry, 2026-07-08 —
+   the handicaps Import/Export dropdown wrapper is a block div and was
+   stacking the row). Wraps gracefully when the viewport is narrow. */
+.header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4rem;
 }
 header h1 {
     font-size: 1.5rem;
@@ -821,22 +840,27 @@ tr.cust-row-guest:hover { background: #f1f5f9; }
 th[data-sort].sort-active .sort-arrow { opacity: 1; color: var(--primary); }
 
 /* ---- Clear filters button ---- */
+/* Red ✕ beside the search box (Kerry, 2026-07-08 — replaces the wide
+   "Clear Filters" button on every page; .visible still gates display) */
 .btn-clear-filters {
     display: none;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.45rem 0.85rem;
-    border: 1px solid var(--border);
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    padding: 0;
+    border: 1px solid #fca5a5;
     border-radius: var(--radius);
     background: var(--surface);
-    font-size: 0.82rem;
-    font-weight: 500;
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1;
     cursor: pointer;
     color: var(--red);
     transition: background 0.15s;
-    white-space: nowrap;
 }
-.btn-clear-filters:hover { background: #fef2f2; }
+.btn-clear-filters:hover { background: #fee2e2; }
 .btn-clear-filters.visible { display: inline-flex; }
 
 /* ---- Clickable Links ---- */
@@ -1942,7 +1966,7 @@ div.mobile-card.row-rsvp-only {
     margin-left: auto;
 }
 .tab-nav a.admin-tab.active,
-.tab-nav a.admin-tab:hover { background: #d96b2d; color: #fff !important; }
+.tab-nav a.admin-tab:hover { background: #D06B2E; color: #fff !important; }
 
 /* Page sub-tabs (RSVP Log under Transactions, Participation under
    Customers) — segmented-control links */

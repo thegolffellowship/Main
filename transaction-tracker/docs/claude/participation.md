@@ -16,7 +16,7 @@ The single source-of-truth for this filter is `_participation_event_filter_sql(a
 
 ### "When" they played = event date, not purchase date
 
-The "played date" is `events.event_date`, period. The query uses **INNER JOIN events ON TRIM(items.item_name) = TRIM(events.item_name) COLLATE NOCASE** with `events.event_date IS NOT NULL` and `events.event_date <= today`.
+The "played date" is `events.event_date`, period. The query joins **`events.id = items.event_id` first (authoritative, v2.49.0), falling back to `TRIM(items.item_name) = TRIM(events.item_name) COLLATE NOCASE` only when `items.event_id` is NULL** — with `events.event_date IS NOT NULL` and `events.event_date <= today`. Name-only matching missed real plays whenever the item snapshot and the events row drifted apart beyond case (e.g. items say `s9.16 TPC OAKS` while the renamed event row says `s9.16 TPC San Antonio | Oaks` — the Arias case, 2026-07-08).
 
 The TRIM + COLLATE NOCASE is load-bearing: the AI parser builds `items.item_name` from order-email text while managers set `events.item_name` by hand on the Events tab, and the two have repeatedly drifted on case (`s9.15 THE QUARRY` vs `s9.15 The Quarry`) and trailing whitespace. Byte-for-byte equality silently dropped most registrations for affected events. The display name in the Last Played / Next Event cells comes from `events.item_name` so the label is canonical regardless of how the items row was parsed.
 

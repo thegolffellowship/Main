@@ -8,7 +8,7 @@
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
-    <meta name="theme-color" content="#1e40af">
+    <meta name="theme-color" content="#E87C3E">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TGF Tracker">
@@ -92,10 +92,25 @@
         }
         .ev-tab:hover { border-color: var(--primary); color: var(--primary); }
         .ev-chapter-row .ev-tab.active { background: #E87C3E; border-color: #E87C3E; color: #fff; }
+        /* Chapter semantic colors (standard palette, Kerry 2026-07-08) */
+        .ev-chapter-row .ev-tab.active[data-ev-chapter="Austin"] { background: var(--chapter-austin, #BF5700); border-color: var(--chapter-austin, #BF5700); color: #fff; }
+        .ev-chapter-row .ev-tab.active[data-ev-chapter="San Antonio"] { background: var(--chapter-sa, #D3DDE4); border-color: var(--chapter-sa-alt, #8FA8B8); color: #1B1B1B; }
         /* Time row = the app's standard segmented control (reconcile-page
            style, Kerry 2026-07-08); active state driven by .active since
            these aren't radio inputs */
         .ev-time-row .seg-option.active { background: #E87C3E; color: #fff; }
+        .ev-time-toolbar {
+            display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+        }
+        .ev-toolbar-right {
+            display: flex; align-items: center; gap: 0.4rem;
+            margin-left: auto; flex-wrap: wrap;
+        }
+        .ev-search-compact { width: 220px; min-width: 140px; flex: 0 1 220px; }
+        @media (max-width: 640px) {
+            .ev-toolbar-right { margin-left: 0; width: 100%; }
+            .ev-search-compact { flex: 1 1 auto; }
+        }
         .ev-tab-count { font-weight: 800; margin-left: 0.15rem; }
         /* TGF-orange breakline between UPCOMING and Past on All Events */
         .ev-past-divider td, .ev-past-divider-card {
@@ -216,10 +231,19 @@
         .pairing-group-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .pairing-group-card.pairings-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
         .pairing-group-header {
-            background: var(--bg-secondary); font-size: 0.75rem; font-weight: 700;
-            padding: 0.3rem 0.6rem; letter-spacing: 0.04em; color: var(--text-muted);
-            border-bottom: 1px solid var(--border);
+            background: #E87C3E; font-size: 0.75rem; font-weight: 700;
+            padding: 0.3rem 0.6rem; letter-spacing: 0.04em; color: #fff;
+            border-bottom: 1px solid #D06B2E; cursor: pointer;
         }
+        .pairing-group-header:hover { background: #D06B2E; }
+        .pairing-empty-slot {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.3rem 0.6rem; font-size: 0.78rem; cursor: pointer;
+            color: var(--text-muted); font-style: italic;
+            border: 1px dashed var(--border); border-left: none; border-right: none;
+            transition: background 0.12s;
+        }
+        .pairing-empty-slot:hover { background: #fff3ec; color: #E87C3E; }
         .pairing-player-row {
             display: flex; align-items: center; gap: 0.4rem;
             padding: 0.3rem 0.6rem; font-size: 0.82rem; cursor: default;
@@ -473,29 +497,31 @@
             <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
 
-        <!-- Controls -->
-        <section class="controls" style="margin-bottom: 0.75rem;">
-            <input type="text" id="event-search" class="search-box" placeholder="Search events by name, course, chapter...">
-            <div class="column-toggle-wrapper">
-                <button class="column-toggle-btn" id="ev-col-toggle-btn">Columns &#9662;</button>
-                <div class="column-toggle-dropdown" id="ev-col-toggle-dropdown"></div>
-            </div>
-            <button class="btn btn-primary" id="btn-add-event" style="font-size:0.82rem;padding:0.45rem 0.9rem;">+ Add Event</button>
-            <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
-        </section>
-
-        <!-- Chapter scope (top row) over compact time tabs (sub row) — Kerry 2026-07-08 -->
+        <!-- Chapter scope (top row) over compact time tabs (sub row) — Kerry 2026-07-08.
+             Search / Columns / Add Event share the time-tab line, right-justified
+             (Kerry 2026-07-08); Clear Filters is the red ✕ beside the search box. -->
         <section class="ev-filter-tabs" id="summary-section">
             <nav class="ev-tab-row ev-chapter-row">
                 <span class="ev-tab active" data-ev-chapter="all">ALL</span>
                 <span class="ev-tab" data-ev-chapter="Austin">AUSTIN</span>
                 <span class="ev-tab" data-ev-chapter="San Antonio">SAN ANTONIO</span>
             </nav>
-            <nav class="segmented-control ev-time-row">
-                <span class="seg-option active" data-ev-filter="upcoming">UPCOMING <span class="ev-tab-count" id="stat-upcoming"></span></span>
-                <span class="seg-option" data-ev-filter="past">Past <span class="ev-tab-count" id="stat-past"></span></span>
-                <span class="seg-option" data-ev-filter="all">All Events <span class="ev-tab-count" id="stat-total"></span></span>
-            </nav>
+            <div class="ev-time-toolbar">
+                <nav class="segmented-control ev-time-row">
+                    <span class="seg-option active" data-ev-filter="upcoming">UPCOMING <span class="ev-tab-count" id="stat-upcoming"></span></span>
+                    <span class="seg-option" data-ev-filter="past">Past <span class="ev-tab-count" id="stat-past"></span></span>
+                    <span class="seg-option" data-ev-filter="all">All Events <span class="ev-tab-count" id="stat-total"></span></span>
+                </nav>
+                <div class="ev-toolbar-right">
+                    <input type="text" id="event-search" class="search-box ev-search-compact" placeholder="Search events...">
+                    <button class="btn-clear-filters" id="btn-clear-filters" title="Clear filters">&#10005;</button>
+                    <div class="column-toggle-wrapper">
+                        <button class="column-toggle-btn" id="ev-col-toggle-btn">Columns &#9662;</button>
+                        <div class="column-toggle-dropdown" id="ev-col-toggle-dropdown"></div>
+                    </div>
+                    <button class="btn btn-primary" id="btn-add-event" style="font-size:0.82rem;padding:0.45rem 0.9rem;">+ Add Event</button>
+                </div>
+            </div>
         </section>
 
         <!-- Action Items Banner (admin/manager) -->
@@ -1800,10 +1826,11 @@
         }
         kickInitialLoad();
         renderEvents();
-        if (currentRole === "admin") {
-            const mv = document.getElementById("btn-match-venmo");
-            if (mv) mv.style.display = "";
-        }
+        // Set explicitly BOTH ways: show-only left the button visible after
+        // an admin logged out and a manager logged in on the same page
+        // (Kerry saw Match Venmo as a manager, 2026-07-08).
+        const mv = document.getElementById("btn-match-venmo");
+        if (mv) mv.style.display = (currentRole === "admin") ? "" : "none";
     }
 
     // Column definitions for Events table
@@ -2315,15 +2342,15 @@
                 const mobilePairingsView = pairingsOpenForEvent[ev.id];
                 const mobileFinancialView = financialOpenForEvent[ev.id];
                 const mobilePayoutsView = payoutsOpenForEvent[ev.id];
-                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
                 badgesHtml += `<span class="game-stat-badge ${mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
                 if (mobileHolesType) {
                     badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
                 }
-                badgesHtml += `<span class="game-stat-badge ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
                 if (currentRole === 'admin') {
                     badgesHtml += `<span class="game-stat-badge ${mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
                 }
+                badgesHtml += `<span class="game-stat-badge ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
                 badgesHtml += '</span>';
                 if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView) {
                     // 9/18 holes filter
@@ -4160,9 +4187,25 @@
             const isDropTarget = isMoveTarget && grp.players.length < 4 &&
                 !(state.selection.holes === holes && state.selection.group_num === grp.group_num);
             html += `<div class="pairing-group-card${isSelected ? ' pairings-selected' : ''}${isDropTarget ? ' pairings-move-target' : ''}" data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}">`;
-            html += `<div class="pairing-group-header">${escapeHtml(grp.slot_label)}${isShotgun ? ' <span style="color:var(--text-muted);font-size:0.75em;">(Hole)</span>' : ''}</div>`;
+            html += `<div class="pairing-group-header" data-slot-edit data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" title="Click to change this group's hole assignment">${escapeHtml(grp.slot_label)}</div>`;
 
-            grp.players.forEach((player, idx) => {
+            // Render all four seats: occupied rows + clickable open slots
+            // (Kerry, 2026-07-08: open spots in short groups must be usable
+            // as Player / Cart Pair / Move targets)
+            const byPos = {};
+            grp.players.forEach(pl => { byPos[pl.cart_pos] = pl; });
+            for (let pos = 1; pos <= 4; pos++) {
+                if (pos === 3) {
+                    html += '<div class="pairing-cart-divider"></div>';
+                }
+                const player = byPos[pos];
+                if (!player) {
+                    html += `<div class="pairing-empty-slot" title="Open spot — select a player or cart pair first, then click here"
+                        data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${pos}">
+                        <span class="pairing-cart-dot" style="background:var(--border);"></span>
+                        <span class="pairing-player-name">— open —</span></div>`;
+                    continue;
+                }
                 const isCart1 = player.cart_pos <= 2;
                 const cartDot = isCart1 ? '#3b82f6' : '#22c55e';
                 const isSelectedPlayer = (state.swapMode === 'player' || state.swapMode === 'move') && state.selection &&
@@ -4175,11 +4218,6 @@
 
                 const hcp = player.handicap_index != null ? Number(player.handicap_index).toFixed(1) : '—';
 
-                // Cart divider between positions 2 and 3
-                if (idx === 2 && grp.players.length > 2) {
-                    html += '<div class="pairing-cart-divider"></div>';
-                }
-
                 html += `<div class="pairing-player-row${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
                     data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
                 html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
@@ -4187,7 +4225,7 @@
                 html += `<span class="pairing-hcp">${hcp}</span>`;
                 html += `<span class="pairing-tee">${escapeHtml(player.tee_choice || '—')}</span>`;
                 html += '</div>';
-            });
+            }
 
             html += '</div>'; // .pairing-group-card
         });
@@ -4813,15 +4851,15 @@
 
         html += '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
-        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
         if (holesType) {
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
         }
-        html += `<span class="game-stat-badge ${financialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
         if (currentRole === 'admin') {
             html += `<span class="game-stat-badge ${payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
         }
+        html += `<span class="game-stat-badge ${financialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
@@ -6349,6 +6387,68 @@
             });
         });
 
+        // Empty seat click — open spots in short groups are drop targets for
+        // the selected player (Player/Move modes) or cart pair (Cart Pair
+        // mode). Kerry, 2026-07-08: "treat open spots in a 3some, 2some or
+        // 1some as clickable for moving as a PLAYER, or a PAIR."
+        container.querySelectorAll('.pairing-empty-slot').forEach(slot => {
+            slot.addEventListener('click', e => {
+                if (!state.swapMode || state.swapMode === 'group') return;
+                if (!state.selection) return; // empty seats are targets only — pick a player/pair first
+                e.stopPropagation();
+                const holes = slot.dataset.holes;
+                const groupNum = parseInt(slot.dataset.groupNum);
+                const cartPos = parseInt(slot.dataset.cartPos);
+                if (state.swapMode === 'cartpair') {
+                    if (state.selection.holes !== holes) {
+                        alert('Cannot swap 9-hole and 18-hole players.');
+                        state.selection = null;
+                        rerenderDetail(container, ev);
+                        return;
+                    }
+                    const destGrp = _findGroup(state, holes, groupNum);
+                    const destCartOccupied = destGrp && destGrp.players.some(p => (p.cart_pos <= 2) === (cartPos <= 2));
+                    if (destCartOccupied) {
+                        // Half-full cart: swap handles unequal pair sizes
+                        _swapCartPairs(state, state.selection, {holes, group_num: groupNum, cart_pos: cartPos});
+                    } else {
+                        _moveCartPair(state, state.selection, holes, groupNum, cartPos);
+                    }
+                } else {
+                    // Player swap or Move — drop the selected player into this exact seat
+                    if (state.swapMode === 'player' && state.selection.holes !== holes) {
+                        alert('Cannot swap 9-hole and 18-hole players.');
+                        state.selection = null;
+                        rerenderDetail(container, ev);
+                        return;
+                    }
+                    _movePlayer(state, state.selection, holes, groupNum, cartPos);
+                }
+                state.isDirty = true; state.selection = null;
+                rerenderDetail(container, ev);
+            });
+        });
+
+        // Hole-assignment header click — edit the group's slot label in
+        // place (persisted by Save; save_event_pairings stores slot_label).
+        container.querySelectorAll('[data-slot-edit]').forEach(hdr => {
+            hdr.addEventListener('click', e => {
+                e.stopPropagation();
+                const holes = hdr.dataset.holes;
+                const groupNum = parseInt(hdr.dataset.groupNum);
+                const grp = _findGroup(state, holes, groupNum);
+                if (!grp) return;
+                const cur = grp.slot_label || '';
+                const next = prompt('Hole assignment for this group:', cur);
+                if (next === null) return;
+                const label = next.trim();
+                if (!label || label === cur) return;
+                grp.slot_label = label;
+                state.isDirty = true;
+                rerenderDetail(container, ev);
+            });
+        });
+
         // Unassigned player row click (move mode only)
         container.querySelectorAll('[data-unassigned-name]').forEach(row => {
             row.addEventListener('click', e => {
@@ -6415,7 +6515,7 @@
         return html;
     }
 
-    function _movePlayer(state, src, destHoles, destGroupNum) {
+    function _movePlayer(state, src, destHoles, destGroupNum, destCartPos) {
         const destGroup = _findGroup(state, destHoles, destGroupNum);
         if (!destGroup) return;
         if (destGroup.players.length >= 4) {
@@ -6436,11 +6536,22 @@
             const idx = srcGroup.players.findIndex(p => p.cart_pos === src.cart_pos);
             if (idx === -1) return;
             [player] = srcGroup.players.splice(idx, 1);
-            // Renumber source
-            srcGroup.players.forEach((p, i) => { p.cart_pos = i + 1; });
+            // Do NOT renumber the source group: open seats are first-class
+            // targets now, so remaining players keep their cart positions.
         }
-        player.cart_pos = destGroup.players.length + 1;
+        // Land in the requested seat if it's free, otherwise the lowest
+        // open seat. (The old `length + 1` collided with sparse positions,
+        // e.g. players at 1 and 3 would both produce cart_pos 3.)
+        const taken = new Set(destGroup.players.map(p => p.cart_pos));
+        let seat = (destCartPos && !taken.has(destCartPos)) ? destCartPos : null;
+        if (!seat) {
+            for (let pos = 1; pos <= 4; pos++) {
+                if (!taken.has(pos)) { seat = pos; break; }
+            }
+        }
+        player.cart_pos = seat;
         destGroup.players.push(player);
+        destGroup.players.sort((a, b) => a.cart_pos - b.cart_pos);
     }
 
     function _swapPlayers(state, a, b) {
@@ -6481,6 +6592,30 @@
             const extra = pairsB[minLen];
             extra.cart_pos = pairsA.length > 0 ? (isCart1A ? 2 : 4) : (isCart1A ? 1 : 3);
         }
+    }
+
+    function _moveCartPair(state, src, destHoles, destGroupNum, destCartPos) {
+        // Move the selected cart pair (1-2 or 3-4 of the source group) into
+        // an EMPTY cart of the destination group. _swapCartPairs swaps player
+        // data in place, so it can't target a cart with no players — this can.
+        const srcGroup = _findGroup(state, src.holes, src.group_num);
+        const destGroup = _findGroup(state, destHoles, destGroupNum);
+        if (!srcGroup || !destGroup) return;
+        const srcCart1 = src.cart_pos <= 2;
+        const destCart1 = destCartPos <= 2;
+        if (srcGroup === destGroup && srcCart1 === destCart1) return; // same cart, no-op
+        const pair = srcGroup.players.filter(p => (p.cart_pos <= 2) === srcCart1);
+        if (!pair.length) return;
+        if (destGroup.players.some(p => (p.cart_pos <= 2) === destCart1)) {
+            alert('That cart already has a player — click an occupied row to swap pairs instead.');
+            return;
+        }
+        srcGroup.players = srcGroup.players.filter(p => (p.cart_pos <= 2) !== srcCart1);
+        const base = destCart1 ? 1 : 3;
+        pair.sort((a, b) => a.cart_pos - b.cart_pos);
+        pair.forEach((p, i) => { p.cart_pos = base + i; });
+        destGroup.players.push(...pair);
+        destGroup.players.sort((a, b) => a.cart_pos - b.cart_pos);
     }
 
     function _swapGroups(state, holesA, gnA, holesB, gnB) {

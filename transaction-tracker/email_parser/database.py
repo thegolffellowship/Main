@@ -3500,6 +3500,12 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Chalfant attribution repair failed: %s", e)
 
+        # Always-run repair: merge Arias payout shell customers (v2.49.0)
+        try:
+            _repair_tgf_payout_shells(conn)
+        except Exception as e:
+            logger.warning("Payout shell repair failed: %s", e)
+
         # Always-run repair: re-attribute William Massey items corrupted by bad merge
         try:
             _repair_massey_attribution(conn)
@@ -8676,6 +8682,83 @@ _MONTH_NUMS = {m.lower(): i + 1 for i, m in enumerate(
      "August", "September", "October", "November", "December"])}
 
 
+def _synthesize_month_points(conn, month_key: str, errors: list) -> dict:
+    """Best-effort monthly standings for a month with no GG "<MONTH>
+    Points" page yet (Kerry, 2026-07-08: JULY must show without waiting
+    for the portal page to be built each month). Walks the per-player
+    season-points detail (the same individual_info XHR the drill-down
+    uses) for ONLY the players who have a scoring round in the month,
+    and sums the points lines dated in-month. Once the GG page exists,
+    link discovery takes over and this path is skipped for that month.
+    Returns the same best-of-both-portals dict the page path builds.
+    """
+    from golf_genius_sync import fetch_points_race_member_detail
+
+    played = conn.execute(
+        """SELECT DISTINCT customer_id, player_name FROM scoring_rounds
+           WHERE round_date LIKE ?""", (month_key + "%",)).fetchall()
+    if not played:
+        return {}
+    played_cids = {r["customer_id"] for r in played if r["customer_id"]}
+    played_names = {(r["player_name"] or "").strip().lower() for r in played}
+
+    best: dict = {}
+    for race_key in ("san_antonio_net", "austin_net"):
+        cfg = _GG_POINTS_RACES[race_key]
+        cards = conn.execute(
+            """SELECT player_name, customer_id, affiliation, member_card_id
+               FROM gg_points_standings
+               WHERE race_key = ? AND member_card_id IS NOT NULL""",
+            (race_key,)).fetchall()
+        for c in cards:
+            cid = c["customer_id"]
+            if not ((cid and cid in played_cids)
+                    or (c["player_name"] or "").strip().lower() in played_names):
+                continue
+            try:
+                detail = fetch_points_race_member_detail(
+                    page_id=cfg["page_id"],
+                    member_card_id=c["member_card_id"],
+                    league_id=cfg["league_id"], host=cfg["host"])
+            except Exception as e:
+                errors.append(
+                    f"{cfg['chapter']} {month_key} {c['player_name']}: {e}")
+                continue
+            pts, rounds = 0.0, 0
+            for t in detail.get("tables") or []:
+                if not t or len(t) < 2:
+                    continue
+                head = [str(h or "").strip().lower() for h in t[0]]
+                d_i = next((i for i, h in enumerate(head) if "date" in h), -1)
+                p_i = next((i for i, h in enumerate(head)
+                            if h == "pts" or "point" in h), -1)
+                if d_i == -1 or p_i == -1:
+                    continue
+                for row in t[1:]:
+                    if len(row) <= max(d_i, p_i):
+                        continue
+                    if not str(row[d_i] or "").strip().startswith(month_key):
+                        continue
+                    try:
+                        pts += float(str(row[p_i]).replace(",", ""))
+                        rounds += 1
+                    except ValueError:
+                        continue
+            if rounds == 0 and pts == 0:
+                continue
+            k = cid if cid is not None else f"n:{(c['player_name'] or '').lower()}"
+            cur = best.get(k)
+            if cur is None or pts > cur["points"]:
+                aff = re.sub(r"^TGF\s+", "", (c["affiliation"] or "").strip())
+                best[k] = {"player_name": c["player_name"],
+                           "customer_id": cid,
+                           "chapter": aff or cfg["chapter"],
+                           "rounds": rounds,
+                           "points": round(pts, 2),
+                           "member_card_id": c["member_card_id"]}
+    return best
+
+
 def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
     import calendar
     from golf_genius_sync import (fetch_public_page, parse_page_structure,
@@ -8705,10 +8788,23 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
             month_pages.setdefault(key, []).append(
                 (chapter, host, league, pid.group(1)))
 
+    # The CURRENT month may have no "<MONTH> Points" page on either
+    # portal yet (they get built by hand each month). Synthesize it from
+    # per-player detail so the tab appears on day one (Kerry, 2026-07-08).
+    # Bounded by the RATIFIED active months (admin 2026-07-06): monthly
+    # races run Mar-Jul and Sep-Oct only — never invent an August or
+    # off-season race.
+    _ACTIVE_MONTHLY_MONTHS = {3, 4, 5, 6, 7, 9, 10}
+    cur_key = f"{today_central().year}-{today_central().month:02d}"
+    synth_keys = (
+        {cur_key} - set(month_pages)
+        if month_pages and today_central().month in _ACTIVE_MONTHLY_MONTHS
+        else set())
+
     out_months = []
     with _connect(db_path) as conn:
         today = today_central().isoformat()
-        for key in sorted(month_pages):
+        for key in sorted(set(month_pages) | synth_keys):
             year, mnum = int(key[:4]), int(key[5:7])
             last_day = calendar.monthrange(year, mnum)[1]
             month_end = f"{year:04d}-{mnum:02d}-{last_day:02d}"
@@ -8719,30 +8815,33 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
                    WHERE date(started_at) <= ? AND date(expires_at) >= ?""",
                 (month_end, month_end)).fetchone()["c"]
             best: dict = {}
-            for chapter, host, league, pid in month_pages[key]:
-                try:
-                    rows = fetch_season_points_race(pid, league, host)
-                except Exception as e:
-                    errors.append(f"{chapter} {key}: {e}")
-                    continue
-                for r in rows:
-                    pts = r.get("total_points")
-                    if pts is None:
+            if key in synth_keys:
+                best = _synthesize_month_points(conn, key, errors)
+            else:
+                for chapter, host, league, pid in month_pages[key]:
+                    try:
+                        rows = fetch_season_points_race(pid, league, host)
+                    except Exception as e:
+                        errors.append(f"{chapter} {key}: {e}")
                         continue
-                    cid = _resolve_scoring_player(conn, r["player_name"])
-                    k = cid if cid is not None else f"n:{r['player_name'].lower()}"
-                    cur = best.get(k)
-                    if cur is None or pts > cur["points"]:
-                        # chapter from the ROW's affiliation ("TGF Austin"),
-                        # not the portal — the monthly tables are TGF-wide
-                        aff = re.sub(r"^TGF\s+", "",
-                                     (r.get("affiliation") or "").strip())
-                        best[k] = {"player_name": r["player_name"],
-                                   "customer_id": cid,
-                                   "chapter": aff or chapter,
-                                   "rounds": r.get("tournaments"),
-                                   "points": pts,
-                                   "member_card_id": r.get("member_card_id")}
+                    for r in rows:
+                        pts = r.get("total_points")
+                        if pts is None:
+                            continue
+                        cid = _resolve_scoring_player(conn, r["player_name"])
+                        k = cid if cid is not None else f"n:{r['player_name'].lower()}"
+                        cur = best.get(k)
+                        if cur is None or pts > cur["points"]:
+                            # chapter from the ROW's affiliation ("TGF Austin"),
+                            # not the portal — the monthly tables are TGF-wide
+                            aff = re.sub(r"^TGF\s+", "",
+                                         (r.get("affiliation") or "").strip())
+                            best[k] = {"player_name": r["player_name"],
+                                       "customer_id": cid,
+                                       "chapter": aff or chapter,
+                                       "rounds": r.get("tournaments"),
+                                       "points": pts,
+                                       "member_card_id": r.get("member_card_id")}
             standings = sorted(best.values(), key=lambda x: -x["points"])
             last_pts, last_rank = None, 0
             for i, row in enumerate(standings, 1):
@@ -29521,6 +29620,56 @@ def run_compliance_checks(db_path: str | Path | None = None) -> list[dict]:
 # TGF Payouts
 # ---------------------------------------------------------------------------
 
+def _repair_tgf_payout_shells(conn: sqlite3.Connection) -> None:
+    """Merge shell customers minted by the pre-v2.49.0
+    _resolve_customer_for_payout comma-split bug (GG "LAST, First Suffix"
+    names → first="Victor Jr"/last="Arias" shells, one per recording
+    pass). For every acquisition_source='tgf_payout' customer with no
+    items, no emails, and no handicap links, re-resolve the name through
+    the scoring spine; if it lands on a DIFFERENT customer, repoint
+    tgf_payouts rows there and delete the shell. Idempotent — clean
+    databases fall straight through."""
+    shells = conn.execute(
+        """SELECT c.customer_id,
+                  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS nm
+             FROM customers c
+            WHERE c.acquisition_source = 'tgf_payout'
+              AND NOT EXISTS (SELECT 1 FROM items i WHERE i.customer_id = c.customer_id)
+              AND NOT EXISTS (SELECT 1 FROM customer_emails ce WHERE ce.customer_id = c.customer_id)
+              AND NOT EXISTS (SELECT 1 FROM handicap_player_links hl WHERE hl.customer_id = c.customer_id)
+        """).fetchall()
+    if not shells:
+        return
+    merged = 0
+    for s in shells:
+        nm = (s["nm"] or "").strip()
+        if not nm:
+            continue
+        # Reconstruct the GG form the recorder saw ("Victor Jr Arias" came
+        # from "ARIAS, Victor Jr") and let the scoring spine resolve it;
+        # also try the name as-is.
+        target = _resolve_scoring_player(conn, nm)
+        if target is None:
+            parts = nm.split()
+            if len(parts) >= 2:
+                target = _resolve_scoring_player(
+                    conn, f"{parts[-1].upper()}, {' '.join(parts[:-1])}")
+        if target is None or target == s["customer_id"]:
+            continue
+        conn.execute("UPDATE tgf_payouts SET customer_id = ? WHERE customer_id = ?",
+                     (target, s["customer_id"]))
+        conn.execute("DELETE FROM customer_aliases WHERE customer_id = ?",
+                     (s["customer_id"],))
+        conn.execute("DELETE FROM customers WHERE customer_id = ?",
+                     (s["customer_id"],))
+        merged += 1
+        logger.info("Merged tgf_payout shell %d ('%s') into customer %d",
+                    s["customer_id"], nm, target)
+    if merged:
+        conn.commit()
+        logger.info("Payout shell repair: merged %d shell customers", merged)
+
+
 def _resolve_customer_for_payout(conn: sqlite3.Connection, name: str) -> int:
     """Return customer_id for a payout entry, creating a customer if needed.
 
@@ -29538,6 +29687,18 @@ def _resolve_customer_for_payout(conn: sqlite3.Connection, name: str) -> int:
         raise ValueError("Cannot resolve payout customer: name is empty")
 
     clean_name = name.strip()
+
+    # GG-format resolution FIRST (v2.49.0): payout names come from Golf
+    # Genius results tables as "ARIAS, Victor Jr" — the scoring spine
+    # (_resolve_scoring_player: curated handicap_player_links map + full
+    # name-candidate expansion incl. suffixes) already resolves exactly
+    # these strings. The old comma-split alone turned "ARIAS, Victor Jr"
+    # into first="Victor Jr"/last="Arias", missed the real customer
+    # (first="Victor", suffix="Jr"), and minted a fresh shell customer on
+    # EVERY recording pass (the Arias duplicate-shell bug, 2026-07-08).
+    cid = _resolve_scoring_player(conn, clean_name)
+    if cid is not None:
+        return cid
 
     # Detect and normalize "LAST, First" format
     if "," in clean_name:
@@ -29558,6 +29719,17 @@ def _resolve_customer_for_payout(conn: sqlite3.Connection, name: str) -> int:
             if cid is not None:
                 return cid
 
+            # Last guard before creating: an identical first+last already
+            # created by a previous pass (the lookup cascade can miss its
+            # own mis-split shells — never mint the same shell twice)
+            row = conn.execute(
+                """SELECT customer_id FROM customers
+                   WHERE LOWER(first_name) = LOWER(?)
+                     AND LOWER(last_name) = LOWER(?) LIMIT 1""",
+                (normalized_first, normalized_last)).fetchone()
+            if row:
+                return row["customer_id"]
+
             # Create customer using the properly-ordered name
             cur = conn.execute(
                 """INSERT INTO customers
@@ -29574,6 +29746,13 @@ def _resolve_customer_for_payout(conn: sqlite3.Connection, name: str) -> int:
     cid = _lookup_customer_id(conn, clean_name, None)
     if cid is not None:
         return cid
+
+    row = conn.execute(
+        """SELECT customer_id FROM customers
+           WHERE LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')))
+                 = LOWER(?) LIMIT 1""", (clean_name,)).fetchone()
+    if row:
+        return row["customer_id"]
 
     parts = clean_name.split()
     if len(parts) >= 2:

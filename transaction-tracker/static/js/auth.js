@@ -135,6 +135,13 @@ function updateNavForRole() {
         const el = document.getElementById(id);
         if (el) el.style.display = (currentRole === "admin") ? "" : "none";
     });
+    // Admin-only buttons that are conditionally SHOWN elsewhere (config
+    // check / onAuthReady) — here we only force-hide for non-admins so a
+    // role switch on the same page can't leave them visible.
+    ["btn-send-report", "btn-match-venmo"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && currentRole !== "admin") el.style.display = "none";
+    });
     // Show/hide admin sub-nav on pages where it is conditionally rendered (e.g. changelog)
     document.querySelectorAll(".admin-subnav.admin-nav").forEach(el => {
         el.style.display = (currentRole === "admin") ? "" : "none";

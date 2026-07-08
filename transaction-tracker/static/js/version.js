@@ -1,5 +1,21 @@
-window.TGF_VERSION = "2.48.0";
+window.TGF_VERSION = "2.49.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.49.0",
+    date: "2026-07-08",
+    changes: [
+      "PAIRINGS INTERACTIVITY (Kerry): open seats in a 3some/2some/1some now render as dashed '-- open --' rows and are CLICK TARGETS -- pick a player (Player or Move mode) or a cart pair (Cart Pair mode) and click an open seat to drop them exactly there; moving a pair into an empty cart now works (it previously required an occupied row to swap with). Group hole assignments are editable by clicking the header above the names (prompts for the new label; Save persists it). The '(Hole)' suffix is gone from group headers and the header bar is TGF orange. Also fixed a latent bug where moving a player into a group with non-contiguous seats could double-book a cart position.",
+      "STANDARD COLORS ADOPTED (Kerry's brand sheet): the app-wide palette switches to TGF Orange #E87C3E accent + monochrome foundation -- primary buttons/links are now orange (hover #D06B2E), text #1B1B1B on #F8F8F8 surfaces, borders #E5E7EB, and the PWA theme color is orange. Chapter semantic colors are live on the Events/Handicaps chapter pills: AUSTIN burnt orange #BF5700, SAN ANTONIO slate #D3DDE4, ALL stays TGF orange. FG2/FG4 and chapter vars are defined in :root for future use.",
+      "EVENT VIEW BADGES (Kerry): PLAYERS renamed ROSTER, and FINANCIAL moved to the END after PAYOUTS (Roster | Pairings | Games | Payouts | Financial) on desktop and mobile.",
+      "JULY MONTHLY POINTS (Kerry): the Contests MONTHLY tab no longer waits for the hand-built '<MONTH> Points' page on the GG portals -- when the current month has no page yet, the tracker synthesizes it from each played player's season-points detail (only players with a scoring round that month are fetched), so JULY shows now and every future month appears on day one. Once the GG page exists it takes over automatically.",
+      "ARIAS FIX 1 -- participation last-played now joins registrations to events by EVENT ID (name-string match only remains as a legacy fallback). The Ariases' s9.16 TPC Oaks rounds were invisible to Participation because the items say 'TPC OAKS' while the event row says 'TPC San Antonio | Oaks'.",
+      "ARIAS FIX 2 -- the payout recorder was minting duplicate shell customers for GG 'LAST, First Suffix' names ('ARIAS, Victor Jr' became a fresh 'Victor Jr Arias' shell on every recording pass; 8 shells found). The resolver now goes through the scoring identity spine first (same resolver that links their scorecards correctly), a boot repair merges the existing shells back into the real customers and repoints their payout rows, and a guard prevents the same shell from ever being minted twice.",
+      "MANAGER ACCESS TIGHTENED (Kerry): Send Report (Transactions) is admin-only, and Match Venmo can no longer linger visible after an admin logs out and a manager logs in on the same page -- both are also force-hidden on any role switch.",
+      "HEADER LAYOUT: the role badge, Import/Export dropdown, Email Cards, and Log Out now sit on ONE line (the header-actions row is flex on desktop too; the dropdown wrapper was a block element that stacked the handicaps header).",
+      "EVENTS TOOLBAR (Kerry): the search bar, Columns, and + Add Event moved onto the SAME line as the UPCOMING | Past | All Events control, right-justified, with the search bar shortened to a compact width.",
+      "RED \u2715 CLEAR (Kerry): the wide 'Clear Filters' button is now a small red \u2715 sitting immediately right of the search bar on EVERY page that had one (Events, Transactions, Customers, RSVP Log). Same behavior -- appears only when a filter is active, one click resets.",
+    ],
+  },
   {
     version: "2.48.0",
     date: "2026-07-08",

@@ -422,10 +422,24 @@ fetch_season_points_race). ALL points in the month count (no best-10).
   month-end date), split across tied winners.
 - **Active months: March, April, May, June, July, September, October**
   (7 months). NO monthly race in August or the off-season (Nov-Feb).
-  The month nav / purse logic should only recognize these months —
-  today it is naturally bounded by which GG "<MONTH> Points" pages
-  exist, but the canonical list should be encoded as a rule so the
-  system does not invent a phantom August race.
+  Encoded as `_ACTIVE_MONTHLY_MONTHS = {3,4,5,6,7,9,10}` in
+  get_monthly_points() (v2.49.0) — it gates the current-month
+  synthesizer so the system never invents a phantom August race.
+
+**Current-month synthesizer (v2.49.0, Kerry: "Add JULY"):** the GG
+"<MONTH> Points" portal pages are built by hand each month, so early in
+a month the MONTHLY tab had nothing to discover. When the current month
+(within the active-months rule) has no portal page, `get_monthly_points`
+calls `_synthesize_month_points()`: players with a `scoring_rounds` row
+in that month are looked up in `gg_points_standings` for their
+member_card_id, each one's season-points detail
+(`fetch_points_race_member_detail` — same XHR as the drill-down) is
+fetched, and points lines dated in-month are summed (rounds = line
+count). Best-of-both-portals merge, same as the page path. Only players
+who actually played are fetched, keeping GG traffic bounded; the fetch
+runs inside the daily 05:30 snapshot job and ?force=1. Once Kerry
+builds the GG page for that month, link discovery takes over
+automatically.
 
 get_monthly_points() (database.py) merges chapters, recomputes ranks,
 and computes the award as above, split across tied winners. Route

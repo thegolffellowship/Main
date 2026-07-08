@@ -8,7 +8,7 @@
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon-180.png">
-    <meta name="theme-color" content="#1e40af">
+    <meta name="theme-color" content="#E87C3E">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TGF Tracker">
@@ -152,6 +152,7 @@
         <!-- Controls -->
         <section class="controls" style="margin-bottom: 0.75rem;">
             <input type="text" id="rsvp-search" class="search-box" placeholder="Search by player name, event, email...">
+            <button class="btn-clear-filters" id="btn-clear-filters" title="Clear filters">&#10005;</button>
             <select id="rsvp-chapter-filter" class="filter-select" title="Scope to a chapter's events (shared/TGF events included)">
                 <option value="">All Chapters</option>
                 <option value="Austin">Austin</option>
@@ -160,7 +161,6 @@
             <select id="rsvp-event-filter" class="filter-select">
                 <option value="">All Events</option>
             </select>
-            <button class="btn-clear-filters" id="btn-clear-filters">Clear Filters</button>
         </section>
 
         <!-- Stats / Category Filters -->
