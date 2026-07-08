@@ -538,6 +538,12 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   is how s9.17 Silverhorn got its payouts recorded WITHOUT Team
   Net/CTP attached (the data was finalized in GG the whole time; the
   next pass' 3-day force-refresh window then heals it).
+  Board-name matching (v2.41.1): scorecard boards are matched by
+  PREFIX — SA names them "ALL Net"/"ALL Gross" but Austin uses
+  "ALL Net 9"/"ALL Gross 9", and the original exact match meant
+  Austin events never got scorecards from the sync (a9.17
+  Falconhead). Every matching board imports (future "ALL Net 18"
+  combo days included).
 - Still manual: Skins ½ Net at <8 gross buyers on 9h (half-pop
   allocation rule unratified — the row shows "manual — ½-net rule
   pending").

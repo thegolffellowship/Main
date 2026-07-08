@@ -8306,24 +8306,29 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
                     if not code:
                         p["scorecards"].append({"round": rid, "note": "no event code — skipped"})
                         continue
+                    # Board names vary per portal: SA uses "ALL Net"/"ALL
+                    # Gross", Austin "ALL Net 9"/"ALL Gross 9" — prefix
+                    # match (v2.41.1; exact match meant Austin events never
+                    # got scorecards from the auto-sync, a9.17 Falconhead).
                     for want in ("ALL Net", "ALL Gross"):   # net FIRST (handicaps)
-                        link = next((l for l in links
-                                     if (l.get("text") or "").strip().lower() == want.lower()), None)
-                        if not link:
-                            continue
-                        href = link.get("href") or ""
-                        if href.startswith("/"):
-                            href = f"https://{host}{href}"
-                        try:
-                            res = import_gg_scorecards(href, event_code=code,
-                                                       db_path=db_path)
-                            p["scorecards"].append({
-                                "round": rid, "board": want, "event": code,
-                                **{k: v for k, v in (res or {}).items()
-                                   if isinstance(v, (int, float, str))}})
-                        except Exception as e:
-                            p["scorecards"].append({"round": rid, "board": want,
-                                                    "error": str(e)})
+                        board_links = [l for l in links
+                                       if (l.get("text") or "").strip().lower()
+                                       .startswith(want.lower())]
+                        for link in board_links:
+                            label = (link.get("text") or "").strip() or want
+                            href = link.get("href") or ""
+                            if href.startswith("/"):
+                                href = f"https://{host}{href}"
+                            try:
+                                res = import_gg_scorecards(href, event_code=code,
+                                                           db_path=db_path)
+                                p["scorecards"].append({
+                                    "round": rid, "board": label, "event": code,
+                                    **{k: v for k, v in (res or {}).items()
+                                       if isinstance(v, (int, float, str))}})
+                            except Exception as e:
+                                p["scorecards"].append({"round": rid, "board": label,
+                                                        "error": str(e)})
             except Exception as e:
                 p["scorecards_error"] = str(e)
         try:

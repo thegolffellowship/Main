@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.41.0";
+window.TGF_VERSION = "2.41.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.41.1",
+    date: "2026-07-08",
+    changes: [
+      "Fix (found on a9.17 Falconhead, Kerry: 'closed out but I don't see much automatically coming thru'): the auto-sync's scorecard step matched board links EXACTLY against 'ALL Net'/'ALL Gross' -- the San Antonio portal's naming -- but Austin names its boards 'ALL Net 9'/'ALL Gross 9', so Austin events NEVER got scorecards from the hourly sync (winners/flights walks worked; everything scorecard-derived sat 'awaiting results'). Board matching is now prefix-based and imports every matching board (handles a future 'ALL Net 18' on combo days). Falconhead's 15 scorecards were imported by hand the same morning; note the sync window is 12:10-23:10 Central, so an event closed overnight lands on the 12:10 pass.",
+    ],
+  },
   {
     version: "2.41.0",
     date: "2026-07-08",
