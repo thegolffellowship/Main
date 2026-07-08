@@ -92,14 +92,14 @@
         }
         .ev-tab:hover { border-color: var(--primary); color: var(--primary); }
         .ev-chapter-row .ev-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
-        .ev-time-row .ev-tab { font-size: 0.72rem; font-weight: 600; padding: 0.28rem 0.7rem; }
-        .ev-time-row .ev-tab.active {
-            background: #eff6ff; border-color: var(--primary); color: var(--primary); font-weight: 700;
-        }
+        /* Time row = the app's standard segmented control (reconcile-page
+           style, Kerry 2026-07-08); active state driven by .active since
+           these aren't radio inputs */
+        .ev-time-row .seg-option.active { background: var(--primary); color: #fff; }
         .ev-tab-count { font-weight: 800; margin-left: 0.15rem; }
         @media (max-width: 640px) {
             .ev-tab { font-size: 0.72rem; padding: 0.3rem 0.65rem; }
-            .ev-time-row .ev-tab { font-size: 0.66rem; padding: 0.24rem 0.55rem; }
+            .ev-time-row .seg-option { font-size: 0.72rem; padding: 0.3rem 0.6rem; }
         }
         .empty-msg {
             text-align: center;
@@ -483,10 +483,10 @@
                 <span class="ev-tab" data-ev-chapter="Austin">AUSTIN</span>
                 <span class="ev-tab" data-ev-chapter="San Antonio">SAN ANTONIO</span>
             </nav>
-            <nav class="ev-tab-row ev-time-row">
-                <span class="ev-tab" data-ev-filter="all">ALL EVENTS <span class="ev-tab-count" id="stat-total"></span></span>
-                <span class="ev-tab active" data-ev-filter="upcoming">UPCOMING <span class="ev-tab-count" id="stat-upcoming"></span></span>
-                <span class="ev-tab" data-ev-filter="past">PAST <span class="ev-tab-count" id="stat-past"></span></span>
+            <nav class="segmented-control ev-time-row">
+                <span class="seg-option active" data-ev-filter="upcoming">Upcoming <span class="ev-tab-count" id="stat-upcoming"></span></span>
+                <span class="seg-option" data-ev-filter="past">Past <span class="ev-tab-count" id="stat-past"></span></span>
+                <span class="seg-option" data-ev-filter="all">All Events <span class="ev-tab-count" id="stat-total"></span></span>
             </nav>
         </section>
 
@@ -574,6 +574,7 @@
                     <label>Chapter
                         <select id="edit-event-chapter" class="modal-input">
                             <option value="">Select chapter...</option>
+                            <option value="TGF">TGF (All Chapters)</option>
                             <option value="San Antonio">San Antonio</option>
                             <option value="Austin">Austin</option>
                             <option value="Houston">Houston</option>
@@ -1295,6 +1296,7 @@
                     <label>Chapter
                         <select id="add-event-chapter" class="modal-input">
                             <option value="">Select chapter...</option>
+                            <option value="TGF">TGF (All Chapters)</option>
                             <option value="San Antonio">San Antonio</option>
                             <option value="Austin">Austin</option>
                             <option value="Houston">Houston</option>
@@ -2004,10 +2006,16 @@
             && ['active', 'rsvp_only', 'wd', 'credited', 'refunded', 'transferred'].includes(item.transaction_status || 'active'));
     }
 
+    // Shared events (chapter "TGF" — shared 18s, TGF Championship) belong
+    // to EVERY chapter tab.
+    function evInChapter(e) {
+        if (eventChapterFilter === "all") return true;
+        const ch = (e.chapter || "").trim();
+        return ch === eventChapterFilter || ch.toUpperCase() === "TGF";
+    }
+
     function getFilteredSortedEvents() {
-        let filtered = eventChapterFilter === "all"
-            ? allEvents
-            : allEvents.filter(e => (e.chapter || "") === eventChapterFilter);
+        let filtered = allEvents.filter(evInChapter);
         const today = new Date().toISOString().split("T")[0];
 
         // Time filter (unless actively searching — search searches everything)
@@ -2432,9 +2440,7 @@
 
         // Summary stats (scoped to the selected chapter)
         const today = new Date().toISOString().split("T")[0];
-        const scoped = eventChapterFilter === "all"
-            ? allEvents
-            : allEvents.filter(e => (e.chapter || "") === eventChapterFilter);
+        const scoped = allEvents.filter(evInChapter);
         const upcoming = scoped.filter(e => e.event_date && e.event_date >= today);
         const past = scoped.filter(e => !e.event_date || e.event_date < today);
         document.getElementById("stat-total").textContent = scoped.length;
@@ -2538,7 +2544,7 @@
                 if (eventTimeFilter !== desiredFilter && eventTimeFilter !== "all") {
                     eventTimeFilter = desiredFilter;
                     if (eventSortField === "event_date") {
-                        eventSortDir = desiredFilter === "past" ? "desc" : "asc";
+                        eventSortDir = desiredFilter === "upcoming" ? "asc" : "desc";
                     }
                     document.querySelectorAll("[data-ev-filter]").forEach(b =>
                         b.classList.toggle("active", b.dataset.evFilter === desiredFilter));
@@ -9937,6 +9943,11 @@
                 eventChapterFilter = btn.dataset.evChapter;
                 document.querySelectorAll("[data-ev-chapter]").forEach(b =>
                     b.classList.toggle("active", b.dataset.evChapter === eventChapterFilter));
+                // every chapter switch re-opens on Upcoming (Kerry)
+                eventTimeFilter = "upcoming";
+                document.querySelectorAll("[data-ev-filter]").forEach(b =>
+                    b.classList.toggle("active", b.dataset.evFilter === "upcoming"));
+                if (eventSortField === "event_date") eventSortDir = "asc";
                 renderEvents();
             });
         });
@@ -9946,11 +9957,11 @@
             btn.addEventListener("click", () => {
                 eventTimeFilter = btn.dataset.evFilter;
                 document.querySelectorAll("[data-ev-filter]").forEach(b => b.classList.toggle("active", b.dataset.evFilter === eventTimeFilter));
-                // Natural date order per bucket: PAST reads newest-first,
-                // upcoming/all soonest-first. Only the default date sort is
-                // touched — an explicit column sort survives the switch.
+                // Natural date order per bucket: Upcoming soonest-first;
+                // Past and All Events newest-first (Kerry). Only the default
+                // date sort is touched — an explicit column sort survives.
                 if (eventSortField === "event_date") {
-                    eventSortDir = eventTimeFilter === "past" ? "desc" : "asc";
+                    eventSortDir = eventTimeFilter === "upcoming" ? "asc" : "desc";
                 }
                 renderEvents();
             });

@@ -9,12 +9,15 @@
 - `transferred` — transferred to another event, shown in **Inactive** section below table. Creates contra-revenue on source event + revenue on target event in `acct_transactions`, plus allocation at target.
 - `wd` — withdrawn, shown in **Inactive** section below table
 
-## Events list filters (v2.45.0)
-Two compact tab rows replace the big stat cards: a CHAPTER scope row
-(ALL | AUSTIN | SAN ANTONIO) over a subordinate time row (ALL EVENTS |
-UPCOMING | PAST, with counts). Chapter is the outer context — it
-applies to the counts, the time filter, AND search. Clear Filters and
-?item= deep-links reset/widen the chapter scope as needed.
+## Events list filters (v2.46.0)
+CHAPTER scope pills (ALL | AUSTIN | SAN ANTONIO; ALL is the landing)
+over the app's standard segmented control for time: Upcoming | Past |
+All Events (standard case, counts inline). Chapter is the outer
+context — counts, time buckets, and search all scope to it — and
+EVERY chapter click re-opens on Upcoming. Shared events carry
+events.chapter = 'TGF' (Edit/Add Event modal: "TGF (All Chapters)")
+and appear under every chapter tab (shared 18s, TGF Championship).
+Clear Filters and ?item= deep-links reset/widen scope as needed.
 
 ## Payout visibility is ADMIN-only (v2.45.0, Kerry)
 Managers must not make prize payouts or see payout surfaces: the
@@ -27,11 +30,11 @@ credit/transfer/WD (internal ledger moves); anything recording a REAL
 outbound payment (refund, partial-refund, payout-credit, payout
 recording, mark-paid) is admin-only.
 
-## Events list ordering (v2.41.0)
-The ALL | UPCOMING | PAST stat-card filter sets the default date sort per
-bucket: PAST lists most-recent-first (Kerry's ask), UPCOMING/ALL keep
-soonest-first. An explicit column-header sort survives filter switches;
-deep-links that auto-flip the filter to PAST get the same newest-first order.
+## Events list ordering (v2.46.0)
+Default date sort per bucket: Upcoming soonest-first; Past AND All
+Events most-recent-first (Kerry). An explicit column-header sort
+survives filter switches; deep-links that auto-flip the filter get the
+same defaults.
 
 ## Event detail view sections (top to bottom)
 1. **Toggle bar** — PLAYERS | PAIRINGS | GAMES + 9|18 holes filter + NET | GROSS | NONE

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.45.0";
+window.TGF_VERSION = "2.46.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.46.0",
+    date: "2026-07-08",
+    changes: [
+      "EVENTS TIME TABS RESTYLED to the app's standard segmented control (Kerry's reconcile-page reference): Upcoming | Past | All Events -- reordered, standard case, counts inline, active segment as the blue pill. Every CHAPTER click re-opens on Upcoming; ALL remains the landing chapter. Default ordering: Upcoming soonest-first, Past AND All Events most-recent-first.",
+      "SHARED EVENTS ACROSS CHAPTERS: the Edit/Add Event chapter dropdown gains 'TGF (All Chapters)' (stored as events.chapter = 'TGF') for shared 18s and the TGF Championship -- those events now appear under EVERY chapter tab, not just one. Event sync never overwrites an edited chapter, so the designation sticks. When more chapters exist, a subset multi-select can layer on the same mechanism.",
+    ],
+  },
   {
     version: "2.45.0",
     date: "2026-07-08",
