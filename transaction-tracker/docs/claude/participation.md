@@ -88,3 +88,10 @@ Bracket-unsupported / typo merge keys are tolerated: a `KeyError`/`IndexError` d
 - **Saving custom templates** — every send currently reads the in-page composer. If we want named templates (e.g. "Warm nudge", "Schedule-focused", "Free round offer"), add a `participation_email_templates` table keyed by `(name, body_html, subject)` and a small picker dropdown above the subject field.
 - **Outreach history** — there's no per-customer "last contacted on" column yet. The `log_message` event with `event_name='participation-reengagement'` is recorded, so a `MAX(message.created_at) WHERE event_name='participation-reengagement' AND recipient_address=...` can be added to the players query when needed.
 - **Scheduled sends** — only ad-hoc bulk sends today. A cron-style "automatically nudge players who hit 120 days dormant once per quarter" is a natural extension but needs a state table to avoid re-sending.
+
+## Landing defaults (v2.47.0, Kerry)
+First load applies: status = MEMBER, dormancy threshold = >=30 days,
+and — for chapter-manager sessions — chapter = the manager's chapter
+(skipped when that chapter has no rows). Users can change all three;
+defaults apply once per page load. Participation is reached as a
+sub-tab of CUSTOMERS (top-level nav tab removed in v2.47.0).

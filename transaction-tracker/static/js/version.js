@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.46.0";
+window.TGF_VERSION = "2.47.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.47.0",
+    date: "2026-07-08",
+    changes: [
+      "CHAPTER-MANAGER PINS (Kerry): new AUSTIN_MANAGER_PIN and SA_MANAGER_PIN env vars log in as manager with the chapter attached to the session -- Events lands on their chapter tab, Contests opens their chapter's points race, the Customers chapter filter and Participation chapter pre-select, and the role badge reads e.g. 'AUSTIN Manager'. They can still click over to other chapters. The LEGACY shared MANAGER_PIN is demoted to view-only (per Kerry: it becomes the view-only PIN); a dedicated VIEWONLY_PIN env var also works. ADMIN_PIN unchanged. NOTE: manager access requires the two new Railway variables -- until they're set, only admin and view-only logins exist.",
+      "VIEW-ONLY REDUCED: view-only sessions see only EVENTS | CONTESTS | HANDICAPS in the nav; /transactions, /customers, /rsvps, and /participation redirect them to Events (server-side, not just hidden links). Badge reads 'View Only'.",
+      "NAV REWORK (Kerry): order is now Events | Contests | Handicaps | Transactions | Customers everywhere, with Payouts and an ADMIN tab in TGF orange (#E87C3E) pinned LAST for admins. RSVP Log is consolidated as a sub-tab inside TRANSACTIONS and Participation as a sub-tab inside CUSTOMERS (segmented-control links under the main nav; the pages themselves are unchanged underneath).",
+      "PARTICIPATION LANDING (Kerry): first load defaults to MEMBER status + >=30-day dormancy, plus the manager's chapter for chapter-manager sessions.",
+      "EVENTS: UPCOMING tab is now ALL CAPS (Past / All Events stay standard case); the All Events view draws a TGF-orange PAST EVENTS breakline where upcoming meets past (desktop and mobile, date-sorted views); and the per-event PAYOUTS view toggle now shows on MOBILE event cards for admins -- it was desktop-only (it is the event-scoped view of the top-level PAYOUTS page, so it stays admin-only per v2.45.0).",
+    ],
+  },
   {
     version: "2.46.0",
     date: "2026-07-08",

@@ -97,6 +97,17 @@
            these aren't radio inputs */
         .ev-time-row .seg-option.active { background: var(--primary); color: #fff; }
         .ev-tab-count { font-weight: 800; margin-left: 0.15rem; }
+        /* TGF-orange breakline between UPCOMING and Past on All Events */
+        .ev-past-divider td, .ev-past-divider-card {
+            padding: 0 !important; border-top: 3px solid #E87C3E !important;
+            background: #fff7f2; text-align: center;
+        }
+        .ev-past-divider td span, .ev-past-divider-card span {
+            display: inline-block; padding: 0.15rem 0.9rem;
+            font-size: 0.66rem; font-weight: 800; letter-spacing: 0.12em;
+            color: #E87C3E;
+        }
+        .ev-past-divider-card { margin: 0.5rem 0; border-radius: 4px; }
         @media (max-width: 640px) {
             .ev-tab { font-size: 0.72rem; padding: 0.3rem 0.65rem; }
             .ev-time-row .seg-option { font-size: 0.72rem; padding: 0.3rem 0.6rem; }
@@ -453,16 +464,13 @@
     <main>
         <!-- Tab Navigation -->
         <nav class="tab-nav">
-            <a href="/accounting" class="admin-nav" style="display:none;">Admin</a>
-            <a href="/transactions">Transactions</a>
             <a href="/events" class="active">Events</a>
             <a href="/contests">Contests</a>
-            <a href="/customers">Customers</a>
-            <a href="/rsvps">RSVP Log</a>
             <a href="/handicaps">Handicaps</a>
-            <a href="/participation">Participation</a>
-
+            <a href="/transactions">Transactions</a>
+            <a href="/customers">Customers</a>
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
+            <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
 
         <!-- Controls -->
@@ -484,7 +492,7 @@
                 <span class="ev-tab" data-ev-chapter="San Antonio">SAN ANTONIO</span>
             </nav>
             <nav class="segmented-control ev-time-row">
-                <span class="seg-option active" data-ev-filter="upcoming">Upcoming <span class="ev-tab-count" id="stat-upcoming"></span></span>
+                <span class="seg-option active" data-ev-filter="upcoming">UPCOMING <span class="ev-tab-count" id="stat-upcoming"></span></span>
                 <span class="seg-option" data-ev-filter="past">Past <span class="ev-tab-count" id="stat-past"></span></span>
                 <span class="seg-option" data-ev-filter="all">All Events <span class="ev-tab-count" id="stat-total"></span></span>
             </nav>
@@ -1780,7 +1788,16 @@
         fetchOrphanedItems();
     }
 
+    let _chapterDefaultApplied = false;
     function onAuthReady() {
+        // Chapter managers land pre-scoped to their chapter (Kerry,
+        // 2026-07-08); they can still click the other tabs.
+        if (!_chapterDefaultApplied && currentChapter) {
+            _chapterDefaultApplied = true;
+            eventChapterFilter = currentChapter;
+            document.querySelectorAll("[data-ev-chapter]").forEach(b =>
+                b.classList.toggle("active", b.dataset.evChapter === currentChapter));
+        }
         kickInitialLoad();
         renderEvents();
         if (currentRole === "admin") {
@@ -2227,7 +2244,16 @@
             return;
         }
 
-        container.innerHTML = filtered.map(ev => {
+        // All Events view: TGF-orange breakline (mirrors the desktop table)
+        let mDividerAfterIdx = -1;
+        if (eventTimeFilter === "all" && eventSortField === "event_date") {
+            const mToday = new Date().toISOString().split("T")[0];
+            const mIsPast = e => !e.event_date || e.event_date < mToday;
+            for (let i = 0; i < filtered.length - 1; i++) {
+                if (mIsPast(filtered[i]) !== mIsPast(filtered[i + 1])) { mDividerAfterIdx = i; break; }
+            }
+        }
+        container.innerHTML = filtered.map((ev, _mIdx) => {
             const isExpanded = expandedEventId === ev.id;
             const registrants = getRegistrants(ev.item_name);
             // Create synthetic rows for unmatched GG RSVP players (mobile)
@@ -2288,14 +2314,18 @@
                 badgesHtml += '<span class="view-toggle-group">';
                 const mobilePairingsView = pairingsOpenForEvent[ev.id];
                 const mobileFinancialView = financialOpenForEvent[ev.id];
-                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
+                const mobilePayoutsView = payoutsOpenForEvent[ev.id];
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">PLAYERS <strong>${stats.players}</strong></span>`;
                 badgesHtml += `<span class="game-stat-badge ${mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
                 if (mobileHolesType) {
                     badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
                 }
                 badgesHtml += `<span class="game-stat-badge ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
+                if (currentRole === 'admin') {
+                    badgesHtml += `<span class="game-stat-badge ${mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
+                }
                 badgesHtml += '</span>';
-                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView) {
+                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView) {
                     // 9/18 holes filter
                     const mHolesFilter = eventHolesFilter[ev.id] || null;
                     const mInactive = ["credited", "refunded", "transferred", "wd"];
@@ -2318,6 +2348,8 @@
 
                 if (mobilePairingsView) {
                     detailHtml = badgesHtml + '<div style="padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:0.95rem;"><strong>Feature Coming Soon!</strong></div>';
+                } else if (mobilePayoutsView) {
+                    detailHtml = badgesHtml + renderPayoutsPanel(ev, registrants);
                 } else if (mobileFinancialView) {
                     detailHtml = badgesHtml + renderFinancialPanel(ev, registrants);
                 } else if (mobileGamesView) {
@@ -2414,7 +2446,7 @@
                     <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
                 </div>
                 ${isExpanded ? `<div class="mobile-card-details" style="display:block;" id="ev-mobile-detail-${ev.id}">${detailHtml}</div>` : `<div class="mobile-card-details" id="ev-mobile-detail-${ev.id}"></div>`}
-            </div>`;
+            </div>${_mIdx === mDividerAfterIdx ? '<div class="ev-past-divider-card"><span>PAST EVENTS</span></div>' : ''}`;
         }).join("");
 
         // Attach click handlers
@@ -2457,7 +2489,16 @@
         }
 
         let html = "";
-        filtered.forEach(ev => {
+        // All Events view: TGF-orange breakline where UPCOMING meets Past
+        // (only meaningful while sorted by date)
+        let dividerAfterIdx = -1;
+        if (eventTimeFilter === "all" && eventSortField === "event_date") {
+            const isPastEv = e => !e.event_date || e.event_date < today;
+            for (let i = 0; i < filtered.length - 1; i++) {
+                if (isPastEv(filtered[i]) !== isPastEv(filtered[i + 1])) { dividerAfterIdx = i; break; }
+            }
+        }
+        filtered.forEach((ev, _evIdx) => {
             const isExpanded = expandedEventId === ev.id;
             html += `
             <tr class="event-row-clickable ${isExpanded ? 'expanded' : ''}" data-id="${ev.id}" data-name="${escapeHtml(ev.item_name)}">
@@ -2486,6 +2527,9 @@
                     </div>
                 </td>
             </tr>`;
+            if (_evIdx === dividerAfterIdx) {
+                html += `<tr class="ev-past-divider"><td colspan="6"><span>PAST EVENTS</span></td></tr>`;
+            }
         });
 
         tbody.innerHTML = html;

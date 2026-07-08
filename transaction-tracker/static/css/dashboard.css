@@ -1933,6 +1933,23 @@ div.mobile-card.row-rsvp-only {
     color: #fff;
 }
 
+/* Admin tab pinned last in TGF orange (Kerry, 2026-07-08) */
+.tab-nav a.admin-tab {
+    background: #E87C3E;
+    color: #fff !important;
+    border-radius: 6px;
+    padding: 0.3rem 0.8rem;
+    margin-left: auto;
+}
+.tab-nav a.admin-tab.active,
+.tab-nav a.admin-tab:hover { background: #d96b2d; color: #fff !important; }
+
+/* Page sub-tabs (RSVP Log under Transactions, Participation under
+   Customers) — segmented-control links */
+.segmented-control a.seg-option { text-decoration: none; color: inherit; display: inline-block; }
+.segmented-control a.seg-option.active { background: var(--primary); color: #fff; }
+.sub-tabs { padding: 0.75rem 2rem 0; }
+
 /* ---- Tee Time Advisor Panel ---- */
 .advisor-panel {
     border: 1px solid var(--border);

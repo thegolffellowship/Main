@@ -22,12 +22,14 @@
 })();
 
 let currentRole = null;
+let currentChapter = null;   // chapter-manager sessions carry their chapter
 
 async function checkRole() {
     try {
         const res = await fetch("/api/auth/role");
         const data = await res.json();
         currentRole = data.role;
+        currentChapter = data.chapter || null;
         return currentRole;
     } catch (err) {
         console.error("Failed to check role:", err);
@@ -70,6 +72,7 @@ async function handleLogin() {
         }
 
         currentRole = data.role;
+        currentChapter = data.chapter || null;
         hideLoginModal();
         updateRoleUI();
         updateNavForRole();
@@ -96,7 +99,9 @@ function updateRoleUI() {
     const logoutBtn = document.getElementById("btn-logout");
     if (!badge || !logoutBtn) return;
     if (currentRole) {
-        badge.textContent = currentRole === "admin" ? "Admin" : "Manager";
+        badge.textContent = currentRole === "admin" ? "Admin"
+            : currentRole === "view-only" ? "View Only"
+            : (currentChapter ? currentChapter.toUpperCase() + " Manager" : "Manager");
         badge.className = "role-badge role-" + currentRole;
         badge.style.display = "";
         logoutBtn.style.display = "";
@@ -110,9 +115,19 @@ function updateRoleUI() {
 }
 
 function updateNavForRole() {
-    // Show/hide the Admin tab for admin role
-    document.querySelectorAll(".tab-nav a.admin-nav").forEach(link => {
-        link.style.display = (currentRole === "admin") ? "" : "none";
+    // Admin-only tabs (Payouts, Admin) show only for admin; view-only
+    // sessions are reduced to EVENTS | CONTESTS | HANDICAPS (Kerry,
+    // 2026-07-08) — other tabs hide and their pages redirect server-side.
+    const VIEW_ONLY_TABS = ["/events", "/contests", "/handicaps"];
+    document.querySelectorAll(".tab-nav a").forEach(link => {
+        const href = link.getAttribute("href") || "";
+        if (link.classList.contains("admin-nav")) {
+            link.style.display = (currentRole === "admin") ? "" : "none";
+        } else if (currentRole === "view-only") {
+            link.style.display = VIEW_ONLY_TABS.includes(href) ? "" : "none";
+        } else {
+            link.style.display = "";
+        }
     });
     // Show/hide admin sub-nav on pages where it is conditionally rendered (e.g. changelog)
     document.querySelectorAll(".admin-subnav.admin-nav").forEach(el => {

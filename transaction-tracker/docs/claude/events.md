@@ -18,6 +18,15 @@ EVERY chapter click re-opens on Upcoming. Shared events carry
 events.chapter = 'TGF' (Edit/Add Event modal: "TGF (All Chapters)")
 and appear under every chapter tab (shared 18s, TGF Championship).
 Clear Filters and ?item= deep-links reset/widen scope as needed.
+v2.47.0: time tabs read UPCOMING | Past | All Events; chapter-manager
+sessions land pre-scoped to their chapter; the All Events view draws a
+TGF-orange (#E87C3E) breakline labeled PAST EVENTS where upcoming meets
+past (desktop table + mobile cards, date-sorted views only). Nav order
+site-wide: Events | Contests | Handicaps | Transactions | Customers
+(+ Payouts and an orange Admin tab pinned last, admin only); RSVP Log
+is a sub-tab of Transactions and Participation a sub-tab of Customers
+(segmented-control links under the nav). The per-event PAYOUTS view
+toggle now renders on MOBILE cards too (admin).
 
 ## Payout visibility is ADMIN-only (v2.45.0, Kerry)
 Managers must not make prize payouts or see payout surfaces: the

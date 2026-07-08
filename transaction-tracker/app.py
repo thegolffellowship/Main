@@ -1567,6 +1567,8 @@ def index():
 
 @app.route("/transactions")
 def transactions_page():
+    if session.get("role") == "view-only":
+        return redirect("/events")
     return render_template("index.html")
 
 
@@ -3654,6 +3656,8 @@ def events_page():
 
 @app.route("/customers")
 def customers_page():
+    if session.get("role") == "view-only":
+        return redirect("/events")
     return render_template("customers.html")
 
 
@@ -6579,6 +6583,8 @@ def api_seed_events():
 # ---------------------------------------------------------------------------
 @app.route("/rsvps")
 def rsvps_page():
+    if session.get("role") == "view-only":
+        return redirect("/events")
     return render_template("rsvps.html")
 
 
@@ -8302,6 +8308,8 @@ def _render_participation_email(row: dict, subject_tpl: str, body_tpl: str) -> d
 
 @app.route("/participation")
 def page_participation():
+    if session.get("role") == "view-only":
+        return redirect("/events")
     return render_template("participation.html")
 
 
@@ -9138,29 +9146,49 @@ def api_auth_login():
 
     pin = str(data.get("pin", "")).strip()
     admin_pin = os.getenv("ADMIN_PIN", "")
+    austin_pin = os.getenv("AUSTIN_MANAGER_PIN", "")
+    sa_pin = os.getenv("SA_MANAGER_PIN", "")
+    viewonly_pin = os.getenv("VIEWONLY_PIN", "")
     manager_pin = os.getenv("MANAGER_PIN", "")
 
+    def _ok(role, chapter=None):
+        session["role"] = role
+        if chapter:
+            session["chapter"] = chapter
+        else:
+            session.pop("chapter", None)
+        return jsonify({"status": "ok", "role": role, "chapter": chapter})
+
+    # Chapter-manager PINs (Kerry, 2026-07-08): each chapter manager gets
+    # their own PIN whose session carries the chapter, so every tab lands
+    # pre-filtered to their chapter. The LEGACY shared MANAGER_PIN is
+    # demoted to view-only (Kerry: "keep the old pin as a VIEWONLY_PIN").
     if admin_pin and secrets.compare_digest(pin, admin_pin):
-        session["role"] = "admin"
-        return jsonify({"status": "ok", "role": "admin"})
+        return _ok("admin")
+    elif austin_pin and secrets.compare_digest(pin, austin_pin):
+        return _ok("manager", "Austin")
+    elif sa_pin and secrets.compare_digest(pin, sa_pin):
+        return _ok("manager", "San Antonio")
+    elif viewonly_pin and secrets.compare_digest(pin, viewonly_pin):
+        return _ok("view-only")
     elif manager_pin and secrets.compare_digest(pin, manager_pin):
-        session["role"] = "manager"
-        return jsonify({"status": "ok", "role": "manager"})
+        return _ok("view-only")
     else:
         return jsonify({"error": "Invalid PIN."}), 401
 
 
 @app.route("/api/auth/role")
 def api_auth_role():
-    """Return the current session role (or null if not logged in)."""
-    role = session.get("role")
-    return jsonify({"role": role})
+    """Return the current session role + chapter (or null if not logged in)."""
+    return jsonify({"role": session.get("role"),
+                    "chapter": session.get("chapter")})
 
 
 @app.route("/api/auth/logout", methods=["POST"])
 def api_auth_logout():
     """Clear the session role."""
     session.pop("role", None)
+    session.pop("chapter", None)
     return jsonify({"status": "ok"})
 
 

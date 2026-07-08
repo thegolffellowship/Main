@@ -32,17 +32,15 @@
     <main>
         <!-- Tab Navigation -->
         <nav class="tab-nav">
-            <a href="/accounting" class="admin-nav" style="display:none;">Admin</a>
-            <a href="/transactions">Transactions</a>
             <a href="/events">Events</a>
             <a href="/contests">Contests</a>
-            <a href="/customers" class="active">Customers</a>
-            <a href="/rsvps">RSVP Log</a>
             <a href="/handicaps">Handicaps</a>
-            <a href="/participation">Participation</a>
-
+            <a href="/transactions">Transactions</a>
+            <a href="/customers" class="active">Customers</a>
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
+            <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
+    <div class="sub-tabs"><nav class="segmented-control"><a class="seg-option active" href="/customers">Customers</a><a class="seg-option" href="/participation">Participation</a></nav></div>
 
         <!-- Stats cards -->
         <section class="stats-row" id="stats-row">
@@ -3862,6 +3860,13 @@
             allItems = await res.json();
             allCustomers = buildCustomers(allItems);
             populateChapterFilter();
+            // chapter managers land scoped to their chapter (Kerry)
+            if (typeof currentChapter !== 'undefined' && currentChapter) {
+                const chSel = document.getElementById('filter-chapter');
+                if (chSel && [...chSel.options].some(o => o.value === currentChapter)) {
+                    chSel.value = currentChapter;
+                }
+            }
 
             // Canonical chapter list (San Antonio / Austin / DFW / Houston / Hill Country)
             try {

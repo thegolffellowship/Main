@@ -153,16 +153,15 @@
 
     <main>
         <nav class="tab-nav">
-            <a href="/accounting" class="admin-nav" style="display:none;">Admin</a>
-            <a href="/transactions">Transactions</a>
             <a href="/events">Events</a>
             <a href="/contests">Contests</a>
-            <a href="/customers">Customers</a>
-            <a href="/rsvps">RSVP Log</a>
             <a href="/handicaps">Handicaps</a>
-            <a href="/participation" class="active">Participation</a>
+            <a href="/transactions">Transactions</a>
+            <a href="/customers" class="active">Customers</a>
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
+            <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
+    <div class="sub-tabs"><nav class="segmented-control"><a class="seg-option" href="/customers">Customers</a><a class="seg-option active" href="/participation">Participation</a></nav></div>
 
         <section class="stats-row" id="stats-row">
             <div class="stat-card">
@@ -338,10 +337,25 @@
                 lastDefaults.subject = data.default_subject || '';
                 lastDefaults.body    = data.default_body_html || '';
                 populateChapters();
+                applyLandingDefaults();
                 render();
             } catch (e) {
                 $('part-tbody').innerHTML =
                   `<tr><td colspan="11" style="text-align:center;padding:32px;color:#ef4444;">Failed to load: ${escapeHtml(e.message)}</td></tr>`;
+            }
+        }
+
+        // Landing defaults (Kerry, 2026-07-08): MEMBER status, ≥30-day
+        // dormancy, and — for chapter-manager sessions — their chapter.
+        let _partDefaultsApplied = false;
+        function applyLandingDefaults() {
+            if (_partDefaultsApplied) return;
+            _partDefaultsApplied = true;
+            $('part-status').value = 'MEMBER';
+            $('part-threshold').value = '30';
+            const ch = (typeof currentChapter !== 'undefined' && currentChapter) || null;
+            if (ch && [...$('part-chapter').options].some(o => o.value === ch)) {
+                $('part-chapter').value = ch;
             }
         }
 

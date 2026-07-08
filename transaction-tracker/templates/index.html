@@ -40,17 +40,15 @@
     <main>
         <!-- Tab Navigation -->
         <nav class="tab-nav">
-            <a href="/accounting" class="admin-nav" style="display:none;">Admin</a>
-            <a href="/transactions" class="active">Transactions</a>
             <a href="/events">Events</a>
             <a href="/contests">Contests</a>
-            <a href="/customers">Customers</a>
-            <a href="/rsvps">RSVP Log</a>
             <a href="/handicaps">Handicaps</a>
-            <a href="/participation">Participation</a>
-
+            <a href="/transactions" class="active">Transactions</a>
+            <a href="/customers">Customers</a>
             <a href="/tgf" class="admin-nav" style="display:none;">Payouts</a>
+            <a href="/accounting" class="admin-nav admin-tab" style="display:none;">Admin</a>
         </nav>
+    <div class="sub-tabs"><nav class="segmented-control"><a class="seg-option active" href="/transactions">Transactions</a><a class="seg-option" href="/rsvps">RSVP Log</a></nav></div>
 
         <!-- Alert banner for unconfigured state -->
         <div id="config-alert" class="alert alert-warning" style="display:none;">
