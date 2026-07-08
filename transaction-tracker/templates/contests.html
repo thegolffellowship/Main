@@ -362,6 +362,15 @@
         }
         .enrollment-table.pr-compact td { padding: 0.3rem 0.25rem; }
 
+        /* Rank-movement chip (GG-style Current vs Previous Rank): green
+           up / red down triangle + places moved, riding in the rank cell.
+           Compact tables stack it under the rank number so the narrow
+           rank column never widens. */
+        .pr-move { font-size: 0.62rem; font-weight: 700; margin-left: 2px; white-space: nowrap; }
+        .pr-move.up { color: #15803d; }
+        .pr-move.down { color: #b91c1c; }
+        .enrollment-table.pr-compact .pr-move { display: block; margin-left: 0; line-height: 1.1; }
+
         /* ── Points Race placeholder ── */
         .pr-section { padding: 1.5rem 2rem; }
         .stableford-ref {
@@ -2292,7 +2301,7 @@
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
                 : '';
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}>
-                <td style="${rankStyle}">${escapeHtml(r.rank)}</td>
+                <td style="${rankStyle}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td>${nameCell}${hcp}${chevron}</td>
                 ${showChapter ? `<td style="${chapStyle}" title="${escapeHtml(r.player_chapter || "")}">${escapeHtml(compact ? prAbbrevChapter(r.player_chapter) : (r.player_chapter || ""))}</td>` : ""}
                 <td style="${ptsStyle}">${r.total_points ?? ""}</td>
@@ -2355,6 +2364,17 @@
     function prFmtReset(v) {
         if (v == null) return "—";
         return v % 1 ? v.toFixed(1) : String(v);
+    }
+
+    // GG publishes Current Rank + Previous Rank on its season points
+    // widgets; a "-" previous rank means no movement to report. Ties
+    // ("T4") compare on the numeric part, like GG's own arrows.
+    function prRankMove(rank, prev) {
+        const cur = parseInt(String(rank ?? "").replace(/[^0-9]/g, ""), 10);
+        const was = parseInt(String(prev ?? "").replace(/[^0-9]/g, ""), 10);
+        if (!cur || !was || cur === was) return "";
+        const up = was > cur;
+        return `<span class="pr-move ${up ? "up" : "down"}" title="Moved ${up ? "up" : "down"} from ${escapeHtml(String(prev))} last event">${up ? "&#9650;" : "&#9660;"}${Math.abs(was - cur)}</span>`;
     }
 
     async function prLoadFellowship(force = false) {

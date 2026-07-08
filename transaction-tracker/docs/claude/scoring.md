@@ -375,6 +375,18 @@ game. The game definitions captured in side-games.md ARE that lock;
 GG cross-checks confirm our encoding matches the admin's current
 standard, but the standard is TGF's, not GG's.
 
+## Points-race rank movement (v2.42.0)
+
+The season races (SAN ANTONIO Net / AUSTIN Net / THE PLAYERS CUP)
+show a compact GG-style movement chip in the Rank column: green
+▲N / red ▼N vs GG's own Previous Rank column (already persisted on
+gg_points_standings.prev_rank; "-" previous = no chip, matching GG).
+Ties compare on the numeric part ("T11" vs "13" → ▲2). Compact
+(phone) tables stack the chip under the rank number so the narrow
+column never widens. Monthly and Fellowship Cup standings are merged
+cross-chapter computations with no GG previous rank, so they carry
+no chip.
+
 ## Monthly points races (v2.30.0)
 
 Contests -> Points Races -> MONTHLY: month nav bar over combined-chapter
