@@ -464,7 +464,11 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   `scoring_rounds.flight` (one label per round, last-import-wins)
   remains only as a legacy fallback when a game has no per-game rows.
   Missing labels on a multi-flight game → `flights_unknown` ("flights
-  pending GG import"). Flights order low→high by average playing
+  pending GG import"). Austin fallback (v2.41.2): Austin's flighted
+  boards have NO detail fragments — flight sections ("LOW Flight"/
+  "HIGH Flight") render inside the leaderboard table itself; when the
+  fragment walk records nothing, `_flight_sections_from_leaderboard`
+  parses the section headings off the board (a9.17 Falconhead). Flights order low→high by average playing
   handicap so the matrix-named rows align by index; the response
   carries `flight_source` for transparency. Ties = golf-style shared
   positions; the ratified split-combined-places rule applies to the
@@ -506,6 +510,11 @@ from our imported scorecards, mirroring the MVP wiring (v2.33.0):
   $108 with two T1 teams → $54/team, matching GG's recorded purses.
   Previously list order gave the first team the whole place and the
   tied team nothing.
+  TGF MVP single owner (v2.41.2): the combined same-day pot is
+  assembled ONLY by the winner's own event — both linked events
+  previously assembled it, so force-refreshing both in one pass
+  (3-day heal window / Populate All) double-recorded it. The
+  non-owner event's notes say where it went.
   `record_event_game_payouts()` finds/creates the tgf_events row by
   event code, stamps rows `auto:` and delegates to import_tgf_payouts
   (customer resolution + Venmo-ledger reconciliation + aggregates);

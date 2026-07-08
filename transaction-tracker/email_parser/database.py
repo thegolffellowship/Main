@@ -8057,6 +8057,48 @@ def _skins_flights_from_expandall(tables: list) -> dict:
     return out
 
 
+def _flight_sections_from_leaderboard(tables: list) -> dict:
+    """Flight membership from a flight-SECTIONED leaderboard table.
+
+    The Austin portal renders flighted Ind Net/Gross boards as ONE
+    table with single-cell section headings ("LOW Flight" / "HIGH
+    Flight") each followed by a Pos./Player header row — and exposes
+    NO per-player detail fragments (a9.17 Falconhead), so the fragment
+    walk records nothing there. Returns {flight_label: [names]} with
+    chapter suffixes stripped; empty for unsectioned boards.
+    """
+    out: dict = {}
+    for t in tables or []:
+        label, player_i = None, -1
+        for row in t or []:
+            cells = [(c or "").strip() for c in (row or [])]
+            nonempty = [c for c in cells if c]
+            if len(cells) <= 1:
+                if not nonempty:
+                    continue          # blank separator row — stay in section
+                # single-cell row with text: a new section heading (must
+                # say "flight") or a footer — either way the previous
+                # section ends here.
+                label = nonempty[0] if re.search(
+                    r"flight", nonempty[0], re.I) else None
+                player_i = -1
+                continue
+            low = [c.lower() for c in cells]
+            if label and player_i < 0:
+                if any("player" in c for c in low):
+                    player_i = next(i for i, c in enumerate(low) if "player" in c)
+                continue
+            if label and player_i > -1 and len(cells) > player_i:
+                raw = cells[player_i]
+                if not raw:
+                    continue
+                m = re.search(r"\s+TGF\s+([A-Za-z .'-]+)$", raw)
+                name = raw[:m.start()].strip() if m else raw
+                if name:
+                    out.setdefault(label, []).append(name)
+    return out
+
+
 def _ensure_gg_game_flights_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS gg_game_flights (
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -8204,6 +8246,7 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
                     continue
 
                 page_html = fetch(href)
+                before = result["flights_recorded"]
                 for agg in parse_tournament_aggregates(page_html):
                     if monotonic() - started > time_budget:
                         out_of_time = True
@@ -8222,6 +8265,17 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
                         _record(parsed["flight"], p["player_name"])
                 if out_of_time:
                     break
+                if result["flights_recorded"] == before:
+                    # Fragments carried no flight labels (Austin) — fall
+                    # back to flight-section headings on the leaderboard
+                    # itself (v2.41.2, a9.17 Falconhead Ind Net).
+                    sec_struct = parse_page_structure(page_html, href)
+                    membership = _flight_sections_from_leaderboard(
+                        sec_struct.get("tables") or [])
+                    if len(membership) > 1:   # single section = unflighted
+                        for flight_label, names in membership.items():
+                            for nm in names:
+                                _record(flight_label, nm)
             if out_of_time:
                 # do NOT mark the round done — resume here next call
                 conn.commit()
@@ -29683,16 +29737,27 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         t = det.get("tgf_mvp") or {}
         if linked and holes == 9:
             if t.get("status") == "determined" and t.get("winners"):
-                combined = tgf_val
-                for le in linked:
-                    le_row = m9.get(str(le.get("net_buyers") or 0)) or {}
-                    combined += _matrix_num(le_row.get("tgfMVP")) or _matrix_num(le_row.get("mvp"))
-                if combined > 0:
-                    _money_split(combined, [w["player"] for w in t["winners"]],
-                                 "tgf_mvp", "TGF MVP (combined same-day pot)"
-                                 + (" (split)" if t.get("split") else ""))
-                    notes.append("TGF MVP recorded here — do NOT record it "
-                                 "again from the linked event")
+                # Exactly ONE event of the day owns the combined pot —
+                # the winner's own event (v2.41.2; both linked events
+                # previously assembled the same row, so a same-pass
+                # force-refresh of both recorded it twice). Deterministic
+                # on every side: min() settles a cross-event tie split.
+                owner = min((w.get("event_name") or ev["item_name"])
+                            for w in t["winners"])
+                if owner.lower() != ev["item_name"].lower():
+                    notes.append(f"TGF MVP: recorded under {owner} "
+                                 "(winner's event) — not here")
+                else:
+                    combined = tgf_val
+                    for le in linked:
+                        le_row = m9.get(str(le.get("net_buyers") or 0)) or {}
+                        combined += _matrix_num(le_row.get("tgfMVP")) or _matrix_num(le_row.get("mvp"))
+                    if combined > 0:
+                        _money_split(combined, [w["player"] for w in t["winners"]],
+                                     "tgf_mvp", "TGF MVP (combined same-day pot)"
+                                     + (" (split)" if t.get("split") else ""))
+                        notes.append("TGF MVP recorded here (winner's event) — "
+                                     "the linked event skips it")
             elif t.get("status") == "awaiting_results":
                 notes.append("TGF MVP: awaiting linked-event results — skipped")
 
